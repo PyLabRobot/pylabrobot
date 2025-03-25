@@ -9,21 +9,20 @@ from typing import Dict, List, Optional, Sequence, Union, cast
 from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.liquid_handling.liquid_classes.hamilton import HamiltonLiquidClass
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
+  Aspiration,
+  AspirationContainer,
+  AspirationPlate,
+  Dispense,
+  DispenseContainer,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
-  Move
+  Move,
+  Pickup,
+  PickupTipRack,
 )
 from pylabrobot.resources import Coordinate, Resource, TipRack, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
-
 
 if sys.version_info >= (3, 8):
   from typing import Literal
@@ -32,7 +31,7 @@ else:
 
 
 def parse_vantage_fw_string(s: str, fmt: Optional[Dict[str, str]] = None) -> dict:
-  """ Parse a Vantage firmware string into a dict.
+  """Parse a Vantage firmware string into a dict.
 
   The identifier parameter (id<int>) is added automatically.
 
@@ -65,22 +64,22 @@ def parse_vantage_fw_string(s: str, fmt: Optional[Dict[str, str]] = None) -> dic
 
   for key, data_type in fmt.items():
     if data_type == "int":
-      matches = re.findall(fr"{key}([-+]?\d+)", s)
+      matches = re.findall(rf"{key}([-+]?\d+)", s)
       if len(matches) != 1:
         raise ValueError(f"Expected exactly one match for {key} in {s}")
       parsed[key] = int(matches[0])
     elif data_type == "str":
-      matches = re.findall(fr"{key}\"(.*)\"", s)
+      matches = re.findall(rf"{key}\"(.*)\"", s)
       if len(matches) != 1:
         raise ValueError(f"Expected exactly one match for {key} in {s}")
       parsed[key] = matches[0]
     elif data_type == "[int]":
-      matches = re.findall(fr"{key}((?:[-+]?[\d ]+)+)", s)
+      matches = re.findall(rf"{key}((?:[-+]?[\d ]+)+)", s)
       if len(matches) != 1:
         raise ValueError(f"Expected exactly one match for {key} in {s}")
       parsed[key] = [int(x) for x in matches[0].split()]
     elif data_type == "hex":
-      matches = re.findall(fr"{key}([0-9a-fA-F]+)", s)
+      matches = re.findall(rf"{key}([0-9a-fA-F]+)", s)
       if len(matches) != 1:
         raise ValueError(f"Expected exactly one match for {key} in {s}")
       parsed[key] = int(matches[0], 16)
@@ -88,6 +87,7 @@ def parse_vantage_fw_string(s: str, fmt: Optional[Dict[str, str]] = None) -> dic
       raise ValueError(f"Unknown data type {data_type}")
 
   return parsed
+
 
 core96_errors = {
   0: "No error",
@@ -141,112 +141,112 @@ core96_errors = {
 }
 
 pip_errors = {
-  22:	"Drive controller message error",
-  23:	"EC drive controller setup not executed",
-  25:	"wrong Flash EPROM data",
-  26:	"Flash EPROM not programmable",
-  27:	"Flash EPROM not erasable",
-  28:	"Flash EPROM checksum error",
-  29:	"wrong FW loaded",
-  30:	"Undefined command",
-  31:	"Undefined parameter",
-  32:	"Parameter out of range",
-  35:	"Voltages out of range",
-  36:	"Stop during command execution",
-  37:	"Adjustment sensor didn't switch (no teach in signal)",
-  38:	"Movement interrupted by partner channel",
-  39:	"Angle alignment offset error",
-  40:	"No parallel processes on level 1 permitted",
-  41:	"No parallel processes on level 2 permitted",
-  42:	"No parallel processes on level 3 permitted",
-  50:	"D drive initialization failed",
-  51:	"D drive not initialized",
-  52:	"D drive movement error",
-  53:	"Maximum volume in tip reached",
-  54:	"D drive position out of permitted area",
-  55:	"Y drive initialization failed",
-  56:	"Y drive not initialized",
-  57:	"Y drive movement error",
-  58:	"Y drive position out of permitted area",
-  59:	"Divergance Y motion controller to linear encoder to heigh",
-  60:	"Z drive initialization failed",
-  61:	"Z drive not initialized",
-  62:	"Z drive movement error",
-  63:	"Z drive position out of permitted area",
-  64:	"Limit stop not found",
-  65:	"S drive initialization failed",
-  66:	"S drive not initialized",
-  67:	"S drive movement error",
-  68:	"S drive position out of permitted area",
-  69:	"Init. position adjustment error",
-  70:	"No liquid level found",
-  71:	"Not enough liquid present",
-  74:	"Liquid at a not allowed position detected",
-  75:	"No tip picked up",
-  76:	"Tip already picked up",
-  77:	"Tip not discarded",
-  78:	"Wrong tip detected",
-  79:	"Tip not correct squeezed",
-  80:	"Liquid not correctly aspirated",
-  81:	"Clot detected",
-  82:	"TADM measurement out of lower limit curve",
-  83:	"TADM measurement out of upper limit curve",
-  84:	"Not enough memory for TADM measurement",
-  85:	"Jet dispense pressure not reached",
-  86:	"ADC algorithm error",
-  90:	"Limit curve not resetable",
-  91:	"Limit curve not programmable",
-  92:	"Limit curve name not found",
-  93:	"Limit curve data incorrect",
-  94:	"Not enough memory for limit curve",
-  95:	"Not allowed limit curve index",
-  96:	"Limit curve already stored",
+  22: "Drive controller message error",
+  23: "EC drive controller setup not executed",
+  25: "wrong Flash EPROM data",
+  26: "Flash EPROM not programmable",
+  27: "Flash EPROM not erasable",
+  28: "Flash EPROM checksum error",
+  29: "wrong FW loaded",
+  30: "Undefined command",
+  31: "Undefined parameter",
+  32: "Parameter out of range",
+  35: "Voltages out of range",
+  36: "Stop during command execution",
+  37: "Adjustment sensor didn't switch (no teach in signal)",
+  38: "Movement interrupted by partner channel",
+  39: "Angle alignment offset error",
+  40: "No parallel processes on level 1 permitted",
+  41: "No parallel processes on level 2 permitted",
+  42: "No parallel processes on level 3 permitted",
+  50: "D drive initialization failed",
+  51: "D drive not initialized",
+  52: "D drive movement error",
+  53: "Maximum volume in tip reached",
+  54: "D drive position out of permitted area",
+  55: "Y drive initialization failed",
+  56: "Y drive not initialized",
+  57: "Y drive movement error",
+  58: "Y drive position out of permitted area",
+  59: "Divergance Y motion controller to linear encoder to heigh",
+  60: "Z drive initialization failed",
+  61: "Z drive not initialized",
+  62: "Z drive movement error",
+  63: "Z drive position out of permitted area",
+  64: "Limit stop not found",
+  65: "S drive initialization failed",
+  66: "S drive not initialized",
+  67: "S drive movement error",
+  68: "S drive position out of permitted area",
+  69: "Init. position adjustment error",
+  70: "No liquid level found",
+  71: "Not enough liquid present",
+  74: "Liquid at a not allowed position detected",
+  75: "No tip picked up",
+  76: "Tip already picked up",
+  77: "Tip not discarded",
+  78: "Wrong tip detected",
+  79: "Tip not correct squeezed",
+  80: "Liquid not correctly aspirated",
+  81: "Clot detected",
+  82: "TADM measurement out of lower limit curve",
+  83: "TADM measurement out of upper limit curve",
+  84: "Not enough memory for TADM measurement",
+  85: "Jet dispense pressure not reached",
+  86: "ADC algorithm error",
+  90: "Limit curve not resetable",
+  91: "Limit curve not programmable",
+  92: "Limit curve name not found",
+  93: "Limit curve data incorrect",
+  94: "Not enough memory for limit curve",
+  95: "Not allowed limit curve index",
+  96: "Limit curve already stored",
 }
 
 ipg_errors = {
   0: "No error",
-  22:	"Drive controller message error",
-  23:	"EC drive controller setup not executed",
-  25:	"Wrong Flash EPROM data",
-  26:	"Flash EPROM not programmable",
-  27:	"Flash EPROM not erasable",
-  28:	"Flash EPROM checksum error",
-  29:	"Wrong FW loaded",
-  30:	"Undefined command",
-  31:	"Undefined parameter",
-  32:	"Parameter out of range",
-  35:	"Voltages out of range",
-  36:	"Stop during command execution",
-  37:	"Adjustment sensor didn't switch (no teach in signal)",
-  39:	"Angle alignment offset error",
-  40:	"No parallel processes on level 1 permitted",
-  41:	"No parallel processes on level 2 permitted",
-  42:	"No parallel processes on level 3 permitted",
-  50:	"Y Drive initialization failed",
-  51:	"Y Drive not initialized",
-  52:	"Y Drive movement error",
-  53:	"Y Drive position out of permitted area",
-  54:	"Diff. motion controller and lin. encoder counter too high",
-  55:	"Z Drive initialization failed",
-  56:	"Z Drive not initialized",
-  57:	"Z Drive movement error",
-  58:	"Z Drive position out of permitted area",
-  59:	"Z Drive limit stop not found",
-  60:	"Rotation Drive initialization failed",
-  61:	"Rotation Drive not initialized",
-  62:	"Rotation Drive movement error",
-  63:	"Rotation Drive position out of permitted area",
-  65:	"Wrist Twist Drive initialization failed",
-  66:	"Wrist Twist Drive not initialized",
-  67:	"Wrist Twist Drive movement error",
-  68:	"Wrist Twist Drive position out of permitted area",
-  70:	"Gripper Drive initialization failed",
-  71:	"Gripper Drive not initialized",
-  72:	"Gripper Drive movement error",
-  73:	"Gripper Drive position out of permitted area",
-  80:	"Plate not found",
-  81:	"Plate is still held",
-  82:	"No plate is held",
+  22: "Drive controller message error",
+  23: "EC drive controller setup not executed",
+  25: "Wrong Flash EPROM data",
+  26: "Flash EPROM not programmable",
+  27: "Flash EPROM not erasable",
+  28: "Flash EPROM checksum error",
+  29: "Wrong FW loaded",
+  30: "Undefined command",
+  31: "Undefined parameter",
+  32: "Parameter out of range",
+  35: "Voltages out of range",
+  36: "Stop during command execution",
+  37: "Adjustment sensor didn't switch (no teach in signal)",
+  39: "Angle alignment offset error",
+  40: "No parallel processes on level 1 permitted",
+  41: "No parallel processes on level 2 permitted",
+  42: "No parallel processes on level 3 permitted",
+  50: "Y Drive initialization failed",
+  51: "Y Drive not initialized",
+  52: "Y Drive movement error",
+  53: "Y Drive position out of permitted area",
+  54: "Diff. motion controller and lin. encoder counter too high",
+  55: "Z Drive initialization failed",
+  56: "Z Drive not initialized",
+  57: "Z Drive movement error",
+  58: "Z Drive position out of permitted area",
+  59: "Z Drive limit stop not found",
+  60: "Rotation Drive initialization failed",
+  61: "Rotation Drive not initialized",
+  62: "Rotation Drive movement error",
+  63: "Rotation Drive position out of permitted area",
+  65: "Wrist Twist Drive initialization failed",
+  66: "Wrist Twist Drive not initialized",
+  67: "Wrist Twist Drive movement error",
+  68: "Wrist Twist Drive position out of permitted area",
+  70: "Gripper Drive initialization failed",
+  71: "Gripper Drive not initialized",
+  72: "Gripper Drive movement error",
+  73: "Gripper Drive position out of permitted area",
+  80: "Plate not found",
+  81: "Plate is still held",
+  82: "No plate is held",
 }
 
 
@@ -259,14 +259,16 @@ class VantageFirmwareError(Exception):
     return f"VantageFirmwareError(errors={self.errors}, raw_response={self.raw_response})"
 
   def __eq__(self, __value: object) -> bool:
-    return isinstance(__value, VantageFirmwareError) and \
-      self.errors == __value.errors and \
-      self.raw_response == __value.raw_response
+    return (
+      isinstance(__value, VantageFirmwareError)
+      and self.errors == __value.errors
+      and self.raw_response == __value.raw_response
+    )
 
 
 def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
-  """ Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
-  response is an error response. """
+  """Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
+  response is an error response."""
 
   try:
     error_format = r"[A-Z0-9]{2}[0-9]{2}"
@@ -295,15 +297,16 @@ def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
       "A1HM": "Core 96",
       "A1RM": "IPG",
       "A1AM": "Arm",
-      "A1XM": "X-arm"
+      "A1XM": "X-arm",
     }.get(module_id, "Unknown module")
     error_string = parse_vantage_fw_string(string, {"et": "str"})["et"]
     errors = {modules: error_string}
 
   return VantageFirmwareError(errors, string)
 
+
 def _get_dispense_mode(jet: bool, empty: bool, blow_out: bool) -> Literal[0, 1, 2, 3, 4]:
-  """ from docs:
+  """from docs:
   0 = part in jet
   1 = blow in jet (called "empty" in VENUS liquid editor)
   2 = Part at surface
@@ -320,7 +323,7 @@ def _get_dispense_mode(jet: bool, empty: bool, blow_out: bool) -> Literal[0, 1, 
 
 
 class Vantage(HamiltonLiquidHandler):
-  """ A Hamilton Vantage liquid handler. """
+  """A Hamilton Vantage liquid handler."""
 
   def __init__(
     self,
@@ -330,7 +333,7 @@ class Vantage(HamiltonLiquidHandler):
     read_timeout: int = 60,
     write_timeout: int = 30,
   ):
-    """ Create a new STAR interface.
+    """Create a new STAR interface.
 
     Args:
       device_address: the USB device address of the Hamilton Vantage. Only useful if using more than
@@ -348,7 +351,8 @@ class Vantage(HamiltonLiquidHandler):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_product=0x8003,
-      serial_number=serial_number)
+      serial_number=serial_number,
+    )
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
@@ -356,28 +360,28 @@ class Vantage(HamiltonLiquidHandler):
 
   @property
   def module_id_length(self) -> int:
-    return  4
+    return 4
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
-    """ Get the id from a firmware response. """
+    """Get the id from a firmware response."""
     parsed = parse_vantage_fw_string(resp, {"id": "int"})
     if "id" in parsed and parsed["id"] is not None:
       return int(parsed["id"])
     return None
 
   def check_fw_string_error(self, resp: str):
-    """ Raise an error if the firmware response is an error response. """
+    """Raise an error if the firmware response is an error response."""
 
     if "er" in resp and not "er0" in resp:
       error = vantage_response_string_to_error(resp)
       raise error
 
   def _parse_response(self, resp: str, fmt: Dict[str, str]) -> dict:
-    """ Parse a firmware response. """
+    """Parse a firmware response."""
     return parse_vantage_fw_string(resp, fmt)
 
   async def setup(self):
-    """ setup
+    """setup
 
     Creates a USB connection and finds read/write interfaces.
     """
@@ -396,14 +400,14 @@ class Vantage(HamiltonLiquidHandler):
     pip_channels_initialized = await self.pip_request_initialization_status()
     if not pip_channels_initialized or any(tip_presences):
       await self.pip_initialize(
-        x_position=[7095]*self.num_channels,
+        x_position=[7095] * self.num_channels,
         y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
         begin_z_deposit_position=[int(self._traversal_height * 10)] * self.num_channels,
         end_z_deposit_position=[1235] * self.num_channels,
         minimal_height_at_command_end=[int(self._traversal_height * 10)] * self.num_channels,
-        tip_pattern=[True]*self.num_channels,
-        tip_type=[1]*self.num_channels,
-        TODO_DI_2=70
+        tip_pattern=[True] * self.num_channels,
+        tip_type=[1] * self.num_channels,
+        TODO_DI_2=70,
       )
 
     loading_cover_initialized = await self.loading_cover_request_initialization_status()
@@ -413,8 +417,8 @@ class Vantage(HamiltonLiquidHandler):
     core96_initialized = await self.core96_request_initialization_status()
     if not core96_initialized:
       await self.core96_initialize(
-        x_position=7347, # TODO: get trash location from deck.
-        y_position=2684, # TODO: get trash location from deck.
+        x_position=7347,  # TODO: get trash location from deck.
+        y_position=2684,  # TODO: get trash location from deck.
         minimal_traverse_height_at_begin_of_command=int(self._traversal_height * 10),
         minimal_height_at_command_end=int(self._traversal_height * 10),
         end_z_deposit_position=2420,
@@ -428,13 +432,13 @@ class Vantage(HamiltonLiquidHandler):
 
   @property
   def num_channels(self) -> int:
-    """ The number of channels on the robot. """
+    """The number of channels on the robot."""
     if self._num_channels is None:
       raise RuntimeError("num_channels is not set.")
     return self._num_channels
 
   def set_minimum_traversal_height(self, traversal_height: float):
-    """ Set the minimum traversal height for the robot.
+    """Set the minimum traversal height for the robot.
 
     This refers to the bottom of the pipetting channel when no tip is present, or the bottom of the
     tip when a tip is present. This value will be used as the default value for the
@@ -455,15 +459,14 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[float]] = None,
     minimal_height_at_command_end: Optional[List[float]] = None,
   ):
-    x_positions, y_positions, tip_pattern = \
-      self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, tip_pattern = self._ops_to_fw_positions(ops, use_channels)
 
     tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
     ttti = await self.get_ttti(tips)
 
     max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
+    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
     # not sure why this is necessary, but it is according to log files and experiments
     if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
@@ -477,16 +480,19 @@ class Vantage(HamiltonLiquidHandler):
         y_position=y_positions,
         tip_pattern=tip_pattern,
         tip_type=ttti,
-        begin_z_deposit_position=[round((max_z + max_total_tip_length)*10)]*len(ops),
-        end_z_deposit_position=[round((max_z + max_tip_length)*10)]*len(ops),
-        minimal_traverse_height_at_begin_of_command=
-          [round(th*10) for th in minimal_traverse_height_at_begin_of_command or
-           [self._traversal_height]]*len(ops),
-        minimal_height_at_command_end=
-          [round(th*10) for th in minimal_height_at_command_end or
-           [self._traversal_height]]*len(ops),
-        tip_handling_method=[1 for _ in tips], # always appears to be 1 # tip.pickup_method.value
-        blow_out_air_volume=[0]*len(ops), # Why is this here? Who knows.
+        begin_z_deposit_position=[round((max_z + max_total_tip_length) * 10)] * len(ops),
+        end_z_deposit_position=[round((max_z + max_tip_length) * 10)] * len(ops),
+        minimal_traverse_height_at_begin_of_command=[
+          round(th * 10)
+          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+        ]
+        * len(ops),
+        minimal_height_at_command_end=[
+          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+        ]
+        * len(ops),
+        tip_handling_method=[1 for _ in tips],  # always appears to be 1 # tip.pickup_method.value
+        blow_out_air_volume=[0] * len(ops),  # Why is this here? Who knows.
       )
     except Exception as e:
       raise e
@@ -499,10 +505,9 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[float]] = None,
     minimal_height_at_command_end: Optional[List[float]] = None,
   ):
-    """ Drop tips to a resource. """
+    """Drop tips to a resource."""
 
-    x_positions, y_positions, channels_involved = \
-      self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
 
@@ -511,15 +516,18 @@ class Vantage(HamiltonLiquidHandler):
         x_position=x_positions,
         y_position=y_positions,
         tip_pattern=channels_involved,
-        begin_z_deposit_position=[round((max_z+10)*10)]*len(ops), # +10
-        end_z_deposit_position=[round(max_z*10)]*len(ops),
-        minimal_traverse_height_at_begin_of_command=
-          [round(th*10) for th in minimal_traverse_height_at_begin_of_command or
-           [self._traversal_height]]*len(ops),
-        minimal_height_at_command_end=
-          [round(th*10) for th in minimal_height_at_command_end or
-           [self._traversal_height]]*len(ops),
-        tip_handling_method=[0 for _ in ops], # Always appears to be 0, even in trash.
+        begin_z_deposit_position=[round((max_z + 10) * 10)] * len(ops),  # +10
+        end_z_deposit_position=[round(max_z * 10)] * len(ops),
+        minimal_traverse_height_at_begin_of_command=[
+          round(th * 10)
+          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+        ]
+        * len(ops),
+        minimal_height_at_command_end=[
+          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+        ]
+        * len(ops),
+        tip_handling_method=[0 for _ in ops],  # Always appears to be 0, even in trash.
         # tip_handling_method=[TipDropMethod.DROP.value if isinstance(op.resource, TipSpot) \
         #                      else TipDropMethod.PLACE_SHIFT.value for op in ops],
         TODO_TR_2=0,
@@ -528,18 +536,18 @@ class Vantage(HamiltonLiquidHandler):
       raise e
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
-    """ Assert that resources are in a valid location for pipetting. """
+    """Assert that resources are in a valid location for pipetting."""
     for resource in resources:
       if resource.get_absolute_location().z < 100:
         raise ValueError(
-          f"Resource {resource} is too low: {resource.get_absolute_location().z} < 100")
+          f"Resource {resource} is too low: {resource.get_absolute_location().z} < 100"
+        )
 
   async def aspirate(
     self,
     ops: List[Aspiration],
     use_channels: List[int],
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
-
     type_of_aspiration: Optional[List[int]] = None,
     minimal_traverse_height_at_begin_of_command: Optional[List[float]] = None,
     minimal_height_at_command_end: Optional[List[float]] = None,
@@ -572,7 +580,7 @@ class Vantage(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """ Aspirate from (a) resource(s).
+    """Aspirate from (a) resource(s).
 
     See :meth:`pip_aspirate` (the firmware command) for parameter documentation. This method serves
     as a wrapper for that command, and will convert operations into the appropriate format. This
@@ -590,19 +598,24 @@ class Vantage(HamiltonLiquidHandler):
     if hlcs is not None:
       raise NotImplementedError("hlcs is deprecated")
 
-    x_positions, y_positions, channels_involved = \
-      self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     self._assert_valid_resources([op.resource for op in ops])
 
-    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
-                    op.resource.material_z_thickness for op in ops]
-    liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [wb + (op.liquid_height or 0)
-                              for wb, op in zip(well_bottoms, ops)]
+    well_bottoms = [
+      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      for op in ops
+    ]
+    liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [
+      wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)
+    ]
     # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [wb + op.resource.get_absolute_size_z() + \
-                          (2.7-1 if isinstance(op.resource, Well) else 5) #?
-                          for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = lld_search_height or [
+      wb
+      + op.resource.get_absolute_size_z()
+      + (2.7 - 1 if isinstance(op.resource, Well) else 5)  # ?
+      for wb, op in zip(well_bottoms, ops)
+    ]
 
     flow_rates = [op.flow_rate or 100 for op in ops]
     blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
@@ -612,51 +625,63 @@ class Vantage(HamiltonLiquidHandler):
     return await self.pip_aspirate(
       x_position=x_positions,
       y_position=y_positions,
-      type_of_aspiration=type_of_aspiration or [0]*len(ops),
+      type_of_aspiration=type_of_aspiration or [0] * len(ops),
       tip_pattern=channels_involved,
-      minimal_traverse_height_at_begin_of_command=
-        [round(th*10) for th in minimal_traverse_height_at_begin_of_command or
-          [self._traversal_height]]*len(ops),
-      minimal_height_at_command_end=
-        [round(th*10) for th in minimal_height_at_command_end or
-          [self._traversal_height]]*len(ops),
-      lld_search_height=[round(ls*10) for ls in lld_search_heights],
-      clot_detection_height=[round(cdh*10) for cdh in clot_detection_height or [0]*len(ops)],
+      minimal_traverse_height_at_begin_of_command=[
+        round(th * 10)
+        for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+      ]
+      * len(ops),
+      minimal_height_at_command_end=[
+        round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+      ]
+      * len(ops),
+      lld_search_height=[round(ls * 10) for ls in lld_search_heights],
+      clot_detection_height=[round(cdh * 10) for cdh in clot_detection_height or [0] * len(ops)],
       liquid_surface_at_function_without_lld=[round(lsn * 10) for lsn in liquid_surfaces_no_lld],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=\
-        [round(pod*10) for pod in pull_out_distance_to_take_transport_air_in_function_without_lld or
-          [10.9]*len(ops)],
-      tube_2nd_section_height_measured_from_zm=
-        [round(t2sh*10) for t2sh in tube_2nd_section_height_measured_from_zm or [0]*len(ops)],
-      tube_2nd_section_ratio=[round(t2sr*10) for t2sr in tube_2nd_section_ratio or [0]*len(ops)],
+      pull_out_distance_to_take_transport_air_in_function_without_lld=[
+        round(pod * 10)
+        for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
+        or [10.9] * len(ops)
+      ],
+      tube_2nd_section_height_measured_from_zm=[
+        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
+      ],
+      tube_2nd_section_ratio=[
+        round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
+      ],
       minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
-      immersion_depth=[round(id_*10) for id_ in immersion_depth or [0]*len(ops)],
-      surface_following_distance=[round(sfd*10) for sfd in surface_following_distance or
-                                  [0]*len(ops)],
-      aspiration_volume=[round(op.volume*100) for op in ops],
+      immersion_depth=[round(id_ * 10) for id_ in immersion_depth or [0] * len(ops)],
+      surface_following_distance=[
+        round(sfd * 10) for sfd in surface_following_distance or [0] * len(ops)
+      ],
+      aspiration_volume=[round(op.volume * 100) for op in ops],
       aspiration_speed=[round(fr * 10) for fr in flow_rates],
-      transport_air_volume=[round(tav*10) for tav in transport_air_volume or [0]*len(ops)],
-      blow_out_air_volume=[round(bav*100) for bav in blow_out_air_volumes],
-      pre_wetting_volume=[round(pwv*100) for pwv in pre_wetting_volume or [0]*len(ops)],
-      lld_mode=lld_mode or [0]*len(ops),
-      lld_sensitivity=lld_sensitivity or [4]*len(ops),
-      pressure_lld_sensitivity=pressure_lld_sensitivity or [4]*len(ops),
-      aspirate_position_above_z_touch_off=
-        [round(apz*10) for apz in aspirate_position_above_z_touch_off or [0.5]*len(ops)],
-      swap_speed=[round(ss*10) for ss in swap_speed or [2]*len(ops)],
-      settling_time=[round(st*10) for st in settling_time or [1]*len(ops)],
-      mix_volume=[round(mv*100) for mv in mix_volume or [0]*len(ops)],
-      mix_cycles=mix_cycles or [0]*len(ops),
-      mix_position_in_z_direction_from_liquid_surface=
-        [round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0]*len(ops)],
-      mix_speed=[round(ms*10) for ms in mix_speed or [250]*len(ops)],
-      surface_following_distance_during_mixing=
-        [round(sfdm*10) for sfdm in surface_following_distance_during_mixing or [0]*len(ops)],
-      TODO_DA_5=TODO_DA_5 or [0]*len(ops),
-      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off or [0]*len(ops),
-      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off or [0]*len(ops),
+      transport_air_volume=[round(tav * 10) for tav in transport_air_volume or [0] * len(ops)],
+      blow_out_air_volume=[round(bav * 100) for bav in blow_out_air_volumes],
+      pre_wetting_volume=[round(pwv * 100) for pwv in pre_wetting_volume or [0] * len(ops)],
+      lld_mode=lld_mode or [0] * len(ops),
+      lld_sensitivity=lld_sensitivity or [4] * len(ops),
+      pressure_lld_sensitivity=pressure_lld_sensitivity or [4] * len(ops),
+      aspirate_position_above_z_touch_off=[
+        round(apz * 10) for apz in aspirate_position_above_z_touch_off or [0.5] * len(ops)
+      ],
+      swap_speed=[round(ss * 10) for ss in swap_speed or [2] * len(ops)],
+      settling_time=[round(st * 10) for st in settling_time or [1] * len(ops)],
+      mix_volume=[round(mv * 100) for mv in mix_volume or [0] * len(ops)],
+      mix_cycles=mix_cycles or [0] * len(ops),
+      mix_position_in_z_direction_from_liquid_surface=[
+        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
+      ],
+      mix_speed=[round(ms * 10) for ms in mix_speed or [250] * len(ops)],
+      surface_following_distance_during_mixing=[
+        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
+      ],
+      TODO_DA_5=TODO_DA_5 or [0] * len(ops),
+      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off or [0] * len(ops),
+      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off or [0] * len(ops),
       tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
-      limit_curve_index=limit_curve_index or [0]*len(ops),
+      limit_curve_index=limit_curve_index or [0] * len(ops),
       recording_mode=recording_mode or 0,
     )
 
@@ -664,12 +689,10 @@ class Vantage(HamiltonLiquidHandler):
     self,
     ops: List[Dispense],
     use_channels: List[int],
-
     jet: Optional[List[bool]] = None,
-    blow_out: Optional[List[bool]] = None, # "empty" in the VENUS liquid editor
-    empty: Optional[List[bool]] = None, # truly "empty", does not exist in liquid editor, dm4
+    blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
+    empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
-
     type_of_dispensing_mode: Optional[List[int]] = None,
     minimum_height: Optional[List[float]] = None,
     pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[float]] = None,
@@ -700,7 +723,7 @@ class Vantage(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """ Dispense to (a) resource(s).
+    """Dispense to (a) resource(s).
 
     See :meth:`pip_dispense` (the firmware command) for parameter documentation. This method serves
     as a wrapper for that command, and will convert operations into the appropriate format. This
@@ -724,81 +747,97 @@ class Vantage(HamiltonLiquidHandler):
     if hlcs is not None:
       raise NotImplementedError("hlcs is deprecated")
 
-    x_positions, y_positions, channels_involved = \
-      self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     if jet is None:
-      jet = [False]*len(ops)
+      jet = [False] * len(ops)
     if empty is None:
-      empty = [False]*len(ops)
+      empty = [False] * len(ops)
     if blow_out is None:
-      blow_out = [False]*len(ops)
+      blow_out = [False] * len(ops)
 
     self._assert_valid_resources([op.resource for op in ops])
 
-    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
-                    op.resource.material_z_thickness for op in ops]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
-                              for wb, op in zip(well_bottoms, ops)]
+    well_bottoms = [
+      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      for op in ops
+    ]
+    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [wb + op.resource.get_absolute_size_z() + \
-                          (2.7-1 if isinstance(op.resource, Well) else 5) #?
-                          for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = lld_search_height or [
+      wb
+      + op.resource.get_absolute_size_z()
+      + (2.7 - 1 if isinstance(op.resource, Well) else 5)  # ?
+      for wb, op in zip(well_bottoms, ops)
+    ]
 
     flow_rates = [op.flow_rate or 100 for op in ops]
 
     blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
 
-    type_of_dispensing_mode = type_of_dispensing_mode or \
-      [_get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i])
-       for i in range(len(ops))]
+    type_of_dispensing_mode = type_of_dispensing_mode or [
+      _get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i]) for i in range(len(ops))
+    ]
 
     return await self.pip_dispense(
       x_position=x_positions,
       y_position=y_positions,
       tip_pattern=channels_involved,
       type_of_dispensing_mode=type_of_dispensing_mode,
-      minimum_height=[round(wb*10) for wb in minimum_height or well_bottoms],
-      lld_search_height=[round(sh*10) for sh in lld_search_heights],
-      liquid_surface_at_function_without_lld=[round(ls*10) for ls in liquid_surfaces_no_lld],
-      pull_out_distance_to_take_transport_air_in_function_without_lld=
-        [round(pod*10) for pod in pull_out_distance_to_take_transport_air_in_function_without_lld or
-          [5.0]*len(ops)],
-      immersion_depth=[round(id*10) for id in immersion_depth or [0]*len(ops)],
-      surface_following_distance=
-        [round(sfd*10) for sfd in surface_following_distance or [2.1]*len(ops)],
-      tube_2nd_section_height_measured_from_zm=
-        [round(t2sh*10) for t2sh in tube_2nd_section_height_measured_from_zm or [0]*len(ops)],
-      tube_2nd_section_ratio=[round(t2sr*10) for t2sr in tube_2nd_section_ratio or [0]*len(ops)],
-      minimal_traverse_height_at_begin_of_command=
-        [round(mth*10) for mth in
-          minimal_traverse_height_at_begin_of_command or [self._traversal_height]*len(ops)],
-      minimal_height_at_command_end=
-        [round(mh*10) for mh in minimal_height_at_command_end or [self._traversal_height]*len(ops)],
-      dispense_volume=[round(op.volume*100) for op in ops],
-      dispense_speed=[round(fr*10) for fr in flow_rates],
-      cut_off_speed=[round(cs*10) for cs in cut_off_speed or [250]*len(ops)],
-      stop_back_volume=[round(sbv*100) for sbv in stop_back_volume or [0]*len(ops)],
-      transport_air_volume=[round(tav*10) for tav in transport_air_volume or [0]*len(ops)],
-      blow_out_air_volume=[round(boav*100) for boav in blow_out_air_volumes],
-      lld_mode=lld_mode or [0]*len(ops),
-      side_touch_off_distance=round(side_touch_off_distance*10),
-      dispense_position_above_z_touch_off=
-        [round(dpz*10) for dpz in dispense_position_above_z_touch_off or [0.5]*len(ops)],
-      lld_sensitivity=lld_sensitivity or [1]*len(ops),
-      pressure_lld_sensitivity=pressure_lld_sensitivity or [1]*len(ops),
-      swap_speed=[round(ss*10) for ss in swap_speed or [1]*len(ops)],
-      settling_time=[round(st*10) for st in settling_time or [0]*len(ops)],
-      mix_volume=[round(mv*100) for mv in mix_volume or [0]*len(ops)],
-      mix_cycles=mix_cycles or [0]*len(ops),
-      mix_position_in_z_direction_from_liquid_surface=
-        [round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0]*len(ops)],
-      mix_speed=[round(ms*10) for ms in mix_speed or [1]*len(ops)],
-      surface_following_distance_during_mixing=
-        [round(sfdm*10) for sfdm in surface_following_distance_during_mixing or [0]*len(ops)],
-      TODO_DD_2=TODO_DD_2 or [0]*len(ops),
+      minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
+      lld_search_height=[round(sh * 10) for sh in lld_search_heights],
+      liquid_surface_at_function_without_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
+      pull_out_distance_to_take_transport_air_in_function_without_lld=[
+        round(pod * 10)
+        for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
+        or [5.0] * len(ops)
+      ],
+      immersion_depth=[round(id * 10) for id in immersion_depth or [0] * len(ops)],
+      surface_following_distance=[
+        round(sfd * 10) for sfd in surface_following_distance or [2.1] * len(ops)
+      ],
+      tube_2nd_section_height_measured_from_zm=[
+        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
+      ],
+      tube_2nd_section_ratio=[
+        round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
+      ],
+      minimal_traverse_height_at_begin_of_command=[
+        round(mth * 10)
+        for mth in minimal_traverse_height_at_begin_of_command
+        or [self._traversal_height] * len(ops)
+      ],
+      minimal_height_at_command_end=[
+        round(mh * 10)
+        for mh in minimal_height_at_command_end or [self._traversal_height] * len(ops)
+      ],
+      dispense_volume=[round(op.volume * 100) for op in ops],
+      dispense_speed=[round(fr * 10) for fr in flow_rates],
+      cut_off_speed=[round(cs * 10) for cs in cut_off_speed or [250] * len(ops)],
+      stop_back_volume=[round(sbv * 100) for sbv in stop_back_volume or [0] * len(ops)],
+      transport_air_volume=[round(tav * 10) for tav in transport_air_volume or [0] * len(ops)],
+      blow_out_air_volume=[round(boav * 100) for boav in blow_out_air_volumes],
+      lld_mode=lld_mode or [0] * len(ops),
+      side_touch_off_distance=round(side_touch_off_distance * 10),
+      dispense_position_above_z_touch_off=[
+        round(dpz * 10) for dpz in dispense_position_above_z_touch_off or [0.5] * len(ops)
+      ],
+      lld_sensitivity=lld_sensitivity or [1] * len(ops),
+      pressure_lld_sensitivity=pressure_lld_sensitivity or [1] * len(ops),
+      swap_speed=[round(ss * 10) for ss in swap_speed or [1] * len(ops)],
+      settling_time=[round(st * 10) for st in settling_time or [0] * len(ops)],
+      mix_volume=[round(mv * 100) for mv in mix_volume or [0] * len(ops)],
+      mix_cycles=mix_cycles or [0] * len(ops),
+      mix_position_in_z_direction_from_liquid_surface=[
+        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
+      ],
+      mix_speed=[round(ms * 10) for ms in mix_speed or [1] * len(ops)],
+      surface_following_distance_during_mixing=[
+        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
+      ],
+      TODO_DD_2=TODO_DD_2 or [0] * len(ops),
       tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
-      limit_curve_index=limit_curve_index or [0]*len(ops),
+      limit_curve_index=limit_curve_index or [0] * len(ops),
       recording_mode=recording_mode or 0,
     )
 
@@ -808,7 +847,7 @@ class Vantage(HamiltonLiquidHandler):
     tip_handling_method: int = 0,
     z_deposit_position: float = 216.4,
     minimal_traverse_height_at_begin_of_command: Optional[float] = None,
-    minimal_height_at_command_end: Optional[float] = None
+    minimal_height_at_command_end: Optional[float] = None,
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
@@ -824,10 +863,12 @@ class Vantage(HamiltonLiquidHandler):
       tip_type=ttti,
       tip_handling_method=tip_handling_method,
       z_deposit_position=round((z_deposit_position + offset_z) * 10),
-      minimal_traverse_height_at_begin_of_command=
-        round((minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10),
-      minimal_height_at_command_end=
-        round((minimal_height_at_command_end or self._traversal_height)*10)
+      minimal_traverse_height_at_begin_of_command=round(
+        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
+      ),
+      minimal_height_at_command_end=round(
+        (minimal_height_at_command_end or self._traversal_height) * 10
+      ),
     )
 
   async def drop_tips96(
@@ -835,32 +876,34 @@ class Vantage(HamiltonLiquidHandler):
     drop: DropTipRack,
     z_deposit_position: float = 216.4,
     minimal_traverse_height_at_begin_of_command: Optional[float] = None,
-    minimal_height_at_command_end: Optional[float] = None
+    minimal_height_at_command_end: Optional[float] = None,
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
     else:
-      raise NotImplementedError("Only TipRacks are supported for dropping tips on Vantage",
-                               f"got {drop.resource}")
+      raise NotImplementedError(
+        "Only TipRacks are supported for dropping tips on Vantage", f"got {drop.resource}"
+      )
     offset_z = drop.offset.z
 
     return await self.core96_tip_discard(
       x_position=round(position.x * 10),
       y_position=round(position.y * 10),
       z_deposit_position=round((z_deposit_position + offset_z) * 10),
-      minimal_traverse_height_at_begin_of_command=
-        round((minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10),
-      minimal_height_at_command_end=
-        round((minimal_height_at_command_end or self._traversal_height)*10)
+      minimal_traverse_height_at_begin_of_command=round(
+        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
+      ),
+      minimal_height_at_command_end=round(
+        (minimal_height_at_command_end or self._traversal_height) * 10
+      ),
     )
 
   async def aspirate96(
     self,
     aspiration: Union[AspirationPlate, AspirationContainer],
     hlc: Optional[HamiltonLiquidClass] = None,
-
     type_of_aspiration: int = 0,
     minimal_traverse_height_at_begin_of_command: Optional[float] = None,
     minimal_height_at_command_end: Optional[float] = None,
@@ -892,16 +935,23 @@ class Vantage(HamiltonLiquidHandler):
 
     if isinstance(aspiration, AspirationPlate):
       top_left_well = aspiration.wells[0]
-      position = top_left_well.get_absolute_location() + top_left_well.center() + \
-        aspiration.offset + Coordinate(z=top_left_well.material_z_thickness)
+      position = (
+        top_left_well.get_absolute_location()
+        + top_left_well.center()
+        + aspiration.offset
+        + Coordinate(z=top_left_well.material_z_thickness)
+      )
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7-1
+      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
     else:
-      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset + \
-        Coordinate(z=aspiration.container.material_z_thickness)
+      position = (
+        aspiration.container.get_absolute_location(y="b")
+        + aspiration.offset
+        + Coordinate(z=aspiration.container.material_z_thickness)
+      )
       bottom = position.z
-      lld_search_height = bottom + aspiration.container.get_absolute_size_z() + 2.7-1
+      lld_search_height = bottom + aspiration.container.get_absolute_size_z() + 2.7 - 1
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
@@ -924,34 +974,40 @@ class Vantage(HamiltonLiquidHandler):
       x_position=round(position.x * 10),
       y_position=round(position.y * 10),
       type_of_aspiration=type_of_aspiration,
-      minimal_traverse_height_at_begin_of_command=
-        round((minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10),
-      minimal_height_at_command_end=
-        round(minimal_height_at_command_end or self._traversal_height * 10),
+      minimal_traverse_height_at_begin_of_command=round(
+        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
+      ),
+      minimal_height_at_command_end=round(
+        minimal_height_at_command_end or self._traversal_height * 10
+      ),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_at_function_without_lld=round(liquid_height * 10),
-      pull_out_distance_to_take_transport_air_in_function_without_lld=\
-        round(pull_out_distance_to_take_transport_air_in_function_without_lld*10),
+      pull_out_distance_to_take_transport_air_in_function_without_lld=round(
+        pull_out_distance_to_take_transport_air_in_function_without_lld * 10
+      ),
       minimum_height=round(well_bottoms * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm*10),
-      tube_2nd_section_ratio=round(tube_2nd_section_ratio*10),
-      immersion_depth=round(immersion_depth*10),
-      surface_following_distance=round(surface_following_distance*10),
+      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
+      tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
+      immersion_depth=round(immersion_depth * 10),
+      surface_following_distance=round(surface_following_distance * 10),
       aspiration_volume=round(aspiration.volume * 100),
       aspiration_speed=round(flow_rate * 10),
-      transport_air_volume=round(transport_air_volume*10),
-      blow_out_air_volume=round(blow_out_air_volume*100),
-      pre_wetting_volume=round(pre_wetting_volume*100),
+      transport_air_volume=round(transport_air_volume * 10),
+      blow_out_air_volume=round(blow_out_air_volume * 100),
+      pre_wetting_volume=round(pre_wetting_volume * 100),
       lld_mode=lld_mode,
       lld_sensitivity=lld_sensitivity,
-      swap_speed=round(swap_speed*10),
-      settling_time=round(settling_time*10),
-      mix_volume=round(mix_volume*100),
+      swap_speed=round(swap_speed * 10),
+      settling_time=round(settling_time * 10),
+      mix_volume=round(mix_volume * 100),
       mix_cycles=mix_cycles,
-      mix_position_in_z_direction_from_liquid_surface=\
-        round(mix_position_in_z_direction_from_liquid_surface*100),
-      surface_following_distance_during_mixing=round(surface_following_distance_during_mixing*100),
-      mix_speed=round(mix_speed*10),
+      mix_position_in_z_direction_from_liquid_surface=round(
+        mix_position_in_z_direction_from_liquid_surface * 100
+      ),
+      surface_following_distance_during_mixing=round(
+        surface_following_distance_during_mixing * 100
+      ),
+      mix_speed=round(mix_speed * 10),
       limit_curve_index=limit_curve_index,
       tadm_channel_pattern=tadm_channel_pattern,
       tadm_algorithm_on_off=tadm_algorithm_on_off,
@@ -962,9 +1018,8 @@ class Vantage(HamiltonLiquidHandler):
     self,
     dispense: Union[DispensePlate, DispenseContainer],
     jet: bool = False,
-    blow_out: bool = False, # "empty" in the VENUS liquid editor
-    empty: bool = False, # truly "empty", does not exist in liquid editor, dm4
-
+    blow_out: bool = False,  # "empty" in the VENUS liquid editor
+    empty: bool = False,  # truly "empty", does not exist in liquid editor, dm4
     hlc: Optional[HamiltonLiquidClass] = None,
     type_of_dispensing_mode: Optional[int] = None,
     tube_2nd_section_height_measured_from_zm: float = 0,
@@ -992,7 +1047,7 @@ class Vantage(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
-    """ Dispense to a plate using the 96 head.
+    """Dispense to a plate using the 96 head.
 
     Args:
       jet: whether to dispense in jet mode.
@@ -1012,16 +1067,23 @@ class Vantage(HamiltonLiquidHandler):
 
     if isinstance(dispense, DispensePlate):
       top_left_well = dispense.wells[0]
-      position = top_left_well.get_absolute_location() + top_left_well.center() + \
-        dispense.offset + Coordinate(z=top_left_well.material_z_thickness)
+      position = (
+        top_left_well.get_absolute_location()
+        + top_left_well.center()
+        + dispense.offset
+        + Coordinate(z=top_left_well.material_z_thickness)
+      )
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7-1
+      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
     else:
-      position = dispense.container.get_absolute_location(y="b") + dispense.offset + \
-        Coordinate(z=dispense.container.material_z_thickness)
+      position = (
+        dispense.container.get_absolute_location(y="b")
+        + dispense.offset
+        + Coordinate(z=dispense.container.material_z_thickness)
+      )
       bottom = position.z
-      lld_search_height = bottom + dispense.container.get_absolute_size_z() + 2.7-1
+      lld_search_height = bottom + dispense.container.get_absolute_size_z() + 2.7 - 1
 
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
@@ -1049,35 +1111,39 @@ class Vantage(HamiltonLiquidHandler):
       y_position=round(position.y * 10),
       type_of_dispensing_mode=type_of_dispensing_mode,
       minimum_height=round(well_bottoms * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm*10),
-      tube_2nd_section_ratio=round(tube_2nd_section_ratio*10),
+      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
+      tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_at_function_without_lld=round(liquid_height * 10),
-      pull_out_distance_to_take_transport_air_in_function_without_lld=\
-        round(pull_out_distance_to_take_transport_air_in_function_without_lld*10),
-      immersion_depth=round(immersion_depth*10),
-      surface_following_distance=round(surface_following_distance*10),
-      minimal_traverse_height_at_begin_of_command=
-        round((minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10),
-      minimal_height_at_command_end=
-        round((minimal_height_at_command_end or self._traversal_height)*10),
+      pull_out_distance_to_take_transport_air_in_function_without_lld=round(
+        pull_out_distance_to_take_transport_air_in_function_without_lld * 10
+      ),
+      immersion_depth=round(immersion_depth * 10),
+      surface_following_distance=round(surface_following_distance * 10),
+      minimal_traverse_height_at_begin_of_command=round(
+        (minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10
+      ),
+      minimal_height_at_command_end=round(
+        (minimal_height_at_command_end or self._traversal_height) * 10
+      ),
       dispense_volume=round(dispense.volume * 100),
       dispense_speed=round(flow_rate * 10),
       cut_off_speed=round(cut_off_speed * 10),
       stop_back_volume=round(stop_back_volume * 100),
-      transport_air_volume=round(transport_air_volume*10),
-      blow_out_air_volume=round(blow_out_air_volume*100),
+      transport_air_volume=round(transport_air_volume * 10),
+      blow_out_air_volume=round(blow_out_air_volume * 100),
       lld_mode=lld_mode,
       lld_sensitivity=lld_sensitivity,
-      side_touch_off_distance=round(side_touch_off_distance*10),
-      swap_speed=round(swap_speed*10),
-      settling_time=round(settling_time*10),
-      mix_volume=round(mix_volume*10),
+      side_touch_off_distance=round(side_touch_off_distance * 10),
+      swap_speed=round(swap_speed * 10),
+      settling_time=round(settling_time * 10),
+      mix_volume=round(mix_volume * 10),
       mix_cycles=mix_cycles,
-      mix_position_in_z_direction_from_liquid_surface=\
-        round(mix_position_in_z_direction_from_liquid_surface*10),
-      surface_following_distance_during_mixing=round(surface_following_distance_during_mixing*10),
-      mix_speed=round(mix_speed*10),
+      mix_position_in_z_direction_from_liquid_surface=round(
+        mix_position_in_z_direction_from_liquid_surface * 10
+      ),
+      surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
+      mix_speed=round(mix_speed * 10),
       limit_curve_index=limit_curve_index,
       tadm_channel_pattern=tadm_channel_pattern,
       tadm_algorithm_on_off=tadm_algorithm_on_off,
@@ -1088,13 +1154,15 @@ class Vantage(HamiltonLiquidHandler):
     await self.pick_up_resource(
       resource=move.resource,
       offset=move.resource_offset,
-      pickup_distance_from_top=move.pickup_distance_from_top)
+      pickup_distance_from_top=move.pickup_distance_from_top,
+    )
 
     await self.release_picked_up_resource(
       resource=move.resource,
       destination=move.destination,
       offset=move.destination_offset,
-      pickup_distance_from_top=move.pickup_distance_from_top)
+      pickup_distance_from_top=move.pickup_distance_from_top,
+    )
 
   async def pick_up_resource(
     self,
@@ -1108,8 +1176,8 @@ class Vantage(HamiltonLiquidHandler):
     hotel_depth: float = 0,
     minimal_height_at_command_end: float = 284.0,
   ):
-    """ Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
-    allows you to pick up and move a resource with a single command. """
+    """Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
+    allows you to pick up and move a resource with a single command."""
 
     center = resource.get_absolute_location() + resource.center() + offset
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
@@ -1120,18 +1188,19 @@ class Vantage(HamiltonLiquidHandler):
       y_position=round(center.y * 10),
       z_position=round(grip_height * 10),
       grip_strength=grip_strength,
-      open_gripper_position=round(plate_width*10) + 32,
+      open_gripper_position=round(plate_width * 10) + 32,
       plate_width=round(plate_width * 10) - 33,
-      plate_width_tolerance=round(plate_width_tolerance*10),
+      plate_width_tolerance=round(plate_width_tolerance * 10),
       acceleration_index=acceleration_index,
-      z_clearance_height=round(z_clearance_height*10),
-      hotel_depth=round(hotel_depth*10),
-      minimal_height_at_command_end=
-        round((minimal_height_at_command_end or self._traversal_height) * 10),
+      z_clearance_height=round(z_clearance_height * 10),
+      hotel_depth=round(hotel_depth * 10),
+      minimal_height_at_command_end=round(
+        (minimal_height_at_command_end or self._traversal_height) * 10
+      ),
     )
 
   async def move_picked_up_resource(self):
-    """ Move a resource picked up with the IPG. See :meth:`pick_up_resource`.
+    """Move a resource picked up with the IPG. See :meth:`pick_up_resource`.
 
     You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
     with a single command.
@@ -1148,9 +1217,9 @@ class Vantage(HamiltonLiquidHandler):
     z_clearance_height: float = 0,
     press_on_distance: int = 5,
     hotel_depth: float = 0,
-    minimal_height_at_command_end: float = 284.0
+    minimal_height_at_command_end: float = 284.0,
   ):
-    """ Release a resource picked up with the IPG. See :meth:`pick_up_resource`.
+    """Release a resource picked up with the IPG. See :meth:`pick_up_resource`.
 
     You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
     with a single command.
@@ -1164,31 +1233,32 @@ class Vantage(HamiltonLiquidHandler):
       x_position=round(center.x * 10),
       y_position=round(center.y * 10),
       z_position=round(grip_height * 10),
-      z_clearance_height=round(z_clearance_height*10),
-      open_gripper_position=round(plate_width*10) + 32,
+      z_clearance_height=round(z_clearance_height * 10),
+      open_gripper_position=round(plate_width * 10) + 32,
       press_on_distance=press_on_distance,
-      hotel_depth=round(hotel_depth*10),
-      minimal_height_at_command_end=
-        round((minimal_height_at_command_end or self._traversal_height) * 10),
+      hotel_depth=round(hotel_depth * 10),
+      minimal_height_at_command_end=round(
+        (minimal_height_at_command_end or self._traversal_height) * 10
+      ),
     )
 
   async def prepare_for_manual_channel_operation(self, channel: int):
-    """ Prepare the robot for manual operation. """
+    """Prepare the robot for manual operation."""
 
-    return await self.expose_channel_n(channel_index=channel + 1) # ?
+    return await self.expose_channel_n(channel_index=channel + 1)  # ?
 
-  async def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
-    """ Move the specified channel to the specified x coordinate. """
+  async def move_channel_x(self, channel: int, x: float):  # pylint: disable=unused-argument
+    """Move the specified channel to the specified x coordinate."""
 
     return await self.x_arm_move_to_x_position(round(x * 10))
 
   async def move_channel_y(self, channel: int, y: float):
-    """ Move the specified channel to the specified y coordinate. """
+    """Move the specified channel to the specified y coordinate."""
 
     return await self.position_single_channel_in_y_direction(channel + 1, round(y * 10))
 
   async def move_channel_z(self, channel: int, z: float):
-    """ Move the specified channel to the specified z coordinate. """
+    """Move the specified channel to the specified z coordinate."""
 
     return await self.position_single_channel_in_z_direction(channel + 1, round(z * 10))
 
@@ -1205,7 +1275,7 @@ class Vantage(HamiltonLiquidHandler):
     uv: int,
     blink_interval: Optional[int] = None,
   ):
-    """ Set the LED color.
+    """Set the LED color.
 
     Args:
       mode: The mode of the LED. One of "on", "off", or "blink".
@@ -1231,25 +1301,21 @@ class Vantage(HamiltonLiquidHandler):
         "blink": 2,
       }[mode],
       os=intensity,
-      ok=blink_interval or 750, # default non zero value
+      ok=blink_interval or 750,  # default non zero value
       ol=f"{white} {red} {green} {blue} {uv}",
     )
 
   async def set_loading_cover(self, cover_open: bool):
-    """ Set the loading cover.
+    """Set the loading cover.
 
     Args:
       cover_open: Whether the cover should be open or closed.
     """
 
-    return await self.send_command(
-      module="I1AM",
-      command="LP",
-      lp=not cover_open
-    )
+    return await self.send_command(module="I1AM", command="LP", lp=not cover_open)
 
   async def loading_cover_request_initialization_status(self) -> bool:
-    """ Request the loading cover initialization status.
+    """Request the loading cover initialization status.
 
     This command was based on the STAR command (QW) and the VStarTranslator log.
 
@@ -1257,15 +1323,11 @@ class Vantage(HamiltonLiquidHandler):
       True if the cover module is initialized, False otherwise.
     """
 
-    resp = await self.send_command(
-      module="I1AM",
-      command="QW",
-      fmt={"qw": "int"}
-    )
+    resp = await self.send_command(module="I1AM", command="QW", fmt={"qw": "int"})
     return resp is not None and resp["qw"] == 1
 
   async def loading_cover_initialize(self):
-    """ Initialize the loading cover. """
+    """Initialize the loading cover."""
 
     return await self.send_command(
       module="I1AM",
@@ -1273,7 +1335,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def arm_request_instrument_initialization_status(self) -> bool:
-    """ Request the instrument initialization status.
+    """Request the instrument initialization status.
 
     This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
     to "arm".
@@ -1286,12 +1348,12 @@ class Vantage(HamiltonLiquidHandler):
     return resp is not None and resp["qw"] == 1
 
   async def arm_pre_initialize(self):
-    """ Initialize the arm module. """
+    """Initialize the arm module."""
 
     return await self.send_command(module="A1AM", command="MI")
 
   async def pip_request_initialization_status(self) -> bool:
-    """ Request the pip initialization status.
+    """Request the pip initialization status.
 
     This command was based on the STAR command (QW) and the VStarTranslator log. A1PM corresponds
     to all pip channels together.
@@ -1314,7 +1376,7 @@ class Vantage(HamiltonLiquidHandler):
     tip_type: Optional[List[int]] = None,
     TODO_DI_2: int = 0,
   ):
-    """ Initialize
+    """Initialize
 
     Args:
       x_position: X Position [0.1mm].
@@ -1383,9 +1445,9 @@ class Vantage(HamiltonLiquidHandler):
     tip_length: int,
     maximum_tip_volume: int,
     tip_size: TipSize,
-    pickup_method: TipPickupMethod
+    pickup_method: TipPickupMethod,
   ):
-    """ Tip/needle definition.
+    """Tip/needle definition.
 
     Args:
       tip_type_table_index: tip_table_index
@@ -1399,17 +1461,19 @@ class Vantage(HamiltonLiquidHandler):
     """
 
     if not 0 <= tip_type_table_index <= 99:
-      raise ValueError("tip_type_table_index must be between 0 and 99, but is "
-                       f"{tip_type_table_index}")
+      raise ValueError(
+        "tip_type_table_index must be between 0 and 99, but is " f"{tip_type_table_index}"
+      )
     if not 0 <= tip_type_table_index <= 99:
-      raise ValueError("tip_type_table_index must be between 0 and 99, but is "
-                       f"{tip_type_table_index}")
+      raise ValueError(
+        "tip_type_table_index must be between 0 and 99, but is " f"{tip_type_table_index}"
+      )
     if not 1 <= tip_length <= 1999:
-      raise ValueError("tip_length must be between 1 and 1999, but is "
-                       f"{tip_length}")
+      raise ValueError("tip_length must be between 1 and 1999, but is " f"{tip_length}")
     if not 1 <= maximum_tip_volume <= 56000:
-      raise ValueError("maximum_tip_volume must be between 1 and 56000, but is "
-                       f"{maximum_tip_volume}")
+      raise ValueError(
+        "maximum_tip_volume must be between 1 and 56000, but is " f"{maximum_tip_volume}"
+      )
 
     return await self.send_command(
       module="A1AM",
@@ -1419,7 +1483,7 @@ class Vantage(HamiltonLiquidHandler):
       tl=f"{tip_length:04}",
       tv=f"{maximum_tip_volume:05}",
       tg=tip_size.value,
-      tu=pickup_method.value
+      tu=pickup_method.value,
     )
 
   async def pip_aspirate(
@@ -1464,7 +1528,7 @@ class Vantage(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """ Aspiration of liquid
+    """Aspiration of liquid
 
     Args:
       type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
@@ -1556,10 +1620,13 @@ class Vantage(HamiltonLiquidHandler):
 
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
       pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in
-                 pull_out_distance_to_take_transport_air_in_function_without_lld):
-      raise ValueError("pull_out_distance_to_take_transport_air_in_function_without_lld must be "
-                       "in range 0 to 3600")
+    elif not all(
+      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ):
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
+        "in range 0 to 3600"
+      )
 
     if tube_2nd_section_height_measured_from_zm is None:
       tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
@@ -1785,7 +1852,7 @@ class Vantage(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """ Dispensing of liquid
+    """Dispensing of liquid
 
     Args:
       type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
@@ -1868,10 +1935,13 @@ class Vantage(HamiltonLiquidHandler):
 
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
       pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
-    elif not all(0 <= x <= 3600 for x in
-                  pull_out_distance_to_take_transport_air_in_function_without_lld):
-      raise ValueError("pull_out_distance_to_take_transport_air_in_function_without_lld must be "
-                       "in range 0 to 3600")
+    elif not all(
+      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ):
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
+        "in range 0 to 3600"
+      )
 
     if immersion_depth is None:
       immersion_depth = [0] * self.num_channels
@@ -2024,7 +2094,7 @@ class Vantage(HamiltonLiquidHandler):
       zr=tube_2nd_section_ratio,
       th=minimal_traverse_height_at_begin_of_command,
       te=minimal_height_at_command_end,
-      dv=[f"{vol:04}" for vol in dispense_volume], # it appears at least 4 digits are needed
+      dv=[f"{vol:04}" for vol in dispense_volume],  # it appears at least 4 digits are needed
       ds=dispense_speed,
       ss=cut_off_speed,
       rv=stop_back_volume,
@@ -2095,7 +2165,7 @@ class Vantage(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """ Simultaneous aspiration & dispensation of liquid
+    """Simultaneous aspiration & dispensation of liquid
 
     Args:
       type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
@@ -2206,10 +2276,13 @@ class Vantage(HamiltonLiquidHandler):
 
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
       pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
-    elif not all(0 <= x <= 3600
-      for x in pull_out_distance_to_take_transport_air_in_function_without_lld):
-      raise ValueError("pull_out_distance_to_take_transport_air_in_function_without_lld must be "
-                       "in range 0 to 3600")
+    elif not all(
+      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+    ):
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
+        "in range 0 to 3600"
+      )
 
     if minimum_height is None:
       minimum_height = [3600] * self.num_channels
@@ -2420,12 +2493,12 @@ class Vantage(HamiltonLiquidHandler):
     self,
     y_position: List[int],
     tip_pattern: Optional[List[bool]] = None,
-    first_shoot_x_pos: int = 0, #1
-    dispense_on_fly_pos_command_end: int = 0, # 2
-    x_acceleration_distance_before_first_shoot: int = 100, # 3
-    space_between_shoots: int = 900, # 4
+    first_shoot_x_pos: int = 0,  # 1
+    dispense_on_fly_pos_command_end: int = 0,  # 2
+    x_acceleration_distance_before_first_shoot: int = 100,  # 3
+    space_between_shoots: int = 900,  # 4
     x_speed: int = 270,
-    number_of_shoots: int = 1, # 5
+    number_of_shoots: int = 1,  # 5
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
     liquid_surface_at_function_without_lld: Optional[List[int]] = None,
@@ -2438,7 +2511,7 @@ class Vantage(HamiltonLiquidHandler):
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
   ):
-    """ Dispense on fly
+    """Dispense on fly
 
     Args:
       tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
@@ -2588,7 +2661,7 @@ class Vantage(HamiltonLiquidHandler):
     TODO_DB_11: Optional[List[int]] = None,
     TODO_DB_12: Optional[List[int]] = None,
   ):
-    """ Nano pulse dispense
+    """Nano pulse dispense
 
     Args:
       TODO_DB_0: (0).
@@ -2738,7 +2811,7 @@ class Vantage(HamiltonLiquidHandler):
     wash_cycles: int = 0,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """ Wash tips
+    """Wash tips
 
     Args:
       tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
@@ -2840,7 +2913,7 @@ class Vantage(HamiltonLiquidHandler):
     blow_out_air_volume: Optional[List[int]] = None,
     tip_handling_method: Optional[List[int]] = None,
   ):
-    """ Tip Pick up
+    """Tip Pick up
 
     Args:
       x_position: X Position [0.1mm].
@@ -2932,7 +3005,7 @@ class Vantage(HamiltonLiquidHandler):
     TODO_TR_2: int = 0,
     tip_handling_method: Optional[List[int]] = None,
   ):
-    """ Tip Discard
+    """Tip Discard
 
     Args:
       x_position: X Position [0.1mm].
@@ -3008,7 +3081,7 @@ class Vantage(HamiltonLiquidHandler):
     x_search_distance: int = 0,
     x_speed: int = 270,
   ):
-    """ Search for Teach in signal in X direction
+    """Search for Teach in signal in X direction
 
     Args:
       channel_index: Channel index.
@@ -3037,7 +3110,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     y_position: List[int],
   ):
-    """ Position all channels in Y direction
+    """Position all channels in Y direction
 
     Args:
       y_position: Y Position [0.1mm].
@@ -3058,7 +3131,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     z_position: Optional[List[int]] = None,
   ):
-    """ Position all channels in Z direction
+    """Position all channels in Z direction
 
     Args:
       z_position: Z Position [0.1mm].
@@ -3080,7 +3153,7 @@ class Vantage(HamiltonLiquidHandler):
     channel_index: int = 1,
     y_position: int = 3000,
   ):
-    """ Position single channel in Y direction
+    """Position single channel in Y direction
 
     Args:
       channel_index: Channel index.
@@ -3105,7 +3178,7 @@ class Vantage(HamiltonLiquidHandler):
     channel_index: int = 1,
     z_position: int = 0,
   ):
-    """ Position single channel in Z direction
+    """Position single channel in Z direction
 
     Args:
       channel_index: Channel index.
@@ -3133,7 +3206,7 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     z_position: Optional[List[int]] = None,
   ):
-    """ Move to defined position
+    """Move to defined position
 
     Args:
       tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
@@ -3185,7 +3258,7 @@ class Vantage(HamiltonLiquidHandler):
     gap_center_z_direction: int = 0,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """ Teach rack using channel n
+    """Teach rack using channel n
 
     Attention! Channels not involved must first be taken out of measurement range.
 
@@ -3228,7 +3301,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     channel_index: int = 1,
   ):
-    """ Expose channel n
+    """Expose channel n
 
     Args:
       channel_index: Channel index.
@@ -3253,7 +3326,7 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     first_pip_channel_node_no: int = 1,
   ):
-    """ Calculates check sums and compares them with the value saved in Flash EPROM
+    """Calculates check sums and compares them with the value saved in Flash EPROM
 
     Args:
       TODO_DC_0: (0).
@@ -3318,7 +3391,7 @@ class Vantage(HamiltonLiquidHandler):
     first_pip_channel_node_no: int = 1,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """ Discard CoRe gripper tool
+    """Discard CoRe gripper tool
 
     Args:
       gripper_tool_x_position: (0).
@@ -3392,7 +3465,7 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """ Grip plate
+    """Grip plate
 
     Args:
       plate_center_x_direction: Plate center X direction [0.1mm].
@@ -3468,7 +3541,7 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
   ):
-    """ Put plate
+    """Put plate
 
     Args:
       plate_center_x_direction: Plate center X direction [0.1mm].
@@ -3531,7 +3604,7 @@ class Vantage(HamiltonLiquidHandler):
     z_speed: int = 1287,
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
   ):
-    """ Move to position
+    """Move to position
 
     Args:
       plate_center_x_direction: Plate center X direction [0.1mm].
@@ -3573,7 +3646,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     first_pip_channel_node_no: int = 1,
   ):
-    """ Release object
+    """Release object
 
     Args:
       first_pip_channel_node_no: First (lower) pip. channel node no. (0 = disabled).
@@ -3589,7 +3662,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def set_any_parameter_within_this_module(self):
-    """ Set any parameter within this module """
+    """Set any parameter within this module"""
 
     return await self.send_command(
       module="A1PM",
@@ -3597,7 +3670,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def request_y_positions_of_all_channels(self):
-    """ Request Y Positions of all channels """
+    """Request Y Positions of all channels"""
 
     return await self.send_command(
       module="A1PM",
@@ -3605,7 +3678,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def request_y_position_of_channel_n(self, channel_index: int = 1):
-    """ Request Y Position of channel n """
+    """Request Y Position of channel n"""
 
     return await self.send_command(
       module="A1PM",
@@ -3614,7 +3687,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def request_z_positions_of_all_channels(self):
-    """ Request Z Positions of all channels """
+    """Request Z Positions of all channels"""
 
     return await self.send_command(
       module="A1PM",
@@ -3622,7 +3695,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def request_z_position_of_channel_n(self, channel_index: int = 1):
-    """ Request Z Position of channel n """
+    """Request Z Position of channel n"""
 
     return await self.send_command(
       module="A1PM",
@@ -3631,14 +3704,14 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def query_tip_presence(self) -> List[bool]:
-    """ Query Tip presence """
+    """Query Tip presence"""
 
     resp = await self.send_command(module="A1PM", command="QA", fmt={"rt": "[int]"})
     presences_int = cast(List[int], resp["rt"])
     return [bool(p) for p in presences_int]
 
   async def request_height_of_last_lld(self):
-    """ Request height of last LLD """
+    """Request height of last LLD"""
 
     return await self.send_command(
       module="A1PM",
@@ -3646,7 +3719,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def request_channel_dispense_on_fly_status(self):
-    """ Request channel dispense on fly status """
+    """Request channel dispense on fly status"""
 
     return await self.send_command(
       module="A1PM",
@@ -3654,7 +3727,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def core96_request_initialization_status(self) -> bool:
-    """ Request CoRe96 initialization status
+    """Request CoRe96 initialization status
 
     This method is inferred from I1AM and A1AM commands ("QW").
 
@@ -3675,7 +3748,7 @@ class Vantage(HamiltonLiquidHandler):
     end_z_deposit_position: int = 0,
     tip_type: int = 4,
   ):
-    """ Initialize 96 head.
+    """Initialize 96 head.
 
     Args:
       x_position: X Position [0.1mm].
@@ -3756,7 +3829,7 @@ class Vantage(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
-    """ Aspiration of liquid using the 96 head.
+    """Aspiration of liquid using the 96 head.
 
     Args:
       type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
@@ -3819,8 +3892,10 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
 
     if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
-      raise ValueError("pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
-                       "range 0 to 3900")
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
+        "range 0 to 3900"
+      )
 
     if not 0 <= minimum_height <= 3900:
       raise ValueError("minimum_height must be in range 0 to 3900")
@@ -3885,8 +3960,9 @@ class Vantage(HamiltonLiquidHandler):
     if tadm_channel_pattern is None:
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
-      raise ValueError("tadm_channel_pattern must be of length 24, but is "
-                        f"'{len(tadm_channel_pattern)}'")
+      raise ValueError(
+        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+      )
     tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
 
     if not 0 <= tadm_algorithm_on_off <= 1:
@@ -3967,7 +4043,7 @@ class Vantage(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
-    """ Dispensing of liquid using the 96 head.
+    """Dispensing of liquid using the 96 head.
 
     Args:
       type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
@@ -4037,8 +4113,10 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
 
     if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
-      raise ValueError("pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
-                       "range 0 to 3900")
+      raise ValueError(
+        "pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
+        "range 0 to 3900"
+      )
 
     if not -990 <= immersion_depth <= 990:
       raise ValueError("immersion_depth must be in range -990 to 990")
@@ -4106,8 +4184,9 @@ class Vantage(HamiltonLiquidHandler):
     if tadm_channel_pattern is None:
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
-      raise ValueError("tadm_channel_pattern must be of length 24, but is "
-                        f"'{len(tadm_channel_pattern)}'")
+      raise ValueError(
+        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+      )
     tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
 
     if not 0 <= tadm_algorithm_on_off <= 1:
@@ -4164,7 +4243,7 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: int = 3900,
     minimal_height_at_command_end: int = 3900,
   ):
-    """ Tip Pick up using the 96 head.
+    """Tip Pick up using the 96 head.
 
     Args:
       x_position: X Position [0.1mm].
@@ -4218,7 +4297,7 @@ class Vantage(HamiltonLiquidHandler):
     minimal_traverse_height_at_begin_of_command: int = 3900,
     minimal_height_at_command_end: int = 3900,
   ):
-    """ Tip Discard using the 96 head.
+    """Tip Discard using the 96 head.
 
     Args:
       x_position: X Position [0.1mm].
@@ -4261,7 +4340,7 @@ class Vantage(HamiltonLiquidHandler):
     z_position: int = 0,
     minimal_traverse_height_at_begin_of_command: int = 3900,
   ):
-    """ Move to defined position using the 96 head.
+    """Move to defined position using the 96 head.
 
     Args:
       x_position: X Position [0.1mm].
@@ -4304,7 +4383,7 @@ class Vantage(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_speed: int = 2000,
   ):
-    """ Wash tips on the 96 head.
+    """Wash tips on the 96 head.
 
     Args:
       x_position: X Position [0.1mm].
@@ -4365,7 +4444,7 @@ class Vantage(HamiltonLiquidHandler):
     liquid_surface_at_function_without_lld: int = 3900,
     minimal_height_at_command_end: int = 3900,
   ):
-    """ Empty washed tips (end of wash procedure only) on the 96 head.
+    """Empty washed tips (end of wash procedure only) on the 96 head.
 
     Args:
       liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
@@ -4390,7 +4469,7 @@ class Vantage(HamiltonLiquidHandler):
     x_search_distance: int = 0,
     x_speed: int = 50,
   ):
-    """ Search for Teach in signal in X direction on the 96 head.
+    """Search for Teach in signal in X direction on the 96 head.
 
     Args:
       x_search_distance: X search distance [0.1mm].
@@ -4411,7 +4490,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def core96_set_any_parameter(self):
-    """ Set any parameter within the 96 head module. """
+    """Set any parameter within the 96 head module."""
 
     return await self.send_command(
       module="A1HM",
@@ -4419,7 +4498,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def core96_query_tip_presence(self):
-    """ Query Tip presence on the 96 head. """
+    """Query Tip presence on the 96 head."""
 
     return await self.send_command(
       module="A1HM",
@@ -4427,7 +4506,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def core96_request_position(self):
-    """ Request position of the 96 head. """
+    """Request position of the 96 head."""
 
     return await self.send_command(
       module="A1HM",
@@ -4438,7 +4517,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     tadm_channel_pattern: Optional[List[bool]] = None,
   ):
-    """ Request TADM error status on the 96 head.
+    """Request TADM error status on the 96 head.
 
     Args:
       tadm_channel_pattern: TADM Channel pattern.
@@ -4447,8 +4526,9 @@ class Vantage(HamiltonLiquidHandler):
     if tadm_channel_pattern is None:
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
-      raise ValueError("tadm_channel_pattern must be of length 24, but is "
-                        f"'{len(tadm_channel_pattern)}'")
+      raise ValueError(
+        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+      )
     tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
 
     return await self.send_command(
@@ -4458,7 +4538,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_request_initialization_status(self) -> bool:
-    """ Request initialization status of IPG.
+    """Request initialization status of IPG.
 
     This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
     to "arm".
@@ -4467,15 +4547,11 @@ class Vantage(HamiltonLiquidHandler):
       True if the ipg module is initialized, False otherwise.
     """
 
-    resp = await self.send_command(
-      module="A1RM",
-      command="QW",
-      fmt={"qw": "int"}
-    )
+    resp = await self.send_command(module="A1RM", command="QW", fmt={"qw": "int"})
     return resp is not None and resp["qw"] == 1
 
   async def ipg_initialize(self):
-    """ Initialize IPG """
+    """Initialize IPG"""
 
     return await self.send_command(
       module="A1RM",
@@ -4483,7 +4559,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_park(self):
-    """ Park IPG """
+    """Park IPG"""
 
     return await self.send_command(
       module="A1RM",
@@ -4491,7 +4567,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_expose_channel_n(self):
-    """ Expose channel n """
+    """Expose channel n"""
 
     return await self.send_command(
       module="A1RM",
@@ -4499,7 +4575,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_release_object(self):
-    """ Release object """
+    """Release object"""
 
     return await self.send_command(
       module="A1RM",
@@ -4511,7 +4587,7 @@ class Vantage(HamiltonLiquidHandler):
     x_search_distance: int = 0,
     x_speed: int = 50,
   ):
-    """ Search for Teach in signal in X direction
+    """Search for Teach in signal in X direction
 
     Args:
       x_search_distance: X search distance [0.1mm].
@@ -4545,7 +4621,7 @@ class Vantage(HamiltonLiquidHandler):
     hotel_depth: int = 0,
     minimal_height_at_command_end: int = 3600,
   ):
-    """ Grip plate
+    """Grip plate
 
     Args:
       x_position: X Position [0.1mm].
@@ -4621,7 +4697,7 @@ class Vantage(HamiltonLiquidHandler):
     hotel_depth: int = 0,
     minimal_height_at_command_end: int = 3600,
   ):
-    """ Put plate
+    """Put plate
 
     Args:
       x_position: X Position [0.1mm].
@@ -4676,7 +4752,7 @@ class Vantage(HamiltonLiquidHandler):
     grip_orientation: int = 32,
     minimal_traverse_height_at_begin_of_command: int = 3600,
   ):
-    """ Prepare gripper orientation
+    """Prepare gripper orientation
 
     Args:
       grip_orientation: Grip orientation.
@@ -4704,7 +4780,7 @@ class Vantage(HamiltonLiquidHandler):
     z_position: int = 3600,
     minimal_traverse_height_at_begin_of_command: int = 3600,
   ):
-    """ Move to defined position
+    """Move to defined position
 
     Args:
       x_position: X Position [0.1mm].
@@ -4736,7 +4812,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_set_any_parameter_within_this_module(self):
-    """ Set any parameter within this module """
+    """Set any parameter within this module"""
 
     return await self.send_command(
       module="A1RM",
@@ -4744,17 +4820,13 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_get_parking_status(self) -> bool:
-    """ Get parking status. Returns `True` if parked. """
+    """Get parking status. Returns `True` if parked."""
 
-    resp = await self.send_command(
-      module="A1RM",
-      command="RG",
-      fmt={"rg": "int"}
-    )
+    resp = await self.send_command(module="A1RM", command="RG", fmt={"rg": "int"})
     return resp is not None and resp["rg"] == 1
 
   async def ipg_query_tip_presence(self):
-    """ Query Tip presence """
+    """Query Tip presence"""
 
     return await self.send_command(
       module="A1RM",
@@ -4762,7 +4834,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_request_access_range(self, grip_orientation: int = 32):
-    """ Request access range
+    """Request access range
 
     Args:
       grip_orientation: Grip orientation.
@@ -4778,7 +4850,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_request_position(self, grip_orientation: int = 32):
-    """ Request position
+    """Request position
 
     Args:
       grip_orientation: Grip orientation.
@@ -4794,7 +4866,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_request_actual_angular_dimensions(self):
-    """ Request actual angular dimensions """
+    """Request actual angular dimensions"""
 
     return await self.send_command(
       module="A1RM",
@@ -4802,7 +4874,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def ipg_request_configuration(self):
-    """ Request configuration """
+    """Request configuration"""
 
     return await self.send_command(
       module="A1RM",
@@ -4810,7 +4882,7 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def x_arm_initialize(self):
-    """ Initialize the x arm """
+    """Initialize the x arm"""
     return await self.send_command(module="A1XM", command="XI")
 
   async def x_arm_move_to_x_position(
@@ -4819,7 +4891,7 @@ class Vantage(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XI_1: int = 1,
   ):
-    """ Move arm to X position
+    """Move arm to X position
 
     Args:
       x_position: X Position [0.1mm].
@@ -4844,7 +4916,7 @@ class Vantage(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XA_1: int = 1,
   ):
-    """ Move arm to X position with all attached components in Z safety position
+    """Move arm to X position with all attached components in Z safety position
 
     Args:
       x_position: X Position [0.1mm].
@@ -4875,7 +4947,7 @@ class Vantage(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XS_1: int = 1,
   ):
-    """ Move arm relatively in X
+    """Move arm relatively in X
 
     Args:
       x_search_distance: X search distance [0.1mm].
@@ -4906,7 +4978,7 @@ class Vantage(HamiltonLiquidHandler):
     x_speed: int = 25000,
     TODO_XT_1: int = 1,
   ):
-    """ Search X for teach signal
+    """Search X for teach signal
 
     Args:
       x_search_distance: X search distance [0.1mm].
@@ -4935,7 +5007,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     TODO_XL_1: int = 1,
   ):
-    """ Set X drive angle of alignment
+    """Set X drive angle of alignment
 
     Args:
       TODO_XL_1: (0).
@@ -4957,7 +5029,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     TODO_BD_1: str = "",
   ):
-    """ Send message to motion controller
+    """Send message to motion controller
 
     Args:
       TODO_BD_1: (0).
@@ -4974,7 +5046,7 @@ class Vantage(HamiltonLiquidHandler):
     TODO_AA_1: int = 0,
     TODO_AA_2: int = 1,
   ):
-    """ Set any parameter within this module
+    """Set any parameter within this module
 
     Args:
       TODO_AA_1: (0).
@@ -4989,12 +5061,12 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def x_arm_request_arm_x_position(self):
-    """ Request arm X position. This returns a list, of which the first value is one that can be
-    used with x_arm_move_to_x_position. """
+    """Request arm X position. This returns a list, of which the first value is one that can be
+    used with x_arm_move_to_x_position."""
     return await self.send_command(module="A1XM", command="RX")
 
   async def x_arm_request_error_code(self):
-    """ X arm request error code """
+    """X arm request error code"""
     return await self.send_command(module="A1XM", command="RE")
 
   async def x_arm_request_x_drive_recorded_data(
@@ -5002,7 +5074,7 @@ class Vantage(HamiltonLiquidHandler):
     TODO_QL_1: int = 0,
     TODO_QL_2: int = 0,
   ):
-    """ Request X drive recorded data
+    """Request X drive recorded data
 
     Args:
       TODO_QL_1: (0).
@@ -5017,16 +5089,18 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def disco_mode(self):
-    """ Easter egg. """
+    """Easter egg."""
     for _ in range(69):
       r, g, b = random.randint(30, 100), random.randint(30, 100), random.randint(30, 100)
       await self.set_led_color("on", intensity=100, white=0, red=r, green=g, blue=b, uv=0)
       await asyncio.sleep(0.1)
 
   async def russian_roulette(self):
-    """ Dangerous easter egg. """
-    sure = input("Are you sure you want to play Russian Roulette? This will turn on the uv-light "
-                 "with a probability of 1/6. (yes/no) ")
+    """Dangerous easter egg."""
+    sure = input(
+      "Are you sure you want to play Russian Roulette? This will turn on the uv-light "
+      "with a probability of 1/6. (yes/no) "
+    )
     if sure.lower() != "yes":
       print("boring")
       return
