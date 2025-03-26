@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.four\_ml\_tip\_with\_filter
+=======================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autofunction:: four_ml_tip_with_filter

@@ -1,0 +1,26 @@
+﻿pylabrobot.machines.backend.MachineBackend
+==========================================
+
+.. currentmodule:: pylabrobot.machines.backend
+
+.. autoclass:: MachineBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MachineBackend.__init__
+      ~MachineBackend.deserialize
+      ~MachineBackend.get_all_instances
+      ~MachineBackend.serialize
+      ~MachineBackend.setup
+      ~MachineBackend.stop
+   
+   

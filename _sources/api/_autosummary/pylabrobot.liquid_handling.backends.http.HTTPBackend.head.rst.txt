@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.http.HTTPBackend.head
+==========================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.http
+
+.. autoproperty:: HTTPBackend.head
