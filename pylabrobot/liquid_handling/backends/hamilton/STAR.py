@@ -23,10 +23,7 @@ from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.liquid_handling.errors import ChannelizedError
-from pylabrobot.liquid_handling.liquid_classes.hamilton import (
-  HamiltonLiquidClass,
-  get_star_liquid_class,
-)
+from pylabrobot.liquid_handling.liquid_classes.hamilton import HamiltonLiquidClass
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -71,7 +68,6 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
   STAR_SIZE_X,
   STARLET_SIZE_X,
 )
-from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
 
@@ -1597,8 +1593,6 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[SingleChannelAspiration],
     use_channels: List[int],
-    jet: Optional[List[bool]] = None,
-    blow_out: Optional[List[bool]] = None,
     lld_search_height: Optional[List[float]] = None,
     clot_detection_height: Optional[List[float]] = None,
     pull_out_distance_transport_air: Optional[List[float]] = None,
@@ -1645,9 +1639,6 @@ class STAR(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations to perform.
       use_channels: The channels to use for the operations.
-      jet: whether to search for a jet liquid class. Only used on dispense. Default is False.
-      blow_out: whether to blow out air. Only used on dispense. Note that in the VENUS Liquid
-        Editor, this is called "empty". Default is False.
 
       lld_search_height: The height to start searching for the liquid level when using LLD.
       clot_detection_height: Unknown, but probably the height to search for clots when doing LLD.
@@ -1696,48 +1687,18 @@ class STAR(HamiltonLiquidHandler):
         starting an aspiration.
       min_z_endpos: The minimum height to move to, this is the end of aspiration.
 
-      hamilton_liquid_classes: Override the default liquid classes. See
-        pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
       liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0
           and 360. Defaults to well bottom + liquid height. Should use absolute z.
     """
+
+    if hamilton_liquid_classes is not None:
+      raise NotImplementedError("Hamilton liquid classes are deprecated.")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
 
-    if jet is None:
-      jet = [False] * n
-    if blow_out is None:
-      blow_out = [False] * n
-
-    if hamilton_liquid_classes is None:
-      hamilton_liquid_classes = []
-      for i, op in enumerate(ops):
-        liquid = Liquid.WATER  # default to WATER
-        # [-1][0]: get last liquid in well, [0] is indexing into the tuple
-        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
-          liquid = op.liquids[-1][0]
-
-        hamilton_liquid_classes.append(
-          get_star_liquid_class(
-            tip_volume=op.tip.maximal_volume,
-            is_core=False,
-            is_tip=True,
-            has_filter=op.tip.has_filter,
-            liquid=liquid,
-            jet=jet[i],
-            blow_out=blow_out[i],
-          )
-        )
-
     self._assert_valid_resources([op.resource for op in ops])
-
-    # correct volumes using the liquid class
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
-    ]
 
     well_bottoms = [
       op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
@@ -1755,13 +1716,7 @@ class STAR(HamiltonLiquidHandler):
       ]
     else:
       lld_search_height = [(wb + sh) for wb, sh in zip(well_bottoms, lld_search_height)]
-    clot_detection_height = _fill_in_defaults(
-      clot_detection_height,
-      default=[
-        hlc.aspiration_clot_retract_height if hlc is not None else 0
-        for hlc in hamilton_liquid_classes
-      ],
-    )
+    clot_detection_height = _fill_in_defaults(clot_detection_height, default=[0] * n)
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10] * n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
@@ -1770,21 +1725,9 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
-    flow_rates = [
-      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
-      for op, hlc in zip(ops, hamilton_liquid_classes)
-    ]
-    transport_air_volume = _fill_in_defaults(
-      transport_air_volume,
-      default=[
-        hlc.aspiration_air_transport_volume if hlc is not None else 0
-        for hlc in hamilton_liquid_classes
-      ],
-    )
-    blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0))
-      for op, hlc in zip(ops, hamilton_liquid_classes)
-    ]
+    flow_rates = [op.flow_rate or 100 for op in ops]
+    transport_air_volume = _fill_in_defaults(transport_air_volume, default=[0] * n)
+    blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
     pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0] * n)
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
@@ -1795,27 +1738,12 @@ class STAR(HamiltonLiquidHandler):
     detection_height_difference_for_dual_lld = _fill_in_defaults(
       detection_height_difference_for_dual_lld, [0] * n
     )
-    swap_speed = _fill_in_defaults(
-      swap_speed,
-      default=[
-        hlc.aspiration_swap_speed if hlc is not None else 100 for hlc in hamilton_liquid_classes
-      ],
-    )
-    settling_time = _fill_in_defaults(
-      settling_time,
-      default=[
-        hlc.aspiration_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    swap_speed = _fill_in_defaults(swap_speed, default=[100] * n)
+    settling_time = _fill_in_defaults(settling_time, default=[0] * n)
     mix_volume = _fill_in_defaults(mix_volume, [0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
     mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
-    mix_speed = _fill_in_defaults(
-      mix_speed,
-      default=[
-        hlc.aspiration_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    mix_speed = _fill_in_defaults(mix_speed, [50] * n)
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -1842,7 +1770,7 @@ class STAR(HamiltonLiquidHandler):
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        aspiration_volumes=[round(vol * 10) for vol in volumes],
+        aspiration_volumes=[round(op.volume * 10) for op in ops],
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         clot_detection_height=[round(cd * 10) for cd in clot_detection_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
@@ -1995,6 +1923,9 @@ class STAR(HamiltonLiquidHandler):
         documentation. Dispense mode 4.
     """
 
+    if hamilton_liquid_classes is not None:
+      raise NotImplementedError("Hamilton liquid classes are deprecated.")
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -2005,32 +1936,6 @@ class STAR(HamiltonLiquidHandler):
       empty = [False] * n
     if blow_out is None:
       blow_out = [False] * n
-
-    if hamilton_liquid_classes is None:
-      hamilton_liquid_classes = []
-      for i, op in enumerate(ops):
-        liquid = Liquid.WATER  # default to WATER
-        # [-1][0]: get last liquid in tip, [0] is indexing into the tuple
-        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
-          liquid = op.liquids[-1][0]
-
-        hamilton_liquid_classes.append(
-          get_star_liquid_class(
-            tip_volume=op.tip.maximal_volume,
-            is_core=False,
-            is_tip=True,
-            has_filter=op.tip.has_filter,
-            liquid=liquid,
-            jet=jet[i],
-            blow_out=blow_out[i],
-          )
-        )
-
-    # correct volumes using the liquid class
-    volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
-    ]
 
     well_bottoms = [
       op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
@@ -2061,55 +1966,23 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
-    flow_rates = [
-      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
-      for op, hlc in zip(ops, hamilton_liquid_classes)
-    ]
+    flow_rates = [op.flow_rate or 120 for op in ops]
     cut_off_speed = _fill_in_defaults(cut_off_speed, [5.0] * n)
-    stop_back_volume = _fill_in_defaults(
-      stop_back_volume,
-      default=[
-        hlc.dispense_stop_back_volume if hlc is not None else 0 for hlc in hamilton_liquid_classes
-      ],
-    )
-    transport_air_volume = _fill_in_defaults(
-      transport_air_volume,
-      default=[
-        hlc.dispense_air_transport_volume if hlc is not None else 0
-        for hlc in hamilton_liquid_classes
-      ],
-    )
-    blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
-      for op, hlc in zip(ops, hamilton_liquid_classes)
-    ]
+    stop_back_volume = _fill_in_defaults(stop_back_volume, default=[0] * n)
+    transport_air_volume = _fill_in_defaults(transport_air_volume, [0] * n)
+    blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
     dispense_position_above_z_touch_off = _fill_in_defaults(
       dispense_position_above_z_touch_off, default=[0] * n
     )
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
     dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1] * n)
-    swap_speed = _fill_in_defaults(
-      swap_speed,
-      default=[
-        hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hamilton_liquid_classes
-      ],
-    )
-    settling_time = _fill_in_defaults(
-      settling_time,
-      default=[
-        hlc.dispense_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    swap_speed = _fill_in_defaults(swap_speed, [10.0] * n)
+    settling_time = _fill_in_defaults(settling_time, [0] * n)
     mix_volume = _fill_in_defaults(mix_volume, [0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
     mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
-    mix_speed = _fill_in_defaults(
-      mix_speed,
-      default=[
-        hlc.dispense_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    mix_speed = _fill_in_defaults(mix_speed, [50.0] * n)
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -2119,7 +1992,7 @@ class STAR(HamiltonLiquidHandler):
         x_positions=x_positions,
         y_positions=y_positions,
         dispensing_mode=dispensing_modes,
-        dispense_volumes=[round(vol * 10) for vol in volumes],
+        dispense_volumes=[round(op.volume * 10) for op in ops],
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
         pull_out_distance_transport_air=[round(po * 10) for po in pull_out_distance_transport_air],
@@ -2255,20 +2128,13 @@ class STAR(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mix: float = 0,
-    speed_of_mix: float = 120.0,
+    mix_speed: float = 120.0,
     limit_curve_index: int = 0,
   ):
     """Aspirate using the Core96 head.
 
     Args:
       aspiration: The aspiration to perform.
-
-      jet: Whether to search for a jet liquid class. Only used on dispense.
-      blow_out: Whether to use "blow out" dispense mode. Only used on dispense. Note that this is
-        labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
-        documentation.
-      hlc: The Hamiltonian liquid class to use. If `None`, the liquid class will be determined
-        automatically.
 
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
       liquid_height: The height of the liquid above the bottom of the well, in millimeters.
@@ -2298,9 +2164,12 @@ class STAR(HamiltonLiquidHandler):
         liquid surface.
       surface_following_distance_during_mix: The distance to follow the liquid surface
         during mix.
-      speed_of_mix: The speed of mix.
+      mix_speed: The speed of mix.
       limit_curve_index: The index of the limit curve to use.
     """
+
+    if hlc is not None:
+      raise NotImplementedError("Hamilton liquid classes are deprecated.")
 
     assert self.core96_head_installed, "96 head must be installed"
 
@@ -2316,56 +2185,26 @@ class STAR(HamiltonLiquidHandler):
     else:
       position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
 
-    tip = aspiration.tips[0]
-
     liquid_height = position.z + liquid_height
 
-    liquid_to_be_aspirated = Liquid.WATER
-    if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
-      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
-      liquid_to_be_aspirated = aspiration.liquids[0][0][0]
-    hlc = hlc or get_star_liquid_class(
-      tip_volume=tip.maximal_volume,
-      is_core=True,
-      is_tip=True,
-      has_filter=tip.has_filter,
-      # get last liquid in pipette, first to be dispensed
-      liquid=liquid_to_be_aspirated,
-      jet=jet,
-      blow_out=blow_out,  # see comment in method docstring
-    )
-
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(aspiration.volume)
+    if transport_air_volume is None:
+      transport_air_volume = 0
+    if aspiration.blow_out_air_volume is None:
+      blow_out_air_volume = 0.0
     else:
-      volume = aspiration.volume
-
-    # Get better default values from the HLC if available
-    transport_air_volume = transport_air_volume or (
-      hlc.aspiration_air_transport_volume if hlc is not None else 0
-    )
-    blow_out_air_volume = aspiration.blow_out_air_volume or (
-      hlc.aspiration_blow_out_volume if hlc is not None else 0
-    )
-    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
-    swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
-    speed_of_mix = speed_of_mix or (hlc.aspiration_mix_flow_rate if hlc is not None else 10.0)
+      blow_out_air_volume = aspiration.blow_out_air_volume
+    if aspiration.flow_rate is None:
+      flow_rate = 250.0
+    else:
+      flow_rate = aspiration.flow_rate
+    if swap_speed is None:
+      swap_speed = 100
+    if settling_time is None:
+      settling_time = 0.5
+    if mix_speed is None:
+      mix_speed = 10.0
 
     channel_pattern = [True] * 12 * 8
-
-    # Was this ever true? Just copied it over from pyhamilton. Could have something to do with
-    # the liquid classes and whether blow_out mode is enabled.
-    # # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
-    # # manually.
-    # if blow_out_air_volume is not None and blow_out_air_volume > 0:
-    #   await self.aspirate_core_96(
-    #     x_position=int(position.x * 10),
-    #     y_positions=int(position.y * 10),
-    #     lld_mode=0,
-    #     liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
-    #     aspiration_volumes=int(blow_out_air_volume * 10)
-    #   )
 
     return await self.aspirate_core_96(
       x_position=round(position.x * 10),
@@ -2389,7 +2228,7 @@ class STAR(HamiltonLiquidHandler):
       liquid_surface_sink_distance_at_the_end_of_aspiration=round(
         liquid_surface_sink_distance_at_the_end_of_aspiration * 10
       ),
-      aspiration_volumes=round(volume * 10),
+      aspiration_volumes=round(aspiration.volume * 10),
       aspiration_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
       blow_out_air_volume=round(blow_out_air_volume * 10),
@@ -2402,7 +2241,7 @@ class STAR(HamiltonLiquidHandler):
       mix_cycles=mix_cycles,
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
       surface_following_distance_during_mix=round(surface_following_distance_during_mix * 10),
-      speed_of_mix=round(speed_of_mix * 10),
+      mix_speed=round(mix_speed * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2437,7 +2276,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mixing: float = 0,
-    speed_of_mixing: float = 120.0,
+    mix_speed: float = 120.0,
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
@@ -2473,11 +2312,14 @@ class STAR(HamiltonLiquidHandler):
       mixing_cycles: Mixing cycles.
       mixing_position_from_liquid_surface: Mixing position from liquid surface, in mm.
       surface_following_distance_during_mixing: Surface following distance during mixing, in mm.
-      speed_of_mixing: Speed of mixing, in ul/s.
+      mix_speed: Speed of mixing, in ul/s.
       limit_curve_index: Limit curve index.
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
     """
+
+    if hlc is not None:
+      raise NotImplementedError("Hamilton liquid classes are deprecated.")
 
     assert self.core96_head_installed, "96 head must be installed"
 
@@ -2492,42 +2334,27 @@ class STAR(HamiltonLiquidHandler):
       )
     else:
       position = dispense.container.get_absolute_location(y="b") + dispense.offset
-    tip = dispense.tips[0]
 
     liquid_height = position.z + liquid_height
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 
-    liquid_to_be_dispensed = Liquid.WATER  # default to water.
-    if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
-      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
-      liquid_to_be_dispensed = dispense.liquids[0][-1][0]
-    hlc = hlc or get_star_liquid_class(
-      tip_volume=tip.maximal_volume,
-      is_core=True,
-      is_tip=True,
-      has_filter=tip.has_filter,
-      # get last liquid in pipette, first to be dispensed
-      liquid=liquid_to_be_dispensed,
-      jet=jet,
-      blow_out=blow_out,  # see comment in method docstring
-    )
-
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(dispense.volume)
+    if transport_air_volume is None:
+      transport_air_volume = 0
+    if dispense.blow_out_air_volume is None:
+      blow_out_air_volume = 0.0
     else:
-      volume = dispense.volume
-
-    transport_air_volume = transport_air_volume or (
-      hlc.dispense_air_transport_volume if hlc is not None else 0
-    )
-    blow_out_air_volume = dispense.blow_out_air_volume or (
-      hlc.dispense_blow_out_volume if hlc is not None else 0
-    )
-    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
-    swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
-    speed_of_mixing = speed_of_mixing or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
+      blow_out_air_volume = dispense.blow_out_air_volume
+    if dispense.flow_rate is None:
+      flow_rate = 120.0
+    else:
+      flow_rate = dispense.flow_rate
+    if swap_speed is None:
+      swap_speed = 100
+    if settling_time is None:
+      settling_time = 5
+    if mix_speed is None:
+      mix_speed = 100
 
     channel_pattern = [True] * 12 * 8
 
@@ -2553,7 +2380,7 @@ class STAR(HamiltonLiquidHandler):
       liquid_surface_sink_distance_at_the_end_of_dispense=round(
         liquid_surface_sink_distance_at_the_end_of_dispense * 10
       ),
-      dispense_volume=round(volume * 10),
+      dispense_volume=round(dispense.volume * 10),
       dispense_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
       blow_out_air_volume=round(blow_out_air_volume * 10),
@@ -2565,7 +2392,7 @@ class STAR(HamiltonLiquidHandler):
       mixing_cycles=mixing_cycles,
       mixing_position_from_liquid_surface=round(mixing_position_from_liquid_surface * 10),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      speed_of_mixing=round(speed_of_mixing * 10),
+      mix_speed=round(mix_speed * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -5375,7 +5202,7 @@ class STAR(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mix: int = 0,
-    speed_of_mix: int = 1000,
+    mix_speed: int = 1000,
     channel_pattern: List[bool] = [True] * 96,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
@@ -5429,7 +5256,7 @@ class STAR(HamiltonLiquidHandler):
           liquid surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
       surface_following_distance_during_mix: surface following distance during
           mix [0.1mm]. Must be between 0 and 990. Default 0.
-      speed_of_mix: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
+      mix_speed: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
           Default 1000.
       todo: TODO: 24 hex chars. Must be between 4 and 5000.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
@@ -5484,7 +5311,7 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= surface_following_distance_during_mix <= 990
     ), "surface_following_distance_during_mix must be between 0 and 990"
-    assert 3 <= speed_of_mix <= 5000, "speed_of_mix must be between 3 and 5000"
+    assert 3 <= mix_speed <= 5000, "mix_speed must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
 
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
@@ -5525,7 +5352,7 @@ class STAR(HamiltonLiquidHandler):
       hc=f"{mix_cycles:02}",
       hp=f"{mix_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_mix:03}",
-      hs=f"{speed_of_mix:04}",
+      hs=f"{mix_speed:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
@@ -5565,7 +5392,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mixing: int = 0,
-    speed_of_mixing: int = 1000,
+    mix_speed: int = 1000,
     channel_pattern: List[bool] = [True] * 12 * 8,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
@@ -5622,7 +5449,7 @@ class STAR(HamiltonLiquidHandler):
           surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
       surface_following_distance_during_mixing: surface following distance during mixing [0.1mm].
           Must be between 0 and 990. Default 0.
-      speed_of_mixing: Speed of mixing [0.1ul/s]. Must be between 3 and 5000. Default 1000.
+      mix_speed: Speed of mixing [0.1ul/s]. Must be between 3 and 5000. Default 1000.
       channel_pattern: list of 96 boolean values
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
@@ -5678,7 +5505,7 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= surface_following_distance_during_mixing <= 990
     ), "surface_following_distance_during_mixing must be between 0 and 990"
-    assert 3 <= speed_of_mixing <= 5000, "speed_of_mixing must be between 3 and 5000"
+    assert 3 <= mix_speed <= 5000, "mix_speed must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
@@ -5720,7 +5547,7 @@ class STAR(HamiltonLiquidHandler):
       hc=f"{mixing_cycles:02}",
       hp=f"{mixing_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_mixing:03}",
-      hs=f"{speed_of_mixing:04}",
+      hs=f"{mix_speed:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
