@@ -1,5 +1,5 @@
-Liquid Handler
-==============
+Liquid Handling
+===============
 
 Resources
 
@@ -15,4 +15,5 @@ Resources
    basic
    moving-channels-around
    hamilton-star/hamilton-star
+   pumps
 
