@@ -1,46 +1,46 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
-from typing import Optional, Callable
-
-from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Resource
-
 import functools
+import sys
+from abc import ABC
+from typing import Any, Awaitable, Callable, TypeVar
+
+from pylabrobot.machines.backend import MachineBackend
+
+if sys.version_info < (3, 10):
+  from typing_extensions import ParamSpec
+else:
+  from typing import ParamSpec
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R", bound=Awaitable[Any])
 
 
-def need_setup_finished(func: Callable):
-  """ Decorator for methods that require the liquid handler to be set up.
+def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
+  """Decorator for methods that require the machine to be set up.
 
   Checked by verifying `self.setup_finished` is `True`.
 
   Raises:
-    RuntimeError: If the liquid handler is not set up.
+    RuntimeError: If the machine is not set up.
   """
 
   @functools.wraps(func)
-  async def wrapper(self: Machine, *args, **kwargs):
+  async def wrapper(*args, **kwargs):
+    assert isinstance(args[0], Machine), "The first argument must be a Machine."
+    self = args[0]
+
     if not self.setup_finished:
       raise RuntimeError("The setup has not finished. See `setup`.")
-    return await func(self, *args, **kwargs)
+    return await func(*args, **kwargs)
+
   return wrapper
 
-class Machine(Resource, metaclass=ABCMeta):
-  """ Abstract class for machine frontends. All Machines are Resources. """
 
-  @abstractmethod
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    backend: MachineBackend,
-    category: Optional[str] = None,
-    model: Optional[str] = None,
-  ):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-                     category=category, model=model)
+class Machine(ABC):
+  """Abstract base class for machine frontends."""
+
+  def __init__(self, backend: MachineBackend):
     self.backend = backend
     self._setup_finished = False
 
@@ -48,8 +48,19 @@ class Machine(Resource, metaclass=ABCMeta):
   def setup_finished(self) -> bool:
     return self._setup_finished
 
-  async def setup(self):
-    await self.backend.setup()
+  def serialize(self) -> dict:
+    return {"backend": self.backend.serialize()}
+
+  @classmethod
+  def deserialize(cls, data: dict):
+    data_copy = data.copy()  # copy data because we will be modifying it
+    backend_data = data_copy.pop("backend")
+    backend = MachineBackend.deserialize(backend_data)
+    data_copy["backend"] = backend
+    return cls(**data_copy)
+
+  async def setup(self, **backend_kwargs):
+    await self.backend.setup(**backend_kwargs)
     self._setup_finished = True
 
   @need_setup_finished

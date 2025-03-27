@@ -1,10 +1,12 @@
 from typing import Any, Dict, List
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import (
+  LiquidHandlerBackend,
+)
 
 
 class SaverBackend(LiquidHandlerBackend):
-  """ A backend that saves all commands received in a list, for testing purposes. """
+  """A backend that saves all commands received in a list, for testing purposes."""
 
   def __init__(self, num_channels: int, *args, **kwargs):
     super().__init__(*args, **kwargs)
@@ -20,18 +22,31 @@ class SaverBackend(LiquidHandlerBackend):
     self.commands_received = []
 
   async def stop(self):
-    await super().stop()
+    pass
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "num_channels": self.num_channels}
 
   async def send_command(self, command: str, data: Dict[str, Any]):
     self.commands_received.append({"command": command, "data": data})
 
   async def assigned_resource_callback(self, *args, **kwargs):
     self.commands_received.append(
-      {"command": "assigned_resource_callback", "args": args, "kwargs": kwargs})
+      {
+        "command": "assigned_resource_callback",
+        "args": args,
+        "kwargs": kwargs,
+      }
+    )
 
   async def unassigned_resource_callback(self, *args, **kwargs):
     self.commands_received.append(
-      {"command": "unassigned_resource_callback", "args": args, "kwargs": kwargs})
+      {
+        "command": "unassigned_resource_callback",
+        "args": args,
+        "kwargs": kwargs,
+      }
+    )
 
   async def pick_up_tips(self, *args, **kwargs):
     self.commands_received.append({"command": "pick_up_tips", "args": args, "kwargs": kwargs})
@@ -57,14 +72,16 @@ class SaverBackend(LiquidHandlerBackend):
   async def dispense96(self, *args, **kwargs):
     self.commands_received.append({"command": "dispense96", "args": args, "kwargs": kwargs})
 
-  async def move_resource(self, *args, **kwargs):
-    self.commands_received.append({"command": "move_resource", "args": args, "kwargs": kwargs})
+  async def pick_up_resource(self, *args, **kwargs):
+    self.commands_received.append({"command": "pick_up_resource", "args": args, "kwargs": kwargs})
 
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "num_channels": self.num_channels,
-    }
+  async def move_picked_up_resource(self, *args, **kwargs):
+    self.commands_received.append(
+      {"command": "move_picked_up_resource", "args": args, "kwargs": kwargs}
+    )
+
+  async def drop_resource(self, *args, **kwargs):
+    self.commands_received.append({"command": "drop_resource", "args": args, "kwargs": kwargs})
 
   # Saver specific methods
 

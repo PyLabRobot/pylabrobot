@@ -6,11 +6,19 @@ import traceback
 from flask import Flask, jsonify, render_template, request
 
 import pylabrobot.resources as resources_module
-from pylabrobot.resources import Resource, STARDeck, STARLetDeck, OTDeck, Deck
+from pylabrobot.resources import (
+  Deck,
+  OTDeck,
+  Resource,
+  STARDeck,
+  STARLetDeck,
+)
 
 print("!" * 80)
-print("I am not sure if the GUI still works. If you are interested in using this, please get in "
-      "touch on forums.pylabrobot.org")
+print(
+  "I am not sure if the GUI still works. If you are interested in using this, please get in "
+  "touch on discuss.pylabrobot.org"
+)
 print("!" * 80)
 
 app = Flask(__name__, template_folder=".", static_folder=".")
@@ -31,6 +39,7 @@ def get_file_data(filename):
     data = json.loads(contents)
     return jsonify(data=data)
 
+
 @app.route("/editor/<string:filename>")
 def editor(filename):
   return render_template("editor.html", filename=filename)
@@ -41,58 +50,58 @@ def list_resources():
   return jsonify(
     plates=[
       "Cos_1536_10ul",
-      "Cos_1536_10ul_L",
+      "Cos_1536_10ul",
       "Cos_1536_10ul_P",
       "Cos_384_DW",
-      "Cos_384_DW_L",
+      "Cos_384_DW",
       "Cos_384_DW_P",
       "Cos_384_PCR",
-      "Cos_384_PCR_L",
+      "Cos_384_PCR",
       "Cos_384_PCR_P",
       "Cos_384_Sq",
-      "Cos_384_Sq_L",
+      "Cos_384_Sq",
       "Cos_384_Sq_P",
       "Cos_384_Sq_Rd",
-      "Cos_384_Sq_Rd_L",
+      "Cos_384_Sq_Rd",
       "Cos_384_Sq_Rd_P",
       "Cos_96_DW_1mL",
-      "Cos_96_DW_1mL_L",
+      "Cos_96_DW_1mL",
       "Cos_96_DW_1mL_P",
       "Cos_96_DW_2mL",
-      "Cos_96_DW_2mL_L",
+      "Cos_96_DW_2mL",
       "Cos_96_DW_2mL_P",
       "Cos_96_DW_500ul",
-      "Cos_96_DW_500ul_L",
+      "Cos_96_DW_500ul",
       "Cos_96_DW_500ul_P",
-      "Cos_96_EZWash",
-      "Cos_96_EZWash_L",
-      "Cos_96_EZWash_P",
+      "Cor_96_wellplate_360ul_Fb",
+      "Cor_96_wellplate_360ul_Fb",
+      "Cor_96_wellplate_360ul_Fb_P",
       "Cos_96_FL",
       "Cos_96_Filter",
-      "Cos_96_Filter_L",
+      "Cos_96_Filter",
       "Cos_96_Filter_P",
-      "Cos_96_Fl_L",
+      "Cos_96_Fl",
       "Cos_96_Fl_P",
       "Cos_96_HalfArea",
-      "Cos_96_HalfArea_L",
+      "Cos_96_HalfArea",
       "Cos_96_HalfArea_P",
       "Cos_96_PCR",
-      "Cos_96_PCR_L",
+      "Cos_96_PCR",
       "Cos_96_PCR_P",
       "Cos_96_ProtCryst",
-      "Cos_96_ProtCryst_L",
+      "Cos_96_ProtCryst",
       "Cos_96_ProtCryst_P",
       "Cos_96_Rd",
-      "Cos_96_Rd_L",
+      "Cos_96_Rd",
       "Cos_96_Rd_P",
       "Cos_96_SpecOps",
-      "Cos_96_SpecOps_L",
+      "Cos_96_SpecOps",
       "Cos_96_SpecOps_P",
       "Cos_96_UV",
-      "Cos_96_UV_L",
+      "Cos_96_UV",
       "Cos_96_UV_P",
       "Cos_96_Vb",
-      "Cos_96_Vb_L",
+      "Cos_96_Vb",
       "Cos_96_Vb_P",
     ],
     plate_carriers=[
@@ -188,23 +197,25 @@ def list_resources():
       "TIP_CAR_NTR_A00",
     ],
     tip_racks=[
-      "FourmlTF_L",
+      "FourmlTF",
       "FourmlTF_P",
-      "FivemlT_L",
+      "FivemlT",
       "FivemlT_P",
-      "HTF_L",
+      "HTF",
       "HTF_P",
-      "HT_L",
+      "HT",
       "HT_P",
-      "LTF_L",
+      "LTF",
       "LTF_P",
-      "LT_L",
+      "LT",
       "LT_P",
-      "STF_L",
+      "STF",
       "STF_P",
-      "ST_L",
+      "ST",
       "ST_P",
-    ])
+    ],
+  )
+
 
 @app.route("/resource/<resource_id>")
 def resource(resource_id):
@@ -250,7 +261,7 @@ def save(filename):
 def create():
   data = request.get_json()
 
-  if not "type" in data:
+  if "type" not in data:
     return jsonify({"error": "No type specified.", "success": False}), 400
 
   # Get a deck from the submitted data, either from a file or create a new deck.
@@ -258,7 +269,7 @@ def create():
     deck_data = data["deck"]
     try:
       deck = Resource.deserialize(deck_data)
-    except Exception as e: # pylint: disable=broad-exception-caught
+    except Exception as e:
       traceback.print_exc()
       return jsonify({"error": str(e), "success": False}), 400
   elif data["type"] == "new_deck":
@@ -270,7 +281,12 @@ def create():
     elif deck_type == "opentrons-ot2":
       deck = OTDeck()
     else:
-      return jsonify({"error": f"Unknown deck type '{deck_type}'.", "success": False}), 400
+      return jsonify(
+        {
+          "error": f"Unknown deck type '{deck_type}'.",
+          "success": False,
+        }
+      ), 400
   else:
     return jsonify({"error": f"Unknown type '{data['type']}'.", "success": False}), 400
 

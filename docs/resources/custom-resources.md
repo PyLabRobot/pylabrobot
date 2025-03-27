@@ -4,7 +4,7 @@ This document describes how to define custom resources in PyLabRobot. We will bu
 
 ## Defining a custom liquid container
 
-![Blue Bucket](../img/custom-resources/blue-bucket.jpg)
+![Blue Bucket](/resources/img/custom-resources/blue-bucket.jpg)
 
 Defining create a custom liquid container, like the blue bucket above, is as easy as instantiating a {class}`pylabrobot.resources.Resource` object:
 
@@ -62,7 +62,7 @@ The default behavior when aspirating from a resource is to aspirate from the bot
 lh.aspirate(blue_bucket, vols=10)
 ```
 
-![Aspirating from the blue bucket](../img/custom-resources/aspirate-blue-bucket.jpg)
+![Aspirating from the blue bucket](/resources/img/custom-resources/aspirate-blue-bucket.jpg)
 
 With multiple channels, the channels will be spread evenly across the bottom of the resource:
 
@@ -70,7 +70,7 @@ With multiple channels, the channels will be spread evenly across the bottom of 
 await lh.aspirate(blue_bucket, vols=[10, 10, 10], use_channels=[0, 1, 2])
 ```
 
-![Aspirating from the blue bucket with multiple channels](../img/custom-resources/aspirate-blue-bucket-multiple-channels.jpg)
+![Aspirating from the blue bucket with multiple channels](/resources/img/custom-resources/aspirate-blue-bucket-multiple-channels.jpg)
 
 What happens when aspirating resources is that PLR creates a list of offsets that equally space the channels across the y-axis in the middle of the resource. These offsets are computed using {meth}`pylabrobot.resources.Resource.get_2d_center_offsets`. We can use this list and modify it to aspirate from a different location. In the example below, we will aspirate 10 mm from the left edge of the resource:
 
@@ -80,7 +80,7 @@ offsets = [Coordinate(x=10, y=c.y, z=c.z) for c in offsets] # set x coordinate o
 await lh.aspirate(blue_bucket, vols=[10, 10], offsets=offsets) # pass the offsets to the aspirate
 ```
 
-![Aspirating from the blue bucket with multiple channels and custom offsets](../img/custom-resources/aspirate-blue-bucket-multiple-channels-custom-offsets.jpg)
+![Aspirating from the blue bucket with multiple channels and custom offsets](/resources/img/custom-resources/aspirate-blue-bucket-multiple-channels-custom-offsets.jpg)
 
 ### Serializing data
 
@@ -103,7 +103,7 @@ class BlueBucket(Resource):
 
 ## Defining a custom plate
 
-![Custom Plate](../img/custom-resources/tube-plate.jpg)
+![Custom Plate](/resources/img/custom-resources/tube-plate.jpg)
 
 The resource pictured above is a custom plate, consisting of tubes in a rack.
 
@@ -125,7 +125,7 @@ class Tube(Container):
 Next, let's define the custom plate. The `Tube` class is passed as a type argument to the `ItemizedResource` class with `[Tube]`:
 
 ```python
-from pylabrobot.resources import ItemizedResource, create_equally_spaced
+from pylabrobot.resources import ItemizedResource, create_equally_spaced_2d
 
 class TubePlate(ItemizedResource[Tube]):
   def __init__(self, name: str):
@@ -134,7 +134,7 @@ class TubePlate(ItemizedResource[Tube]):
       size_x=127.0,
       size_y=86.0,
       size_z=45.0,
-      items=create_equally_spaced(Tube,
+      items=create_equally_spaced_2d(Tube,
         num_items_x=12,
         num_items_y=8,
         dx=9.5,
@@ -146,7 +146,7 @@ class TubePlate(ItemizedResource[Tube]):
     )
 ```
 
-The {meth}`pylabrobot.resources.create_equally_spaced` function creates a list of items, equally spaced in a grid.
+The {meth}`pylabrobot.resources.create_equally_spaced_2d` function creates a list of items, equally spaced in a grid.
 
 This resource is automatically compatible with the rest of PyLabRobot. For example, we can aspirate from the plate:
 
@@ -158,4 +158,4 @@ lh.aspirate(tube_plate["A1":"C1"], vols=10)
 lh.dispense(tube_plate["A2":"C2"], vols=10)
 ```
 
-![Aspirating from the tube plate](../img/custom-resources/aspirate-tube-plate.jpg)
+![Aspirating from the tube plate](/resources/img/custom-resources/aspirate-tube-plate.jpg)

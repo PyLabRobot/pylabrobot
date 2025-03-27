@@ -2,7 +2,7 @@ from typing import Dict
 
 
 class NoChannelError(Exception):
-  """ Raised when no channel is available, e.g. when trying to pick up a tip with no empty channels.
+  """Raised when no channel is available, e.g. when trying to pick up a tip with no empty channels.
   This error is only raised when the channel is automatically selected by the system.
 
   Examples:
@@ -11,8 +11,8 @@ class NoChannelError(Exception):
 
 
 class ChannelizedError(Exception):
-  """ Raised by operations that work on multiple channels: pick_up_tips, drop_tips, aspirate, and
-  dispense. Contains a key for each channel that had an error, and the error that occurred. """
+  """Raised by operations that work on multiple channels: pick_up_tips, drop_tips, aspirate, and
+  dispense. Contains a key for each channel that had an error, and the error that occurred."""
 
   def __init__(self, errors: Dict[int, Exception], **kwargs):
     self.errors = errors

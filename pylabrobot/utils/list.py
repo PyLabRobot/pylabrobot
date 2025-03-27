@@ -1,8 +1,6 @@
-""" Utilities for working with lists. """
+"""Utilities for working with lists."""
 
-import collections.abc
-from typing import List, Tuple, TypeVar, Union, Sequence, cast
-
+from typing import List, Tuple, TypeVar
 
 T = TypeVar("T")
 
@@ -23,7 +21,7 @@ def assert_shape(list_: List[List[T]], shape: Tuple[int, int]):
 
 
 def reshape_2d(list_: List[T], shape: Tuple[int, int]) -> List[List[T]]:
-  """ Reshape a list into a 2d list.
+  """Reshape a list into a 2d list.
 
   Args:
     list_: The list to reshape.
@@ -44,14 +42,3 @@ def reshape_2d(list_: List[T], shape: Tuple[int, int]) -> List[List[T]]:
       new_list[i].append(list_[i * shape[1] + j])
 
   return new_list
-
-
-def expand(list_or_item: Union[Sequence[T], T], n: int) -> List[T]:
-  if n <= 0:
-    raise ValueError(f"Cannot expand list {list_or_item} by {n}.")
-  if isinstance(list_or_item, collections.abc.Sequence) and not isinstance(list_or_item, str):
-    if len(list_or_item) != n:
-      raise ValueError(f"Expected list of length {n}, got {len(list_or_item)}.")
-    return list(list_or_item)
-  # cast to T to avoid mypy error (thinks it's a string). This can probably be written better.
-  return [cast(T, list_or_item)] * n

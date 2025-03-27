@@ -4,12 +4,11 @@ import unittest
 import pylabrobot
 from pylabrobot.pumps.calibration import PumpCalibration
 
-
 plr_directory = os.path.join(pylabrobot.__path__[0], "testing", "test_data")
 
 
 class TestCalibration(unittest.TestCase):
-  """ Tests for the PumpCalibration class.  """
+  """Tests for the PumpCalibration class."""
 
   def test_load_calibration_value(self):
     with self.assertRaises(ValueError):
@@ -54,19 +53,19 @@ class TestCalibration(unittest.TestCase):
 
   def test_load_from_dict_errors(self):
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration({0: 1.0, 1: 2.0, 3: 3.0}) # missing key 2
+      PumpCalibration.load_calibration({0: 1.0, 1: 2.0, 3: 3.0})  # missing key 2
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration({0: -1.0, 1: 2.0, 2: 3.0}) # negative value
+      PumpCalibration.load_calibration({0: -1.0, 1: 2.0, 2: 3.0})  # negative value
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration({-1: 1.0, 0: 1.0, 1: 2.0}) # negative key
+      PumpCalibration.load_calibration({-1: 1.0, 0: 1.0, 1: 2.0})  # negative key
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration({2: 1.0, 5: 1.0, 1: 2.0}) # missing key 0
+      PumpCalibration.load_calibration({2: 1.0, 5: 1.0, 1: 2.0})  # missing key 0
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration({2: 1.0, 3: 1.0, 4: 2.0}) # missing key 0, 1
+      PumpCalibration.load_calibration({2: 1.0, 3: 1.0, 4: 2.0})  # missing key 0, 1
 
   def test_load_from_list(self):
     test_list = [1.0, 2.0]
@@ -92,13 +91,16 @@ class TestCalibration(unittest.TestCase):
 
   def test_calibration_mode_errors(self):
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration([1.0, 2.0],
-                                       calibration_mode="invalid") # type: ignore[arg-type]
+      PumpCalibration.load_calibration(
+        [1.0, 2.0],
+        calibration_mode="invalid",  # type: ignore[arg-type]
+      )
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration({0: 1.0, 1: 2.0},
-                                       calibration_mode="invalid") # type: ignore[arg-type]
+      PumpCalibration.load_calibration(
+        {0: 1.0, 1: 2.0},
+        calibration_mode="invalid",  # type: ignore[arg-type]
+      )
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration(1.0, 2,
-                                       calibration_mode="invalid") # type: ignore[arg-type]
+      PumpCalibration.load_calibration(1.0, 2, calibration_mode="invalid")  # type: ignore[arg-type]

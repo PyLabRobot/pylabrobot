@@ -1,11 +1,13 @@
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.hamilton.hamilton_decks import (
+  _RAILS_WIDTH,
+  HamiltonDeck,
+)
 from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck, _RAILS_WIDTH
-
 
 
 class VantageDeck(HamiltonDeck):
-  """ A Hamilton Vantage deck. """
+  """A Hamilton Vantage deck."""
 
   def __init__(
     self,
@@ -13,9 +15,9 @@ class VantageDeck(HamiltonDeck):
     name="deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
-    no_trash: bool = False,
+    with_trash: bool = True,
   ) -> None:
-    """ Create a new Vantage deck of the given size.
+    """Create a new Vantage deck of the given size.
 
     TODO: parameters for setting up the Entry Exit module, waste, etc.
 
@@ -39,13 +41,14 @@ class VantageDeck(HamiltonDeck):
       )
       self.size = 1.3
 
-      if not no_trash:
-        trash_x = size_x - 460 # only tested on small Vantage
+      if with_trash:
+        trash_x = size_x - 480  # works with vantage 1.3 (480) (used to be 460)
 
         # an experimentally informed guess.
         self.assign_child_resource(
           resource=Trash("trash", size_x=0, size_y=260, size_z=0),
-          location=Coordinate(x=trash_x, y=185.6, z=137.1)) # z I am not sure about
+          location=Coordinate(x=trash_x, y=185.6, z=137.1),
+        )  # z I am not sure about
     elif size == 2.0:
       raise NotImplementedError("2.0m Vantage decks are not yet supported.")
     else:
@@ -59,7 +62,4 @@ class VantageDeck(HamiltonDeck):
     super_serialized = super().serialize()
     for key in ["size_x", "size_y", "size_z", "num_rails"]:
       super_serialized.pop(key)
-    return {
-      "size": self.size,
-      **super_serialized
-    }
+    return {"size": self.size, **super_serialized}

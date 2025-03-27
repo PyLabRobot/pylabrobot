@@ -1,4 +1,4 @@
-""" Convert liquid classes from Venus into Python. """
+"""Convert liquid classes from Venus into Python."""
 
 import binascii
 import csv
@@ -38,7 +38,7 @@ def main():
     lines = f.readlines()
     lines = lines[1:]
     reader = csv.reader(lines)
-    rows = list(reader) # copy into rows, then close file.
+    rows = list(reader)  # copy into rows, then close file.
 
   out_file = open("liquid_classes.py", "w", encoding="utf-8")
 
@@ -69,7 +69,7 @@ def main():
     dispense_stop_flow_rate = float(row[28])
     dispense_stop_back_volume = float(row[29])
 
-    tip = "Needle" not in name # "Tip" is not always in the name
+    tip = "Needle" not in name  # "Tip" is not always in the name
     jet = "Jet" in name
     empty = "Empty" in name
     # slim tip probably aindicates a 96 head, they are only used in this combo, but not sure.
@@ -84,24 +84,26 @@ def main():
       continue
 
     dat = binascii.unhexlify(curve_data[2:])
-    assert len(dat) % 16 == 0 and not len(dat)==0, "invalid length for " + dat.decode()
+    assert len(dat) % 16 == 0 and not len(dat) == 0, "invalid length for " + dat.decode()
 
     curve: Dict[float, float] = {}
 
     for i in range(len(dat) // 16):
-      key_data, value_data = dat[i*16:i*16+8], dat[i*16+8:i*16+16]
+      key_data, value_data = dat[i * 16 : i * 16 + 8], dat[i * 16 + 8 : i * 16 + 16]
       key, value = ieee_754_to_float(key_data), ieee_754_to_float(value_data)
-      value = round(value, 3) # mitigate floating point errors
+      value = round(value, 3)  # mitigate floating point errors
       curve[key] = value
 
     notes = notes.replace("\x00", "")
     if notes != "":
-      notes = '\n    # ' + '\n    # '.join(notes.splitlines())
+      notes = "\n    # " + "\n    # ".join(notes.splitlines())
 
-    if name[0] in {str(i) for i in range(11)}: # python doesn't allow numbers as first character
+    if name[0] in {str(i) for i in range(11)}:  # python doesn't allow numbers as first character
       name = "_" + name
 
-    out_file.write(textwrap.dedent(f"""\n
+    out_file.write(
+      textwrap.dedent(
+        f"""\n
     {notes}
     mapping[({tip_volume}, {core}, {tip}, {has_filter}, Liquid.{liquid.name}, {jet}, {empty})] = \\
     {name} = HamiltonLiquidClass(
@@ -123,7 +125,9 @@ def main():
       dispense_settling_time={dispense_settling_time},
       dispense_stop_flow_rate={dispense_stop_flow_rate},
       dispense_stop_back_volume={dispense_stop_back_volume}
-    )"""))
+    )"""
+      )
+    )
 
     print(name)
 

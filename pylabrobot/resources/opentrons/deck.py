@@ -1,5 +1,5 @@
 import textwrap
-from typing import Optional, List
+from typing import List, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
@@ -8,11 +8,17 @@ from pylabrobot.resources.trash import Trash
 
 
 class OTDeck(Deck):
-  """ The OpenTron deck. """
+  """The OpenTron deck."""
 
-  def __init__(self, size_x: float = 624.3, size_y: float = 565.2, size_z: float = 900,
+  def __init__(
+    self,
+    size_x: float = 624.3,
+    size_y: float = 565.2,
+    size_z: float = 900,
     origin: Coordinate = Coordinate(0, 0, 0),
-    no_trash: bool = False, name: str = "deck"):
+    with_trash: bool = True,
+    name: str = "deck",
+  ):
     # size_z is probably wrong
 
     super().__init__(size_x=size_x, size_y=size_y, size_z=size_z, origin=origin)
@@ -20,25 +26,25 @@ class OTDeck(Deck):
     self.slots: List[Optional[Resource]] = [None] * 12
 
     self.slot_locations = [
-      Coordinate(x=0.0,   y=0.0,   z=0.0),
-      Coordinate(x=132.5, y=0.0,   z=0.0),
-      Coordinate(x=265.0, y=0.0,   z=0.0),
-      Coordinate(x=0.0,   y=90.5,  z=0.0),
-      Coordinate(x=132.5, y=90.5,  z=0.0),
-      Coordinate(x=265.0, y=90.5,  z=0.0),
-      Coordinate(x=0.0,   y=181.0, z=0.0),
+      Coordinate(x=0.0, y=0.0, z=0.0),
+      Coordinate(x=132.5, y=0.0, z=0.0),
+      Coordinate(x=265.0, y=0.0, z=0.0),
+      Coordinate(x=0.0, y=90.5, z=0.0),
+      Coordinate(x=132.5, y=90.5, z=0.0),
+      Coordinate(x=265.0, y=90.5, z=0.0),
+      Coordinate(x=0.0, y=181.0, z=0.0),
       Coordinate(x=132.5, y=181.0, z=0.0),
       Coordinate(x=265.0, y=181.0, z=0.0),
-      Coordinate(x=0.0,   y=271.5, z=0.0),
+      Coordinate(x=0.0, y=271.5, z=0.0),
       Coordinate(x=132.5, y=271.5, z=0.0),
-      Coordinate(x=265.0, y=271.5, z=0.0)
+      Coordinate(x=265.0, y=271.5, z=0.0),
     ]
 
-    if not no_trash:
+    if with_trash:
       self._assign_trash()
 
   def _assign_trash(self):
-    """ Assign the trash area to the deck.
+    """Assign the trash area to the deck.
 
     Because all opentrons operations require that the resource passed references a parent, we need
     to create a dummy resource to represent the container of the actual trash area.
@@ -69,14 +75,17 @@ class OTDeck(Deck):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
-    reassign: bool = True
+    location: Optional[Coordinate],
+    reassign: bool = True,
   ):
-    """ Assign a resource to a slot.
+    """Assign a resource to a slot.
 
     ..warning:: This method exists only for deserialization. You should use
     :meth:`assign_child_at_slot` instead.
     """
+
+    if location is None:
+      raise ValueError("location must be provided for resources on the deck")
 
     if location not in self.slot_locations:
       super().assign_child_resource(resource, location=location)
@@ -85,15 +94,14 @@ class OTDeck(Deck):
       self.assign_child_at_slot(resource, slot)
 
   def assign_child_at_slot(self, resource: Resource, slot: int):
-    # pylint: disable=arguments-renamed
     if slot not in range(1, 13):
       raise ValueError("slot must be between 1 and 12")
 
-    if self.slots[slot-1] is not None:
+    if self.slots[slot - 1] is not None:
       raise ValueError(f"Spot {slot} is already occupied")
 
-    self.slots[slot-1] = resource
-    super().assign_child_resource(resource, location=self.slot_locations[slot-1])
+    self.slots[slot - 1] = resource
+    super().assign_child_resource(resource, location=self.slot_locations[slot - 1])
 
   def unassign_child_resource(self, resource: Resource):
     if resource not in self.slots:
@@ -104,13 +112,13 @@ class OTDeck(Deck):
     super().unassign_child_resource(resource)
 
   def get_slot(self, resource: Resource) -> Optional[int]:
-    """ Get the slot number of a resource. """
+    """Get the slot number of a resource."""
     if resource not in self.slots:
       return None
     return self.slots.index(resource) + 1
 
   def summary(self) -> str:
-    """ Get a summary of the deck.
+    """Get a summary of the deck.
 
     >>> print(deck.summary())
 
@@ -136,7 +144,7 @@ class OTDeck(Deck):
     """
 
     def _get_slot_name(slot: int) -> str:
-      """ Get slot name, or 'Empty' if slot is empty. If the name is too long, truncate it. """
+      """Get slot name, or 'Empty' if slot is empty. If the name is too long, truncate it."""
       length = 11
       resource = self.slots[slot]
       if resource is None:
@@ -147,7 +155,7 @@ class OTDeck(Deck):
       return name.ljust(length)
 
     summary_ = f"""
-      Deck: {self.get_size_x()}mm x {self.get_size_y()}mm
+      Deck: {self.get_absolute_size_x()}mm x {self.get_absolute_size_y()}mm
 
       +-----------------+-----------------+-----------------+
       |                 |                 |                 |

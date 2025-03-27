@@ -4,10 +4,9 @@ from opentrons_shared_data.load import get_shared_data_root
 
 from pylabrobot.resources import Plate, TipRack, TubeRack
 from pylabrobot.resources.opentrons.load import (
+  UnknownResourceType,
   load_shared_opentrons_resource,
-  UnknownResourceType
 )
-
 
 OT_PATH = get_shared_data_root()
 
@@ -22,8 +21,6 @@ TUBE_RACK_OUT_FILE = "tube_racks.py"
 
 
 def main(po, to, tro):
-  # pylint: disable=f-string-without-interpolation
-
   p = os.path.join(OT_PATH, "labware", "definitions", "2")
   p = os.path.expanduser(p)
 
@@ -73,7 +70,7 @@ def main(po, to, tro):
 
 
 if __name__ == "__main__":
-  with open(PLATE_OUT_FILE, "w", encoding="utf-8") as plate_file, \
-       open(TIP_RACK_OUT_FILE, "w", encoding="utf-8") as tip_rack_file, \
-        open(TUBE_RACK_OUT_FILE, "w", encoding="utf-8") as tube_rack_file:
+  with open(PLATE_OUT_FILE, "w", encoding="utf-8") as plate_file, open(
+    TIP_RACK_OUT_FILE, "w", encoding="utf-8"
+  ) as tip_rack_file, open(TUBE_RACK_OUT_FILE, "w", encoding="utf-8") as tube_rack_file:
     main(plate_file, tip_rack_file, tube_rack_file)

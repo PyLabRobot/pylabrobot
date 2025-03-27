@@ -1,7 +1,10 @@
-from typing import Any, Dict, List, Optional, Sequence, Union, cast
+from typing import Any, Dict, List, Sequence, Union, cast
+
 from pylabrobot.machines.machine import Machine, need_setup_finished
-from .backend import PowderDispenserBackend, PowderDispense
-from pylabrobot.resources import Resource, Powder
+from pylabrobot.resources import Powder, Resource
+
+from .backend import PowderDispense, PowderDispenserBackend
+
 
 class PowderDispenser(Machine):
   """
@@ -9,7 +12,7 @@ class PowderDispenser(Machine):
   into containers such as mtp's placed on a deck.
 
   Here's an example of how to use this class:
-  >>> pd = PowderDispenser(backend=YourPowderDispenserBackend(), deck=Deck())
+  >>> pd = PowderDispenser(backend=YourPowderDispenserBackend())
   >>> pd.setup()
   >>> result = pd.dispense_powder(plate["A1"], powders='NaCl', amount=0.005)
   >>> print(result)
@@ -18,17 +21,10 @@ class PowderDispenser(Machine):
 
   def __init__(
     self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
     backend: PowderDispenserBackend,
-    category: Optional[str] = None,
-    model: Optional[str] = None
     # deck: Deck
   ) -> None:
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
-                     category=category, model=model)
+    super().__init__(backend=backend)
     self.backend: PowderDispenserBackend = backend
 
   @need_setup_finished
@@ -37,7 +33,7 @@ class PowderDispenser(Machine):
     resources: Union[Resource, Sequence[Resource]],
     powders: Union[Powder, Sequence[Powder]],
     amounts: Union[float, Sequence[float]],
-    **backend_kwargs
+    **backend_kwargs,
   ) -> List[Dict[str, Any]]:
     """
     Dispense powders into containers with specified amounts and tolerances.
@@ -69,18 +65,14 @@ class PowderDispenser(Machine):
     assert len(amounts) == len(powders) == len(resources)
 
     powder_dispenses = [
-        PowderDispense(resource=r, powder=p, amount=a)
-        for r, p, a in zip(
-          resources,
-          powders,
-          amounts,
-        )
-      ]
+      PowderDispense(resource=r, powder=p, amount=a)
+      for r, p, a in zip(
+        resources,
+        powders,
+        amounts,
+      )
+    ]
 
     result = await self.backend.dispense(powder_dispenses, **backend_kwargs)
 
     return cast(List[Dict[str, Any]], result)
-
-  async def setup(self):
-    """ Setup the powder dispenser. This method should be called before any dispensing actions. """
-    await super().setup()

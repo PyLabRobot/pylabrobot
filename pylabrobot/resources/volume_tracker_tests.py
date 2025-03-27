@@ -1,12 +1,15 @@
 import unittest
 
+from pylabrobot.resources.errors import (
+  TooLittleLiquidError,
+  TooLittleVolumeError,
+)
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.volume_tracker import VolumeTracker
-from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
 
 
 class TestVolumeTracker(unittest.TestCase):
-  """ Test for the tip volume tracker """
+  """Test for the tip volume tracker"""
 
   def test_init(self):
     tracker = VolumeTracker(max_volume=100)

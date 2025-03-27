@@ -1,18 +1,17 @@
-""" Tecan wash station """
+from typing import Dict, Optional
 
-# pylint: disable=empty-docstring
-# pylint: disable=invalid-name
-# pylint: disable=line-too-long
-
-from typing import List, Optional
-from pylabrobot.resources.carrier import Carrier, CarrierSite, create_carrier_sites
+from pylabrobot.resources.carrier import (
+  Carrier,
+  ResourceHolder,
+  create_resources,
+)
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
+from pylabrobot.resources.trash import Trash
 
 
 class TecanWashStation(Carrier, TecanResource):
-  """ Base class for Tecan tip carriers. """
+  """Base class for Tecan tip carriers."""
 
   def __init__(
     self,
@@ -22,24 +21,26 @@ class TecanWashStation(Carrier, TecanResource):
     size_z: float,
     off_x: float,
     off_y: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Optional[Dict[int, ResourceHolder]] = None,
     category="tecan_wash_station",
-    model: Optional[str] = None):
-    super().__init__(name, size_x, size_y, size_z,
-      sites, category=category, model=model)
+    model: Optional[str] = None,
+  ):
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
     self.off_x: float = off_x
     self.off_y: float = off_y
 
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "off_x": self.off_x,
-      "off_y": self.off_y,
-    }
 
 def Wash_Station(name: str) -> TecanWashStation:
-  """ Tecan part no. 10613001 """
+  """Tecan part no. 10613001"""
   return TecanWashStation(
     name=name,
     size_x=25.0,
@@ -47,20 +48,25 @@ def Wash_Station(name: str) -> TecanWashStation:
     size_z=0.0,
     off_x=12.5,
     off_y=24.7,
-    sites=create_carrier_sites(locations = [
+    sites=create_resources(
+      klass=ResourceHolder,
+      locations=[
         Coordinate(12.2, 106.7, 0.0),
         Coordinate(11.0, 180.7, 0.0),
         Coordinate(12.2, 281.7, 0.0),
-      ], site_size_x=[
+      ],
+      resource_size_x=[
         12.0,
         12.0,
         12.0,
-      ], site_size_y=[
+      ],
+      resource_size_y=[
         73.0,
         100.0,
         73.0,
-    ]),
-    model="Wash_Station"
+      ],
+    ),
+    model="Wash_Station",
   )
 
 

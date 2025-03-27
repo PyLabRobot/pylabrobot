@@ -1,12 +1,12 @@
 import re
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.tecan import TipType
 
 
 def from_str(s: str) -> Optional[Liquid]:
-  """ Parses a Tecan liquid class name and creates a Liquid object. """
+  """Parses a Tecan liquid class name and creates a Liquid object."""
 
   m = re.match(r"(\w+) free dispense$", s)
   if m is None:
@@ -19,7 +19,7 @@ def from_str(s: str) -> Optional[Liquid]:
 
 
 class TecanLiquidClass:
-  """ A liquid class like used in EVOware. """
+  """A liquid class like used in EVOware."""
 
   def __init__(
     self,
@@ -33,10 +33,8 @@ class TecanLiquidClass:
     pmp_viscosity: float,
     pmp_character: int,
     density: float,
-
     calibration_factor: float,
     calibration_offset: float,
-
     aspirate_speed: float,
     aspirate_delay: float,
     aspirate_stag_volume: float,
@@ -57,7 +55,6 @@ class TecanLiquidClass:
     aspirate_retract_position: int,
     aspirate_retract_speed: float,
     aspirate_retract_offset: float,
-
     dispense_speed: float,
     dispense_breakoff: float,
     dispense_delay: float,
@@ -74,7 +71,7 @@ class TecanLiquidClass:
     dispense_mix_cycles: int,
     dispense_retract_position: int,
     dispense_retract_speed: float,
-    dispense_retract_offset: float
+    dispense_retract_offset: float,
   ):
     self.lld_mode = lld_mode
     self.lld_conductivity = lld_conductivity
@@ -134,6 +131,7 @@ class TecanLiquidClass:
 
 
 mapping: Dict[Tuple[float, float, Liquid, TipType], TecanLiquidClass] = {}
+
 
 def get_liquid_class(
   target_volume: float,

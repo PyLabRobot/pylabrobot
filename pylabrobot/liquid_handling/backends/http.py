@@ -1,18 +1,21 @@
-from typing import Optional, Dict, Any, cast
 import urllib.parse
+from typing import Any, Dict, Optional, cast
 
-from pylabrobot.liquid_handling.backends.serializing_backend import SerializingBackend
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
+from pylabrobot.liquid_handling.backends.serializing_backend import (
+  SerializingBackend,
+)
 
 try:
   import requests
+
   HAS_REQUESTS = True
 except ImportError:
   HAS_REQUESTS = False
 
 
 class HTTPBackend(SerializingBackend):
-  """ A backend that sends commands over HTTP(s).
+  """A backend that sends commands over HTTP(s).
 
   This backend is used when you want to run a :class:`~pylabrobot.liquid_handling.LiquidHandler`
   locally and have a server communicating with the robot elsewhere.
@@ -30,7 +33,7 @@ class HTTPBackend(SerializingBackend):
     protocol: str = "http",
     base_path: str = "events",
   ):
-    """ Create a new web socket backend.
+    """Create a new web socket backend.
 
     Args:
       host: The hostname of the server.
@@ -54,11 +57,9 @@ class HTTPBackend(SerializingBackend):
     self.url = f"{self.protocol}://{self.host}:{self.port}/{self.base_path}/"
 
   async def send_command(
-    self,
-    command: str,
-    data: Optional[Dict[str, Any]] = None
+    self, command: str, data: Optional[Dict[str, Any]] = None
   ) -> Optional[dict]:
-    """ Send an event to the server.
+    """Send an event to the server.
 
     Args:
       event: The event identifier.
@@ -76,7 +77,8 @@ class HTTPBackend(SerializingBackend):
       json=data,
       headers={
         "User-Agent": f"pylabrobot/{STANDARD_FORM_JSON_VERSION}",
-      })
+      },
+    )
     return cast(dict, resp.json())
 
   async def setup(self):

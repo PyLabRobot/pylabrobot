@@ -3,7 +3,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 try:
   import websockets
@@ -11,13 +11,16 @@ try:
   import websockets.legacy
   import websockets.legacy.server
   import websockets.server
+
   HAS_WEBSOCKETS = True
 except ImportError:
   HAS_WEBSOCKETS = False
 
-from pylabrobot.liquid_handling.backends.serializing_backend import SerializingBackend
-from pylabrobot.resources import Resource
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
+from pylabrobot.liquid_handling.backends.serializing_backend import (
+  SerializingBackend,
+)
+from pylabrobot.resources import Resource
 
 if TYPE_CHECKING:
   import websockets.legacy
@@ -27,7 +30,7 @@ logger = logging.getLogger("pylabrobot")
 
 
 class WebSocketBackend(SerializingBackend):
-  """ A backend that hosts a websocket server and sends commands over it. """
+  """A backend that hosts a websocket server and sends commands over it."""
 
   def __init__(
     self,
@@ -35,7 +38,7 @@ class WebSocketBackend(SerializingBackend):
     ws_host: str = "127.0.0.1",
     ws_port: int = 2121,
   ):
-    """ Create a new web socket backend.
+    """Create a new web socket backend.
 
     Args:
       ws_host: The hostname of the websocket server.
@@ -61,40 +64,42 @@ class WebSocketBackend(SerializingBackend):
     self._id = 0
 
   @property
-  def websocket(self) -> "websockets.legacy.server.WebSocketServerProtocol":
-    """ The websocket connection. """
+  def websocket(
+    self,
+  ) -> "websockets.legacy.server.WebSocketServerProtocol":
+    """The websocket connection."""
     if self._websocket is None:
       raise RuntimeError("No websocket connection has been established.")
     return self._websocket
 
   @property
   def loop(self) -> asyncio.AbstractEventLoop:
-    """ The event loop. """
+    """The event loop."""
     if self._loop is None:
       raise RuntimeError("Event loop has not been started.")
     return self._loop
 
   @property
   def t(self) -> threading.Thread:
-    """ The thread that runs the event loop. """
+    """The thread that runs the event loop."""
     if self._t is None:
       raise RuntimeError("Event loop has not been started.")
     return self._t
 
   @property
   def stop_(self) -> asyncio.Future:
-    """ The future that is set when the web socket is stopped. """
+    """The future that is set when the web socket is stopped."""
     if self._stop_ is None:
       raise RuntimeError("Event loop has not been started.")
     return self._stop_
 
   def _generate_id(self):
-    """ continuously generate unique ids 0 <= x < 10000. """
+    """continuously generate unique ids 0 <= x < 10000."""
     self._id += 1
     return f"{self._id % 10000:04}"
 
   async def handle_event(self, event: str, data: dict):
-    """ Handle an event from the browser.
+    """Handle an event from the browser.
 
     This method is intended to be overridden by subclasses. Be sure to call the superclass if you
     want to preserve the default behavior.
@@ -104,14 +109,15 @@ class WebSocketBackend(SerializingBackend):
       data: The event data, deserialized from JSON.
     """
 
-    # pylint: disable=unused-argument
-
     if event == "ping":
       await self.websocket.send(json.dumps({"event": "pong"}))
 
-  async def _socket_handler(self, websocket: "websockets.legacy.server.WebSocketServerProtocol"):
-    """ Handle a new websocket connection. Save the websocket connection store received
-    messages in `self.received`. """
+  async def _socket_handler(
+    self,
+    websocket: "websockets.legacy.server.WebSocketServerProtocol",
+  ):
+    """Handle a new websocket connection. Save the websocket connection store received
+    messages in `self.received`."""
 
     while True:
       try:
@@ -138,18 +144,23 @@ class WebSocketBackend(SerializingBackend):
         logger.warning("Unhandled message: %s", message)
 
   def _assemble_command(self, event: str, data) -> Tuple[str, str]:
-    """ Assemble a command into standard JSON form. """
+    """Assemble a command into standard JSON form."""
     id_ = self._generate_id()
-    command_data = {"event": event, "id": id_, "version": STANDARD_FORM_JSON_VERSION, **data}
+    command_data = {
+      "event": event,
+      "id": id_,
+      "version": STANDARD_FORM_JSON_VERSION,
+      **data,
+    }
     return json.dumps(command_data), id_
 
   def has_connection(self) -> bool:
-    """ Return `True` if a websocket connection has been established. """
+    """Return `True` if a websocket connection has been established."""
     # Since the websocket connection is saved in self.websocket, we can just check if it is `None`.
     return self._websocket is not None
 
   def wait_for_connection(self):
-    """ Wait for a websocket connection to be established.
+    """Wait for a websocket connection to be established.
 
     This method will block until a websocket connection is established. It is not required to wait,
     since :meth:`~WebSocketBackend.send_event` automatically save messages until a connection is
@@ -161,24 +172,29 @@ class WebSocketBackend(SerializingBackend):
 
   async def assigned_resource_callback(self, resource: Resource):
     # override SerializingBackend so we don't wait for a response
-    await self.send_command(command="resource_assigned", data={
+    await self.send_command(
+      command="resource_assigned",
+      data={
         "resource": resource.serialize(),
-        "parent_name": (resource.parent.name if resource.parent else None)
+        "parent_name": (resource.parent.name if resource.parent else None),
       },
-      wait_for_response=False)
+      wait_for_response=False,
+    )
 
   async def unassigned_resource_callback(self, name: str):
     # override SerializingBackend so we don't wait for a response
-    await self.send_command(command="resource_unassigned", data={"resource_name": name,
-      "wait_for_response": False})
+    await self.send_command(
+      command="resource_unassigned",
+      data={"resource_name": name, "wait_for_response": False},
+    )
 
   async def send_command(
     self,
     command: str,
     data: Optional[Dict[str, Any]] = None,
     wait_for_response: bool = True,
-  )-> Optional[dict]:
-    """ Send an event to the browser.
+  ) -> Optional[dict]:
+    """Send an event to the browser.
 
     If a websocket connection has not been established, the event will be saved and sent when it is
     established.
@@ -225,7 +241,7 @@ class WebSocketBackend(SerializingBackend):
     return None
 
   async def _replay(self):
-    """ Send all sent messages.
+    """Send all sent messages.
 
     This is called when the websocket connection is established.
     """
@@ -234,7 +250,7 @@ class WebSocketBackend(SerializingBackend):
       asyncio.run_coroutine_threadsafe(self.websocket.send(message), self.loop)
 
   async def setup(self):
-    """ Start the websocket server. This will run in a separate thread. """
+    """Start the websocket server. This will run in a separate thread."""
 
     if not HAS_WEBSOCKETS:
       raise RuntimeError("The WebSocketBackend requires websockets to be installed.")
@@ -259,7 +275,7 @@ class WebSocketBackend(SerializingBackend):
 
     # Acquire a lock to prevent setup from returning until the server is running.
     lock = threading.Lock()
-    lock.acquire() # pylint: disable=consider-using-with
+    lock.acquire()
     self._loop = asyncio.new_event_loop()
     self._t = threading.Thread(target=start_loop, daemon=True)
     self.t.start()
@@ -270,7 +286,7 @@ class WebSocketBackend(SerializingBackend):
     self.setup_finished = True
 
   async def stop(self):
-    """ Stop the web socket server. """
+    """Stop the web socket server."""
 
     if self.has_connection():
       # send stop event to the browser

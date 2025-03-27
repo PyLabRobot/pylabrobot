@@ -5,8 +5,12 @@
     "agrow",
     "agrowpumps",
     "coro",
+    "cytomat",
+    "decalibrate",
     "Defaultable",
+    "Deprecated",
     "frontmost",
+    "hepa",
     "Inheco",
     "iswap",
     "jsonify",
@@ -22,8 +26,6 @@
     "usascientific",
     "websockets"
   ],
-  "python.linting.pylintEnabled": true,
-  "python.linting.pylintArgs": ["--disable={c0103}"],
   "python.linting.mypyEnabled": true,
   "python.linting.enabled": true,
   "python.testing.pytestArgs": ["."],
@@ -31,7 +33,6 @@
   "python.testing.pytestEnabled": true,
   "python.testing.autoTestDiscoverOnSaveEnabled": true,
   "editor.rulers": [100],
-  "editor.formatOnSave": true,
   "files.exclude": {
     "**/__pycache__": true
   },
