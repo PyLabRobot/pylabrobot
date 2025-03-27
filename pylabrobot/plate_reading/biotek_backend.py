@@ -1202,8 +1202,14 @@ class Cytation5Backend(ImageReaderBackend):
     if center_position is None:
       center_position = (0, 0)
     # Going in a snake pattern is not faster (strangely)
+
+    #overlap between images to have images stitched
+    overlap_fraction = 0.1  # 10% overlap
+    step_width = img_width * (1 - overlap_fraction)
+    step_height = img_height * (1 - overlap_fraction)
+
     positions = [
-      (x * img_width + center_position[0], -y * img_height + center_position[1])
+      (x * step_width + center_position[0], -y * step_height + center_position[1])
       for y in [i - (rows - 1) / 2 for i in range(rows)]
       for x in [i - (cols - 1) / 2 for i in range(cols)]
     ]
