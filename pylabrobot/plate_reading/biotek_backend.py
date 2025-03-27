@@ -1164,13 +1164,25 @@ class Cytation5Backend(ImageReaderBackend):
       # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
       # simply take the wide fov option.
       # um to mm (plr unit)
-      if magnification == 4:
-        return (3474 / 1000, 3474 / 1000)
-      if magnification == 20:
-        return (694 / 1000, 694 / 1000)
-      if magnification == 40:
-        return (347 / 1000, 347 / 1000)
-      raise ValueError(f"Don't know image size for magnification {magnification}")
+
+      if self.version.startswith("1"):
+        if magnification == 2.5: #actually 2.74x
+          return (3160 / 1000, 2370 / 1000) # pixel size = 2.45 um
+        if magnification == 4:
+           return (2164.8 / 1000, 1619.5 / 1000) # pixel size  = 1.68 um
+        if magnification == 20:
+            return (433 / 1000, 325 / 1000)  # pixel size ≈ 0.336 µm 
+        if magnification == 40:
+            return (216.5 / 1000, 161.9 /1000)  # pixel size ≈ 0.168 µm
+        raise ValueError(f"Don't know image size for magnification {magnification}")
+      else:
+        if magnification == 4:
+          return (3474 / 1000, 3474 / 1000)
+        if magnification == 20:
+          return (694 / 1000, 694 / 1000)
+        if magnification == 40:
+          return (347 / 1000, 347 / 1000)
+        raise ValueError(f"Don't know image size for magnification {magnification}")
 
     if self._objective is None:
       raise RuntimeError("Objective not set. Run set_objective() first.")
