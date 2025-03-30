@@ -13,6 +13,7 @@ Special :class:`Plate` Tutorials
    :maxdepth: 1
 
    tutorial-tip-definition
+   hamilton-tips
 
 ----
 

@@ -1,5 +1,5 @@
-Analytical
-==========
+How PLR Works
+=============
 
 Resources
 
@@ -11,7 +11,5 @@ Resources
    :maxdepth: 1
    :hidden:
 
-   plate-reading/plate-reading
-   scales
 
-
+ok

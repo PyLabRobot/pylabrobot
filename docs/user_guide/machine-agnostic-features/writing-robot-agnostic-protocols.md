@@ -1,4 +1,4 @@
-# Writing robot agnostic protocols
+# Writing Machine-Agnostic Protocols
 
 This document describes best practices for writing methods that are agnostic to the robot backend.
 

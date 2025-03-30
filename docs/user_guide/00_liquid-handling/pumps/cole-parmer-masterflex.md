@@ -1,4 +1,4 @@
-# Pumps
+# Cole Parmer Masterflex
 
 PyLabRobot supports the following pumps:
 

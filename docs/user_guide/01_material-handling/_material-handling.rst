@@ -11,5 +11,11 @@ Resources
    :maxdepth: 1
    :hidden:
 
-   c_scara/_scara
+   arms/_arm
+   centrifuge/_centrifuge
+   heating-shaking
+   fans/fans
+   temperature
+   tilting
+
 

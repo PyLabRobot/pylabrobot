@@ -20,7 +20,6 @@ The PLR Resource Management System consists of two key components, each serving 
 
 introduction
 custom-resources
-plr-rl-naming-conventions
 ```
 
 ----
@@ -124,7 +123,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
 
 arm/arm
 carrier/carrier
-channel-head-tool/channel-head-tool
+channel-head-tool/_channel-head-tool
 container/container
 deck/deck
 itemized-resource/itemized-resource

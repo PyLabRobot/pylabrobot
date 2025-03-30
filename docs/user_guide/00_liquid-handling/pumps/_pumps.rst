@@ -1,7 +1,8 @@
-ChannelHeadTool
-===============
+Pumps
+=====
 
 Resources
+
 
 
 ------------------------------------------
@@ -10,5 +11,5 @@ Resources
    :maxdepth: 1
    :hidden:
 
-   tip/tip
-   gripper/gripper
+   cole-parmer-masterflex
+

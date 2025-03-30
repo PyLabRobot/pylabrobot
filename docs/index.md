@@ -83,14 +83,6 @@ user_guide/index
 ```
 
 ```{toctree}
-:maxdepth: 0
-:caption: Resource Management
-:hidden:
-
-Protocol Library <protocol_library/index>
-```
-
-```{toctree}
 :maxdepth: 2
 :caption: Development
 :hidden:

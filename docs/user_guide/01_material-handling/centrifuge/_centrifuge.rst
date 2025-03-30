@@ -1,5 +1,5 @@
-Sample Prep & Processing
-========================
+Centrifuge
+==========
 
 Resources
 
@@ -11,5 +11,6 @@ Resources
    :maxdepth: 1
    :hidden:
 
-   centrifuge/centrifuge
+   agilent_vspin
+
 

@@ -1,5 +1,5 @@
-Plate Readers
-=============
+BMG ClarioSTAR
+==============
 
 PyLabRobot supports the following plate readers:
 
@@ -47,8 +47,3 @@ The BMG CLARIOStar plate reader is controlled by the :class:`~pylabrobot.plate_r
    c = CLARIOStar()
 
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   cytation5

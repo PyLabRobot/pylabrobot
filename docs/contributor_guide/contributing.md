@@ -4,7 +4,7 @@ Thank you for your interest in contributing to PyLabRobot! This document will he
 
 ## Getting Started
 
-See the installation instructions [here](/user_guide/installation.md). For contributing, you should install PyLabRobot from source.
+See the installation instructions [here](../user_guide/_getting-started/installation.md). For contributing, you should install PyLabRobot from source.
 
 If this is your first time contributing to open source, check out [How to Open Source](/contributor_guide/how-to-open-source.md) for an easy introduction.
 

@@ -1,4 +1,4 @@
-# Centrifuges
+# Agilent VSpin
 
 PyLabRobot supports the following centrifuges:
 
