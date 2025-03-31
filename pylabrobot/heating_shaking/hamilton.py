@@ -75,12 +75,17 @@ class HamiltonHeatShaker(HeaterShakerBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
+    while not await self.get_is_shaking():
+      await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
 
   async def stop_shaking(self):
-    """Shaker `stop_shaking` implementation."""
     await self._stop_shaking()
     await self._wait_for_stop()
+
+  async def get_is_shaking(self) -> bool:
+    response = self._send_command("RD").decode("ascii")
+    is_shaking = response.endswith("1")
+    return is_shaking
 
   async def _move_plate_lock(self, position: PlateLockPosition):
     return self._send_command("LP", lp=position.value)
