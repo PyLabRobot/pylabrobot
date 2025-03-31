@@ -84,8 +84,7 @@ class HamiltonHeatShaker(HeaterShakerBackend):
 
   async def get_is_shaking(self) -> bool:
     response = self._send_command("RD").decode("ascii")
-    is_shaking = response.endswith("1")
-    return is_shaking
+    return response.endswith("1")  # type: ignore[no-any-return] # what
 
   async def _move_plate_lock(self, position: PlateLockPosition):
     return self._send_command("LP", lp=position.value)
