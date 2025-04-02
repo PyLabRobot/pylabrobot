@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin.VSpin.configure\_and\_initialize
+============================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. automethod:: VSpin.configure_and_initialize

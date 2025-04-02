@@ -1,0 +1,32 @@
+﻿pylabrobot.machines.machine.Machine
+===================================
+
+.. currentmodule:: pylabrobot.machines.machine
+
+.. autoclass:: Machine
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Machine.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Machine.__init__
+      ~Machine.deserialize
+      ~Machine.serialize
+      ~Machine.setup
+      ~Machine.stop
+   
+   

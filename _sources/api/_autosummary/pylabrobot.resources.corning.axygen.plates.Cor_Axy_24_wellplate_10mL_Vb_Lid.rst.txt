@@ -1,0 +1,6 @@
+pylabrobot.resources.corning.axygen.plates.Cor\_Axy\_24\_wellplate\_10mL\_Vb\_Lid
+=================================================================================
+
+.. currentmodule:: pylabrobot.resources.corning.axygen.plates
+
+.. autofunction:: Cor_Axy_24_wellplate_10mL_Vb_Lid

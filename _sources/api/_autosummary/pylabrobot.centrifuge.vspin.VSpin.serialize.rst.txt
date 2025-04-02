@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin.VSpin.serialize
+===========================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. automethod:: VSpin.serialize
