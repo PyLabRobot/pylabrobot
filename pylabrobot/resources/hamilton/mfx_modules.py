@@ -61,3 +61,16 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
     model=MFX_DWP_rackbased_module.__name__,
     pedestal_size_z=0,
   )
+
+def MFX_WP_module_flat(name: str) -> PlateHolder:
+  """Hamilton cat. no.: 188041 (uncertain)
+  """
+  return PlateHolder(
+    name=name,
+    size_x=135.0,
+    size_y=94.0,
+    size_z=216 - 18.195 - 100,
+    # probe height - carrier_height - deck_height
+    child_location=Coordinate(3.0, 4.0, 209.9 - 18.195 - 100),
+    pedestal_size_z=0,
+  )
