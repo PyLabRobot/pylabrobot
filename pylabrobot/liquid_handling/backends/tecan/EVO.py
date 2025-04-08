@@ -50,6 +50,7 @@ from pylabrobot.resources import (
   TecanTip,
   TecanTipRack,
   Trash,
+  TipSpot, # VIKMOL ADDED
 )
 
 T = TypeVar("T")
@@ -301,7 +302,7 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
     await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
-    await self.liha.position_valve_logical([1] * self.num_channels)
+    await self.liha.position_valve_logical([1] * self.num_channelsk)
     await self.liha.move_plunger_relative([100] * self.num_channels)
     await self.liha.position_valve_logical([0] * self.num_channels)
     await self.liha.set_end_speed_plunger([1800] * self.num_channels)
@@ -518,8 +519,8 @@ class EVO(TecanLiquidHandler):
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     x, _ = self._first_valid(x_positions)
-    y, yi = self._first_valid(y_positions)
-    z, _ = self._first_valid(z_positions)  # GET VALID Z POSITION
+    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS
+    # z, _ = self._first_valid(z_positions)  # GET VALID Z POSITION
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
@@ -544,7 +545,7 @@ class EVO(TecanLiquidHandler):
     await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), z_positions['start'][0] - 227, 210) ## OPS OONYL FOR CHANNEL 0
     # TODO: check z params
 
-  async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int]): #TODO ADD TRASH SO IT CAN DROP TO TRASH
     """Drops tips to waste.
 
     Args:
@@ -555,12 +556,14 @@ class EVO(TecanLiquidHandler):
     assert (
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
-    assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
+    # assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
+    assert all(isinstance(op.resource, (Trash, TipSpot)) for op in ops), "Must drop in waste container or tip rack" # vikmol added
+
 
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     # move channels
-    ys = 90
+    ys =  int(ops[0].resource.get_absolute_size_y() * 10) # was 90
     x, _ = self._first_valid(x_positions)
     y, _ = self._first_valid(y_positions)
     assert x is not None and y is not None
@@ -571,6 +574,35 @@ class EVO(TecanLiquidHandler):
 
     # discard tips
     await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels))
+
+  async def return_tips(self, ops: List[Drop], use_channels: List[int]): # vikmol added
+      """Returns tips to their original tip rack positions.
+
+      Args:
+        ops: The return operations to perform.
+        use_channels: The channels to use for the return operations.
+      """
+
+      assert all(isinstance(op.resource, Resource) for op in ops), "Must return tips to a valid Resource"
+      x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
+
+      # move channels to return position
+      ys = 90 # proably wrong
+      x, _ = self._first_valid(x_positions)
+      y, _ = self._first_valid(y_positions)
+      assert x is not None and y is not None
+
+      await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+      await self.liha.position_absolute_all_axis(
+          x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
+      )
+
+      # place tips back in rack
+      await self.liha.place_tip_back(self._bin_use_channels(use_channels))
+
+
+
+
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError()
@@ -1179,6 +1211,15 @@ class LiHa(EVOArm):
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
+
+  async def place_tip_back(self, tips):
+      """Places tips back into the original tip rack positions.
+
+      Args:
+        tips: Binary coded tip select
+      """
+
+      await self.backend.send_command(module=self.module, command="PTB", params=[tips])
 
 ## VIKMOL ADDED MCA
 class Mca(EVOArm):
