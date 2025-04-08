@@ -338,7 +338,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     )
 
     # ad-hoc offset adjustment that makes it smoother.
-    offset_z += 50
+    offset_z += op.tip.total_tip_length
 
     ot_api.lh.pick_up_tip(
       labware_id,
