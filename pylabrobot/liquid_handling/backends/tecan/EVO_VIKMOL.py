@@ -284,15 +284,15 @@ class EVO(TecanLiquidHandler):
     if self.mca_connected: # VIKMOL added mca initialization
       self.mca = Mca(self, EVO.MCA)
       # await self.mca.position_initialization_x() # function deos not work for mca. vikmol
-      print("MCA connected!")
+      print("MCA connected!") # VIKMOL DEBUG
       await self._park_mca() # VIKMOL ADDED
     else:
-      print("MCA not connected")
+      print("MCA not connected") # VIKMOL DEBUG
 
     if self.liha_connected:
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
-      print("LiHa connected!")
+      print("LiHa connected!") # VIKMOL DEBUG
 
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
