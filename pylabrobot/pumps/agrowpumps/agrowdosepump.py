@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Union
 try:
   from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 except ImportError:
-  AsyncModbusSerialClient = None
+  AsyncModbusSerialClient = None  # type: ignore
 
 from pylabrobot.pumps.backend import PumpArrayBackend
 

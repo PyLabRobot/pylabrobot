@@ -1,5 +1,3 @@
-"""Tests for LiquidHandler"""
-
 import itertools
 import tempfile
 import unittest
