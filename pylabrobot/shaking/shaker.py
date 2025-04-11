@@ -59,3 +59,9 @@ class Shaker(ResourceHolder, Machine):
 
   async def unlock_plate(self):
     await self.backend.unlock_plate()
+
+  def serialize(self) -> dict:
+    return {
+      **Machine.serialize(self),
+      **ResourceHolder.serialize(self),
+    }
