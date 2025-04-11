@@ -4120,7 +4120,6 @@ class STAR(HamiltonLiquidHandler):
       command="TR",
       tip_pattern=tip_pattern,
       read_timeout=max(120, self.read_timeout),
-      fmt="kz### (n)vz### (n)",
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
