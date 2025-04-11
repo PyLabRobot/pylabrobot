@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.biotek\_backend.Cytation5Backend.get\_serial\_number
+==============================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.biotek_backend
+
+.. automethod:: Cytation5Backend.get_serial_number

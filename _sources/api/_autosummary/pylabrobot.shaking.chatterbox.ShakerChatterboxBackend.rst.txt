@@ -1,0 +1,37 @@
+﻿pylabrobot.shaking.chatterbox.ShakerChatterboxBackend
+=====================================================
+
+.. currentmodule:: pylabrobot.shaking.chatterbox
+
+.. autoclass:: ShakerChatterboxBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ShakerChatterboxBackend.temperature
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ShakerChatterboxBackend.__init__
+      ~ShakerChatterboxBackend.deserialize
+      ~ShakerChatterboxBackend.get_all_instances
+      ~ShakerChatterboxBackend.lock_plate
+      ~ShakerChatterboxBackend.serialize
+      ~ShakerChatterboxBackend.setup
+      ~ShakerChatterboxBackend.shake
+      ~ShakerChatterboxBackend.stop
+      ~ShakerChatterboxBackend.stop_shaking
+      ~ShakerChatterboxBackend.unlock_plate
+   
+   
