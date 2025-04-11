@@ -63,7 +63,7 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
   )
 
 def MFX_WP_module_flat(name: str) -> PlateHolder:
-  """Hamilton cat. no.: 188041 (uncertain)
+  """Hamilton cat. no.: 188049 (uncertain)
   Module to position a Well Plate. Taller version of MFX_DWP_module_flat.
   """
   return PlateHolder(
