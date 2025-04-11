@@ -7,7 +7,7 @@ from pylabrobot.resources.well import Well
 
 
 class STARChatterboxBackend(STAR):
-  """Chatterbox backend for "STAR" """
+  """Chatterbox backend for 'STAR' """
 
   def __init__(self, num_channels: int = 8):
     """Initialize a chatter box backend."""
@@ -60,7 +60,7 @@ class STARChatterboxBackend(STAR):
       "id": 3,
     }
     # extended configuration is directly copied from a STARlet w/ 8p, iswap, and autoload
-    return self.extended_conf
+    return self._extended_conf
 
   async def request_iswap_initialization_status(self) -> bool:
     return True
@@ -77,7 +77,6 @@ class STARChatterboxBackend(STAR):
     read_timeout: Optional[int] = None,
     wait: bool = True,
   ) -> Optional[str]:
-    # print(f"Sending command: {module}{command} with args {args} and kwargs {kwargs}.")
     print(cmd)
     return None
 
@@ -95,32 +94,35 @@ class STARChatterboxBackend(STAR):
     return 285.0
 
   async def step_off_foil(
-    self, wells: Union[Well, List[Well]], front_channel: int, back_channel: int, move_inwards: float = 2, move_height: float = 15,
+    self,
+    wells: Union[Well, List[Well]],
+    front_channel: int,
+    back_channel: int,
+    move_inwards: float = 2,
+    move_height: float = 15,
   ):
-    print("stepping off foil")
-    print(f"wells: {wells}")
-    print(f"front channel: {front_channel}")
-    print(f"back channel: {back_channel}")
-    print(f"move inwards: {move_inwards}")
-    print(f"move height: {move_height}")
-
+    print(
+      f"stepping off foil | wells: {wells} | front channel: {front_channel} | back channel: {back_channel} | "
+      f"move inwards: {move_inwards} | move height: {move_height}"
+    )
 
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel safely in the y direction."""
 
   @asynccontextmanager
   async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
-    """A context manager that sets the iSWAP to slow speed during the context"""
-    assert 20 <= gripper_velocity <= 75_000
-    assert 20 <= wrist_velocity <= 65_000
+    """A context manager that sets the iSWAP to slow speed during the context."""
+    assert 20 <= gripper_velocity <= 75_000, "Gripper velocity out of range."
+    assert 20 <= wrist_velocity <= 65_000, "Wrist velocity out of range."
 
+    messages = ["start slow iswap"]
     try:
-      print("start slow iswap")
       yield
     finally:
-      print("end slow iswap")
+      messages.append("end slow iswap")
+      print(" | ".join(messages))
       
-async def pierce_foil(
+  async def pierce_foil(
     self,
     wells: Union[Well, List[Well]],
     piercing_channels: List[int],
@@ -130,11 +132,8 @@ async def pierce_foil(
     one_by_one: bool = False,
     distance_from_bottom: float = 20.0,
   ):
-    print("piercing foil")
-    print(f"wells: {wells}")
-    print(f"piercing channels: {piercing_channels}")
-    print(f"hold down channels: {hold_down_channels}")
-    print(f"move inwards: {move_inwards}")
-    print(f"spread: {spread}")
-    print(f"one by one: {one_by_one}")
-    print(f"distance from bottom: {distance_from_bottom}")
+    # Combine all print outputs into a single line.
+    print(
+      f"piercing foil | wells: {wells} | piercing channels: {piercing_channels} | hold down channels: {hold_down_channels} | "
+      f"move inwards: {move_inwards} | spread: {spread} | one by one: {one_by_one} | distance from bottom: {distance_from_bottom}"
+    )
