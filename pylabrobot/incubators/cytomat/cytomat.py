@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import List, Literal, Optional, cast
+from typing import List, Literal, Optional, Union, cast
 
 import serial
 
@@ -47,7 +47,7 @@ class Cytomat(IncubatorBackend):
   default_baud = 9600
   serial_message_encoding = "utf-8"
 
-  def __init__(self, model: CytomatType, port: str):
+  def __init__(self, model: Union[CytomatType, str], port: str):
     supported_models = [
       CytomatType.C6000,
       CytomatType.C6002,
@@ -55,8 +55,15 @@ class Cytomat(IncubatorBackend):
       CytomatType.C2C_450_SHAKE,
       CytomatType.C5C,
     ]
+    if isinstance(model, str):
+      try:
+        model = CytomatType(model)
+      except ValueError:
+        raise ValueError(f"Unsupported Cytomat model: '{model}'")
     if model not in supported_models:
-      raise NotImplementedError("Only the following Cytomats are supported:", supported_models)
+      raise NotImplementedError(
+        f"Only the following Cytomats are supported: {supported_models}, but got '{model}'"
+      )
     self.model = model
     self._racks: List[PlateCarrier] = []
 
@@ -369,6 +376,13 @@ class Cytomat(IncubatorBackend):
 
   async def set_temperature(self, *args, **kwargs):
     raise NotImplementedError("Temperature control is not implemented yet")
+
+  def serialize(self) -> dict:
+    return {
+      **IncubatorBackend.serialize(self),
+      "model": self.model.value,
+      "port": self.io.port,
+    }
 
 
 class CytomatChatterbox(Cytomat):
