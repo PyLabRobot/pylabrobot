@@ -75,7 +75,7 @@ def MFX_WP_module_flat(name: str) -> PlateHolder:
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=216 - 18.195 - 100, # mesured using probe
+    size_z=216 - 18.195 - 100,  # mesured using probe
     # probe height - carrier_height - deck_height
     child_location=Coordinate(3.0, 4.0, 209.9 - 18.195 - 100),
     pedestal_size_z=0,
