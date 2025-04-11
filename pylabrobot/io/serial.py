@@ -49,6 +49,10 @@ class Serial(IOBase):
     self.write_timeout = write_timeout
     self.timeout = timeout
 
+  @property
+  def port(self) -> str:
+    return self._port
+
   async def setup(self):
     try:
       self.ser = serial.Serial(
