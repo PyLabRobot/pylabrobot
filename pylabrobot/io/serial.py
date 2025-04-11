@@ -101,6 +101,29 @@ class Serial(IOBase):
     )
     return cast(bytes, data)
 
+  def serialize(self):
+    return {
+      "port": self._port,
+      "baudrate": self.baudrate,
+      "bytesize": self.bytesize,
+      "parity": self.parity,
+      "stopbits": self.stopbits,
+      "write_timeout": self.write_timeout,
+      "timeout": self.timeout,
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> "SerialValidator":
+    return cls(
+      port=data["port"],
+      baudrate=data["baudrate"],
+      bytesize=data["bytesize"],
+      parity=data["parity"],
+      stopbits=data["stopbits"],
+      write_timeout=data["write_timeout"],
+      timeout=data["timeout"],
+    )
+
 
 class SerialValidator(Serial):
   def __init__(
@@ -111,6 +134,8 @@ class SerialValidator(Serial):
     bytesize: int = 8,  # serial.EIGHTBITS
     parity: str = "N",  # serial.PARITY_NONE
     stopbits: int = 1,  # serial.STOPBITS_ONE,
+    write_timeout=1,
+    timeout=1,
   ):
     super().__init__(
       port=port,
@@ -118,6 +143,8 @@ class SerialValidator(Serial):
       bytesize=bytesize,
       parity=parity,
       stopbits=stopbits,
+      write_timeout=write_timeout,
+      timeout=timeout,
     )
     self.cr = cr
 
