@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
@@ -98,10 +98,15 @@ class STARChatterboxBackend(STAR):
     self, wells: Union[Well, List[Well]], front_channel: int, back_channel: int, move_inwards: float = 2, move_height: float = 15,
   ):
     print("stepping off foil")
+    print(f"wells: {wells}")
+    print(f"front channel: {front_channel}")
+    print(f"back channel: {back_channel}")
+    print(f"move inwards: {move_inwards}")
+    print(f"move height: {move_height}")
+
 
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel safely in the y direction."""
-    print("moving channel in y")
 
   @asynccontextmanager
   async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
@@ -114,6 +119,22 @@ class STARChatterboxBackend(STAR):
       yield
     finally:
       print("end slow iswap")
-
-  async def pierce_foil(self, **kwargs):
+      
+async def pierce_foil(
+    self,
+    wells: Union[Well, List[Well]],
+    piercing_channels: List[int],
+    hold_down_channels: List[int],
+    move_inwards: float,
+    spread: Literal["wide", "tight"] = "wide",
+    one_by_one: bool = False,
+    distance_from_bottom: float = 20.0,
+  ):
     print("piercing foil")
+    print(f"wells: {wells}")
+    print(f"piercing channels: {piercing_channels}")
+    print(f"hold down channels: {hold_down_channels}")
+    print(f"move inwards: {move_inwards}")
+    print(f"spread: {spread}")
+    print(f"one by one: {one_by_one}")
+    print(f"distance from bottom: {distance_from_bottom}")
