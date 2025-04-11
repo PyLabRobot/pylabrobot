@@ -113,7 +113,7 @@ class Serial(IOBase):
     }
 
   @classmethod
-  def deserialize(cls, data: dict) -> "SerialValidator":
+  def deserialize(cls, data: dict) -> "Serial":
     return cls(
       port=data["port"],
       baudrate=data["baudrate"],
