@@ -132,7 +132,6 @@ class STARChatterboxBackend(STAR):
     one_by_one: bool = False,
     distance_from_bottom: float = 20.0,
   ):
-    # Combine all print outputs into a single line.
     print(
       f"piercing foil | wells: {wells} | piercing channels: {piercing_channels} | hold down channels: {hold_down_channels} | "
       f"move inwards: {move_inwards} | spread: {spread} | one by one: {one_by_one} | distance from bottom: {distance_from_bottom}"
