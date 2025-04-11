@@ -62,10 +62,15 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
     pedestal_size_z=0,
   )
 
+
 def MFX_WP_module_flat(name: str) -> PlateHolder:
   """Hamilton cat. no.: 188049 (uncertain)
   Module to position a Well Plate. Taller version of MFX_DWP_module_flat.
   """
+
+  # Resource size is carried over from MFX_DWP_module_flat.
+  # Child location offset for x, y are measured with caliper.
+
   return PlateHolder(
     name=name,
     size_x=135.0,
