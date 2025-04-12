@@ -7,7 +7,7 @@ from pylabrobot.resources.well import Well
 
 
 class STARChatterboxBackend(STAR):
-  """Chatterbox backend for 'STAR' """
+  """Chatterbox backend for 'STAR'"""
 
   def __init__(self, num_channels: int = 8):
     """Initialize a chatter box backend."""
@@ -121,7 +121,7 @@ class STARChatterboxBackend(STAR):
     finally:
       messages.append("end slow iswap")
       print(" | ".join(messages))
-      
+
   async def pierce_foil(
     self,
     wells: Union[Well, List[Well]],
