@@ -1,7 +1,10 @@
 Liquid Handling
 ===============
 
-Resources
+Everything that that touches a liquid directly.
+Examples:
+- Liquid handlers
+- Pumps
 
 
 

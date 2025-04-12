@@ -1,7 +1,8 @@
 Analytical
 ==========
 
-Resources
+Everything whose primary function is to measure something.
+This includes flow cytometers, plate readers, and scales.
 
 
 

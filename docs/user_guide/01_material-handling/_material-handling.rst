@@ -1,7 +1,8 @@
 Material Handling
 =================
 
-Resources
+Everything that controls the movement of materials and the condition/state of the materials.
+This includes machines for temperature and motion control (as neither machines physically touch a liquid).
 
 
 

@@ -104,11 +104,6 @@ api/pylabrobot
 Community <https://discuss.pylabrobot.org/>
 ```
 
-```{toctree}
-:hidden:
-
-resources/index
-```
 
 ## Citing
 

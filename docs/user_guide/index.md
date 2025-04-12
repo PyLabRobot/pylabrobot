@@ -8,7 +8,7 @@
 :hidden:
 
 _getting-started/installation
-_getting-started/plr-architecture
+How PLR Works <_getting-started/plr-architecture>
 _getting-started/rpi
 ```
 
