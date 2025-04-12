@@ -1968,6 +1968,8 @@ class LiquidHandler(Resource, Machine):
       )
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       destination.assign_child_resource(resource)
+    elif isinstance(destination, Trash):
+      pass  # don't assign to trash, resource will simply be unassigned
     else:
       destination.assign_child_resource(resource, location=to_location)
 
