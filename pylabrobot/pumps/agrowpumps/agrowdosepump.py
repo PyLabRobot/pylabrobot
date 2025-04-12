@@ -4,7 +4,10 @@ import threading
 import time
 from typing import Dict, List, Optional, Union
 
-from pymodbus.client import AsyncModbusSerialClient  # type: ignore
+try:
+  from pymodbus.client import AsyncModbusSerialClient  # type: ignore
+except ImportError:
+  AsyncModbusSerialClient = None  # type: ignore
 
 from pylabrobot.pumps.backend import PumpArrayBackend
 
@@ -36,18 +39,13 @@ class AgrowPumpArray(PumpArrayBackend):
     self.address = int(address)
     self._keep_alive_thread: Optional[threading.Thread] = None
     self._pump_index_to_address: Optional[Dict[int, int]] = None
-    self._modbus: Optional[AsyncModbusSerialClient] = None
+    self._modbus: Optional["AsyncModbusSerialClient"] = None
     self._num_channels: Optional[int] = None
     self._keep_alive_thread_active = False
 
   @property
-  def modbus(self) -> AsyncModbusSerialClient:
-    """Returns the Modbus connection to the AgrowPumpArray.
-
-    Returns:
-      AsyncModbusSerialClient: The Modbus connection to the AgrowPumpArray.
-    """
-
+  def modbus(self) -> "AsyncModbusSerialClient":
+    """Returns the Modbus connection to the AgrowPumpArray."""
     if self._modbus is None:
       raise RuntimeError("Modbus connection not established")
     return self._modbus
@@ -69,16 +67,15 @@ class AgrowPumpArray(PumpArrayBackend):
     """The number of channels that the AgrowPumpArray has.
 
     Returns:
-      int: The number of channels that the AgrowPumpArray has.
+      The number of channels that the AgrowPumpArray has.
     """
     if self._num_channels is None:
       raise RuntimeError("Number of channels not established")
     return self._num_channels
 
   def start_keep_alive_thread(self):
-    """Creates a daemon thread that sends a Modbus request
-    every 25 seconds to keep the connection alive.
-    """
+    """Creates a daemon thread that sends a Modbus request every 25 seconds to keep the connection
+    alive."""
 
     async def keep_alive():
       """Sends a Modbus request every 25 seconds to keep the connection alive.
@@ -119,6 +116,8 @@ class AgrowPumpArray(PumpArrayBackend):
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
 
   async def _setup_modbus(self):
+    if AsyncModbusSerialClient is None:
+      raise RuntimeError("pymodbus is not installed. Please install it with 'pip install pymodbus'")
     self._modbus = AsyncModbusSerialClient(
       port=self.port,
       baudrate=115200,

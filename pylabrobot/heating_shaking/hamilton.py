@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Literal
+from typing import Literal, Optional
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.usb import USB
@@ -20,6 +20,8 @@ class HamiltonHeatShaker(HeaterShakerBackend):
     shaker_index: int,
     id_vendor: int = 0x8AF,
     id_product: int = 0x8002,
+    device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
   ) -> None:
     """
     Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
@@ -30,7 +32,12 @@ class HamiltonHeatShaker(HeaterShakerBackend):
     self.command_id = 0
 
     super().__init__()
-    self.io = USB(id_vendor=id_vendor, id_product=id_product)
+    self.io = USB(
+      id_vendor=id_vendor,
+      id_product=id_product,
+      device_address=device_address,
+      serial_number=serial_number,
+    )
 
   async def setup(self):
     """
@@ -44,6 +51,8 @@ class HamiltonHeatShaker(HeaterShakerBackend):
 
   def serialize(self) -> dict:
     usb_serialized = self.io.serialize()
+    for key in ["packet_read_timeout", "read_timeout", "write_timeout"]:
+      del usb_serialized[key]
     heater_shaker_serialized = HeaterShakerBackend.serialize(self)
     return {
       **usb_serialized,
@@ -75,12 +84,18 @@ class HamiltonHeatShaker(HeaterShakerBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
+    while True:
+      await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
+      if await self.get_is_shaking():
+        break
 
   async def stop_shaking(self):
-    """Shaker `stop_shaking` implementation."""
     await self._stop_shaking()
     await self._wait_for_stop()
+
+  async def get_is_shaking(self) -> bool:
+    response = self._send_command("RD").decode("ascii")
+    return response.endswith("1")  # type: ignore[no-any-return] # what
 
   async def _move_plate_lock(self, position: PlateLockPosition):
     return self._send_command("LP", lp=position.value)

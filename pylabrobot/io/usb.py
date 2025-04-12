@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional
 
-from pylabrobot.io.capture import Command, capturer
+from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
@@ -37,7 +37,7 @@ class USBCommand(Command):
 
 
 class USB(IOBase):
-  """IO for reading/writnig to a USB device."""
+  """IO for reading/writing to a USB device."""
 
   def __init__(
     self,
@@ -63,6 +63,9 @@ class USB(IOBase):
     """
 
     super().__init__()
+
+    if get_capture_or_validation_active():
+      raise RuntimeError("Cannot create a new USB object while capture or validation is active")
 
     assert (
       packet_read_timeout < read_timeout
