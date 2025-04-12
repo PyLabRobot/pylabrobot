@@ -47,7 +47,7 @@ class Shaker(ResourceHolder, Machine):
 
     if duration is None:
       return
-    
+
     if not isinstance(self.backend, ShakerChatterboxBackend):
       await asyncio.sleep(duration)
 
