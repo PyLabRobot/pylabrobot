@@ -1163,7 +1163,7 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
     self._channel_traversal_height: float = 245.0
-    self._iswap_traversal_height: float = 284.0
+    self._iswap_traversal_height: float = 280.0
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -2594,7 +2594,7 @@ class STAR(HamiltonLiquidHandler):
     location: Coordinate,
     resource: Resource,
     grip_direction: GripDirection,
-    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1,
@@ -2621,7 +2621,7 @@ class STAR(HamiltonLiquidHandler):
         GripDirection.LEFT: 4,
       }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=round(
-        minimum_traverse_height_at_beginning_of_a_command * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
       collision_control_level=collision_control_level,
       acceleration_index_high_acc=acceleration_index_high_acc,
