@@ -1174,14 +1174,14 @@ class Cytation5Backend(ImageReaderBackend):
         if magnification == 40:
           return (216.5 / 1000, 161.9 / 1000)  # pixel size ≈ 0.168 µm
         raise ValueError(f"Don't know image size for magnification {magnification}")
-      else:
-        if magnification == 4:
-          return (3474 / 1000, 3474 / 1000)
-        if magnification == 20:
-          return (694 / 1000, 694 / 1000)
-        if magnification == 40:
-          return (347 / 1000, 347 / 1000)
-        raise ValueError(f"Don't know image size for magnification {magnification}")
+      # version 2
+      if magnification == 4:
+        return (3474 / 1000, 3474 / 1000)
+      if magnification == 20:
+        return (694 / 1000, 694 / 1000)
+      if magnification == 40:
+        return (347 / 1000, 347 / 1000)
+      raise ValueError(f"Don't know image size for magnification {magnification}")
 
     if self._objective is None:
       raise RuntimeError("Objective not set. Run set_objective() first.")
