@@ -31,8 +31,7 @@ class STARChatterboxBackend(STAR):
     # Bit 5:   Wash station 2                     0 = none        1 = installed
     # Bit 6:   Temp. controlled carrier 1         0 = none        1 = installed
     # Bit 7:   Temp. controlled carrier 2         0 = none        1 = installed
-    self.conf = {"kb": 11, "kp": self.num_channels, "id": 2}
-    return self.conf
+    return {"kb": 11, "kp": self.num_channels, "id": 2}
 
   async def request_extended_configuration(self):
     self._extended_conf = {
