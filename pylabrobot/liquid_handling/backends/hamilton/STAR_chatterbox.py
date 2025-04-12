@@ -106,7 +106,7 @@ class STARChatterboxBackend(STAR):
     )
 
   async def move_channel_y(self, channel: int, y: float):
-    """Move a channel safely in the y direction."""
+    print(f"moving channel {channel} to y: {y}")
 
   @asynccontextmanager
   async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
