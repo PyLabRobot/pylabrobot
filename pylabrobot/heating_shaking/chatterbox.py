@@ -6,4 +6,5 @@ from pylabrobot.temperature_controlling import TemperatureControllerChatterboxBa
 class HeaterShakerChatterboxBackend(
   HeaterShakerBackend, ShakerChatterboxBackend, TemperatureControllerChatterboxBackend
 ):
-  pass
+  async def initialize_shaker_drive(self):
+    print("initialize_shaker_drive")
