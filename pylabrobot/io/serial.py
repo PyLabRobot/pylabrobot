@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 class SerialCommand(Command):
   data: str
 
-  def __init__(self, device_id: str, action: str, data: str):
-    super().__init__(module="serial", device_id=device_id, action=action)
+  def __init__(self, device_id: str, action: str, data: str, module: str = "serial"):
+    super().__init__(module=module, device_id=device_id, action=action)
     self.data = data
 
 
