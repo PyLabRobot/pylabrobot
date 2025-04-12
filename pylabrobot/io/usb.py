@@ -316,7 +316,7 @@ class USBValidator(USB):
     pass
 
   def write(self, data: bytes, timeout: Optional[float] = None):
-    next_command = USBCommand(**self.cr.next_command())
+    next_command = USBCommand(**self.cr.next_command(self._unique_id))
     if not (
       next_command.module == "usb"
       and next_command.device_id == self._unique_id
@@ -328,7 +328,7 @@ class USBValidator(USB):
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   def read(self, timeout: Optional[float] = None) -> bytes:
-    next_command = USBCommand(**self.cr.next_command())
+    next_command = USBCommand(**self.cr.next_command(self._unique_id))
     if not (
       next_command.module == "usb"
       and next_command.device_id == self._unique_id

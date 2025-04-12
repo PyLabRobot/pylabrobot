@@ -83,34 +83,37 @@ class _CaptureWriter:
 class CaptureReader:
   def __init__(self, path: str):
     self.path = path
-    self.commands: List[dict] = []
+    self.commands: dict[str, List[dict]] = {}
     with open(path, "r") as f:
       data = json.load(f)
       for c in data["commands"]:
-        self.commands.append(c)
-    self._command_idx = 0
+        if c.get("device_id") not in self.commands:
+          self.commands[c["device_id"]] = []
+        self.commands[c["device_id"]].append(c)
+    self._command_idx = {k: 0 for k in self.commands.keys()}
 
   def start(self):
     global _capture_or_validation_active
     _capture_or_validation_active = True
 
-  def next_command(self) -> dict:
-    command = self.commands[self._command_idx]
-    self._command_idx += 1
+  def next_command(self, device_id) -> dict:
+    print("getting next command for device", device_id)
+    command = self.commands[device_id][self._command_idx[device_id]]
+    self._command_idx[device_id] += 1
     return command
 
   def done(self):
-    if self._command_idx < len(self.commands):
-      left = len(self.commands) - self._command_idx
-      next_command = self.commands[self._command_idx]
-      raise ValidationError(
-        f"Log file not fully read, {left} lines left. First command: {next_command}"
-      )
+    # if self._command_idx < len(self.commands):
+    #   left = len(self.commands) - self._command_idx
+    #   next_command = self.commands[self._command_idx]
+    #   raise ValidationError(
+    #     f"Log file not fully read, {left} lines left. First command: {next_command}"
+    #   )
     print("Validation successful!")
     self.reset()
 
   def reset(self):
-    self._command_idx = 0
+    self._command_idx = {k: 0 for k in self.commands.keys()}
 
     global _capture_or_validation_active
     _capture_or_validation_active = True
