@@ -40,6 +40,8 @@ def validate(capture_file: str):
     else:
       raise RuntimeError(f"Backend {machine_backend} not supported for validation")
 
+  cr.start()
+
 
 def end_validation():
   if cr is None:

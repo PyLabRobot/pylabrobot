@@ -7,6 +7,12 @@ from typing import List, Union
 from pylabrobot.__version__ import __version__
 from pylabrobot.io.errors import ValidationError
 
+_capture_or_validation_active = False
+
+
+def get_capture_or_validation_active() -> bool:
+  return _capture_or_validation_active
+
 
 @dataclass
 class Command:
@@ -31,6 +37,9 @@ class _CaptureWriter:
     self._tempfile.write(b'",\n')
     self._tempfile.write(b'  "commands": [\n')
     self._tempfile.flush()
+
+    global _capture_or_validation_active
+    _capture_or_validation_active = True
 
   def record(self, command: Command):
     if self._tempfile is not None:
@@ -63,6 +72,9 @@ class _CaptureWriter:
 
     self._path = None
 
+    global _capture_or_validation_active
+    _capture_or_validation_active = True
+
   @property
   def capture_active(self):
     return self._tempfile is not None
@@ -78,6 +90,10 @@ class CaptureReader:
         self.commands.append(c)
     self._command_idx = 0
 
+  def start(self):
+    global _capture_or_validation_active
+    _capture_or_validation_active = True
+
   def next_command(self) -> dict:
     command = self.commands[self._command_idx]
     self._command_idx += 1
@@ -91,9 +107,13 @@ class CaptureReader:
         f"Log file not fully read, {left} lines left. First command: {next_command}"
       )
     print("Validation successful!")
+    self.reset()
 
   def reset(self):
     self._command_idx = 0
+
+    global _capture_or_validation_active
+    _capture_or_validation_active = True
 
 
 capturer = _CaptureWriter()
