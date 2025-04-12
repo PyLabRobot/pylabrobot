@@ -1126,7 +1126,7 @@ class Cytation5Backend(ImageReaderBackend):
     led_intensity: int = 10,
     coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
     center_position: Optional[Tuple[float, float]] = None,
-    overlap: Optional[float] = None,
+    overlap_fraction: float = 0.1,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
   ) -> List[Image]:
@@ -1142,12 +1142,11 @@ class Cytation5Backend(ImageReaderBackend):
       center_position: center position of the well, in mm from the center of the selected well. If
         `None`, the center of the selected well is used (eg (0, 0) offset). If `coverage` is
         specified, this is the center of the coverage area.
+      overlap_fraction: fraction of overlap between images. e.g. `0.1` means 10% overlap.
       color_processing_algorithm: color processing algorithm. See
         PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_*
       pixel_format: pixel format. See PySpin.PixelFormat_*
     """
-
-    assert overlap is None, "not implemented yet"
 
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
@@ -1166,14 +1165,14 @@ class Cytation5Backend(ImageReaderBackend):
       # um to mm (plr unit)
 
       if self.version.startswith("1"):
-        if magnification == 2.5: #actually 2.74x
-          return (3160 / 1000, 2370 / 1000) # pixel size = 2.45 um
+        if magnification == 2.5:  # actually 2.74x
+          return (3160 / 1000, 2370 / 1000)  # pixel size = 2.45 um
         if magnification == 4:
-           return (2164.8 / 1000, 1619.5 / 1000) # pixel size  = 1.68 um
+          return (2164.8 / 1000, 1619.5 / 1000)  # pixel size  = 1.68 um
         if magnification == 20:
-            return (433 / 1000, 325 / 1000)  # pixel size ≈ 0.336 µm 
+          return (433 / 1000, 325 / 1000)  # pixel size ≈ 0.336 µm
         if magnification == 40:
-            return (216.5 / 1000, 161.9 /1000)  # pixel size ≈ 0.168 µm
+          return (216.5 / 1000, 161.9 / 1000)  # pixel size ≈ 0.168 µm
         raise ValueError(f"Don't know image size for magnification {magnification}")
       else:
         if magnification == 4:
@@ -1203,8 +1202,7 @@ class Cytation5Backend(ImageReaderBackend):
       center_position = (0, 0)
     # Going in a snake pattern is not faster (strangely)
 
-    #overlap between images to have images stitched
-    overlap_fraction = 0.1  # 10% overlap
+    # overlap between images to have images stitched
     step_width = img_width * (1 - overlap_fraction)
     step_height = img_height * (1 - overlap_fraction)
 
