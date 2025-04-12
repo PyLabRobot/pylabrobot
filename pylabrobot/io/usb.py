@@ -212,6 +212,57 @@ class USB(IOBase):
     for dev in self.get_available_devices():
       print(dev)
 
+  def ctrl_transfer(
+    self,
+    bmRequestType: int,
+    bRequest: int,
+    wValue: int,
+    wIndex: int,
+    data_or_wLength: int,
+    timeout: Optional[int] = None,
+  ) -> bytearray:
+    assert self.dev is not None, "Device not connected."
+
+    if timeout is None:
+      timeout = self.read_timeout
+
+    res = self.dev.ctrl_transfer(
+      bmRequestType=bmRequestType,
+      bRequest=bRequest,
+      wValue=wValue,
+      wIndex=wIndex,
+      data_or_wLength=data_or_wLength,
+      timeout=timeout * 1000,  # timeout in ms
+    )
+
+    logger.log(
+      LOG_LEVEL_IO,
+      "%s ctrl_transfer: bmRequestType=%s, bRequest=%s, wValue=%s, wIndex=%s, data_or_wLength=%s",
+      self._unique_id,
+      bmRequestType,
+      bRequest,
+      wValue,
+      wIndex,
+      data_or_wLength,
+    )
+
+    capturer.record(
+      USBCommand(
+        device_id=self._unique_id,
+        action="ctrl_transfer_request",
+        data=" ".join(map(str, [bmRequestType, bRequest, wValue, wIndex, data_or_wLength])),
+      )
+    )
+    capturer.record(
+      USBCommand(
+        device_id=self._unique_id,
+        action="ctrl_transfer_response",
+        data=" ".join(map(str, res)),
+      )
+    )
+
+    return bytearray(res)
+
   async def setup(self):
     """Initialize the USB connection to the machine."""
 
