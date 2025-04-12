@@ -48,6 +48,8 @@ class Cytomat(IncubatorBackend):
   serial_message_encoding = "utf-8"
 
   def __init__(self, model: Union[CytomatType, str], port: str):
+    super().__init__()
+
     supported_models = [
       CytomatType.C6000,
       CytomatType.C6002,

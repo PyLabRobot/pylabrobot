@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, cast
 
-from pylabrobot.io.capture import CaptureReader, Command, capturer
+from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
@@ -31,6 +31,9 @@ class HID(IOBase):
     self.serial_number = serial_number
     self.device: Optional[hid.Device] = None
     self._unique_id = f"{vid}:{pid}:{serial_number}"
+
+    if get_capture_or_validation_active():
+      raise RuntimeError("Cannot create a new HID object while capture or validation is active")
 
   async def setup(self):
     if not USE_HID:
