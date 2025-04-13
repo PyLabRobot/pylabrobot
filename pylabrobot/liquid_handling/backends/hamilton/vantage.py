@@ -5247,15 +5247,17 @@ class VantageBackend(HamiltonLiquidHandler):
       uv=0,
     )
 
+
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
 import warnings
 
+
 class Vantage(VantageBackend):
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            "`Vantage` is deprecated and will be removed in a future release. "
-            "Please use `VantageBackend` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`Vantage` is deprecated and will be removed in a future release. "
+      "Please use `VantageBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)

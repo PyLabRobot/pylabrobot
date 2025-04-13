@@ -256,16 +256,16 @@ class EVOBackend(TecanLiquidHandler):
 
     await super().setup()
 
-    self._liha_connected = await self.setup_arm(EVO.LIHA)
-    self._roma_connected = await self.setup_arm(EVO.ROMA)
+    self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
+    self._roma_connected = await self.setup_arm(EVOBackend.ROMA)
 
     if self.roma_connected:  # position_initialization_x in reverse order from setup_arm
-      self.roma = RoMa(self, EVO.ROMA)
+      self.roma = RoMa(self, EVOBackend.ROMA)
       await self.roma.position_initialization_x()
       # move to home position (TBD) after initialization
       await self._park_roma()
     if self.liha_connected:
-      self.liha = LiHa(self, EVO.LIHA)
+      self.liha = LiHa(self, EVOBackend.LIHA)
       await self.liha.position_initialization_x()
 
     self._num_channels = await self.liha.report_number_tips()
@@ -820,18 +820,21 @@ class EVOBackend(TecanLiquidHandler):
 
     return x_position, y_position, z_positions
 
+
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
 import warnings
 
+
 class EVO(EVOBackend):
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            "`EVO` is deprecated and will be removed in a future release. "
-            "Please use `EVOBackend` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`EVO` is deprecated and will be removed in a future release. "
+      "Please use `EVOBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)
+
 
 class EVOArm:
   """

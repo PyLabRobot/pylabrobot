@@ -7891,18 +7891,21 @@ class STARBackend(HamiltonLiquidHandler):
       await self.send_command("R0", "AA", wv=original_wv)
       await self.send_command("R0", "AA", tv=original_tv)
 
+
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
 import warnings
 
+
 class STAR(STARBackend):
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            "`STAR` is deprecated and will be removed in a future release. "
-            "Please use `STARBackend` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`STAR` is deprecated and will be removed in a future release. "
+      "Please use `STARBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)
+
 
 class UnSafe:
   """
@@ -7910,7 +7913,7 @@ class UnSafe:
   For example, actions that send the iSWAP outside of the Hamilton Deck
   """
 
-  def __init__(self, star: "STAR"):
+  def __init__(self, star: "STARBackend"):
     self.star = star
 
   async def put_in_hotel(
