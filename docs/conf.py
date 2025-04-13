@@ -82,9 +82,9 @@ html_theme = "pydata_sphinx_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = [
   "_static",
-  "resource_management/library/img"
+  "resources/library/img"
   ]
-html_extra_path = ["resource_management/library/img"]
+html_extra_path = ["resources/library/img"]
 
 html_theme_options = {
   "show_nav_level": 1,

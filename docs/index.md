@@ -79,7 +79,7 @@ user_guide/index
 :caption: Resource Management
 :hidden:
 
- Resource Management <resource_management/index>
+ Resource Management <resources/index>
 ```
 
 ```{toctree}

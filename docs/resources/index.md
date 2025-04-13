@@ -65,9 +65,10 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   ├── <a href="carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></td></tr>
   <tr><td>│   └── <a href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></td></tr>
 
-  <tr><td>├── ChannelHeadTool</td></tr>
+  <!-- <tr><td>├── ChannelHeadTool</td></tr>
   <tr><td>│   ├── <a href="container/trough/trough.html">Gripper</a></td></tr>
   <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">Tip (to be made a resource)</a></td></tr>
+ -->
 
   <!-- Container subtree -->
   <tr><td>├── <a href="container/container.html">Container</a></td></tr>
@@ -123,7 +124,6 @@ PLR's `Resource` subclasses in the inheritance tree are:
 
 arm/arm
 carrier/carrier
-channel-head-tool/_channel-head-tool
 container/container
 deck/deck
 itemized-resource/itemized-resource
