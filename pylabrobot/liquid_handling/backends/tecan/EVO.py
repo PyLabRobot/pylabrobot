@@ -165,7 +165,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.io.stop()
 
 
-class EVO(TecanLiquidHandler):
+class EVOBackend(TecanLiquidHandler):
   """
   Interface for the Tecan Freedom EVO series
   """
@@ -820,6 +820,18 @@ class EVO(TecanLiquidHandler):
 
     return x_position, y_position, z_positions
 
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+import warnings
+
+class EVO(EVOBackend):
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "`EVO` is deprecated and will be removed in a future release. "
+            "Please use `EVOBackend` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
 class EVOArm:
   """

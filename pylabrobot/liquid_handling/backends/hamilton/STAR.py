@@ -1120,7 +1120,7 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
     return 3 if blow_out else 2
 
 
-class STAR(HamiltonLiquidHandler):
+class STARBackend(HamiltonLiquidHandler):
   """
   Interface for the Hamilton STAR.
   """
@@ -7891,6 +7891,18 @@ class STAR(HamiltonLiquidHandler):
       await self.send_command("R0", "AA", wv=original_wv)
       await self.send_command("R0", "AA", tv=original_tv)
 
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+import warnings
+
+class STAR(STARBackend):
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "`STAR` is deprecated and will be removed in a future release. "
+            "Please use `STARBackend` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
 class UnSafe:
   """
