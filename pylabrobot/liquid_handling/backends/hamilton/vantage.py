@@ -2,6 +2,7 @@ import asyncio
 import random
 import re
 import sys
+import warnings
 from typing import Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
@@ -38,8 +39,6 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-
-import warnings
 
 if sys.version_info >= (3, 8):
   from typing import Literal
@@ -5251,6 +5250,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+
 
 class Vantage(VantageBackend):
   def __init__(self, *args, **kwargs):

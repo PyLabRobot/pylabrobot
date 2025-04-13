@@ -2,6 +2,7 @@
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
 
+import warnings
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -50,8 +51,6 @@ from pylabrobot.resources import (
   TecanTipRack,
   Trash,
 )
-
-import warnings
 
 T = TypeVar("T")
 
@@ -824,6 +823,7 @@ class EVOBackend(TecanLiquidHandler):
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+
 
 class EVO(EVOBackend):
   def __init__(self, *args, **kwargs):

@@ -3,6 +3,7 @@ import enum
 import functools
 import logging
 import re
+import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -74,8 +75,6 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
-
-import warnings
 
 T = TypeVar("T")
 
@@ -7895,6 +7894,7 @@ class STARBackend(HamiltonLiquidHandler):
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+
 
 class STAR(STARBackend):
   def __init__(self, *args, **kwargs):
