@@ -1,12 +1,4 @@
 Tecan EVO
 =========
 
-Resources
-
-
-
-------------------------------------------
-
-ok
-
-
+Documentation coming soon.

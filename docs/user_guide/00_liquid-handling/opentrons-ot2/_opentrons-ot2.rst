@@ -1,12 +1,4 @@
 Opentrons OT-2
 ==============
 
-Resources
-
-
-
-------------------------------------------
-
-ok
-
-
+Documentation coming soon.

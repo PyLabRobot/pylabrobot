@@ -1,15 +1,9 @@
 Pumps
 =====
 
-Resources
-
-
-
-------------------------------------------
+PLR supports the following pumps:
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    cole-parmer-masterflex
-

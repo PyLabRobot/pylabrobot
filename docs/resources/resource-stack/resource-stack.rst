@@ -1,13 +1,6 @@
 ResourceStack
-==================
+=============
 
-Resources
+TODO: write a tutorial
 
-.. toctree::
-   :maxdepth: 1
-
-   nested-tip-rack-stack/nested-tip-rack-stack
-
-----
-
-.. comment
+See :class:`~pylabrobot.resources.resource_stack.ResourceStack` for the API reference.

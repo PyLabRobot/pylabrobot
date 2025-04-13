@@ -1,12 +1,4 @@
 Hamilton Vantage
 ================
 
-Resources
-
-
-
-------------------------------------------
-
-ok
-
-
+Documentation coming soon.

@@ -21,7 +21,9 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     PetriDish
     Plate
     PlateCarrier
+    PlateHolder
     Resource
+    ResourceHolder
     ResourceStack
     Rotation
     tip.Tip

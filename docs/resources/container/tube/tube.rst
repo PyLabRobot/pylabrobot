@@ -1,4 +1,4 @@
 Tube
 ====
 
-Resources
+A tube is a circular resource that holds liquids.

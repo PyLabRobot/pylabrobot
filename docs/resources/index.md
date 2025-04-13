@@ -122,7 +122,6 @@ PLR's `Resource` subclasses in the inheritance tree are:
 :caption: Resource Ontology
 :hidden:
 
-arm/arm
 carrier/carrier
 container/container
 deck/deck
@@ -130,7 +129,6 @@ itemized-resource/itemized-resource
 resource-holder/resource-holder
 plate-adapter/plate-adapter
 resource-stack/resource-stack
-workcell/workcell
 ```
 
 ## Resource Library

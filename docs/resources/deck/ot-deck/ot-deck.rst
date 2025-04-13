@@ -1,8 +1,0 @@
-OTDeck
-======
-
-Resources
-
-----
-
-.. comment

@@ -1,10 +1,7 @@
 SCARA
 =====
 
-
-Resources
-
-
+Selective Compliance Assembly Robot Arm (SCARA).
 
 ------------------------------------------
 
@@ -13,4 +10,3 @@ Resources
    :hidden:
 
    precise-flex-pf400/_precise-flex-pf400
-

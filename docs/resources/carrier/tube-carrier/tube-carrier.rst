@@ -1,8 +1,4 @@
 TubeCarrier
 ===========
 
-Resources
-
-----
-
-.. comment
+TODO

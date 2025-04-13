@@ -1,8 +1,4 @@
 TroughCarrier
 =============
 
-Resources
-
-----
-
-.. comment
+TODO

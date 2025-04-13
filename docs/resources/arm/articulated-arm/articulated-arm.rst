@@ -1,8 +1,0 @@
-ArticulatedArm
-==============
-
-Resources
-
-----
-
-.. comment

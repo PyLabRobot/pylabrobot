@@ -28,8 +28,3 @@ Carrier Types
 
 - **Plate Carriers**: These carriers hold standard microplates and deep-well plates, ensuring proper alignment for automated pipetting and handling.
 - **MFX Carriers**: A specific type of carrier designed for flexible reconfiguration of that carrier layout by removably screwing "MFX Modules" onto the MFX Carrier of choice.
-
-
-----
-
-.. comment

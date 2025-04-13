@@ -1,8 +1,4 @@
 Well
 ====
 
-Resources
-
-----
-
-.. comment
+A single cavity in a microplate.

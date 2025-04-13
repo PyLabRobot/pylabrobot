@@ -1,7 +1,7 @@
 Container
 =========
 
-Resources that contain liquid are subclasses of :class:`pylabrobot.resources.container.Container`. This class provides a :class:`pylabrobot.resources.volume_tracker.VolumeTracker` that helps :class:`pylabrobot.liquid_handling.liquid_handler.LiquidHandler` keep track of the liquid in the resource. (For more information on trackers, check out :doc:`/user_guide/machine-agnostic-features/using-trackers`). Examples of subclasses of `Container` are :class:`pylabrobot.resources.Well` and :class:`pylabrobot.resources.trough.Trough`.
+Resources that contain liquid are subclasses of :class:`~pylabrobot.resources.container.Container`. This class provides a :class:`~pylabrobot.resources.volume_tracker.VolumeTracker` that helps :class:`~pylabrobot.liquid_handling.liquid_handler.LiquidHandler` keep track of the liquid in the resource. (For more information on trackers, check out :doc:`/user_guide/machine-agnostic-features/using-trackers`). Examples of subclasses of `Container` are :class:`~pylabrobot.resources.Well` and :class:`~pylabrobot.resources.trough.Trough`.
 
 It is possible to instantiate a `Container` directly:
 

@@ -1,9 +1,7 @@
 Flow Cytometers
 ===============
 
-Resources
-
-
+The Cytoflex is a WIP.
 
 ------------------------------------------
 
@@ -12,5 +10,3 @@ Resources
    :hidden:
 
    beckman-coulter-cytoflex
-
-

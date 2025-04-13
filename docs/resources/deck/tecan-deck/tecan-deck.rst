@@ -1,8 +1,0 @@
-TecanDeck
-=========
-
-Resources
-
-----
-
-.. comment

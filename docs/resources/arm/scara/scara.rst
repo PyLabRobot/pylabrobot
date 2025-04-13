@@ -1,8 +1,0 @@
-SCARA
-=====
-
-Resources
-
-----
-
-.. comment

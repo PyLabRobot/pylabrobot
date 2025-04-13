@@ -1,8 +1,6 @@
 TipRack
 =======
 
-Resources
+TODO: write a tutorial
 
-----
-
-.. comment
+See :class:`~pylabrobot.resources.tip_rack.TipRack` for the API reference.

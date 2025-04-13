@@ -1,9 +1,7 @@
 Arm
 ===
 
-Resources
-
-
+Robotic arms are a WIP in PLR.
 
 ------------------------------------------
 
@@ -12,4 +10,3 @@ Resources
   :hidden:
 
   c_scara/_scara
-

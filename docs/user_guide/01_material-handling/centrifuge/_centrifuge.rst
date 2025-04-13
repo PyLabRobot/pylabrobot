@@ -1,16 +1,9 @@
 Centrifuge
 ==========
 
-Resources
-
-
-
-------------------------------------------
+PLR supports the following centrifuges:
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    agilent_vspin
-
-

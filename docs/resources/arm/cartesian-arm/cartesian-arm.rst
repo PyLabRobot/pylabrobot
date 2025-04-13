@@ -1,8 +1,0 @@
-CartesianArm
-============
-
-Resources
-
-----
-
-.. comment

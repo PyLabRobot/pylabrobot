@@ -1,8 +1,6 @@
 PlateHolder
 ===========
 
-Resources
+TODO: write a tutorial
 
-----
-
-.. comment
+See :class:`~pylabrobot.resources.PlateHolder` for the API reference.

@@ -1,8 +1,0 @@
-HamiltonDeck
-============
-
-Resources
-
-----
-
-.. comment

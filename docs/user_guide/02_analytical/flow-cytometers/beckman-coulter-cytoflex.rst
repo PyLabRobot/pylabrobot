@@ -1,11 +1,4 @@
 Beckman CytoFLEX
 ================
 
-Resources
-
-
-
-------------------------------------------
-
-ok
-
+Cytoflex coming soon.
