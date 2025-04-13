@@ -51,6 +51,8 @@ from pylabrobot.resources import (
   Trash,
 )
 
+import warnings
+
 T = TypeVar("T")
 
 
@@ -822,8 +824,6 @@ class EVOBackend(TecanLiquidHandler):
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-import warnings
-
 
 class EVO(EVOBackend):
   def __init__(self, *args, **kwargs):

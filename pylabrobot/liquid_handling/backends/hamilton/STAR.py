@@ -75,6 +75,8 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
 
+import warnings
+
 T = TypeVar("T")
 
 
@@ -7893,8 +7895,6 @@ class STARBackend(HamiltonLiquidHandler):
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-import warnings
-
 
 class STAR(STARBackend):
   def __init__(self, *args, **kwargs):

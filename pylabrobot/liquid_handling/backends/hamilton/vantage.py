@@ -39,6 +39,8 @@ from pylabrobot.resources.hamilton import (
   TipSize,
 )
 
+import warnings
+
 if sys.version_info >= (3, 8):
   from typing import Literal
 else:
@@ -5249,8 +5251,6 @@ class VantageBackend(HamiltonLiquidHandler):
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-import warnings
-
 
 class Vantage(VantageBackend):
   def __init__(self, *args, **kwargs):
