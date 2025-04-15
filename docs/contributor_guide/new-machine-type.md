@@ -6,7 +6,7 @@ PyLabRobot supports a number of different types of machines. Currently, these ar
 - [Plate readers](/user_guide/02_analytical/plate-reading/plate-reading)
 - [Pumps](/user_guide/00_liquid-handling/pumps/_pumps)
 - [Temperature controllers](/user_guide/01_material-handling/temperature)
-- [Heater shakers](/user_guide/01_material-handling/heating-shaking)
+- [Heater shakers](/user_guide/01_material-handling/heating_shaking/heating_shaking)
 
 If you want to add support for a new type of machine, this guide will explain the process. If you want to add a new machine for a type that already exists, you should read {doc}`this guide <new-concrete-backend>` instead.
 
