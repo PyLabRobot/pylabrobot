@@ -47,6 +47,9 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     """
     await self.io.setup()
 
+  async def stop(self):
+    await self.io.stop()
+
   async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
     args = "".join([f"{key}{value}" for key, value in kwargs.items()])
     id_ = str(self._generate_id()).zfill(4)
