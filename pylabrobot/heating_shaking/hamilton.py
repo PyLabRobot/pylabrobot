@@ -57,7 +57,7 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
     return self.io.read().decode("utf-8")
 
 
-class HamiltonHeatShaker(HeaterShakerBackend):
+class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   """Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box"""
 
   def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
@@ -76,6 +76,9 @@ class HamiltonHeatShaker(HeaterShakerBackend):
     If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
     await self._initialize_lock()
+
+  async def stop(self):
+    pass
 
   def serialize(self) -> dict:
     warnings.warn("The interface is not serialized.")
@@ -154,11 +157,12 @@ class HamiltonHeatShaker(HeaterShakerBackend):
   async def _get_current_temperature(self) -> Dict[str, float]:
     """get temperature in Celsius"""
     response = await self.intf.send_hhs_command(index=self.index, command="RT")
+    response = response.split("rt")[1]
     middle_temp = float(str(response).split(" ")[0].strip("+")) / 10
     edge_temp = float(str(response).split(" ")[1].strip("+")) / 10
     return {"middle": middle_temp, "edge": edge_temp}
 
-  async def get_temperature(self) -> float:
+  async def get_current_temperature(self) -> float:
     """get temperature in Celsius"""
     response = await self._get_current_temperature()
     return response["middle"]
