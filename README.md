@@ -128,10 +128,9 @@ weight = await scale.get_weight()
 Setting the temperature of a heater shaker to 37&deg;C:
 
 ```python
-from pylabrobot.heating_shaking import HeaterShaker
-from pylabrobot.heating_shaking import InhecoThermoShake
+from pylabrobot.heating_shaking import HeaterShaker, InhecoThermoShakeBackend
 
-backend = InhecoThermoShake()
+backend = InhecoThermoShakeBackend()
 hs = HeaterShaker(backend=backend, name="HeaterShaker", size_x=0, size_y=0, size_z=0)
 await hs.setup()
 await hs.set_temperature(37)

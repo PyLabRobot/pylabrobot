@@ -5,7 +5,7 @@ from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.hid import HID
 
 
-class InhecoThermoShake(HeaterShakerBackend):
+class InhecoThermoShakeBackend(HeaterShakerBackend):
   """Backend for Inheco Thermoshake devices
 
   https://www.inheco.com/thermoshake-ac.html
