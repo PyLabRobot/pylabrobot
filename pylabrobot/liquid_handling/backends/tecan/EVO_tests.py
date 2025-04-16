@@ -3,7 +3,7 @@ import unittest.mock
 from unittest.mock import call
 
 from pylabrobot.liquid_handling.backends.tecan.EVO import (
-  EVO,
+  EVOBackend,
   LiHa,
   RoMa,
 )
@@ -33,7 +33,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     super().setUp()
 
     # mock the EVO
-    self.evo = EVO(diti_count=8)
+    self.evo = EVOBackend(diti_count=8)
     self.evo.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
 
     async def send_command(module, command, params=None):
@@ -57,8 +57,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo._z_range = 2000
     self.evo._roma_connected = True
     self.evo._liha_connected = True
-    self.evo.liha = LiHa(self.evo, EVO.LIHA)
-    self.evo.roma = RoMa(self.evo, EVO.ROMA)
+    self.evo.liha = LiHa(self.evo, EVOBackend.LIHA)
+    self.evo.roma = RoMa(self.evo, EVOBackend.ROMA)
 
     # deck setup
     self.tr_carrier = DiTi_SBS_3_Pos_MCA96(name="tip_rack_carrier")

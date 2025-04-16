@@ -55,9 +55,9 @@ lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
 Or **Tecan** (also works on any operating system!):
 
 ```python
-from pylabrobot.liquid_handling.backends import EVO
+from pylabrobot.liquid_handling.backends import EVOBackend
 deck = Deck.load_from_json_file("tecan-layout.json")
-lh = LiquidHandler(backend=EVO(), deck=deck)
+lh = LiquidHandler(backend=EVOBackend(), deck=deck)
 ```
 
 We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and can be used to develop and test protocols without a physical robot.

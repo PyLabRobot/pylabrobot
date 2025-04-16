@@ -843,7 +843,7 @@ class EVOArm:
 
   _pos_cache: Dict[str, int] = {}
 
-  def __init__(self, backend: EVO, module: str):
+  def __init__(self, backend: EVOBackend, module: str):
     self.backend = backend
     self.module = module
 
