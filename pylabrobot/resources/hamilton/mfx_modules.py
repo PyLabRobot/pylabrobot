@@ -63,9 +63,9 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
   )
 
 
-def MFX_WP_module_flat(name: str) -> PlateHolder:
-  """Hamilton cat. no.: 188049 (uncertain)
-  Module to position a Well Plate. Taller version of MFX_DWP_module_flat.
+def MFX_MTP_HPFlatSloped(name: str) -> PlateHolder:
+  """Hamilton part. no.: 92585-01 (RNO)
+  Module to position a Well Plate.
   """
 
   # Resource size is carried over from MFX_DWP_module_flat.
