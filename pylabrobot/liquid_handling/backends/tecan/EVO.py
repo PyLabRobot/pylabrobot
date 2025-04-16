@@ -822,20 +822,6 @@ class EVOBackend(TecanLiquidHandler):
     return x_position, y_position, z_positions
 
 
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-
-
-class EVO(EVOBackend):
-  def __init__(self, *args, **kwargs):
-    warnings.warn(
-      "`EVO` is deprecated and will be removed in a future release. "
-      "Please use `EVOBackend` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    super().__init__(*args, **kwargs)
-
-
 class EVOArm:
   """
   Provides firmware commands for EVO arms. Caches arm positions.
@@ -843,7 +829,7 @@ class EVOArm:
 
   _pos_cache: Dict[str, int] = {}
 
-  def __init__(self, backend: EVOBackend, module: str):
+  def __init__(self, backend: EVO, module: str):
     self.backend = backend
     self.module = module
 
@@ -1308,3 +1294,14 @@ class RoMa(EVOArm):
     """
 
     await self.backend.send_command(module=self.module, command="STW", params=[wc, x, y, z, r, g])
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class EVO(EVOBackend):
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`EVO` is deprecated. Please use `EVOBackend` instead.",
+    )

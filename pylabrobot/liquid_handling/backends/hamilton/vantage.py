@@ -5250,6 +5250,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
 
 
 class Vantage(VantageBackend):

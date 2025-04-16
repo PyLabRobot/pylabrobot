@@ -7893,20 +7893,6 @@ class STARBackend(HamiltonLiquidHandler):
       await self.send_command("R0", "AA", tv=original_tv)
 
 
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-
-
-class STAR(STARBackend):
-  def __init__(self, *args, **kwargs):
-    warnings.warn(
-      "`STAR` is deprecated and will be removed in a future release. "
-      "Please use `STARBackend` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    super().__init__(*args, **kwargs)
-
-
 class UnSafe:
   """
   Namespace for actions that are unsafe to perfom.
@@ -8073,3 +8059,18 @@ class UnSafe:
       Consider this method an easter egg. Not for serious use.
     """
     await self.star.send_command(module=STAR.channel_id(channel_idx), command="SI")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class STAR(STARBackend):
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`STAR` is deprecated and will be removed in a future release. "
+      "Please use `STARBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)
