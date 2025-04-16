@@ -247,3 +247,14 @@ class InhecoThermoShakeBackend(HeaterShakerBackend):
     """De/activate the touchscreen"""
 
     return await self.send_command("0ADD0")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class InhecoThermoShake:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`InhecoThermoShake` is deprecated. Please use `InhecoThermoShakeBackend` instead. "
+    )
