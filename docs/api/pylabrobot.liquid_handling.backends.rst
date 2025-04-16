@@ -28,7 +28,7 @@ Hardware
     backends.hamilton.STAR.STAR
     backends.hamilton.vantage.Vantage
     backends.opentrons_backend.OpentronsBackend
-    backends.tecan.EVO.EVO
+    backends.tecan.EVO.EVOBackend
 
 Net
 ---

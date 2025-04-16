@@ -125,7 +125,7 @@ class Access2Backend(LoaderBackend):
     await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
 
-class VSpin(CentrifugeBackend):
+class VSpinBackend(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
@@ -487,3 +487,12 @@ class VSpin(CentrifugeBackend):
     ]
 
     await self.send_payloads(payloads)
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class VSpin:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`VSpin` is deprecated. Please use `VSpinBackend` instead. ")
