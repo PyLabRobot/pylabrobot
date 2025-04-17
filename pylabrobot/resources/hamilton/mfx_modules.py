@@ -64,10 +64,8 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
 
 
 def Hamilton_MFXmodule_tall_flat(name: str) -> PlateHolder:
-  """Hamilton part. no.: 92585-01 (RNO) (Uncertain)
+  """Hamilton cat. no.: 188228 (BSZ)
   Module to position a Well Plate.
-
-  Also could be Hamilton cat.no.: 188228
   """
 
   # Resource size is measured with caliper.
@@ -75,7 +73,7 @@ def Hamilton_MFXmodule_tall_flat(name: str) -> PlateHolder:
 
   return PlateHolder(
     name=name,
-    size_x=134.0,
+    size_x=135.0,
     size_y=94.0,
     size_z=216 - 18.195 - 100,  # mesured using probe
     # probe height - carrier_height - deck_height
