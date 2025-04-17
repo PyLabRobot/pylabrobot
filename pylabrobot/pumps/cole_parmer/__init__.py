@@ -1,1 +1,1 @@
-from .masterflex import Masterflex
+from .masterflex import MasterflexBackend

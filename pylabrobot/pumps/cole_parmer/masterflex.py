@@ -4,7 +4,7 @@ from pylabrobot.io.serial import Serial
 from pylabrobot.pumps.backend import PumpBackend
 
 
-class Masterflex(PumpBackend):
+class MasterflexBackend(PumpBackend):
   """Backend for the Cole Parmer Masterflex L/S 07551-20 pump
 
   Documentation available at:
@@ -58,3 +58,12 @@ class Masterflex(PumpBackend):
 
   def halt(self):
     self.send_command("H")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class Masterflex:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`Masterflex` is deprecated. Please use `MasterflexBackend` instead.")
