@@ -4,7 +4,7 @@ pylabrobot.liquid_handling package
 ==================================
 
 This package contains all APIs relevant to liquid handling.
-.. See :doc:`Basic liquid handling </user_guide/basic>` for a simple example.
+.. See :doc:`Basic liquid handling </user_guide/00_liquid-handling/hamilton-star/basic>` for a simple example.
 
 Machine control is split into two parts: backends and front ends. Backends are used to control the
 machine, and front ends are used to interact with the backend. Front ends are designed to be
