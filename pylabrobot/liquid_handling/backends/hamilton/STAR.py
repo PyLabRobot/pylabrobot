@@ -7752,10 +7752,9 @@ class STAR(HamiltonLiquidHandler):
       assert (
         len(set(w.get_absolute_location().x for w in wells)) == 1
       ), "Wells must be on the same column"
-      absolute_center = wells[0].get_absolute_location("c", "c", "cavity_bottom")
-      x = absolute_center.x
-      ys = [well.get_absolute_location(x="c", y="c").y for well in wells]
-      z = absolute_center.z
+      x = wells[0].get_absolute_location().x
+      ys = [well.get_absolute_location().y for well in wells]
+      z = wells[0].get_absolute_location(z="cavity_bottom").z
 
     await self.move_channel_x(0, x=x)
 
