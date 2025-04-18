@@ -1,4 +1,6 @@
 import abc
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
@@ -35,6 +37,7 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
       serial_number=serial_number,
     )
     self._id = 0
+    self._usb_executor = ThreadPoolExecutor(max_workers=1)
 
   def _generate_id(self) -> int:
     """continuously generate unique ids 0 <= x < 10000."""
@@ -50,11 +53,14 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
   async def stop(self):
     await self.io.stop()
 
-  async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
-    args = "".join([f"{key}{value}" for key, value in kwargs.items()])
-    id_ = str(self._generate_id()).zfill(4)
-    self.io.write(f"T{index}{command}id{id_}{args}".encode())
-    return self.io.read().decode("utf-8")
+  async def send_hhs_command(self, index, command, **kwargs) -> str:
+        loop = asyncio.get_running_loop()
+        payload = f"T{index}{command}" + "".join(f"{k}{v}" for k, v in kwargs.items())
+        data = payload.encode()
+
+        await loop.run_in_executor(self._usb_executor, self.io.write, data)
+        raw = await loop.run_in_executor(self._usb_executor, self.io.read)
+        return raw.decode("utf-8")
 
 
 class HamiltonHeaterShakerBackend(HeaterShakerBackend):
