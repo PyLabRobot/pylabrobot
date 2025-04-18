@@ -34,14 +34,17 @@ def get_wide_single_resource_liquid_op_offsets(
     )
   )  # reverse because channels are from back to front
 
-  center_offsets: List[Coordinate] = []
-  x_offset = resource.get_absolute_size_x() / 2
-  center_offsets = [Coordinate(x=x_offset, y=c, z=0) for c in centers]
-
   # offsets are relative to the center of the resource, but above we computed them wrt lfb
   # so we need to subtract the center of the resource
   # also, offsets are in absolute space, so we need to rotate the center
-  return [o - resource.center().rotated(resource.get_absolute_rotation()) for o in center_offsets]
+  return [
+    Coordinate(
+      x=0,
+      y=c - resource.center().rotated(resource.get_absolute_rotation()).y,
+      z=0,
+    )
+    for c in centers
+  ]
 
 
 def get_tight_single_resource_liquid_op_offsets(
@@ -53,12 +56,16 @@ def get_tight_single_resource_liquid_op_offsets(
   if min_y < MIN_SPACING_EDGE:
     raise ValueError("Resource is too small to space channels.")
 
-  x_offset = resource.get_absolute_size_x() / 2
-  offsets = [
-    Coordinate(x_offset, min_y + i * MIN_SPACING_BETWEEN_CHANNELS, 0) for i in range(num_channels)
-  ][::-1]
+  centers = [min_y + i * MIN_SPACING_BETWEEN_CHANNELS for i in range(num_channels)][::-1]
 
   # offsets are relative to the center of the resource, but above we computed them wrt lfb
   # so we need to subtract the center of the resource
   # also, offsets are in absolute space, so we need to rotate the center
-  return [o - resource.center().rotated(resource.get_absolute_rotation()) for o in offsets]
+  return [
+    Coordinate(
+      x=0,
+      y=c - resource.center().rotated(resource.get_absolute_rotation()).y,
+      z=0,
+    )
+    for c in centers
+  ]
