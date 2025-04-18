@@ -134,9 +134,11 @@ class VSpin(CentrifugeBackend):
     Args:
       device_id: The libftdi id for the centrifuge. Find using
         `python3 -m pylibftdi.examples.list_devices`
-      calibration_offset: The number required for setup to open to position of bucket 1 in the
-        centrifuge. At first run, intialize with an arbitrary value, move to the bucket, and
-        call get_position() to get the position. Then use this value for future runs.
+      calibration_offset: The number of steps after the home (setup) position to reach the bucket.
+        To find this value, start with an arbitrary value, call `setup()` and then `get_position()`.
+        Then, move to the bucket by manually pushing it and call `get_position()` again. The
+        difference between the two values is the calibration offset. The reason we need an offset /
+        relative distance is the setup position will change between runs.
     """
     self.io = FTDI(device_id=device_id)
     self.calibration_offset = calibration_offset
