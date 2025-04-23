@@ -1236,7 +1236,7 @@ class LiHa(EVOArm):
 
     await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
 
-  async def place_tip_back(self, tips, z_start, z_search): #added by VIKMOL z_start, z_search
+  async def place_tip_back(self, tips, discard_hight): #added by VIKMOL z_start, z_search
       """Places tips back into the original tip rack positions.
 
       Args:
