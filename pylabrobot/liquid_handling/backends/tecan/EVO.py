@@ -302,7 +302,7 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
     await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
-    await self.liha.position_valve_logical([1] * self.num_channelsk)
+    await self.liha.position_valve_logical([1] * self.num_channels)
     await self.liha.move_plunger_relative([100] * self.num_channels)
     await self.liha.position_valve_logical([0] * self.num_channels)
     await self.liha.set_end_speed_plunger([1800] * self.num_channels)
@@ -519,10 +519,11 @@ class EVO(TecanLiquidHandler):
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     x, _ = self._first_valid(x_positions)
-    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS
+    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS VIKMOL
     # z, _ = self._first_valid(z_positions)  # GET VALID Z POSITION
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+    print('[self._z_range]', [self._z_range], 'self.num_channels', self.num_channels)
     await self.liha.position_absolute_all_axis(
       x, y - yi * ys, ys, [self._z_range] * self.num_channels
     )
@@ -560,20 +561,33 @@ class EVO(TecanLiquidHandler):
     assert all(isinstance(op.resource, (Trash, TipSpot)) for op in ops), "Must drop in waste container or tip rack" # vikmol added
 
 
-    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
+    # Get positions including offsets
+    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
+
+    # Apply offsets
+    for i, op in enumerate(ops): # VIKMOL ADDED
+        x_positions[i] += op.offset.x
+        y_positions[i] += op.offset.y
+
+    for key in z_positions:
+      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
+    print('z_positions', z_positions)
 
     # move channels
     ys =  int(ops[0].resource.get_absolute_size_y() * 10) # was 90
     x, _ = self._first_valid(x_positions)
-    y, _ = self._first_valid(y_positions)
+    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS VIKMOL
+    print('ys', ys, 'y', y, 'yi', yi) # VIKMOL DEBUG
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+    print('[self._z_range]', [self._z_range], 'self.num_channels', self.num_channels)
     await self.liha.position_absolute_all_axis(
-      x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
+      x, y - yi * ys, ys, [self._z_range] * self.num_channels # added VIKMOL
+      # x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
     )
 
-    # discard tips
-    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels))
+    # TODO check channel positions match resource positions for z-axis
+    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels), discard_hight = 0)
 
   async def return_tips(self, ops: List[Drop], use_channels: List[int]): # vikmol added
       """Returns tips to their original tip rack positions.
@@ -1203,23 +1217,35 @@ class LiHa(EVOArm):
       params=[tips, z_start, z_search, 0],
     )
 
-  async def discard_disposable_tip(self, tips):
+  async def discard_disposable_tip_high(self, tips): # changed by VIKMOL
     """Drops tips
-
+    Discards at the Z-axes initialization hight
     Args:
       tips: binary coded tip select
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
 
-  async def place_tip_back(self, tips):
+  async def discard_disposable_tip(self, tips, discard_hight):  #added by VIKMOL z_start
+    """Drops tips
+    Discards at a veriable Z-axes initialization hight
+    Args:
+      tips: binary coded tip select
+      discard_hight: binary. 0 above tip rack, 1 in tip rack
+    """
+
+    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
+
+  async def place_tip_back(self, tips, z_start, z_search): #added by VIKMOL z_start, z_search
       """Places tips back into the original tip rack positions.
 
       Args:
         tips: Binary coded tip select
+        discard_hight: binary. 0 above tip rack, 1 in tip rack
+
       """
 
-      await self.backend.send_command(module=self.module, command="PTB", params=[tips])
+      await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
 
 ## VIKMOL ADDED MCA
 class Mca(EVOArm):
