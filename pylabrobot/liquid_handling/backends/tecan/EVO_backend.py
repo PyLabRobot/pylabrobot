@@ -540,11 +540,9 @@ class EVOBackend(TecanLiquidHandler):
     await self.liha.set_end_speed_plunger(sep)
     await self.liha.move_plunger_relative(ppr)
 
+
     # get tips
-    # await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), 768, 210)
-    # z_positions {'travel': [1345], 'start': [995], 'dispense': [995], 'max': [695]}
-    await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), z_positions['start'][0] - 227, 210) ## OPS OONYL FOR CHANNEL 0
-    # TODO: check z params
+    await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), z_positions['start'][0] - 227, 210)
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]): #TODO ADD TRASH SO IT CAN DROP TO TRASH
     """Drops tips to waste.
@@ -571,19 +569,15 @@ class EVOBackend(TecanLiquidHandler):
 
     for key in z_positions:
       z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
-    print('z_positions', z_positions)
 
     # move channels
     ys =  int(ops[0].resource.get_absolute_size_y() * 10) # was 90
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS VIKMOL
-    print('ys', ys, 'y', y, 'yi', yi) # VIKMOL DEBUG
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    print('[self._z_range]', [self._z_range], 'self.num_channels', self.num_channels)
     await self.liha.position_absolute_all_axis(
       x, y - yi * ys, ys, [self._z_range] * self.num_channels # added VIKMOL
-      # x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
     )
 
     # TODO check channel positions match resource positions for z-axis
