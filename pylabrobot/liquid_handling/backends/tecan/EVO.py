@@ -370,7 +370,16 @@ class EVO(TecanLiquidHandler):
       use_channels: The channels to use for the operations.
     """
 
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
+    # Get positions including offsets
+    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
+
+    # Apply offsets
+    for i, op in enumerate(ops): # VIKMOL ADDED
+        x_positions[i] += op.offset.x
+        y_positions[i] += op.offset.y
+
+    for key in z_positions:
+      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
 
     tecan_liquid_classes = [
       get_liquid_class(
@@ -382,6 +391,7 @@ class EVO(TecanLiquidHandler):
       else None
       for op in ops
     ]
+
 
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
