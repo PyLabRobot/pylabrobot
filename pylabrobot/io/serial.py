@@ -75,7 +75,7 @@ class Serial(IOBase):
     if self.ser is not None and self.ser.is_open:
       self.ser.close()
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     assert self.ser is not None, "forgot to call setup?"
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
@@ -83,7 +83,7 @@ class Serial(IOBase):
     )
     self.ser.write(data)
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     assert self.ser is not None, "forgot to call setup?"
     data = self.ser.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
@@ -92,7 +92,7 @@ class Serial(IOBase):
     )
     return cast(bytes, data)
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     assert self.ser is not None, "forgot to call setup?"
     data = self.ser.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
@@ -151,7 +151,7 @@ class SerialValidator(Serial):
   async def setup(self):
     pass
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     next_command = SerialCommand(**self.cr.next_command())
     if not (
       next_command.module == "serial"
@@ -163,7 +163,7 @@ class SerialValidator(Serial):
       align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     next_command = SerialCommand(**self.cr.next_command())
     if not (
       next_command.module == "serial"
@@ -174,7 +174,7 @@ class SerialValidator(Serial):
       raise ValidationError(f"Next line is {next_command}, expected Serial read {num_bytes}")
     return next_command.data.encode()
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_command = SerialCommand(**self.cr.next_command())
     if not (
       next_command.module == "serial"

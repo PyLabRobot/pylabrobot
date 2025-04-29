@@ -180,12 +180,12 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       timeout: The timeout in seconds.
     """
 
-    self.io.write(command.encode() + b"\r\n")
+    await self.io.write(command.encode() + b"\r\n")
 
     raw_response = b""
     timeout_time = time.time() + timeout
     while True:
-      raw_response = self.io.readline()
+      raw_response = await self.io.readline()
       await asyncio.sleep(0.001)
       if time.time() > timeout_time:
         raise TimeoutError("Timeout while waiting for response from scale.")
