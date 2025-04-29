@@ -77,3 +77,9 @@ class TemperatureController(ResourceHolder, Machine):
     """
     self.target_temperature = None
     return await self.backend.deactivate()
+
+  def serialize(self) -> dict:
+    return {
+      **Machine.serialize(self),
+      **ResourceHolder.serialize(self),
+    }

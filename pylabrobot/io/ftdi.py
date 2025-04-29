@@ -10,7 +10,7 @@ try:
 except ImportError:
   HAS_PYLIBFTDI = False
 
-from pylabrobot.io.capture import CaptureReader, Command, capturer
+from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
@@ -30,6 +30,9 @@ class FTDI(IOBase):
   def __init__(self, device_id: Optional[str] = None):
     self._dev = Device(lazy_open=True, device_id=device_id)
     self._device_id = device_id or "None"  # for io
+
+    if get_capture_or_validation_active():
+      raise RuntimeError("Cannot create a new FTDI object while capture or validation is active")
 
   async def setup(self):
     if not HAS_PYLIBFTDI:
