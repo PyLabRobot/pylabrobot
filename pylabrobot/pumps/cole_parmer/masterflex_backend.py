@@ -4,7 +4,7 @@ from pylabrobot.io.serial import Serial
 from pylabrobot.pumps.backend import PumpBackend
 
 
-class Masterflex(PumpBackend):
+class MasterflexBackend(PumpBackend):
   """Backend for the Cole Parmer Masterflex L/S 07551-20 pump
 
   Documentation available at:
@@ -27,8 +27,8 @@ class Masterflex(PumpBackend):
   async def setup(self):
     await self.io.setup()
 
-    self.io.write(b"\x05")  # Enquiry; ready to send.
-    self.io.write(b"\x05P02\r")
+    await self.io.write(b"\x05")  # Enquiry; ready to send.
+    await self.io.write(b"\x05P02\r")
 
   def serialize(self):
     return {**super().serialize(), "com_port": self.com_port}
@@ -36,17 +36,17 @@ class Masterflex(PumpBackend):
   async def stop(self):
     await self.io.stop()
 
-  def send_command(self, command: str):
+  async def send_command(self, command: str):
     command = "\x02P02" + command + "\x0d"
-    self.io.write(command.encode())
+    await self.io.write(command.encode())
     return self.io.read()
 
-  def run_revolutions(self, num_revolutions: float):
+  async def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
     cmd = f"V{num_revolutions}G"
-    self.send_command(cmd)
+    await self.send_command(cmd)
 
-  def run_continuously(self, speed: float):
+  async def run_continuously(self, speed: float):
     if speed == 0:
       self.halt()
       return
@@ -54,7 +54,16 @@ class Masterflex(PumpBackend):
     direction = "+" if speed > 0 else "-"
     speed = int(abs(speed))
     cmd = f"S{direction}{speed}G0"
-    self.send_command(cmd)
+    await self.send_command(cmd)
 
-  def halt(self):
-    self.send_command("H")
+  async def halt(self):
+    await self.send_command("H")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class Masterflex:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`Masterflex` is deprecated. Please use `MasterflexBackend` instead.")

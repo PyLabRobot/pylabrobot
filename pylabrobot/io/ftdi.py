@@ -105,13 +105,13 @@ class FTDI(IOBase):
   async def stop(self):
     self._dev.close()
 
-  def write(self, data: bytes) -> int:
+  async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self._device_id, action="write", data=data.hex()))
     return cast(int, self._dev.write(data))
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     data = self._dev.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
     capturer.record(
@@ -123,7 +123,7 @@ class FTDI(IOBase):
     )
     return cast(bytes, data)
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     data = self._dev.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self._device_id, action="readline", data=data.hex()))
@@ -250,7 +250,7 @@ class FTDIValidator(FTDI):
       )
     return int(next_command.data)
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"
@@ -262,7 +262,7 @@ class FTDIValidator(FTDI):
       align_sequences(expected=next_command.data, actual=data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"
@@ -273,7 +273,7 @@ class FTDIValidator(FTDI):
       raise ValidationError(f"Next line is {next_command}, expected FTDI read {self._device_id}")
     return bytes.fromhex(next_command.data)
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"

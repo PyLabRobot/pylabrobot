@@ -20,7 +20,7 @@ else:
 logger = logging.getLogger("pylabrobot")
 
 
-class CLARIOStar(PlateReaderBackend):
+class CLARIOStarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
@@ -57,7 +57,7 @@ class CLARIOStar(PlateReaderBackend):
     # we keep reading for at least one more cycle. We only check the timeout if the last read was
     # unsuccessful (i.e. keep reading if we are still getting data).
     while True:
-      last_read = self.io.read(25)  # 25 is max length observed in pcap
+      last_read = await self.io.read(25)  # 25 is max length observed in pcap
       if len(last_read) > 0:
         d += last_read
         end_byte_found = d[-1] == 0x0D
@@ -90,7 +90,7 @@ class CLARIOStar(PlateReaderBackend):
 
     logger.debug("sending %s", cmd.hex())
 
-    w = self.io.write(cmd)
+    w = await self.io.write(cmd)
 
     logger.debug("wrote %s bytes", w)
 
@@ -340,3 +340,12 @@ class CLARIOStar(PlateReaderBackend):
     focal_height: float,
   ) -> List[List[float]]:
     raise NotImplementedError("Not implemented yet")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class CLARIOStar:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`CLARIOStar` is deprecated. Please use `CLARIOStarBackend` instead.")

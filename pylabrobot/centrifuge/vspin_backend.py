@@ -30,7 +30,7 @@ class Access2Backend(LoaderBackend):
     r = None
     start = time.time()
     while r != b"" or x == b"":
-      r = self.io.read(1)
+      r = await self.io.read(1)
       x += r
       if r == b"":
         await asyncio.sleep(0.1)
@@ -40,7 +40,7 @@ class Access2Backend(LoaderBackend):
 
   async def send_command(self, command: bytes) -> bytes:
     logger.debug("[loader] Sending %s", command.hex())
-    self.io.write(command)
+    await self.io.write(command)
     return await self._read()
 
   async def setup(self):
@@ -125,21 +125,23 @@ class Access2Backend(LoaderBackend):
     await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
 
-class VSpin(CentrifugeBackend):
+class VSpinBackend(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
-  def __init__(self, bucket_1_position: int, device_id: Optional[str] = None):
+  def __init__(self, calibration_offset: int, device_id: Optional[str] = None):
     """
     Args:
       device_id: The libftdi id for the centrifuge. Find using
         `python3 -m pylibftdi.examples.list_devices`
-      bucket_1_position: The position of bucket 1 in the centrifuge. At first run, intialize with
-        an arbitrary value, move to the bucket, and call get_position() to get the position. Then
-        use this value for future runs.
+      calibration_offset: The number of steps after the home (setup) position to reach the bucket.
+        To find this value, start with an arbitrary value, call `setup()` and then `get_position()`.
+        Then, move to the bucket by manually pushing it and call `get_position()` again. The
+        difference between the two values is the calibration offset. The reason we need an offset /
+        relative distance is the setup position will change between runs.
     """
     self.io = FTDI(device_id=device_id)
-    self.bucket_1_position = bucket_1_position
+    self.calibration_offset = calibration_offset
     self.homing_position = 0
 
   async def setup(self):
@@ -250,6 +252,8 @@ class VSpin(CentrifugeBackend):
 
     await self.send(b"\xaa\x01\x0e\x0f")
 
+    self._bucket_1_position = (await self.get_position()) + self.calibration_offset
+
   async def stop(self):
     await self.send(b"\xaa\x02\x0e\x10")
     await self.configure_and_initialize()
@@ -290,7 +294,7 @@ class VSpin(CentrifugeBackend):
     start_time = time.time()
 
     while True:
-      chunk = self.io.read(25)
+      chunk = await self.io.read(25)
       if chunk:
         data += chunk
         end_byte_found = data[-1] == 0x0D
@@ -305,7 +309,7 @@ class VSpin(CentrifugeBackend):
     return data
 
   async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    written = self.io.write(bytes(cmd))  # TODO: why decode? .decode("latin-1")
+    written = await self.io.write(bytes(cmd))  # TODO: why decode? .decode("latin-1")
 
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
@@ -332,10 +336,10 @@ class VSpin(CentrifugeBackend):
     self.io.set_baudrate(19200)
 
   async def initialize(self):
-    self.io.write(b"\x00" * 20)
+    await self.io.write(b"\x00" * 20)
     for i in range(33):
       packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
-      self.io.write(packet)
+      await self.io.write(packet)
     await self.send(b"\xaa\xff\x0f\x0e")
 
   # Centrifuge operations
@@ -369,11 +373,11 @@ class VSpin(CentrifugeBackend):
     await self.send(b"\xaa\x02\x0e\x10")
 
   async def go_to_bucket1(self):
-    await self.go_to_position(self.bucket_1_position)
+    await self.go_to_position(self._bucket_1_position)
 
   async def go_to_bucket2(self):
     half_rotation = 4000
-    await self.go_to_position(self.bucket_1_position + half_rotation)
+    await self.go_to_position(self._bucket_1_position + half_rotation)
 
   async def rotate_distance(self, distance):
     current_position = await self.get_position()
@@ -487,3 +491,12 @@ class VSpin(CentrifugeBackend):
     ]
 
     await self.send_payloads(payloads)
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class VSpin:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`VSpin` is deprecated. Please use `VSpinBackend` instead. ")

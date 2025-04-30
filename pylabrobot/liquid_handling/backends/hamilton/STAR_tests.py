@@ -27,7 +27,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.hamilton import STF, STARLetDeck
 
-from .STAR import (
+from .STAR_backend import (
   STAR,
   CommandSyntaxError,
   HamiltonNoTipError,
@@ -145,7 +145,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.star = STAR(read_timeout=2, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
-    self.star.io = unittest.mock.MagicMock()
+    self.star.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
 
   async def test_send_command_correct_response(self):

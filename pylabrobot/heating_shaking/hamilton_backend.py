@@ -10,7 +10,7 @@ class PlateLockPosition(Enum):
   UNLOCKED = 0
 
 
-class HamiltonHeatShaker(HeaterShakerBackend):
+class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   """
   Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box
   """
@@ -60,10 +60,12 @@ class HamiltonHeatShaker(HeaterShakerBackend):
       "shaker_index": self.shaker_index,
     }
 
-  def _send_command(self, command: str, **kwargs):
+  async def _send_command(self, command: str, **kwargs):
     assert len(command) == 2, "Command must be 2 characters long"
     args = "".join([f"{key}{value}" for key, value in kwargs.items()])
-    self.io.write(f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}".encode())
+    await self.io.write(
+      f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}".encode()
+    )
 
     self.command_id = (self.command_id + 1) % 10_000
     return self.io.read()
@@ -94,11 +96,11 @@ class HamiltonHeatShaker(HeaterShakerBackend):
     await self._wait_for_stop()
 
   async def get_is_shaking(self) -> bool:
-    response = self._send_command("RD").decode("ascii")
+    response = (await self._send_command("RD")).decode("ascii")
     return response.endswith("1")  # type: ignore[no-any-return] # what
 
   async def _move_plate_lock(self, position: PlateLockPosition):
-    return self._send_command("LP", lp=position.value)
+    return await self._send_command("LP", lp=position.value)
 
   async def lock_plate(self):
     await self._move_plate_lock(PlateLockPosition.LOCKED)
@@ -108,34 +110,34 @@ class HamiltonHeatShaker(HeaterShakerBackend):
 
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
-    result = self._send_command("LI")
+    result = await self._send_command("LI")
     return result
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """Firmware command for starting shaking."""
     speed_str = str(speed).zfill(4)
     acceleration_str = str(acceleration).zfill(5)
-    return self._send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
+    return await self._send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
 
   async def _stop_shaking(self):
     """Firmware command for stopping shaking."""
-    return self._send_command("SC")
+    return await self._send_command("SC")
 
   async def _wait_for_stop(self):
     """Firmware command for waiting for shaking to stop."""
-    return self._send_command("SW")
+    return await self._send_command("SW")
 
   async def set_temperature(self, temperature: float):
     """set temperature in Celsius"""
     temp_str = f"{round(10*temperature):04d}"
-    return self._send_command("TA", ta=temp_str)
+    return await self._send_command("TA", ta=temp_str)
 
   async def get_current_temperature(self) -> float:
     """get temperature in Celsius"""
-    response = self._send_command("RT").decode("ascii")
+    response = (await self._send_command("RT")).decode("ascii")
     temp = str(response).split(" ")[1].strip("+")
     return float(temp) / 10
 
   async def deactivate(self):
     """turn off heating"""
-    return self._send_command("TO")
+    return await self._send_command("TO")

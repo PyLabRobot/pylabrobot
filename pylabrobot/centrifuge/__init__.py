@@ -7,4 +7,4 @@ from .standard import (
   LoaderNoPlateError,
   NotAtBucketError,
 )
-from .vspin import Access2Backend, VSpin
+from .vspin_backend import Access2Backend, VSpinBackend

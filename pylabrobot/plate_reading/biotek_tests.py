@@ -22,6 +22,8 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()
+    self.backend.io.read = unittest.mock.AsyncMock()
+    self.backend.io.write = unittest.mock.AsyncMock()
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
   async def test_setup(self):

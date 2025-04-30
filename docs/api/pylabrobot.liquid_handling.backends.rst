@@ -25,10 +25,10 @@ Hardware
   :recursive:
 
     backends.hamilton.base.HamiltonLiquidHandler
-    backends.hamilton.STAR.STAR
-    backends.hamilton.vantage.Vantage
+    backends.hamilton.STAR_backend.STAR
+    backends.hamilton.vantage_backend.Vantage
     backends.opentrons_backend.OpentronsBackend
-    backends.tecan.EVO.EVO
+    backends.tecan.EVO_backend.EVOBackend
 
 Net
 ---
