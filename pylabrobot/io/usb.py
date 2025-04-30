@@ -107,8 +107,8 @@ class USB(IOBase):
 
     # write command to endpoint
     loop = asyncio.get_running_loop()
-    if self._executor is None:
-      raise RuntimeError("Executor not initialized. Call setup() first.")
+    if self._executor is None or self.dev is None:
+      raise RuntimeError("Call setup() first.")
     loop.run_in_executor(
       self._executor,
       lambda: self.dev.write(self.write_endpoint, data, timeout=timeout),
@@ -182,8 +182,8 @@ class USB(IOBase):
       raise TimeoutError("Timeout while reading.")
 
     loop = asyncio.get_running_loop()
-    if self._executor is None:
-      raise RuntimeError("Executor not initialized. Call setup() first.")
+    if self._executor is None or self.dev is None:
+      raise RuntimeError("Call setup() first.")
     return await loop.run_in_executor(self._executor, read_or_timeout)
 
   def get_available_devices(self) -> List["usb.core.Device"]:
