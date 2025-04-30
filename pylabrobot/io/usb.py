@@ -107,11 +107,13 @@ class USB(IOBase):
 
     # write command to endpoint
     loop = asyncio.get_running_loop()
-    if self._executor is None or self.dev is None:
+    write_endpoint = self.write_endpoint
+    dev = self.dev
+    if self._executor is None or dev is None or write_endpoint is None:
       raise RuntimeError("Call setup() first.")
     loop.run_in_executor(
       self._executor,
-      lambda: self.dev.write(self.write_endpoint, data, timeout=timeout),
+      lambda: dev.write(write_endpoint, data, timeout=timeout),
     )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
@@ -167,6 +169,8 @@ class USB(IOBase):
           last_packet = self._read_packet()
           if last_packet is not None:
             resp += last_packet
+          if self.read_endpoint is None:
+            raise RuntimeError("Read endpoint is None. Call setup() first.")
           if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
             break
 
