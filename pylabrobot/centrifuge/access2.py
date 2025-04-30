@@ -1,7 +1,7 @@
 from typing import Tuple
 
 from pylabrobot.centrifuge.centrifuge import Centrifuge, Loader
-from pylabrobot.centrifuge.vspin import Access2Backend, VSpinBackend
+from pylabrobot.centrifuge.vspin_backend import Access2Backend, VSpinBackend
 from pylabrobot.resources import Coordinate
 
 
