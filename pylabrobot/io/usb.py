@@ -86,7 +86,7 @@ class USB(IOBase):
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
-    self._executor = ThreadPoolExecutor(max_workers=1)
+    self._executor: Optional[ThreadPoolExecutor] = None
 
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
@@ -107,6 +107,8 @@ class USB(IOBase):
 
     # write command to endpoint
     loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Executor not initialized. Call setup() first.")
     loop.run_in_executor(
       self._executor,
       lambda: self.dev.write(self.write_endpoint, data, timeout=timeout),
@@ -180,6 +182,8 @@ class USB(IOBase):
       raise TimeoutError("Timeout while reading.")
 
     loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Executor not initialized. Call setup() first.")
     return await loop.run_in_executor(self._executor, read_or_timeout)
 
   def get_available_devices(self) -> List["usb.core.Device"]:
@@ -277,6 +281,8 @@ class USB(IOBase):
     while self._read_packet() is not None:
       pass
 
+    self._executor = ThreadPoolExecutor(max_workers=1)
+
   async def stop(self):
     """Close the USB connection to the machine."""
 
@@ -285,6 +291,10 @@ class USB(IOBase):
     logging.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
+
+    if self._executor is not None:
+      self._executor.shutdown(wait=True)
+      self._executor = None
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""
