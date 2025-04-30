@@ -1,13 +1,12 @@
-from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.well import (
-  Well,
-  WellBottomType,
-  CrossSectionType,
-)
-from pylabrobot.resources.utils import create_ordered_items_2d
-
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_volume_container_2segments_round_vbottom,
+)
+from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources.well import (
+  CrossSectionType,
+  Well,
+  WellBottomType,
 )
 
 
@@ -52,9 +51,7 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name: str, with_lid: bool = Fal
   - Thermal resistance: ?
   - Sealing options: ?
   - Cleanliness: ?
-  - Automation compatibility: "Rigid frame eliminates warping and distortion during
-    PCR. Ideal for use with robotic systems.' -> extra  rigid skirt option (4ti-0960/RIG)
-    available.
+  - Automation compatibility: "Rigid frame eliminates warping and distortion during PCR. Ideal for use with robotic systems.' -> extra  rigid skirt option (4ti-0960/RIG) available.
   """
   return Plate(
     name=name,

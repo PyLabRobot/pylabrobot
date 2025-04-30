@@ -21,8 +21,8 @@ def test_query():
 
 def test_query_with_type():
   root = Resource(name="root", size_x=10, size_y=10, size_z=10)
-  well1 = Well(name="well", size_x=3, size_y=3, size_z=3)
-  well2 = Well(name="well", size_x=3, size_y=3, size_z=3)
+  well1 = Well(name="well1", size_x=3, size_y=3, size_z=3)
+  well2 = Well(name="well2", size_x=3, size_y=3, size_z=3)
   root.assign_child_resource(well1, location=Coordinate(6, 1, 0))
   root.assign_child_resource(well2, location=Coordinate(6, 6, 0))
   assert query(root, Well) == [well1, well2]

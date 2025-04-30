@@ -4,10 +4,9 @@ from opentrons_shared_data.load import get_shared_data_root
 
 from pylabrobot.resources import Plate, TipRack, TubeRack
 from pylabrobot.resources.opentrons.load import (
-  load_shared_opentrons_resource,
   UnknownResourceType,
+  load_shared_opentrons_resource,
 )
-
 
 OT_PATH = get_shared_data_root()
 
@@ -22,7 +21,6 @@ TUBE_RACK_OUT_FILE = "tube_racks.py"
 
 
 def main(po, to, tro):
-
   p = os.path.join(OT_PATH, "labware", "definitions", "2")
   p = os.path.expanduser(p)
 
@@ -36,9 +34,7 @@ def main(po, to, tro):
 
         try:
           # we don't really care about name
-          resource = load_shared_opentrons_resource(
-            definition, version=version, name=file
-          )
+          resource = load_shared_opentrons_resource(definition, version=version, name=file)
         except UnknownResourceType:
           print(f"[SKIP] {definition} {version}")
           continue

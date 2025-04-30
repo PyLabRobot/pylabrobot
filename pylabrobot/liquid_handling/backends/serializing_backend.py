@@ -1,24 +1,26 @@
-from abc import ABCMeta, abstractmethod
 import sys
-from typing import Any, Dict, Optional, List, Union
+from abc import ABCMeta, abstractmethod
+from typing import Any, Dict, List, Optional, Union
 
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
-from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
-  Move,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
+  Pickup,
+  PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
+from pylabrobot.resources import Resource
 from pylabrobot.serializer import serialize
 
 if sys.version_info >= (3, 8):
@@ -95,7 +97,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data={"channels": serialized, "use_channels": use_channels},
     )
 
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     serialized = [
       {
         "resource_name": op.resource.name,
@@ -114,7 +116,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data={"channels": serialized, "use_channels": use_channels},
     )
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     serialized = [
       {
         "resource_name": op.resource.name,
@@ -151,7 +153,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       },
     )
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
     data = {
       "aspiration": {
         "offset": serialize(aspiration.offset),
@@ -163,13 +167,13 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "tips": [serialize(tip) for tip in aspiration.tips],
       }
     }
-    if isinstance(aspiration, AspirationPlate):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       data["aspiration"]["well_names"] = [well.name for well in aspiration.wells]
     else:
       data["aspiration"]["trough"] = aspiration.container.name
     await self.send_command(command="aspirate96", data=data)
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     data = {
       "dispense": {
         "offset": serialize(dispense.offset),
@@ -181,26 +185,46 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "tips": [serialize(tip) for tip in dispense.tips],
       }
     }
-    if isinstance(dispense, DispensePlate):
+    if isinstance(dispense, MultiHeadDispensePlate):
       data["dispense"]["well_names"] = [well.name for well in dispense.wells]
     else:
       data["dispense"]["trough"] = dispense.container.name
     await self.send_command(command="dispense96", data=data)
 
-  async def move_resource(self, move: Move, **backend_kwargs):
+  async def pick_up_resource(self, pickup: ResourcePickup, **backend_kwargs):
     await self.send_command(
-      command="move",
+      command="pick_up_resource",
       data={
-        "move": {
-          "resource_name": move.resource.name,
-          "to": serialize(move.destination),
-          "intermediate_locations": [serialize(loc) for loc in move.intermediate_locations],
-          "resource_offset": serialize(move.resource_offset),
-          "destination_offset": serialize(move.destination_offset),
-          "pickup_distance_from_top": move.pickup_distance_from_top,
-          "get_direction": serialize(move.get_direction),
-          "put_direction": serialize(move.put_direction),
-        }
+        "resource_name": pickup.resource.name,
+        "offset": serialize(pickup.offset),
+        "pickup_distance_from_top": pickup.pickup_distance_from_top,
+        "direction": serialize(pickup.direction),
+      },
+      **backend_kwargs,
+    )
+
+  async def move_picked_up_resource(self, move: ResourceMove, **backend_kwargs):
+    await self.send_command(
+      command="move_picked_up_resource",
+      data={
+        "resource_name": move.resource.name,
+        "location": serialize(move.location),
+        "gripped_direction": serialize(move.gripped_direction),
+      },
+      **backend_kwargs,
+    )
+
+  async def drop_resource(self, drop: ResourceDrop, **backend_kwargs):
+    await self.send_command(
+      command="drop_resource",
+      data={
+        "resource_name": drop.resource.name,
+        "destination": serialize(drop.destination),
+        "offset": serialize(drop.offset),
+        "pickup_distance_from_top": drop.pickup_distance_from_top,
+        "pickup_direction": serialize(drop.pickup_direction),
+        "drop_direction": serialize(drop.drop_direction),
+        "rotation": drop.rotation,
       },
       **backend_kwargs,
     )

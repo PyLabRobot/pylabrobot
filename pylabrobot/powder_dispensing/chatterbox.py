@@ -1,9 +1,9 @@
 from typing import List
 
 from pylabrobot.powder_dispensing.backend import (
-  PowderDispenserBackend,
-  PowderDispense,
   DispenseResults,
+  PowderDispense,
+  PowderDispenserBackend,
 )
 
 

@@ -1,4 +1,5 @@
 from typing import Optional
+
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import serialize
@@ -54,7 +55,7 @@ class ResourceHolder(Resource):
     reassign: bool = True,
   ):
     location = location or self.get_default_child_location(resource)
-    if len(self.children) > 0:
+    if len(self.children) > 0 and not reassign:
       raise ValueError("ResourceHolders can only take one child at a time.")
     return super().assign_child_resource(resource, location, reassign)
 

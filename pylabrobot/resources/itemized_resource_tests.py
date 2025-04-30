@@ -1,6 +1,6 @@
 import sys
-from typing import List
 import unittest
+from typing import List
 
 from pylabrobot.resources import (
   Coordinate,
@@ -896,6 +896,72 @@ class TestItemizedResource(unittest.TestCase):
       self.assertEqual(len(wells), 5)
       num_batches += 1
     self.assertEqual(len(items), self.plate.num_items * num_rounds)
+
+  def test_get_row(self):
+    self.assertEqual(
+      [w.name for w in self.plate.row(0)],
+      [
+        "plate_well_0_0",
+        "plate_well_1_0",
+        "plate_well_2_0",
+        "plate_well_3_0",
+        "plate_well_4_0",
+        "plate_well_5_0",
+        "plate_well_6_0",
+        "plate_well_7_0",
+        "plate_well_8_0",
+        "plate_well_9_0",
+        "plate_well_10_0",
+        "plate_well_11_0",
+      ],
+    )
+
+    self.assertEqual(
+      [w.name for w in self.plate.row(3)],
+      [
+        "plate_well_0_3",
+        "plate_well_1_3",
+        "plate_well_2_3",
+        "plate_well_3_3",
+        "plate_well_4_3",
+        "plate_well_5_3",
+        "plate_well_6_3",
+        "plate_well_7_3",
+        "plate_well_8_3",
+        "plate_well_9_3",
+        "plate_well_10_3",
+        "plate_well_11_3",
+      ],
+    )
+
+  def test_get_column(self):
+    self.assertEqual(
+      [w.name for w in self.plate.column(0)],
+      [
+        "plate_well_0_0",
+        "plate_well_0_1",
+        "plate_well_0_2",
+        "plate_well_0_3",
+        "plate_well_0_4",
+        "plate_well_0_5",
+        "plate_well_0_6",
+        "plate_well_0_7",
+      ],
+    )
+
+    self.assertEqual(
+      [w.name for w in self.plate.column(3)],
+      [
+        "plate_well_3_0",
+        "plate_well_3_1",
+        "plate_well_3_2",
+        "plate_well_3_3",
+        "plate_well_3_4",
+        "plate_well_3_5",
+        "plate_well_3_6",
+        "plate_well_3_7",
+      ],
+    )
 
 
 class TestCreateEquallySpaced(unittest.TestCase):

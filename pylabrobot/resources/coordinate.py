@@ -1,5 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 
 @dataclass
@@ -37,9 +41,7 @@ class Coordinate:
     )
 
   def __str__(self) -> str:
-    if self.x is not None and self.y is not None and self.z is not None:
-      return f"({self.x:07.3f}, {self.y:07.3f}, {self.z:07.3f})"
-    return "(None, None, None)"
+    return f"Coordinate({self.x:07.3f}, {self.y:07.3f}, {self.z:07.3f})"
 
   def __neg__(self) -> Coordinate:
     return Coordinate(-self.x, -self.y, -self.z)
@@ -49,3 +51,7 @@ class Coordinate:
 
   def __iter__(self):
     return iter((self.x, self.y, self.z))
+
+  def rotated(self, rotation: Rotation) -> Coordinate:
+    """Rotate the coordinate by the given rotation around the origin."""
+    return Coordinate(*matrix_vector_multiply_3x3(rotation.get_rotation_matrix(), self.vector()))

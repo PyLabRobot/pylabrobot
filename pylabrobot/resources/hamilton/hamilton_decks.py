@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 import logging
+from abc import ABCMeta, abstractmethod
 from typing import Optional, cast
 
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.carrier import ResourceHolder
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.errors import NoLocationError
+from pylabrobot.resources.hamilton.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
-from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.trash import Trash
-
 
 logger = logging.getLogger("pylabrobot")
 
@@ -56,7 +56,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       origin=origin,
     )
     self.num_rails = num_rails
-    self.register_did_assign_resource_callback(self._check_save_z_height)
+    self.register_did_assign_resource_callback(self._check_safe_z_height)
 
   @abstractmethod
   def rails_to_location(self, rails: int) -> Coordinate:
@@ -67,18 +67,24 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     return {
       **super().serialize(),
       "num_rails": self.num_rails,
-      "no_trash": True,  # data encoded as child. (not very pretty to have this key though...)
+      "with_trash": False,  # data encoded as child. (not very pretty to have this key though...)
+      "with_trash96": False,
     }
 
-  def _check_save_z_height(self, resource: Resource):
-    """ " Check for this resource, and all its children, that the z location is not too high."""
+  def _check_safe_z_height(self, resource: Resource):
+    """Check for this resource, and all its children, that the z location is not too high."""
 
     # TODO: maybe these are parameters per HamiltonDeck that we can take as attributes.
     Z_MOVEMENT_LIMIT = 245
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
-      z_top = resource.get_absolute_location(z="top").z
+      try:
+        z_top = resource.get_absolute_location(z="top").z
+      except NoLocationError:
+        # if a resource has no location, we cannot check its z height
+        # this is fine, because it's a convenience feature and not critical
+        return
 
       if z_top > Z_MOVEMENT_LIMIT:
         logger.warning(
@@ -107,6 +113,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     reassign: bool = False,
     rails: Optional[int] = None,
     replace=False,
+    ignore_collision=False,
   ):
     """Assign a new deck resource.
 
@@ -134,6 +141,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       replace: Replace the resource with the same name that was previously assigned, if it exists.
         If a resource is assigned with the same name and replace is False, a ValueError
         will be raised.
+      ignore_collision: If True, ignore collision detection.
 
     Raises:
       ValueError: If a resource is assigned with the same name and replace is `False`.
@@ -157,44 +165,45 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     elif location is not None:
       resource_location = location
     else:
-      resource_location = None  # unknown resource location
+      raise ValueError("Either rails or location must be provided.")
 
-    if resource_location is not None:  # collision detection
-      if (
-        resource_location.x + resource.get_absolute_size_x()
-        > self.rails_to_location(self.num_rails + 1).x
-        and rails is not None
-      ):
-        raise ValueError(
-          f"Resource with width {resource.get_absolute_size_x()} does not fit at rails {rails}."
-        )
-
-      # Check if there is space for this new resource.
-      for og_resource in self.children:
-        og_x = cast(Coordinate, og_resource.location).x
-        og_y = cast(Coordinate, og_resource.location).y
-
-        # A resource is not allowed to overlap with another resource. Resources overlap when a
-        # corner of one resource is inside the boundaries of another resource.
-        if any(
-          [
-            og_x <= resource_location.x < og_x + og_resource.get_absolute_size_x(),
-            og_x
-            < resource_location.x + resource.get_absolute_size_x()
-            < og_x + og_resource.get_absolute_size_x(),
-          ]
-        ) and any(
-          [
-            og_y <= resource_location.y < og_y + og_resource.get_absolute_size_y(),
-            og_y
-            < resource_location.y + resource.get_absolute_size_y()
-            < og_y + og_resource.get_absolute_size_y(),
-          ]
+    if not ignore_collision:
+      if resource_location is not None:  # collision detection
+        if (
+          resource_location.x + resource.get_absolute_size_x()
+          > self.rails_to_location(self.num_rails + 1).x
+          and rails is not None
         ):
           raise ValueError(
-            f"Location {resource_location} is already occupied by resource "
-            f"'{og_resource.name}'."
+            f"Resource with width {resource.get_absolute_size_x()} does not fit at rails {rails}."
           )
+
+        # Check if there is space for this new resource.
+        for og_resource in self.children:
+          og_x = cast(Coordinate, og_resource.location).x
+          og_y = cast(Coordinate, og_resource.location).y
+
+          # A resource is not allowed to overlap with another resource. Resources overlap when a
+          # corner of one resource is inside the boundaries of another resource.
+          if any(
+            [
+              og_x <= resource_location.x < og_x + og_resource.get_absolute_size_x(),
+              og_x
+              < resource_location.x + resource.get_absolute_size_x()
+              < og_x + og_resource.get_absolute_size_x(),
+            ]
+          ) and any(
+            [
+              og_y <= resource_location.y < og_y + og_resource.get_absolute_size_y(),
+              og_y
+              < resource_location.y + resource.get_absolute_size_y()
+              < og_y + og_resource.get_absolute_size_y(),
+            ]
+          ):
+            raise ValueError(
+              f"Location {resource_location} is already occupied by resource "
+              f"'{og_resource.name}'."
+            )
 
     return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
 
@@ -299,8 +308,12 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       r_summary += resource.__class__.__name__.ljust(type_column_length)
 
       # Print resource location
-      location = resource.get_absolute_location()
-      r_summary += str(location).ljust(location_column_length)
+      try:
+        x, y, z = resource.get_absolute_location()
+        location = f"({x:07.3f}, {y:07.3f}, {z:07.3f})"
+      except NoLocationError:
+        location = "Undefined"
+      r_summary += location.ljust(location_column_length)
 
       return r_summary
 
@@ -348,8 +361,11 @@ class HamiltonSTARDeck(HamiltonDeck):
     name="deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
-    no_trash: bool = False,
-    no_teaching_rack: bool = False,
+    with_trash: bool = True,
+    with_trash96: bool = True,
+    with_teaching_rack: bool = True,
+    no_trash: Optional[bool] = None,
+    no_teaching_rack: Optional[bool] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size."""
 
@@ -363,8 +379,15 @@ class HamiltonSTARDeck(HamiltonDeck):
       origin=origin,
     )
 
+    if no_trash is not None:
+      raise NotImplementedError("no_trash is deprecated. Use with_trash=False instead.")
+    if no_teaching_rack is not None:
+      raise NotImplementedError(
+        "no_teaching_rack is deprecated. Use with_teaching_rack=False instead."
+      )
+
     # assign trash area
-    if not no_trash:
+    if with_trash:
       trash_x = (
         size_x - 560
       )  # only tested on STARLet, assume STAR is same distance from right max..
@@ -374,14 +397,16 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=trash_x, y=190.6, z=137.1),
       )  # z I am not sure about
 
+    self._trash96: Optional[Trash] = None
+    if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
-      self._trash96 = Trash("trash_core96", size_x=82.6, size_y=122.4, size_z=0)  # size of tiprack
+      self._trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
       self.assign_child_resource(
         resource=self._trash96,
-        location=Coordinate(x=-232.1, y=110.3, z=189.0),
-      )  # 165.0 -> 189.0
+        location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=229.0),
+      )
 
-    if not no_teaching_rack:
+    if with_teaching_rack:
       teaching_carrier = Resource(name="teaching_carrier", size_x=30, size_y=445.2, size_z=100)
       tip_spots = [
         TipSpot(
@@ -397,15 +422,15 @@ class HamiltonSTARDeck(HamiltonDeck):
         ts.location = Coordinate(x=0, y=9 * i, z=23.1)
       teaching_tip_rack = TipRack(
         name="teaching_tip_rack",
-        size_x=9 * 8,
-        size_y=9,
+        size_x=9,
+        size_y=9 * 8,
         size_z=50.4,
-        ordered_items={f"A{i}": tip_spots[i] for i in range(8)},
+        ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("HGFEDCBA")},
         with_tips=True,
         model="hamilton_teaching_tip_rack",
       )
       teaching_carrier.assign_child_resource(
-        teaching_tip_rack, location=Coordinate(x=5.9, y=400.3, z=0)
+        teaching_tip_rack, location=Coordinate(x=5.9, y=409.3, z=0)
       )
       self.assign_child_resource(
         teaching_carrier,
@@ -415,7 +440,7 @@ class HamiltonSTARDeck(HamiltonDeck):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "no_teaching_rack": True,  # data encoded as child. (not very pretty to have this key though...)
+      "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
     }
 
   def rails_to_location(self, rails: int) -> Coordinate:
@@ -423,11 +448,18 @@ class HamiltonSTARDeck(HamiltonDeck):
     return Coordinate(x=x, y=63, z=100)
 
   def get_trash_area96(self) -> Trash:
+    if self._trash96 is None:
+      raise RuntimeError(
+        "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
+      )
     return self._trash96
 
 
 def STARLetDeck(
   origin: Coordinate = Coordinate.zero(),
+  with_trash: bool = True,
+  with_trash96: bool = True,
+  with_teaching_rack: bool = True,
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck.
 
@@ -440,11 +472,17 @@ def STARLetDeck(
     size_y=STARLET_SIZE_Y,
     size_z=STARLET_SIZE_Z,
     origin=origin,
+    with_trash=with_trash,
+    with_trash96=with_trash96,
+    with_teaching_rack=with_teaching_rack,
   )
 
 
 def STARDeck(
   origin: Coordinate = Coordinate.zero(),
+  with_trash: bool = True,
+  with_trash96: bool = True,
+  with_teaching_rack: bool = True,
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck.
 
@@ -457,4 +495,7 @@ def STARDeck(
     size_y=STAR_SIZE_Y,
     size_z=STAR_SIZE_Z,
     origin=origin,
+    with_trash=with_trash,
+    with_trash96=with_trash96,
+    with_teaching_rack=with_teaching_rack,
   )

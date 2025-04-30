@@ -1,9 +1,10 @@
 from typing import Dict, Optional
+
 from pylabrobot.resources.carrier import (
-  TipCarrier,
   ResourceHolder,
-  create_resources,
+  TipCarrier,
   create_homogeneous_resources,
+  create_resources,
 )
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
@@ -79,6 +80,7 @@ def Washstation_2Grid_Trough_DiTi(name: str) -> TecanTipCarrier:
         92.0,
         71.0,
       ],
+      name_prefix=name,
     ),
     model="Washstation_2Grid_Trough_DiTi",
   )
@@ -100,6 +102,7 @@ def MCA384_DiTi_Carrier(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=122.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="MCA384_DiTi_Carrier",
   )
@@ -131,6 +134,7 @@ def DiTi_2Pos___Waste(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_2Pos___Waste",
   )
@@ -154,6 +158,7 @@ def DiTi_3Pos(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=88.5,
+      name_prefix=name,
     ),
     model="DiTi_3Pos",
   )
@@ -177,6 +182,7 @@ def DiTi_SBS_3_Pos_MCA96(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_SBS_3_Pos_MCA96",
   )
@@ -200,6 +206,7 @@ def LI___DiTi_3Pos(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=88.5,
+      name_prefix=name,
     ),
     model="LI___DiTi_3Pos",
   )
@@ -231,6 +238,7 @@ def DiTi_SBS_2P_Waste_MCA96(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_SBS_2P_Waste_MCA96",
   )
@@ -255,6 +263,7 @@ def DiTi_SBS_4_Pos_MCA96(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_SBS_4_Pos_MCA96",
   )
@@ -357,6 +366,7 @@ def DiTi_Nest_2P_W_MCA384(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2P_W_MCA384",
   )
@@ -460,6 +470,7 @@ def DiTi_Nest_2P_W_MCA384_Indiv(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2P_W_MCA384_Indiv",
   )
@@ -507,6 +518,7 @@ def DiTi_Nest_3_Pos_MCA384_Indiv(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA384_Indiv",
   )
@@ -554,6 +566,7 @@ def DiTi_Nested_3_Pos_MCA384(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nested_3_Pos_MCA384",
   )
@@ -610,6 +623,7 @@ def DiTi_Nested_4_Pos_MCA384(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nested_4_Pos_MCA384",
   )
@@ -641,6 +655,7 @@ def DiTi_SBS_2P_W_MCA38_Indiv(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_SBS_2P_W_MCA38_Indiv",
   )
@@ -672,6 +687,7 @@ def DiTi_SBS_2P_W_MCA384(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_SBS_2P_W_MCA384",
   )
@@ -695,6 +711,7 @@ def DiTi_SBS_3_Pos_MCA384(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_SBS_3_Pos_MCA384",
   )
@@ -718,6 +735,7 @@ def DiTi_SBS_3_Pos_MCA384_Indiv(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_SBS_3_Pos_MCA384_Indiv",
   )
@@ -742,6 +760,7 @@ def DiTi_SBS_4_Pos_MCA384(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_SBS_4_Pos_MCA384",
   )
@@ -845,6 +864,7 @@ def DiTi_Nest_2_W_MCA96_100(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA96_100",
   )
@@ -948,6 +968,7 @@ def DiTi_Nest_2_W_MCA96_200(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA96_200",
   )
@@ -1051,6 +1072,7 @@ def DiTi_Nest_2_W_MCA96_50(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA96_50",
   )
@@ -1098,6 +1120,7 @@ def DiTi_Nest_3_Pos_MCA96_100(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA96_100",
   )
@@ -1145,6 +1168,7 @@ def DiTi_Nest_3_Pos_MCA96_200(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA96_200",
   )
@@ -1192,6 +1216,7 @@ def DiTi_Nest_3_Pos_MCA96_50(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_MCA96_50",
   )
@@ -1248,6 +1273,7 @@ def DiTi_Nest_4_Pos_MCA96_100(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_MCA96_100",
   )
@@ -1304,6 +1330,7 @@ def DiTi_Nest_4_Pos_MCA96_200(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_MCA96_200",
   )
@@ -1360,6 +1387,7 @@ def DiTi_Nest_4_Pos_MCA96_50(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_MCA96_50",
   )
@@ -1394,6 +1422,7 @@ def DiTi_3Pos___Waste(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_3Pos___Waste",
   )
@@ -1497,6 +1526,7 @@ def DiTi_Nest_2_W_MCA384_100(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA384_100",
   )
@@ -1600,6 +1630,7 @@ def DiTi_Nest_2_W_MCA384_200(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA384_200",
   )
@@ -1703,6 +1734,7 @@ def DiTi_Nest_2_W_MCA384_50(name: str) -> TecanTipCarrier:
         88.5,
         88.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_MCA384_50",
   )
@@ -1749,6 +1781,7 @@ def DiTi_Waste_station_6_Trough(name: str) -> TecanTipCarrier:
         84.0,
         84.0,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Waste_station_6_Trough",
   )
@@ -1816,6 +1849,7 @@ def DiTi_Nest_2_W_LiHa_350(name: str) -> TecanTipCarrier:
         85.5,
         85.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_LiHa_350",
   )
@@ -1851,6 +1885,7 @@ def DiTi_Nest_3_Pos_LiHa_350(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_LiHa_350",
   )
@@ -1933,6 +1968,7 @@ def DiTi_Nest_3_W_LiHa_350(name: str) -> TecanTipCarrier:
         85.5,
         85.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_W_LiHa_350",
   )
@@ -1973,6 +2009,7 @@ def DiTi_Nest_4_Pos_LiHa_350(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_LiHa_350",
   )
@@ -2040,6 +2077,7 @@ def DiTi_Nest_2_W_LiHa_10(name: str) -> TecanTipCarrier:
         85.5,
         85.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_LiHa_10",
   )
@@ -2107,6 +2145,7 @@ def DiTi_Nest_2_W_LiHa_10_F(name: str) -> TecanTipCarrier:
         85.5,
         85.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_2_W_LiHa_10_F",
   )
@@ -2142,6 +2181,7 @@ def DiTi_Nest_3_Pos_LiHa_10(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_LiHa_10",
   )
@@ -2177,6 +2217,7 @@ def DiTi_Nest_3_Pos_LiHa_10_F(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_Pos_LiHa_10_F",
   )
@@ -2259,6 +2300,7 @@ def DiTi_Nest_3_W_LiHa_10(name: str) -> TecanTipCarrier:
         85.5,
         85.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_W_LiHa_10",
   )
@@ -2341,6 +2383,7 @@ def DiTi_Nest_3_W_LiHa_10_F(name: str) -> TecanTipCarrier:
         85.5,
         85.5,
       ],
+      name_prefix=name,
     ),
     model="DiTi_Nest_3_W_LiHa_10_F",
   )
@@ -2381,6 +2424,7 @@ def DiTi_Nest_4_Pos_LiHa_10(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_LiHa_10",
   )
@@ -2421,6 +2465,7 @@ def DiTi_Nest_4_Pos_LiHa_10_F(name: str) -> TecanTipCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="DiTi_Nest_4_Pos_LiHa_10_F",
   )

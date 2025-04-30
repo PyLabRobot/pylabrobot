@@ -1,6 +1,6 @@
-import math
 import json
-from typing import Dict, List, Union, TYPE_CHECKING, cast
+import math
+from typing import TYPE_CHECKING, Dict, List, Union, cast
 
 try:
   import opentrons_shared_data.labware
@@ -15,13 +15,13 @@ from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tube import Tube
 from pylabrobot.resources.tube_rack import TubeRack
-from pylabrobot.resources.well import Well, CrossSectionType
-
+from pylabrobot.resources.well import CrossSectionType, Well
 
 if TYPE_CHECKING:
-  from opentrons_shared_data.labware.dev_types import (
-    LabwareDefinition,
-  )
+  try:
+    from opentrons_shared_data.labware.types import LabwareDefinition  # type: ignore
+  except ImportError:
+    from opentrons_shared_data.labware.dev_types import LabwareDefinition  # type: ignore
 
 
 class UnknownResourceType(Exception):

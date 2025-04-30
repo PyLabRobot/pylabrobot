@@ -5,7 +5,6 @@ from xml.etree.ElementTree import parse
 from pylabrobot.liquid_handling.liquid_classes.tecan import from_str
 from pylabrobot.resources.tecan import TipType
 
-
 path = "DefaultLCs.xml"
 
 

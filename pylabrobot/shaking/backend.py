@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
-from pylabrobot.machines.backends import MachineBackend
+
+from pylabrobot.machines.backend import MachineBackend
 
 
 class ShakerBackend(MachineBackend, metaclass=ABCMeta):
@@ -16,3 +17,11 @@ class ShakerBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def stop_shaking(self):
     """Stop shaking"""
+
+  @abstractmethod
+  async def lock_plate(self):
+    """Lock the plate"""
+
+  @abstractmethod
+  async def unlock_plate(self):
+    """Unlock the plate"""

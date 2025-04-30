@@ -1,13 +1,11 @@
 import datetime
 import logging
 from pathlib import Path
-import sys
 from typing import Optional, Union
-import warnings
 
 from pylabrobot.__version__ import __version__
-
-from pylabrobot.config import load_config, Config
+from pylabrobot.config import Config, load_config
+from pylabrobot.io import end_validation, start_capture, stop_capture, validate
 
 CONFIG_FILE_NAME = "pylabrobot"
 
@@ -64,11 +62,3 @@ def configure(cfg: Config):
 
 
 configure(CONFIG)
-
-
-# deprecation warning for 3.8
-if sys.version_info < (3, 9):
-  warnings.warn(
-    "Support for Python 3.8 is deprecated and will be removed in Dec 2024. "
-    "Please upgrade to Python 3.9 or later."
-  )

@@ -1,19 +1,18 @@
 from typing import Optional, cast
 
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.carrier import Carrier
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.tip_rack import TipRack
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from pylabrobot.resources.tecan.wash import (
   Wash_Station,
+  Wash_Station_Cleaner_deep,
   Wash_Station_Cleaner_shallow,
   Wash_Station_Waste,
-  Wash_Station_Cleaner_deep,
 )
-
+from pylabrobot.resources.tip_rack import TipRack
 
 _RAILS_WIDTH = 25
 

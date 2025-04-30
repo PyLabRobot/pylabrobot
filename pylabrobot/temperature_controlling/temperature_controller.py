@@ -3,7 +3,8 @@ import time
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
-from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources import Coordinate, ResourceHolder
+
 from .backend import TemperatureControllerBackend
 
 
@@ -17,6 +18,7 @@ class TemperatureController(ResourceHolder, Machine):
     size_y: float,
     size_z: float,
     backend: TemperatureControllerBackend,
+    child_location: Coordinate,
     category: str = "temperature_controller",
     model: Optional[str] = None,
   ):
@@ -26,6 +28,7 @@ class TemperatureController(ResourceHolder, Machine):
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
+      child_location=child_location,
       category=category,
       model=model,
     )
@@ -74,3 +77,9 @@ class TemperatureController(ResourceHolder, Machine):
     """
     self.target_temperature = None
     return await self.backend.deactivate()
+
+  def serialize(self) -> dict:
+    return {
+      **Machine.serialize(self),
+      **ResourceHolder.serialize(self),
+    }

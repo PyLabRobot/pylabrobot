@@ -85,6 +85,22 @@ class TestResource(unittest.TestCase):
       other_child = Resource("child", size_x=5, size_y=5, size_z=5)
       deck.assign_child_resource(other_child, location=Coordinate(5, 5, 5))
 
+  def test_assign_name_exists_in_tree(self):
+    root = Resource("root", size_x=10, size_y=10, size_z=10)
+    child1 = Resource("child", size_x=5, size_y=5, size_z=5)
+    root.assign_child_resource(child1, location=Coordinate(5, 5, 5))
+    child2 = Resource("child", size_x=5, size_y=5, size_z=5)
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(child2, location=Coordinate(5, 5, 5))
+
+    grandchild1 = Resource("grandchild", size_x=5, size_y=5, size_z=5)
+    child1.assign_child_resource(grandchild1, location=Coordinate(5, 5, 5))
+    child3 = Resource("child3", size_x=5, size_y=5, size_z=5)
+    root.assign_child_resource(child3, location=Coordinate(5, 5, 5))
+    grandchild2 = Resource("grandchild", size_x=5, size_y=5, size_z=5)
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(grandchild2, location=Coordinate(5, 5, 5))
+
   def test_get_anchor(self):
     resource = Resource("test", size_x=12, size_y=12, size_z=12)
     self.assertEqual(
@@ -156,6 +172,18 @@ class TestResource(unittest.TestCase):
       deck.get_resource("child")
     with self.assertRaises(ResourceNotFoundError):
       parent.get_resource("child")
+
+  def test_reassign_child(self):
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent1 = Resource("parent1", size_x=10, size_y=10, size_z=10)
+    parent2 = Resource("parent2", size_x=10, size_y=10, size_z=10)
+
+    parent1.assign_child_resource(child, location=Coordinate(5, 5, 5))
+    parent2.assign_child_resource(child, location=Coordinate(5, 5, 5))
+
+    self.assertEqual(child.parent, parent2)
+    self.assertEqual(parent1.children, [])
+    self.assertEqual(parent2.children, [child])
 
   def test_get_all_children(self):
     deck = Deck()

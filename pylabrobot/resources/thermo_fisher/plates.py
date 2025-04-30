@@ -1,18 +1,18 @@
 """Thermo Fisher Scientific  Inc. (and all its brand) plates"""
 
-from pylabrobot.resources.well import (
-  Well,
-  WellBottomType,
-  CrossSectionType,
-)
-from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.plate import Lid, Plate
+import math
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_ubottom,
   calculate_liquid_volume_container_2segments_square_ubottom,
 )
-
+from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources.well import (
+  CrossSectionType,
+  Well,
+  WellBottomType,
+)
 
 # Please conform with the 'manufacturer-first, then brands' naming principle:
 
@@ -121,7 +121,7 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
 def Thermo_TS_96_wellplate_1200ul_Rb_L(name: str, with_lid: bool = False) -> Plate:
   # https://github.com/PyLabRobot/pylabrobot/issues/252
   raise NotImplementedError(
-    "_L and _P definitions are deprecated. Use " "Thermo_TS_96_wellplate_1200ul_Rb instead."
+    "_L and _P definitions are deprecated. Use Thermo_TS_96_wellplate_1200ul_Rb instead."
   )
 
 
@@ -234,8 +234,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_L(name: str, with_lid: bool = False) -> Plate:
   raise NotImplementedError(
-    "_L and _P definitions are deprecated. Use "
-    "Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate instead."
+    "_L and _P definitions are deprecated. Use Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate instead."
   )
 
 
@@ -243,4 +242,39 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_P(name: str, with_lid: bool = Fa
   raise NotImplementedError(
     "_L and _P definitions are deprecated. Use "
     "Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate.rotated(90) instead."
+  )
+
+
+def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
+  """
+  - Part no.: 260252
+  - Diagram: https://assets.thermofisher.com/TFS-Assets/LSG/manuals/D03011.pdf
+  """
+
+  well_diameter = 8.00  # measured
+  return Plate(
+    name=name,
+    size_x=127.76,  # from definition, A
+    size_y=85.47,  # from definition, B
+    size_z=31.6,  # from definition, F
+    lid=None,
+    model=Thermo_Nunc_96_well_plate_1300uL_Rb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=14.4 - well_diameter / 2,  # from definition, H - well_diameter/2
+      dy=11.2 - well_diameter / 2,  # from definition, J - well_diameter/2
+      dz=1.4,  # from definition, N
+      item_dx=9,
+      item_dy=9,
+      size_x=well_diameter,
+      size_y=well_diameter,
+      size_z=31.6 - 1.4,  # from definition, F - N
+      bottom_type=WellBottomType.U,
+      material_z_thickness=31.6 - 29.1 - 1.4,  # from definition, F - L - N
+      cross_section_type=CrossSectionType.CIRCLE,
+      compute_height_from_volume=lambda liquid_volume: liquid_volume
+      / (math.pi * ((well_diameter / 2) ** 2)),
+    ),
   )

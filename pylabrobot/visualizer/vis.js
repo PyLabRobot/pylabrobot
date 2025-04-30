@@ -151,7 +151,11 @@ function openSocket() {
   // webSocket.onmessage = function (event) {
   webSocket.addEventListener("message", function (event) {
     var data = event.data;
-    data = JSON.parse(data);
+    data = JSON.parse(data, (key, value) => {
+      if (value == "Infinity") return Infinity;
+      if (value == "-Infinity") return -Infinity;
+      return value;
+    });
     console.log(`[message] Data received from server:`, data);
     handleEvent(data.id, data.event, data.data);
   });

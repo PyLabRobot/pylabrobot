@@ -1,12 +1,13 @@
 from typing import Dict, Optional
+
 from pylabrobot.resources.carrier import (
   Carrier,
   ResourceHolder,
   create_resources,
 )
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
+from pylabrobot.resources.trash import Trash
 
 
 class TecanWashStation(Carrier, TecanResource):

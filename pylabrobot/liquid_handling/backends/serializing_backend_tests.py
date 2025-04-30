@@ -5,12 +5,12 @@ from pylabrobot.liquid_handling.backends.serializing_backend import (
   SerializingSavingBackend,
 )
 from pylabrobot.resources import (
-  STARLetDeck,
-  TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
-  Cor_96_wellplate_360ul_Fb,
   STF,
+  TIP_CAR_480_A00,
   Coordinate,
+  Cor_96_wellplate_360ul_Fb,
+  STARLetDeck,
   no_tip_tracking,
   no_volume_tracking,
 )
@@ -219,20 +219,25 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_move(self):
     to = Coordinate(600, 200, 200)
     await self.lh.move_plate(self.plate, to=to)
-    self.assertEqual(len(self.backend.sent_commands), 3)  # move + resource unassign + assign
-    self.assertEqual(self.backend.sent_commands[0]["command"], "move")
+    self.assertEqual(len(self.backend.sent_commands), 4)  # move + resource unassign + assign
     self.assertEqual(
-      self.backend.get_first_data_for_command("move"),
+      self.backend.get_first_data_for_command("pick_up_resource"),
       {
-        "move": {
-          "resource_name": self.plate.name,
-          "to": serialize(to),
-          "intermediate_locations": [],
-          "resource_offset": serialize(Coordinate.zero()),
-          "destination_offset": serialize(Coordinate.zero()),
-          "pickup_distance_from_top": 9.87,
-          "get_direction": "FRONT",
-          "put_direction": "FRONT",
-        }
+        "resource_name": self.plate.name,
+        "offset": serialize(Coordinate.zero()),
+        "pickup_distance_from_top": 9.87,
+        "direction": "FRONT",
+      },
+    )
+    self.assertEqual(
+      self.backend.get_first_data_for_command("drop_resource"),
+      {
+        "resource_name": self.plate.name,
+        "destination": serialize(to),
+        "offset": serialize(Coordinate.zero()),
+        "pickup_distance_from_top": 9.87,
+        "pickup_direction": "FRONT",
+        "drop_direction": "FRONT",
+        "rotation": 0,
       },
     )

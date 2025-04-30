@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.plate import Plate
-
+from pylabrobot.resources.resource import Resource
 
 logger = logging.getLogger("pylabrobot")
 

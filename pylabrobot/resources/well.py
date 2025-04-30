@@ -4,6 +4,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.plate import Plate
 
 
 class WellBottomType(enum.Enum):
@@ -119,3 +120,12 @@ class Well(Container):
     """
 
     self.tracker.set_liquids(liquids)
+
+  def get_identifier(self) -> str:
+    """Get the (canonical) identifier, like `"A1"` of the well in the parent plate. If the well is
+    not in a plate, this will raise a ValueError."""
+
+    if self.parent is None or not isinstance(self.parent, Plate):
+      raise ValueError("Well must be in a plate to get its identifier.")
+
+    return self.parent.get_child_identifier(self)

@@ -1,22 +1,25 @@
 import sys
-from typing import Dict, Optional, List, cast, Union
+from typing import Dict, List, Optional, Union, cast
 
+from pylabrobot import utils
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
-  Move,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
+  Pickup,
+  PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import (
   Coordinate,
@@ -27,7 +30,6 @@ from pylabrobot.resources import (
   TipSpot,
 )
 from pylabrobot.resources.opentrons import OTDeck, OTModule
-from pylabrobot import utils
 
 PYTHON_VERSION = sys.version_info[:2]
 
@@ -42,7 +44,7 @@ else:
   USE_OT = False
 
 # https://github.com/Opentrons/opentrons/issues/14590
-# https://forums.pylabrobot.org/t/connect-pylabrobot-to-ot2/2862/18
+# https://labautomation.io/t/connect-pylabrobot-to-ot2/2862/18
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 
 
@@ -284,7 +286,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     del self.defined_labware[name]
 
     # The OT-api does not support removing labware definitions
-    # https://forums.pylabrobot.org/t/feature-request-support-unloading-labware-in-the-http-api/3098
+    # https://labautomation.io/t/feature-request-support-unloading-labware-in-the-http-api/3098
     # instead, we move the labware off deck as a workaround
     ot_api.labware.move_labware(labware_id=name, off_deck=True)
 
@@ -336,7 +338,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     )
 
     # ad-hoc offset adjustment that makes it smoother.
-    offset_z += 50
+    offset_z += op.tip.total_tip_length
 
     ot_api.lh.pick_up_tip(
       labware_id,
@@ -469,7 +471,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6,
     }[pipette_name]
 
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     """Aspirate liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
@@ -530,7 +532,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6,
     }[pipette_name]
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
@@ -572,20 +574,27 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.health.home()
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
   async def drop_tips96(self, drop: DropTipRack):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
-  async def move_resource(self, move: Move):
-    """Move the specified lid within the robot."""
-    raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")
+  async def pick_up_resource(self, pickup: ResourcePickup):
+    raise NotImplementedError("The Opentrons backend does not support the robotic arm.")
+
+  async def move_picked_up_resource(self, move: ResourceMove):
+    raise NotImplementedError("The Opentrons backend does not support the robotic arm.")
+
+  async def drop_resource(self, drop: ResourceDrop):
+    raise NotImplementedError("The Opentrons backend does not support the robotic arm.")
 
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""

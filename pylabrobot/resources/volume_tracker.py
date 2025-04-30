@@ -1,15 +1,14 @@
 import contextlib
 import copy
 import sys
-from typing import Callable, List, Tuple, Optional, cast
+from typing import Callable, List, Optional, Tuple, cast
 
 from pylabrobot.resources.errors import (
   TooLittleLiquidError,
   TooLittleVolumeError,
 )
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.serializer import serialize, deserialize
-
+from pylabrobot.serializer import deserialize, serialize
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False  # type: ignore
@@ -214,7 +213,7 @@ class VolumeTracker:
   def rollback(self) -> None:
     """Rollback the pending operations."""
     assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
-    self.pending_liquids.clear()
+    self.pending_liquids = copy.deepcopy(self.liquids)
 
   def clear_cross_contamination_history(self) -> None:
     """Resets the liquid_history for cross contamination tracking. Use when there is a wash step."""

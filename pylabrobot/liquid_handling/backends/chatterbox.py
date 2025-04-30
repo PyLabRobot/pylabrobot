@@ -3,20 +3,22 @@ from typing import List, Union
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
-from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
-  Move,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
+  Pickup,
+  PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
+from pylabrobot.resources import Resource
 
 
 class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
@@ -124,7 +126,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def aspirate(
     self,
-    ops: List[Aspiration],
+    ops: List[SingleChannelAspiration],
     use_channels: List[int],
     **backend_kwargs,
   ):
@@ -165,7 +167,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def dispense(
     self,
-    ops: List[Dispense],
+    ops: List[SingleChannelDispense],
     use_channels: List[int],
     **backend_kwargs,
   ):
@@ -210,19 +212,27 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   async def drop_tips96(self, drop: DropTipRack, **backend_kwargs):
     print(f"Dropping tips to {drop.resource.name}.")
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
-    if isinstance(aspiration, AspirationPlate):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       resource = aspiration.wells[0].parent
     else:
       resource = aspiration.container
     print(f"Aspirating {aspiration.volume} from {resource}.")
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
-    if isinstance(dispense, DispensePlate):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
+    if isinstance(dispense, MultiHeadDispensePlate):
       resource = dispense.wells[0].parent
     else:
       resource = dispense.container
     print(f"Dispensing {dispense.volume} to {resource}.")
 
-  async def move_resource(self, move: Move, **backend_kwargs):
-    print(f"Moving {move}.")
+  async def pick_up_resource(self, pickup: ResourcePickup):
+    print(f"Picking up resource: {pickup}")
+
+  async def move_picked_up_resource(self, move: ResourceMove):
+    print(f"Moving picked up resource: {move}")
+
+  async def drop_resource(self, drop: ResourceDrop):
+    print(f"Dropping resource: {drop}")

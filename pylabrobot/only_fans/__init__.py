@@ -1,3 +1,3 @@
-from .fan import Fan
 from .backend import FanBackend
-from .hamilton_hepa_fan import HamiltonHepaFan
+from .fan import Fan
+from .hamilton_hepa_fan_backend import HamiltonHepaFanBackend

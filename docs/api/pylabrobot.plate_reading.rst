@@ -22,5 +22,5 @@ Backends
   :recursive:
 
     chatterbox.PlateReaderChatterboxBackend
-    clario_star.CLARIOStar
+    clario_star_backend.CLARIOStarBackend
     biotek_backend.Cytation5Backend

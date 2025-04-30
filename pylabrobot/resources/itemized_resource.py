@@ -1,18 +1,18 @@
-from abc import ABCMeta
 import sys
+from abc import ABCMeta
+from string import ascii_uppercase as LETTERS
 from typing import (
   Dict,
-  Union,
-  Tuple,
-  TypeVar,
+  Generator,
   Generic,
   List,
   Optional,
-  Generator,
   Sequence,
+  Tuple,
+  TypeVar,
+  Union,
   cast,
 )
-from string import ascii_uppercase as LETTERS
 
 import pylabrobot.utils
 
@@ -156,9 +156,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       start, stop = identifier.start, identifier.stop
       if isinstance(identifier.start, str):
         start = self._ordering.index(identifier.start)
+      elif identifier.start is None:
+        start = 0
       if isinstance(identifier.stop, str):
         stop = self._ordering.index(identifier.stop)
-      identifier = list(range(start, stop))
+      elif identifier.stop is None:
+        stop = self.num_items
+      identifier = list(range(start, stop, identifier.step or 1))
       return self.get_items(identifier)
 
     if isinstance(identifier, (list, tuple)):
@@ -434,6 +438,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         return i
     return None
 
+  def get_child_identifier(self, item: T) -> str:
+    """Get the identifier of the item."""
+    index = self.index_of_item(item)
+    if index is None:
+      raise ValueError(f"Item {item} not found in resource.")
+    return self._ordering[index]
+
   def get_all_items(self) -> List[T]:
     """Get all items in the resource. Items are in a 1D list, starting from the top left and going
     down, then right."""
@@ -474,3 +485,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   @property
   def items(self) -> List[str]:
     raise NotImplementedError("Deprecated.")
+
+  def column(self, column: int) -> List[T]:
+    """Get all items in the given column."""
+    return self[column * self.num_items_y : (column + 1) * self.num_items_y]
+
+  def row(self, row: int) -> List[T]:
+    """Get all items in the given row."""
+    return self[row :: self.num_items_y]

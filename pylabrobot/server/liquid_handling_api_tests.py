@@ -1,8 +1,8 @@
 import logging
-from pathlib import Path
 import time
-from typing import cast
 import unittest
+from pathlib import Path
+from typing import cast
 
 from pylabrobot import Config
 from pylabrobot.liquid_handling import LiquidHandler
@@ -10,12 +10,12 @@ from pylabrobot.liquid_handling.backends import (
   SerializingSavingBackend,
 )
 from pylabrobot.resources import (
+  HTF,
+  PLT_CAR_L5AC_A00,
+  TIP_CAR_480_A00,
+  Cor_96_wellplate_360ul_Fb,
   Plate,
   TipRack,
-  HTF,
-  Cor_96_wellplate_360ul_Fb,
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
   no_tip_tracking,
 )
 from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck

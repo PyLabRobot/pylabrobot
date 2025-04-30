@@ -71,7 +71,7 @@ class PetriDishHolder(Resource):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
+    location: Optional[Coordinate],
     reassign: bool = True,
   ):
     """Can only assign a single PetriDish"""

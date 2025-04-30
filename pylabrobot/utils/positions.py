@@ -1,5 +1,5 @@
-from string import ascii_uppercase as LETTERS
 import typing
+from string import ascii_uppercase as LETTERS
 
 
 def string_to_position(

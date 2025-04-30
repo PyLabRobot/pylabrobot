@@ -1,60 +1,59 @@
-"""Tests for LiquidHandler"""
-
 import itertools
-import pytest
 import tempfile
-from typing import Any, Dict, List, Optional, Union, cast
 import unittest
 import unittest.mock
+from typing import Any, Dict, List, Optional, Union, cast
 
+import pytest
+
+from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
+from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
 from pylabrobot.resources import (
+  PLT_CAR_L5AC_A00,
+  TIP_CAR_480_A00,
+  Container,
+  Coordinate,
+  Cor_96_wellplate_360ul_Fb,
+  Deck,
+  Lid,
+  Liquid,
+  Plate,
+  ResourceNotFoundError,
+  ResourceStack,
+  TipRack,
   no_tip_tracking,
   set_tip_tracking,
-  Liquid,
 )
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.errors import (
+  CrossContaminationError,
   HasTipError,
   NoTipError,
-  CrossContaminationError,
 )
+from pylabrobot.resources.hamilton import HTF, STF, STARLetDeck
+from pylabrobot.resources.opentrons.reservoirs import agilent_1_reservoir_290ml
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
-  set_volume_tracking,
   set_cross_contamination_tracking,
+  set_volume_tracking,
 )
 from pylabrobot.resources.well import Well
-from pylabrobot.resources.utils import create_ordered_items_2d
 
 from . import backends
 from .liquid_handler import LiquidHandler, OperationCallback
-from pylabrobot.resources import (
-  Container,
-  Coordinate,
-  Deck,
-  Lid,
-  Plate,
-  ResourceStack,
-  TipRack,
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
-  Cor_96_wellplate_360ul_Fb,
-  ResourceNotFoundError,
-)
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF, HTF
 from .standard import (
-  GripDirection,
-  Pickup,
   Drop,
   DropTipRack,
-  Aspiration,
-  Dispense,
-  AspirationPlate,
-  DispensePlate,
+  GripDirection,
+  MultiHeadAspirationPlate,
+  MultiHeadDispensePlate,
+  Pickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 
 
@@ -63,8 +62,8 @@ def _make_asp(
   vol: float,
   tip: Any,
   offset: Coordinate = Coordinate.zero(),
-) -> Aspiration:
-  return Aspiration(
+) -> SingleChannelAspiration:
+  return SingleChannelAspiration(
     resource=r,
     volume=vol,
     tip=tip,
@@ -81,8 +80,8 @@ def _make_disp(
   vol: float,
   tip: Any,
   offset: Coordinate = Coordinate.zero(),
-) -> Dispense:
-  return Dispense(
+) -> SingleChannelDispense:
+  return SingleChannelDispense(
     resource=r,
     volume=vol,
     tip=tip,
@@ -337,13 +336,14 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
     test_cases = itertools.product(sites, rotations, grip_directions)
 
-    for site, rotation, (get_direction, put_direction) in test_cases:
+    for site, rotation, (pickup_direction, drop_direction) in test_cases:
       with self.subTest(
         stack_type=site.__class__.__name__,
         rotation=rotation,
-        get_direction=get_direction,
-        put_direction=put_direction,
+        pickup_direction=pickup_direction,
+        drop_direction=drop_direction,
       ):
+        print()
         self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
 
         plate = Plate(
@@ -371,17 +371,18 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         await self.lh.move_plate(
           plate,
           site,
-          get_direction=get_direction,
-          put_direction=put_direction,
+          pickup_direction=pickup_direction,
+          drop_direction=drop_direction,
         )
         new_center = plate.get_absolute_location(x="c", y="c", z="c")
+        assert plate.rotation.z == (rotation + 180) % 360
 
         self.assertEqual(
           new_center,
           original_center,
           f"Center mismatch for {site.__class__.__name__}, rotation {rotation}, "
-          f"get_direction {get_direction}, "
-          f"put_direction {put_direction}",
+          f"pickup_direction {pickup_direction}, "
+          f"drop_direction {drop_direction}",
         )
         plate.unassign()
         self.deck.unassign_child_resource(site)
@@ -404,11 +405,11 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       nesting_z_height=4,
     )
     self.deck.assign_child_resource(plate, location=Coordinate(100, 100, 0))
-    for rot, (get_direction, put_direction) in test_cases:
+    for rot, (pickup_direction, drop_direction) in test_cases:
       with self.subTest(
         rotation=rot,
-        get_direction=get_direction,
-        put_direction=put_direction,
+        pickup_direction=pickup_direction,
+        drop_direction=drop_direction,
       ):
         plate.rotate(z=rot)
         plate.assign_child_resource(lid)
@@ -416,15 +417,15 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         await self.lh.move_lid(
           lid,
           plate,
-          get_direction=get_direction,
-          put_direction=put_direction,
+          pickup_direction=pickup_direction,
+          drop_direction=drop_direction,
         )
         new_center = lid.get_absolute_location(x="c", y="c", z="c")
         self.assertEqual(
           new_center,
           original_center,
-          f"Center mismatch for rotation {rot}, get_direction {get_direction}, "
-          f"put_direction {put_direction}",
+          f"Center mismatch for rotation {rot}, pickup_direction {pickup_direction}, "
+          f"drop_direction {drop_direction}",
         )
         lid.unassign()
         # reset rotations
@@ -783,7 +784,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "command": "aspirate96",
         "args": (),
         "kwargs": {
-          "aspiration": AspirationPlate(
+          "aspiration": MultiHeadAspirationPlate(
             wells=self.plate.get_all_items(),
             volume=10.0,
             tips=ts,
@@ -802,7 +803,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "command": "dispense96",
         "args": (),
         "kwargs": {
-          "dispense": DispensePlate(
+          "dispense": MultiHeadDispensePlate(
             wells=self.plate.get_all_items(),
             volume=10.0,
             tips=ts,
@@ -868,8 +869,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4])
     await self.lh.discard_tips()
     trash = self.deck.get_trash_area()
-    offsets = list(reversed(trash.centers(yn=4)))
-    offsets = [o - trash.center() for o in offsets]  # offset is wrt trash center
+    offsets = get_tight_single_resource_liquid_op_offsets(trash, num_channels=4)
 
     self.assertEqual(
       self.get_first_command("drop_tips"),
@@ -1011,6 +1011,11 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     set_volume_tracking(enabled=False)
 
+  async def test_aspirate_single_reservoir(self):
+    reagent_reservoir = agilent_1_reservoir_290ml(name="reservoir")
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate96(reagent_reservoir.get_item("A1"), volume=100)
+
 
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
@@ -1053,6 +1058,23 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
       await self.lh.aspirate([self.plate.get_item("A1")], vols=[10])
       await self.lh.dispense([self.plate.get_item("A2")], vols=[10])
+
+  async def test_dispense_fails(self):
+    well = self.plate.get_item("A1")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+
+    async def error_func(*args, **kwargs):
+      raise ChannelizedError(errors={0: Exception("This is an error")})
+
+    self.backend.dispense = error_func  # type: ignore
+    well.tracker.set_liquids([(None, 200)])
+
+    await self.lh.aspirate([well], vols=[200])
+    assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
+    with self.assertRaises(ChannelizedError):
+      await self.lh.dispense([well], vols=[60])
+    # test volume doens't change on failed dispense
+    assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
 
 
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):

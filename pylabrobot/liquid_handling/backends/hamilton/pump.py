@@ -1,5 +1,5 @@
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import STAR
 from pylabrobot.resources import Coordinate, Resource
-from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
 
 
 class Pump(Resource):

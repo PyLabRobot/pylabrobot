@@ -1,7 +1,8 @@
 import unittest
 
-from .container import Container
 from pylabrobot.serializer import serialize
+
+from .container import Container
 
 
 class TestContainer(unittest.TestCase):

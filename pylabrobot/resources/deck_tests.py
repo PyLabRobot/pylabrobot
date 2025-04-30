@@ -1,23 +1,23 @@
-import tempfile
 import os
+import tempfile
 import unittest
 
 from pylabrobot.resources import (
-  ResourceHolder,
   Coordinate,
   Deck,
   Plate,
   PlateCarrier,
   PlateHolder,
   Resource,
+  ResourceHolder,
+  ResourceNotFoundError,
   TipCarrier,
   TipRack,
   TipSpot,
   Well,
-  ResourceNotFoundError,
+  create_homogeneous_resources,
   create_ordered_items_2d,
   standard_volume_tip_with_filter,
-  create_homogeneous_resources,
 )
 
 
@@ -65,6 +65,7 @@ class DeckTests(unittest.TestCase):
         locations=[Coordinate(10, 20, 30)],
         resource_size_x=10,
         resource_size_y=10,
+        name_prefix="tc",
       ),
     )
 
@@ -97,6 +98,7 @@ class DeckTests(unittest.TestCase):
         locations=[Coordinate(10, 20, 30)],
         resource_size_x=10,
         resource_size_y=10,
+        name_prefix="pc",
         pedestal_size_z=0,
       ),
     )

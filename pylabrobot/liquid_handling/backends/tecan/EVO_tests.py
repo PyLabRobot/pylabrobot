@@ -2,27 +2,28 @@ import unittest
 import unittest.mock
 from unittest.mock import call
 
-from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends.tecan.EVO import (
-  EVO,
+from pylabrobot.liquid_handling.backends.tecan.EVO_backend import (
+  EVOBackend,
   LiHa,
   RoMa,
 )
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  Aspiration,
-  Dispense,
-  Move,
   GripDirection,
+  Pickup,
+  ResourceDrop,
+  ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import (
   Coordinate,
-  EVO150Deck,
   DeepWell_96_Well,
   DiTi_100ul_Te_MO,
   DiTi_SBS_3_Pos_MCA96,
+  EVO150Deck,
   MP_3Pos_PCR,
 )
+from pylabrobot.resources.rotation import Rotation
 
 
 class EVOTests(unittest.IsolatedAsyncioTestCase):
@@ -32,7 +33,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     super().setUp()
 
     # mock the EVO
-    self.evo = EVO(diti_count=8)
+    self.evo = EVOBackend(diti_count=8)
     self.evo.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
 
     async def send_command(module, command, params=None):
@@ -47,7 +48,6 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo.send_command.side_effect = send_command  # type: ignore[method-assign]
 
     self.deck = EVO150Deck()
-    self.lh = LiquidHandler(backend=self.evo, deck=self.deck)
 
     # setup
     self.evo.setup = unittest.mock.AsyncMock()  # type: ignore[method-assign]
@@ -57,8 +57,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo._z_range = 2000
     self.evo._roma_connected = True
     self.evo._liha_connected = True
-    self.evo.liha = LiHa(self.evo, EVO.LIHA)
-    self.evo.roma = RoMa(self.evo, EVO.ROMA)
+    self.evo.liha = LiHa(self.evo, EVOBackend.LIHA)
+    self.evo.roma = RoMa(self.evo, EVOBackend.ROMA)
 
     # deck setup
     self.tr_carrier = DiTi_SBS_3_Pos_MCA96(name="tip_rack_carrier")
@@ -134,7 +134,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
   #   self.evo.send_command.assert_has_calls([])
 
   async def test_aspirate(self):
-    op = Aspiration(
+    op = SingleChannelAspiration(
       resource=self.plate.get_item("A1"),
       offset=Coordinate.zero(),
       tip=self.tr.get_tip("A1"),
@@ -275,7 +275,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_dispense(self):
-    op = Dispense(
+    op = SingleChannelDispense(
       resource=self.plate.get_item("A1"),
       offset=Coordinate.zero(),
       tip=self.tr.get_tip("A1"),
@@ -330,16 +330,26 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_move_resource(self):
-    op = Move(
+    pickup = ResourcePickup(
+      resource=self.plate,
+      offset=Coordinate.zero(),
+      pickup_distance_from_top=13.2,
+      direction=GripDirection.FRONT,
+    )
+    drop = ResourceDrop(
       resource=self.plate,
       destination=self.plate_carrier[0].get_absolute_location(),
-      resource_offset=Coordinate.zero(),
-      destination_offset=Coordinate.zero(),
+      destination_absolute_rotation=Rotation(0, 0, 0),
+      offset=Coordinate.zero(),
       pickup_distance_from_top=13.2,
-      get_direction=GripDirection.FRONT,
-      put_direction=GripDirection.FRONT,
+      pickup_direction=GripDirection.FRONT,
+      drop_direction=GripDirection.FRONT,
+      rotation=0,
     )
-    await self.evo.move_resource(op)
+
+    await self.evo.pick_up_resource(pickup)
+    await self.evo.drop_resource(drop)
+
     self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
       [
         call(module="C1", command="RPZ", params=[5]),
@@ -377,6 +387,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
         call(module="C1", command="SFR", params=[2000, 600]),
         call(module="C1", command="SGG", params=[100, 75, None]),
         call(module="C1", command="AGR", params=[754]),
+        call(module="C1", command="RPZ", params=[5]),
         call(module="C1", command="STW", params=[1, 0, 0, 0, 135, 0]),
         call(module="C1", command="STW", params=[2, 0, 0, 0, 53, 0]),
         call(module="C1", command="STW", params=[3, 0, 0, 0, 55, 0]),

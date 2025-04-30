@@ -3,8 +3,9 @@ from typing import List, Optional
 
 from pylabrobot.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
-from pylabrobot.resources.well import CrossSectionType, Well
 from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.well import CrossSectionType, Well
+
 from .tilter_backend import TilterBackend
 
 
@@ -19,7 +20,7 @@ class Tilter(ResourceHolder, Machine):
     size_z: float,
     backend: TilterBackend,
     hinge_coordinate: Coordinate,
-    child_resource_location: Coordinate,
+    child_location: Coordinate,
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
@@ -31,12 +32,12 @@ class Tilter(ResourceHolder, Machine):
       size_z=size_z,
       category=category,
       model=model,
+      child_location=child_location,
     )
     Machine.__init__(self, backend=backend)
     self.backend: TilterBackend = backend  # fix type
     self._absolute_angle: float = 0
     self._hinge_coordinate = hinge_coordinate
-    self.child_resource_location = child_resource_location
 
   @property
   def absolute_angle(self) -> float:
