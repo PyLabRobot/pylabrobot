@@ -1,5 +1,7 @@
+import abc
+import warnings
 from enum import Enum
-from typing import Literal, Optional
+from typing import Dict, Literal, Optional
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.usb import USB
@@ -10,65 +12,83 @@ class PlateLockPosition(Enum):
   UNLOCKED = 0
 
 
-class HamiltonHeaterShakerBackend(HeaterShakerBackend):
-  """
-  Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box
-  """
+class HamiltonHeaterShakerInterface(abc.ABC):
+  """Either a control box or a STAR: the api is the same"""
 
+  @abc.abstractmethod
+  async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
+    pass
+
+
+class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
   def __init__(
     self,
-    shaker_index: int,
     id_vendor: int = 0x8AF,
     id_product: int = 0x8002,
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
-  ) -> None:
-    """
-    Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
-    separate 'shaker index'
-    """
-    assert shaker_index >= 0, "Shaker index must be non-negative"
-    self.shaker_index = shaker_index
-    self.command_id = 0
-
-    super().__init__()
+  ):
     self.io = USB(
       id_vendor=id_vendor,
       id_product=id_product,
       device_address=device_address,
       serial_number=serial_number,
     )
+    self._id = 0
+
+  def _generate_id(self) -> int:
+    """continuously generate unique ids 0 <= x < 10000."""
+    self._id += 1
+    return self._id % 10000
 
   async def setup(self):
     """
     If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
     await self.io.setup()
-    await self._initialize_lock()
 
   async def stop(self):
     await self.io.stop()
 
+  async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
+    args = "".join([f"{key}{value}" for key, value in kwargs.items()])
+    id_ = str(self._generate_id()).zfill(4)
+    await self.io.write(f"T{index}{command}id{id_}{args}".encode())
+    return (await self.io.read()).decode("utf-8")
+
+
+class HamiltonHeaterShakerBackend(HeaterShakerBackend):
+  """Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box"""
+
+  def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
+    """
+    Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
+    unique 'shaker index'
+    """
+    assert index >= 0, "Shaker index must be non-negative"
+    self.index = index
+
+    super().__init__()
+    self.intf = interface
+
+  async def setup(self):
+    """
+    If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
+    """
+    await self._initialize_lock()
+
+  async def stop(self):
+    pass
+
   def serialize(self) -> dict:
-    usb_serialized = self.io.serialize()
-    for key in ["packet_read_timeout", "read_timeout", "write_timeout"]:
-      del usb_serialized[key]
+    warnings.warn("The interface is not serialized.")
+
     heater_shaker_serialized = HeaterShakerBackend.serialize(self)
     return {
-      **usb_serialized,
       **heater_shaker_serialized,
-      "shaker_index": self.shaker_index,
+      "index": self.index,
+      "interface": None,  # TODO: implement serialization
     }
-
-  async def _send_command(self, command: str, **kwargs):
-    assert len(command) == 2, "Command must be 2 characters long"
-    args = "".join([f"{key}{value}" for key, value in kwargs.items()])
-    await self.io.write(
-      f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}".encode()
-    )
-
-    self.command_id = (self.command_id + 1) % 10_000
-    return self.io.read()
 
   async def shake(
     self,
@@ -96,11 +116,11 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     await self._wait_for_stop()
 
   async def get_is_shaking(self) -> bool:
-    response = (await self._send_command("RD")).decode("ascii")
+    response = await self.intf.send_hhs_command(index=self.index, command="RD")
     return response.endswith("1")  # type: ignore[no-any-return] # what
 
   async def _move_plate_lock(self, position: PlateLockPosition):
-    return await self._send_command("LP", lp=position.value)
+    return await self.intf.send_hhs_command(index=self.index, command="LP", lp=position.value)
 
   async def lock_plate(self):
     await self._move_plate_lock(PlateLockPosition.LOCKED)
@@ -110,34 +130,48 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
 
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
-    result = await self._send_command("LI")
-    return result
+    return await self.intf.send_hhs_command(index=self.index, command="LI")
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """Firmware command for starting shaking."""
     speed_str = str(speed).zfill(4)
     acceleration_str = str(acceleration).zfill(5)
-    return await self._send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
+    return await self.intf.send_hhs_command(
+      index=self.index, command="SB", st=direction, sv=speed_str, sr=acceleration_str
+    )
 
   async def _stop_shaking(self):
     """Firmware command for stopping shaking."""
-    return await self._send_command("SC")
+    return await self.intf.send_hhs_command(index=self.index, command="SC")
 
   async def _wait_for_stop(self):
     """Firmware command for waiting for shaking to stop."""
-    return await self._send_command("SW")
+    return await self.intf.send_hhs_command(index=self.index, command="SW")
 
   async def set_temperature(self, temperature: float):
     """set temperature in Celsius"""
+    assert 0 < temperature <= 105
     temp_str = f"{round(10*temperature):04d}"
-    return await self._send_command("TA", ta=temp_str)
+    return await self.intf.send_hhs_command(index=self.index, command="TA", ta=temp_str)
+
+  async def _get_current_temperature(self) -> Dict[str, float]:
+    """get temperature in Celsius"""
+    response = await self.intf.send_hhs_command(index=self.index, command="RT")
+    response = response.split("rt")[1]
+    middle_temp = float(str(response).split(" ")[0].strip("+")) / 10
+    edge_temp = float(str(response).split(" ")[1].strip("+")) / 10
+    return {"middle": middle_temp, "edge": edge_temp}
 
   async def get_current_temperature(self) -> float:
     """get temperature in Celsius"""
-    response = (await self._send_command("RT")).decode("ascii")
-    temp = str(response).split(" ")[1].strip("+")
-    return float(temp) / 10
+    response = await self._get_current_temperature()
+    return response["middle"]
+
+  async def get_edge_temperature(self) -> float:
+    """get temperature in Celsius"""
+    response = await self._get_current_temperature()
+    return response["edge"]
 
   async def deactivate(self):
     """turn off heating"""
-    return await self._send_command("TO")
+    return await self.intf.send_hhs_command(index=self.index, command="TO")

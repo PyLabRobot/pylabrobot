@@ -14,7 +14,7 @@ This includes machines for temperature and motion control (as neither machines p
 
    arms/_arm
    centrifuge/_centrifuge
-   heating-shaking
+   heating_shaking/heating_shaking
    fans/fans
    temperature
    tilting
