@@ -39,11 +39,11 @@ Read a plate:
 BMG ClarioSTAR
 --------------
 
-The BMG CLARIOStar plate reader is controlled by the :class:`~pylabrobot.plate_reading.clario_star.CLARIOStar` class.
+The BMG CLARIOStar plate reader is controlled by the :class:`~pylabrobot.plate_reading.clario_star_backend.CLARIOStarBackend` class.
 
 .. code-block:: python
 
-   from pylabrobot.plate_reading.clario_star import CLARIOStar
-   c = CLARIOStar()
+   from pylabrobot.plate_reading.clario_star import CLARIOStarBackend
+   c = CLARIOStarBackend()
 
 

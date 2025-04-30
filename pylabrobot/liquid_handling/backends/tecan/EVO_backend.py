@@ -150,11 +150,11 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     cmd = self._assemble_command(module, command, [] if params is None else params)
 
-    self.io.write(cmd.encode(), timeout=write_timeout)
+    await self.io.write(cmd.encode(), timeout=write_timeout)
     if not wait:
       return None
 
-    resp = self.io.read(timeout=read_timeout)
+    resp = await self.io.read(timeout=read_timeout)
     return self.parse_response(resp)
 
   async def setup(self):
@@ -165,7 +165,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.io.stop()
 
 
-class EVO(TecanLiquidHandler):
+class EVOBackend(TecanLiquidHandler):
   """
   Interface for the Tecan Freedom EVO series
   """
@@ -256,16 +256,16 @@ class EVO(TecanLiquidHandler):
 
     await super().setup()
 
-    self._liha_connected = await self.setup_arm(EVO.LIHA)
-    self._roma_connected = await self.setup_arm(EVO.ROMA)
+    self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
+    self._roma_connected = await self.setup_arm(EVOBackend.ROMA)
 
     if self.roma_connected:  # position_initialization_x in reverse order from setup_arm
-      self.roma = RoMa(self, EVO.ROMA)
+      self.roma = RoMa(self, EVOBackend.ROMA)
       await self.roma.position_initialization_x()
       # move to home position (TBD) after initialization
       await self._park_roma()
     if self.liha_connected:
-      self.liha = LiHa(self, EVO.LIHA)
+      self.liha = LiHa(self, EVOBackend.LIHA)
       await self.liha.position_initialization_x()
 
     self._num_channels = await self.liha.report_number_tips()
@@ -828,7 +828,7 @@ class EVOArm:
 
   _pos_cache: Dict[str, int] = {}
 
-  def __init__(self, backend: EVO, module: str):
+  def __init__(self, backend: EVOBackend, module: str):
     self.backend = backend
     self.module = module
 
@@ -1293,3 +1293,14 @@ class RoMa(EVOArm):
     """
 
     await self.backend.send_command(module=self.module, command="STW", params=[wc, x, y, z, r, g])
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class EVO(EVOBackend):
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`EVO` is deprecated. Please use `EVOBackend` instead.",
+    )

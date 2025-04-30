@@ -48,13 +48,13 @@ class HID(IOBase):
     logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="close", data=""))
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     assert self.device is not None, "forgot to call setup?"
     self.device.write(data)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
     capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.decode()))
 
-  def read(self, size: int, timeout: int) -> bytes:
+  async def read(self, size: int, timeout: int) -> bytes:
     assert self.device is not None, "forgot to call setup?"
     r = self.device.read(size, timeout=timeout)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
@@ -98,7 +98,7 @@ class HIDValidator(HID):
     ):
       raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     next_command = HIDCommand(**self.cr.next_command())
     if (
       not next_command.module == "hid"
@@ -110,7 +110,7 @@ class HIDValidator(HID):
       align_sequences(expected=next_command.data, actual=data.decode())
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  def read(self, size: int, timeout: int) -> bytes:
+  async def read(self, size: int, timeout: int) -> bytes:
     next_command = HIDCommand(**self.cr.next_command())
     if (
       not next_command.module == "hid"

@@ -13,7 +13,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.hamilton import VantageDeck
 
-from .vantage import (
+from .vantage_backend import (
   Vantage,
   VantageFirmwareError,
   parse_vantage_fw_string,

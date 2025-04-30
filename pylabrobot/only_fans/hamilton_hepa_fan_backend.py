@@ -5,7 +5,7 @@ from pylabrobot.io.ftdi import FTDI
 from .backend import FanBackend
 
 
-class HamiltonHepaFan(FanBackend):
+class HamiltonHepaFanBackend(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""
 
   def __init__(self, vid=0x0856, pid=0xAC11, serial_number=None, device_id=None):
@@ -146,7 +146,18 @@ class HamiltonHepaFan(FanBackend):
   async def stop(self):
     await self.io.stop()
 
-  async def send(self, command):
-    self.io.write(command)
+  async def send(self, command: bytes):
+    await self.io.write(command)
     await asyncio.sleep(0.1)
-    self.io.read(64)
+    await self.io.read(64)
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class HamiltonHepaFan:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`HamiltonHepaFan` is deprecated. Please use `HamiltonHepaFanBackend` instead."
+    )

@@ -142,7 +142,7 @@ class MettlerToledoError(Exception):
 MettlerToledoResponse = List[str]
 
 
-class MettlerToledoWXS205SDU(ScaleBackend):
+class MettlerToledoWXS205SDUBackend(ScaleBackend):
   """Backend for the Mettler Toledo WXS205SDU scale.
 
   This scale is used by Hamilton in the liquid verification kit (LVK).
@@ -180,12 +180,12 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       timeout: The timeout in seconds.
     """
 
-    self.io.write(command.encode() + b"\r\n")
+    await self.io.write(command.encode() + b"\r\n")
 
     raw_response = b""
     timeout_time = time.time() + timeout
     while True:
-      raw_response = self.io.readline()
+      raw_response = await self.io.readline()
       await asyncio.sleep(0.001)
       if time.time() > timeout_time:
         raise TimeoutError("Timeout while waiting for response from scale.")
@@ -435,3 +435,14 @@ class MettlerToledoWXS205SDU(ScaleBackend):
   async def set_weight_display(self) -> MettlerToledoResponse:
     """Return the display to the normal weight display."""
     return await self.send_command("DW")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class MettlerToledoWXS205SDU:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`MettlerToledoWXS205SDU` is deprecated. Please use `MettlerToledoWXS205SDUBackend` instead."
+    )

@@ -3,6 +3,7 @@ import enum
 import functools
 import logging
 import re
+import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -19,7 +20,7 @@ from typing import (
 )
 
 from pylabrobot import audio
-from pylabrobot.heating_shaking.hamilton import HamiltonHeaterShakerInterface
+from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
@@ -1121,7 +1122,7 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
     return 3 if blow_out else 2
 
 
-class STAR(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
+class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   """Interface for the Hamilton STAR."""
 
   def __init__(
@@ -7637,7 +7638,7 @@ class UnSafe:
   For example, actions that send the iSWAP outside of the Hamilton Deck
   """
 
-  def __init__(self, star: "STAR"):
+  def __init__(self, star: "STARBackend"):
     self.star = star
 
   async def put_in_hotel(
@@ -7797,3 +7798,18 @@ class UnSafe:
       Consider this method an easter egg. Not for serious use.
     """
     await self.star.send_command(module=STAR.channel_id(channel_idx), command="SI")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class STAR(STARBackend):
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`STAR` is deprecated and will be removed in a future release. "
+      "Please use `STARBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)
