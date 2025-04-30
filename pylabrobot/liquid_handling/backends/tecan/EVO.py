@@ -2,7 +2,6 @@
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
 
-import warnings
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -829,7 +828,7 @@ class EVOArm:
 
   _pos_cache: Dict[str, int] = {}
 
-  def __init__(self, backend: EVO, module: str):
+  def __init__(self, backend: EVOBackend, module: str):
     self.backend = backend
     self.module = module
 
