@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional
 
@@ -84,6 +86,8 @@ class USB(IOBase):
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
+    self._executor = ThreadPoolExecutor(max_workers=1)
+
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
 
@@ -102,7 +106,11 @@ class USB(IOBase):
       timeout = self.write_timeout
 
     # write command to endpoint
-    self.dev.write(self.write_endpoint, data, timeout=timeout)
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(
+      self._executor,
+      lambda: self.dev.write(self.write_endpoint, data, timeout=timeout),
+    )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
       USBCommand(device_id=self._unique_id, action="write", data=data.decode("unicode_escape"))
@@ -144,31 +152,35 @@ class USB(IOBase):
     if timeout is None:
       timeout = self.read_timeout
 
-    # Attempt to read packets until timeout, or when we identify the right id.
-    timeout_time = time.time() + timeout
+    def read_or_timeout():
+      # Attempt to read packets until timeout, or when we identify the right id.
+      timeout_time = time.time() + timeout
 
-    while time.time() < timeout_time:
-      # read response from endpoint, and keep reading until the packet is smaller than the max
-      # packet size: if the packet is that size, it means that there may be more data to read.
-      resp = bytearray()
-      last_packet: Optional[bytearray] = None
-      while True:  # read while we have data, and while the last packet is the max size.
-        last_packet = self._read_packet()
-        if last_packet is not None:
-          resp += last_packet
-        if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
-          break
+      while time.time() < timeout_time:
+        # read response from endpoint, and keep reading until the packet is smaller than the max
+        # packet size: if the packet is that size, it means that there may be more data to read.
+        resp = bytearray()
+        last_packet: Optional[bytearray] = None
+        while True:  # read while we have data, and while the last packet is the max size.
+          last_packet = self._read_packet()
+          if last_packet is not None:
+            resp += last_packet
+          if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
+            break
 
-      if len(resp) == 0:
-        continue
+        if len(resp) == 0:
+          continue
 
-      logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, resp)
-      capturer.record(
-        USBCommand(device_id=self._unique_id, action="read", data=resp.decode("unicode_escape"))
-      )
-      return resp
+        logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, resp)
+        capturer.record(
+          USBCommand(device_id=self._unique_id, action="read", data=resp.decode("unicode_escape"))
+        )
+        return resp
 
-    raise TimeoutError("Timeout while reading.")
+      raise TimeoutError("Timeout while reading.")
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(self._executor, read_or_timeout)
 
   def get_available_devices(self) -> List["usb.core.Device"]:
     """Get a list of available devices that match the specified vendor and product IDs, and serial
