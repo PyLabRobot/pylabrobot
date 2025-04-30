@@ -418,7 +418,7 @@ class Cytation5Backend(ImageReaderBackend):
     res = b""
     t0 = time.time()
     while x != char:
-      x = self.io.read(1)
+      x = await self.io.read(1)
       res += x
 
       if time.time() - t0 > timeout:
@@ -440,7 +440,7 @@ class Cytation5Backend(ImageReaderBackend):
   ) -> Optional[bytes]:
     await self._purge_buffers()
 
-    self.io.write(command.encode())
+    await self.io.write(command.encode())
     logger.debug("[cytation5] sent %s", command)
     response: Optional[bytes] = None
     if wait_for_response or parameter is not None:
@@ -449,7 +449,7 @@ class Cytation5Backend(ImageReaderBackend):
       )
 
     if parameter is not None:
-      self.io.write(parameter.encode())
+      await self.io.write(parameter.encode())
       logger.debug("[cytation5] sent %s", parameter)
       if wait_for_response:
         response = await self._read_until(b"\x03", timeout=timeout)

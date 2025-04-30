@@ -146,10 +146,10 @@ class HamiltonHepaFanBackend(FanBackend):
   async def stop(self):
     await self.io.stop()
 
-  async def send(self, command):
-    self.io.write(command)
+  async def send(self, command: bytes):
+    await self.io.write(command)
     await asyncio.sleep(0.1)
-    self.io.read(64)
+    await self.io.read(64)
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)

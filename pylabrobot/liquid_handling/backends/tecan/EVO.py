@@ -151,11 +151,11 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     cmd = self._assemble_command(module, command, [] if params is None else params)
 
-    self.io.write(cmd.encode(), timeout=write_timeout)
+    await self.io.write(cmd.encode(), timeout=write_timeout)
     if not wait:
       return None
 
-    resp = self.io.read(timeout=read_timeout)
+    resp = await self.io.read(timeout=read_timeout)
     return self.parse_response(resp)
 
   async def setup(self):

@@ -99,8 +99,8 @@ class CytomatBackend(IncubatorBackend):
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
       logging.debug(command_str.encode(self.serial_message_encoding))
-      self.io.write(command_str.encode(self.serial_message_encoding))
-      resp = self.io.read(128).decode(self.serial_message_encoding)
+      await self.io.write(command_str.encode(self.serial_message_encoding))
+      resp = (await self.io.read(128)).decode(self.serial_message_encoding)
       if len(resp) == 0:
         raise RuntimeError("Cytomat did not respond to command, is it turned on?")
       key, *values = resp.split()

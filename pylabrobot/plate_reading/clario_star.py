@@ -57,7 +57,7 @@ class CLARIOStarBackend(PlateReaderBackend):
     # we keep reading for at least one more cycle. We only check the timeout if the last read was
     # unsuccessful (i.e. keep reading if we are still getting data).
     while True:
-      last_read = self.io.read(25)  # 25 is max length observed in pcap
+      last_read = await self.io.read(25)  # 25 is max length observed in pcap
       if len(last_read) > 0:
         d += last_read
         end_byte_found = d[-1] == 0x0D
@@ -90,7 +90,7 @@ class CLARIOStarBackend(PlateReaderBackend):
 
     logger.debug("sending %s", cmd.hex())
 
-    w = self.io.write(cmd)
+    w = await self.io.write(cmd)
 
     logger.debug("wrote %s bytes", w)
 

@@ -54,8 +54,8 @@ class HamiltonTiltModuleBackend(TilterBackend):
     if parameter is None:
       parameter = ""
 
-    self.io.write(f"99{command}{parameter}\r\n".encode("utf-8"))
-    resp = self.io.read(128).decode("utf-8")
+    await self.io.write(f"99{command}{parameter}\r\n".encode("utf-8"))
+    resp = (await self.io.read(128)).decode("utf-8")
 
     # Check for error.
     error_matches = re.search("er[0-9]{2}", resp)
