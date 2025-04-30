@@ -2,7 +2,7 @@ import unittest
 import unittest.mock
 from unittest.mock import call
 
-from pylabrobot.liquid_handling.backends.tecan.EVO import (
+from pylabrobot.liquid_handling.backends.tecan.EVO_backend import (
   EVOBackend,
   LiHa,
   RoMa,

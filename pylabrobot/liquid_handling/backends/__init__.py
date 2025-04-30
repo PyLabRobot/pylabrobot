@@ -10,7 +10,7 @@ from .serializing_backend import (
   SerializingBackend,
   SerializingSavingBackend,
 )
-from .tecan.EVO import EVOBackend
+from .tecan.EVO_backend import EVOBackend
 
 # many rely on this
 from .websocket import WebSocketBackend
