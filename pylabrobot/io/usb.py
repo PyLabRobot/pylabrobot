@@ -87,7 +87,7 @@ class USB(IOBase):
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
 
-  def write(self, data: bytes, timeout: Optional[float] = None):
+  async def write(self, data: bytes, timeout: Optional[float] = None):
     """Write data to the device.
 
     Args:
@@ -131,7 +131,7 @@ class USB(IOBase):
       # No data available (yet), this will give a timeout error. Don't reraise.
       return None
 
-  def read(self, timeout: Optional[int] = None) -> bytes:
+  async def read(self, timeout: Optional[int] = None) -> bytes:
     """Read a response from the device.
 
     Args:
@@ -315,7 +315,7 @@ class USBValidator(USB):
   async def setup(self):
     pass
 
-  def write(self, data: bytes, timeout: Optional[float] = None):
+  async def write(self, data: bytes, timeout: Optional[float] = None):
     next_command = USBCommand(**self.cr.next_command())
     if not (
       next_command.module == "usb"
@@ -327,7 +327,7 @@ class USBValidator(USB):
       align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  def read(self, timeout: Optional[float] = None) -> bytes:
+  async def read(self, timeout: Optional[float] = None) -> bytes:
     next_command = USBCommand(**self.cr.next_command())
     if not (
       next_command.module == "usb"
