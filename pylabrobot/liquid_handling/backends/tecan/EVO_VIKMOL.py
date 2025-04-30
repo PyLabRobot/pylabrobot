@@ -1,7 +1,7 @@
 """
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
-import asyncio # VIKMOL ADDED
+import asyncio
 
 from abc import ABCMeta, abstractmethod
 from typing import (
@@ -50,7 +50,6 @@ from pylabrobot.resources import (
   TecanTip,
   TecanTipRack,
   Trash,
-  TipSpot, # VIKMOL ADDED
 )
 
 T = TypeVar("T")
@@ -164,11 +163,12 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     cmd = self._assemble_command(module, command, [] if params is None else params)
 
-    await self.io.write(cmd.encode(), timeout=write_timeout)
+    self.io.write(cmd.encode(), timeout=write_timeout)
     if not wait:
       return None
 
-    resp = await self.io.read(timeout=read_timeout)
+    resp = self.io.read(timeout=read_timeout)
+    print(f"Raw Response: {resp}")  # Debugging line VIKMOL
     return self.parse_response(resp)
 
   async def setup(self):
@@ -187,7 +187,7 @@ class EVO(TecanLiquidHandler):
   LIHA = "C5"
   ROMA = "C1"
   MCA = "W1" # also attempted W also attemed P3 # VIKMOL CHANGED FROM C3
-  PNP = "W2" # changed from W1 VIKMOL
+  #PNP = "W1"
 
   def __init__(
     self,
@@ -254,6 +254,7 @@ class EVO(TecanLiquidHandler):
   @property
   def mca_connected(self) -> bool:
     """Whether MCA arm is present on the robot."""
+    # VIKMOL MCA NOT WORKING
 
     if self._mca_connected is None:
       raise RuntimeError("mca_connected not set, forgot to call `setup`?")
@@ -338,7 +339,6 @@ class EVO(TecanLiquidHandler):
     await self.roma.action_move_vector_coordinate_position()
 
   async def _park_mca(self): # VIKMOL ADDED
-    # TODO CHANGE TO USE CORRECT FUNCTIONS
     """Moves the MCA arm to a safe park position to prevent collision."""
 
     # Ensure MCA is initialized before moving
@@ -358,6 +358,9 @@ class EVO(TecanLiquidHandler):
     await asyncio.sleep(0.5)
 
     print("MCA parked safely.")
+
+
+
   # ============== LiquidHandlerBackend methods ==============
 
   async def aspirate(
@@ -370,16 +373,7 @@ class EVO(TecanLiquidHandler):
       use_channels: The channels to use for the operations.
     """
 
-    # Get positions including offsets
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
-
-    # Apply offsets
-    for i, op in enumerate(ops): # VIKMOL ADDED
-        x_positions[i] += op.offset.x
-        y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
+    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
     tecan_liquid_classes = [
       get_liquid_class(
@@ -391,7 +385,6 @@ class EVO(TecanLiquidHandler):
       else None
       for op in ops
     ]
-
 
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
@@ -506,34 +499,34 @@ class EVO(TecanLiquidHandler):
       ops: The pickup operations to perform.
       use_channels: The channels to use for the pickup operations.
 
-    VIKMOL COMMENT COMMAND THAT WORKED: await lh.pick_up_tips(tip_spot, ops=pickup_op, offsets=[Coordinate(-15, -15, 0)])
+      VIKMOL COMMENT COMMAND THAT WORKED: await lh.pick_up_tips(tip_spot, ops=pickup_op, offsets=[Coordinate(-15, -15, 0)])
     """
+    # print(f"DiTi Count: {self.diti_count}") # VIKMOL DEBUG
+    # print(f"Number of Channels: {self.num_channels}")  # VIKMOL DEBUG
+    # print(f"Use Channels: {list(range(self.num_channels))}") # VIKMOL DEBUG
+    # self.diti_count = 8 # VIKMOL DEBUG
+    # print(f"DiTi Count: {self.diti_count}") # VIKMOL DEBUG
 
     assert (
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
 
     # Get positions including offsets
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels) # VIKMOL ADDED
 
     # Apply offsets
     for i, op in enumerate(ops): # VIKMOL ADDED
         x_positions[i] += op.offset.x
         y_positions[i] += op.offset.y
 
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
-    print('z_positions', z_positions)
-
+    # TODO add offset for z_positions
 
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     x, _ = self._first_valid(x_positions)
-    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS VIKMOL
-    # z, _ = self._first_valid(z_positions)  # GET VALID Z POSITION
+    y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    print('[self._z_range]', [self._z_range], 'self.num_channels', self.num_channels)
     await self.liha.position_absolute_all_axis(
       x, y - yi * ys, ys, [self._z_range] * self.num_channels
     )
@@ -550,11 +543,11 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_end_speed_plunger(sep)
     await self.liha.move_plunger_relative(ppr)
 
-
     # get tips
-    await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), z_positions['start'][0] - 227, 210)
+    await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), 768, 210)
+    # TODO: check z params
 
-  async def drop_tips(self, ops: List[Drop], use_channels: List[int]): #TODO ADD TRASH SO IT CAN DROP TO TRASH
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """Drops tips to waste.
 
     Args:
@@ -565,62 +558,22 @@ class EVO(TecanLiquidHandler):
     assert (
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
-    # assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
-    assert all(isinstance(op.resource, (Trash, TipSpot)) for op in ops), "Must drop in waste container or tip rack" # vikmol added
+    assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
 
-
-    # Get positions including offsets
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
-
-    # Apply offsets
-    for i, op in enumerate(ops): # VIKMOL ADDED
-        x_positions[i] += op.offset.x
-        y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     # move channels
-    ys =  int(ops[0].resource.get_absolute_size_y() * 10) # was 90
+    ys = 90
     x, _ = self._first_valid(x_positions)
-    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS VIKMOL
+    y, _ = self._first_valid(y_positions)
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
-      x, y - yi * ys, ys, [self._z_range] * self.num_channels # added VIKMOL
+      x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
     )
 
-    # TODO check channel positions match resource positions for z-axis
-    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels), discard_hight = 0)
-
-  async def return_tips(self, ops: List[Drop], use_channels: List[int]): # vikmol added
-      """Returns tips to their original tip rack positions.
-
-      Args:
-        ops: The return operations to perform.
-        use_channels: The channels to use for the return operations.
-      """
-
-      assert all(isinstance(op.resource, Resource) for op in ops), "Must return tips to a valid Resource"
-      x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
-
-      # move channels to return position
-      ys = 90 # proably wrong
-      x, _ = self._first_valid(x_positions)
-      y, _ = self._first_valid(y_positions)
-      assert x is not None and y is not None
-
-      await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-      await self.liha.position_absolute_all_axis(
-          x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
-      )
-
-      # place tips back in rack
-      await self.liha.place_tip_back(self._bin_use_channels(use_channels))
-
-
-
-
+    # discard tips
+    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels))
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError()
@@ -747,7 +700,6 @@ class EVO(TecanLiquidHandler):
       y_positions[channel] = int((346.5 - location.y) * 10)  # TODO: verify
 
       par = ops[i].resource.parent
-      print(f"Resource parent: {par}, Type: {type(par)}")  # Debug statement VIKMOL
       if not isinstance(par, (TecanPlate, TecanTipRack)):
         raise ValueError(f"Operation is not supported by resource {par}.")
       # TODO: calculate defaults when z-attribs are not specified
@@ -1029,11 +981,20 @@ class LiHa(EVOArm):
     Raises:
       TecanError: if moving to the target position causes a collision
     """
+    # Initialize if necessary
+    await self.backend.send_command(EVO.LIHA, command="PIA") # VIKMOL
+    await asyncio.sleep(0.5)  # Allow time for initialization # VIKMOL
 
     cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
+      cur_x = int(cur_x) # VIKMOL ADDED
+      x = int(x) # VIKMOL ADDED
+      pos = int(pos) # VIKMOL ADDED
+      print("cur_x LiHa()", cur_x, type(cur_x)) # VIKMOL DEBUG
+      print("x LiHa()", x, type(x)) # VIKMOL DEBUG
+      print("pos LiHa()", pos, type(pos)) # VIKMOL DEBUG
       if cur_x < x and cur_x < pos < x:  # moving right
         raise TecanError("Invalid command (collision)", self.module, 2)
       if cur_x > x and cur_x > pos > x:
@@ -1221,35 +1182,14 @@ class LiHa(EVOArm):
       params=[tips, z_start, z_search, 0],
     )
 
-  async def discard_disposable_tip_high(self, tips): # changed by VIKMOL
+  async def discard_disposable_tip(self, tips):
     """Drops tips
-    Discards at the Z-axes initialization hight
+
     Args:
       tips: binary coded tip select
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
-
-  async def discard_disposable_tip(self, tips, discard_hight):  #added by VIKMOL z_start
-    """Drops tips
-    Discards at a veriable Z-axes initialization hight
-    Args:
-      tips: binary coded tip select
-      discard_hight: binary. 0 above tip rack, 1 in tip rack
-    """
-
-    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
-
-  async def place_tip_back(self, tips, discard_hight): #added by VIKMOL z_start, z_search
-      """Places tips back into the original tip rack positions.
-
-      Args:
-        tips: Binary coded tip select
-        discard_hight: binary. 0 above tip rack, 1 in tip rack
-
-      """
-
-      await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
 
 ## VIKMOL ADDED MCA
 class Mca(EVOArm):
@@ -1625,6 +1565,12 @@ class RoMa(EVOArm):
 
     cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
     for module, pos in EVOArm._pos_cache.items():
+      cur_x = int(cur_x) # VIKMOL ADDED
+      x = int(x) # VIKMOL ADDED
+      pos = int(pos) # VIKMOL ADDED
+      print("cur_x RoMa()", cur_x, type(cur_x)) # VIKMOL DEBUG
+      print("x RoMa()", x, type(x)) # VIKMOL DEBUG
+      print("pos RoMa()", pos, type(pos)) # VIKMOL DEBUG
       if module == self.module:
         continue
       if cur_x < x and cur_x < pos < x:  # moving right

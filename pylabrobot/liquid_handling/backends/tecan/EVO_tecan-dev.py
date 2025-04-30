@@ -1,7 +1,6 @@
 """
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
-import asyncio # VIKMOL ADDED
 
 from abc import ABCMeta, abstractmethod
 from typing import (
@@ -50,7 +49,6 @@ from pylabrobot.resources import (
   TecanTip,
   TecanTipRack,
   Trash,
-  TipSpot, # VIKMOL ADDED
 )
 
 T = TypeVar("T")
@@ -117,19 +115,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     if ret != 0:
       raise error_code_to_exception(module, ret)
 
-    # below line changed to revie int and str. VIKMOL
-    data: List[Union[int, str]] = []
-    for x in s[3:-1].split(","):
-        if not x:  # Skip empty values
-            continue
-        if module in [EVO.ROMA, EVO.LIHA]:
-            # RoMa(C1) and LiHa(C5) should only have integer values
-            data.append(int(x))
-        elif module == EVO.MCA:
-            # MCA can return both integers and strings
-            data.append(int(x) if x.isdigit() else x)
-
-
+    data: List[int] = [int(x) for x in s[3:-1].split(",") if x]
     return {"module": module, "data": data}
 
   async def send_command(
@@ -164,11 +150,11 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     cmd = self._assemble_command(module, command, [] if params is None else params)
 
-    await self.io.write(cmd.encode(), timeout=write_timeout)
+    self.io.write(cmd.encode(), timeout=write_timeout)
     if not wait:
       return None
 
-    resp = await self.io.read(timeout=read_timeout)
+    resp = self.io.read(timeout=read_timeout)
     return self.parse_response(resp)
 
   async def setup(self):
@@ -186,15 +172,15 @@ class EVO(TecanLiquidHandler):
 
   LIHA = "C5"
   ROMA = "C1"
-  MCA = "W1" # also attempted W also attemed P3 # VIKMOL CHANGED FROM C3
-  PNP = "W2" # changed from W1 VIKMOL
+  MCA = "C3"
+  PNP = "W1"
 
   def __init__(
     self,
     diti_count: int = 0,
-    packet_read_timeout: int = 12, # VIKMOL CHANGED FROM 120 THIS CHANGE INCREASES INITIALIZATION SPEED
-    read_timeout: int = 60, # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
-    write_timeout: int = 60, # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
+    packet_read_timeout: int = 120,
+    read_timeout: int = 300,
+    write_timeout: int = 300,
   ):
     """Create a new EVO interface.
 
@@ -271,27 +257,16 @@ class EVO(TecanLiquidHandler):
     await super().setup()
 
     self._liha_connected = await self.setup_arm(EVO.LIHA)
-    self._mca_connected = await self.setup_arm(EVO.MCA)
     self._roma_connected = await self.setup_arm(EVO.ROMA)
 
     if self.roma_connected:  # position_initialization_x in reverse order from setup_arm
       self.roma = RoMa(self, EVO.ROMA)
       await self.roma.position_initialization_x()
-      print("RoMa connected!")
       # move to home position (TBD) after initialization
       await self._park_roma()
-    if self.mca_connected: # VIKMOL added mca initialization
-      self.mca = Mca(self, EVO.MCA)
-      # await self.mca.position_initialization_x() # function deos not work for mca. vikmol
-      print("MCA connected!") # VIKMOL DEBUG
-      await self._park_mca() # VIKMOL ADDED
-    else:
-      print("MCA not connected") # VIKMOL DEBUG
-
     if self.liha_connected:
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
-      print("LiHa connected!") # VIKMOL DEBUG
 
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
@@ -311,22 +286,13 @@ class EVO(TecanLiquidHandler):
 
   async def setup_arm(self, module):
     try:
-      # print(await self.send_command(module, command="RFV", params=[0])) # VIKMOL ADDED
-
-      if module == EVO.MCA:
-        print(await self.send_command(module, command="PIB"))  # Try Pre-Initialization first VIKMOL ADDED
-
       await self.send_command(module, command="PIA")
-
     except TecanError as e:
       if e.error_code == 5:
         return False
       raise e
 
-
-    if module != EVO.MCA: # vikmol added
-      await self.send_command(module, command="BMX", params=[2])
-
+    await self.send_command(module, command="BMX", params=[2])
     return True
 
   async def _park_liha(self):
@@ -337,27 +303,6 @@ class EVO(TecanLiquidHandler):
     await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
 
-  async def _park_mca(self): # VIKMOL ADDED
-    # TODO CHANGE TO USE CORRECT FUNCTIONS
-    """Moves the MCA arm to a safe park position to prevent collision."""
-
-    # Ensure MCA is initialized before moving
-    await self.send_command(EVO.MCA, command="PIA")
-    await asyncio.sleep(0.5)
-
-    # Raise MCA Z-axis first to avoid collision
-    await self.send_command(EVO.MCA, command="PAA", params=[None, None, 2000])  # Raise Z-axis
-    await asyncio.sleep(1)
-
-    # Move MCA to parking position (adjust X, Y as needed)
-    await self.send_command(EVO.MCA, command="PAA", params=[6000, 1000, None])
-    await asyncio.sleep(1)
-
-    # Stop movement to prevent drifting
-    await self.send_command(EVO.MCA, command="BMA", params=[0, 0, 0])
-    await asyncio.sleep(0.5)
-
-    print("MCA parked safely.")
   # ============== LiquidHandlerBackend methods ==============
 
   async def aspirate(
@@ -370,16 +315,7 @@ class EVO(TecanLiquidHandler):
       use_channels: The channels to use for the operations.
     """
 
-    # Get positions including offsets
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
-
-    # Apply offsets
-    for i, op in enumerate(ops): # VIKMOL ADDED
-        x_positions[i] += op.offset.x
-        y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
+    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
     tecan_liquid_classes = [
       get_liquid_class(
@@ -391,7 +327,6 @@ class EVO(TecanLiquidHandler):
       else None
       for op in ops
     ]
-
 
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
@@ -505,35 +440,20 @@ class EVO(TecanLiquidHandler):
     Args:
       ops: The pickup operations to perform.
       use_channels: The channels to use for the pickup operations.
-
-    VIKMOL COMMENT COMMAND THAT WORKED: await lh.pick_up_tips(tip_spot, ops=pickup_op, offsets=[Coordinate(-15, -15, 0)])
     """
 
     assert (
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
 
-    # Get positions including offsets
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
-
-    # Apply offsets
-    for i, op in enumerate(ops): # VIKMOL ADDED
-        x_positions[i] += op.offset.x
-        y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
-    print('z_positions', z_positions)
-
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     x, _ = self._first_valid(x_positions)
-    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS VIKMOL
-    # z, _ = self._first_valid(z_positions)  # GET VALID Z POSITION
+    y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    print('[self._z_range]', [self._z_range], 'self.num_channels', self.num_channels)
     await self.liha.position_absolute_all_axis(
       x, y - yi * ys, ys, [self._z_range] * self.num_channels
     )
@@ -550,11 +470,11 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_end_speed_plunger(sep)
     await self.liha.move_plunger_relative(ppr)
 
-
     # get tips
-    await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), z_positions['start'][0] - 227, 210)
+    await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), 768, 210)
+    # TODO: check z params
 
-  async def drop_tips(self, ops: List[Drop], use_channels: List[int]): #TODO ADD TRASH SO IT CAN DROP TO TRASH
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """Drops tips to waste.
 
     Args:
@@ -565,62 +485,22 @@ class EVO(TecanLiquidHandler):
     assert (
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
-    # assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
-    assert all(isinstance(op.resource, (Trash, TipSpot)) for op in ops), "Must drop in waste container or tip rack" # vikmol added
+    assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
 
-
-    # Get positions including offsets
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
-
-    # Apply offsets
-    for i, op in enumerate(ops): # VIKMOL ADDED
-        x_positions[i] += op.offset.x
-        y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     # move channels
-    ys =  int(ops[0].resource.get_absolute_size_y() * 10) # was 90
+    ys = 90
     x, _ = self._first_valid(x_positions)
-    y, yi = self._first_valid(y_positions) # what is ys, y and yi? OPS OPS VIKMOL
+    y, _ = self._first_valid(y_positions)
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
-      x, y - yi * ys, ys, [self._z_range] * self.num_channels # added VIKMOL
+      x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
     )
 
-    # TODO check channel positions match resource positions for z-axis
-    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels), discard_hight = 0)
-
-  async def return_tips(self, ops: List[Drop], use_channels: List[int]): # vikmol added
-      """Returns tips to their original tip rack positions.
-
-      Args:
-        ops: The return operations to perform.
-        use_channels: The channels to use for the return operations.
-      """
-
-      assert all(isinstance(op.resource, Resource) for op in ops), "Must return tips to a valid Resource"
-      x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
-
-      # move channels to return position
-      ys = 90 # proably wrong
-      x, _ = self._first_valid(x_positions)
-      y, _ = self._first_valid(y_positions)
-      assert x is not None and y is not None
-
-      await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-      await self.liha.position_absolute_all_axis(
-          x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
-      )
-
-      # place tips back in rack
-      await self.liha.place_tip_back(self._bin_use_channels(use_channels))
-
-
-
-
+    # discard tips
+    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels))
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError()
@@ -747,7 +627,6 @@ class EVO(TecanLiquidHandler):
       y_positions[channel] = int((346.5 - location.y) * 10)  # TODO: verify
 
       par = ops[i].resource.parent
-      print(f"Resource parent: {par}, Type: {type(par)}")  # Debug statement VIKMOL
       if not isinstance(par, (TecanPlate, TecanTipRack)):
         raise ValueError(f"Operation is not supported by resource {par}.")
       # TODO: calculate defaults when z-attribs are not specified
@@ -1221,289 +1100,14 @@ class LiHa(EVOArm):
       params=[tips, z_start, z_search, 0],
     )
 
-  async def discard_disposable_tip_high(self, tips): # changed by VIKMOL
+  async def discard_disposable_tip(self, tips):
     """Drops tips
-    Discards at the Z-axes initialization hight
+
     Args:
       tips: binary coded tip select
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
-
-  async def discard_disposable_tip(self, tips, discard_hight):  #added by VIKMOL z_start
-    """Drops tips
-    Discards at a veriable Z-axes initialization hight
-    Args:
-      tips: binary coded tip select
-      discard_hight: binary. 0 above tip rack, 1 in tip rack
-    """
-
-    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
-
-  async def place_tip_back(self, tips, discard_hight): #added by VIKMOL z_start, z_search
-      """Places tips back into the original tip rack positions.
-
-      Args:
-        tips: Binary coded tip select
-        discard_hight: binary. 0 above tip rack, 1 in tip rack
-
-      """
-
-      await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
-
-## VIKMOL ADDED MCA
-class Mca(EVOArm):
-  pass
-  # """
-  # Provides firmware commands for the MCA TEST
-  # """
-
-  # async def initialize_plunger(self, tips):
-  #   """Initializes plunger and valve drive
-
-  #   Args:
-  #     tips: binary coded tip select
-  #   """
-  #   await self.backend.send_command(module=self.module, command="PID", params=[tips])
-
-  # async def report_z_param(self, param: int) -> List[int]:
-  #   """Report current parameters for z-axis.
-
-  #   Args:
-  #     param: 0 - current position, 5 - actual machine range
-  #   """
-
-  #   resp: List[int] = (
-  #     await self.backend.send_command(module=self.module, command="RPZ", params=[param])
-  #   )["data"]
-  #   return resp
-
-  # async def report_number_tips(self) -> int:
-  #   """Report number of tips on arm."""
-
-  #   resp: List[int] = (
-  #     await self.backend.send_command(module=self.module, command="RNT", params=[1])
-  #   )["data"]
-  #   return resp[0]
-
-  # async def position_absolute_all_axis(self, x: int, y: int, ys: int, z: List[int]):
-  #   """Position absolute for all LiHa axes.
-
-  #   Args:
-  #     x: aboslute x position in 1/10 mm, must be in allowed machine range
-  #     y: absolute y position in 1/10 mm, must be in allowed machine range
-  #     ys: absolute y spacing in 1/10 mm, must be between 90 and 380
-  #     z: absolute z position in 1/10 mm for each channel, must be in
-  #        allowed machine range
-
-  #   Raises:
-  #     TecanError: if moving to the target position causes a collision
-  #   """
-  #   cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
-  #   for module, pos in EVOArm._pos_cache.items():
-  #     cur_x = int(cur_x) # VIKMOL ADDED
-  #     x = int(x) # VIKMOL ADDED
-  #     pos = int(pos) # VIKMOL ADDED
-  #     print("cur_x Mca()", cur_x, type(cur_x)) # VIKMOL DEBUG
-  #     print("x Mca()", x, type(x)) # VIKMOL DEBUG
-  #     print("pos Mca()", pos, type(pos)) # VIKMOL DEBUG
-  #     if module == self.module:
-  #       continue
-  #     if cur_x < x and cur_x < pos < x:  # moving right
-  #       raise TecanError("Invalid command (collision)", self.module, 2)
-  #     if cur_x > x and cur_x > pos > x:
-  #       raise TecanError("Invalid command (collision)", self.module, 2)
-  #     if abs(pos - x) < 1500:
-  #       raise TecanError("Invalid command (collision)", self.module, 2)
-
-  #   await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
-
-  #   EVOArm._pos_cache[self.module] = x
-
-  # # async def position_valve_logical(self, param: List[Optional[int]]):
-  # #   """Position valve logical for each channel.
-
-  # #   Args:
-  # #     param: 0 - outlet, 1 - inlet, 2 - bypass
-  # #   """
-
-  # #   await self.backend.send_command(module=self.module, command="PVL", params=param)
-
-  # async def set_end_speed_plunger(self, speed: List[Optional[int]]):
-  #   """Set end speed for plungers.
-
-  #   Args:
-  #     speed: speed for each plunger in half step per second, must be between
-  #            5 and 6000
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SEP", params=speed)
-
-  # async def move_plunger_relative(self, rel: List[Optional[int]]):
-  #   """Move plunger relative upwards (dispense) or downards (aspirate).
-
-  #   Args:
-  #     rel: relative position for each plunger in full steps, must be between
-  #          -3150 and 3150
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="PPR", params=rel)
-
-  # async def set_detection_mode(self, proc: int, sense: int):
-  #   """Set liquid detection mode.
-
-  #   Args:
-  #     proc: detection procedure (7 for double detection sequential with
-  #           retract and extra submerge)
-  #     sense: conductivity (1 for high)
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SDM", params=[proc, sense])
-
-  # async def set_search_speed(self, speed: List[Optional[int]]):
-  #   """Set search speed for liquid search commands.
-
-  #   Args:
-  #     speed: speed for each channel in 1/10 mm/s, must be between 1 and 1500
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SSL", params=speed)
-
-  # async def set_search_retract_distance(self, dist: List[Optional[int]]):
-  #   """Set z-axis retract distance for liquid search commands.
-
-  #   Args:
-  #     dist: retract distance for each channel in 1/10 mm, must be in allowed
-  #           machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SDL", params=dist)
-
-  # async def set_search_submerge(self, dist: List[Optional[int]]):
-  #   """Set submerge for liquid search commands.
-
-  #   Args:
-  #     dist: submerge distance for each channel in 1/10 mm, must be between
-  #           -1000 and max z range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SBL", params=dist)
-
-  # async def set_search_z_start(self, z: List[Optional[int]]):
-  #   """Set z-start for liquid search commands.
-
-  #   Args:
-  #     z: start height for each channel in 1/10 mm, must be in allowed machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="STL", params=z)
-
-  # async def set_search_z_max(self, z: List[Optional[int]]):
-  #   """Set z-max for liquid search commands.
-
-  #   Args:
-  #     z: max for each channel in 1/10 mm, must be in allowed machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SML", params=z)
-
-  # async def set_z_travel_height(self, z):
-  #   """Set z-travel height.
-
-  #   Args:
-  #     z: travel heights in absolute 1/10 mm for each channel, must be in allowed
-  #        machine range + 20
-  #   """
-  #   await self.backend.send_command(module=self.module, command="SHZ", params=z)
-
-  # async def move_detect_liquid(self, channels: int, zadd: List[Optional[int]]):
-  #   """Move tip, detect liquid, submerge.
-
-  #   Args:
-  #     channels: binary coded tip select
-  #     zadd: required distance to travel downwards in 1/10 mm for each channel,
-  #           must be between 0 and z-start - z-max
-  #   """
-
-  #   await self.backend.send_command(
-  #     module=self.module,
-  #     command="MDT",
-  #     params=[channels] + [None] * 3 + zadd,
-  #   )
-
-  # async def set_slow_speed_z(self, speed: List[Optional[int]]):
-  #   """Set slow speed for z.
-
-  #   Args:
-  #     speed: speed in 1/10 mm/s for each channel, must be between 1 and 4000
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SSZ", params=speed)
-
-  # async def set_tracking_distance_z(self, rel: List[Optional[int]]):
-  #   """Set z-axis relative tracking distance used by dispense and aspirate.
-
-  #   Args:
-  #     rel: relative value in 1/10 mm for each channel, must be between
-  #           -2100 and 2100
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="STZ", params=rel)
-
-  # async def move_tracking_relative(self, rel: List[Optional[int]]):
-  #   """Move tracking relative. Starts the z-drives and dilutors simultaneously
-  #       to achieve a synchronous tracking movement.
-
-  #   Args:
-  #     rel: relative position for each plunger in full steps, must be between
-  #          -3150 and 3150
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="MTR", params=rel)
-
-  # async def move_absolute_z(self, z: List[Optional[int]]):
-  #   """Position absolute with slow speed z-axis
-
-  #   Args:
-  #     z: absolute position in 1/10 mm for each channel, must be in
-  #        allowed machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="MAZ", params=z)
-
-  # async def set_stop_speed_plunger(self, speed: List[Optional[int]]):
-  #   """Set stop speed for plungers
-
-  #   Args:
-  #     speed: speed for each plunger in half step per second, must be between
-  #            50 and 2700
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SPP", params=speed)
-
-  # async def get_disposable_tip(self, tips, z_start, z_search):
-  #   """Picks up tips
-
-  #   Args:
-  #     tips: binary coded tip select
-  #     z_start: position in 1/10 mm where searching begins
-  #     z_search: search distance in 1/10 mm, range within a tip must be found
-  #   """
-
-  #   await self.backend.send_command(
-  #     module=self.module,
-  #     command="AGT",
-  #     params=[tips, z_start, z_search, 0],
-  #   )
-
-  # async def discard_disposable_tip(self, tips):
-  #   """Drops tips
-
-  #   Args:
-  #     tips: binary coded tip select
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="ADT", params=[tips])
 
 
 class RoMa(EVOArm):

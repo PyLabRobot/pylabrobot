@@ -1,0 +1,71 @@
+from typing import Optional
+
+# from pylabrobot.resources.container import Container
+from pylabrobot.resources.trash import Trash
+from pylabrobot.resources.tecan.tecan_resource import TecanResource
+
+
+class TecanTrash(Trash, TecanResource):
+    """Base class for Tecan diti tip trash containers."""
+
+    def __init__(
+        self,
+        name: str,
+        size_x: float,
+        size_y: float,
+        size_z: float,
+        category: str = "tecan_trash",
+        model: Optional[str] = None,
+    ):
+        super().__init__(
+            name=name,
+            size_x=size_x,
+            size_y=size_y,
+            size_z=size_z,
+            category=category,
+            model=model,
+        )
+
+
+def Trash_Container(name: str) -> TecanTrash:
+    """Tecan trash container."""
+    return TecanTrash(
+        name=name,
+        size_x=25.0,
+        size_y=390.0,
+        size_z=140.0,
+        model="Trash_Container",
+    )
+
+
+def Trash_Waste(name: str) -> TecanTrash:
+    """Tecan waste container."""
+    return TecanTrash(
+        name=name,
+        size_x=12.0,
+        size_y=100.0,
+        size_z=140.0,
+        model="Trash_Waste",
+    )
+
+
+# def Trash_Cleaner_Shallow(name: str) -> TecanTrash:
+#     """Tecan shallow cleaner container."""
+#     return TecanTrash(
+#         name=name,
+#         size_x=12.0,
+#         size_y=73.0,
+#         size_z=140.0,
+#         model="Trash_Cleaner_Shallow",
+#     )
+
+
+# def Trash_Cleaner_Deep(name: str) -> TecanTrash:
+#     """Tecan deep cleaner container."""
+#     return TecanTrash(
+#         name=name,
+#         size_x=12.0,
+#         size_y=73.0,
+#         size_z=140.0,
+#         model="Trash_Cleaner_Deep",
+#     )
