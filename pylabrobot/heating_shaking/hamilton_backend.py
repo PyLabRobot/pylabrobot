@@ -10,7 +10,7 @@ class PlateLockPosition(Enum):
   UNLOCKED = 0
 
 
-class HamiltonHeatShaker(HeaterShakerBackend):
+class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   """
   Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box
   """
