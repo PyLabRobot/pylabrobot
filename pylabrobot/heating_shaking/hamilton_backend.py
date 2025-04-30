@@ -69,7 +69,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     self.index = index
 
     super().__init__()
-    self.intf = interface
+    self.interface = interface
 
   async def setup(self):
     """
@@ -116,11 +116,11 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     await self._wait_for_stop()
 
   async def get_is_shaking(self) -> bool:
-    response = await self.intf.send_hhs_command(index=self.index, command="RD")
+    response = await self.interface.send_hhs_command(index=self.index, command="RD")
     return response.endswith("1")  # type: ignore[no-any-return] # what
 
   async def _move_plate_lock(self, position: PlateLockPosition):
-    return await self.intf.send_hhs_command(index=self.index, command="LP", lp=position.value)
+    return await self.interface.send_hhs_command(index=self.index, command="LP", lp=position.value)
 
   async def lock_plate(self):
     await self._move_plate_lock(PlateLockPosition.LOCKED)
@@ -130,33 +130,33 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
 
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
-    return await self.intf.send_hhs_command(index=self.index, command="LI")
+    return await self.interface.send_hhs_command(index=self.index, command="LI")
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """Firmware command for starting shaking."""
     speed_str = str(speed).zfill(4)
     acceleration_str = str(acceleration).zfill(5)
-    return await self.intf.send_hhs_command(
+    return await self.interface.send_hhs_command(
       index=self.index, command="SB", st=direction, sv=speed_str, sr=acceleration_str
     )
 
   async def _stop_shaking(self):
     """Firmware command for stopping shaking."""
-    return await self.intf.send_hhs_command(index=self.index, command="SC")
+    return await self.interface.send_hhs_command(index=self.index, command="SC")
 
   async def _wait_for_stop(self):
     """Firmware command for waiting for shaking to stop."""
-    return await self.intf.send_hhs_command(index=self.index, command="SW")
+    return await self.interface.send_hhs_command(index=self.index, command="SW")
 
   async def set_temperature(self, temperature: float):
     """set temperature in Celsius"""
     assert 0 < temperature <= 105
     temp_str = f"{round(10*temperature):04d}"
-    return await self.intf.send_hhs_command(index=self.index, command="TA", ta=temp_str)
+    return await self.interface.send_hhs_command(index=self.index, command="TA", ta=temp_str)
 
   async def _get_current_temperature(self) -> Dict[str, float]:
     """get temperature in Celsius"""
-    response = await self.intf.send_hhs_command(index=self.index, command="RT")
+    response = await self.interface.send_hhs_command(index=self.index, command="RT")
     response = response.split("rt")[1]
     middle_temp = float(str(response).split(" ")[0].strip("+")) / 10
     edge_temp = float(str(response).split(" ")[1].strip("+")) / 10
@@ -174,4 +174,4 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
 
   async def deactivate(self):
     """turn off heating"""
-    return await self.intf.send_hhs_command(index=self.index, command="TO")
+    return await self.interface.send_hhs_command(index=self.index, command="TO")
