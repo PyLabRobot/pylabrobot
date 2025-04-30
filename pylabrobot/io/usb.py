@@ -232,6 +232,67 @@ class USB(IOBase):
     for dev in self.get_available_devices():
       print(dev)
 
+  def _serialize_ctrl_transfer_request(
+    self,
+    bmRequestType: int,
+    bRequest: int,
+    wValue: int,
+    wIndex: int,
+    data_or_wLength: int,
+  ) -> str:
+    return " ".join(map(str, [bmRequestType, bRequest, wValue, wIndex, data_or_wLength]))
+
+  def ctrl_transfer(
+    self,
+    bmRequestType: int,
+    bRequest: int,
+    wValue: int,
+    wIndex: int,
+    data_or_wLength: int,
+    timeout: Optional[int] = None,
+  ) -> bytearray:
+    assert self.dev is not None, "Device not connected."
+
+    if timeout is None:
+      timeout = self.read_timeout
+
+    res = self.dev.ctrl_transfer(
+      bmRequestType=bmRequestType,
+      bRequest=bRequest,
+      wValue=wValue,
+      wIndex=wIndex,
+      data_or_wLength=data_or_wLength,
+      timeout=timeout * 1000,  # timeout in ms
+    )
+
+    logger.log(
+      LOG_LEVEL_IO,
+      "%s ctrl_transfer: %s",
+      self._unique_id,
+      self._serialize_ctrl_transfer_request(
+        bmRequestType, bRequest, wValue, wIndex, data_or_wLength
+      ),
+    )
+
+    capturer.record(
+      USBCommand(
+        device_id=self._unique_id,
+        action="ctrl_transfer_request",
+        data=self._serialize_ctrl_transfer_request(
+          bmRequestType, bRequest, wValue, wIndex, data_or_wLength
+        ),
+      )
+    )
+    capturer.record(
+      USBCommand(
+        device_id=self._unique_id,
+        action="ctrl_transfer_response",
+        data=" ".join(map(str, res)),
+      )
+    )
+
+    return bytearray(res)
+
   async def setup(self):
     """Initialize the USB connection to the machine."""
 
@@ -362,3 +423,40 @@ class USBValidator(USB):
     ):
       raise ValidationError("next command is not read")
     return next_command.data.encode()
+
+  def ctrl_transfer(
+    self,
+    bmRequestType: int,
+    bRequest: int,
+    wValue: int,
+    wIndex: int,
+    data_or_wLength: int,
+    timeout: Optional[int] = None,
+  ) -> bytearray:
+    next_command = USBCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "usb"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "ctrl_transfer_request"
+    ):
+      raise ValidationError("next command is not ctrl_transfer_request")
+
+    if not next_command.data == self._serialize_ctrl_transfer_request(
+      bmRequestType, bRequest, wValue, wIndex, data_or_wLength
+    ):
+      align_sequences(
+        expected=next_command.data,
+        actual=self._serialize_ctrl_transfer_request(
+          bmRequestType, bRequest, wValue, wIndex, data_or_wLength
+        ),
+      )
+      raise ValidationError("Data mismatch: difference was written to stdout.")
+
+    next_command = USBCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "usb"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "ctrl_transfer_response"
+    ):
+      raise ValidationError("next command is not ctrl_transfer_response")
+    return bytearray(map(int, next_command.data.split(" ")))
