@@ -37,7 +37,7 @@ await p.halt()
 
 ## Cole Parmer Masterflex
 
-The Masterflex pump is controlled by the {class}`~pylabrobot.pumps.cole_parmer.masterflex.MasterflexBackend` class. This takes a serial port as an argument. The serial port is used to communicate with the pump.
+The Masterflex pump is controlled by the {class}`~pylabrobot.pumps.cole_parmer.masterflex_backend.MasterflexBackend` class. This takes a serial port as an argument. The serial port is used to communicate with the pump.
 
 ```python
 from pylabrobot.pumps.cole_parmer.masterflex import MasterflexBackend

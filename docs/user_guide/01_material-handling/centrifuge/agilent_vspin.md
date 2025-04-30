@@ -38,7 +38,7 @@ await cf.start_spin_cycle(g = 800, duration = 60)
 
 ## VSpin
 
-The VSpin centrifuge is controlled by the {class}`~pylabrobot.centrifuge.vspin.VSpinBackend` class.
+The VSpin centrifuge is controlled by the {class}`~pylabrobot.centrifuge.vspin_backend.VSpinBackend` class.
 
 ```python
 from pylabrobot.centrifuge import Centrifuge, VSpinBackend
