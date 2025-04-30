@@ -23,4 +23,4 @@ Backends
 
     backend.FanBackend
     chatterbox.FanChatterboxBackend
-    hamilton_hepa_fan.HamiltonHepaFan
+    hamilton_hepa_fan_backend.HamiltonHepaFanBackend

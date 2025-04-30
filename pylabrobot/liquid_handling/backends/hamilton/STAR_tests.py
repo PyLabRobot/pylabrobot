@@ -27,7 +27,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.hamilton import STF, STARLetDeck
 
-from .STAR import (
+from .STAR_backend import (
   STAR,
   CommandSyntaxError,
   HamiltonNoTipError,

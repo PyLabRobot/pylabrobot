@@ -2,6 +2,7 @@ import asyncio
 import random
 import re
 import sys
+import warnings
 from typing import Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
@@ -339,7 +340,7 @@ def _get_dispense_mode(jet: bool, empty: bool, blow_out: bool) -> Literal[0, 1, 
     return 3 if blow_out else 2
 
 
-class Vantage(HamiltonLiquidHandler):
+class VantageBackend(HamiltonLiquidHandler):
   """A Hamilton Vantage liquid handler."""
 
   def __init__(
@@ -5246,3 +5247,18 @@ class Vantage(HamiltonLiquidHandler):
       blue=100,
       uv=0,
     )
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class Vantage(VantageBackend):
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`Vantage` is deprecated and will be removed in a future release. "
+      "Please use `VantageBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)

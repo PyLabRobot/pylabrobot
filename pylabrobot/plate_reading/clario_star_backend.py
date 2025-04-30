@@ -20,7 +20,7 @@ else:
 logger = logging.getLogger("pylabrobot")
 
 
-class CLARIOStar(PlateReaderBackend):
+class CLARIOStarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
@@ -340,3 +340,12 @@ class CLARIOStar(PlateReaderBackend):
     focal_height: float,
   ) -> List[List[float]]:
     raise NotImplementedError("Not implemented yet")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class CLARIOStar:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`CLARIOStar` is deprecated. Please use `CLARIOStarBackend` instead.")

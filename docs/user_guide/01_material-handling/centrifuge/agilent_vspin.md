@@ -38,11 +38,11 @@ await cf.start_spin_cycle(g = 800, duration = 60)
 
 ## VSpin
 
-The VSpin centrifuge is controlled by the {class}`~pylabrobot.centrifuge.vspin.VSpin` class.
+The VSpin centrifuge is controlled by the {class}`~pylabrobot.centrifuge.vspin_backend.VSpinBackend` class.
 
 ```python
-from pylabrobot.centrifuge import Centrifuge, VSpin
-cf = Centrifuge(name = 'centrifuge', backend = VSpin(bucket_1_position=0), size_x= 1, size_y=1, size_z=1)
+from pylabrobot.centrifuge import Centrifuge, VSpinBackend
+cf = Centrifuge(name = 'centrifuge', backend = VSpinBackend(bucket_1_position=0), size_x= 1, size_y=1, size_z=1)
 ```
 
 ### Installation
@@ -137,10 +137,10 @@ To interact with the centrifuge programmatically, you need its FTDI device ID. U
 Use the following code to configure the centrifuge in Python:
 
 ```python
-from pylabrobot.centrifuge import Centrifuge, VSpin
+from pylabrobot.centrifuge import Centrifuge, VSpinBackend
 
 # Replace with your specific FTDI device ID and bucket position for profile in Agilent Centrifuge Config Tool.
-backend = VSpin(bucket_1_position=6969, device_id="XXXXXXXX")
+backend = VSpinBackend(bucket_1_position=6969, device_id="XXXXXXXX")
 centrifuge = Centrifuge(
    backend=backend,
    name="centrifuge",
@@ -162,8 +162,8 @@ Here's how to use the loader:
 ```python
 import asyncio
 
-from pylabrobot.centrifuge import Access2, VSpin
-v = VSpin(device_id="FTE1YWTI", bucket_1_position=1314) # bucket 1 position is empirically determined
+from pylabrobot.centrifuge import Access2, VSpinBackend
+v = VSpinBackend(device_id="FTE1YWTI", bucket_1_position=1314) # bucket 1 position is empirically determined
 centrifuge, loader = Access2(name="name", vspin=v, device_id="FTE1YZC5")
 
 # initialize the centrifuge and loader in parallel
