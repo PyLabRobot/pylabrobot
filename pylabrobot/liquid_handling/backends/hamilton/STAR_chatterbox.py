@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import STAR
 from pylabrobot.resources.well import Well
 
 
