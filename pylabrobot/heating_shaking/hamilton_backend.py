@@ -179,4 +179,5 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
 
   async def deactivate(self):
     """turn off heating"""
+
     return await self.interface.send_hhs_command(index=self.index, command="TO")
