@@ -43,7 +43,7 @@ from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 logger = logging.getLogger(__name__)
 
 
-class Cytomat(IncubatorBackend):
+class CytomatBackend(IncubatorBackend):
   default_baud = 9600
   serial_message_encoding = "utf-8"
 
@@ -99,8 +99,8 @@ class Cytomat(IncubatorBackend):
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
       logging.debug(command_str.encode(self.serial_message_encoding))
-      self.io.write(command_str.encode(self.serial_message_encoding))
-      resp = self.io.read(128).decode(self.serial_message_encoding)
+      await self.io.write(command_str.encode(self.serial_message_encoding))
+      resp = (await self.io.read(128)).decode(self.serial_message_encoding)
       if len(resp) == 0:
         raise RuntimeError("Cytomat did not respond to command, is it turned on?")
       key, *values = resp.split()
@@ -387,7 +387,7 @@ class Cytomat(IncubatorBackend):
     }
 
 
-class CytomatChatterbox(Cytomat):
+class CytomatChatterbox(CytomatBackend):
   async def setup(self):
     await self.wait_for_task_completion()
 
@@ -405,3 +405,12 @@ class CytomatChatterbox(Cytomat):
   async def wait_for_transfer_station(self, occupied: bool = False):
     # send the command, but don't wait when we are in chatting mode.
     _ = await self.get_overview_register()
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class Cytomat:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`Cytomat` is deprecated. Please use `CytomatBackend` instead. ")

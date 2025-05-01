@@ -21,7 +21,9 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     PetriDish
     Plate
     PlateCarrier
+    PlateHolder
     Resource
+    ResourceHolder
     ResourceStack
     Rotation
     tip.Tip
@@ -212,7 +214,7 @@ VWR
 Tip trackers
 ------------
 
-See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
+See :doc:`Using trackers </user_guide/machine-agnostic-features/using-trackers>` for a tutorial.
 
 .. autosummary::
   :toctree: _autosummary
@@ -227,7 +229,7 @@ See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
 Volume trackers
 ---------------
 
-See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
+See :doc:`Using trackers </user_guide/machine-agnostic-features/using-trackers>` for a tutorial.
 
 .. autosummary::
   :toctree: _autosummary
