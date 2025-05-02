@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 
 
 class SealerBackend(MachineBackend, metaclass=ABCMeta):
@@ -10,9 +10,9 @@ class SealerBackend(MachineBackend, metaclass=ABCMeta):
     ...
 
   @abstractmethod
-  async def open_shuttle(self):
+  async def open(self):
     ...
 
   @abstractmethod
-  async def close_shuttle(self):
+  async def close(self):
     ...

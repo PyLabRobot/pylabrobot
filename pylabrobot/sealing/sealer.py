@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pylabrobot.machines import Machine
 
 from .backend import SealerBackend
@@ -13,10 +11,18 @@ class Sealer(Machine):
     self.backend: SealerBackend = backend  # fix type
 
   async def seal(self, temperature: int, duration: float):
-    await self.backend.seal(temperature=temperature, duration=duration)
+    return await self.backend.seal(temperature=temperature, duration=duration)
 
-  async def open_shuttle(self):
-    await self.backend.open_shuttle()
+  async def open(self):
+    return await self.backend.open()
 
-  async def close_shuttle(self):
-    await self.backend.close_shuttle()
+  async def close(self):
+    return await self.backend.close()
+  
+  async def set_temperature(self, temperature: int):
+    """Set the temperature of the sealer in degrees Celsius."""
+    return await self.backend.set_temperature(temperature=temperature)
+
+  async def get_temperature(self) -> float:
+    """Get the current temperature of the sealer in degrees Celsius."""
+    return await self.backend.get_temperature() 
