@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class CytomatLegacyBackend(IncubatorBackend):
     """
-    Backend for legacy Cytomat controllers.
+    Backend for legacy (Heraeus) Cytomats.
     Perhaps identical to Liconic backend...
     to configure stackers:
         WR DM25 00007 for setting a stacker config to 10 slots
