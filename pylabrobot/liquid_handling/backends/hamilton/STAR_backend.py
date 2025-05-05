@@ -6376,6 +6376,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
     )
 
+  async def move_iswap_x(self, x_position: float):
+    """Move iSWAP X to absolute position"""
+    loc = await self.request_iswap_position()
+    await self.move_iswap_x_relative(
+      step_size=x_position - loc["xs"],
+      allow_splitting=True,
+    )
+
+  async def move_iswap_y(self, y_position: float):
+    """Move iSWAP Y to absolute position"""
+    loc = await self.request_iswap_position()
+    await self.move_iswap_y_relative(
+      step_size=y_position - loc["yj"],
+      allow_splitting=True,
+    )
+
+  async def move_iswap_z(self, z_position: float):
+    """Move iSWAP Z to absolute position"""
+    loc = await self.request_iswap_position()
+    await self.move_iswap_z_relative(
+      step_size=z_position - loc["zj"],
+      allow_splitting=True,
+    )
+
   async def open_not_initialized_gripper(self):
     return await self.send_command(module="C0", command="GI")
 
