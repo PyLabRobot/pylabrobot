@@ -6375,7 +6375,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
     )
-  
+
   async def move_iswap_x(self, x_position: float):
     """Move iSWAP X to absolute position"""
     loc = await self.request_iswap_position()
@@ -6391,7 +6391,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       step_size=y_position - loc["yj"],
       allow_splitting=True,
     )
-  
+
   async def move_iswap_z(self, z_position: float):
     """Move iSWAP Z to absolute position"""
     loc = await self.request_iswap_position()
