@@ -5732,46 +5732,67 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_core_96_head_to_defined_position(
     self,
-    dispensing_mode: int = 0,
-    x_position: int = 0,
-    x_direction: int = 0,
-    y_position: int = 0,
-    z_position: int = 0,
-    minimum_height_at_beginning_of_a_command: int = 3425,
+    x: float = 0,
+    y: float = 0,
+    z: float = 0,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
     """Move CoRe 96 Head to defined position
 
     Args:
-      dispensing_mode: Type of dispensing mode 0 = Partial volume in jet mode 1 = Blow out
-        in jet mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix
-        position. Must be between 0 and 4. Default 0.
-      x_position: X-Position [0.1mm] of well A1. Must be between 0 and 30000. Default 0.
-      x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      y_position: Y-Position [0.1mm]. Must be between 1080 and 5600. Default 0.
-      z_position: Z-Position [0.1mm]. Must be between 0 and 5600. Default 0.
-      minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command 0.1mm]
+      x: X-Position [1mm] of well A1. Must be between 0 and 3000.0. Default 0.
+      y: Y-Position [1mm]. Must be between 108.0 and 560.0. Default 0.
+      z: Z-Position [1mm]. Must be between 0 and 560.0. Default 0.
+      minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
         (refers to all channels independent of tip pattern parameter 'tm'). Must be between 0 and
-        3425. Default 3425.
+        342.5. Default 342.5.
     """
 
-    assert 0 <= dispensing_mode <= 4, "dispensing_mode must be between 0 and 4"
-    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
-    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
-    assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
-    assert 0 <= y_position <= 5600, "z_position must be between 0 and 5600"
+    assert 0 <= x <= 3000.0, "x_position must be between 0 and 30000"
+    assert 108.0 <= y <= 560.0, "y_position must be between 1080 and 5600"
+    assert 0 <= y <= 560.0, "z_position must be between 0 and 5600"
     assert (
-      0 <= minimum_height_at_beginning_of_a_command <= 3425
+      0 <= minimum_height_at_beginning_of_a_command <= 342.5
     ), "minimum_height_at_beginning_of_a_command must be between 0 and 3425"
 
     return await self.send_command(
       module="C0",
       command="EM",
-      dm=dispensing_mode,
-      xs=x_position,
-      xd=x_direction,
-      yh=y_position,
-      za=z_position,
-      zh=minimum_height_at_beginning_of_a_command,
+      xs=f"{round(x*10):05}",
+      xd=0 if x >= 0 else 1,
+      yh=f"{round(y*10):04}",
+      za=f"{round(z*10):04}",
+      zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
+    )
+
+  async def move_core_96_head_x(self, x_position: float):
+    """Move CoRe 96 Head X to absolute position"""
+    loc = await self.request_position_of_core_96_head()
+    await self.move_core_96_head_to_defined_position(
+      x=x_position,
+      y=loc["yh"],
+      z=loc["za"],
+      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+    )
+
+  async def move_core_96_head_y(self, y_position: float):
+    """Move CoRe 96 Head Y to absolute position"""
+    loc = await self.request_position_of_core_96_head()
+    await self.move_core_96_head_to_defined_position(
+      x=loc["xs"],
+      y=y_position,
+      z=loc["za"],
+      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+    )
+
+  async def move_core_96_head_z(self, z_position: float):
+    """Move CoRe 96 Head Z to absolute position"""
+    loc = await self.request_position_of_core_96_head()
+    await self.move_core_96_head_to_defined_position(
+      x=loc["xs"],
+      y=loc["yh"],
+      z=z_position,
+      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
     )
 
   # -------------- 3.10.5 Wash procedure commands using CoRe 96 Head --------------
@@ -5794,13 +5815,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Request position of CoRe 96 Head (A1 considered to tip length)
 
     Returns:
-      xs: A1 X direction [0.1mm]
+      xs: A1 X direction [1mm]
       xd: X direction 0 = positive 1 = negative
-      yh: A1 Y direction [0.1mm]
-      za: Z height [0.1mm]
+      yh: A1 Y direction [1mm]
+      za: Z height [1mm]
     """
 
-    return await self.send_command(module="C0", command="QI", fmt="xs#####xd#hy####za####")
+    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
+    resp["xs"] = resp["xs"] / 10
+    resp["yh"] = resp["yh"] / 10
+    resp["za"] = resp["za"] / 10
+    return resp
 
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
