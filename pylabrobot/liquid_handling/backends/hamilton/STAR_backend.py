@@ -5782,7 +5782,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x=loc["xs"],
       y=y_position,
       z=loc["za"],
-      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+      minimum_height_at_beginning_of_a_command=loc["za"],
     )
 
   async def move_core_96_head_z(self, z_position: float):
