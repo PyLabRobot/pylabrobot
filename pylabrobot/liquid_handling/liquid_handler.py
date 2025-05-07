@@ -1832,6 +1832,7 @@ class LiquidHandler(Resource, Machine):
         location=to,
         resource=self._resource_pickup.resource,
         gripped_direction=self._resource_pickup.direction,
+        pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
       ),
       **backend_kwargs,
     )
