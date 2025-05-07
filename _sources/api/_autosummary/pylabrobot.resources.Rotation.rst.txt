@@ -1,0 +1,23 @@
+﻿pylabrobot.resources.Rotation
+=============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Rotation
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Rotation.__init__
+      ~Rotation.deserialize
+      ~Rotation.get_rotation_matrix
+   
+   

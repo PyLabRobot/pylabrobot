@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.deserialize
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.deserialize

@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.calculates\_check\_sums\_and\_compares\_them\_with\_the\_value\_saved\_in\_flash\_eprom
+==============================================================================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. automethod:: Vantage.calculates_check_sums_and_compares_them_with_the_value_saved_in_flash_eprom

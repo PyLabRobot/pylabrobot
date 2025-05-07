@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.clario\_star\_backend.CLARIOStarBackend.request\_eeprom\_data
+=======================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.clario_star_backend
+
+.. automethod:: CLARIOStarBackend.request_eeprom_data

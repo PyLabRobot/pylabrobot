@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.load\_from\_json\_file
+==========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.load_from_json_file

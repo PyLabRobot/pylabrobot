@@ -1,0 +1,21 @@
+﻿pylabrobot.centrifuge.vspin\_backend.VSpin
+==========================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. autoclass:: VSpin
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VSpin.__init__
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.scales.scale.Scale.get\_root
+=======================================
+
+.. currentmodule:: pylabrobot.scales.scale
+
+.. automethod:: Scale.get_root

@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.center
+=======================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.center

@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.save
+========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.save

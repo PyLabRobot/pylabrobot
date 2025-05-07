@@ -1,0 +1,6 @@
+pylabrobot.resources.Well.get\_highest\_known\_point
+====================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Well.get_highest_known_point

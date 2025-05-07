@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.copy
+========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.copy
