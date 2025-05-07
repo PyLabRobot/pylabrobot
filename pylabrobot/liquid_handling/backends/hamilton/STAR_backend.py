@@ -2882,14 +2882,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     center = (
       move.location
       + move.resource.get_anchor("c", "c", "t")
-      - Coordinate(z=move.pick_up_distance_from_top)
+      - Coordinate(z=move.pickup_distance_from_top)
     )
 
     if use_arm == "iswap":
       await self.iswap_move_picked_up_resource(
         center=center,
         grip_direction=move.gripped_direction,
-        pick_up_distance_from_top=move.pickup_distance_from_top,
         minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         collision_control_level=1,
         acceleration_index_high_acc=4,
