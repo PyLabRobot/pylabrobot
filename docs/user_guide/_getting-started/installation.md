@@ -24,7 +24,7 @@ Alternatively, you can install PyLabRobot from source. This is particularly usef
 ```bash
 git clone https://github.com/pylabrobot/pylabrobot.git
 cd pylabrobot
-pip install -e '.[dev]'
+pip install -e ".[dev]"
 ```
 
 See [CONTRIBUTING.md](/contributor_guide/contributing) for specific instructions on testing, documentation and development.
@@ -43,8 +43,8 @@ If you want to build documentation or run tests, you need install the additional
 dependencies. Also using pip:
 
 ```bash
-pip install 'pylabrobot[docs]'
-pip install 'pylabrobot[testing]'
+pip install "pylabrobot[docs]"
+pip install "pylabrobot[testing]"
 ```
 
 There's a multitude of other optional dependencies that you can install. Replace `[docs]` with one of the following items to install the desired dependencies.
