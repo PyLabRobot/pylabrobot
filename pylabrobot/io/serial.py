@@ -201,7 +201,7 @@ class SerialValidator(Serial):
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial readline")
     return next_command.data.encode()
-  
+
   async def send_break(self, duration: float):
     next_command = SerialCommand(**self.cr.next_command())
     if not (
