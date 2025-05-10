@@ -847,8 +847,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call(
           "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
-        _any_write_and_read_command_call("C0PMid0002xs03979xd0yj3062yd0zj2432zd0gr1th2800ga1xe4 1"),
-        _any_write_and_read_command_call("C0PMid0003xs02979xd0yj4022yd0zj2432zd0gr1th2800ga1xe4 1"),
+        _any_write_and_read_command_call("C0PMid0002xs03979xd0yj3062yd0zj2405zd0gr1th2800ga1xe4 1"),
+        _any_write_and_read_command_call("C0PMid0003xs02979xd0yj4022yd0zj2405zd0gr1th2800ga1xe4 1"),
         _any_write_and_read_command_call(
           "C0PRid0004xs03479xd0yj2102yd0zj1874zd0th2800te2800gr1go1308ga0gc0"
         ),
