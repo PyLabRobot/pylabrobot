@@ -260,7 +260,7 @@ class Prep(LiquidHandlerBackend):
     self.port = port
     self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-  async def setup(self):
+  async def setup(self, smart: bool = False):
     self.socket.connect((self.host, self.port))
     self.socket.settimeout(30)
 
@@ -271,7 +271,7 @@ class Prep(LiquidHandlerBackend):
         rolloff_distance=3,
         channel_parameters=[],
       ),
-      smart=False,
+      smart=smart,
     )
 
     await super().setup()
