@@ -55,10 +55,10 @@ class HeraeusCytomatBackend(IncubatorBackend):
     except serial.SerialException as e:
       raise RuntimeError(f"Could not open {self.io.port}: {e}")
 
-    self.io.ser.send_break(duration=0.2)  # >100 ms required
+    self.io.send_break(duration=0.2)  # >100 ms required
     await asyncio.sleep(0.15)
-    self.io.ser.reset_input_buffer()
-    self.io.ser.reset_output_buffer()
+    self.io.reset_input_buffer()
+    self.io.reset_output_buffer()
 
     await self.io.write(b"CR\r")
     deadline = time.time() + self.init_timeout
