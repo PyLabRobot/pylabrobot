@@ -13,7 +13,7 @@ from pylabrobot.resources.carrier import PlateCarrier
 logger = logging.getLogger(__name__)
 
 
-class CytomatLegacyBackend(IncubatorBackend):
+class HeraeusCytomatBackend(IncubatorBackend):
   """
   Backend for legacy (Heraeus) Cytomats.
   Perhaps identical to Liconic backend...
@@ -48,7 +48,7 @@ class CytomatLegacyBackend(IncubatorBackend):
     2. Send >200 ms break, wait 150 ms, flush buffers.
     3. Handshake: CR → wait for CC<CR><LF>
     4. Activate handling: ST 1801 → expect OK<CR><LF>
-    5. Poll ready‐flag: RD 1915 → wait for “1”<CR><LF>
+    5. Poll ready-flag: RD 1915 → wait for "1"<CR><LF>
     """
     try:
       await self.io.setup()
@@ -145,22 +145,19 @@ class CytomatLegacyBackend(IncubatorBackend):
     rack = site.parent
     rack_idx = self._racks.index(rack) + 1  # plr is 0-indexed, cytomat is 1-indexed
     site_idx = next(idx for idx, s in rack.sites.items() if s == site) + 1  # 1-indexed
-    print("m, n:", rack_idx, site_idx)
     return rack_idx, site_idx
 
   async def _send_command(self, command: str) -> str:
     """
     Send an ASCII command (without CR) and return the raw response string.
     """
-    print(f"send: {command}")
     cmd = command.strip() + "\r"
     logger.debug("Sending Cytomat command: %r", cmd)
-    self.io.write(cmd.encode(self.serial_message_encoding))
-    resp = self.io.read(128).decode(self.serial_message_encoding)
+    await self.io.write(cmd.encode(self.serial_message_encoding))
+    resp = await self.io.read(128).decode(self.serial_message_encoding)
     if not resp:
       raise RuntimeError("No response from Cytomat controller")
     resp = resp.strip()
-    print("resp", resp)
     if resp.startswith("E"):
       raise RuntimeError(f"Cytomat controller error: {resp}")
     return resp
