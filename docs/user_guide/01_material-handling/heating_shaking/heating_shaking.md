@@ -12,6 +12,6 @@ PyLabRobot supports the following heater shakers:
 ```{toctree}
 :maxdepth: 1
 
-Inheco ThermoShake <hw_inheco_thermoshake>
-Hamilton Heater Shaker <hw_hamilton_heater_shaker>
+Inheco ThermoShake <inheco>
+Hamilton Heater Shaker <hamilton>
 ```
