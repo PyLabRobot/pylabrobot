@@ -1,5 +1,7 @@
 # Resource Management System
 
+<hr>
+
 The PyLabRobot (PLR) Resource Management System (RMS) is a **framework** that **models** both the **physical components** of an automation setup and the **distinct physical behaviors of each component**.
 (It does not provide electronic control of machines.
 This is the role of PLR's *machine control system*.)
@@ -22,7 +24,7 @@ introduction
 custom-resources
 ```
 
-----
+<hr>
 
 ## Resource Ontology System
 
