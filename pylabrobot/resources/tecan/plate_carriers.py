@@ -7,6 +7,7 @@ from pylabrobot.resources.carrier import (
   create_homogeneous_resources,
 )
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
+
 # from pylabrobot.resources.tecan.tip_racks import TecanTipRack  # Import TecanTipRack VIKMOL
 
 # # Define the combined class here
@@ -187,7 +188,7 @@ def MP_3Pos_TePS(name: str) -> TecanPlateCarrier:
       resource_size_x=127.0,
       resource_size_y=85.5,
       name_prefix=name,
-      pedestal_size_z = 0,
+      pedestal_size_z=0,
     ),
     model="MP_3Pos_TePS",
   )
@@ -217,7 +218,7 @@ def LI___MP_3Pos(name: str) -> TecanPlateCarrier:
       resource_size_x=127.0,
       resource_size_y=85.5,
       name_prefix=name,
-      pedestal_size_z = 0,
+      pedestal_size_z=0,
     ),
     model="LI___MP_3Pos",
   )
@@ -233,7 +234,7 @@ def MP_4Pos_landscape(name: str) -> TecanPlateCarrier:
     off_x=7.5,
     off_y=70.0,
     sites=create_homogeneous_resources(
-      klass=PlateHolder, #PlateHolderWithTipRack, #PlateHolder, VIKMOL
+      klass=PlateHolder,  # PlateHolderWithTipRack, #PlateHolder, VIKMOL
       locations=[
         Coordinate(10.2, 44.5, 83.0),
         Coordinate(10.2, 136.0, 83.0),
@@ -410,7 +411,7 @@ def MP_3Pos(name: str) -> TecanPlateCarrier:
       resource_size_x=127.0,
       resource_size_y=85.5,
       name_prefix=name,
-      pedestal_size_z = 0,
+      pedestal_size_z=0,
     ),
     model="MP_3Pos",
   )
@@ -523,7 +524,7 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
       resource_size_x=127.0,
       resource_size_y=85.5,
       name_prefix=name,
-      pedestal_size_z = 0,
+      pedestal_size_z=0,
     ),
     model="MP_3Pos_Flat",
   )
@@ -548,7 +549,7 @@ def MP_3Pos_No_Robot_Access(name: str) -> TecanPlateCarrier:
       resource_size_x=127.0,
       resource_size_y=85.5,
       name_prefix=name,
-      pedestal_size_z = 0,
+      pedestal_size_z=0,
     ),
     model="MP_3Pos_No_Robot_Access",
   )
@@ -579,7 +580,7 @@ def MP_4Pos(name: str) -> TecanPlateCarrier:
       resource_size_x=127.0,
       resource_size_y=85.5,
       name_prefix=name,
-      pedestal_size_z = 0,
+      pedestal_size_z=0,
     ),
     model="MP_4Pos",
   )
@@ -610,7 +611,7 @@ def MP_4Pos_flat(name: str) -> TecanPlateCarrier:
       resource_size_x=127.0,
       resource_size_y=85.5,
       name_prefix=name,
-      pedestal_size_z = 0,
+      pedestal_size_z=0,
     ),
     model="MP_4Pos_flat",
   )

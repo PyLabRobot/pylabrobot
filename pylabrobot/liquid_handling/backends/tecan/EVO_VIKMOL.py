@@ -2,7 +2,6 @@
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
 import asyncio
-
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -119,15 +118,14 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     # below line changed to revie int and str. VIKMOL
     data: List[Union[int, str]] = []
     for x in s[3:-1].split(","):
-        if not x:  # Skip empty values
-            continue
-        if module in [EVO.ROMA, EVO.LIHA]:
-            # RoMa(C1) and LiHa(C5) should only have integer values
-            data.append(int(x))
-        elif module == EVO.MCA:
-            # MCA can return both integers and strings
-            data.append(int(x) if x.isdigit() else x)
-
+      if not x:  # Skip empty values
+        continue
+      if module in [EVO.ROMA, EVO.LIHA]:
+        # RoMa(C1) and LiHa(C5) should only have integer values
+        data.append(int(x))
+      elif module == EVO.MCA:
+        # MCA can return both integers and strings
+        data.append(int(x) if x.isdigit() else x)
 
     return {"module": module, "data": data}
 
@@ -186,15 +184,15 @@ class EVO(TecanLiquidHandler):
 
   LIHA = "C5"
   ROMA = "C1"
-  MCA = "W1" # also attempted W also attemed P3 # VIKMOL CHANGED FROM C3
-  #PNP = "W1"
+  MCA = "W1"  # also attempted W also attemed P3 # VIKMOL CHANGED FROM C3
+  # PNP = "W1"
 
   def __init__(
     self,
     diti_count: int = 0,
-    packet_read_timeout: int = 12, # VIKMOL CHANGED FROM 120 THIS CHANGE INCREASES INITIALIZATION SPEED
-    read_timeout: int = 60, # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
-    write_timeout: int = 60, # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
+    packet_read_timeout: int = 12,  # VIKMOL CHANGED FROM 120 THIS CHANGE INCREASES INITIALIZATION SPEED
+    read_timeout: int = 60,  # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
+    write_timeout: int = 60,  # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
   ):
     """Create a new EVO interface.
 
@@ -281,18 +279,18 @@ class EVO(TecanLiquidHandler):
       print("RoMa connected!")
       # move to home position (TBD) after initialization
       await self._park_roma()
-    if self.mca_connected: # VIKMOL added mca initialization
+    if self.mca_connected:  # VIKMOL added mca initialization
       self.mca = Mca(self, EVO.MCA)
       # await self.mca.position_initialization_x() # function deos not work for mca. vikmol
-      print("MCA connected!") # VIKMOL DEBUG
-      await self._park_mca() # VIKMOL ADDED
+      print("MCA connected!")  # VIKMOL DEBUG
+      await self._park_mca()  # VIKMOL ADDED
     else:
-      print("MCA not connected") # VIKMOL DEBUG
+      print("MCA not connected")  # VIKMOL DEBUG
 
     if self.liha_connected:
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
-      print("LiHa connected!") # VIKMOL DEBUG
+      print("LiHa connected!")  # VIKMOL DEBUG
 
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
@@ -315,7 +313,9 @@ class EVO(TecanLiquidHandler):
       # print(await self.send_command(module, command="RFV", params=[0])) # VIKMOL ADDED
 
       if module == EVO.MCA:
-        print(await self.send_command(module, command="PIB"))  # Try Pre-Initialization first VIKMOL ADDED
+        print(
+          await self.send_command(module, command="PIB")
+        )  # Try Pre-Initialization first VIKMOL ADDED
 
       await self.send_command(module, command="PIA")
 
@@ -324,8 +324,7 @@ class EVO(TecanLiquidHandler):
         return False
       raise e
 
-
-    if module != EVO.MCA: # vikmol added
+    if module != EVO.MCA:  # vikmol added
       await self.send_command(module, command="BMX", params=[2])
 
     return True
@@ -338,7 +337,7 @@ class EVO(TecanLiquidHandler):
     await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
 
-  async def _park_mca(self): # VIKMOL ADDED
+  async def _park_mca(self):  # VIKMOL ADDED
     """Moves the MCA arm to a safe park position to prevent collision."""
 
     # Ensure MCA is initialized before moving
@@ -358,8 +357,6 @@ class EVO(TecanLiquidHandler):
     await asyncio.sleep(0.5)
 
     print("MCA parked safely.")
-
-
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -512,12 +509,12 @@ class EVO(TecanLiquidHandler):
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
 
     # Get positions including offsets
-    x_positions, y_positions, _ = self._liha_positions(ops, use_channels) # VIKMOL ADDED
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)  # VIKMOL ADDED
 
     # Apply offsets
-    for i, op in enumerate(ops): # VIKMOL ADDED
-        x_positions[i] += op.offset.x
-        y_positions[i] += op.offset.y
+    for i, op in enumerate(ops):  # VIKMOL ADDED
+      x_positions[i] += op.offset.x
+      y_positions[i] += op.offset.y
 
     # TODO add offset for z_positions
 
@@ -982,19 +979,19 @@ class LiHa(EVOArm):
       TecanError: if moving to the target position causes a collision
     """
     # Initialize if necessary
-    await self.backend.send_command(EVO.LIHA, command="PIA") # VIKMOL
+    await self.backend.send_command(EVO.LIHA, command="PIA")  # VIKMOL
     await asyncio.sleep(0.5)  # Allow time for initialization # VIKMOL
 
     cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
-      cur_x = int(cur_x) # VIKMOL ADDED
-      x = int(x) # VIKMOL ADDED
-      pos = int(pos) # VIKMOL ADDED
-      print("cur_x LiHa()", cur_x, type(cur_x)) # VIKMOL DEBUG
-      print("x LiHa()", x, type(x)) # VIKMOL DEBUG
-      print("pos LiHa()", pos, type(pos)) # VIKMOL DEBUG
+      cur_x = int(cur_x)  # VIKMOL ADDED
+      x = int(x)  # VIKMOL ADDED
+      pos = int(pos)  # VIKMOL ADDED
+      print("cur_x LiHa()", cur_x, type(cur_x))  # VIKMOL DEBUG
+      print("x LiHa()", x, type(x))  # VIKMOL DEBUG
+      print("pos LiHa()", pos, type(pos))  # VIKMOL DEBUG
       if cur_x < x and cur_x < pos < x:  # moving right
         raise TecanError("Invalid command (collision)", self.module, 2)
       if cur_x > x and cur_x > pos > x:
@@ -1190,6 +1187,7 @@ class LiHa(EVOArm):
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
+
 
 ## VIKMOL ADDED MCA
 class Mca(EVOArm):
@@ -1565,12 +1563,12 @@ class RoMa(EVOArm):
 
     cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
     for module, pos in EVOArm._pos_cache.items():
-      cur_x = int(cur_x) # VIKMOL ADDED
-      x = int(x) # VIKMOL ADDED
-      pos = int(pos) # VIKMOL ADDED
-      print("cur_x RoMa()", cur_x, type(cur_x)) # VIKMOL DEBUG
-      print("x RoMa()", x, type(x)) # VIKMOL DEBUG
-      print("pos RoMa()", pos, type(pos)) # VIKMOL DEBUG
+      cur_x = int(cur_x)  # VIKMOL ADDED
+      x = int(x)  # VIKMOL ADDED
+      pos = int(pos)  # VIKMOL ADDED
+      print("cur_x RoMa()", cur_x, type(cur_x))  # VIKMOL DEBUG
+      print("x RoMa()", x, type(x))  # VIKMOL DEBUG
+      print("pos RoMa()", pos, type(pos))  # VIKMOL DEBUG
       if module == self.module:
         continue
       if cur_x < x and cur_x < pos < x:  # moving right

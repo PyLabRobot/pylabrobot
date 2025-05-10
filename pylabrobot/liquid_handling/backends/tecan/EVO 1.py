@@ -2,6 +2,9 @@
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
 
+import asyncio
+import logging
+import time
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -12,9 +15,6 @@ from typing import (
   TypeVar,
   Union,
 )
-import asyncio
-import logging
-import time
 
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -62,10 +62,10 @@ logger.setLevel(logging.INFO)  # Set logging level to INFO for more detailed out
 
 # Add a handler if not already present
 if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+  handler = logging.StreamHandler()
+  formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+  handler.setFormatter(formatter)
+  logger.addHandler(handler)
 
 
 class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
@@ -264,9 +264,9 @@ class EVO(TecanLiquidHandler):
     self.skip_roma = skip_roma
 
     # Set arm movement speeds based on the factor (0.0-1.0)
-    self.liha_speed = int(5000 * movement_speed_factor)   # LIHA default speed
+    self.liha_speed = int(5000 * movement_speed_factor)  # LIHA default speed
     self.liha2_speed = int(5000 * movement_speed_factor)  # LIHA2 default speed
-    self.roma_speed = int(2500 * movement_speed_factor)   # RoMa default speed (slower than others)
+    self.roma_speed = int(2500 * movement_speed_factor)  # RoMa default speed (slower than others)
 
     # Initialize positions dictionary to store current arm positions
     self._arm_positions = self.DEFAULT_POSITIONS.copy()
@@ -415,14 +415,14 @@ class EVO(TecanLiquidHandler):
         await self.move_liha2_to_position(self._arm_positions[EVO.LIHA2])
         await asyncio.sleep(2)  # Ensure LIHA2 is fully positioned
     except Exception as e:
-        logger.error(f"Error initializing LIHA2: {e}")
+      logger.error(f"Error initializing LIHA2: {e}")
 
     try:
       if self._liha_connected:
         await self.move_liha_to_position(self._arm_positions[EVO.LIHA])
         await asyncio.sleep(2)  # Ensure LIHA is fully positioned
     except Exception as e:
-        logger.error(f"Error initializing LIHA: {e}")
+      logger.error(f"Error initializing LIHA: {e}")
 
     # Initialize RoMa last, and only if not skipped
     if not self.skip_roma:
@@ -480,12 +480,16 @@ class EVO(TecanLiquidHandler):
     await self.send_command(EVO.LIHA, command="SFX", params=[self.liha_speed], ignore_errors=True)
 
     # Get current position
-    current_x = await self.liha.report_x_param(0) if hasattr(self, 'liha') else self._arm_positions.get(EVO.LIHA, 4045)
+    current_x = (
+      await self.liha.report_x_param(0)
+      if hasattr(self, "liha")
+      else self._arm_positions.get(EVO.LIHA, 4045)
+    )
 
     # Move Z-axis up first for safety
-    if hasattr(self, '_z_range'):
-        z_channels = [self._z_range] * self.num_channels
-        await self.liha.set_z_travel_height(z_channels)
+    if hasattr(self, "_z_range"):
+      z_channels = [self._z_range] * self.num_channels
+      await self.liha.set_z_travel_height(z_channels)
 
     # Move X-axis to target position with reduced speed
     await self.send_command(EVO.LIHA, command="PAX", params=[x_position])
@@ -508,12 +512,16 @@ class EVO(TecanLiquidHandler):
     await self.send_command(EVO.LIHA2, command="SFX", params=[self.liha2_speed], ignore_errors=True)
 
     # Get current position
-    current_x = await self.liha2.report_x_param(0) if hasattr(self, 'liha2') else self._arm_positions.get(EVO.LIHA2, 10045)
+    current_x = (
+      await self.liha2.report_x_param(0)
+      if hasattr(self, "liha2")
+      else self._arm_positions.get(EVO.LIHA2, 10045)
+    )
 
     # Move Z-axis up first for safety
-    if hasattr(self, '_z_range2'):
-        z_channels = [self._z_range2] * self.num_channels2
-        await self.liha2.set_z_travel_height(z_channels)
+    if hasattr(self, "_z_range2"):
+      z_channels = [self._z_range2] * self.num_channels2
+      await self.liha2.set_z_travel_height(z_channels)
 
     # Move X-axis to target position with reduced speed
     await self.send_command(EVO.LIHA2, command="PAX", params=[x_position])
@@ -537,21 +545,21 @@ class EVO(TecanLiquidHandler):
 
     # Basic positioning - direct movement to target position
     try:
-        # Just move to X position directly, which is safer than vector movements
-        await self.send_command(EVO.ROMA, command="PAX", params=[x_position], ignore_errors=True)
-        await asyncio.sleep(2)  # Wait for movement to complete
+      # Just move to X position directly, which is safer than vector movements
+      await self.send_command(EVO.ROMA, command="PAX", params=[x_position], ignore_errors=True)
+      await asyncio.sleep(2)  # Wait for movement to complete
 
-        # Try to set Z to a safe height
-        await self.send_command(EVO.ROMA, command="PAZ", params=[2000], ignore_errors=True)
+      # Try to set Z to a safe height
+      await self.send_command(EVO.ROMA, command="PAZ", params=[2000], ignore_errors=True)
 
-        # Update position cache
-        self._arm_positions[EVO.ROMA] = x_position
-        EVOArm._pos_cache[EVO.ROMA] = x_position
+      # Update position cache
+      self._arm_positions[EVO.ROMA] = x_position
+      EVOArm._pos_cache[EVO.ROMA] = x_position
 
-        logger.info(f"RoMa positioned successfully at {x_position}")
+      logger.info(f"RoMa positioned successfully at {x_position}")
     except Exception as e:
-        logger.error(f"Failed to position RoMa: {e}")
-        # Continue despite errors - RoMa isn't critical for basic operation
+      logger.error(f"Failed to position RoMa: {e}")
+      # Continue despite errors - RoMa isn't critical for basic operation
 
   async def move_roma_to_position(self, x_position: int):
     """Moves RoMa to a specified X position with safer path and reduced speed.
@@ -563,54 +571,64 @@ class EVO(TecanLiquidHandler):
     logger.info(f"Moving RoMa to position {x_position}")
 
     # Get current position
-    current_x = await self.roma.report_x_param(0) if hasattr(self, 'roma') else self._arm_positions.get(EVO.ROMA, 9000)
+    current_x = (
+      await self.roma.report_x_param(0)
+      if hasattr(self, "roma")
+      else self._arm_positions.get(EVO.ROMA, 9000)
+    )
 
     # Set up RoMa parameters with SLOWER speed
-    await self.send_command(EVO.ROMA, command="SSM", params=[1], ignore_errors=True)  # Set smooth mode
+    await self.send_command(
+      EVO.ROMA, command="SSM", params=[1], ignore_errors=True
+    )  # Set smooth mode
     await self.send_command(EVO.ROMA, command="SFX", params=[self.roma_speed], ignore_errors=True)
-    await self.send_command(EVO.ROMA, command="SFY", params=[self.roma_speed // 2], ignore_errors=True)
-    await self.send_command(EVO.ROMA, command="SFZ", params=[self.roma_speed // 2], ignore_errors=True)
+    await self.send_command(
+      EVO.ROMA, command="SFY", params=[self.roma_speed // 2], ignore_errors=True
+    )
+    await self.send_command(
+      EVO.ROMA, command="SFZ", params=[self.roma_speed // 2], ignore_errors=True
+    )
 
     try:
-        # First, raise the Z-axis to a safe height to avoid horizontal collisions
-        await self.send_command(
-            EVO.ROMA,
-            command="SAA",
-            params=[1, current_x, 2000, 1800, 1800, None, 1, 0, 0],
-            ignore_errors=True
-        )
-        await self.send_command(EVO.ROMA, command="AAC", ignore_errors=True)
+      # First, raise the Z-axis to a safe height to avoid horizontal collisions
+      await self.send_command(
+        EVO.ROMA,
+        command="SAA",
+        params=[1, current_x, 2000, 1800, 1800, None, 1, 0, 0],
+        ignore_errors=True,
+      )
+      await self.send_command(EVO.ROMA, command="AAC", ignore_errors=True)
 
-        # Add a small delay to ensure Z movement completes
-        await asyncio.sleep(1.5)
+      # Add a small delay to ensure Z movement completes
+      await asyncio.sleep(1.5)
 
-        # Now move to target X position while staying high
-        await self.send_command(
-            EVO.ROMA,
-            command="SAA",
-            params=[1, x_position, 2000, 1800, 1800, None, 1, 0, 0],
-            ignore_errors=True
-        )
-        await self.send_command(EVO.ROMA, command="AAC", ignore_errors=True)
+      # Now move to target X position while staying high
+      await self.send_command(
+        EVO.ROMA,
+        command="SAA",
+        params=[1, x_position, 2000, 1800, 1800, None, 1, 0, 0],
+        ignore_errors=True,
+      )
+      await self.send_command(EVO.ROMA, command="AAC", ignore_errors=True)
 
-        # Add another delay
-        await asyncio.sleep(1.5)
+      # Add another delay
+      await asyncio.sleep(1.5)
 
-        # Finally, lower to the normal Z position
-        await self.send_command(
-            EVO.ROMA,
-            command="SAA",
-            params=[1, x_position, 2000, 2464, 1800, None, 1, 0, 0],
-            ignore_errors=True
-        )
-        await self.send_command(EVO.ROMA, command="AAC", ignore_errors=True)
+      # Finally, lower to the normal Z position
+      await self.send_command(
+        EVO.ROMA,
+        command="SAA",
+        params=[1, x_position, 2000, 2464, 1800, None, 1, 0, 0],
+        ignore_errors=True,
+      )
+      await self.send_command(EVO.ROMA, command="AAC", ignore_errors=True)
 
-        self._arm_positions[EVO.ROMA] = x_position
-        EVOArm._pos_cache[EVO.ROMA] = x_position
+      self._arm_positions[EVO.ROMA] = x_position
+      EVOArm._pos_cache[EVO.ROMA] = x_position
     except Exception as e:
-        logger.error(f"Error in vector-based RoMa movement: {e}")
-        # Try simpler positioning as fallback
-        await self.simplified_roma_position(x_position)
+      logger.error(f"Error in vector-based RoMa movement: {e}")
+      # Try simpler positioning as fallback
+      await self.simplified_roma_position(x_position)
 
   async def initialize_liha_plungers(self):
     """Initialize plungers for the LIHA."""
@@ -618,14 +636,15 @@ class EVO(TecanLiquidHandler):
 
     # Assume LIHA is already at its default position
     channels = self.num_channels
-    z_range = self._z_range if hasattr(self, '_z_range') else 2000
+    z_range = self._z_range if hasattr(self, "_z_range") else 2000
 
     # Set travel height
     await self.liha.set_z_travel_height([z_range] * channels)
 
     # Position to plunger init position
     await self.liha.position_absolute_all_axis(
-      self._arm_positions[EVO.LIHA], 1031, 90, [1200] * channels)
+      self._arm_positions[EVO.LIHA], 1031, 90, [1200] * channels
+    )
 
     # Initialize plungers
     await self.liha.initialize_plunger(self._bin_use_channels(list(range(channels))))
@@ -639,7 +658,8 @@ class EVO(TecanLiquidHandler):
 
     # Return to default position
     await self.liha.position_absolute_all_axis(
-      self._arm_positions[EVO.LIHA], 1031, 90, [z_range] * channels)
+      self._arm_positions[EVO.LIHA], 1031, 90, [z_range] * channels
+    )
 
   async def initialize_liha2_plungers(self):
     """Initialize plungers for the LIHA2."""
@@ -647,46 +667,44 @@ class EVO(TecanLiquidHandler):
 
     # Assume LIHA2 is already at its default position
     channels = self.num_channels2
-    z_range = self._z_range2 if hasattr(self, '_z_range2') else 2000
+    z_range = self._z_range2 if hasattr(self, "_z_range2") else 2000
 
     try:
-        # Set travel height
-        await self.liha2.set_z_travel_height([z_range] * channels)
+      # Set travel height
+      await self.liha2.set_z_travel_height([z_range] * channels)
 
-        # Position to plunger init position - but stay at current X
-        current_x = self._arm_positions[EVO.LIHA2]
-        await self.liha2.position_absolute_all_axis(
-          current_x, 1031, 90, [1200] * channels)
+      # Position to plunger init position - but stay at current X
+      current_x = self._arm_positions[EVO.LIHA2]
+      await self.liha2.position_absolute_all_axis(current_x, 1031, 90, [1200] * channels)
 
-        # Initialize plungers
-        await self.liha2.initialize_plunger(self._bin_use_channels2(list(range(channels))))
+      # Initialize plungers
+      await self.liha2.initialize_plunger(self._bin_use_channels2(list(range(channels))))
 
-        # Cycle plungers to ensure proper initialization
-        await self.liha2.position_valve_logical([1] * channels)
-        await self.liha2.move_plunger_relative([100] * channels)
-        await self.liha2.position_valve_logical([0] * channels)
-        await self.liha2.set_end_speed_plunger([1000] * channels)
-        await self.liha2.move_plunger_relative([-100] * channels)
+      # Cycle plungers to ensure proper initialization
+      await self.liha2.position_valve_logical([1] * channels)
+      await self.liha2.move_plunger_relative([100] * channels)
+      await self.liha2.position_valve_logical([0] * channels)
+      await self.liha2.set_end_speed_plunger([1000] * channels)
+      await self.liha2.move_plunger_relative([-100] * channels)
 
-        # Return to default position
-        await self.liha2.position_absolute_all_axis(
-          current_x, 1031, 90, [z_range] * channels)
+      # Return to default position
+      await self.liha2.position_absolute_all_axis(current_x, 1031, 90, [z_range] * channels)
 
     except Exception as e:
-        logger.error(f"Error in LIHA2 plunger initialization: {e}")
-        # Recover from errors
-        try:
-            await self.move_liha2_to_position(self._arm_positions[EVO.LIHA2])
-        except Exception:
-            pass
+      logger.error(f"Error in LIHA2 plunger initialization: {e}")
+      # Recover from errors
+      try:
+        await self.move_liha2_to_position(self._arm_positions[EVO.LIHA2])
+      except Exception:
+        pass
 
   async def _park_liha(self):
     """Park the LIHA arm at its home position."""
-    if not hasattr(self, 'liha') or not self._liha_connected:
+    if not hasattr(self, "liha") or not self._liha_connected:
       return
 
     channels = self.num_channels
-    z_range = self._z_range if hasattr(self, '_z_range') else 2000
+    z_range = self._z_range if hasattr(self, "_z_range") else 2000
 
     # Set reduced speed for parking
     await self.send_command(EVO.LIHA, command="SFX", params=[self.liha_speed], ignore_errors=True)
@@ -696,15 +714,16 @@ class EVO(TecanLiquidHandler):
 
     # Then move to park position
     await self.liha.position_absolute_all_axis(
-      self._arm_positions[EVO.LIHA], 1031, 90, [z_range] * channels)
+      self._arm_positions[EVO.LIHA], 1031, 90, [z_range] * channels
+    )
 
   async def _park_liha2(self):
     """Park the LIHA2 arm at its home position."""
-    if not hasattr(self, 'liha2') or not self._liha2_connected:
+    if not hasattr(self, "liha2") or not self._liha2_connected:
       return
 
     channels = self.num_channels2
-    z_range = self._z_range2 if hasattr(self, '_z_range2') else 2000
+    z_range = self._z_range2 if hasattr(self, "_z_range2") else 2000
 
     # Set reduced speed for parking
     await self.send_command(EVO.LIHA2, command="SFX", params=[self.liha2_speed], ignore_errors=True)
@@ -714,20 +733,19 @@ class EVO(TecanLiquidHandler):
 
     # Then move to park position
     await self.liha2.position_absolute_all_axis(
-      self._arm_positions[EVO.LIHA2], 1031, 90, [z_range] * channels)
+      self._arm_positions[EVO.LIHA2], 1031, 90, [z_range] * channels
+    )
 
   async def _park_roma(self):
     """Park the RoMa arm at its home position."""
-    if not hasattr(self, 'roma') or not self._roma_connected:
+    if not hasattr(self, "roma") or not self._roma_connected:
       return
 
     await self.simplified_roma_position(self._arm_positions[EVO.ROMA])
 
   # ============== LiquidHandlerBackend methods ==============
 
-  async def aspirate(
-    self, ops: List[Aspiration], use_channels: List[int], use_liha2: bool = False
-  ):
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int], use_liha2: bool = False):
     """Aspirate liquid from the specified channels.
 
     Args:
@@ -800,8 +818,12 @@ class EVO(TecanLiquidHandler):
       await liha.set_search_submerge(sbl)
       shz = [min(z for z in z_positions["travel"] if z)] * num_channels
       await liha.set_z_travel_height(shz)
-      await liha.move_detect_liquid(self._bin_use_channels(use_channels) if not use_liha2 else
-                                   self._bin_use_channels2(use_channels), zadd)
+      await liha.move_detect_liquid(
+        self._bin_use_channels(use_channels)
+        if not use_liha2
+        else self._bin_use_channels2(use_channels),
+        zadd,
+      )
       await liha.set_z_travel_height([z_range] * num_channels)
 
     # aspirate + retract
@@ -891,9 +913,7 @@ class EVO(TecanLiquidHandler):
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
     await liha.set_z_travel_height([z_range] * num_channels)
-    await liha.position_absolute_all_axis(
-      x, y - yi * ys, ys, [z_range] * num_channels
-    )
+    await liha.position_absolute_all_axis(x, y - yi * ys, ys, [z_range] * num_channels)
 
     # aspirate airgap
     pvl: List[Optional[int]] = [None] * num_channels
@@ -908,7 +928,9 @@ class EVO(TecanLiquidHandler):
     await liha.move_plunger_relative(ppr)
 
     # get tips
-    bin_channels = self._bin_use_channels2(use_channels) if use_liha2 else self._bin_use_channels(use_channels)
+    bin_channels = (
+      self._bin_use_channels2(use_channels) if use_liha2 else self._bin_use_channels(use_channels)
+    )
     await liha.get_disposable_tip(bin_channels, 768, 210)
     # TODO: check z params
 
@@ -939,12 +961,12 @@ class EVO(TecanLiquidHandler):
     y, _ = self._first_valid(y_positions)
     assert x is not None and y is not None
     await liha.set_z_travel_height([z_range] * num_channels)
-    await liha.position_absolute_all_axis(
-      x, int(y - ys * 3.5), ys, [z_range] * num_channels
-    )
+    await liha.position_absolute_all_axis(x, int(y - ys * 3.5), ys, [z_range] * num_channels)
 
     # discard tips
-    bin_channels = self._bin_use_channels2(use_channels) if use_liha2 else self._bin_use_channels(use_channels)
+    bin_channels = (
+      self._bin_use_channels2(use_channels) if use_liha2 else self._bin_use_channels(use_channels)
+    )
     await liha.discard_disposable_tip(bin_channels)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
@@ -972,7 +994,9 @@ class EVO(TecanLiquidHandler):
     # move to resource
     await self.roma.set_smooth_move_x(1)
     await self.roma.set_fast_speed_x(self.roma_speed)
-    await self.roma.set_fast_speed_y(self.roma_speed // 2, self.roma_speed // 4)  # Reduced speed and acceleration
+    await self.roma.set_fast_speed_y(
+      self.roma_speed // 2, self.roma_speed // 4
+    )  # Reduced speed and acceleration
     await self.roma.set_fast_speed_z(self.roma_speed // 2)
     await self.roma.set_fast_speed_r(self.roma_speed // 2, self.roma_speed // 4)
     await self.roma.set_vector_coordinate_position(1, x, y, z["safe"], 900, None, 1, 0)
@@ -986,7 +1010,9 @@ class EVO(TecanLiquidHandler):
     # TODO verify z param
     await self.roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
-    await self.roma.set_fast_speed_y(self.roma_speed // 3, self.roma_speed // 5)  # Even slower for gripping
+    await self.roma.set_fast_speed_y(
+      self.roma_speed // 3, self.roma_speed // 5
+    )  # Even slower for gripping
     await self.roma.set_fast_speed_r(self.roma_speed // 3, self.roma_speed // 5)
     await self.roma.set_gripper_params(self.roma_speed // 5, 75)  # Slower gripper operation
     await self.roma.grip_plate(h - 100)
@@ -1069,7 +1095,11 @@ class EVO(TecanLiquidHandler):
     # Get the total number of channels from first valid op
     # This works for either LIHA1 or LIHA2 since the structure is the same
     first_channel = use_channels[0] if use_channels else 0
-    num_channels = max(self.num_channels, self.num_channels2) if hasattr(self, 'num_channels2') else self.num_channels
+    num_channels = (
+      max(self.num_channels, self.num_channels2)
+      if hasattr(self, "num_channels2")
+      else self.num_channels
+    )
 
     x_positions: List[Optional[int]] = [None] * num_channels
     y_positions: List[Optional[int]] = [None] * num_channels
@@ -1081,8 +1111,10 @@ class EVO(TecanLiquidHandler):
     }
 
     def get_z_position(z, z_off, tip_length, additional_offset=0):
-      #additional_offset = 0
-      return int(self._z_range - z + z_off * 10 + tip_length + additional_offset)  # TODO: verify z formula
+      # additional_offset = 0
+      return int(
+        self._z_range - z + z_off * 10 + tip_length + additional_offset
+      )  # TODO: verify z formula
 
     for i, channel in enumerate(use_channels):
       location = ops[i].resource.get_absolute_location() + ops[i].resource.center()
@@ -1094,8 +1126,12 @@ class EVO(TecanLiquidHandler):
         raise ValueError(f"Operation is not supported by resource {par}.")
       # TODO: calculate defaults when z-attribs are not specified
       tip_length = int(ops[i].tip.total_tip_length * 10)
-      print(f"[Channel {channel}] z_dispense={par.z_dispense}, abs_z={par.get_absolute_location().z}, tip_len={tip_length}")
-      print(f" -> final Z_dispense: {get_z_position(par.z_dispense, par.get_absolute_location().z, tip_length, additional_offset=300)}")
+      print(
+        f"[Channel {channel}] z_dispense={par.z_dispense}, abs_z={par.get_absolute_location().z}, tip_len={tip_length}"
+      )
+      print(
+        f" -> final Z_dispense: {get_z_position(par.z_dispense, par.get_absolute_location().z, tip_length, additional_offset=300)}"
+      )
 
       z_positions["travel"][channel] = get_z_position(
         par.z_travel, par.get_absolute_location().z, tip_length, additional_offset=100
@@ -1130,7 +1166,11 @@ class EVO(TecanLiquidHandler):
     """
     # Get the total number of channels from first valid channel
     first_channel = use_channels[0] if use_channels else 0
-    num_channels = max(self.num_channels, self.num_channels2) if hasattr(self, 'num_channels2') else self.num_channels
+    num_channels = (
+      max(self.num_channels, self.num_channels2)
+      if hasattr(self, "num_channels2")
+      else self.num_channels
+    )
 
     pvl: List[Optional[int]] = [None] * num_channels
     sep: List[Optional[int]] = [None] * num_channels
@@ -1163,7 +1203,11 @@ class EVO(TecanLiquidHandler):
     """
     # Get the total number of channels from first valid channel
     first_channel = use_channels[0] if use_channels else 0
-    num_channels = max(self.num_channels, self.num_channels2) if hasattr(self, 'num_channels2') else self.num_channels
+    num_channels = (
+      max(self.num_channels, self.num_channels2)
+      if hasattr(self, "num_channels2")
+      else self.num_channels
+    )
 
     ssl: List[Optional[int]] = [None] * num_channels
     sdl: List[Optional[int]] = [None] * num_channels
@@ -1205,7 +1249,11 @@ class EVO(TecanLiquidHandler):
     """
     # Get the total number of channels from first valid channel
     first_channel = use_channels[0] if use_channels else 0
-    num_channels = max(self.num_channels, self.num_channels2) if hasattr(self, 'num_channels2') else self.num_channels
+    num_channels = (
+      max(self.num_channels, self.num_channels2)
+      if hasattr(self, "num_channels2")
+      else self.num_channels
+    )
 
     ssz: List[Optional[int]] = [None] * num_channels
     sep: List[Optional[int]] = [None] * num_channels
@@ -1246,7 +1294,11 @@ class EVO(TecanLiquidHandler):
     """
     # Get the total number of channels from first valid channel
     first_channel = use_channels[0] if use_channels else 0
-    num_channels = max(self.num_channels, self.num_channels2) if hasattr(self, 'num_channels2') else self.num_channels
+    num_channels = (
+      max(self.num_channels, self.num_channels2)
+      if hasattr(self, "num_channels2")
+      else self.num_channels
+    )
 
     sep: List[Optional[int]] = [None] * num_channels
     spp: List[Optional[int]] = [None] * num_channels
@@ -1421,15 +1473,23 @@ class LiHa(EVOArm):
 
       # Check for potential collision with increased safety distance
       if cur_x < x and cur_x < pos < x:  # moving right
-        logger.warning(f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}")
+        logger.warning(
+          f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}"
+        )
         if abs(pos - x) < EVO.SAFE_DISTANCE:
-          logger.warning(f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}")
+          logger.warning(
+            f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}"
+          )
           raise TecanError("Invalid command (collision)", self.module, 2)
 
       if cur_x > x and cur_x > pos > x:  # moving left
-        logger.warning(f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}")
+        logger.warning(
+          f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}"
+        )
         if abs(pos - x) < EVO.SAFE_DISTANCE:
-          logger.warning(f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}")
+          logger.warning(
+            f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}"
+          )
           raise TecanError("Invalid command (collision)", self.module, 2)
 
     await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
@@ -1761,15 +1821,23 @@ class RoMa(EVOArm):
 
       # Check for potential collision with increased safety distance
       if cur_x < x and cur_x < pos < x:  # moving right
-        logger.warning(f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}")
+        logger.warning(
+          f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}"
+        )
         if abs(pos - x) < EVO.SAFE_DISTANCE:
-          logger.warning(f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}")
+          logger.warning(
+            f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}"
+          )
           raise TecanError("Invalid command (collision)", self.module, 2)
 
       if cur_x > x and cur_x > pos > x:  # moving left
-        logger.warning(f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}")
+        logger.warning(
+          f"Checking collision: {self.module} moving from {cur_x} to {x}, {module} at {pos}"
+        )
         if abs(pos - x) < EVO.SAFE_DISTANCE:
-          logger.warning(f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}")
+          logger.warning(
+            f"Potential collision detected with {module} at {pos} when moving {self.module} from {cur_x} to {x}"
+          )
           raise TecanError("Invalid command (collision)", self.module, 2)
 
     await self.backend.send_command(

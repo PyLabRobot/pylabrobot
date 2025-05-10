@@ -327,7 +327,7 @@ def DiTi_200ul_SBS_LiHa_tip() -> TecanTip:
   # print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
-    total_tip_length=21.0, #vikmol changed from -5
+    total_tip_length=21.0,  # vikmol changed from -5
     maximal_volume=220.0,
     tip_type=TipType.DITI,
   )
