@@ -1,8 +1,9 @@
 import asyncio
-import time
 import logging
-from typing import List
+import time
 import warnings
+from typing import List
+
 import serial
 
 from pylabrobot.incubators.backend import IncubatorBackend
