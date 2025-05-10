@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, cast
 
-from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.resource_holder import ResourceHolder, get_child_location
 
 from .coordinate import Coordinate
-from .plate import Plate
+from .plate import Lid, Plate
 from .plate_adapter import PlateAdapter
 from .resource import Resource
 from .resource_stack import ResourceStack
@@ -45,7 +45,7 @@ class Carrier(Resource, Generic[S]):
     for spot, site in sites.items():
       if site.location is None:
         raise ValueError(f"site {site} has no location")
-      self.assign_child_resource(site, location=site.location, spot=spot)
+      self.assign_child_resource(site, location=site.location + get_child_location(site), spot=spot)
 
   @property
   def capacity(self):
@@ -64,7 +64,7 @@ class Carrier(Resource, Generic[S]):
 
     # see if we have an index for the resource name (eg from deserialization or user specification),
     # otherwise add in first available spot
-    idx = spot or len(self.sites)
+    idx = spot if spot is not None else len(self.sites)
     if not reassign and self.sites[idx] is not None:
       raise ValueError(f"a site with index {idx} already exists")
     self.sites[idx] = cast(S, resource)
@@ -186,7 +186,7 @@ class PlateHolder(ResourceHolder):
           "If a ResourceStack is assigned to a PlateHolder, the items "
           + f"must be Plates, not {type(resource.children[-1])}"
         )
-    elif not isinstance(resource, (Plate, PlateAdapter)):
+    elif not isinstance(resource, (Plate, PlateAdapter, Lid)):
       raise TypeError(
         "PlateHolder can only store Plate, PlateAdapter or ResourceStack "
         + f"resources, not {type(resource)}"
@@ -285,7 +285,7 @@ class MFXCarrier(Carrier[ResourceHolder]):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Dict[int, ResourceHolder],
+    sites: Optional[Dict[int, ResourceHolder]] = None,
     category="mfx_carrier",
     model: Optional[str] = None,
   ):

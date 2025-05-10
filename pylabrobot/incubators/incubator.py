@@ -193,7 +193,7 @@ class Incubator(Machine, Resource):
     }
 
   @classmethod
-  def deserialize(cls, data: dict, allow_marshall: bool = False):
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
     backend = IncubatorBackend.deserialize(data.pop("backend"))
     return cls(
       backend=backend,

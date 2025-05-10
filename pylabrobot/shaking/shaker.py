@@ -34,7 +34,7 @@ class Shaker(ResourceHolder, Machine):
     Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend  # fix type
 
-  async def shake(self, speed: float, duration: Optional[float] = None):
+  async def shake(self, speed: float, duration: Optional[float] = None, **backend_kwargs):
     """Shake the shaker at the given speed
 
     Args:
@@ -42,7 +42,7 @@ class Shaker(ResourceHolder, Machine):
       duration: Duration of shaking in seconds. If None, shake indefinitely.
     """
     await self.backend.lock_plate()
-    await self.backend.shake(speed=speed)
+    await self.backend.shake(speed=speed, **backend_kwargs)
 
     if duration is None:
       return
@@ -59,3 +59,9 @@ class Shaker(ResourceHolder, Machine):
 
   async def unlock_plate(self):
     await self.backend.unlock_plate()
+
+  def serialize(self) -> dict:
+    return {
+      **Machine.serialize(self),
+      **ResourceHolder.serialize(self),
+    }

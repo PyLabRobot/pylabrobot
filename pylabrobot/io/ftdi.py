@@ -10,7 +10,7 @@ try:
 except ImportError:
   HAS_PYLIBFTDI = False
 
-from pylabrobot.io.capture import CaptureReader, Command, capturer
+from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
@@ -31,6 +31,9 @@ class FTDI(IOBase):
     self._dev = Device(lazy_open=True, device_id=device_id)
     self._device_id = device_id or "None"  # for io
 
+    if get_capture_or_validation_active():
+      raise RuntimeError("Cannot create a new FTDI object while capture or validation is active")
+
   async def setup(self):
     if not HAS_PYLIBFTDI:
       raise RuntimeError("pyserial not installed.")
@@ -41,12 +44,12 @@ class FTDI(IOBase):
     self._dev.baudrate = baudrate
 
   def set_rts(self, level: bool):
-    self._dev.ftdi_fn.setrts(level)
+    self._dev.ftdi_fn.ftdi_setrts(level)
     logger.log(LOG_LEVEL_IO, "[%s] set_rts %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_rts", data=str(level)))
 
   def set_dtr(self, level: bool):
-    self._dev.ftdi_fn.setdtr(level)
+    self._dev.ftdi_fn.ftdi_setdtr(level)
     logger.log(LOG_LEVEL_IO, "[%s] set_dtr %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_dtr", data=str(level)))
 
@@ -56,14 +59,14 @@ class FTDI(IOBase):
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_reset", data=""))
 
   def set_latency_timer(self, latency: int):
-    self._dev.ftdi_fn.set_latency_timer(latency)
+    self._dev.ftdi_fn.ftdi_set_latency_timer(latency)
     logger.log(LOG_LEVEL_IO, "[%s] set_latency_timer %s", self._device_id, latency)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="set_latency_timer", data=str(latency))
     )
 
   def set_line_property(self, bits: int, stopbits: int, parity: int):
-    self._dev.ftdi_fn.set_line_property(bits, stopbits, parity)
+    self._dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
     logger.log(
       LOG_LEVEL_IO, "[%s] set_line_property %s,%s,%s", self._device_id, bits, stopbits, parity
     )
@@ -74,7 +77,7 @@ class FTDI(IOBase):
     )
 
   def set_flowctrl(self, flowctrl: int):
-    self._dev.ftdi_fn.setflowctrl(flowctrl)
+    self._dev.ftdi_fn.ftdi_setflowctrl(flowctrl)
     logger.log(LOG_LEVEL_IO, "[%s] set_flowctrl %s", self._device_id, flowctrl)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="set_flowctrl", data=str(flowctrl))
@@ -102,32 +105,28 @@ class FTDI(IOBase):
   async def stop(self):
     self._dev.close()
 
-  def write(self, data: bytes) -> int:
+  async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
-    capturer.record(
-      FTDICommand(device_id=self._device_id, action="write", data=data.decode("unicode_escape"))
-    )
+    capturer.record(FTDICommand(device_id=self._device_id, action="write", data=data.hex()))
     return cast(int, self._dev.write(data))
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     data = self._dev.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
     capturer.record(
       FTDICommand(
         device_id=self._device_id,
         action="read",
-        data=data if isinstance(data, str) else data.decode("unicode_escape"),
+        data=data if isinstance(data, str) else data.hex(),
       )
     )
     return cast(bytes, data)
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     data = self._dev.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
-    capturer.record(
-      FTDICommand(device_id=self._device_id, action="readline", data=data.decode("unicode_escape"))
-    )
+    capturer.record(FTDICommand(device_id=self._device_id, action="readline", data=data.hex()))
     return cast(bytes, data)
 
   def serialize(self):
@@ -251,7 +250,7 @@ class FTDIValidator(FTDI):
       )
     return int(next_command.data)
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"
@@ -259,11 +258,11 @@ class FTDIValidator(FTDI):
       and next_command.action == "write"
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI write {self._device_id}")
-    if not next_command.data == data.decode("unicode_escape"):
-      align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
+    if not next_command.data == data.hex():
+      align_sequences(expected=next_command.data, actual=data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"
@@ -272,9 +271,9 @@ class FTDIValidator(FTDI):
       and len(next_command.data) == num_bytes
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI read {self._device_id}")
-    return next_command.data.encode("unicode_escape")
+    return bytes.fromhex(next_command.data)
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"
@@ -284,4 +283,4 @@ class FTDIValidator(FTDI):
       raise ValidationError(
         f"Next line is {next_command}, expected FTDI readline {self._device_id}"
       )
-    return next_command.data.encode("unicode_escape")
+    return bytes.fromhex(next_command.data)

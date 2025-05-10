@@ -12,7 +12,7 @@ try:
 except ImportError:
   HAS_SERIAL = False
 
-from pylabrobot.io.capture import CaptureReader, Command, capturer
+from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 logger = logging.getLogger(__name__)
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 class SerialCommand(Command):
   data: str
 
-  def __init__(self, device_id: str, action: str, data: str):
-    super().__init__(module="serial", device_id=device_id, action=action)
+  def __init__(self, device_id: str, action: str, data: str, module: str = "serial"):
+    super().__init__(module=module, device_id=device_id, action=action)
     self.data = data
 
 
@@ -49,6 +49,13 @@ class Serial(IOBase):
     self.write_timeout = write_timeout
     self.timeout = timeout
 
+    if get_capture_or_validation_active():
+      raise RuntimeError("Cannot create a new Serial object while capture or validation is active")
+
+  @property
+  def port(self) -> str:
+    return self._port
+
   async def setup(self):
     try:
       self.ser = serial.Serial(
@@ -68,7 +75,7 @@ class Serial(IOBase):
     if self.ser is not None and self.ser.is_open:
       self.ser.close()
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     assert self.ser is not None, "forgot to call setup?"
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
@@ -76,7 +83,7 @@ class Serial(IOBase):
     )
     self.ser.write(data)
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     assert self.ser is not None, "forgot to call setup?"
     data = self.ser.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
@@ -85,7 +92,7 @@ class Serial(IOBase):
     )
     return cast(bytes, data)
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     assert self.ser is not None, "forgot to call setup?"
     data = self.ser.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
@@ -93,6 +100,29 @@ class Serial(IOBase):
       SerialCommand(device_id=self._port, action="readline", data=data.decode("unicode_escape"))
     )
     return cast(bytes, data)
+
+  def serialize(self):
+    return {
+      "port": self._port,
+      "baudrate": self.baudrate,
+      "bytesize": self.bytesize,
+      "parity": self.parity,
+      "stopbits": self.stopbits,
+      "write_timeout": self.write_timeout,
+      "timeout": self.timeout,
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> "Serial":
+    return cls(
+      port=data["port"],
+      baudrate=data["baudrate"],
+      bytesize=data["bytesize"],
+      parity=data["parity"],
+      stopbits=data["stopbits"],
+      write_timeout=data["write_timeout"],
+      timeout=data["timeout"],
+    )
 
 
 class SerialValidator(Serial):
@@ -104,6 +134,8 @@ class SerialValidator(Serial):
     bytesize: int = 8,  # serial.EIGHTBITS
     parity: str = "N",  # serial.PARITY_NONE
     stopbits: int = 1,  # serial.STOPBITS_ONE,
+    write_timeout=1,
+    timeout=1,
   ):
     super().__init__(
       port=port,
@@ -111,13 +143,15 @@ class SerialValidator(Serial):
       bytesize=bytesize,
       parity=parity,
       stopbits=stopbits,
+      write_timeout=write_timeout,
+      timeout=timeout,
     )
     self.cr = cr
 
   async def setup(self):
     pass
 
-  def write(self, data: bytes):
+  async def write(self, data: bytes):
     next_command = SerialCommand(**self.cr.next_command())
     if not (
       next_command.module == "serial"
@@ -129,7 +163,7 @@ class SerialValidator(Serial):
       align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  def read(self, num_bytes: int = 1) -> bytes:
+  async def read(self, num_bytes: int = 1) -> bytes:
     next_command = SerialCommand(**self.cr.next_command())
     if not (
       next_command.module == "serial"
@@ -140,7 +174,7 @@ class SerialValidator(Serial):
       raise ValidationError(f"Next line is {next_command}, expected Serial read {num_bytes}")
     return next_command.data.encode()
 
-  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
+  async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_command = SerialCommand(**self.cr.next_command())
     if not (
       next_command.module == "serial"

@@ -1,10 +1,17 @@
 import json
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Union
 
-from pylabrobot import __version__
+from pylabrobot.__version__ import __version__
 from pylabrobot.io.errors import ValidationError
+
+_capture_or_validation_active = False
+
+
+def get_capture_or_validation_active() -> bool:
+  return _capture_or_validation_active
 
 
 @dataclass
@@ -17,42 +24,62 @@ class Command:
 class _CaptureWriter:
   def __init__(self):
     self._path = None
-    self._commands: List[Command] = []
-    self._capture_active = False
-
-  def record(self, command: Command):
-    if self._capture_active:
-      self._commands.append(command)
+    self._tempfile = None
 
   def start(self, path: Path):
-    if self._capture_active:
+    if self._tempfile is not None:
       raise RuntimeError("io capture already active")
-    self._commands = []
     self._path = path
-    self._capture_active = True
+
+    self._tempfile = tempfile.NamedTemporaryFile(delete=False)
+    self._tempfile.write(b'{\n  "version": "')
+    self._tempfile.write(__version__.encode("utf-8"))
+    self._tempfile.write(b'",\n')
+    self._tempfile.write(b'  "commands": [\n')
+    self._tempfile.flush()
+
+    global _capture_or_validation_active
+    _capture_or_validation_active = True
+
+  def record(self, command: Command):
+    if self._tempfile is not None:
+      encoded_command = json.dumps(command.__dict__, indent=2).encode()
+      # add 4 spaces to each line
+      encoded_command = b"    " + encoded_command.replace(b"\n", b"\n    ")
+      self._tempfile.write(encoded_command)
+      self._tempfile.write(b",\n")
+      self._tempfile.flush()
 
   def stop(self):
-    if self._path is None:
+    if self._path is None or self._tempfile is None:
       raise RuntimeError("io capture not active. Call start() first.")
-    with open(self._path, "w") as f:
-      json.dump(
-        {
-          "version": __version__,
-          "commands": [c.__dict__ for c in self._commands],
-        },
-        f,
-        indent=2,
-      )
+
+    self._tempfile.seek(self._tempfile.tell() - 2)
+    # if previous line ends with a comma, delete it
+    if self._tempfile.read(1) == b",":
+      self._tempfile.seek(self._tempfile.tell() - 1)
+      self._tempfile.write(b"\n")
+      self._tempfile.write(b"  ]\n}")
+    else:
+      self._tempfile.write(b"]\n}")
+    self._tempfile.flush()
+    self._tempfile.seek(0)
+
+    with open(self._path, "wb") as f:
+      f.write(self._tempfile.read())
 
     print(f"Validation file written to {self._path}")
 
-    self._capture_active = False
-    self._commands = []
     self._path = None
+
+    global _capture_or_validation_active
+    _capture_or_validation_active = False
+
+    self._tempfile = None
 
   @property
   def capture_active(self):
-    return self._capture_active
+    return self._tempfile is not None
 
 
 class CaptureReader:
@@ -64,6 +91,10 @@ class CaptureReader:
       for c in data["commands"]:
         self.commands.append(c)
     self._command_idx = 0
+
+  def start(self):
+    global _capture_or_validation_active
+    _capture_or_validation_active = True
 
   def next_command(self) -> dict:
     command = self.commands[self._command_idx]
@@ -78,9 +109,13 @@ class CaptureReader:
         f"Log file not fully read, {left} lines left. First command: {next_command}"
       )
     print("Validation successful!")
+    self.reset()
 
   def reset(self):
     self._command_idx = 0
+
+    global _capture_or_validation_active
+    _capture_or_validation_active = True
 
 
 capturer = _CaptureWriter()

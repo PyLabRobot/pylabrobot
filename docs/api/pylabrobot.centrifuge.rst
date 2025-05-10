@@ -21,4 +21,4 @@ Backends
   :nosignatures:
   :recursive:
 
-    vspin.VSpin
+    vspin_backend.VSpin

@@ -6,8 +6,10 @@ from pylabrobot.plate_reading.standard import (
   Exposure,
   FocalPosition,
   Gain,
+  Image,
   ImagingMode,
   NoPlateError,
+  Objective,
 )
 from pylabrobot.resources import Plate, Resource, Well
 
@@ -54,11 +56,12 @@ class Imager(Resource, Machine):
     self,
     well: Union[Well, Tuple[int, int]],
     mode: ImagingMode,
+    objective: Objective,
     exposure_time: Exposure = "auto",
     focal_height: FocalPosition = "auto",
     gain: Gain = "auto",
     **backend_kwargs,
-  ) -> List[List[float]]:
+  ) -> List[Image]:
     if isinstance(well, tuple):
       row, column = well
     else:
@@ -71,6 +74,7 @@ class Imager(Resource, Machine):
       row=row,
       column=column,
       mode=mode,
+      objective=objective,
       exposure_time=exposure_time,
       focal_height=focal_height,
       gain=gain,
