@@ -726,7 +726,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
-    spread: Literal["wide", "tight"] = "wide",
+    spread: Literal["wide", "tight", "custom"] = "wide",
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -773,7 +773,8 @@ class LiquidHandler(Resource, Machine):
         backend default will be used.
       spread: Used if aspirating from a single resource with multiple channels. If "tight", the
         channels will be spaced as close as possible. If "wide", the channels will be spaced as far
-        apart as possible.
+        apart as possible. If "custom", the user must specify the offsets wrt the center of the
+        resource.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -819,10 +820,14 @@ class LiquidHandler(Resource, Machine):
         center_offsets = get_tight_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
-      else:  # wide
+      elif spread == "wide":
         center_offsets = get_wide_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
+      elif spread == "custom":
+        center_offsets = [Coordinate.zero()] * len(use_channels)
+      else:
+        raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
@@ -905,7 +910,8 @@ class LiquidHandler(Resource, Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
-        (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
+        tip_volume_tracker = self.head[channel].get_tip().tracker
+        (tip_volume_tracker.commit if success else tip_volume_tracker.rollback)()
 
     # trigger callback
     self._trigger_callback(
@@ -927,7 +933,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
-    spread: Literal["wide", "tight"] = "wide",
+    spread: Literal["wide", "tight", "custom"] = "wide",
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
@@ -1012,10 +1018,14 @@ class LiquidHandler(Resource, Machine):
         center_offsets = get_tight_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
-      else:
+      elif spread == "wide":
         center_offsets = get_wide_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
+      elif spread == "custom":
+        center_offsets = [Coordinate.zero()] * len(use_channels)
+      else:
+        raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
@@ -1107,7 +1117,8 @@ class LiquidHandler(Resource, Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
-        (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
+        tip_volume_tracker = self.head[channel].get_tip().tracker
+        (tip_volume_tracker.commit if success else tip_volume_tracker.rollback)()
 
     if any(bav is not None for bav in blow_out_air_volume):
       self._blow_out_air_volume = None
@@ -1812,6 +1823,7 @@ class LiquidHandler(Resource, Machine):
   async def move_picked_up_resource(
     self,
     to: Coordinate,
+    **backend_kwargs,
   ):
     if self._resource_pickup is None:
       raise RuntimeError("No resource picked up")
@@ -1820,7 +1832,9 @@ class LiquidHandler(Resource, Machine):
         location=to,
         resource=self._resource_pickup.resource,
         gripped_direction=self._resource_pickup.direction,
-      )
+        pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
+      ),
+      **backend_kwargs,
     )
 
   async def drop_resource(
@@ -1891,35 +1905,28 @@ class LiquidHandler(Resource, Machine):
       to_location = destination.get_absolute_location(z="top")
     elif isinstance(destination, Coordinate):
       to_location = destination
-    elif isinstance(destination, Tilter):
-      to_location = destination.get_absolute_location() + destination.get_default_child_location(
-        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
-    elif isinstance(destination, PlateHolder):
+    elif isinstance(destination, ResourceHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
-      to_location = (destination.get_absolute_location()) + destination.get_default_child_location(
+      child_wrt_parent = destination.get_default_child_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
+      ).rotated(destination.get_absolute_rotation())
+      to_location = (destination.get_absolute_location()) + child_wrt_parent
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = destination.compute_plate_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
+      ).rotated(destination.get_absolute_rotation())
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
-    elif isinstance(destination, ResourceHolder):
-      x = destination.get_default_child_location(
-        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
-      to_location = destination.get_absolute_location() + x
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
       plate_location = destination.get_absolute_location()
-      to_location = plate_location + destination.get_lid_location(
+      child_wrt_parent = destination.get_lid_location(
         lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
+      ).rotated(destination.get_absolute_rotation())
+      to_location = plate_location + child_wrt_parent
     else:
       to_location = destination.get_absolute_location()
 
@@ -1964,6 +1971,8 @@ class LiquidHandler(Resource, Machine):
       )
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       destination.assign_child_resource(resource)
+    elif isinstance(destination, Trash):
+      pass  # don't assign to trash, resource will simply be unassigned
     else:
       destination.assign_child_resource(resource, location=to_location)
 

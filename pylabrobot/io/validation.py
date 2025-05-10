@@ -22,23 +22,32 @@ def validate(capture_file: str):
 
   global cr
   cr = CaptureReader(path=capture_file)
-  for machine_backend in MachineBackend.get_all_instances():
+
+  def _replace_io(obj):
     io2v = {
       USB: USBValidator,
       Serial: SerialValidator,
       FTDI: FTDIValidator,
       HID: HIDValidator,
     }
-
-    # replace `io` with validator variant
-    if machine_backend.io.__class__ in io2v:
-      machine_backend.io = io2v[machine_backend.io.__class__](
-        **machine_backend.io.serialize(), cr=cr
-      )
-    elif machine_backend.io.__class__ in io2v.values():
-      machine_backend.io.cr = cr
+    if not hasattr(obj, "io"):
+      return False
+    if obj.io.__class__ in io2v:
+      obj.io = io2v[obj.io.__class__](**obj.io.serialize(), cr=cr)
+    elif obj.io.__class__ in io2v.values():
+      obj.io.cr = cr
     else:
+      return False
+    return True
+
+  for machine_backend in MachineBackend.get_all_instances():
+    if not (
+      (hasattr(machine_backend, "io") and _replace_io(machine_backend))
+      or (hasattr(machine_backend, "interface") and _replace_io(machine_backend.interface))
+    ):
       raise RuntimeError(f"Backend {machine_backend} not supported for validation")
+
+  cr.start()
 
 
 def end_validation():

@@ -1,7 +1,7 @@
 import textwrap
 import unittest
 
-from pylabrobot.resources.corning_costar import (
+from pylabrobot.resources.corning import (
   Cor_96_wellplate_360ul_Fb,
 )
 from pylabrobot.resources.hamilton import (

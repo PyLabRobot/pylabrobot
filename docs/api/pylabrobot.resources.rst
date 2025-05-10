@@ -21,7 +21,9 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     PetriDish
     Plate
     PlateCarrier
+    PlateHolder
     Resource
+    ResourceHolder
     ResourceStack
     Rotation
     tip.Tip
@@ -42,7 +44,7 @@ Azenta
   :nosignatures:
   :recursive:
 
-    corning_axygen.plates
+    azenta.plates
 
 
 Biorad
@@ -75,7 +77,7 @@ Corning Axygen
   :nosignatures:
   :recursive:
 
-    corning_axygen.plates
+    corning.axygen.plates
 
 
 Corning Costar
@@ -86,18 +88,18 @@ Corning Costar
   :nosignatures:
   :recursive:
 
-    corning_costar.plates
+    corning.costar.plates
 
 
-Falcon
-------
+Corning Falcon
+--------------
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    falcon.tubes
+    corning.falcon.tubes
 
 
 Hamilton
@@ -212,7 +214,7 @@ VWR
 Tip trackers
 ------------
 
-See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
+See :doc:`Using trackers </user_guide/machine-agnostic-features/using-trackers>` for a tutorial.
 
 .. autosummary::
   :toctree: _autosummary
@@ -227,7 +229,7 @@ See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
 Volume trackers
 ---------------
 
-See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
+See :doc:`Using trackers </user_guide/machine-agnostic-features/using-trackers>` for a tutorial.
 
 .. autosummary::
   :toctree: _autosummary

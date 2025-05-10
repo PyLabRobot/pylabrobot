@@ -16,8 +16,8 @@ class PlateReader(ResourceHolder, Machine):
 
   Here's an example of how to use this class in a Jupyter Notebook:
 
-  >>> from pylabrobot.plate_reading.clario_star import CLARIOStar
-  >>> pr = PlateReader(backend=CLARIOStar())
+  >>> from pylabrobot.plate_reading.clario_star import CLARIOStarBackend
+  >>> pr = PlateReader(backend=CLARIOStarBackend())
   >>> pr.setup()
   >>> await pr.read_luminescence()
   [[value1, value2, value3, ...], [value1, value2, value3, ...], ...
@@ -67,7 +67,8 @@ class PlateReader(ResourceHolder, Machine):
     await self.backend.open(**backend_kwargs)
 
   async def close(self, **backend_kwargs) -> None:
-    await self.backend.close(**backend_kwargs)
+    plate = self.get_plate() if len(self.children) > 0 else None
+    await self.backend.close(plate=plate, **backend_kwargs)
 
   @need_setup_finished
   async def read_luminescence(self, focal_height: float) -> List[List[float]]:

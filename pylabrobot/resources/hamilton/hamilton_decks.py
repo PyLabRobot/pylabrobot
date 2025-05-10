@@ -422,8 +422,8 @@ class HamiltonSTARDeck(HamiltonDeck):
         ts.location = Coordinate(x=0, y=9 * i, z=23.1)
       teaching_tip_rack = TipRack(
         name="teaching_tip_rack",
-        size_x=9 * 8,
-        size_y=9,
+        size_x=9,
+        size_y=9 * 8,
         size_z=50.4,
         ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("HGFEDCBA")},
         with_tips=True,

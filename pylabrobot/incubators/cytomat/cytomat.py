@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import List, Literal, Optional, cast
+from typing import List, Literal, Optional, Union, cast
 
 import serial
 
@@ -43,11 +43,13 @@ from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 logger = logging.getLogger(__name__)
 
 
-class Cytomat(IncubatorBackend):
+class CytomatBackend(IncubatorBackend):
   default_baud = 9600
   serial_message_encoding = "utf-8"
 
-  def __init__(self, model: CytomatType, port: str):
+  def __init__(self, model: Union[CytomatType, str], port: str):
+    super().__init__()
+
     supported_models = [
       CytomatType.C6000,
       CytomatType.C6002,
@@ -55,8 +57,15 @@ class Cytomat(IncubatorBackend):
       CytomatType.C2C_450_SHAKE,
       CytomatType.C5C,
     ]
+    if isinstance(model, str):
+      try:
+        model = CytomatType(model)
+      except ValueError:
+        raise ValueError(f"Unsupported Cytomat model: '{model}'")
     if model not in supported_models:
-      raise NotImplementedError("Only the following Cytomats are supported:", supported_models)
+      raise NotImplementedError(
+        f"Only the following Cytomats are supported: {supported_models}, but got '{model}'"
+      )
     self.model = model
     self._racks: List[PlateCarrier] = []
 
@@ -90,8 +99,8 @@ class Cytomat(IncubatorBackend):
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
       logging.debug(command_str.encode(self.serial_message_encoding))
-      self.io.write(command_str.encode(self.serial_message_encoding))
-      resp = self.io.read(128).decode(self.serial_message_encoding)
+      await self.io.write(command_str.encode(self.serial_message_encoding))
+      resp = (await self.io.read(128)).decode(self.serial_message_encoding)
       if len(resp) == 0:
         raise RuntimeError("Cytomat did not respond to command, is it turned on?")
       key, *values = resp.split()
@@ -370,8 +379,15 @@ class Cytomat(IncubatorBackend):
   async def set_temperature(self, *args, **kwargs):
     raise NotImplementedError("Temperature control is not implemented yet")
 
+  def serialize(self) -> dict:
+    return {
+      **IncubatorBackend.serialize(self),
+      "model": self.model.value,
+      "port": self.io.port,
+    }
 
-class CytomatChatterbox(Cytomat):
+
+class CytomatChatterbox(CytomatBackend):
   async def setup(self):
     await self.wait_for_task_completion()
 
@@ -389,3 +405,12 @@ class CytomatChatterbox(Cytomat):
   async def wait_for_transfer_station(self, occupied: bool = False):
     # send the command, but don't wait when we are in chatting mode.
     _ = await self.get_overview_register()
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class Cytomat:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`Cytomat` is deprecated. Please use `CytomatBackend` instead. ")

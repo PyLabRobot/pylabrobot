@@ -98,14 +98,14 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
     name=name,
     size_x=127.76,  # from spec
     size_y=85.48,  # from spec
-    size_z=31.4,  # from spec
+    size_z=44.2,  # measured
     lid=lid,
     model=AGenBio_1_wellplate_Fl.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,
       num_items_y=1,
-      dx=9.8,
+      dx=10.1,
       dy=7.6,
       dz=5.88,
       item_dx=INNER_WELL_WIDTH,
