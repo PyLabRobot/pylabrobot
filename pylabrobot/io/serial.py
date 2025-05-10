@@ -46,7 +46,7 @@ class Serial(IOBase):
     self.bytesize = bytesize
     self.parity = parity
     self.stopbits = stopbits
-    self.ser: Optional[serial.Serial] = None
+    self._ser: Optional[serial.Serial] = None
     self.write_timeout = write_timeout
     self.timeout = timeout
     self.rtscts = rtscts
@@ -60,7 +60,7 @@ class Serial(IOBase):
 
   async def setup(self):
     try:
-      self.ser = serial.Serial(
+      self._ser = serial.Serial(
         port=self._port,
         baudrate=self.baudrate,
         bytesize=self.bytesize,
@@ -75,20 +75,20 @@ class Serial(IOBase):
       raise e
 
   async def stop(self):
-    if self.ser is not None and self.ser.is_open:
-      self.ser.close()
+    if self._ser is not None and self._ser.is_open:
+      self._ser.close()
 
   async def write(self, data: bytes):
-    assert self.ser is not None, "forgot to call setup?"
+    assert self._ser is not None, "forgot to call setup?"
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="write", data=data.decode("unicode_escape"))
     )
-    self.ser.write(data)
+    self._ser.write(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    assert self.ser is not None, "forgot to call setup?"
-    data = self.ser.read(num_bytes)
+    assert self._ser is not None, "forgot to call setup?"
+    data = self._ser.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="read", data=data.decode("unicode_escape"))
@@ -96,8 +96,8 @@ class Serial(IOBase):
     return cast(bytes, data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    assert self.ser is not None, "forgot to call setup?"
-    data = self.ser.readline()
+    assert self._ser is not None, "forgot to call setup?"
+    data = self._ser.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="readline", data=data.decode("unicode_escape"))
