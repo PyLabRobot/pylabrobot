@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import List
+from typing import List, Tuple
 
 import serial
 
@@ -56,10 +56,10 @@ class HeraeusCytomatBackend(IncubatorBackend):
     except serial.SerialException as e:
       raise RuntimeError(f"Could not open {self.io.port}: {e}")
 
-    self.io.send_break(duration=0.2)  # >100 ms required
+    await self.io.send_break(duration=0.2)  # >100 ms required
     await asyncio.sleep(0.15)
-    self.io.reset_input_buffer()
-    self.io.reset_output_buffer()
+    await self.io.reset_input_buffer()
+    await self.io.reset_output_buffer()
 
     await self.io.write(b"CR\r")
     deadline = time.time() + self.init_timeout
@@ -142,8 +142,10 @@ class HeraeusCytomatBackend(IncubatorBackend):
     await self._send_command("RS 1607")
     await self._wait_ready()
 
-  def _site_to_m_n(self, site: PlateHolder) -> (int, int):
+  def _site_to_m_n(self, site: PlateHolder) -> Tuple[int, int]:
     rack = site.parent
+    assert isinstance(rack, PlateCarrier), "Site not in rack"
+    assert self._racks is not None, "Racks not set"
     rack_idx = self._racks.index(rack) + 1  # plr is 0-indexed, cytomat is 1-indexed
     site_idx = next(idx for idx, s in rack.sites.items() if s == site) + 1  # 1-indexed
     return rack_idx, site_idx
@@ -155,7 +157,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
     cmd = command.strip() + "\r"
     logger.debug("Sending Cytomat command: %r", cmd)
     await self.io.write(cmd.encode(self.serial_message_encoding))
-    resp = await self.io.read(128).decode(self.serial_message_encoding)
+    resp = (await self.io.read(128)).decode(self.serial_message_encoding)
     if not resp:
       raise RuntimeError("No response from Cytomat controller")
     resp = resp.strip()
