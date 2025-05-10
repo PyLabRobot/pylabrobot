@@ -8,46 +8,6 @@ from pylabrobot.resources.carrier import (
 )
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
 
-# from pylabrobot.resources.tecan.tip_racks import TecanTipRack  # Import TecanTipRack VIKMOL
-
-# # Define the combined class here
-# class PlateHolderWithTipRack(PlateHolder, TecanTipRack):
-#     """A combined class that acts as both a PlateHolder and a TecanTipRack. Based on TecanPlateCarrier"""
-#     def __init__(
-#       self,
-#       name: str,
-#       size_x: float,
-#       size_y: float,
-#       size_z: float,
-#       off_x: float,
-#       off_y: float,
-#       roma_x: Optional[float] = None,
-#       roma_y: Optional[float] = None,
-#       roma_z_safe: Optional[float] = None,
-#       roma_z_travel: Optional[float] = None,
-#       roma_z_end: Optional[float] = None,
-#       sites: Optional[Dict[int, PlateHolder]] = None,
-#       category="tecan_plate_carrier",
-#       model: Optional[str] = None,
-#     ):
-#       super().__init__(
-#         name,
-#         size_x,
-#         size_y,
-#         size_z,
-#         sites,
-#         category=category,
-#         model=model,
-#       )
-
-#       self.off_x = off_x
-#       self.off_y = off_y
-#       self.roma_x = roma_x
-#       self.roma_y = roma_y
-#       self.roma_z_safe = roma_z_safe
-#       self.roma_z_travel = roma_z_travel
-#       self.roma_z_end = roma_z_end
-
 
 class TecanPlateCarrier(PlateCarrier, TecanResource):
   """Base class for Tecan plate carriers."""
@@ -234,7 +194,7 @@ def MP_4Pos_landscape(name: str) -> TecanPlateCarrier:
     off_x=7.5,
     off_y=70.0,
     sites=create_homogeneous_resources(
-      klass=PlateHolder,  # PlateHolderWithTipRack, #PlateHolder, VIKMOL
+      klass=PlateHolder,
       locations=[
         Coordinate(10.2, 44.5, 83.0),
         Coordinate(10.2, 136.0, 83.0),

@@ -532,7 +532,6 @@ class LiquidHandler(Resource, Machine):
     if use_channels is None:
       if self._default_use_channels is None:
         use_channels = list(range(len(tip_spots)))
-        print("use_channels", use_channels)  # vikmol debug
       else:
         use_channels = self._default_use_channels
     tips = []
@@ -544,7 +543,6 @@ class LiquidHandler(Resource, Machine):
 
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(tip_spots)
-    print("offsets", offsets)
 
     # checks
     self._assert_resources_exist(tip_spots)

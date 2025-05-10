@@ -1,5 +1,3 @@
-""" Tecan tip racks """
-
 # pylint: disable=empty-docstring
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
@@ -9,7 +7,6 @@ from typing import List, Optional
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
-# from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 from .tip_creators import (
@@ -115,7 +112,6 @@ def DiTi_100ul_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1280.0,
     z_max=1430.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -144,7 +140,6 @@ def DiTi_50ul_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1430.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -173,7 +168,6 @@ def DiTi_200ul_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1430.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -202,7 +196,6 @@ def DiTi_100ul_Filter_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1357.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -231,7 +224,6 @@ def DiTi_200ul_Filter_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1430.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -261,7 +253,6 @@ def Adapter_96_DiTi_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -291,7 +282,6 @@ def Adapter_DiTi_Combo_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1457.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -321,7 +311,6 @@ def Adapter_DiTi_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -351,7 +340,6 @@ def DiTi_100ul_Filter_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -381,7 +369,6 @@ def DiTi_100ul_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -411,7 +398,6 @@ def DiTi_200ul_Filter_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -441,7 +427,6 @@ def DiTi_200ul_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -471,7 +456,6 @@ def DiTi_50ul_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -501,7 +485,6 @@ def Base_Nested_DiTi_MCA96(name: str) -> TecanTipRack:
     z_dispense=3282.0,
     z_max=3280.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=4,
@@ -531,7 +514,6 @@ def DiTi_100ul_Nested_MCA96(name: str) -> TecanTipRack:
     z_dispense=1933.0,
     z_max=2099.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -560,7 +542,6 @@ def DiTi_100ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -589,7 +570,6 @@ def DiTi_200ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -618,7 +598,6 @@ def DiTi_50ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1728.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -648,7 +627,6 @@ def DiTi_50ul_Nested_MCA96(name: str) -> TecanTipRack:
     z_dispense=1933.0,
     z_max=2099.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -678,7 +656,6 @@ def Adapter_96_DiTi_1to1_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -708,7 +685,6 @@ def DiTi_200ul_Nested_MCA96(name: str) -> TecanTipRack:
     z_dispense=1933.0,
     z_max=2099.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -738,7 +714,6 @@ def DiTi_200ul_w_b_filter_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -768,7 +743,6 @@ def DiTi_200ul_wide_bore_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -798,7 +772,6 @@ def Adapter_96_DiTi_4to1_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -827,7 +800,6 @@ def DiTi_500ul_Filter_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1410.0,
     z_max=1560.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -856,7 +828,6 @@ def DiTi_500ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1438.0,
     z_max=1578.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -886,7 +857,6 @@ def DiTi_Nested_Waste_MCA384(name: str) -> TecanTipRack:
     z_dispense=1940.0,
     z_max=1940.0,
     area=20385.0,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -915,7 +885,6 @@ def DiTi_1000ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1010.0,
     z_max=1260.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -944,9 +913,7 @@ def DiTi_200ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
-    # ordered_items=create_ordered_items_2d(
-    items=create_ordered_items_2d(
+    ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
       num_items_y=8,
@@ -974,7 +941,6 @@ def DiTi_50ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1004,7 +970,6 @@ def DiTi_5000ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=850.0,
     z_max=1150.0,
     area=50.0,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,
@@ -1034,7 +999,6 @@ def DiTi_5000ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=850.0,
     z_max=1150.0,
     area=50.0,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,
@@ -1064,7 +1028,6 @@ def DiTi_125ul_Filter_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -1094,7 +1057,6 @@ def DiTi_125ul_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -1124,7 +1086,6 @@ def DiTi_15ul_Filter_MCA384(name: str) -> TecanTipRack:
     z_dispense=1676.0,
     z_max=1879.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -1154,7 +1115,6 @@ def DiTi_15ul_MCA384(name: str) -> TecanTipRack:
     z_dispense=1676.0,
     z_max=1879.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -1184,7 +1144,6 @@ def DiTi_50ul_Filter_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -1214,7 +1173,6 @@ def DiTi_50ul_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=24,
@@ -1244,9 +1202,7 @@ def DiTi_1000ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
-    # ordered_items=create_ordered_items_2d(
-    items=create_ordered_items_2d(
+    ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
       num_items_y=8,
@@ -1275,7 +1231,6 @@ def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1305,7 +1260,6 @@ def DiTi_10ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1335,7 +1289,6 @@ def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1365,7 +1318,6 @@ def DiTi_200ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1395,7 +1347,6 @@ def DiTi_200ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1425,7 +1376,6 @@ def DiTi_50ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1455,7 +1405,6 @@ def DiTi_50ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1485,7 +1434,6 @@ def DiTi_350ul_Nested_LiHa(name: str) -> TecanTipRack:
     z_dispense=2015.0,
     z_max=2175.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1515,7 +1463,6 @@ def DiTi_10ul_Filter_LiHa_L(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1545,7 +1492,6 @@ def DiTi_10ul_Filter_Nested_LiHa(name: str) -> TecanTipRack:
     z_dispense=2015.0,
     z_max=2175.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1575,7 +1521,6 @@ def DiTi_10ul_LiHa_L(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1605,7 +1550,6 @@ def DiTi_10ul_Nested_LiHa(name: str) -> TecanTipRack:
     z_dispense=2015.0,
     z_max=2175.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1635,7 +1579,6 @@ def DiTi_10ul_SBS_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1665,7 +1608,6 @@ def DiTi_10ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1695,7 +1637,6 @@ def DiTi_1000ul_W_B_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1725,7 +1666,6 @@ def DiTi_1000ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1755,7 +1695,6 @@ def DiTi_1000ul_CL_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1785,7 +1724,6 @@ def DiTi_200ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1815,7 +1753,6 @@ def DiTi_200ul_CL_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1845,7 +1782,6 @@ def DiTi_50ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -1875,7 +1811,6 @@ def DiTi_50ul_CL_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    # items=create_equally_spaced(TipSpot,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,

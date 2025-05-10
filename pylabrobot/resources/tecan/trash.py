@@ -1,8 +1,6 @@
 from typing import Optional
 
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
-
-# from pylabrobot.resources.container import Container
 from pylabrobot.resources.trash import Trash
 
 
