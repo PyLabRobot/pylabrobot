@@ -1,3 +1,4 @@
+import asyncio
 import random
 import socket
 import struct
@@ -3433,13 +3434,13 @@ class Prep(LiquidHandlerBackend):
   async def disco_mode(self):
     """Easter egg"""
     for _ in range(69):
-      self.set_deck_light(
+      await self.set_deck_light(
         white=random.randint(1, 255),
         red=random.randint(1, 255),
         green=random.randint(1, 255),
         blue=random.randint(1, 255),
       )
-      time.sleep(0.1)
+      await asyncio.sleep(0.1)
 
   async def get_deck_light(
     self,
