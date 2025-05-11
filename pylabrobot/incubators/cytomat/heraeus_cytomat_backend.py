@@ -166,13 +166,13 @@ class HeraeusCytomatBackend(IncubatorBackend):
     return resp
   
   async def wait_for_transfer_station(self, occupied: bool = False):
-        while (await self.read_plate_detection_xfer()) != occupied:
-            await asyncio.sleep(1)
+    while (await self.read_plate_detection_xfer()) != occupied:
+      await asyncio.sleep(1)
 
   async def read_plate_detection_xfer(self) -> bool:
-        """Read Plate Detection Transfer Station (RD 1813)."""
-        resp = await self._send_command("RD 1813")
-        return resp == "1"
+    """Read Plate Detection Transfer Station (RD 1813)."""
+    resp = await self._send_command("RD 1813")
+    return resp == "1"
 
   async def _wait_ready(self, timeout: int = 60):
     """
