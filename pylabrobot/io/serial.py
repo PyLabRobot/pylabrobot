@@ -235,3 +235,32 @@ class SerialValidator(Serial):
       and next_command.action == "reset_output_buffer"
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial reset_output_buffer")
+
+  async def send_break(self, duration: float):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "send_break"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial send_break")
+    if float(next_command.data) != duration:
+      raise ValidationError("Data mismatch: difference was written to stdout.")
+
+  async def reset_input_buffer(self):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "reset_input_buffer"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial reset_input_buffer")
+
+  async def reset_output_buffer(self):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "reset_output_buffer"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial reset_output_buffer")
