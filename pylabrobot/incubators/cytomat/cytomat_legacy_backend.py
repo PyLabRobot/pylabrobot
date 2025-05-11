@@ -58,26 +58,26 @@ class CytomatLegacyBackend(IncubatorBackend):
         self.io.ser.reset_input_buffer()
         self.io.ser.reset_output_buffer()
 
-        self.io.write(b"CR\r")
+        await self.io.write(b"CR\r")
         deadline = time.time() + self.init_timeout
         while time.time() < deadline:
-            resp = self.io.readline()           # reads through LF
+            resp = await self.io.readline()           # reads through LF
             if resp.strip() == b"CC":
                 break
         else:
             await self.io.stop()
             raise TimeoutError(f"No CC response from PLC within {self.init_timeout} seconds")
 
-        self.io.write(b"ST 1801\r")
-        resp = self.io.readline()
+        await self.io.write(b"ST 1801\r")
+        resp = await self.io.readline()
         if resp.strip() != b"OK":
             await self.io.stop()
             raise RuntimeError(f"Unexpected reply to ST 1801: {resp!r}")
 
         deadline = time.time() + self.start_timeout
         while time.time() < deadline:
-            self.io.write(b"RD 1915\r")
-            flag = self.io.readline()
+            await self.io.write(b"RD 1915\r")
+            flag = await self.io.readline()
             if flag.strip() == b"1":
                 return self.io
             await asyncio.sleep(self.poll_interval)
@@ -153,8 +153,9 @@ class CytomatLegacyBackend(IncubatorBackend):
         print(f"send: {command}")
         cmd = command.strip() + "\r"
         logger.debug("Sending Cytomat command: %r", cmd)
-        self.io.write(cmd.encode(self.serial_message_encoding))
-        resp = self.io.read(128).decode(self.serial_message_encoding)
+        await self.io.write(cmd.encode(self.serial_message_encoding))
+        raw = await self.io.read(128)
+        resp = raw.decode(self.serial_message_encoding)
         if not resp:
             raise RuntimeError("No response from Cytomat controller")
         resp = resp.strip()
@@ -162,6 +163,15 @@ class CytomatLegacyBackend(IncubatorBackend):
         if resp.startswith("E"):
             raise RuntimeError(f"Cytomat controller error: {resp}")
         return resp
+
+    async def wait_for_transfer_station(self, occupied: bool = False):
+        while (await self.read_plate_detection_xfer()) != occupied:
+            await asyncio.sleep(1)
+
+    async def read_plate_detection_xfer(self) -> bool:
+        """Read Plate Detection Transfer Station (RD 1813)."""
+        resp = await self._send_command("RD 1813")
+        return resp == "1"
 
     async def _wait_ready(self, timeout: int = 60):
         """
