@@ -97,10 +97,15 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     acceleration: int = 1_000,
   ):
     """
+    if the plate is not locked, it will be locked.
+
     speed: steps per second
     direction: 0 for positive, 1 for negative
     acceleration: increments per second
     """
+
+    await self.lock_plate()
+
     int_speed = int(speed)
     assert 20 <= int_speed <= 2_000, "Speed must be between 20 and 2_000"
     assert direction in [0, 1], "Direction must be 0 or 1"
