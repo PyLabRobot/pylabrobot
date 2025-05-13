@@ -355,14 +355,6 @@ class EVOBackend(TecanLiquidHandler):
     # Get positions including offsets
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
-    # Apply offsets
-    for i, op in enumerate(ops):
-      x_positions[i] += op.offset.x
-      y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
-
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
@@ -495,14 +487,6 @@ class EVOBackend(TecanLiquidHandler):
     # Get positions including offsets
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
-    # Apply offsets
-    for i, op in enumerate(ops):
-      x_positions[i] += op.offset.x
-      y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
-
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     x, _ = self._first_valid(x_positions)
@@ -547,11 +531,6 @@ class EVOBackend(TecanLiquidHandler):
 
     # Get positions including offsets
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
-
-    # Apply offsets
-    for i, op in enumerate(ops):
-      x_positions[i] += op.offset.x
-      y_positions[i] += op.offset.y
 
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)  # was 90
@@ -686,12 +665,13 @@ class EVOBackend(TecanLiquidHandler):
     }
 
     def get_z_position(z, z_off, tip_length):
+      # TODO: simplify z units
       return int(self._z_range - z + z_off * 10 + tip_length)  # TODO: verify z formula
 
     for i, channel in enumerate(use_channels):
       location = ops[i].resource.get_absolute_location() + ops[i].resource.center()
-      x_positions[channel] = int((location.x - 100) * 10)
-      y_positions[channel] = int((346.5 - location.y) * 10)  # TODO: verify
+      x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
+      y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
 
       par = ops[i].resource.parent
       if not isinstance(par, (TecanPlate, TecanTipRack)):
@@ -699,16 +679,16 @@ class EVOBackend(TecanLiquidHandler):
       # TODO: calculate defaults when z-attribs are not specified
       tip_length = int(ops[i].tip.total_tip_length * 10)
       z_positions["travel"][channel] = get_z_position(
-        par.z_travel, par.get_absolute_location().z, tip_length
+        par.z_travel, par.get_absolute_location().z + op.offset.z, tip_length
       )
       z_positions["start"][channel] = get_z_position(
-        par.z_start, par.get_absolute_location().z, tip_length
+        par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
       )
       z_positions["dispense"][channel] = get_z_position(
-        par.z_dispense, par.get_absolute_location().z, tip_length
+        par.z_dispense, par.get_absolute_location().z + op.offset.z, tip_length
       )
       z_positions["max"][channel] = get_z_position(
-        par.z_max, par.get_absolute_location().z, tip_length
+        par.z_max, par.get_absolute_location().z + op.offset.z, tip_length
       )
 
     return x_positions, y_positions, z_positions

@@ -2,7 +2,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
@@ -87,11 +87,11 @@ class TecanTipRack(TipRack, TecanResource):
     z_dispense: float,
     z_max: float,
     area: float,
-    items: Optional[List[List[TipSpot]]] = None,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
     category: str = "tecan_plate",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, items, category=category, model=model)
+    super().__init__(name, size_x, size_y, size_z, ordered_items, category=category, model=model)
 
     self.z_travel = z_travel
     self.z_start = z_start
