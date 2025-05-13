@@ -184,9 +184,9 @@ class EVOBackend(TecanLiquidHandler):
   def __init__(
     self,
     diti_count: int = 0,
-    packet_read_timeout: int = 12,  # VIKMOL CHANGED FROM 120 THIS CHANGE INCREASES INITIALIZATION SPEED
-    read_timeout: int = 60,  # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
-    write_timeout: int = 60,  # VIKMOL CHANGED FROM 300 THIS CHANGE INCREASES INITIALIZATION SPEED
+    packet_read_timeout: int = 12,
+    read_timeout: int = 60,
+    write_timeout: int = 60,
   ):
     """Create a new EVO interface.
 
@@ -269,12 +269,11 @@ class EVOBackend(TecanLiquidHandler):
     if self.roma_connected:  # position_initialization_x in reverse order from setup_arm
       self.roma = RoMa(self, EVOBackend.ROMA)
       await self.roma.position_initialization_x()
-      print("RoMa connected!")
       # move to home position (TBD) after initialization
       await self._park_roma()
     if self.mca_connected:
       self.mca = Mca(self, EVO.MCA)
-      # await self.mca.position_initialization_x() # function deos not work for mca. vikmol
+      # await self.mca.position_initialization_x() # function does not work for mca.
       await self._park_mca()
 
     if self.liha_connected:
