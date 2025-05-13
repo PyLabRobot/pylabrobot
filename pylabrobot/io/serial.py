@@ -45,7 +45,7 @@ class Serial(IOBase):
     self.bytesize = bytesize
     self.parity = parity
     self.stopbits = stopbits
-    self.ser: Optional[serial.Serial] = None
+    self._ser: Optional[serial.Serial] = None
     self.write_timeout = write_timeout
     self.timeout = timeout
 
@@ -58,7 +58,7 @@ class Serial(IOBase):
 
   async def setup(self):
     try:
-      self.ser = serial.Serial(
+      self._ser = serial.Serial(
         port=self._port,
         baudrate=self.baudrate,
         bytesize=self.bytesize,
@@ -72,20 +72,20 @@ class Serial(IOBase):
       raise e
 
   async def stop(self):
-    if self.ser is not None and self.ser.is_open:
-      self.ser.close()
+    if self._ser is not None and self._ser.is_open:
+      self._ser.close()
 
   async def write(self, data: bytes):
-    assert self.ser is not None, "forgot to call setup?"
+    assert self._ser is not None, "forgot to call setup?"
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="write", data=data.decode("unicode_escape"))
     )
-    self.ser.write(data)
+    self._ser.write(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    assert self.ser is not None, "forgot to call setup?"
-    data = self.ser.read(num_bytes)
+    assert self._ser is not None, "forgot to call setup?"
+    data = self._ser.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="read", data=data.decode("unicode_escape"))
@@ -93,13 +93,31 @@ class Serial(IOBase):
     return cast(bytes, data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    assert self.ser is not None, "forgot to call setup?"
-    data = self.ser.readline()
+    assert self._ser is not None, "forgot to call setup?"
+    data = self._ser.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="readline", data=data.decode("unicode_escape"))
     )
     return cast(bytes, data)
+
+  async def send_break(self, duration: float):
+    assert self._ser is not None, "forgot to call setup?"
+    logger.log(LOG_LEVEL_IO, "[%s] send_break %s", self._port, duration)
+    capturer.record(SerialCommand(device_id=self._port, action="send_break", data=str(duration)))
+    self._ser.send_break(duration=duration)
+
+  async def reset_input_buffer(self):
+    assert self._ser is not None, "forgot to call setup?"
+    logger.log(LOG_LEVEL_IO, "[%s] reset_input_buffer", self._port)
+    capturer.record(SerialCommand(device_id=self._port, action="reset_input_buffer", data=""))
+    self._ser.reset_input_buffer()
+
+  async def reset_output_buffer(self):
+    assert self._ser is not None, "forgot to call setup?"
+    logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
+    capturer.record(SerialCommand(device_id=self._port, action="reset_output_buffer", data=""))
+    self._ser.reset_output_buffer()
 
   def serialize(self):
     return {
@@ -183,3 +201,32 @@ class SerialValidator(Serial):
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial readline")
     return next_command.data.encode()
+
+  async def send_break(self, duration: float):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "send_break"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial send_break")
+    if float(next_command.data) != duration:
+      raise ValidationError("Data mismatch: difference was written to stdout.")
+
+  async def reset_input_buffer(self):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "reset_input_buffer"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial reset_input_buffer")
+
+  async def reset_output_buffer(self):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "reset_output_buffer"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial reset_output_buffer")
