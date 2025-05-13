@@ -46,25 +46,3 @@ def Trash_Waste(name: str) -> TecanTrash:
     size_z=140.0,
     model="Trash_Waste",
   )
-
-
-# def Trash_Cleaner_Shallow(name: str) -> TecanTrash:
-#     """Tecan shallow cleaner container."""
-#     return TecanTrash(
-#         name=name,
-#         size_x=12.0,
-#         size_y=73.0,
-#         size_z=140.0,
-#         model="Trash_Cleaner_Shallow",
-#     )
-
-
-# def Trash_Cleaner_Deep(name: str) -> TecanTrash:
-#     """Tecan deep cleaner container."""
-#     return TecanTrash(
-#         name=name,
-#         size_x=12.0,
-#         size_y=73.0,
-#         size_z=140.0,
-#         model="Trash_Cleaner_Deep",
-#     )

@@ -1,7 +1,4 @@
-"""
-This file defines interfaces for all supported Tecan liquid handling robots.
-"""
-import asyncio  # VIKMOL ADDED
+import asyncio
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -48,7 +45,7 @@ from pylabrobot.resources import (
   TecanPlateCarrier,
   TecanTip,
   TecanTipRack,
-  TipSpot,  # VIKMOL ADDED
+  TipSpot,
   Trash,
 )
 
@@ -360,7 +357,7 @@ class EVOBackend(TecanLiquidHandler):
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
     # Apply offsets
-    for i, op in enumerate(ops):  # VIKMOL ADDED
+    for i, op in enumerate(ops):
       x_positions[i] += op.offset.x
       y_positions[i] += op.offset.y
 
@@ -550,15 +547,12 @@ class EVOBackend(TecanLiquidHandler):
     ), "Must drop in waste container or tip rack"
 
     # Get positions including offsets
-    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
+    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     # Apply offsets
     for i, op in enumerate(ops):
       x_positions[i] += op.offset.x
       y_positions[i] += op.offset.y
-
-    for key in z_positions:
-      z_positions[key][i] += op.offset.z  # Apply the offset to all z position types
 
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)  # was 90
@@ -1232,259 +1226,8 @@ class LiHa(EVOArm):
     await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
 
 
-## VIKMOL ADDED MCA
 class Mca(EVOArm):
   pass
-  # """
-  # Provides firmware commands for the MCA TEST
-  # """
-
-  # async def initialize_plunger(self, tips):
-  #   """Initializes plunger and valve drive
-
-  #   Args:
-  #     tips: binary coded tip select
-  #   """
-  #   await self.backend.send_command(module=self.module, command="PID", params=[tips])
-
-  # async def report_z_param(self, param: int) -> List[int]:
-  #   """Report current parameters for z-axis.
-
-  #   Args:
-  #     param: 0 - current position, 5 - actual machine range
-  #   """
-
-  #   resp: List[int] = (
-  #     await self.backend.send_command(module=self.module, command="RPZ", params=[param])
-  #   )["data"]
-  #   return resp
-
-  # async def report_number_tips(self) -> int:
-  #   """Report number of tips on arm."""
-
-  #   resp: List[int] = (
-  #     await self.backend.send_command(module=self.module, command="RNT", params=[1])
-  #   )["data"]
-  #   return resp[0]
-
-  # async def position_absolute_all_axis(self, x: int, y: int, ys: int, z: List[int]):
-  #   """Position absolute for all LiHa axes.
-
-  #   Args:
-  #     x: aboslute x position in 1/10 mm, must be in allowed machine range
-  #     y: absolute y position in 1/10 mm, must be in allowed machine range
-  #     ys: absolute y spacing in 1/10 mm, must be between 90 and 380
-  #     z: absolute z position in 1/10 mm for each channel, must be in
-  #        allowed machine range
-
-  #   Raises:
-  #     TecanError: if moving to the target position causes a collision
-  #   """
-  #   cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
-  #   for module, pos in EVOArm._pos_cache.items():
-  #     cur_x = int(cur_x) # VIKMOL ADDED
-  #     x = int(x) # VIKMOL ADDED
-  #     pos = int(pos) # VIKMOL ADDED
-  #     print("cur_x Mca()", cur_x, type(cur_x)) # VIKMOL DEBUG
-  #     print("x Mca()", x, type(x)) # VIKMOL DEBUG
-  #     print("pos Mca()", pos, type(pos)) # VIKMOL DEBUG
-  #     if module == self.module:
-  #       continue
-  #     if cur_x < x and cur_x < pos < x:  # moving right
-  #       raise TecanError("Invalid command (collision)", self.module, 2)
-  #     if cur_x > x and cur_x > pos > x:
-  #       raise TecanError("Invalid command (collision)", self.module, 2)
-  #     if abs(pos - x) < 1500:
-  #       raise TecanError("Invalid command (collision)", self.module, 2)
-
-  #   await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
-
-  #   EVOArm._pos_cache[self.module] = x
-
-  # # async def position_valve_logical(self, param: List[Optional[int]]):
-  # #   """Position valve logical for each channel.
-
-  # #   Args:
-  # #     param: 0 - outlet, 1 - inlet, 2 - bypass
-  # #   """
-
-  # #   await self.backend.send_command(module=self.module, command="PVL", params=param)
-
-  # async def set_end_speed_plunger(self, speed: List[Optional[int]]):
-  #   """Set end speed for plungers.
-
-  #   Args:
-  #     speed: speed for each plunger in half step per second, must be between
-  #            5 and 6000
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SEP", params=speed)
-
-  # async def move_plunger_relative(self, rel: List[Optional[int]]):
-  #   """Move plunger relative upwards (dispense) or downards (aspirate).
-
-  #   Args:
-  #     rel: relative position for each plunger in full steps, must be between
-  #          -3150 and 3150
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="PPR", params=rel)
-
-  # async def set_detection_mode(self, proc: int, sense: int):
-  #   """Set liquid detection mode.
-
-  #   Args:
-  #     proc: detection procedure (7 for double detection sequential with
-  #           retract and extra submerge)
-  #     sense: conductivity (1 for high)
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SDM", params=[proc, sense])
-
-  # async def set_search_speed(self, speed: List[Optional[int]]):
-  #   """Set search speed for liquid search commands.
-
-  #   Args:
-  #     speed: speed for each channel in 1/10 mm/s, must be between 1 and 1500
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SSL", params=speed)
-
-  # async def set_search_retract_distance(self, dist: List[Optional[int]]):
-  #   """Set z-axis retract distance for liquid search commands.
-
-  #   Args:
-  #     dist: retract distance for each channel in 1/10 mm, must be in allowed
-  #           machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SDL", params=dist)
-
-  # async def set_search_submerge(self, dist: List[Optional[int]]):
-  #   """Set submerge for liquid search commands.
-
-  #   Args:
-  #     dist: submerge distance for each channel in 1/10 mm, must be between
-  #           -1000 and max z range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SBL", params=dist)
-
-  # async def set_search_z_start(self, z: List[Optional[int]]):
-  #   """Set z-start for liquid search commands.
-
-  #   Args:
-  #     z: start height for each channel in 1/10 mm, must be in allowed machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="STL", params=z)
-
-  # async def set_search_z_max(self, z: List[Optional[int]]):
-  #   """Set z-max for liquid search commands.
-
-  #   Args:
-  #     z: max for each channel in 1/10 mm, must be in allowed machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SML", params=z)
-
-  # async def set_z_travel_height(self, z):
-  #   """Set z-travel height.
-
-  #   Args:
-  #     z: travel heights in absolute 1/10 mm for each channel, must be in allowed
-  #        machine range + 20
-  #   """
-  #   await self.backend.send_command(module=self.module, command="SHZ", params=z)
-
-  # async def move_detect_liquid(self, channels: int, zadd: List[Optional[int]]):
-  #   """Move tip, detect liquid, submerge.
-
-  #   Args:
-  #     channels: binary coded tip select
-  #     zadd: required distance to travel downwards in 1/10 mm for each channel,
-  #           must be between 0 and z-start - z-max
-  #   """
-
-  #   await self.backend.send_command(
-  #     module=self.module,
-  #     command="MDT",
-  #     params=[channels] + [None] * 3 + zadd,
-  #   )
-
-  # async def set_slow_speed_z(self, speed: List[Optional[int]]):
-  #   """Set slow speed for z.
-
-  #   Args:
-  #     speed: speed in 1/10 mm/s for each channel, must be between 1 and 4000
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SSZ", params=speed)
-
-  # async def set_tracking_distance_z(self, rel: List[Optional[int]]):
-  #   """Set z-axis relative tracking distance used by dispense and aspirate.
-
-  #   Args:
-  #     rel: relative value in 1/10 mm for each channel, must be between
-  #           -2100 and 2100
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="STZ", params=rel)
-
-  # async def move_tracking_relative(self, rel: List[Optional[int]]):
-  #   """Move tracking relative. Starts the z-drives and dilutors simultaneously
-  #       to achieve a synchronous tracking movement.
-
-  #   Args:
-  #     rel: relative position for each plunger in full steps, must be between
-  #          -3150 and 3150
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="MTR", params=rel)
-
-  # async def move_absolute_z(self, z: List[Optional[int]]):
-  #   """Position absolute with slow speed z-axis
-
-  #   Args:
-  #     z: absolute position in 1/10 mm for each channel, must be in
-  #        allowed machine range
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="MAZ", params=z)
-
-  # async def set_stop_speed_plunger(self, speed: List[Optional[int]]):
-  #   """Set stop speed for plungers
-
-  #   Args:
-  #     speed: speed for each plunger in half step per second, must be between
-  #            50 and 2700
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="SPP", params=speed)
-
-  # async def get_disposable_tip(self, tips, z_start, z_search):
-  #   """Picks up tips
-
-  #   Args:
-  #     tips: binary coded tip select
-  #     z_start: position in 1/10 mm where searching begins
-  #     z_search: search distance in 1/10 mm, range within a tip must be found
-  #   """
-
-  #   await self.backend.send_command(
-  #     module=self.module,
-  #     command="AGT",
-  #     params=[tips, z_start, z_search, 0],
-  #   )
-
-  # async def discard_disposable_tip(self, tips):
-  #   """Drops tips
-
-  #   Args:
-  #     tips: binary coded tip select
-  #   """
-
-  #   await self.backend.send_command(module=self.module, command="ADT", params=[tips])
 
 
 class RoMa(EVOArm):
