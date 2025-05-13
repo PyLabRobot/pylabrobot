@@ -568,48 +568,21 @@ class EVOBackend(TecanLiquidHandler):
     )
 
     # TODO check channel positions match resource positions for z-axis
-    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels), discard_hight=0)
-
-  async def return_tips(self, ops: List[Drop], use_channels: List[int]):  # TODO: is this necessary?
-    """Returns tips to their original tip rack positions.
-
-    Args:
-      ops: The return operations to perform.
-      use_channels: The channels to use for the return operations.
-    """
-
-    assert all(
-      isinstance(op.resource, Resource) for op in ops
-    ), "Must return tips to a valid Resource"
-    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
-
-    # move channels to return position
-    ys = 90  # probably wrong
-    x, _ = self._first_valid(x_positions)
-    y, _ = self._first_valid(y_positions)
-    assert x is not None and y is not None
-
-    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
-      x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
-    )
-
-    # place tips back in rack
-    await self.liha.place_tip_back(self._bin_use_channels(use_channels))
+    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_hight=0)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def drop_tips96(self, drop: DropTipRack):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def aspirate96(
     self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
   ):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def pick_up_resource(self, pickup: ResourcePickup):
     # TODO: implement PnP for moving tubes
@@ -1195,7 +1168,7 @@ class LiHa(EVOArm):
       params=[tips, z_start, z_search, 0],
     )
 
-  async def discard_disposable_tip_high(self, tips):  # changed by VIKMOL
+  async def discard_disposable_tip_high(self, tips):
     """Drops tips
     Discards at the Z-axes initialization hight
     Args:
@@ -1204,23 +1177,13 @@ class LiHa(EVOArm):
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
 
-  async def discard_disposable_tip(self, tips, discard_hight):  # added by VIKMOL z_start
+  async def _drop_disposable_tip(self, tips, discard_hight):
     """Drops tips
-    Discards at a veriable Z-axes initialization hight
+    Discards at a variable Z-axis initialization height
+
     Args:
       tips: binary coded tip select
       discard_hight: binary. 0 above tip rack, 1 in tip rack
-    """
-
-    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
-
-  async def place_tip_back(self, tips, discard_hight):  # added by VIKMOL z_start, z_search
-    """Places tips back into the original tip rack positions.
-
-    Args:
-      tips: Binary coded tip select
-      discard_hight: binary. 0 above tip rack, 1 in tip rack
-
     """
 
     await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
