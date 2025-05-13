@@ -510,8 +510,10 @@ class EVOBackend(TecanLiquidHandler):
     await self.liha.move_plunger_relative(ppr)
 
     # get tips
+    first_z_start, _ = self._first_valid(z_positions["start"])
+    assert first_z_start is not None, "Could not find a valid z_start position"
     await self.liha.get_disposable_tip(
-      self._bin_use_channels(use_channels), z_positions["start"][0] - 227, 210
+      self._bin_use_channels(use_channels), first_z_start - 227, 210
     )
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
@@ -668,8 +670,8 @@ class EVOBackend(TecanLiquidHandler):
       # TODO: simplify z units
       return int(self._z_range - z + z_off * 10 + tip_length)  # TODO: verify z formula
 
-    for i, channel in enumerate(use_channels):
-      location = ops[i].resource.get_absolute_location() + ops[i].resource.center()
+    for i, (op, channel) in enumerate(zip(ops, use_channels)):
+      location = ops[i].resource.get_absolute_location() + op.resource.center()
       x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
       y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
 
