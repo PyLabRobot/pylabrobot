@@ -42,6 +42,10 @@ class Tilter(ResourceHolder, Machine):
   @property
   def absolute_angle(self) -> float:
     return self._absolute_angle
+  
+  @property
+  def hinge_coordinate(self) -> Coordinate:
+    return self._hinge_coordinate
 
   async def set_angle(self, absolute_angle: float):
     """Set the tilt module to rotate to a given angle.
