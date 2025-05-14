@@ -2314,14 +2314,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + aspiration.offset
       )
     else:
-      x_width = (12 - 1) * 9 # 12 tips in a row, 9 mm between them
-      y_width = (8 - 1) * 9 # 8 tips in a column, 9 mm between them
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
       x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
       y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        aspiration.container.get_absolute_location(z="cavity_bottom") +
-        Coordinate(x=x_position, y=y_position) +
-        aspiration.offset
+        aspiration.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + aspiration.offset
       )
 
     tip = aspiration.tips[0]
@@ -2501,14 +2501,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       # dispense in the center of the container
       # but we have to get the position of the center of tip A1
-      x_width = (12 - 1) * 9 # 12 tips in a row, 9 mm between them
-      y_width = (8 - 1) * 9 # 8 tips in a column, 9 mm between them
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
       x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
       y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        dispense.container.get_absolute_location(z="cavity_bottom") +
-        Coordinate(x=x_position, y=y_position) +
-        dispense.offset
+        dispense.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + dispense.offset
       )
     tip = dispense.tips[0]
 
