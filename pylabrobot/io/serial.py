@@ -39,6 +39,7 @@ class Serial(IOBase):
     stopbits: int = 1,  # serial.STOPBITS_ONE,
     write_timeout=1,
     timeout=1,
+    rtscts: bool = False,
   ):
     self._port = port
     self.baudrate = baudrate
@@ -48,6 +49,7 @@ class Serial(IOBase):
     self._ser: Optional[serial.Serial] = None
     self.write_timeout = write_timeout
     self.timeout = timeout
+    self.rtscts = rtscts
 
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new Serial object while capture or validation is active")
@@ -66,6 +68,7 @@ class Serial(IOBase):
         stopbits=self.stopbits,
         write_timeout=self.write_timeout,
         timeout=self.timeout,
+        rtscts=self.rtscts,
       )
     except serial.SerialException as e:
       logger.error("Could not connect to device, is it in use by a different notebook/process?")
@@ -128,6 +131,7 @@ class Serial(IOBase):
       "stopbits": self.stopbits,
       "write_timeout": self.write_timeout,
       "timeout": self.timeout,
+      "rtscts": self.rtscts,
     }
 
   @classmethod
@@ -140,6 +144,7 @@ class Serial(IOBase):
       stopbits=data["stopbits"],
       write_timeout=data["write_timeout"],
       timeout=data["timeout"],
+      rtscts=data["rtscts"],
     )
 
 
