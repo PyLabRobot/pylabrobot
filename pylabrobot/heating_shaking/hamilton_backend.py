@@ -133,10 +133,6 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def unlock_plate(self):
     await self._move_plate_lock(PlateLockPosition.UNLOCKED)
 
-  async def _initialize_shaker_drive(self):
-    """Firmware command initialize shaker drive."""
-    return await self.interface.send_hhs_command(index=self.index, command="SI")
-  
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
     return await self.interface.send_hhs_command(index=self.index, command="LI")
