@@ -111,7 +111,7 @@ class USB(IOBase):
     dev = self.dev
     if self._executor is None or dev is None or write_endpoint is None:
       raise RuntimeError("Call setup() first.")
-    loop.run_in_executor(
+    await loop.run_in_executor(
       self._executor,
       lambda: dev.write(write_endpoint, data, timeout=timeout),
     )
