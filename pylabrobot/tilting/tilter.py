@@ -42,7 +42,7 @@ class Tilter(ResourceHolder, Machine):
   @property
   def absolute_angle(self) -> float:
     return self._absolute_angle
-  
+
   @property
   def hinge_coordinate(self) -> Coordinate:
     return self._hinge_coordinate
