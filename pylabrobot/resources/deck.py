@@ -37,7 +37,7 @@ class Deck(Resource):
       category=category,
     )
     self.location = origin
-    self.resources: Dict[str, Resource] = {}
+    self._resources: Dict[str, Resource] = {}
 
     self.register_did_assign_resource_callback(self._register_resource)
     self.register_did_unassign_resource_callback(self._deregister_resource)
@@ -54,7 +54,7 @@ class Deck(Resource):
       raise ValueError(f"Resource '{resource.name}' already assigned to deck")
 
   def _register_resource(self, resource: Resource):
-    """Recursively assign the given resource and all child resources to the `self.resources`
+    """Recursively assign the given resource and all child resources to the `self._resources`
     dictionary. This method is called after a resource is assigned to the deck
     (did_assign_resource_callback).
 
@@ -63,16 +63,16 @@ class Deck(Resource):
 
     for child in resource.children:
       self._register_resource(child)
-    self.resources[resource.name] = resource
+    self._resources[resource.name] = resource
 
   def _deregister_resource(self, resource: Resource):
-    """Recursively deregisters the given resource and all child resources from the `self.resources`
+    """Recursively deregisters the given resource and all child resources from the `self._resources`
     dictionary. This method is called after a resource is unassigned from the deck
     (did_unassign_resource_callback).
     """
 
     if self.has_resource(resource.name):
-      del self.resources[resource.name]
+      del self._resources[resource.name]
     for child in resource.children:
       self._deregister_resource(child)
 
@@ -84,15 +84,15 @@ class Deck(Resource):
     """
     if not self.has_resource(name):
       raise ResourceNotFoundError(f"Resource '{name}' not found")
-    return self.resources[name]
+    return self._resources[name]
 
   def has_resource(self, name: str) -> bool:
     """Returns True if the deck has a resource with the given name."""
-    return name in self.resources
+    return name in self._resources
 
   def get_all_resources(self) -> List[Resource]:
     """Returns a list of all resources in the deck."""
-    return list(self.resources.values())
+    return list(self._resources.values())
 
   def clear(self, include_trash: bool = False):
     """Removes all resources from the deck.
