@@ -474,6 +474,18 @@ class Cytation5Backend(ImageReaderBackend):
     return await self.send_command("J")
 
   async def close(self, plate: Optional[Plate], slow: bool = False):
+    # reset cache
+    self._plate = None
+    self._exposure = None
+    self._focal_height = None
+    self._gain = None
+    self._imaging_mode = None
+    self._row = None
+    self._column = None
+    self._pos_x = None
+    self._pos_y = None
+    self._objective = None
+
     await self._set_slow_mode(slow)
     if plate is not None:
       await self.set_plate(plate)
@@ -571,8 +583,6 @@ class Cytation5Backend(ImageReaderBackend):
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
-    await self.set_plate(plate)
-
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
     checksum = str(sum(cmd.encode()) % 100)
@@ -593,8 +603,6 @@ class Cytation5Backend(ImageReaderBackend):
 
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
-
-    await self.set_plate(plate)
 
     cmd = "008401010108120001200100001100100000123000500200200-001000-00300000000000000000001351092"
     await self.send_command("D", cmd)
@@ -622,8 +630,6 @@ class Cytation5Backend(ImageReaderBackend):
 
     cmd = f"{614220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
-
-    await self.set_plate(plate)
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
@@ -1152,7 +1158,6 @@ class Cytation5Backend(ImageReaderBackend):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
-    await self.set_plate(plate)
     await self.set_objective(objective)
     await self.set_imaging_mode(mode, led_intensity=led_intensity)
     await self.select(row, column)
