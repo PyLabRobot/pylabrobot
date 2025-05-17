@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.move\_all\_channels\_in\_z\_safety
+===================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.move_all_channels_in_z_safety

@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.nano\_pulse\_dispense
+============================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. automethod:: Vantage.nano_pulse_dispense

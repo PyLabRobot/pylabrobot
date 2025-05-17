@@ -1,0 +1,30 @@
+﻿pylabrobot.pumps.cole\_parmer.masterflex\_backend.MasterflexBackend
+===================================================================
+
+.. currentmodule:: pylabrobot.pumps.cole_parmer.masterflex_backend
+
+.. autoclass:: MasterflexBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MasterflexBackend.__init__
+      ~MasterflexBackend.deserialize
+      ~MasterflexBackend.get_all_instances
+      ~MasterflexBackend.halt
+      ~MasterflexBackend.run_continuously
+      ~MasterflexBackend.run_revolutions
+      ~MasterflexBackend.send_command
+      ~MasterflexBackend.serialize
+      ~MasterflexBackend.setup
+      ~MasterflexBackend.stop
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.inheco\_backend.InhecoThermoShakeBackend.get\_current\_temperature
+==============================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.inheco_backend
+
+.. automethod:: InhecoThermoShakeBackend.get_current_temperature

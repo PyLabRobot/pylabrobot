@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.russian\_roulette
+========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. automethod:: Vantage.russian_roulette

@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.rotated
+===================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.rotated

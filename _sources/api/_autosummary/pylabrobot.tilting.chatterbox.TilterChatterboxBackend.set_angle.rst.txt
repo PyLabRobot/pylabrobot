@@ -1,0 +1,6 @@
+pylabrobot.tilting.chatterbox.TilterChatterboxBackend.set\_angle
+================================================================
+
+.. currentmodule:: pylabrobot.tilting.chatterbox
+
+.. automethod:: TilterChatterboxBackend.set_angle

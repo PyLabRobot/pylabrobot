@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.load\_state
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.load_state

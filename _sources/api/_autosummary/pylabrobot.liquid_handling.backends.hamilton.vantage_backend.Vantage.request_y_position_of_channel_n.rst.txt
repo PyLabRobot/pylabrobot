@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.request\_y\_position\_of\_channel\_n
+===========================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. automethod:: Vantage.request_y_position_of_channel_n

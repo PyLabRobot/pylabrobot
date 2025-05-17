@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.get\_absolute\_rotation
+========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.get_absolute_rotation
