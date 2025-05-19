@@ -482,8 +482,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._imaging_mode = None
     self._row = None
     self._column = None
-    self._pos_x = None
-    self._pos_y = None
+    self._pos_x, self._pos_y = 0, 0
     self._objective = None
 
     await self._set_slow_mode(slow)
