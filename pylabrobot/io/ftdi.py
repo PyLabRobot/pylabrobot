@@ -1,9 +1,9 @@
+import asyncio
 import ctypes
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
 from typing import Optional, cast
-from concurrent.futures import ThreadPoolExecutor
-import asyncio
 
 try:
   from pylibftdi import Device
