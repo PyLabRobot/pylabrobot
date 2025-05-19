@@ -15,13 +15,13 @@ class HamiltonHepaFanBackend(FanBackend):
     self.io = FTDI(device_id=device_id)
 
   async def setup(self):
-    self.io.setup()
-    self.io.set_baudrate(9600)
-    self.io.set_line_property(8, 0, 0)  # 8N1
-    self.io.set_latency_timer(16)
-    self.io.set_flowctrl(512)
-    self.io.set_dtr(True)
-    self.io.set_rts(True)
+    await self.io.setup()
+    await self.io.set_baudrate(9600)
+    await self.io.set_line_property(8, 0, 0)  # 8N1
+    await self.io.set_latency_timer(16)
+    await self.io.set_flowctrl(512)
+    await self.io.set_dtr(True)
+    await self.io.set_rts(True)
 
     await self.send(b"\x55\xc1\x01\x02\x23\x4b")
     await self.send(b"\x55\xc1\x01\x08\x08\x6a")

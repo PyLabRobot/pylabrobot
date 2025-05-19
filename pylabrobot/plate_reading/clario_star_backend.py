@@ -29,9 +29,9 @@ class CLARIOStarBackend(PlateReaderBackend):
 
   async def setup(self):
     await self.io.setup()
-    self.io.set_baudrate(125000)
-    self.io.set_line_property(8, 0, 0)  # 8N1
-    self.io.set_latency_timer(2)
+    await self.io.set_baudrate(125000)
+    await self.io.set_line_property(8, 0, 0)  # 8N1
+    await self.io.set_latency_timer(2)
 
     await self.initialize()
     await self.request_eeprom_data()
@@ -39,8 +39,8 @@ class CLARIOStarBackend(PlateReaderBackend):
   async def stop(self):
     await self.io.stop()
 
-  def get_stat(self):
-    stat = self.io.poll_modem_status()
+  async def get_stat(self):
+    stat = await self.io.poll_modem_status()
     return hex(stat)
 
   async def read_resp(self, timeout=20) -> bytes:
