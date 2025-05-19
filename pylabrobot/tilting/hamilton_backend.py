@@ -219,7 +219,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
     return await self.send_command(command="PC", parameter=str(open_collector))
 
-  # Single Commands **with** **Option** “Heating”:
+  # Single Commands **with** **Option** "Heating":
 
   async def tilt_set_temperature(self, temperature: float):
     """Tilt set the temperature 10.. 50 Grad C [1/10 Grad C]
@@ -239,7 +239,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
       command="TO",
     )
 
-  # Single Commands **with** **Option** “Waste Pump (PWM2)”:
+  # Single Commands **with** **Option** "Waste Pump (PWM2)":
 
   async def tilt_set_drain_time(self, drain_time: float):
     """Set the drain time on the tilt module.
