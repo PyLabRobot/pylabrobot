@@ -1823,6 +1823,7 @@ class LiquidHandler(Resource, Machine):
   async def move_picked_up_resource(
     self,
     to: Coordinate,
+    offset: Coordinate = Coordinate.zero(),
     **backend_kwargs,
   ):
     if self._resource_pickup is None:
@@ -1833,6 +1834,7 @@ class LiquidHandler(Resource, Machine):
         resource=self._resource_pickup.resource,
         gripped_direction=self._resource_pickup.direction,
         pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
+        offset=offset
       ),
       **backend_kwargs,
     )

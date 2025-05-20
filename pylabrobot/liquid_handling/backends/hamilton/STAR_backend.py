@@ -2901,6 +2901,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       move.location
       + move.resource.get_anchor("c", "c", "t")
       - Coordinate(z=move.pickup_distance_from_top)
+      + move.offset
     )
 
     if use_arm == "iswap":
