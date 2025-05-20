@@ -218,7 +218,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     """Get all tips in the tip rack."""
     return [ts.get_tip() for ts in self.get_all_items()]
 
-  def summary(self) -> str:
+  def summary(self) -> None:
     """Print ascii table of the tip rack. 'o' indicates a tip, ' ' indicates an empty spot."""
     horizontal_line = "+" + "-" * self.num_items_x + "+\n"
     table = horizontal_line
