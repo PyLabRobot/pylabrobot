@@ -2147,6 +2147,21 @@ class LiquidHandler(Resource, Machine):
     """Move channel to absolute z position"""
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
     await self.backend.move_channel_z(channel=channel, z=z)
+  
+  @contextlib.contextmanager
+  def on_fail(self, error_cls: Type[Exception], handler: Callable):
+    """Register a handler to be called when an error occurs.
+
+    Args:
+      error_cls: The exception class to handle.
+      handler: The handler function to call.
+    """
+
+    self._error_handlers[error_cls] = handler
+    try:
+      yield
+    finally:
+      del self._error_handlers[error_cls]
 
   # -- Resource methods --
 
