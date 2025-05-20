@@ -123,6 +123,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._shaking = False
     self._pos_x, self._pos_y = 0.0, 0.0
     self._objective: Optional[Objective] = None
+    self._slow_mode: Optional[bool] = None
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
@@ -403,6 +404,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._objectives = None
     self._filters = None
+    self._slow_mode = None
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
@@ -467,7 +469,10 @@ class Cytation5Backend(ImageReaderBackend):
     return " ".join(resp[1:-1].decode().split(" ")[3:4])
 
   async def _set_slow_mode(self, slow: bool):
+    if self._slow_mode == slow:
+      return
     await self.send_command("&", "S1" if slow else "S0")
+    self._slow_mode = slow
 
   async def open(self, slow: bool = False):
     await self._set_slow_mode(slow)
