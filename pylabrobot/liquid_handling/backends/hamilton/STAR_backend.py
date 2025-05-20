@@ -1218,6 +1218,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise e
 
   @property
+  def iswap_traversal_height(self) -> float:
+    return self._iswap_traversal_height
+
+  @property
   def module_id_length(self):
     return 2
 
