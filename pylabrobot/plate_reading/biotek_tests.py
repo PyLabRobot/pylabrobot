@@ -62,8 +62,6 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_read_absorbance(self):
     self.backend.io.read.side_effect = _byte_iter(
       "\x06"
-      + "0000\x03"
-      + "\x06"
       + "0350000000000000010000000000490300000\x03"
       + "\x06"
       + "0000\x03"
@@ -214,8 +212,6 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
       "\x06"
-      + "0000\x03"
-      + "\x06"
       + "0000\x03"
       + "\x06"
       + "0350000000000000010000000000490300000\x03"
