@@ -20,6 +20,7 @@ from typing import (
   Sequence,
   Set,
   Tuple,
+  Type,
   Union,
   cast,
 )
@@ -61,6 +62,7 @@ from pylabrobot.resources.errors import CrossContaminationError, HasTipError
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.tilting.tilter import Tilter
+from pylabrobot.error_handling import handles_errors
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -111,18 +113,6 @@ class LiquidHandler(Resource, Machine):
   defined in `pyhamilton.liquid_handling.backends`) to communicate with the liquid handler.
   """
 
-  ALLOWED_CALLBACKS = {
-    "aspirate",
-    "aspirate96",
-    "dispense",
-    "dispense96",
-    "drop_tips",
-    "drop_tips96",
-    "move_resource",
-    "pick_up_tips",
-    "pick_up_tips96",
-  }
-
   def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
     """Initialize a LiquidHandler.
 
@@ -142,7 +132,6 @@ class LiquidHandler(Resource, Machine):
     Machine.__init__(self, backend=backend)
 
     self.backend: LiquidHandlerBackend = backend  # fix type
-    self._callbacks: Dict[str, OperationCallback] = {}
 
     self.deck = deck
     # register callbacks for sending resource assignment/unassignment to backend
@@ -160,6 +149,8 @@ class LiquidHandler(Resource, Machine):
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
     self._resource_pickup: Optional[ResourcePickup] = None
+
+    self._error_handlers: Dict[Type[Exception], Callable] = {}
 
   async def setup(self, **backend_kwargs):
     """Prepare the robot for use."""
@@ -347,7 +338,8 @@ class LiquidHandler(Resource, Machine):
     if not len(invalid_channels) == 0:
       raise ValueError(f"Invalid channels: {invalid_channels}")
 
-  @need_setup_finished
+  @handles_errors
+  # @need_setup_finished
   async def pick_up_tips(
     self,
     tip_spots: List[TipSpot],
@@ -463,15 +455,8 @@ class LiquidHandler(Resource, Machine):
         (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
       (self.head[channel].commit if success else self.head[channel].rollback)()
 
-    # trigger callback
-    self._trigger_callback(
-      "pick_up_tips",
-      liquid_handler=self,
-      operations=pickups,
-      use_channels=use_channels,
-      error=error,
-      **backend_kwargs,
-    )
+    if error is not None:
+      raise error
 
   @need_setup_finished
   async def drop_tips(
@@ -599,15 +584,8 @@ class LiquidHandler(Resource, Machine):
         (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
       (self.head[channel].commit if success else self.head[channel].rollback)()
 
-    # trigger callback
-    self._trigger_callback(
-      "drop_tips",
-      liquid_handler=self,
-      operations=drops,
-      use_channels=use_channels,
-      error=error,
-      **backend_kwargs,
-    )
+    if error is not None:
+      raise error
 
   async def return_tips(
     self,
@@ -913,15 +891,8 @@ class LiquidHandler(Resource, Machine):
         tip_volume_tracker = self.head[channel].get_tip().tracker
         (tip_volume_tracker.commit if success else tip_volume_tracker.rollback)()
 
-    # trigger callback
-    self._trigger_callback(
-      "aspirate",
-      liquid_handler=self,
-      operations=aspirations,
-      use_channels=use_channels,
-      error=error,
-      **backend_kwargs,
-    )
+    if error is not None:
+      raise error
 
   @need_setup_finished
   async def dispense(
@@ -1123,15 +1094,8 @@ class LiquidHandler(Resource, Machine):
     if any(bav is not None for bav in blow_out_air_volume):
       self._blow_out_air_volume = None
 
-    # trigger callback
-    self._trigger_callback(
-      "dispense",
-      liquid_handler=self,
-      operations=dispenses,
-      use_channels=use_channels,
-      error=error,
-      **backend_kwargs,
-    )
+    if error is not None:
+      raise error
 
   async def transfer(
     self,
@@ -1212,6 +1176,9 @@ class LiquidHandler(Resource, Machine):
         **backend_kwargs,
       )
 
+    if error is not None:
+      raise error
+
   @contextlib.contextmanager
   def use_channels(self, channels: List[int]):
     """Temporarily use the specified channels as a default argument to `use_channels`.
@@ -1287,25 +1254,13 @@ class LiquidHandler(Resource, Machine):
         if does_tip_tracking() and not tip_spot.tracker.is_disabled:
           tip_spot.tracker.rollback()
         self.head96[i].rollback()
-      self._trigger_callback(
-        "pick_up_tips96",
-        liquid_handler=self,
-        pickup=pickup_operation,
-        error=error,
-        **backend_kwargs,
-      )
+      
+      raise error
     else:
       for i, tip_spot in enumerate(tip_rack.get_all_items()):
         if does_tip_tracking() and not tip_spot.tracker.is_disabled:
           tip_spot.tracker.commit()
         self.head96[i].commit()
-      self._trigger_callback(
-        "pick_up_tips96",
-        liquid_handler=self,
-        pickup=pickup_operation,
-        error=None,
-        **backend_kwargs,
-      )
 
   async def drop_tips96(
     self,
@@ -1367,13 +1322,8 @@ class LiquidHandler(Resource, Machine):
           if does_tip_tracking() and not tip_spot.tracker.is_disabled:
             tip_spot.tracker.rollback()
         self.head96[i].rollback()
-      self._trigger_callback(
-        "drop_tips96",
-        liquid_handler=self,
-        drop=drop_operation,
-        error=e,
-        **backend_kwargs,
-      )
+
+      raise error
     else:
       for i in range(96):
         if isinstance(resource, TipRack):
@@ -1381,13 +1331,6 @@ class LiquidHandler(Resource, Machine):
           if does_tip_tracking() and not tip_spot.tracker.is_disabled:
             tip_spot.tracker.commit()
         self.head96[i].commit()
-      self._trigger_callback(
-        "drop_tips96",
-        liquid_handler=self,
-        drop=drop_operation,
-        error=None,
-        **backend_kwargs,
-      )
 
   def _get_96_head_origin_tip_rack(self) -> Optional[TipRack]:
     """Get the tip rack where the tips on the 96 head were picked up. If no tips were picked up,
@@ -1589,26 +1532,13 @@ class LiquidHandler(Resource, Machine):
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
         channel.get_tip().tracker.rollback()
-      self._trigger_callback(
-        "aspirate96",
-        liquid_handler=self,
-        aspiration=aspiration,
-        error=error,
-        **backend_kwargs,
-      )
+      
+      raise error
     else:
       for channel, container in zip(self.head96.values(), containers):
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.commit()
       channel.get_tip().tracker.commit()
-
-      self._trigger_callback(
-        "aspirate96",
-        liquid_handler=self,
-        aspiration=aspiration,
-        error=None,
-        **backend_kwargs,
-      )
 
   async def dispense96(
     self,
@@ -1738,26 +1668,12 @@ class LiquidHandler(Resource, Machine):
           container.tracker.rollback()
         channel.get_tip().tracker.rollback()
 
-      self._trigger_callback(
-        "dispense96",
-        liquid_handler=self,
-        dispense=dispense,
-        error=error,
-        **backend_kwargs,
-      )
+      raise error
     else:
       for channel, container in zip(self.head96.values(), containers):
         if does_volume_tracking() and not well.tracker.is_disabled:
           container.tracker.commit()
         channel.get_tip().tracker.commit()
-
-      self._trigger_callback(
-        "dispense96",
-        liquid_handler=self,
-        dispense=dispense,
-        error=None,
-        **backend_kwargs,
-      )
 
   async def stamp(
     self,
@@ -2186,36 +2102,6 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
-  def register_callback(self, method_name: str, callback: OperationCallback):
-    """Registers a callback for a specific method."""
-    if method_name in self._callbacks:
-      error_message = f"Callback already registered for: {method_name}"
-      raise RuntimeError(error_message)
-    if method_name not in self.ALLOWED_CALLBACKS:
-      error_message = f"Callback not allowed: {method_name}"
-      raise RuntimeError(error_message)
-    self._callbacks[method_name] = callback
-
-  def _trigger_callback(
-    self,
-    method_name: str,
-    *args,
-    error: Optional[Exception] = None,
-    **kwargs,
-  ):
-    """Triggers the callback associated with a method, if any.
-
-    NB: If an error exists it will be passed to the callback instead of being raised.
-    """
-    if callback := self._callbacks.get(method_name):
-      callback(self, *args, error=error, **kwargs)
-    elif error is not None:
-      raise error
-
-  @property
-  def callbacks(self):
-    return self._callbacks
-
   def serialize(self):
     return {**Resource.serialize(self), **Machine.serialize(self)}
 
@@ -2275,8 +2161,3 @@ class LiquidHandler(Resource, Machine):
       "Cannot assign child resource to liquid handler. Use "
       "lh.deck.assign_child_resource() instead."
     )
-
-
-class OperationCallback(Protocol):
-  def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
-    ...  # pragma: no cover
