@@ -41,11 +41,11 @@ from pylabrobot.resources import (
   Coordinate,
   Liquid,
   Resource,
-  Tip,
   TecanPlate,
   TecanPlateCarrier,
   TecanTip,
   TecanTipRack,
+  Tip,
   TipSpot,
   Trash,
 )

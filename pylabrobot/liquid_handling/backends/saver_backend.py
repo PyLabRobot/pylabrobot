@@ -1,9 +1,9 @@
 from typing import Any, Dict, List
 
-from pylabrobot.resources import Tip
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
+from pylabrobot.resources import Tip
 
 
 class SaverBackend(LiquidHandlerBackend):
