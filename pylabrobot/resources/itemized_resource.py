@@ -388,7 +388,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def _occupied_func(item: T):
     return "O" if item.children else "-"
 
-  def make_grid(self, occupied_func=None):
+  def summary(self, occupied_func=None):
     # The "occupied_func" is a function that checks if a resource has something in it,
     # and returns a single character representing its status.
     if occupied_func is None:
@@ -421,9 +421,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     footer_text = f"{self.num_items_x}x{self.num_items_y} {self.__class__.__name__}"
 
     return info_str + "\n" + header_row + "\n" + item_text + "\n" + footer_text
-
-  def print_grid(self, occupied_func=None):
-    print(self.make_grid(occupied_func=occupied_func))
 
   def serialize(self) -> dict:
     return {
