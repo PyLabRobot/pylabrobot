@@ -284,6 +284,10 @@ class VSpinBackend(CentrifugeBackend):
     resp = await self.get_status()
     return int.from_bytes(resp[1:5], byteorder="little")
 
+  async def get_home_position(self):
+    resp = await self.get_status()
+    return int.from_bytes(resp[9:13], byteorder="little")
+
   # Centrifuge communication: read_resp, send, send_payloads
 
   async def read_resp(self, timeout=20) -> bytes:
@@ -442,7 +446,7 @@ class VSpinBackend(CentrifugeBackend):
     rpm = int((g / (1.118 * (10 ** (-4)))) ** 0.5)
     base = int(107007 - 328 * rpm + 1.13 * (rpm**2))
     rpm_b = (int(4481 * rpm + 10852)).to_bytes(4, byteorder="little")
-    acc = (int(915 * acceleration / 100)).to_bytes(2, byteorder="little")
+    acc = (int(9.15 * acceleration)).to_bytes(2, byteorder="little")
     maxp = min(
       (await self.get_position() + base + 4000 * rpm // 30 * duration),
       4294967294,
