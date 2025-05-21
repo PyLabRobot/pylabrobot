@@ -1,5 +1,7 @@
 from typing import Dict
 
+from pylabrobot.incubators.cytomat.constants import ErrorRegister
+
 
 class CytomatBusyError(Exception):
   """Exception raised when the device is still busy and a new command is not accepted."""
@@ -82,4 +84,95 @@ error_map: Dict[int, Exception] = {
   0x42: CytomatLiftDoorNotOpenError("Automatic lift door not open"),
   0x51: CytomatMemoryAccessError("Error while accessing internal memory"),
   0x52: CytomatUnauthorizedAccessError("Incorrect password / unauthorized access"),
+}
+
+
+class CytomatCommunicationWithMotorControllersInterruptedError(Exception):
+  pass
+
+
+class CytomatNoMtpLoadedOnHandlerShovelError(Exception):
+  pass
+
+
+class CytomatNoMtpUnloadedFromHandlerShovelError(Exception):
+  pass
+
+
+class CytomatShovelNotExtendedAutomaticUnitPositionError(Exception):
+  pass
+
+
+class CytomatProcessTimeoutError(Exception):
+  pass
+
+
+class CytomatAutomaticLiftDoorNotOpenError(Exception):
+  pass
+
+
+class CytomatAutomaticLiftDoorNotClosedError(Exception):
+  pass
+
+
+class CytomatShovelNotRetractedError(Exception):
+  pass
+
+
+class CytomatStepperMotorControllerTemperatureTooHighError(Exception):
+  pass
+
+
+class CytomatOtherStepperMotorControllerError(Exception):
+  pass
+
+
+class CytomatTransferStationNotRotatedError(Exception):
+  pass
+
+
+class CytomatCommunicationWithHeatingControllersAndGasSupplyDisturbedError(Exception):
+  pass
+
+
+class CytomatFatalErrorOccurredDuringErrorRoutineError(Exception):
+  pass
+
+
+error_register_map: Dict[ErrorRegister, Exception] = {
+  ErrorRegister.COMMUNICATION_WITH_MOTOR_CONTROLLERS_INTERRUPTED: CytomatCommunicationWithMotorControllersInterruptedError(
+    "Communication with motor controllers interrupted"
+  ),
+  ErrorRegister.NO_MTP_LOADED_ON_HANDLER_SHOVEL: CytomatNoMtpLoadedOnHandlerShovelError(
+    "MTP not loaded on handler shovel"
+  ),
+  ErrorRegister.NO_MTP_UNLOADED_FROM_HANDLER_SHOVEL: CytomatNoMtpUnloadedFromHandlerShovelError(
+    "MTP not unloaded from handler shovel"
+  ),
+  ErrorRegister.SHOVEL_NOT_EXTENDED_AUTOMATIC_UNIT_POSITION_ERROR: CytomatShovelNotExtendedAutomaticUnitPositionError(
+    "Shovel not extended, automatic unit position error"
+  ),
+  ErrorRegister.PROCESS_TIMEOUT: CytomatProcessTimeoutError("Process timeout"),
+  ErrorRegister.AUTOMATIC_LIFT_DOOR_NOT_OPEN: CytomatAutomaticLiftDoorNotOpenError(
+    "Automatic lift door not open"
+  ),
+  ErrorRegister.AUTOMATIC_LIFT_DOOR_NOT_CLOSED: CytomatAutomaticLiftDoorNotClosedError(
+    "Automatic lift door not closed"
+  ),
+  ErrorRegister.SHOVEL_NOT_RETRACTED: CytomatShovelNotRetractedError("Shovel not retracted"),
+  ErrorRegister.STEPPER_MOTOR_CONTROLLER_TEMPERATURE_TOO_HIGH: CytomatStepperMotorControllerTemperatureTooHighError(
+    "Stepper motor controller temperature too high"
+  ),
+  ErrorRegister.OTHER_STEPPER_MOTOR_CONTROLLER_ERROR: CytomatOtherStepperMotorControllerError(
+    "Other stepper motor controller error"
+  ),
+  ErrorRegister.TRANSFER_STATION_NOT_ROTATED: CytomatTransferStationNotRotatedError(
+    "Transfer station not rotated"
+  ),
+  ErrorRegister.COMMUNICATION_WITH_HEATING_CONTROLLERS_AND_GAS_SUPPLY_DISTURBED: CytomatCommunicationWithHeatingControllersAndGasSupplyDisturbedError(
+    "Communication with heating controllers and gas supply disturbed"
+  ),
+  ErrorRegister.FATAL_ERROR_OCCURRED_DURING_ERROR_ROUTINE: CytomatFatalErrorOccurredDuringErrorRoutineError(
+    "Fatal error occurred during error routine"
+  ),
 }
