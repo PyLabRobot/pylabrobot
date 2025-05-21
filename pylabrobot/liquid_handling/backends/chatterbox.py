@@ -236,6 +236,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def drop_resource(self, drop: ResourceDrop):
     print(f"Dropping resource: {drop}")
-  
+
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return True
