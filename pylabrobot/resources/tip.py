@@ -34,5 +34,7 @@ class Tip:
       "fitting_depth": self.fitting_depth,
     }
 
+  def __hash__(self):
+    return hash(repr(self))
 
 TipCreator = Callable[[], Tip]
