@@ -18,7 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Resource, Tip
 
 
 class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
@@ -236,3 +236,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def drop_resource(self, drop: ResourceDrop):
     print(f"Dropping resource: {drop}")
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    return True

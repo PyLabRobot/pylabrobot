@@ -411,6 +411,16 @@ class LiquidHandler(Resource, Machine):
         use_channels = self._default_use_channels
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
 
+    if not all(
+      self.backend.can_pick_up_tip(channel, tip) for channel, tip in zip(use_channels, tips)
+    ):
+      cannot = [
+        channel
+        for channel, tip in zip(use_channels, tips)
+        if not self.backend.can_pick_up_tip(channel, tip)
+      ]
+      raise RuntimeError(f"Cannot pick up tips on channels {cannot}.")
+
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(tip_spots)
 
