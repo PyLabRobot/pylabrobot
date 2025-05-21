@@ -138,7 +138,7 @@ class CytomatFatalErrorOccurredDuringErrorRoutineError(Exception):
   pass
 
 
-error_register_map: Dict[int, Exception] = {
+error_register_map: Dict[ErrorRegister, Exception] = {
   ErrorRegister.COMMUNICATION_WITH_MOTOR_CONTROLLERS_INTERRUPTED: CytomatCommunicationWithMotorControllersInterruptedError(
     "Communication with motor controllers interrupted"
   ),
