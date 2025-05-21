@@ -83,9 +83,6 @@ class HamiltonTip(Tip):
       f"pickup_method={self.pickup_method.name})"
     )
 
-  def __hash__(self):
-    return hash(repr(self))
-
   def get_uid(self) -> int:
     """Get a unique identifier for the general information in the tip. (2 tips of the same class,
     say high volume with filter, should return the same value)"""
