@@ -37,4 +37,5 @@ class Tip:
   def __hash__(self):
     return hash(repr(self))
 
+
 TipCreator = Callable[[], Tip]
