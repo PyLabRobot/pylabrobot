@@ -320,6 +320,12 @@ class CytomatBackend(IncubatorBackend):
       await asyncio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60) -> OverviewRegisterState:
+    """
+    Wait for the cytomat to finish the current task. This is done by checking the overview register
+    until the busy bit is not set. If the cytomat is busy for too long, a TimeoutError is raised.
+    If the error bit is set in the overview register, the error register is read and the corresponding
+    error is raised.
+    """
     start = time.time()
     while True:
       overview_register = await self.get_overview_register()
