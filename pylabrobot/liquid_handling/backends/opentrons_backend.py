@@ -26,6 +26,7 @@ from pylabrobot.resources import (
   ItemizedResource,
   Plate,
   Resource,
+  Tip,
   TipRack,
   TipSpot,
 )
@@ -638,3 +639,16 @@ class OpentronsBackend(LiquidHandlerBackend):
       speed=speed,
       force_direct=force_direct,
     )
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if channel_idx == 0:
+      if self.left_pipette is None:
+        return False
+      left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
+      return left_volume == tip.maximal_volume
+    if channel_idx == 1:
+      if self.right_pipette is None:
+        return False
+      right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
+      return right_volume == tip.maximal_volume
+    return False

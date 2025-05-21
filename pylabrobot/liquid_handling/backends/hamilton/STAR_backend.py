@@ -53,6 +53,7 @@ from pylabrobot.resources import (
   Carrier,
   Coordinate,
   Resource,
+  Tip,
   TipRack,
   TipSpot,
   Well,
@@ -3094,6 +3095,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
     )
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    return True
 
   async def core_check_resource_exists_at_location_center(
     self,
