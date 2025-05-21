@@ -411,6 +411,16 @@ class LiquidHandler(Resource, Machine):
         use_channels = self._default_use_channels
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
 
+    if not all(
+      self.backend.can_pick_up_tip(channel, tip) for channel, tip in zip(use_channels, tips)
+    ):
+      cannot = [
+        channel
+        for channel, tip in zip(use_channels, tips)
+        if not self.backend.can_pick_up_tip(channel, tip)
+      ]
+      raise RuntimeError(f"Cannot pick up tips on channels {cannot}.")
+
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(tip_spots)
 
@@ -1823,6 +1833,7 @@ class LiquidHandler(Resource, Machine):
   async def move_picked_up_resource(
     self,
     to: Coordinate,
+    offset: Coordinate = Coordinate.zero(),
     **backend_kwargs,
   ):
     if self._resource_pickup is None:
@@ -1833,6 +1844,7 @@ class LiquidHandler(Resource, Machine):
         resource=self._resource_pickup.resource,
         gripped_direction=self._resource_pickup.direction,
         pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
+        offset=offset,
       ),
       **backend_kwargs,
     )

@@ -26,6 +26,7 @@ from pylabrobot.resources import (
   ItemizedResource,
   Plate,
   Resource,
+  Tip,
   TipRack,
   TipSpot,
 )
@@ -290,29 +291,26 @@ class OpentronsBackend(LiquidHandlerBackend):
     # instead, we move the labware off deck as a workaround
     ot_api.labware.move_labware(labware_id=name, off_deck=True)
 
-  def select_tip_pipette(self, tip_max_volume: float, with_tip: bool) -> Optional[str]:
+  def select_tip_pipette(self, tip: Tip, with_tip: bool) -> Optional[str]:
     """Select a pipette based on maximum tip volume for tip pick up or drop.
 
     The volume of the head must match the maximum tip volume. If both pipettes have the same
     maximum volume, the left pipette is selected.
 
     Args:
-      tip_max_volume: The maximum volume of the tip.
-      prefer_tip: If True, get a channel that has a tip.
+      with_tip: If True, get a channel that has a tip.
 
     Returns:
       The id of the pipette, or None if no pipette is available.
     """
 
-    if self.left_pipette is not None:
-      left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
-      if left_volume == tip_max_volume and with_tip == self.left_pipette_has_tip:
-        return cast(str, self.left_pipette["pipetteId"])
+    if self.can_pick_up_tip(0, tip) and with_tip == self.left_pipette_has_tip:
+      assert self.left_pipette is not None
+      return cast(str, self.left_pipette["pipetteId"])
 
-    if self.right_pipette is not None:
-      right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
-      if right_volume == tip_max_volume and with_tip == self.right_pipette_has_tip:
-        return cast(str, self.right_pipette["pipetteId"])
+    if self.can_pick_up_tip(1, tip) and with_tip == self.right_pipette_has_tip:
+      assert self.right_pipette is not None
+      return cast(str, self.right_pipette["pipetteId"])
 
     return None
 
@@ -326,8 +324,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     assert op.resource.parent is not None, "must not be a floating resource"
 
     labware_id = self.defined_labware[op.resource.parent.name]  # get name of tip rack
-    tip_max_volume = op.tip.maximal_volume
-    pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=False)
+    pipette_id = self.select_tip_pipette(op.tip, with_tip=False)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
@@ -374,8 +371,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       labware_id = "fixedTrash"
     else:
       labware_id = self.defined_labware[op.resource.parent.name]  # get name of tip rack
-    tip_max_volume = op.tip.maximal_volume
-    pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=True)
+    pipette_id = self.select_tip_pipette(op.tip, with_tip=True)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 
@@ -638,3 +634,16 @@ class OpentronsBackend(LiquidHandlerBackend):
       speed=speed,
       force_direct=force_direct,
     )
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if channel_idx == 0:
+      if self.left_pipette is None:
+        return False
+      left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
+      return left_volume == tip.maximal_volume
+    if channel_idx == 1:
+      if self.right_pipette is None:
+        return False
+      right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
+      return right_volume == tip.maximal_volume
+    return False
