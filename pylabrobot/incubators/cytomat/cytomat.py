@@ -146,7 +146,7 @@ class CytomatBackend(IncubatorBackend):
       timeout: The maximum time to wait for the command to complete. If None, the command will not
         wait for completion.
     """
-    resp = await self.send_command(command_type, command, params)
+    await self.send_command(command_type, command, params)
     if timeout is not None:
       overview_register = await self.wait_for_task_completion(timeout=timeout)
     return overview_register
@@ -209,7 +209,7 @@ class CytomatBackend(IncubatorBackend):
     await self.send_command("rs", "be", "")
 
   async def initialize(self) -> None:
-    await self.send_action("ll", "in", "", timeout=120)  # this command sometimes times out
+    await self.send_action("ll", "in", "", timeout=300)  # this command sometimes times out
 
   async def open_door(self):
     return await self.send_action("ll", "gp", "002")
