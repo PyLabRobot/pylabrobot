@@ -252,8 +252,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """Traverse the items in this resource.
 
     Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
-    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`
-    and `"snake_left"` start at the top right (A12).
+    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`,
+    `"snake_left"` and "down_left", start at the top right (A12).
 
     The snake directions alternate between going in the given direction and going in the opposite
     direction. For example, `"snake_down"` will go from A1 to H1, then H2 to A2, then A3 to H3, etc.
@@ -267,8 +267,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     Args:
       batch_size: The number of items to return in each batch.
-      direction: The direction to traverse the items. Can be one of "up", "down", "right", "left",
-        "snake_up", "snake_down", "snake_left" or "snake_right".
+      direction: The direction to traverse the items. Can be one of "up", "down_right", "right",
+      "left", "snake_up", "snake_down", "snake_left" or "snake_right".
       repeat: Whether to repeat the traversal when the end of the resource is reached.
 
     Returns:
@@ -280,7 +280,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
       Traverse the items in the resource from top to bottom, in batches of 3:
 
-        >>> items.traverse(batch_size=3, direction="down", repeat=False)
+        >>> items.traverse(batch_size=3, direction="down_right", repeat=False)
 
         [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
 
