@@ -55,6 +55,7 @@ The guide is divided into three parts:
 
 - **Machine-Agnostic Features** – Discover powerful tools that work across all devices, like the visualizer, trackers, reusable protocol patterns, validation tools, and error handling.
 
+Check out [the list of supported devices](/devices).
 
 <hr>
 
