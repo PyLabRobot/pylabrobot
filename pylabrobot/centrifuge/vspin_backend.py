@@ -62,9 +62,9 @@ class Access2Backend(LoaderBackend):
     await self.send_command(bytes.fromhex("110500070024040000024000c6bd"))
     await self.send_command(bytes.fromhex("1105000300400000f0bf"))
     await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
-    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    # await self.send_command(bytes.fromhex("11050003002000006bd4"))
     await self.send_command(bytes.fromhex("1105000e00440b00000000000000007041020203c7"))
-    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    # await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
   async def stop(self):
     logger.debug("[loader] stop")
@@ -122,7 +122,7 @@ class Access2Backend(LoaderBackend):
     await self.send_command(bytes.fromhex("1105000e00440b00010000404000002041030096fa"))
     await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
     await self.send_command(bytes.fromhex("1105000e00440b00000000000000002041020056be"))
-    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    # await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
 
 class VSpinBackend(CentrifugeBackend):
@@ -418,23 +418,23 @@ class VSpinBackend(CentrifugeBackend):
     self,
     g: float = 500,
     duration: float = 60,
-    acceleration: float = 80,
+    acceleration: float = .8,
   ) -> None:
     """Start a spin cycle. spin spin spin spin
 
     Args:
       g: relative centrifugal force, also known as g-force
-      duration: How much time spent actually spinning at the desired g in seconds
+      duration: time in seconds spent at speed (g)
       acceleration: 1-100% of total acceleration
 
     Examples:
       Spin with 1000 g-force (close to 3000rpm) for 5 minutes at 100% acceleration
 
-      >>> cf.start_spin_cycle(g = 1000, duration = 300, acceleration = 100)
+      >>> cf.start_spin_cycle(g = 1000, duration = 300, acceleration = .8)
     """
 
-    if acceleration < 1 or acceleration > 100:
-      raise ValueError("Acceleration must be within 1-100.")
+    if acceleration <= 0 or acceleration > 1:
+      raise ValueError("Acceleration must be within 0-1.")
     if g < 1 or g > 1000:
       raise ValueError("G-force must be within 1-1000")
     if duration < 1:
@@ -443,34 +443,54 @@ class VSpinBackend(CentrifugeBackend):
     await self.close_door()
     await self.lock_door()
 
-    rpm = int((g / (1.118 * (10 ** (-4)))) ** 0.5)
-    base = int(107007 - 328 * rpm + 1.13 * (rpm**2))
-    rpm_b = (int(4481 * rpm + 10852)).to_bytes(4, byteorder="little")
-    acc = (int(9.15 * acceleration)).to_bytes(2, byteorder="little")
-    maxp = min(
-      (await self.get_position() + base + 4000 * rpm // 30 * duration),
-      4294967294,
+    # 1 - compute the final position
+    # g to rpm: https://en.wikipedia.org/wiki/Centrifugation#Mathematical_formula
+    r = 10
+    rpm = int((g / (1.118 * 10 ** -5 * r)) ** 0.5)
+
+    # compute the distance traveled during the acceleration period
+    # distance = 1/2 * v^2 / a. area under 0 to t (triangle). t = a/v_max
+    # 12903.2 is 100% acceleration
+    acceleration_ticks_per_second2 = 12903.2 * acceleration  
+    speed_per_second = rpm / 60
+    distance_during_acceleration = (
+      (speed_per_second * speed_per_second / acceleration) // 2
     )
-    position = maxp.to_bytes(4, byteorder="little")
+
+    # compute the distance traveled at speed
+    distance_at_speed = speed_per_second * duration
+
+    current_position = await self.get_position()
+    final_position = current_position + distance_during_acceleration + distance_at_speed
+    if final_position > 2 ** 32 - 1:
+      raise NotImplementedError(
+        "We don't know what happens if the position exceeds 2^32-1. "
+        "Please report this issue on discuss.pylabrobot.org."
+      )
+    position = final_position.to_bytes(4, byteorder="little")
+
+    # 2 - encode the rpm
+    rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
+
+    # 3 - encode the acceleration
+    acc = int(9.15 * acceleration).to_bytes(2, byteorder="little")
 
     byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc + b"\x00\x00"
     last_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += last_byte.to_bytes(1, byteorder="little")
+    print(f"Final position: {final_position}, RPM: {rpm}, Acceleration: {acceleration}, current position: {current_position}, duration: {duration}, byte_string: {byte_string.hex()}")
 
-    payloads = [
-      "aa 02 26 00 00 28",
-      "aa 02 0e 10",
-      "aa 01 17 02 1a",
-      "aa 01 0e 0f",
-      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      "aa 01 17 04 1c",
-      "aa 01 17 01 19",
-      "aa 01 0b 0c",
-      "aa 01 0e 0f",
-      "aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
-      byte_string,
-    ]
-    await self.send_payloads(payloads)
+    await self.send(bytes.fromhex("aa0226000028"))
+    # await self.send(bytes.fromhex("aa020e10"))
+    await self.send(bytes.fromhex("aa0117021a"))
+    # await self.send(bytes.fromhex("aa010e0f"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
+    await self.send(bytes.fromhex("aa010b0c"))
+    # await self.send(bytes.fromhex("aa010e0f"))
+    await self.send(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+    await self.send(byte_string)
 
     status_resp = await self.get_status()
     status = status_resp[0]
@@ -483,18 +503,15 @@ class VSpinBackend(CentrifugeBackend):
 
     # reset position back to 0ish
     # this part is needed because otherwise calling go_to_position will not work after
-    payloads = [
-      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      "aa 01 17 04 1c",
-      "aa 01 17 01 19",
-      "aa 01 0b 0c",
-      "aa 01 00 01",
-      "aa 01 e6 05 00 64 00 00 00 00 00 32 00 e8 03 01 00 6e",
-      "aa 01 94 b6 12 83 00 00 12 01 00 00 f3",
-      "aa 01 19 28 42",
-    ]
-
-    await self.send_payloads(payloads)
+    await self.send(bytes.fromhex("aa0117021a"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
+    await self.send(bytes.fromhex("aa010b0c"))
+    await self.send(bytes.fromhex("aa010001"))
+    await self.send(bytes.fromhex("aa01e605006400000000003200e80301006e"))
+    await self.send(bytes.fromhex("aa0194b61283000012010000f3"))
+    await self.send(bytes.fromhex("aa01192842"))
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
