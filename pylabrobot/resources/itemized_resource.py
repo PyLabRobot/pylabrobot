@@ -323,7 +323,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if direction == "up":
       # start at the bottom, and go up in each column
       indices = [(8 * y + x) for y in range(12) for x in range(7, -1, -1)]
-    elif direction == "down":
+    elif direction == "down_right":
       # start at the top, and go down in each column. This is how the items are stored in the
       # list, so no need to do anything special.
       indices = list(range(self.num_items))
@@ -334,7 +334,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       # Start at the top right, and go left in each row
       indices = [(8 * y + x) for x in range(8) for y in range(11, -1, -1)]
     elif direction == "down_left":
-      # Start at the top right, and go left in each row
+      # Start at the top right, go first down in each column, then go to the next left column
       indices = [8 * y + x for y in range(11, -1, -1) for x in range(0, 8)]
     elif direction == "snake_right":
       top_right = 88
