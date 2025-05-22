@@ -332,6 +332,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       indices = [(8 * y + x) for x in range(8) for y in range(0, 12)]
     elif direction == "left":
       # Start at the top right, and go left in each row
+      indices = [(8 * y + x) for x in range(8) for y in range(11, -1, -1)]
+    elif direction == "down_left":
+      # Start at the top right, and go left in each row
       indices = [8 * y + x for y in range(11, -1, -1) for x in range(0, 8)]
     elif direction == "snake_right":
       top_right = 88
