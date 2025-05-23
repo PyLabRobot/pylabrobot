@@ -2314,7 +2314,8 @@ class LiquidHandler(Resource, Machine):
       """
       Merge adjacent sublists if combined length <= max_len,
         without splitting sublists."""
-      merged, buffer = [], []
+      merged: List[List[int]] = []
+      buffer: List[int] = []
 
       for sublist in lists:
         if not sublist:
@@ -2354,7 +2355,7 @@ class LiquidHandler(Resource, Machine):
       if isinstance(item, TipRack) and item.name not in ignore_tiprack_list
     ]
 
-    clusters_by_model = {}
+    clusters_by_model: Dict[int, List[Tuple[TipRack, int]]] = {}
 
     for idx, tip_rack in enumerate(all_tipracks_on_deck_list):
       # Only consider partially-filled tip_racks
@@ -2415,7 +2416,8 @@ class LiquidHandler(Resource, Machine):
         all_target_tip_spots, key=lambda tip: (str(tip.parent), round(tip.location.x, 3))
       )
 
-      target_tip_clusters_by_parent_x = {}
+      target_tip_clusters_by_parent_x: Dict[Tuple[str, float], List[TipSpot]] = {}
+
       for tip_spot in sorted_tip_spots:
         key = (str(tip_spot.parent), round(tip_spot.location.x, 3))
         if key not in target_tip_clusters_by_parent_x:
