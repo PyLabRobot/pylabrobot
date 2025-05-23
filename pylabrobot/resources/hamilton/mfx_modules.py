@@ -61,3 +61,22 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
     model=MFX_DWP_rackbased_module.__name__,
     pedestal_size_z=0,
   )
+
+
+def Hamilton_MFXmodule_tall_flat(name: str) -> PlateHolder:
+  """Hamilton cat. no.: 188228 (BSZ)
+  Module to position a Well Plate.
+  """
+
+  # Resource size is measured with caliper.
+  # Child location offset for x, y are measured with caliper.
+
+  return PlateHolder(
+    name=name,
+    size_x=135.0,
+    size_y=94.0,
+    size_z=216 - 18.195 - 100,  # mesured using probe
+    # probe height - carrier_height - deck_height
+    child_location=Coordinate(3.0, 4.0, 209.9 - 18.195 - 100),
+    pedestal_size_z=0,
+  )
