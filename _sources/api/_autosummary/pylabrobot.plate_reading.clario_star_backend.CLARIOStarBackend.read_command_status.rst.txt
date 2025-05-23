@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.clario\_star\_backend.CLARIOStarBackend.read\_command\_status
+=======================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.clario_star_backend
+
+.. automethod:: CLARIOStarBackend.read_command_status
