@@ -21,4 +21,5 @@ Examples:
    tecan-evo/_tecan-evo
    pumps/_pumps
    moving-channels-around
+   tutorial_tip_inventory_consolidation
 
