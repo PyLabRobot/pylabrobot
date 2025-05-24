@@ -64,15 +64,15 @@ class Resource:
     # Barcode location validation
     if barcode_position_on_resource and barcode_position_on_resource not in [
       "right",
-      "back",
-      "left",
       "front",
+      "left",
+      "back",
       "bottom",
       "top",
     ]:
       raise ValueError(
-        f"Invalid barcode location '{barcode_position_on_resource}'. Must be one of "
-        + "['right', 'back', 'left', 'front', 'bottom', 'top']."
+        f"Invalid barcode location '{barcode_position_on_resource}'."
+        + "Must be one of ['right', 'back', 'left', 'front', 'bottom', 'top']."
       )
 
     self._name = name
