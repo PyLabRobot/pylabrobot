@@ -4,7 +4,7 @@ import itertools
 import json
 import logging
 import sys
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast, Union, Literal
 
 from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
@@ -40,6 +40,10 @@ class Resource:
     location: The location of the resource, relative to its parent.
       (see :meth:`get_absolute_location`)
     category: The category of the resource, e.g. `tips`, `plate_carrier`, etc.
+    model: The model of the resource (optional).
+    barcode: The barcode of the resource (optional, can be either a string or an integer).
+    barcode_symbology: The symbology of the barcode (optional).
+    barcode_location: The location of the barcode (optional, should be one of ['right', 'back', 'left', 'front', 'bottom', 'top']).
   """
 
   def __init__(
@@ -51,7 +55,26 @@ class Resource:
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    barcode: Optional[Union[str, int]] = None,
+    barcode_symbology: Optional[str] = None,
+    barcode_position_on_resource: Optional[
+      Literal["right", "back", "left", "front", "bottom", "top"]
+    ] = None,
   ):
+    # Barcode location validation
+    if barcode_position_on_resource and barcode_position_on_resource not in [
+      "right",
+      "back",
+      "left",
+      "front",
+      "bottom",
+      "top",
+    ]:
+      raise ValueError(
+        f"Invalid barcode location '{barcode_position_on_resource}'. Must be one of "
+        + "['right', 'back', 'left', 'front', 'bottom', 'top']."
+      )
+
     self._name = name
     self._size_x = size_x
     self._size_y = size_y
@@ -60,6 +83,9 @@ class Resource:
     self.rotation = rotation or Rotation()
     self.category = category
     self.model = model
+    self.barcode = barcode
+    self.barcode_symbology = barcode_symbology
+    self.barcode_position_on_resource = barcode_position_on_resource
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
