@@ -252,8 +252,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """Traverse the items in this resource.
 
     Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
-    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`
-    and `"snake_left"` start at the top right (A12).
+    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`,
+    `"snake_left"` and "down_left", start at the top right (A12).
 
     The snake directions alternate between going in the given direction and going in the opposite
     direction. For example, `"snake_down"` will go from A1 to H1, then H2 to A2, then A3 to H3, etc.
@@ -267,8 +267,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     Args:
       batch_size: The number of items to return in each batch.
-      direction: The direction to traverse the items. Can be one of "up", "down", "right", "left",
-        "snake_up", "snake_down", "snake_left" or "snake_right".
+      direction: The direction to traverse the items. Can be one of "up", "down_right", "right",
+      "left", "snake_up", "snake_down", "snake_left" or "snake_right".
       repeat: Whether to repeat the traversal when the end of the resource is reached.
 
     Returns:
@@ -280,7 +280,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
       Traverse the items in the resource from top to bottom, in batches of 3:
 
-        >>> items.traverse(batch_size=3, direction="down", repeat=False)
+        >>> items.traverse(batch_size=3, direction="down_right", repeat=False)
 
         [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
 
@@ -323,7 +323,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if direction == "up":
       # start at the bottom, and go up in each column
       indices = [(8 * y + x) for y in range(12) for x in range(7, -1, -1)]
-    elif direction == "down":
+    elif direction == "down_right":
       # start at the top, and go down in each column. This is how the items are stored in the
       # list, so no need to do anything special.
       indices = list(range(self.num_items))
@@ -333,6 +333,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     elif direction == "left":
       # Start at the top right, and go left in each row
       indices = [(8 * y + x) for x in range(8) for y in range(11, -1, -1)]
+    elif direction == "down_left":
+      # Start at the top right, go first down in each column, then go to the next left column
+      indices = [8 * y + x for y in range(11, -1, -1) for x in range(0, 8)]
     elif direction == "snake_right":
       top_right = 88
       indices = []
