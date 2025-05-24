@@ -150,7 +150,8 @@ class TestItemizedResource(unittest.TestCase):
     self,
     direction: Literal[
       "up",
-      "down",
+      "down_right",
+      "down_left",
       "right",
       "left",
       "snake_up",
