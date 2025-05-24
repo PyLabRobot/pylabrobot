@@ -43,7 +43,8 @@ class Resource:
     model: The model of the resource (optional).
     barcode: The barcode of the resource (optional, can be either a string or an integer).
     barcode_symbology: The symbology of the barcode (optional).
-    barcode_location: The location of the barcode (optional, should be one of ['right', 'back', 'left', 'front', 'bottom', 'top']).
+    barcode_location: The location of the barcode (optional, should be one of
+      ['right', 'back', 'left', 'front', 'bottom', 'top']).
   """
 
   def __init__(
