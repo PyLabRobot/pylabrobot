@@ -4,7 +4,7 @@ import itertools
 import json
 import logging
 import sys
-from typing import Any, Callable, Dict, List, Optional, cast, Union, Literal
+from typing import Any, Callable, Dict, List, Literal, Optional, Union, cast
 
 from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
