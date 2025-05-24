@@ -239,7 +239,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     batch_size: int,
     direction: Literal[
       "up",
-      "down",
+      "down_right",
+      "down_left",
       "right",
       "left",
       "snake_up",
