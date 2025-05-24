@@ -172,7 +172,7 @@ class TestItemizedResource(unittest.TestCase):
 
   def test_traverse_down(self):
     pattern = list(range(self.plate.num_items))
-    self._traverse_test("down", pattern)
+    self._traverse_test("down_right", pattern)
 
   def test_traverse_up(self):
     pattern = [
@@ -890,7 +890,7 @@ class TestItemizedResource(unittest.TestCase):
     num_rounds = 10
     total_num_batches = 96 * num_rounds // 5  # 10 rounds, batch size 5
     num_batches = 0
-    for wells in self.plate.traverse(batch_size=5, direction="down", repeat=True):
+    for wells in self.plate.traverse(batch_size=5, direction="down_right", repeat=True):
       if num_batches == total_num_batches:
         break
       items.extend(wells)
