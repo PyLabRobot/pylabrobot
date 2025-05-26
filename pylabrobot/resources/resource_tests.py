@@ -2,6 +2,7 @@ import math
 import unittest
 import unittest.mock
 
+from .barcode import Barcode
 from .coordinate import Coordinate
 from .deck import Deck
 from .errors import ResourceNotFoundError
@@ -208,7 +209,13 @@ class TestResource(unittest.TestCase):
     self.assertEqual(child1, child2)
 
   def test_serialize(self):
-    r = Resource("test", size_x=10, size_y=10, size_z=10)
+    r = Resource(
+      "test",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      barcode=Barcode(data="1234567890", symbology="code128", position_on_resource="left"),
+    )
     self.assertEqual(
       r.serialize(),
       {
@@ -228,6 +235,11 @@ class TestResource(unittest.TestCase):
         "category": None,
         "parent_name": None,
         "model": None,
+        "barcode": {
+          "data": "1234567890",
+          "symbology": "code128",
+          "position_on_resource": "left",
+        },
       },
     )
 
@@ -279,11 +291,18 @@ class TestResource(unittest.TestCase):
         "category": None,
         "parent_name": None,
         "model": None,
+        "barcode": None,
       },
     )
 
   def test_deserialize(self):
-    r = Resource("test", size_x=10, size_y=10, size_z=10)
+    r = Resource(
+      "test",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      barcode=Barcode(data="1234567890", symbology="code128", position_on_resource="left"),
+    )
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
   def test_deserialize_location_none(self):

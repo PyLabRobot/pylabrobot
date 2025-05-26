@@ -10,6 +10,7 @@ from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
+from .barcode import Barcode
 from .coordinate import Coordinate
 from .errors import NoLocationError, ResourceNotFoundError
 from .rotation import Rotation
@@ -37,9 +38,10 @@ class Resource:
     size_x: The size of the resource in the x-direction.
     size_y: The size of the resource in the y-direction.
     size_z: The size of the resource in the z-direction.
-    location: The location of the resource, relative to its parent.
-      (see :meth:`get_absolute_location`)
+    location: The location of the resource, relative to its parent. (see :meth:`get_absolute_location`)
     category: The category of the resource, e.g. `tips`, `plate_carrier`, etc.
+    model: The model of the resource (optional).
+    barcode: The barcode of the resource (optional).
   """
 
   def __init__(
@@ -51,6 +53,7 @@ class Resource:
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    barcode: Optional[Barcode] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -60,6 +63,7 @@ class Resource:
     self.rotation = rotation or Rotation()
     self.category = category
     self.model = model
+    self.barcode = barcode
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
@@ -84,7 +88,6 @@ class Resource:
     return self._local_size_z
 
   def serialize(self) -> dict:
-    """Serialize this resource."""
     return {
       "name": self.name,
       "type": self.__class__.__name__,
@@ -95,6 +98,7 @@ class Resource:
       "rotation": serialize(self.rotation),
       "category": self.category,
       "model": self.model,
+      "barcode": self.barcode.serialize() if self.barcode is not None else None,
       "children": [child.serialize() for child in self.children],
       "parent_name": self.parent.name if self.parent is not None else None,
     }
@@ -607,8 +611,11 @@ class Resource:
       del data_copy[key]
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
+    barcode = data_copy.pop("barcode", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
+    if barcode is not None:
+      resource.barcode = Barcode.deserialize(barcode)
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
