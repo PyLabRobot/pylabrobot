@@ -37,6 +37,7 @@ PYTHON_VERSION = sys.version_info[:2]
 if PYTHON_VERSION == (3, 10):
   try:
     import ot_api
+
     # for run cancellation
     import ot_api.requestor as _req
     from requests import HTTPError
