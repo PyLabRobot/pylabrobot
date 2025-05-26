@@ -3,8 +3,8 @@ This module defines the Barcode class, which represents a barcode associated wit
 It includes attributes for the barcode data, symbology, and its position on the resource.
 """
 
-from typing import Literal
 from dataclasses import dataclass
+from typing import Literal
 
 BarcodePosition = Literal["right", "front", "left", "back", "bottom", "top"]
 
