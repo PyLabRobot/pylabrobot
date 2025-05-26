@@ -4,7 +4,7 @@ import itertools
 import json
 import logging
 import sys
-from typing import Any, Callable, Dict, List, Literal, Optional, Union, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
@@ -38,14 +38,10 @@ class Resource:
     size_x: The size of the resource in the x-direction.
     size_y: The size of the resource in the y-direction.
     size_z: The size of the resource in the z-direction.
-    location: The location of the resource, relative to its parent.
-      (see :meth:`get_absolute_location`)
+    location: The location of the resource, relative to its parent. (see :meth:`get_absolute_location`)
     category: The category of the resource, e.g. `tips`, `plate_carrier`, etc.
     model: The model of the resource (optional).
-    barcode: The barcode of the resource (optional, can be either a string or an integer).
-    barcode_symbology: The symbology of the barcode (optional).
-    barcode_location: The location of the barcode (optional, should be one of
-      ['right', 'back', 'left', 'front', 'bottom', 'top']).
+    barcode: The barcode of the resource (optional).
   """
 
   def __init__(
