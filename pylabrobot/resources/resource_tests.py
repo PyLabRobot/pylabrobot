@@ -286,6 +286,7 @@ class TestResource(unittest.TestCase):
             "category": None,
             "parent_name": "test",
             "model": None,
+            "barcode": None,
           }
         ],
         "category": None,
