@@ -9,8 +9,8 @@ def assert_shape(list_: List[List[T]], shape: Tuple[int, int]):
   """Assert that a list has the correct shape.
 
   Args:
-      list_: The list to check.
-      shape: The expected shape.
+    list_: The list to check.
+    shape: The expected shape.
   """
 
   if len(list_) != shape[0]:
@@ -24,17 +24,14 @@ def reshape_2d(list_: List[T], shape: Tuple[int, int]) -> List[List[T]]:
   """Reshape a list into a 2d list.
 
   Args:
-      list_: The list to reshape.
-      shape: A tuple (rows, columns) specifying the desired shape of the 2D list.
-          - The first element (shape[0]) represents the number of rows.
-          - The second element (shape[1]) represents the number of columns.
+    list_: The list to reshape.
+    shape: A tuple (rows, columns) specifying the desired shape of the 2D list.
 
   Returns:
-      A 2D list with the specified number of rows and columns.
+    A 2D list with the specified number of rows and columns.
 
   Raises:
-      ValueError: If the total number of elements in the list does not match
-      the specified shape (rows * columns).
+    ValueError: If the total number of elements in the list does not match the specified shape (rows * columns).
   """
 
   if not len(list_) == shape[0] * shape[1]:
@@ -54,18 +51,18 @@ def chunk_list(list_: List[T], chunk_size: int) -> List[List[T]]:
   """Divide a list into smaller chunks of a specified size.
 
   Args:
-      list_: The list to be divided into chunks.
-      chunk_size: The size of each chunk.
+    list_: The list to be divided into chunks.
+    chunk_size: The size of each chunk.
 
   Returns:
-      A list of chunks, where each chunk is a list of elements.
+    A list of chunks, where each chunk is a list of elements.
 
   Example:
-      >>> chunk_list([1, 2, 3, 4, 5, 6, 7, 8, 9], 3)
-      [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    >>> chunk_list([1, 2, 3, 4, 5, 6, 7, 8, 9], 3)
+    [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
-      >>> chunk_list([1, 2, 3, 4, 5], 2)
-      [[1, 2], [3, 4], [5]]
+    >>> chunk_list([1, 2, 3, 4, 5], 2)
+    [[1, 2], [3, 4], [5]]
   """
   chunks: List[List[T]] = []
   for i in range(0, len(list_), chunk_size):
