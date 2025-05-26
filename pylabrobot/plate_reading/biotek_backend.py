@@ -589,7 +589,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
-    checksum = str(sum(cmd.encode()) % 100)
+    checksum = str(sum(cmd.encode()) % 100).zfill(2)
     cmd = cmd + checksum + "\x03"
     await self.send_command("D", cmd)
 
@@ -641,7 +641,7 @@ class Cytation5Backend(ImageReaderBackend):
       f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
       f"{emission_wavelength_str}000000000000000000210011"
     )
-    checksum = str((sum(cmd.encode()) + 7) % 100)  # don't know why +7
+    checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
     cmd = cmd + checksum + "\x03"
     resp = await self.send_command("D", cmd)
 
@@ -680,7 +680,7 @@ class Cytation5Backend(ImageReaderBackend):
       duration = str(max_duration).zfill(3)
       assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}{frequency}01"
-      checksum = str((sum(cmd.encode()) + 73) % 100)  # don't know why +73
+      checksum = str((sum(cmd.encode()) + 73) % 100).zfill(2)  # don't know why +73
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
 
