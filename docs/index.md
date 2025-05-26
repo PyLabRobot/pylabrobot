@@ -9,6 +9,7 @@
 - **GitHub repository**: [https://github.com/PyLabRobot/pylabrobot](https://github.com/PyLabRobot/pylabrobot)
 - **Community & Developer Forum**: [https://discuss.pylabrobot.org](https://discuss.pylabrobot.org)
 - **Publication**: [Wierenga et al 2023, PyLabRobot: An Open-Source, Hardware Agnostic Interface for Liquid-Handling Robots and Accessories (Device)](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>)
+- **Supported devices**: [supported devices](devices.md)
 
 <hr>
 
@@ -17,7 +18,6 @@
 :align: center
 :alt: Graphical abstract of PyLabRobot
 ```
-
 
 ```{note}
 PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton).
@@ -103,7 +103,6 @@ api/pylabrobot
 
 Community <https://discuss.pylabrobot.org/>
 ```
-
 
 ## Citing
 
