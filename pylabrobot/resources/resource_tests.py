@@ -296,7 +296,13 @@ class TestResource(unittest.TestCase):
     )
 
   def test_deserialize(self):
-    r = Resource("test", size_x=10, size_y=10, size_z=10, barcode=Barcode(data="1234567890", symbology="code128", position_on_resource="left"))
+    r = Resource(
+      "test",
+      size_x=10,
+      size_y=10,
+      size_z=10,
+      barcode=Barcode(data="1234567890", symbology="code128", position_on_resource="left"),
+    )
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
   def test_deserialize_location_none(self):
