@@ -34,6 +34,7 @@ class TestContainer(unittest.TestCase):
         "material_z_thickness": 1,
         "category": None,
         "model": None,
+        "barcode": None,
         "max_volume": 1000,
         "compute_volume_from_height": serialize(compute_volume_from_height),
         "compute_height_from_volume": serialize(compute_height_from_volume),

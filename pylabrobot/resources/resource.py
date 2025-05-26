@@ -53,9 +53,8 @@ class Resource:
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
-    barcode: Optional[Barcode] = None
+    barcode: Optional[Barcode] = None,
   ):
-
     self._name = name
     self._size_x = size_x
     self._size_y = size_y
@@ -89,7 +88,6 @@ class Resource:
     return self._local_size_z
 
   def serialize(self) -> dict:
-    """Serialize this resource."""
     return {
       "name": self.name,
       "type": self.__class__.__name__,
@@ -100,6 +98,7 @@ class Resource:
       "rotation": serialize(self.rotation),
       "category": self.category,
       "model": self.model,
+      "barcode": self.barcode.serialize() if self.barcode is not None else None,
       "children": [child.serialize() for child in self.children],
       "parent_name": self.parent.name if self.parent is not None else None,
     }
@@ -612,8 +611,11 @@ class Resource:
       del data_copy[key]
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
+    barcode = data_copy.pop("barcode", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
+    if barcode is not None:
+      resource.barcode = Barcode.deserialize(barcode)
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
