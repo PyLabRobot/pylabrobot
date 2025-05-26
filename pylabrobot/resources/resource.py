@@ -10,6 +10,7 @@ from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
+from .barcode import Barcode
 from .coordinate import Coordinate
 from .errors import NoLocationError, ResourceNotFoundError
 from .rotation import Rotation
@@ -56,25 +57,8 @@ class Resource:
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
-    barcode: Optional[Union[str, int]] = None,
-    barcode_symbology: Optional[str] = None,
-    barcode_position_on_resource: Optional[
-      Literal["right", "back", "left", "front", "bottom", "top"]
-    ] = None,
+    barcode: Optional[Barcode] = None
   ):
-    # Barcode location validation
-    if barcode_position_on_resource and barcode_position_on_resource not in [
-      "right",
-      "front",
-      "left",
-      "back",
-      "bottom",
-      "top",
-    ]:
-      raise ValueError(
-        f"Invalid barcode location '{barcode_position_on_resource}'."
-        + "Must be one of ['right', 'back', 'left', 'front', 'bottom', 'top']."
-      )
 
     self._name = name
     self._size_x = size_x
@@ -85,8 +69,6 @@ class Resource:
     self.category = category
     self.model = model
     self.barcode = barcode
-    self.barcode_symbology = barcode_symbology
-    self.barcode_position_on_resource = barcode_position_on_resource
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
