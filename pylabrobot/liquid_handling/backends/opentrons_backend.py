@@ -38,6 +38,10 @@ if PYTHON_VERSION == (3, 10):
   try:
     import ot_api
 
+    # for run cancellation
+    import ot_api.requestor as _req
+    from requests import HTTPError
+
     USE_OT = True
   except ImportError:
     USE_OT = False
@@ -115,6 +119,25 @@ class OpentronsBackend(LiquidHandlerBackend):
     return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
 
   async def stop(self):
+    """Cancel any active OT run, then clear labware definitions."""
+    # cancel the HTTP-API run if it exists (helpful to make device available again in official Opentrons app)
+    run_id = getattr(ot_api, "run_id", None)
+    if run_id:
+      try:
+        _req.post(f"/runs/{run_id}/cancel")
+      except HTTPError as err:
+        if err.response.status_code == 404:
+          _req.post(f"/runs/{run_id}/actions/cancel")
+        else:
+          raise
+      except Exception:
+        # fallback: delete the run entirely
+        try:
+          _req.delete(f"/runs/{run_id}")
+        except Exception:
+          pass
+
+    # then clear local labware mapping
     self.defined_labware = {}
 
   def _get_resource_ot_location(self, resource: Resource) -> Union[str, int]:
@@ -318,7 +341,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     """Pick up tips from the specified resource."""
 
     assert len(ops) == 1, "only one channel supported for now"
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]  # for channel in channels
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -358,7 +380,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     # how do we do that with trash, assuming we don't want to have a child for the trash?
 
     assert len(ops) == 1  # only one channel supported for now
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]  # for channel in channels
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -471,7 +492,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     """Aspirate liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -532,7 +552,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     """Dispense liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
