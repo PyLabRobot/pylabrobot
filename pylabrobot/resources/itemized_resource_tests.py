@@ -285,7 +285,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def _traverse_test(
     self,
-    ir: ItemizedResource,
     direction: Literal[
       "up",
       "down",
@@ -300,7 +299,7 @@ class TestItemizedResourceTraversal(unittest.TestCase):
     pattern: List[str],
   ):
     items: List[Well] = []
-    for wells in ir.traverse(batch_size=1, direction=direction, start=start, repeat=False):
+    for wells in self.ir.traverse(batch_size=1, direction=direction, start=start, repeat=False):
       items.extend(wells)
 
     self.assertEqual(len(items), len(pattern))
@@ -309,7 +308,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_down_top_left(self):
     self._traverse_test(
-      self.ir,
       direction="down",
       start="top_left",
       pattern=["A1", "B1", "C1", "A2", "B2", "C2", "A3", "B3", "C3"],
@@ -317,7 +315,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_down_top_right(self):
     self._traverse_test(
-      self.ir,
       direction="down",
       start="top_right",
       pattern=["A3", "B3", "C3", "A2", "B2", "C2", "A1", "B1", "C1"],
@@ -325,7 +322,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_up_bottom_left(self):
     self._traverse_test(
-      self.ir,
       direction="up",
       start="bottom_left",
       pattern=["C1", "B1", "A1", "C2", "B2", "A2", "C3", "B3", "A3"],
@@ -333,7 +329,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_up_bottom_right(self):
     self._traverse_test(
-      self.ir,
       direction="up",
       start="bottom_right",
       pattern=["C3", "B3", "A3", "C2", "B2", "A2", "C1", "B1", "A1"],
@@ -341,7 +336,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_right_top_left(self):
     self._traverse_test(
-      self.ir,
       direction="right",
       start="top_left",
       pattern=["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3"],
@@ -349,7 +343,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_right_bottom_left(self):
     self._traverse_test(
-      self.ir,
       direction="right",
       start="bottom_left",
       pattern=["C1", "C2", "C3", "B1", "B2", "B3", "A1", "A2", "A3"],
@@ -357,7 +350,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_left_top_right(self):
     self._traverse_test(
-      self.ir,
       direction="left",
       start="top_right",
       pattern=["A3", "A2", "A1", "B3", "B2", "B1", "C3", "C2", "C1"],
@@ -365,7 +357,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_left_bottom_right(self):
     self._traverse_test(
-      self.ir,
       direction="left",
       start="bottom_right",
       pattern=["C3", "C2", "C1", "B3", "B2", "B1", "A3", "A2", "A1"],
@@ -373,7 +364,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_down_top_left(self):
     self._traverse_test(
-      self.ir,
       direction="snake_down",
       start="top_left",
       pattern=["A1", "B1", "C1", "C2", "B2", "A2", "A3", "B3", "C3"],
@@ -381,7 +371,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_down_top_right(self):
     self._traverse_test(
-      self.ir,
       direction="snake_down",
       start="top_right",
       pattern=["A3", "B3", "C3", "C2", "B2", "A2", "A1", "B1", "C1"],
@@ -389,7 +378,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_up_bottom_left(self):
     self._traverse_test(
-      self.ir,
       direction="snake_up",
       start="bottom_left",
       pattern=["C1", "B1", "A1", "A2", "B2", "C2", "C3", "B3", "A3"],
@@ -397,7 +385,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_up_bottom_right(self):
     self._traverse_test(
-      self.ir,
       direction="snake_up",
       start="bottom_right",
       pattern=["C3", "B3", "A3", "A2", "B2", "C2", "C1", "B1", "A1"],
@@ -405,7 +392,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_right_top_left(self):
     self._traverse_test(
-      self.ir,
       direction="snake_right",
       start="top_left",
       pattern=["A1", "A2", "A3", "B3", "B2", "B1", "C1", "C2", "C3"],
@@ -413,7 +399,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_right_bottom_left(self):
     self._traverse_test(
-      self.ir,
       direction="snake_right",
       start="bottom_left",
       pattern=["C1", "C2", "C3", "B3", "B2", "B1", "A1", "A2", "A3"],
@@ -421,7 +406,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_left_top_right(self):
     self._traverse_test(
-      self.ir,
       direction="snake_left",
       start="top_right",
       pattern=["A3", "A2", "A1", "B1", "B2", "B3", "C3", "C2", "C1"],
@@ -429,7 +413,6 @@ class TestItemizedResourceTraversal(unittest.TestCase):
 
   def test_traverse_snake_left_bottom_right(self):
     self._traverse_test(
-      self.ir,
       direction="snake_left",
       start="bottom_right",
       pattern=["C3", "C2", "C1", "B1", "B2", "B3", "A3", "A2", "A1"],
