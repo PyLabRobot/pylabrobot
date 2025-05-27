@@ -1,7 +1,7 @@
-import logging
-from typing import Optional, cast
-from concurrent.futures import ThreadPoolExecutor
 import asyncio
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from typing import Optional, cast
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -56,20 +56,28 @@ class HID(IOBase):
       self._executor = None
 
   async def write(self, data: bytes):
-    assert self.device is not None, "forgot to call setup?"
     loop = asyncio.get_running_loop()
+
+    def _write():
+      assert self.device is not None, "forgot to call setup?"
+      self.device.write(data)
+
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    await loop.run_in_executor(self._executor, lambda: self.device.write(data))
+    await loop.run_in_executor(self._executor, _write)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
     capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.decode()))
 
   async def read(self, size: int, timeout: int) -> bytes:
-    assert self.device is not None, "forgot to call setup?"
     loop = asyncio.get_running_loop()
+
+    def _read():
+      assert self.device is not None, "forgot to call setup?"
+      self.device.read(size, timeout=timeout)
+
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    r = await loop.run_in_executor(self._executor, lambda: self.device.read(size, timeout=timeout))
+    r = await loop.run_in_executor(self._executor, _read)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
     capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.decode()))
     return cast(bytes, r)
