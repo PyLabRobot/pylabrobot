@@ -129,19 +129,18 @@ class Cytation5Backend(ImageReaderBackend):
     logger.info("[cytation5] setting up")
 
     await self.io.setup()
-    self.io.usb_reset()
-    self.io.set_latency_timer(16)
-    self.io.set_baudrate(9600)  # 0x38 0x41
-    self.io.set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
+    await self.io.usb_reset()
+    await self.io.set_latency_timer(16)
+    await self.io.set_baudrate(9600)  # 0x38 0x41
     SIO_RTS_CTS_HS = 0x1 << 8
-    self.io.set_flowctrl(SIO_RTS_CTS_HS)
-    self.io.set_rts(True)
+    await self.io.set_flowctrl(SIO_RTS_CTS_HS)
+    await self.io.set_rts(True)
 
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
       self._version = await self.get_firmware_version()
     except TimeoutError:
-      self.io.set_baudrate(38_461)  # 4e c0
+      await self.io.set_baudrate(38_461)  # 4e c0
       self._version = await self.get_firmware_version()
 
     self._shaking = False
@@ -409,8 +408,8 @@ class Cytation5Backend(ImageReaderBackend):
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
     for _ in range(6):
-      self.io.usb_purge_rx_buffer()
-    self.io.usb_purge_tx_buffer()
+      await self.io.usb_purge_rx_buffer()
+    await self.io.usb_purge_tx_buffer()
 
   async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
     """If timeout is None, use self.timeout"""
