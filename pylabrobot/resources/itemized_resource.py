@@ -237,10 +237,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def traverse(
     self,
     batch_size: int,
+    start: Literal["top_left", "bottom_left", "top_right", "bottom_right"],
     direction: Literal[
       "up",
-      "down_right",
-      "down_left",
+      "down",
       "right",
       "left",
       "snake_up",
@@ -251,10 +251,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     repeat: bool = False,
   ) -> Generator[List[T], None, None]:
     """Traverse the items in this resource.
-
-    Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
-    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`,
-    `"snake_left"` and "down_left", start at the top right (A12).
 
     The snake directions alternate between going in the given direction and going in the opposite
     direction. For example, `"snake_down"` will go from A1 to H1, then H2 to A2, then A3 to H3, etc.
@@ -271,9 +267,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       direction: The direction to traverse the items. Can be one of "up", "down_right", "right",
       "left", "snake_up", "snake_down", "snake_left" or "snake_right".
       repeat: Whether to repeat the traversal when the end of the resource is reached.
-
-    Returns:
-      A list of items.
 
     Raises:
       ValueError: If the direction is not valid.
@@ -321,64 +314,86 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         yield batch
         start += batch_size
 
-    if direction == "up":
-      # start at the bottom, and go up in each column
-      indices = [(8 * y + x) for y in range(12) for x in range(7, -1, -1)]
-    elif direction == "down_right":
-      # start at the top, and go down in each column. This is how the items are stored in the
-      # list, so no need to do anything special.
-      indices = list(range(self.num_items))
-    elif direction == "right":
-      # Start at the top left, and go right in each row
-      indices = [(8 * y + x) for x in range(8) for y in range(0, 12)]
-    elif direction == "left":
-      # Start at the top right, and go left in each row
-      indices = [(8 * y + x) for x in range(8) for y in range(11, -1, -1)]
-    elif direction == "down_left":
-      # Start at the top right, go first down in each column, then go to the next left column
-      indices = [8 * y + x for y in range(11, -1, -1) for x in range(0, 8)]
-    elif direction == "snake_right":
-      top_right = 88
-      indices = []
-      for x in range(8):
-        if x % 2 == 0:
-          # even rows go left to right
-          indices.extend((8 * y + x) for y in range(0, 12))
-        else:
-          # odd rows go right to left
-          indices.extend((top_right + x - 8 * y) for y in range(0, 12))
-    elif direction == "snake_down":
-      top_right = 88
-      indices = []
-      for x in range(12):
-        if x % 2 == 0:
-          # even columns go top to bottom
-          indices.extend(8 * x + y for y in range(0, 8))
-        else:
-          # odd columns go bottom to top
-          indices.extend(8 * x + (7 - y) for y in range(0, 8))
-    elif direction == "snake_left":
-      top_right = 88
-      indices = []
-      for x in range(8):
-        if x % 2 == 0:
-          # even rows go right to left
-          indices.extend((8 * y + x) for y in range(11, -1, -1))
-        else:
-          # odd rows go left to right
-          indices.extend((top_right + x - 8 * y) for y in range(11, -1, -1))
-    elif direction == "snake_up":
-      top_right = 88
-      indices = []
-      for x in range(12):
-        if x % 2 == 0:
-          # even columns go bottom to top
-          indices.extend(8 * x + y for y in range(7, -1, -1))
-        else:
-          # odd columns go top to bottom
-          indices.extend(8 * x + (7 - y) for y in range(7, -1, -1))
+    base_rows = list(range(self.num_items_y))
+    base_cols = list(range(self.num_items_x))
+
+    # Determine starting rows and cols based on start position
+    if "bottom" in start:
+      rows = list(reversed(base_rows))
     else:
-      raise ValueError(f"Invalid direction '{direction}'.")
+      rows = base_rows
+
+    if "right" in start:
+      cols = list(reversed(base_cols))
+    else:
+      cols = base_cols
+
+    coords = []
+
+    if direction in {"up", "down"}:
+      for col_idx in cols:
+        if direction == "up":
+          row_order = list(reversed(base_rows))
+        else:  # down
+          row_order = base_rows
+
+        for row_idx in row_order:
+          coords.append((col_idx, row_idx))
+
+    elif direction in {"left", "right"}:
+      for row_idx in rows:
+        if direction == "left":
+          col_order = list(reversed(base_cols))
+        else:  # right
+          col_order = base_cols
+
+        for col_idx in col_order:
+          coords.append((col_idx, row_idx))
+
+    elif direction.startswith("snake_"):
+      axis = direction.split("_")[1]
+
+      if axis in {"up", "down"}:
+        # Snake up/down: alternate direction for each column
+        for i, col_idx in enumerate(cols):
+          if axis == "up":
+            # For snake_up, even columns go bottom-to-top, odd go top-to-bottom
+            if i % 2 == 0:
+              row_order = list(reversed(base_rows))  # bottom to top
+            else:
+              row_order = base_rows  # top to bottom
+          else:  # snake_down
+            # For snake_down, even columns go top-to-bottom, odd go bottom-to-top
+            if i % 2 == 0:
+              row_order = base_rows  # top to bottom
+            else:
+              row_order = list(reversed(base_rows))  # bottom to top
+
+          for row_idx in row_order:
+            coords.append((col_idx, row_idx))
+
+      else:  # snake_left or snake_right
+        # Snake left/right: alternate direction for each row
+        for i, row_idx in enumerate(rows):
+          if axis == "left":
+            # For snake_left, even rows go right-to-left, odd go left-to-right
+            if i % 2 == 0:
+              col_order = list(reversed(base_cols))  # right to left
+            else:
+              col_order = base_cols  # left to right
+          else:  # snake_right
+            # For snake_right, even rows go left-to-right, odd go right-to-left
+            if i % 2 == 0:
+              col_order = base_cols  # left to right
+            else:
+              col_order = list(reversed(base_cols))  # right to left
+
+          for col_idx in col_order:
+            coords.append((col_idx, row_idx))
+
+    # Convert coordinates to Excel-style notation
+    # coords are (col_idx, row_idx), so x=col_idx, y=row_idx
+    indices = [LETTERS[row_idx] + str(col_idx + 1) for col_idx, row_idx in coords]
 
     return make_generator(indices, batch_size, repeat)
 
