@@ -286,7 +286,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
     """
 
-    def make_generator(items: List[T], batch_size: int, repeat: int) -> Generator[List[T], None, None]:
+    def make_generator(
+      items: List[T], batch_size: int, repeat: int
+    ) -> Generator[List[T], None, None]:
       """Make a generator from a list, that returns items in batches, optionally repeating"""
 
       # If we're repeating, we need to make a copy of the items
