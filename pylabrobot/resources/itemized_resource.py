@@ -314,40 +314,26 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         yield batch
         start += batch_size
 
-    base_rows = list(range(self.num_items_y))
-    base_cols = list(range(self.num_items_x))
+    rows = list(range(self.num_items_y))
+    cols = list(range(self.num_items_x))
 
     # Determine starting rows and cols based on start position
     if "bottom" in start:
-      rows = list(reversed(base_rows))
-    else:
-      rows = base_rows
+      rows.reverse()
 
     if "right" in start:
-      cols = list(reversed(base_cols))
-    else:
-      cols = base_cols
+      cols.reverse()
 
     coords = []
 
     if direction in {"up", "down"}:
       for col_idx in cols:
-        if direction == "up":
-          row_order = list(reversed(base_rows))
-        else:  # down
-          row_order = base_rows
-
-        for row_idx in row_order:
+        for row_idx in rows:
           coords.append((col_idx, row_idx))
 
     elif direction in {"left", "right"}:
       for row_idx in rows:
-        if direction == "left":
-          col_order = list(reversed(base_cols))
-        else:  # right
-          col_order = base_cols
-
-        for col_idx in col_order:
+        for col_idx in cols:
           coords.append((col_idx, row_idx))
 
     elif direction.startswith("snake_"):
@@ -356,18 +342,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       if axis in {"up", "down"}:
         # Snake up/down: alternate direction for each column
         for i, col_idx in enumerate(cols):
-          if axis == "up":
-            # For snake_up, even columns go bottom-to-top, odd go top-to-bottom
-            if i % 2 == 0:
-              row_order = list(reversed(base_rows))  # bottom to top
-            else:
-              row_order = base_rows  # top to bottom
-          else:  # snake_down
-            # For snake_down, even columns go top-to-bottom, odd go bottom-to-top
-            if i % 2 == 0:
-              row_order = base_rows  # top to bottom
-            else:
-              row_order = list(reversed(base_rows))  # bottom to top
+          row_order = rows if i % 2 == 0 else list(reversed(rows))
 
           for row_idx in row_order:
             coords.append((col_idx, row_idx))
@@ -375,18 +350,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       else:  # snake_left or snake_right
         # Snake left/right: alternate direction for each row
         for i, row_idx in enumerate(rows):
-          if axis == "left":
-            # For snake_left, even rows go right-to-left, odd go left-to-right
-            if i % 2 == 0:
-              col_order = list(reversed(base_cols))  # right to left
-            else:
-              col_order = base_cols  # left to right
-          else:  # snake_right
-            # For snake_right, even rows go left-to-right, odd go right-to-left
-            if i % 2 == 0:
-              col_order = base_cols  # left to right
-            else:
-              col_order = list(reversed(base_cols))  # right to left
+          col_order = cols if i % 2 == 0 else list(reversed(cols))
 
           for col_idx in col_order:
             coords.append((col_idx, row_idx))
