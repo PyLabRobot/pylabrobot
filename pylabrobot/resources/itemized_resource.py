@@ -209,7 +209,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       identifier: Deprecated. Use `identifiers` instead. # TODO(deprecate-ordered-items)
       identifiers: The identifiers of the items. Either a string range or a list of integers. If a
         string, it uses transposed MS Excel style notation. Regions of items can be specified using
-        a colon, e.g. "A1:H1" for the first column. If a list of integers, it is the indices of the
+        a colon, e.g. "A1:H1" for the first column. If a list of integers, it is the items of the
         items in the list of items (counted from 0, top to bottom, left to right).
 
     Examples:
@@ -286,31 +286,29 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
     """
 
-    def make_generator(indices, batch_size, repeat) -> Generator[List[T], None, None]:
+    def make_generator(items: List[T], batch_size: int, repeat: int) -> Generator[List[T], None, None]:
       """Make a generator from a list, that returns items in batches, optionally repeating"""
 
-      # If we're repeating, we need to make a copy of the indices
+      # If we're repeating, we need to make a copy of the items
       if repeat:
-        indices = indices.copy()
+        items = items.copy()
 
       start = 0
 
       while True:
-        if (len(indices) - start) < batch_size:  # not enough items left
+        if (len(items) - start) < batch_size:  # not enough items left
           if repeat:
-            # if we're repeating, shift the indices and start over
-            indices = indices[start:] + indices[:start]
+            # if we're repeating, shift the items and start over
+            items = items[start:] + items[:start]
             start = 0
           else:
-            if start != len(indices):
+            if start != len(items):
               # there are items left, so yield last (partial) batch
-              batch = indices[start:]
-              batch = [self.get_item(i) for i in batch]
+              batch = items[start:]
               yield batch
             break
 
-        batch = indices[start : start + batch_size]
-        batch = [self.get_item(i) for i in batch]
+        batch = items[start : start + batch_size]
         yield batch
         start += batch_size
 
@@ -324,17 +322,17 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if "right" in start:
       cols.reverse()
 
-    coords = []
+    items = []
 
     if direction in {"up", "down"}:
       for col_idx in cols:
         for row_idx in rows:
-          coords.append((col_idx, row_idx))
+          items.append(self.get_item((row_idx, col_idx)))
 
     elif direction in {"left", "right"}:
       for row_idx in rows:
         for col_idx in cols:
-          coords.append((col_idx, row_idx))
+          items.append(self.get_item((row_idx, col_idx)))
 
     elif direction.startswith("snake_"):
       axis = direction.split("_")[1]
@@ -345,7 +343,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
           row_order = rows if i % 2 == 0 else list(reversed(rows))
 
           for row_idx in row_order:
-            coords.append((col_idx, row_idx))
+            items.append(self.get_item((row_idx, col_idx)))
 
       else:  # snake_left or snake_right
         # Snake left/right: alternate direction for each row
@@ -353,13 +351,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
           col_order = cols if i % 2 == 0 else list(reversed(cols))
 
           for col_idx in col_order:
-            coords.append((col_idx, row_idx))
+            items.append(self.get_item((row_idx, col_idx)))
 
-    # Convert coordinates to Excel-style notation
-    # coords are (col_idx, row_idx), so x=col_idx, y=row_idx
-    indices = [LETTERS[row_idx] + str(col_idx + 1) for col_idx, row_idx in coords]
-
-    return make_generator(indices, batch_size, repeat)
+    return make_generator(items, batch_size, repeat)
 
   def __repr__(self) -> str:
     return (
