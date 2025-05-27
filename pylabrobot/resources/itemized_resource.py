@@ -209,7 +209,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       identifier: Deprecated. Use `identifiers` instead. # TODO(deprecate-ordered-items)
       identifiers: The identifiers of the items. Either a string range or a list of integers. If a
         string, it uses transposed MS Excel style notation. Regions of items can be specified using
-        a colon, e.g. "A1:H1" for the first column. If a list of integers, it is the items of the
+        a colon, e.g. "A1:H1" for the first column. If a list of integers, it is the indices of the
         items in the list of items (counted from 0, top to bottom, left to right).
 
     Examples:
@@ -264,7 +264,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     Args:
       batch_size: The number of items to return in each batch.
-      direction: The direction to traverse the items. Can be one of "up", "down_right", "right",
+      direction: The direction to traverse the items. Can be one of "up", "down", "right",
       "left", "snake_up", "snake_down", "snake_left" or "snake_right".
       repeat: Whether to repeat the traversal when the end of the resource is reached.
 
@@ -274,14 +274,14 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
       Traverse the items in the resource from top to bottom, in batches of 3:
 
-        >>> items.traverse(batch_size=3, direction="down_right", repeat=False)
+        >>> items.traverse(batch_size=3, direction="down", start="top_left", repeat=False)
 
         [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
 
       Traverse the items in the resource from left to right, in batches of 5, repeating the
       traversal when the end of the resource is reached:
 
-        >>> items.traverse(batch_size=5, direction="right", repeat=True)
+        >>> items.traverse(batch_size=5, direction="right", start="top_left", repeat=True)
 
         [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
     """

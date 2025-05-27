@@ -419,19 +419,19 @@ class TestItemizedResourceTraversal(unittest.TestCase):
       pattern=["C3", "C2", "C1", "B1", "B2", "B3", "A3", "A2", "A1"],
     )
 
-  # def test_traverse_down_repeat(self):
-  #   # do a down traversal with batch size 5, which does not divide 96. `ItemizedResource.traverse`
-  #   # should continue the batch from the beginning of the resource.
-  #   # Go over the resource 10 times in total.
+  def test_traverse_down_repeat(self):
+    # do a down traversal with batch size 5, which does not divide 9. `ItemizedResource.traverse`
+    # should continue the batch from the beginning of the resource.
+    # Go over the resource 10 times in total.
 
-  #   items = []
-  #   num_rounds = 10
-  #   total_num_batches = 96 * num_rounds // 5  # 10 rounds, batch size 5
-  #   num_batches = 0
-  #   for wells in self.plate.traverse(batch_size=5, direction="down_right", repeat=True):
-  #     if num_batches == total_num_batches:
-  #       break
-  #     items.extend(wells)
-  #     self.assertEqual(len(wells), 5)
-  #     num_batches += 1
-  #   self.assertEqual(len(items), self.plate.num_items * num_rounds)
+    items = []
+    num_rounds = 10
+    total_num_batches = 9 * num_rounds // 5  # 10 rounds, batch size 5
+    num_batches = 0
+    for batch in self.ir.traverse(batch_size=5, direction="down", start="top_left", repeat=True):
+      if num_batches == total_num_batches:
+        break
+      items.extend(batch)
+      self.assertEqual(len(batch), 5)
+      num_batches += 1
+    self.assertEqual(len(items), self.ir.num_items * num_rounds)
