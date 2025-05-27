@@ -298,12 +298,13 @@ class TestItemizedResourceTraversal(unittest.TestCase):
     start: Literal["top_left", "bottom_left", "top_right", "bottom_right"],
     pattern: List[str],
   ):
-    items: List[Well] = []
+    items = []
     for wells in self.ir.traverse(batch_size=1, direction=direction, start=start, repeat=False):
       items.extend(wells)
 
     self.assertEqual(len(items), len(pattern))
     for w, identifier in zip(items, pattern):
+      assert w.parent is not None
       self.assertEqual(w.name, w.parent.name + "_" + identifier)
 
   def test_traverse_down_top_left(self):
