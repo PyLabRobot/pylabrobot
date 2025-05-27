@@ -317,12 +317,16 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     # Determine starting rows and cols based on start position
     if "bottom" in start:
+      if "down" in direction:
+        raise ValueError(f"Cannot start from {start} and go {direction}.")
       rows.reverse()
 
     if "right" in start:
+      if "right" in direction:
+        raise ValueError(f"Cannot start from {start} and go {direction}.")
       cols.reverse()
 
-    items = []
+    items: List[T] = []
 
     if direction in {"up", "down"}:
       for col_idx in cols:
