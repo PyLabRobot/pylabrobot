@@ -68,6 +68,14 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 
 ```{toctree}
 :maxdepth: 2
+:caption: Devices
+:hidden:
+
+devices
+```
+
+```{toctree}
+:maxdepth: 2
 :caption: User Guide
 :hidden:
 
