@@ -476,6 +476,12 @@ class Resource:
     new_resource.rotate(x=x, y=y, z=z)
     return new_resource
 
+  def at(self, location: Coordinate) -> Self:
+    """Return a copy of this resource at the given location."""
+    new_resource = self.copy()
+    new_resource.location = location
+    return new_resource
+
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
     """Get the center of this resource.
 

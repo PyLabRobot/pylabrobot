@@ -237,6 +237,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def traverse(
     self,
     batch_size: int,
+    start: Literal["top_left", "bottom_left", "top_right", "bottom_right"],
     direction: Literal[
       "up",
       "down",
@@ -251,10 +252,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   ) -> Generator[List[T], None, None]:
     """Traverse the items in this resource.
 
-    Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
-    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`
-    and `"snake_left"` start at the top right (A12).
-
     The snake directions alternate between going in the given direction and going in the opposite
     direction. For example, `"snake_down"` will go from A1 to H1, then H2 to A2, then A3 to H3, etc.
 
@@ -267,12 +264,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     Args:
       batch_size: The number of items to return in each batch.
-      direction: The direction to traverse the items. Can be one of "up", "down", "right", "left",
-        "snake_up", "snake_down", "snake_left" or "snake_right".
+      direction: The direction to traverse the items. Can be one of "up", "down", "right",
+      "left", "snake_up", "snake_down", "snake_left" or "snake_right".
       repeat: Whether to repeat the traversal when the end of the resource is reached.
-
-    Returns:
-      A list of items.
 
     Raises:
       ValueError: If the direction is not valid.
@@ -280,103 +274,92 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
       Traverse the items in the resource from top to bottom, in batches of 3:
 
-        >>> items.traverse(batch_size=3, direction="down", repeat=False)
+        >>> items.traverse(batch_size=3, direction="down", start="top_left", repeat=False)
 
         [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
 
       Traverse the items in the resource from left to right, in batches of 5, repeating the
       traversal when the end of the resource is reached:
 
-        >>> items.traverse(batch_size=5, direction="right", repeat=True)
+        >>> items.traverse(batch_size=5, direction="right", start="top_left", repeat=True)
 
         [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
     """
 
-    def make_generator(indices, batch_size, repeat) -> Generator[List[T], None, None]:
+    def make_generator(
+      items: List[T], batch_size: int, repeat: int
+    ) -> Generator[List[T], None, None]:
       """Make a generator from a list, that returns items in batches, optionally repeating"""
 
-      # If we're repeating, we need to make a copy of the indices
+      # If we're repeating, we need to make a copy of the items
       if repeat:
-        indices = indices.copy()
+        items = items.copy()
 
       start = 0
 
       while True:
-        if (len(indices) - start) < batch_size:  # not enough items left
+        if (len(items) - start) < batch_size:  # not enough items left
           if repeat:
-            # if we're repeating, shift the indices and start over
-            indices = indices[start:] + indices[:start]
+            # if we're repeating, shift the items and start over
+            items = items[start:] + items[:start]
             start = 0
           else:
-            if start != len(indices):
+            if start != len(items):
               # there are items left, so yield last (partial) batch
-              batch = indices[start:]
-              batch = [self.get_item(i) for i in batch]
+              batch = items[start:]
               yield batch
             break
 
-        batch = indices[start : start + batch_size]
-        batch = [self.get_item(i) for i in batch]
+        batch = items[start : start + batch_size]
         yield batch
         start += batch_size
 
-    if direction == "up":
-      # start at the bottom, and go up in each column
-      indices = [(8 * y + x) for y in range(12) for x in range(7, -1, -1)]
-    elif direction == "down":
-      # start at the top, and go down in each column. This is how the items are stored in the
-      # list, so no need to do anything special.
-      indices = list(range(self.num_items))
-    elif direction == "right":
-      # Start at the top left, and go right in each row
-      indices = [(8 * y + x) for x in range(8) for y in range(0, 12)]
-    elif direction == "left":
-      # Start at the top right, and go left in each row
-      indices = [(8 * y + x) for x in range(8) for y in range(11, -1, -1)]
-    elif direction == "snake_right":
-      top_right = 88
-      indices = []
-      for x in range(8):
-        if x % 2 == 0:
-          # even rows go left to right
-          indices.extend((8 * y + x) for y in range(0, 12))
-        else:
-          # odd rows go right to left
-          indices.extend((top_right + x - 8 * y) for y in range(0, 12))
-    elif direction == "snake_down":
-      top_right = 88
-      indices = []
-      for x in range(12):
-        if x % 2 == 0:
-          # even columns go top to bottom
-          indices.extend(8 * x + y for y in range(0, 8))
-        else:
-          # odd columns go bottom to top
-          indices.extend(8 * x + (7 - y) for y in range(0, 8))
-    elif direction == "snake_left":
-      top_right = 88
-      indices = []
-      for x in range(8):
-        if x % 2 == 0:
-          # even rows go right to left
-          indices.extend((8 * y + x) for y in range(11, -1, -1))
-        else:
-          # odd rows go left to right
-          indices.extend((top_right + x - 8 * y) for y in range(11, -1, -1))
-    elif direction == "snake_up":
-      top_right = 88
-      indices = []
-      for x in range(12):
-        if x % 2 == 0:
-          # even columns go bottom to top
-          indices.extend(8 * x + y for y in range(7, -1, -1))
-        else:
-          # odd columns go top to bottom
-          indices.extend(8 * x + (7 - y) for y in range(7, -1, -1))
-    else:
-      raise ValueError(f"Invalid direction '{direction}'.")
+    rows = list(range(self.num_items_y))
+    cols = list(range(self.num_items_x))
 
-    return make_generator(indices, batch_size, repeat)
+    # Determine starting rows and cols based on start position
+    if "bottom" in start:
+      if "down" in direction:
+        raise ValueError(f"Cannot start from {start} and go {direction}.")
+      rows.reverse()
+
+    if "right" in start:
+      if "right" in direction:
+        raise ValueError(f"Cannot start from {start} and go {direction}.")
+      cols.reverse()
+
+    items: List[T] = []
+
+    if direction in {"up", "down"}:
+      for col_idx in cols:
+        for row_idx in rows:
+          items.append(self.get_item((row_idx, col_idx)))
+
+    elif direction in {"left", "right"}:
+      for row_idx in rows:
+        for col_idx in cols:
+          items.append(self.get_item((row_idx, col_idx)))
+
+    elif direction.startswith("snake_"):
+      axis = direction.split("_")[1]
+
+      if axis in {"up", "down"}:
+        # Snake up/down: alternate direction for each column
+        for i, col_idx in enumerate(cols):
+          row_order = rows if i % 2 == 0 else list(reversed(rows))
+
+          for row_idx in row_order:
+            items.append(self.get_item((row_idx, col_idx)))
+
+      else:  # snake_left or snake_right
+        # Snake left/right: alternate direction for each row
+        for i, row_idx in enumerate(rows):
+          col_order = cols if i % 2 == 0 else list(reversed(cols))
+
+          for col_idx in col_order:
+            items.append(self.get_item((row_idx, col_idx)))
+
+    return make_generator(items, batch_size, repeat)
 
   def __repr__(self) -> str:
     return (
