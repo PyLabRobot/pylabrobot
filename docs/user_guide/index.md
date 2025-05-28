@@ -18,10 +18,10 @@ _getting-started/rpi
 :caption: Machines
 :hidden:
 
+machines
 00_liquid-handling/_liquid-handling
 01_material-handling/_material-handling
 02_analytical/_analytical
-machines
 ```
 
 ```{toctree}
