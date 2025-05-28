@@ -174,31 +174,31 @@ class VSpinBackend(CentrifugeBackend):
     await self.send(b"\xaa\x02\x12\x03\x17")
     for _ in range(5):
       await self.send(b"\xaa\x02\x26\x20\x00\x48")
-      await self.send(b"\xaa\x02\x0e\x10")
+      # await self.send(b"\xaa\x02\x0e\x10")
       await self.send(b"\xaa\x02\x26\x00\x00\x28")
-      await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x02\x0e\x10")
+      # await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     await self.lock_door()
 
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     await self.send(b"\xaa\x01\x0e\x0f")
 
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     await self.send(b"\xaa\x02\x26\x00\x00\x28")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -215,7 +215,7 @@ class VSpinBackend(CentrifugeBackend):
 
     resp = 0x89
     while resp == 0x89:
-      await self.send(b"\xaa\x02\x0e\x10")
+      # await self.send(b"\xaa\x02\x0e\x10")
       stat = await self.send(b"\xaa\x01\x0e\x0f")
       resp = stat[0]
 
@@ -247,7 +247,7 @@ class VSpinBackend(CentrifugeBackend):
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
 
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     await self.lock_door()
 
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -255,7 +255,7 @@ class VSpinBackend(CentrifugeBackend):
     self._bucket_1_position = (await self.get_position()) + self.calibration_offset
 
   async def stop(self):
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     await self.configure_and_initialize()
     await self.io.stop()
 
@@ -350,31 +350,31 @@ class VSpinBackend(CentrifugeBackend):
 
   async def open_door(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     # we can't tell when the door is fully open, so we just wait a bit
     await asyncio.sleep(4)
 
   async def close_door(self):
     await self.send(b"\xaa\x02\x26\x00\x05\x2d")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
     # we can't tell when the door is fully closed, so we just wait a bit
     await asyncio.sleep(2)
 
   async def lock_door(self):
     await self.send(b"\xaa\x02\x26\x00\x01\x29")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
   async def unlock_door(self):
     await self.send(b"\xaa\x02\x26\x00\x05\x2d")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
   async def lock_bucket(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
   async def unlock_bucket(self):
     await self.send(b"\xaa\x02\x26\x00\x06\x2e")
-    await self.send(b"\xaa\x02\x0e\x10")
+    # await self.send(b"\xaa\x02\x0e\x10")
 
   async def go_to_bucket1(self):
     await self.go_to_position(self._bucket_1_position)
@@ -419,6 +419,7 @@ class VSpinBackend(CentrifugeBackend):
     g: float = 500,
     duration: float = 60,
     acceleration: float = .8,
+    deceleration: float = 0.8,
   ) -> None:
     """Start a spin cycle. spin spin spin spin
 
@@ -426,11 +427,12 @@ class VSpinBackend(CentrifugeBackend):
       g: relative centrifugal force, also known as g-force
       duration: time in seconds spent at speed (g)
       acceleration: 1-100% of total acceleration
+      deceleration: 1-100% of total deceleration
 
     Examples:
       Spin with 1000 g-force (close to 3000rpm) for 5 minutes at 100% acceleration
 
-      >>> cf.start_spin_cycle(g = 1000, duration = 300, acceleration = .8)
+      >>> cf.start_spin_cycle(g = 1000, duration = 300, acceleration = .8, deceleration = .8)
     """
 
     if acceleration <= 0 or acceleration > 1:
@@ -473,7 +475,7 @@ class VSpinBackend(CentrifugeBackend):
     rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
 
     # 3 - encode the acceleration
-    acc = int(9.15 * acceleration).to_bytes(2, byteorder="little")
+    acc = int(9.15 * 10 * acceleration).to_bytes(2, byteorder="little")
 
     byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc + b"\x00\x00"
     last_byte = (sum(byte_string) - 0xAA) & 0xFF
@@ -498,6 +500,14 @@ class VSpinBackend(CentrifugeBackend):
       await asyncio.sleep(1)
       status_resp = await self.get_status()
       status = status_resp[0]
+
+    await self.send(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+    # aa0194b600000000dc02000029: decel at 80
+    # aa0194b6000000000a03000058: decel at 85
+    decc = int(9.15 * 10 * deceleration).to_bytes(2, byteorder="little")
+    decel_command = bytes.fromhex("aa0194b600000000") + decc + bytes.fromhex("0000")
+    decel_command += ((sum(decel_command) - 0xAA) & 0xff).to_bytes(1, byteorder="little")
+    await self.send(decel_command)
 
     await asyncio.sleep(2)
 
