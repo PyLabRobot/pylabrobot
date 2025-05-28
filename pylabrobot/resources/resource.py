@@ -399,7 +399,7 @@ class Resource:
 
     if resource not in self.children:
       raise ValueError(
-        f"Resource with name '{resource.name}' is not a child of this resource " f"('{self.name}')."
+        f"Resource with name '{resource.name}' is not a child of this resource ('{self.name}')."
       )
 
     # Call "will unassign" callbacks
@@ -626,7 +626,7 @@ class Resource:
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:
-        raise ValueError(f'Could not find subclass with name {child_data["type"]}')
+        raise ValueError(f"Could not find subclass with name {child_data['type']}")
       child = child_cls.deserialize(child_data, allow_marshal=allow_marshal)
       location_data = child_data.get("location", None)
       if location_data is not None:
@@ -728,8 +728,12 @@ class Resource:
   # Developer note: you probably don't need to override this method. Instead, override `load_state`.
   def load_all_state(self, state: Dict[str, Dict[str, Any]]) -> None:
     """Load state for this resource and all children."""
+    # Load state for this resource first.
+    if self.name in state:
+      self.load_state(state[self.name])
+
+    # Then load state for all children.
     for child in self.children:
-      child.load_state(state[child.name])
       child.load_all_state(state)
 
   def save_state_to_file(self, fn: str, indent: Optional[int] = None):
