@@ -131,11 +131,14 @@ class Serial(IOBase):
     return cast(bytes, data)
 
   async def send_break(self, duration: float):
-    assert self._ser is not None, "forgot to call setup?"
     loop = asyncio.get_running_loop()
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    await loop.run_in_executor(self._executor, lambda: self._ser.send_break(duration=duration))
+    def _send_break(ser, duration: float) -> None:
+      """Send a break condition for the specified duration."""
+      assert ser is not None, "forgot to call setup?"
+      ser.send_break(duration=duration)
+    await loop.run_in_executor(self._executor, lambda: _send_break(self._ser, duration=duration))
     logger.log(LOG_LEVEL_IO, "[%s] send_break %s", self._port, duration)
     capturer.record(SerialCommand(device_id=self._port, action="send_break", data=str(duration)))
 
