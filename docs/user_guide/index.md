@@ -18,6 +18,7 @@ _getting-started/rpi
 :caption: Machines
 :hidden:
 
+machines
 00_liquid-handling/_liquid-handling
 01_material-handling/_material-handling
 02_analytical/_analytical
@@ -55,7 +56,7 @@ The guide is divided into three parts:
 
 - **Machine-Agnostic Features** – Discover powerful tools that work across all devices, like the visualizer, trackers, reusable protocol patterns, validation tools, and error handling.
 
-Check out [the list of supported devices](/devices).
+Check out [the list of supported machines](/user_guide/machines).
 
 <hr>
 

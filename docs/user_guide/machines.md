@@ -1,4 +1,4 @@
-# Devices
+# Supported Machines
 
 ```{raw} html
 <style>
@@ -11,7 +11,7 @@ tr > td:nth-child(2) {
 </style>
 ```
 
-Below is a list of devices that are currently supported in PyLabRobot, and devices that are currently a work in progress (WIP).
+Below is a list of machines that are currently supported in PyLabRobot, and machines that are currently a work in progress (WIP).
 
 ## Liquid handling robots
 
