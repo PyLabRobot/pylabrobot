@@ -9,22 +9,23 @@ def _cytomat_rack(name: str, site_height: float, num_sites: int, model: str):
     size_x=109,  # roughly measured, not important right now
     size_y=142,  # roughly measured, not important right now
     size_z=541,  # roughly measured, not important right now
-    sites=create_homogeneous_resources(
-      klass=PlateHolder,
-      locations=[
+    sites={
+      i: PlateHolder(
+        size_x=85.48,
+        size_y=127.27,
+        # the last site is always 50mm or taller.
+        size_z=max(site_height, 50) if i == num_sites - 1 else site_height,
+        name=f"{name}-{i + 1}",
+        pedestal_size_z=0,
+      ).at(
         Coordinate(
           x=11.76,  # estimate
           y=0,  # estimate
           z=start + site_height * i,
         )
-        for i in range(num_sites)
-      ],
-      resource_size_x=85.48,
-      resource_size_y=127.27,
-      resource_size_z=site_height,
-      name_prefix=name,
-      pedestal_size_z=0,
-    ),
+      )
+      for i in range(num_sites)
+    },
     model=model,
   )
 
