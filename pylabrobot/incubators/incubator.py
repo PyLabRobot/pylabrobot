@@ -85,33 +85,26 @@ class Incubator(Machine, Resource):
     return plate
 
   def _find_available_sites_sorted(self, plate: Plate) -> List[PlateHolder]:
-    def _plate_height(p: Plate) -> float:
-        return p.get_size_z() + 3 if p.has_lid() else p.get_size_z()
+    """Find all sites that are free and fit the plate, sorted by size."""
 
-    required = _plate_height(plate)
-    extra_clearance = 50.0 # measured for 21 plate 23mm pitch racks, but bigger on all other rack models, so safe to use
+    def _plate_height(p: Plate):
+      if p.has_lid():
+        # TODO: we can use plr nesting height
+        # lid.location.z + lid.get_anchor(z="t").z
+        return p.get_size_z() + 3
+      return p.get_size_z()
 
-    available: List[PlateHolder] = []
-    for rack in self._racks:
-      all_sites = [c for c in rack.children if isinstance(c, PlateHolder)]
-      free_sites = [site for site in all_sites if site.resource is None]
-      top_idx = len(all_sites) - 1
-
-      for idx, site in enumerate(all_sites):
-          if site not in free_sites:
-              continue
-          pitch = site.get_size_z()
-          if pitch >= required or (idx == top_idx and pitch + extra_clearance >= required):
-              available.append(site)
-
-    if not available:
-        raise NoFreeSiteError(
-            f"No free site found in incubator '{self.name}' for plate '{plate.name}'"
-        )
-
-    return sorted(available, key=lambda s: s.get_size_z())
-
-
+    available = [
+      site
+      for rack in self._racks
+      for site in rack.get_free_sites()
+      if site.get_size_z() >= _plate_height(plate)
+    ]
+    if len(available) == 0:
+      raise NoFreeSiteError(
+        f"No free site found in incubator '{self.name}' for plate '{plate.name}'"
+      )
+    return sorted(available, key=lambda site: site.get_size_z())
 
   def find_smallest_site_for_plate(self, plate: Plate) -> PlateHolder:
     return self._find_available_sites_sorted(plate)[0]
