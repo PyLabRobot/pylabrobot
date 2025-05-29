@@ -76,6 +76,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
     await self._initialize_lock()
+    await self._initialize_shaker_drive()
 
   async def stop(self):
     pass
