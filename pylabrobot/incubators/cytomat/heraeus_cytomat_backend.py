@@ -164,7 +164,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
     if resp.startswith("E"):
       raise RuntimeError(f"Cytomat controller error: {resp}")
     return resp
-  
+
   async def wait_for_transfer_station(self, occupied: bool = False):
     while (await self.read_plate_detection_xfer()) != occupied:
       await asyncio.sleep(1)
