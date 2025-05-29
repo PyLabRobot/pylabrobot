@@ -1,5 +1,5 @@
 from pylabrobot.resources import Coordinate
-from pylabrobot.resources.carrier import PlateCarrier, PlateHolder, create_homogeneous_resources
+from pylabrobot.resources.carrier import PlateCarrier, PlateHolder
 
 
 def _cytomat_rack(name: str, site_height: float, num_sites: int, model: str):
