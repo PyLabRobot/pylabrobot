@@ -31,6 +31,7 @@ from pylabrobot.resources import (
   Coordinate,
   Liquid,
   Resource,
+  Tip,
   TipRack,
   Well,
 )
@@ -1050,10 +1051,14 @@ class VantageBackend(HamiltonLiquidHandler):
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
     else:
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
+      y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        aspiration.container.get_absolute_location(y="b")
+        aspiration.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
         + aspiration.offset
-        + Coordinate(z=aspiration.container.material_z_thickness)
       )
       bottom = position.z
       lld_search_height = bottom + aspiration.container.get_absolute_size_z() + 2.7 - 1
@@ -1195,10 +1200,14 @@ class VantageBackend(HamiltonLiquidHandler):
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
     else:
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
+      y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        dispense.container.get_absolute_location(y="b")
+        dispense.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
         + dispense.offset
-        + Coordinate(z=dispense.container.material_z_thickness)
       )
       bottom = position.z
       lld_search_height = bottom + dispense.container.get_absolute_size_z() + 2.7 - 1
@@ -1372,6 +1381,13 @@ class VantageBackend(HamiltonLiquidHandler):
     """Move the specified channel to the specified z coordinate."""
 
     return await self.position_single_channel_in_z_direction(channel + 1, round(z * 10))
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    return True
 
   # ============== Firmware Commands ==============
 

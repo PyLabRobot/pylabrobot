@@ -53,6 +53,7 @@ from pylabrobot.resources import (
   Carrier,
   Coordinate,
   Resource,
+  Tip,
   TipRack,
   TipSpot,
   Well,
@@ -1218,6 +1219,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise e
 
   @property
+  def iswap_traversal_height(self) -> float:
+    return self._iswap_traversal_height
+
+  @property
   def module_id_length(self):
     return 2
 
@@ -2314,7 +2319,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + aspiration.offset
       )
     else:
-      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
+      y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
+      position = (
+        aspiration.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + aspiration.offset
+      )
 
     tip = aspiration.tips[0]
 
@@ -2491,7 +2504,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + dispense.offset
       )
     else:
-      position = dispense.container.get_absolute_location(y="b") + dispense.offset
+      # dispense in the center of the container
+      # but we have to get the position of the center of tip A1
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
+      y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
+      position = (
+        dispense.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + dispense.offset
+      )
     tip = dispense.tips[0]
 
     liquid_height = position.z + liquid_height
@@ -2883,6 +2906,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       move.location
       + move.resource.get_anchor("c", "c", "t")
       - Coordinate(z=move.pickup_distance_from_top)
+      + move.offset
     )
 
     if use_arm == "iswap":
@@ -3071,6 +3095,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
     )
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    return True
 
   async def core_check_resource_exists_at_location_center(
     self,

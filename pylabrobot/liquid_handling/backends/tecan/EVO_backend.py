@@ -1,7 +1,4 @@
-"""
-This file defines interfaces for all supported Tecan liquid handling robots.
-"""
-
+import asyncio
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -48,6 +45,8 @@ from pylabrobot.resources import (
   TecanPlateCarrier,
   TecanTip,
   TecanTipRack,
+  Tip,
+  TipSpot,
   Trash,
 )
 
@@ -99,7 +98,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     cmd = module + command + ",".join(str(a) if a is not None else "" for a in params)
     return f"\02{cmd}\00"
 
-  def parse_response(self, resp: bytes) -> Dict[str, Union[str, int, List[int]]]:
+  def parse_response(self, resp: bytes) -> Dict[str, Union[str, int, List[Union[int, str]]]]:
     """Parse a machine response string
 
     Args:
@@ -115,7 +114,15 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     if ret != 0:
       raise error_code_to_exception(module, ret)
 
-    data: List[int] = [int(x) for x in s[3:-1].split(",") if x]
+    # below line changed to revie int and str.
+    data: List[Union[int, str]] = []
+    for x in s[3:-1].split(","):
+      if len(x) == 0:  # Skip empty values
+        continue
+      # RoMa(C1) and LiHa(C5) should only have integer values
+      # MCA can return both integers and strings
+      data.append(int(x) if x.isdigit() else x)
+
     return {"module": module, "data": data}
 
   async def send_command(
@@ -172,15 +179,15 @@ class EVOBackend(TecanLiquidHandler):
 
   LIHA = "C5"
   ROMA = "C1"
-  MCA = "C3"
-  PNP = "W1"
+  MCA = "W1"
+  PNP = "W2"
 
   def __init__(
     self,
     diti_count: int = 0,
-    packet_read_timeout: int = 120,
-    read_timeout: int = 300,
-    write_timeout: int = 300,
+    packet_read_timeout: int = 12,
+    read_timeout: int = 60,
+    write_timeout: int = 60,
   ):
     """Create a new EVO interface.
 
@@ -257,6 +264,7 @@ class EVOBackend(TecanLiquidHandler):
     await super().setup()
 
     self._liha_connected = await self.setup_arm(EVOBackend.LIHA)
+    self._mca_connected = await self.setup_arm(EVOBackend.MCA)
     self._roma_connected = await self.setup_arm(EVOBackend.ROMA)
 
     if self.roma_connected:  # position_initialization_x in reverse order from setup_arm
@@ -264,6 +272,11 @@ class EVOBackend(TecanLiquidHandler):
       await self.roma.position_initialization_x()
       # move to home position (TBD) after initialization
       await self._park_roma()
+    if self.mca_connected:
+      self.mca = Mca(self, EVO.MCA)
+      # await self.mca.position_initialization_x() # function does not work for mca.
+      await self._park_mca()
+
     if self.liha_connected:
       self.liha = LiHa(self, EVOBackend.LIHA)
       await self.liha.position_initialization_x()
@@ -286,13 +299,18 @@ class EVOBackend(TecanLiquidHandler):
 
   async def setup_arm(self, module):
     try:
+      if module == EVO.MCA:
+        await self.send_command(module, command="PIB")
+
       await self.send_command(module, command="PIA")
     except TecanError as e:
       if e.error_code == 5:
         return False
       raise e
 
-    await self.send_command(module, command="BMX", params=[2])
+    if module != EVO.MCA:
+      await self.send_command(module, command="BMX", params=[2])
+
     return True
 
   async def _park_liha(self):
@@ -302,6 +320,26 @@ class EVOBackend(TecanLiquidHandler):
   async def _park_roma(self):
     await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
+
+  async def _park_mca(self):
+    """Moves the MCA arm to a safe park position to prevent collision."""
+    # TODO CHANGE TO USE CORRECT FUNCTIONS
+
+    # Ensure MCA is initialized before moving
+    await self.send_command(EVO.MCA, command="PIA")
+    await asyncio.sleep(0.5)
+
+    # Raise MCA Z-axis first to avoid collision
+    await self.send_command(EVO.MCA, command="PAA", params=[None, None, 2000])  # Raise Z-axis
+    await asyncio.sleep(1)
+
+    # Move MCA to parking position (adjust X, Y as needed)
+    await self.send_command(EVO.MCA, command="PAA", params=[6000, 1000, None])
+    await asyncio.sleep(1)
+
+    # Stop movement to prevent drifting
+    await self.send_command(EVO.MCA, command="BMA", params=[0, 0, 0])
+    await asyncio.sleep(0.5)
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -315,6 +353,7 @@ class EVOBackend(TecanLiquidHandler):
       use_channels: The channels to use for the operations.
     """
 
+    # Get positions including offsets
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
     tecan_liquid_classes = [
@@ -446,7 +485,8 @@ class EVOBackend(TecanLiquidHandler):
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
 
-    x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
+    # Get positions including offsets
+    x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
@@ -471,11 +511,14 @@ class EVOBackend(TecanLiquidHandler):
     await self.liha.move_plunger_relative(ppr)
 
     # get tips
-    await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), 768, 210)
-    # TODO: check z params
+    first_z_start, _ = self._first_valid(z_positions["start"])
+    assert first_z_start is not None, "Could not find a valid z_start position"
+    await self.liha.get_disposable_tip(
+      self._bin_use_channels(use_channels), first_z_start - 227, 210
+    )
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
-    """Drops tips to waste.
+    """Drops tips.
 
     Args:
       ops: The drop operations to perform.
@@ -485,36 +528,42 @@ class EVOBackend(TecanLiquidHandler):
     assert (
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
-    assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
+    assert all(
+      isinstance(op.resource, (Trash, TipSpot)) for op in ops
+    ), "Must drop in waste container or tip rack"
 
+    # Get positions including offsets
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     # move channels
-    ys = 90
+    ys = int(ops[0].resource.get_absolute_size_y() * 10)  # was 90
     x, _ = self._first_valid(x_positions)
-    y, _ = self._first_valid(y_positions)
+    y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
-      x, int(y - ys * 3.5), ys, [self._z_range] * self.num_channels
+      x,
+      y - yi * ys,
+      ys,
+      [self._z_range] * self.num_channels,
     )
 
-    # discard tips
-    await self.liha.discard_disposable_tip(self._bin_use_channels(use_channels))
+    # TODO check channel positions match resource positions for z-axis
+    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_hight=0)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def drop_tips96(self, drop: DropTipRack):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def aspirate96(
     self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
   ):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
-    raise NotImplementedError()
+    raise NotImplementedError("MCA not implemented yet")
 
   async def pick_up_resource(self, pickup: ResourcePickup):
     # TODO: implement PnP for moving tubes
@@ -582,6 +631,11 @@ class EVOBackend(TecanLiquidHandler):
     await self.roma.set_fast_speed_y(3500, 1000)
     await self.roma.set_fast_speed_r(2000, 600)
 
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, TecanTip):
+      return False
+    return True
+
   def _first_valid(self, lst: List[Optional[T]]) -> Tuple[Optional[T], int]:
     """Returns first item in list that is not None"""
 
@@ -619,12 +673,13 @@ class EVOBackend(TecanLiquidHandler):
     }
 
     def get_z_position(z, z_off, tip_length):
+      # TODO: simplify z units
       return int(self._z_range - z + z_off * 10 + tip_length)  # TODO: verify z formula
 
-    for i, channel in enumerate(use_channels):
-      location = ops[i].resource.get_absolute_location() + ops[i].resource.center()
-      x_positions[channel] = int((location.x - 100) * 10)
-      y_positions[channel] = int((346.5 - location.y) * 10)  # TODO: verify
+    for i, (op, channel) in enumerate(zip(ops, use_channels)):
+      location = ops[i].resource.get_absolute_location() + op.resource.center()
+      x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
+      y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
 
       par = ops[i].resource.parent
       if not isinstance(par, (TecanPlate, TecanTipRack)):
@@ -632,16 +687,16 @@ class EVOBackend(TecanLiquidHandler):
       # TODO: calculate defaults when z-attribs are not specified
       tip_length = int(ops[i].tip.total_tip_length * 10)
       z_positions["travel"][channel] = get_z_position(
-        par.z_travel, par.get_absolute_location().z, tip_length
+        par.z_travel, par.get_absolute_location().z + op.offset.z, tip_length
       )
       z_positions["start"][channel] = get_z_position(
-        par.z_start, par.get_absolute_location().z, tip_length
+        par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
       )
       z_positions["dispense"][channel] = get_z_position(
-        par.z_dispense, par.get_absolute_location().z, tip_length
+        par.z_dispense, par.get_absolute_location().z + op.offset.z, tip_length
       )
       z_positions["max"][channel] = get_z_position(
-        par.z_max, par.get_absolute_location().z, tip_length
+        par.z_max, par.get_absolute_location().z + op.offset.z, tip_length
       )
 
     return x_positions, y_positions, z_positions
@@ -1100,14 +1155,29 @@ class LiHa(EVOArm):
       params=[tips, z_start, z_search, 0],
     )
 
-  async def discard_disposable_tip(self, tips):
+  async def discard_disposable_tip_high(self, tips):
     """Drops tips
-
+    Discards at the Z-axes initialization hight
     Args:
       tips: binary coded tip select
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
+
+  async def _drop_disposable_tip(self, tips, discard_hight):
+    """Drops tips
+    Discards at a variable Z-axis initialization height
+
+    Args:
+      tips: binary coded tip select
+      discard_hight: binary. 0 above tip rack, 1 in tip rack
+    """
+
+    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
+
+
+class Mca(EVOArm):
+  pass
 
 
 class RoMa(EVOArm):

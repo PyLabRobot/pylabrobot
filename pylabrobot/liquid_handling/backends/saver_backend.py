@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
+from pylabrobot.resources import Tip
 
 
 class SaverBackend(LiquidHandlerBackend):
@@ -82,6 +83,9 @@ class SaverBackend(LiquidHandlerBackend):
 
   async def drop_resource(self, *args, **kwargs):
     self.commands_received.append({"command": "drop_resource", "args": args, "kwargs": kwargs})
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    return True
 
   # Saver specific methods
 

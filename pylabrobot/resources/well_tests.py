@@ -28,6 +28,7 @@ class TestWell(unittest.TestCase):
         "cross_section_type": "circle",
         "max_volume": 10,
         "model": "model",
+        "barcode": None,
         "category": "well",
         "children": [],
         "type": "Well",
