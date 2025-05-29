@@ -76,6 +76,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
     await self._initialize_lock()
+    await self._initialize_shaker_drive()
 
   async def stop(self):
     pass
@@ -136,6 +137,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
     return await self.interface.send_hhs_command(index=self.index, command="LI")
+
+  async def _initialize_shaker_drive(self):
+    """Initialize the shaker drive, homing to absolute position 0"""
+    return await self.interface.send_hhs_command(index=self.index, command="SI")
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """Firmware command for starting shaking."""
