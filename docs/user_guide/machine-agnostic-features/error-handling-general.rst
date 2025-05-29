@@ -11,6 +11,5 @@ Advanced
 --------
 
 For (bio)wetlab automation error handling it can be useful to write more complex error handling code than a single try/except block.
-Again, using Python standard practices, one can use callbacks to handle errors.
 
 
