@@ -136,6 +136,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
     return await self.interface.send_hhs_command(index=self.index, command="LI")
+  
+  async def _initialize_shaker_drive(self):
+    """Initialize the shaker drive, homing to absolute position 0"""
+    return await self.interface.send_hhs_command(index=self.index, command="SI")
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """Firmware command for starting shaking."""
