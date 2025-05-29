@@ -1132,5 +1132,3 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
     )  # order matters
     with self.assertRaises(CrossContaminationError):
       await self.lh.aspirate([pure_blood_well], vols=[10])
-
-

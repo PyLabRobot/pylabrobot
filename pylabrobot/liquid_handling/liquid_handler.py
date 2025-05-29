@@ -110,7 +110,6 @@ class LiquidHandler(Resource, Machine):
   defined in `pyhamilton.liquid_handling.backends`) to communicate with the liquid handler.
   """
 
-
   def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
     """Initialize a LiquidHandler.
 
@@ -2102,7 +2101,6 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
-
   def serialize(self):
     return {**Resource.serialize(self), **Machine.serialize(self)}
 
@@ -2162,5 +2160,3 @@ class LiquidHandler(Resource, Machine):
       "Cannot assign child resource to liquid handler. Use "
       "lh.deck.assign_child_resource() instead."
     )
-
-
