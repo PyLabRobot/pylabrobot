@@ -44,7 +44,7 @@ from pylabrobot.resources.volume_tracker import (
 from pylabrobot.resources.well import Well
 
 from . import backends
-from .liquid_handler import LiquidHandler, OperationCallback
+from .liquid_handler import LiquidHandler
 from .standard import (
   Drop,
   DropTipRack,
@@ -1134,63 +1134,3 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
       await self.lh.aspirate([pure_blood_well], vols=[10])
 
 
-class LiquidHandlerForTesting(LiquidHandler):
-  ALLOWED_CALLBACKS = {
-    "test_operation",
-    "test_duplicate",
-    "test_operation_without_error",
-    "test_callback_not_registered_with_error",
-  }
-
-  def trigger_callback(self, method_name: str, *args, **kwargs):
-    self._trigger_callback(method_name, *args, **kwargs)
-
-
-class TestLiquidHandlerCallbacks(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
-    self.backend = backends.SaverBackend(num_channels=8)
-    self.deck = STARLetDeck()
-    self.lh = LiquidHandlerForTesting(self.backend, deck=self.deck)
-    self.callback = unittest.mock.Mock(spec=OperationCallback)
-
-  def test_register_callback(self):
-    self.lh.register_callback("test_operation", self.callback)
-    assert "test_operation" in self.lh.callbacks
-
-  def test_duplicate_register_callback(self):
-    self.lh.register_callback("test_duplicate", self.callback)
-    with pytest.raises(RuntimeError):
-      self.lh.register_callback("test_duplicate", self.callback)
-
-  def test_register_disallowed_callback(self):
-    with pytest.raises(RuntimeError):
-      self.lh.register_callback("not_allowed", self.callback)
-
-  def test_trigger_callback_without_error(self):
-    self.lh.register_callback("test_operation_without_error", self.callback)
-    self.lh.trigger_callback("test_operation_without_error")
-    self.callback.assert_called_once()
-
-  def test_trigger_callback_with_error_raised(self):
-    callback = unittest.mock.Mock(spec=OperationCallback, side_effect=RuntimeError)
-    self.lh.register_callback("test_operation", callback)
-    with pytest.raises(RuntimeError):
-      self.lh.trigger_callback("test_operation", error=RuntimeError("test"))
-    error_passed = callback.call_args[1].get("error")
-    assert isinstance(error_passed, Exception)
-
-  def test_trigger_callback_with_error_not_raised(self):
-    error = RuntimeError("test")
-    self.lh.register_callback("test_operation", self.callback)
-    try:
-      self.lh.trigger_callback("test_operation", error=error)
-    except RuntimeError as e:
-      pytest.fail(f"Unexpected exception raised: {e}")
-    self.callback.assert_called_with(self.lh, error=error)
-
-  def test_trigger_callback_not_found_with_error(self):
-    with pytest.raises(RuntimeError):
-      self.lh.trigger_callback(
-        "test_callback_not_registered_with_error",
-        error=RuntimeError("test"),
-      )
