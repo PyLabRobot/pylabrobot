@@ -24,6 +24,10 @@ from typing import (
 )
 
 from pylabrobot.liquid_handling.errors import ChannelizedError
+from pylabrobot.liquid_handling.error_handling import (
+  ErrorHandler,
+  run_with_error_handlers,
+)
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   get_strictness,
@@ -147,24 +151,36 @@ class LiquidHandler(Resource, Machine):
 
     self._resource_pickup: Optional[ResourcePickup] = None
 
-  async def setup(self, **backend_kwargs):
+  async def setup(
+    self,
+    *,
+    error_handlers: Optional[List[ErrorHandler]] = None,
+    **backend_kwargs,
+  ):
     """Prepare the robot for use."""
 
-    if self.setup_finished:
-      raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
+    async def _setup(**kw):
+      if self.setup_finished:
+        raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
-    self.backend.set_deck(self.deck)
-    self.backend.set_heads(head=self.head, head96=self.head96)
-    await super().setup(**backend_kwargs)
+      self.backend.set_deck(self.deck)
+      self.backend.set_heads(head=self.head, head96=self.head96)
+      await super().setup(**kw["backend_kwargs"])
 
-    self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
-    self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
+      self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
+      self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
 
-    self._send_assigned_resource_to_backend(self.deck)
-    for resource in self.deck.children:
-      self._send_assigned_resource_to_backend(resource)
+      self._send_assigned_resource_to_backend(self.deck)
+      for resource in self.deck.children:
+        self._send_assigned_resource_to_backend(resource)
 
-    self._resource_pickup = None
+      self._resource_pickup = None
+
+    await run_with_error_handlers(
+      _setup,
+      {"backend_kwargs": backend_kwargs},
+      error_handlers or [],
+    )
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
@@ -333,14 +349,14 @@ class LiquidHandler(Resource, Machine):
     if not len(invalid_channels) == 0:
       raise ValueError(f"Invalid channels: {invalid_channels}")
 
-  @need_setup_finished
-  async def pick_up_tips(
+  async def _pick_up_tips_impl(
     self,
+    *,
     tip_spots: List[TipSpot],
     use_channels: Optional[List[int]] = None,
     offsets: Optional[List[Coordinate]] = None,
-    **backend_kwargs,
-  ):
+    backend_kwargs: Dict[str, Any],
+  ) -> None:
     """Pick up tips from a resource.
 
     Examples:
@@ -413,9 +429,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert (
-      len(tip_spots) == len(offsets) == len(use_channels)
-    ), "Number of tips and offsets and use_channels must be equal."
+    assert len(tip_spots) == len(offsets) == len(use_channels), (
+      "Number of tips and offsets and use_channels must be equal."
+    )
 
     # create operations
     pickups = [
@@ -463,14 +479,34 @@ class LiquidHandler(Resource, Machine):
       raise error
 
   @need_setup_finished
-  async def drop_tips(
+  async def pick_up_tips(
     self,
+    tip_spots: List[TipSpot],
+    use_channels: Optional[List[int]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    error_handlers: Optional[List[ErrorHandler]] = None,
+    **backend_kwargs,
+  ) -> None:
+    await run_with_error_handlers(
+      self._pick_up_tips_impl,
+      {
+        "tip_spots": tip_spots,
+        "use_channels": use_channels,
+        "offsets": offsets,
+        "backend_kwargs": backend_kwargs,
+      },
+      error_handlers or [],
+    )
+
+  async def _drop_tips_impl(
+    self,
+    *,
     tip_spots: Sequence[Union[TipSpot, Trash]],
     use_channels: Optional[List[int]] = None,
     offsets: Optional[List[Coordinate]] = None,
     allow_nonzero_volume: bool = False,
-    **backend_kwargs,
-  ):
+    backend_kwargs: Dict[str, Any],
+  ) -> None:
     """Drop tips to a resource.
 
     Examples:
@@ -536,9 +572,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert (
-      len(tip_spots) == len(offsets) == len(use_channels) == len(tips)
-    ), "Number of channels and offsets and use_channels and tips must be equal."
+    assert len(tip_spots) == len(offsets) == len(use_channels) == len(tips), (
+      "Number of channels and offsets and use_channels and tips must be equal."
+    )
 
     # create operations
     drops = [
@@ -590,6 +626,28 @@ class LiquidHandler(Resource, Machine):
 
     if error is not None:
       raise error
+
+  @need_setup_finished
+  async def drop_tips(
+    self,
+    tip_spots: Sequence[Union[TipSpot, Trash]],
+    use_channels: Optional[List[int]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    allow_nonzero_volume: bool = False,
+    error_handlers: Optional[List[ErrorHandler]] = None,
+    **backend_kwargs,
+  ) -> None:
+    await run_with_error_handlers(
+      self._drop_tips_impl,
+      {
+        "tip_spots": tip_spots,
+        "use_channels": use_channels,
+        "offsets": offsets,
+        "allow_nonzero_volume": allow_nonzero_volume,
+        "backend_kwargs": backend_kwargs,
+      },
+      error_handlers or [],
+    )
 
   async def return_tips(
     self,
@@ -699,8 +757,9 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resources must be `Container`s, got {not_containers}")
 
   @need_setup_finished
-  async def aspirate(
+  async def _aspirate_impl(
     self,
+    *,
     resources: Sequence[Container],
     vols: List[float],
     use_channels: Optional[List[int]] = None,
@@ -709,8 +768,8 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
-    **backend_kwargs,
-  ):
+    backend_kwargs: Dict[str, Any],
+  ) -> None:
     """Aspirate liquid from the specified wells.
 
     Examples:
@@ -899,7 +958,7 @@ class LiquidHandler(Resource, Machine):
       raise error
 
   @need_setup_finished
-  async def dispense(
+  async def aspirate(
     self,
     resources: Sequence[Container],
     vols: List[float],
@@ -909,8 +968,38 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
+    error_handlers: Optional[List[ErrorHandler]] = None,
     **backend_kwargs,
-  ):
+  ) -> None:
+    await run_with_error_handlers(
+      self._aspirate_impl,
+      {
+        "resources": resources,
+        "vols": vols,
+        "use_channels": use_channels,
+        "flow_rates": flow_rates,
+        "offsets": offsets,
+        "liquid_height": liquid_height,
+        "blow_out_air_volume": blow_out_air_volume,
+        "spread": spread,
+        "backend_kwargs": backend_kwargs,
+      },
+      error_handlers or [],
+    )
+
+  async def _dispense_impl(
+    self,
+    *,
+    resources: Sequence[Container],
+    vols: List[float],
+    use_channels: Optional[List[int]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight", "custom"] = "wide",
+    backend_kwargs: Dict[str, Any],
+  ) -> None:
     """Dispense liquid to the specified channels.
 
     Examples:
@@ -1100,6 +1189,36 @@ class LiquidHandler(Resource, Machine):
 
     if error is not None:
       raise error
+
+  @need_setup_finished
+  async def dispense(
+    self,
+    resources: Sequence[Container],
+    vols: List[float],
+    use_channels: Optional[List[int]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight", "custom"] = "wide",
+    error_handlers: Optional[List[ErrorHandler]] = None,
+    **backend_kwargs,
+  ) -> None:
+    await run_with_error_handlers(
+      self._dispense_impl,
+      {
+        "resources": resources,
+        "vols": vols,
+        "use_channels": use_channels,
+        "flow_rates": flow_rates,
+        "offsets": offsets,
+        "liquid_height": liquid_height,
+        "blow_out_air_volume": blow_out_air_volume,
+        "spread": spread,
+        "backend_kwargs": backend_kwargs,
+      },
+      error_handlers or [],
+    )
 
   async def transfer(
     self,
@@ -1814,9 +1933,9 @@ class LiquidHandler(Resource, Machine):
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
-      assert (
-        destination.direction == "z"
-      ), "Only ResourceStacks with direction 'z' are currently supported"
+      assert destination.direction == "z", (
+        "Only ResourceStacks with direction 'z' are currently supported"
+      )
       to_location = destination.get_absolute_location(z="top")
     elif isinstance(destination, Coordinate):
       to_location = destination
@@ -2157,6 +2276,5 @@ class LiquidHandler(Resource, Machine):
   ):
     """Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute."""
     raise NotImplementedError(
-      "Cannot assign child resource to liquid handler. Use "
-      "lh.deck.assign_child_resource() instead."
+      "Cannot assign child resource to liquid handler. Use lh.deck.assign_child_resource() instead."
     )

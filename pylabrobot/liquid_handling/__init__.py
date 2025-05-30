@@ -12,3 +12,9 @@ from .standard import (
   SingleChannelDispense,
 )
 from .strictness import Strictness, get_strictness, set_strictness
+from .error_handling import (
+  ErrorHandler,
+  RetryContext,
+  increase_liquid_height,
+  try_next_tip_spot,
+)
