@@ -24,6 +24,7 @@ def with_error_handler(func: Callable[_P, _R]) -> Callable[_P, _R]:
         sig = inspect.signature(func)
         bound_args = sig.bind(self, *args, **kwargs)
         bound_args = {k: v for k, v in bound_args.arguments.items() if k != "self"}
+        bound_args["error_handler"] = error_handler
 
         return await error_handler(bound, error, **bound_args)
       raise
