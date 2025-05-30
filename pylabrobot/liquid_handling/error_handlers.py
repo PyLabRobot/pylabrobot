@@ -1,5 +1,6 @@
 from pylabrobot.liquid_handling.errors import ChannelizedError
 
+
 def try_next_tip_spot(try_tip_spots):
   async def handler(func, error: Exception, **kwargs):
     assert isinstance(error, ChannelizedError)

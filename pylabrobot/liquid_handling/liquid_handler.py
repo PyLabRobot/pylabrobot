@@ -23,6 +23,7 @@ from typing import (
   cast,
 )
 
+from pylabrobot.error_handling import with_error_handler
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
@@ -95,29 +96,6 @@ def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
     not src_tracker.is_cross_contamination_tracking_disabled
     and not dest_tracker.is_cross_contamination_tracking_disabled
   )
-
-import functools
-import inspect
-
-
-def with_error_handler(func):
-  @functools.wraps(func)
-  async def wrapper(self, *args, error_handler=None, **kwargs):
-    try:
-      return await func(self, *args, **kwargs)
-    except Exception as error:
-      print("caught error", error)
-      if error_handler is not None:
-        bound = wrapper.__get__(self, type(self))
-
-        # convert all args to kwargs, remove self
-        sig = inspect.signature(func)
-        bound_args = sig.bind(self, *args, **kwargs)
-        bound_args = {k: v for k, v in bound_args.arguments.items() if k != "self"}
-
-        return await error_handler(bound, error, **bound_args)
-      raise
-  return wrapper
 
 
 class BlowOutVolumeError(Exception):
