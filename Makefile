@@ -24,7 +24,7 @@ lint:
 
 format:
 	$(BIN)python -m ruff format pylabrobot
-	$(BIN)python -m ruff check --fix pylabrobot
+	$(BIN)python -m ruff check --fix pylabrobot --select I
 
 format-check:
 	$(BIN)python -m ruff format --check pylabrobot

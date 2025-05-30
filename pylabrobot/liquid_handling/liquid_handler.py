@@ -16,7 +16,6 @@ from typing import (
   List,
   Literal,
   Optional,
-  Protocol,
   Sequence,
   Set,
   Tuple,
@@ -402,6 +401,16 @@ class LiquidHandler(Resource, Machine):
       else:
         use_channels = self._default_use_channels
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
+
+    if not all(
+      self.backend.can_pick_up_tip(channel, tip) for channel, tip in zip(use_channels, tips)
+    ):
+      cannot = [
+        channel
+        for channel, tip in zip(use_channels, tips)
+        if not self.backend.can_pick_up_tip(channel, tip)
+      ]
+      raise RuntimeError(f"Cannot pick up tips on channels {cannot}.")
 
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(tip_spots)
@@ -1254,7 +1263,6 @@ class LiquidHandler(Resource, Machine):
         if does_tip_tracking() and not tip_spot.tracker.is_disabled:
           tip_spot.tracker.rollback()
         self.head96[i].rollback()
-      
       raise error
     else:
       for i, tip_spot in enumerate(tip_rack.get_all_items()):
@@ -1322,8 +1330,7 @@ class LiquidHandler(Resource, Machine):
           if does_tip_tracking() and not tip_spot.tracker.is_disabled:
             tip_spot.tracker.rollback()
         self.head96[i].rollback()
-
-      raise error
+      raise e
     else:
       for i in range(96):
         if isinstance(resource, TipRack):
@@ -1532,7 +1539,6 @@ class LiquidHandler(Resource, Machine):
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
         channel.get_tip().tracker.rollback()
-      
       raise error
     else:
       for channel, container in zip(self.head96.values(), containers):
@@ -1667,7 +1673,6 @@ class LiquidHandler(Resource, Machine):
         if does_volume_tracking() and not well.tracker.is_disabled:
           container.tracker.rollback()
         channel.get_tip().tracker.rollback()
-
       raise error
     else:
       for channel, container in zip(self.head96.values(), containers):
@@ -1739,6 +1744,7 @@ class LiquidHandler(Resource, Machine):
   async def move_picked_up_resource(
     self,
     to: Coordinate,
+    offset: Coordinate = Coordinate.zero(),
     **backend_kwargs,
   ):
     if self._resource_pickup is None:
@@ -1749,6 +1755,7 @@ class LiquidHandler(Resource, Machine):
         resource=self._resource_pickup.resource,
         gripped_direction=self._resource_pickup.direction,
         pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
+        offset=offset,
       ),
       **backend_kwargs,
     )

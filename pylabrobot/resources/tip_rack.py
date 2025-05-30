@@ -218,21 +218,6 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     """Get all tips in the tip rack."""
     return [ts.get_tip() for ts in self.get_all_items()]
 
-  def summary(self) -> None:
-    """Print ascii table of the tip rack. 'o' indicates a tip, ' ' indicates an empty spot."""
-    horizontal_line = "+" + "-" * self.num_items_x + "+\n"
-    table = horizontal_line
-    for i in range(self.num_items_y):
-      table += "|"
-      for j in range(self.num_items_x):
-        if self.get_item((i, j)).has_tip():
-          table += "o"
-        else:
-          table += " "
-      table += "|\n"
-    table += horizontal_line
-    print(table)
-
 
 class NestedTipRack(TipRack):
   """A nested tip rack."""

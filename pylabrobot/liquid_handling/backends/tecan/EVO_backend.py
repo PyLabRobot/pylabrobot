@@ -45,6 +45,7 @@ from pylabrobot.resources import (
   TecanPlateCarrier,
   TecanTip,
   TecanTipRack,
+  Tip,
   TipSpot,
   Trash,
 )
@@ -629,6 +630,11 @@ class EVOBackend(TecanLiquidHandler):
     await self.roma.action_move_vector_coordinate_position()
     await self.roma.set_fast_speed_y(3500, 1000)
     await self.roma.set_fast_speed_r(2000, 600)
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, TecanTip):
+      return False
+    return True
 
   def _first_valid(self, lst: List[Optional[T]]) -> Tuple[Optional[T], int]:
     """Returns first item in list that is not None"""

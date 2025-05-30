@@ -31,6 +31,7 @@ from pylabrobot.resources import (
   Coordinate,
   Liquid,
   Resource,
+  Tip,
   TipRack,
   Well,
 )
@@ -1380,6 +1381,13 @@ class VantageBackend(HamiltonLiquidHandler):
     """Move the specified channel to the specified z coordinate."""
 
     return await self.position_single_channel_in_z_direction(channel + 1, round(z * 10))
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    return True
 
   # ============== Firmware Commands ==============
 
