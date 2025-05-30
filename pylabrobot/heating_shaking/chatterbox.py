@@ -6,6 +6,4 @@ from pylabrobot.temperature_controlling import TemperatureControllerChatterboxBa
 class HeaterShakerChatterboxBackend(
   HeaterShakerBackend, ShakerChatterboxBackend, TemperatureControllerChatterboxBackend
 ):
-  @property
-  def supports_active_cooling(self) -> bool:
-    return False
+  pass
