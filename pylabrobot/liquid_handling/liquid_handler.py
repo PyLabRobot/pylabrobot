@@ -96,6 +96,29 @@ def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
     and not dest_tracker.is_cross_contamination_tracking_disabled
   )
 
+import functools
+import inspect
+
+
+def with_error_handler(func):
+  @functools.wraps(func)
+  async def wrapper(self, *args, error_handler=None, **kwargs):
+    try:
+      return await func(self, *args, **kwargs)
+    except Exception as error:
+      print("caught error", error)
+      if error_handler is not None:
+        bound = wrapper.__get__(self, type(self))
+
+        # convert all args to kwargs, remove self
+        sig = inspect.signature(func)
+        bound_args = sig.bind(self, *args, **kwargs)
+        bound_args = {k: v for k, v in bound_args.arguments.items() if k != "self"}
+
+        return await error_handler(bound, error, **bound_args)
+      raise
+  return wrapper
+
 
 class BlowOutVolumeError(Exception):
   pass
@@ -333,7 +356,7 @@ class LiquidHandler(Resource, Machine):
     if not len(invalid_channels) == 0:
       raise ValueError(f"Invalid channels: {invalid_channels}")
 
-  @need_setup_finished
+  @with_error_handler
   async def pick_up_tips(
     self,
     tip_spots: List[TipSpot],
