@@ -58,7 +58,7 @@ await star.position_components_for_free_iswap_y_range()
 
 2. Move the iSWAP wrist and rotation drive to the correct orientation as [explained above](#rotations). Repeated: be careful to move the iSWAP to a position where it does not hit any other components. See commands below for how to do this.
 
-3. You can then then use the following three commands to move the iSWAP in the X, Y and Z directions. All units are in mm.
+3. You can then use the following three commands to move the iSWAP in the X, Y and Z directions. All units are in mm.
 
 ```python
 await star.move_iswap_x(x)
