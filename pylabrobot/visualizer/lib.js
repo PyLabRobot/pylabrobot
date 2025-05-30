@@ -142,8 +142,12 @@ function getSnappingGrid(x, y, width, height) {
   let snappingLines = {};
 
   const deck = resources["deck"];
-  if (deck.constructor.name === "HamiltonSTARDeck") {
-    // TODO: vantage
+  if (
+    deck.constructor.name === "HamiltonSTARDeck" ||
+    deck.constructor.name === "VantageDeck"
+  ) {
+    const railOffset = deck.constructor.name === "VantageDeck" ? 32.5 : 100;
+
     if (Math.abs(y - deck.location.y - 63) < SNAP_MARGIN) {
       snappingLines.resourceY = deck.location.y + 63;
     }
@@ -160,9 +164,8 @@ function getSnappingGrid(x, y, width, height) {
       snappingLines.resourceX = deck.location.x;
     }
 
-    // Check if the resource is on a Hamilton deck rail. (100 + 22.5 * i)
     for (let rail = 0; rail < deck.num_rails; rail++) {
-      const railX = 100 + 22.5 * rail;
+      const railX = railOffset + 22.5 * rail;
       if (Math.abs(x - railX) < SNAP_MARGIN) {
         snappingLines.resourceX = railX;
       }
@@ -471,6 +474,74 @@ class HamiltonSTARDeck extends Deck {
         num_rails: this.num_rails,
         with_trash: false,
         with_trash96: false,
+      },
+    };
+  }
+}
+
+class VantageDeck extends Deck {
+  constructor(resourceData) {
+    super(resourceData, undefined);
+    const { num_rails, size } = resourceData;
+    this.num_rails = num_rails;
+    this.size = size;
+    this.railHeight = 497;
+  }
+
+  drawMainShape() {
+    let mainShape = new Konva.Group();
+    mainShape.add(
+      new Konva.Rect({
+        y: 63,
+        width: this.size_x,
+        height: this.railHeight,
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
+
+    mainShape.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
+
+    for (let i = 0; i < this.num_rails; i++) {
+      const railX = 32.5 + i * 22.5;
+      const rail = new Konva.Line({
+        points: [railX, 63, railX, this.railHeight + 63],
+        stroke: "black",
+        strokeWidth: 1,
+      });
+      mainShape.add(rail);
+
+      if ((i + 1) % 5 === 0) {
+        const railLabel = new Konva.Text({
+          x: railX,
+          y: 50,
+          text: i + 1,
+          fontSize: 12,
+          fill: "black",
+        });
+        railLabel.scaleY(-1);
+        mainShape.add(railLabel);
+      }
+    }
+    return mainShape;
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_rails: this.num_rails,
+        with_trash: false,
+        with_trash96: false,
+        size: this.size,
       },
     };
   }
@@ -993,10 +1064,7 @@ function classForResourceType(type) {
     case "Trough":
       return Trough;
     case "VantageDeck":
-      alert(
-        "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
-      );
-      return HamiltonSTARDeck;
+      return VantageDeck;
     case "LiquidHandler":
       return LiquidHandler;
     case "TubeRack":
