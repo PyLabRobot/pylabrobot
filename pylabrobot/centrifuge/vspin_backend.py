@@ -62,9 +62,9 @@ class Access2Backend(LoaderBackend):
     await self.send_command(bytes.fromhex("110500070024040000024000c6bd"))
     await self.send_command(bytes.fromhex("1105000300400000f0bf"))
     await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
-    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    # await self.send_command(bytes.fromhex("11050003002000006bd4"))
     await self.send_command(bytes.fromhex("1105000e00440b00000000000000007041020203c7"))
-    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    # await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
   async def stop(self):
     logger.debug("[loader] stop")
@@ -98,7 +98,7 @@ class Access2Backend(LoaderBackend):
 
     # laser check
     r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
-    if r == b"\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1":
+    if r == bytes.fromhex("1105000800510500000300000079f1"):
       raise LoaderNoPlateError("no plate found on stage")
 
     await self.send_command(bytes.fromhex("1105000a00460700018fc2b540020023dc"))
@@ -115,14 +115,14 @@ class Access2Backend(LoaderBackend):
 
     # laser check
     r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
-    if r == b"\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1":
+    if r == bytes.fromhex("1105000800510500000300000079f1"):
       raise LoaderNoPlateError("no plate found in centrifuge")
 
     await self.send_command(bytes.fromhex("1105000a00460700017b14b6400200d57a"))
     await self.send_command(bytes.fromhex("1105000e00440b00010000404000002041030096fa"))
     await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
     await self.send_command(bytes.fromhex("1105000e00440b00000000000000002041020056be"))
-    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    # await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
 
 class VSpinBackend(CentrifugeBackend):
@@ -149,113 +149,71 @@ class VSpinBackend(CentrifugeBackend):
     # TODO: add functionality where if robot has been intialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
-      await self.send(b"\xaa\x00\x21\x01\xff\x21")
-    await self.send(b"\xaa\x00\x21\x01\xff\x21")
-    await self.send(b"\xaa\x01\x13\x20\x34")
-    await self.send(b"\xaa\x00\x21\x02\xff\x22")
-    await self.send(b"\xaa\x02\x13\x20\x35")
-    await self.send(b"\xaa\x00\x21\x03\xff\x23")
-    await self.send(b"\xaa\xff\x1a\x14\x2d")
+      await self.send(bytes.fromhex("aa002101ff21"))
+    await self.send(bytes.fromhex("aa002101ff21"))
+    await self.send(bytes.fromhex("aa01132034"))
+    await self.send(bytes.fromhex("aa002102ff22"))
+    await self.send(bytes.fromhex("aa02132035"))
+    await self.send(bytes.fromhex("aa002103ff23"))
+    await self.send(bytes.fromhex("aaff1a142d"))
 
     await self.io.set_baudrate(57600)
     await self.io.set_rts(True)
     await self.io.set_dtr(True)
 
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x12\x1f\x32")
+    await self.send(bytes.fromhex("aa01121f32"))
     for _ in range(8):
-      await self.send(b"\xaa\x02\x20\xff\x0f\x30")
-    await self.send(b"\xaa\x02\x20\xdf\x0f\x10")
-    await self.send(b"\xaa\x02\x20\xdf\x0e\x0f")
-    await self.send(b"\xaa\x02\x20\xdf\x0c\x0d")
-    await self.send(b"\xaa\x02\x20\xdf\x08\x09")
+      await self.send(bytes.fromhex("aa0220ff0f30"))
+    await self.send(bytes.fromhex("aa0220df0f10"))
+    await self.send(bytes.fromhex("aa0220df0e0f"))
+    await self.send(bytes.fromhex("aa0220df0c0d"))
+    await self.send(bytes.fromhex("aa0220df0809"))
     for _ in range(4):
-      await self.send(b"\xaa\x02\x26\x00\x00\x28")
-    await self.send(b"\xaa\x02\x12\x03\x17")
+      await self.send(bytes.fromhex("aa0226000028"))
+    await self.send(bytes.fromhex("aa02120317"))
     for _ in range(5):
-      await self.send(b"\xaa\x02\x26\x20\x00\x48")
-      await self.send(b"\xaa\x02\x0e\x10")
-      await self.send(b"\xaa\x02\x26\x00\x00\x28")
-      await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x02\x0e\x10")
+      await self.send(bytes.fromhex("aa0226200048"))
+      await self.send(bytes.fromhex("aa0226000028"))
     await self.lock_door()
 
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa0226000028"))
 
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa0117021a"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
 
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x01\x0e\x0f")
-
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x02\x26\x00\x00\x28")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x01\x17\x02\x1a")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    await self.send(b"\xaa\x01\x17\x04\x1c")
-    await self.send(b"\xaa\x01\x17\x01\x19")
-
-    await self.send(b"\xaa\x01\x0b\x0c")
-    await self.send(b"\xaa\x01\x00\x01")
-    await self.send(b"\xaa\x01\xe6\x05\x00\x64\x00\x00\x00\x00\x00\x32\x00\xe8\x03\x01\x00\x6e")
-    await self.send(b"\xaa\x01\x94\xb6\x12\x83\x00\x00\x12\x01\x00\x00\xf3")
-    await self.send(b"\xaa\x01\x19\x28\x42")
-    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(bytes.fromhex("aa010b0c"))
+    await self.send(bytes.fromhex("aa010001"))
+    await self.send(bytes.fromhex("aa01e605006400000000003200e80301006e"))
+    await self.send(bytes.fromhex("aa0194b61283000012010000f3"))
+    await self.send(bytes.fromhex("aa01192842"))
 
     resp = 0x89
     while resp == 0x89:
-      await self.send(b"\xaa\x02\x0e\x10")
-      stat = await self.send(b"\xaa\x01\x0e\x0f")
       resp = stat[0]
 
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(bytes.fromhex("aa0117021a"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
 
-    await self.send(b"\xaa\x01\x17\x02\x1a")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    await self.send(b"\xaa\x01\x17\x04\x1c")
-    await self.send(b"\xaa\x01\x17\x01\x19")
-
-    await self.send(b"\xaa\x01\x0b\x0c")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+    await self.send(bytes.fromhex("aa010b0c"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
     new_position = (self.homing_position + 8000).to_bytes(4, byteorder="little")
-    await self.send(b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(bytes.fromhex("aa01d497") + new_position + bytes.fromhex("c3f52800d71a000049"))
 
     resp = 0x08
     while resp != 0x09:
-      stat = await self.send(b"\xaa\x01\x0e\x0f")
-      await self.send(b"\xaa\x01\x0e\x0f")
       resp = stat[0]
 
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(bytes.fromhex("aa0117021a"))
 
-    await self.send(b"\xaa\x01\x17\x02\x1a")
-
-    await self.send(b"\xaa\x02\x0e\x10")
     await self.lock_door()
-
-    await self.send(b"\xaa\x01\x0e\x0f")
 
     self._bucket_1_position = (await self.get_position()) + self.calibration_offset
 
   async def stop(self):
-    await self.send(b"\xaa\x02\x0e\x10")
     await self.configure_and_initialize()
     await self.io.stop()
 
@@ -275,7 +233,6 @@ class VSpinBackend(CentrifugeBackend):
       - 10th to 13th byte (index 9-12) = Homing Position
       - Last byte (index 13) = checksum
     """
-    resp = await self.send(b"\xaa\x01\x0e\x0f")
     if len(resp) == 0:
       raise IOError("Empty status from centrifuge")
     return resp
@@ -284,7 +241,11 @@ class VSpinBackend(CentrifugeBackend):
     resp = await self.get_status()
     return int.from_bytes(resp[1:5], byteorder="little")
 
-  # Centrifuge communication: read_resp, send, send_payloads
+  async def get_home_position(self):
+    resp = await self.get_status()
+    return int.from_bytes(resp[9:13], byteorder="little")
+
+  # Centrifuge communication: read_resp, send
 
   async def read_resp(self, timeout=20) -> bytes:
     """Read a response from the centrifuge. If the timeout is reached, return the data that has
@@ -315,15 +276,6 @@ class VSpinBackend(CentrifugeBackend):
       raise RuntimeError("Failed to write all bytes")
     return await self.read_resp(timeout=read_timeout)
 
-  async def send_payloads(self, payloads) -> None:
-    """Send a list of commands to the centrifuge."""
-    for tx in payloads:
-      if isinstance(tx, str):
-        byte_literal = bytes.fromhex(tx)
-        await self.send(byte_literal)
-      else:
-        await self.send(tx)
-
   async def configure_and_initialize(self):
     await self.set_configuration_data()
     await self.initialize()
@@ -340,37 +292,31 @@ class VSpinBackend(CentrifugeBackend):
     for i in range(33):
       packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
       await self.io.write(packet)
-    await self.send(b"\xaa\xff\x0f\x0e")
+    await self.send(bytes.fromhex("aaff0f0e"))
 
   # Centrifuge operations
 
   async def open_door(self):
-    await self.send(b"\xaa\x02\x26\x00\x07\x2f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa022600072f"))
     # we can't tell when the door is fully open, so we just wait a bit
     await asyncio.sleep(4)
 
   async def close_door(self):
-    await self.send(b"\xaa\x02\x26\x00\x05\x2d")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa022600052d"))
     # we can't tell when the door is fully closed, so we just wait a bit
     await asyncio.sleep(2)
 
   async def lock_door(self):
-    await self.send(b"\xaa\x02\x26\x00\x01\x29")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa0226000129"))
 
   async def unlock_door(self):
-    await self.send(b"\xaa\x02\x26\x00\x05\x2d")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa022600052d"))
 
   async def lock_bucket(self):
-    await self.send(b"\xaa\x02\x26\x00\x07\x2f")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa022600072f"))
 
   async def unlock_bucket(self):
-    await self.send(b"\xaa\x02\x26\x00\x06\x2e")
-    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(bytes.fromhex("aa022600062e"))
 
   async def go_to_bucket1(self):
     await self.go_to_position(self._bucket_1_position)
@@ -388,49 +334,48 @@ class VSpinBackend(CentrifugeBackend):
     await self.lock_door()
 
     position_bytes = position.to_bytes(4, byteorder="little")
-    byte_string = b"\xaa\x01\xd4\x97" + position_bytes + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
+    byte_string = bytes.fromhex("aa01d497") + position_bytes + bytes.fromhex("c3f52800d71a0000")
     sum_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += sum_byte.to_bytes(1, byteorder="little")
-    move_bucket = [
-      "aa 02 26 00 00 28",
-      "aa 02 0e 10",
-      "aa 01 17 02 1a",
-      "aa 01 0e 0f",
-      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      "aa 01 17 04 1c",
-      "aa 01 17 01 19",
-      "aa 01 0b 0c",
-      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      byte_string,
-    ]
-    await self.send_payloads(move_bucket)
+    await self.send(bytes.fromhex("aa0226000028"))
+    await self.send(bytes.fromhex("aa020e10"))
+    await self.send(bytes.fromhex("aa0117021a"))
+    await self.send(bytes.fromhex("aa010e0f"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
+    await self.send(bytes.fromhex("aa010b0c"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(byte_string)
 
     await asyncio.sleep(2)
 
-    await self.send(b"\xaa\x01\x17\x02\x1a")
+    await self.send(bytes.fromhex("aa0117021a"))
     await self.open_door()
 
   async def start_spin_cycle(
     self,
     g: float = 500,
     duration: float = 60,
-    acceleration: float = 80,
+    acceleration: float = 0.8,
+    deceleration: float = 0.8,
   ) -> None:
     """Start a spin cycle. spin spin spin spin
 
     Args:
       g: relative centrifugal force, also known as g-force
-      duration: How much time spent actually spinning at the desired g in seconds
+      duration: time in seconds spent at speed (g)
       acceleration: 1-100% of total acceleration
+      deceleration: 1-100% of total deceleration
 
     Examples:
       Spin with 1000 g-force (close to 3000rpm) for 5 minutes at 100% acceleration
 
-      >>> cf.start_spin_cycle(g = 1000, duration = 300, acceleration = 100)
+      >>> cf.start_spin_cycle(g = 1000, duration = 300, acceleration = .8, deceleration = .8)
     """
 
-    if acceleration < 1 or acceleration > 100:
-      raise ValueError("Acceleration must be within 1-100.")
+    if acceleration <= 0 or acceleration > 1:
+      raise ValueError("Acceleration must be within 0-1.")
     if g < 1 or g > 1000:
       raise ValueError("G-force must be within 1-1000")
     if duration < 1:
@@ -439,34 +384,54 @@ class VSpinBackend(CentrifugeBackend):
     await self.close_door()
     await self.lock_door()
 
-    rpm = int((g / (1.118 * (10 ** (-4)))) ** 0.5)
-    base = int(107007 - 328 * rpm + 1.13 * (rpm**2))
-    rpm_b = (int(4481 * rpm + 10852)).to_bytes(4, byteorder="little")
-    acc = (int(915 * acceleration / 100)).to_bytes(2, byteorder="little")
-    maxp = min(
-      (await self.get_position() + base + 4000 * rpm // 30 * duration),
-      4294967294,
-    )
-    position = maxp.to_bytes(4, byteorder="little")
+    # 1 - compute the final position
+    # g to rpm: https://en.wikipedia.org/wiki/Centrifugation#Mathematical_formula
+    r = 10
+    rpm = int((g / (1.118 * 10**-5 * r)) ** 0.5)
 
-    byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc + b"\x00\x00"
+    # compute the distance traveled during the acceleration period
+    # distance = 1/2 * v^2 / a. area under 0 to t (triangle). t = a/v_max
+    # 12903.2 is 100% acceleration
+    acceleration_ticks_per_second2 = 12903.2 * acceleration
+    speed_per_second = rpm / 60
+    distance_during_acceleration = (speed_per_second * speed_per_second / acceleration) // 2
+
+    # compute the distance traveled at speed
+    distance_at_speed = speed_per_second * duration
+
+    current_position = await self.get_position()
+    final_position = current_position + distance_during_acceleration + distance_at_speed
+    if final_position > 2**32 - 1:
+      raise NotImplementedError(
+        "We don't know what happens if the position exceeds 2^32-1. "
+        "Please report this issue on discuss.pylabrobot.org."
+      )
+    position = final_position.to_bytes(4, byteorder="little")
+
+    # 2 - encode the rpm
+    rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
+
+    # 3 - encode the acceleration
+    acc = int(9.15 * 10 * acceleration).to_bytes(2, byteorder="little")
+
+    byte_string = bytes.fromhex("aa01d497") + position + rpm_b + acc + bytes.fromhex("0000")
     last_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += last_byte.to_bytes(1, byteorder="little")
+    print(
+      f"Final position: {final_position}, RPM: {rpm}, Acceleration: {acceleration}, current position: {current_position}, duration: {duration}, byte_string: {byte_string.hex()}"
+    )
 
-    payloads = [
-      "aa 02 26 00 00 28",
-      "aa 02 0e 10",
-      "aa 01 17 02 1a",
-      "aa 01 0e 0f",
-      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      "aa 01 17 04 1c",
-      "aa 01 17 01 19",
-      "aa 01 0b 0c",
-      "aa 01 0e 0f",
-      "aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
-      byte_string,
-    ]
-    await self.send_payloads(payloads)
+    await self.send(bytes.fromhex("aa0226000028"))
+    # await self.send(bytes.fromhex("aa020e10"))
+    await self.send(bytes.fromhex("aa0117021a"))
+    # await self.send(bytes.fromhex("aa010e0f"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
+    await self.send(bytes.fromhex("aa010b0c"))
+    # await self.send(bytes.fromhex("aa010e0f"))
+    await self.send(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+    await self.send(byte_string)
 
     status_resp = await self.get_status()
     status = status_resp[0]
@@ -475,22 +440,27 @@ class VSpinBackend(CentrifugeBackend):
       status_resp = await self.get_status()
       status = status_resp[0]
 
+    await self.send(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+    # aa0194b600000000dc02000029: decel at 80
+    # aa0194b6000000000a03000058: decel at 85
+    decc = int(9.15 * 10 * deceleration).to_bytes(2, byteorder="little")
+    decel_command = bytes.fromhex("aa0194b600000000") + decc + bytes.fromhex("0000")
+    decel_command += ((sum(decel_command) - 0xAA) & 0xFF).to_bytes(1, byteorder="little")
+    await self.send(decel_command)
+
     await asyncio.sleep(2)
 
     # reset position back to 0ish
     # this part is needed because otherwise calling go_to_position will not work after
-    payloads = [
-      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      "aa 01 17 04 1c",
-      "aa 01 17 01 19",
-      "aa 01 0b 0c",
-      "aa 01 00 01",
-      "aa 01 e6 05 00 64 00 00 00 00 00 32 00 e8 03 01 00 6e",
-      "aa 01 94 b6 12 83 00 00 12 01 00 00 f3",
-      "aa 01 19 28 42",
-    ]
-
-    await self.send_payloads(payloads)
+    await self.send(bytes.fromhex("aa0117021a"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
+    await self.send(bytes.fromhex("aa010b0c"))
+    await self.send(bytes.fromhex("aa010001"))  # set position back to 0 (exactly)
+    await self.send(bytes.fromhex("aa01e605006400000000003200e80301006e"))
+    await self.send(bytes.fromhex("aa0194b61283000012010000f3"))
+    await self.send(bytes.fromhex("aa01192842"))  # it starts moving again
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
