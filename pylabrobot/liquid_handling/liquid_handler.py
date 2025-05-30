@@ -23,6 +23,7 @@ from typing import (
   cast,
 )
 
+from pylabrobot.error_handling import with_error_handler
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
@@ -333,7 +334,7 @@ class LiquidHandler(Resource, Machine):
     if not len(invalid_channels) == 0:
       raise ValueError(f"Invalid channels: {invalid_channels}")
 
-  @need_setup_finished
+  @with_error_handler
   async def pick_up_tips(
     self,
     tip_spots: List[TipSpot],
