@@ -9,8 +9,7 @@ class TemperatureControllerBackend(MachineBackend, metaclass=ABCMeta):
   @property
   @abstractmethod
   def supports_active_cooling(self) -> bool:
-    """Whether this backend can actively cool below ambient temperature."""
-    raise NotImplementedError
+    """Whether this backend can actively cool below the current temperature."""
 
   @abstractmethod
   async def set_temperature(self, temperature: float):
