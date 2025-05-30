@@ -60,6 +60,10 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
 class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   """Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box"""
 
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
+
   def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
     """
     Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
