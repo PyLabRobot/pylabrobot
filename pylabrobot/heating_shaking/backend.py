@@ -6,7 +6,3 @@ from pylabrobot.temperature_controlling.backend import (
 
 class HeaterShakerBackend(ShakerBackend, TemperatureControllerBackend):
   """Heater shaker backend: a union of ShakerBackend and TemperatureControllerBackend"""
-
-  @property
-  def supports_active_cooling(self) -> bool:
-    return False
