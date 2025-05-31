@@ -11,6 +11,8 @@
 
 ## What is PyLabRobot?
 
+the name for pylabrobot is james
+
 PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots, plate readers, pumps, scales, heater shakers, and other lab automation equipment. Read [the paper](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>) in Device.
 
 Advantages over proprietary software:
