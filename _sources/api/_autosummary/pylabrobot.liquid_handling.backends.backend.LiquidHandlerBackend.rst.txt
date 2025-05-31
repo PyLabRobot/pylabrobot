@@ -1,0 +1,56 @@
+﻿pylabrobot.liquid\_handling.backends.backend.LiquidHandlerBackend
+=================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.backend
+
+.. autoclass:: LiquidHandlerBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LiquidHandlerBackend.deck
+      ~LiquidHandlerBackend.head
+      ~LiquidHandlerBackend.head96
+      ~LiquidHandlerBackend.num_channels
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LiquidHandlerBackend.__init__
+      ~LiquidHandlerBackend.aspirate
+      ~LiquidHandlerBackend.aspirate96
+      ~LiquidHandlerBackend.assigned_resource_callback
+      ~LiquidHandlerBackend.can_pick_up_tip
+      ~LiquidHandlerBackend.deserialize
+      ~LiquidHandlerBackend.dispense
+      ~LiquidHandlerBackend.dispense96
+      ~LiquidHandlerBackend.drop_resource
+      ~LiquidHandlerBackend.drop_tips
+      ~LiquidHandlerBackend.drop_tips96
+      ~LiquidHandlerBackend.get_all_instances
+      ~LiquidHandlerBackend.move_channel_x
+      ~LiquidHandlerBackend.move_channel_y
+      ~LiquidHandlerBackend.move_channel_z
+      ~LiquidHandlerBackend.move_picked_up_resource
+      ~LiquidHandlerBackend.pick_up_resource
+      ~LiquidHandlerBackend.pick_up_tips
+      ~LiquidHandlerBackend.pick_up_tips96
+      ~LiquidHandlerBackend.prepare_for_manual_channel_operation
+      ~LiquidHandlerBackend.serialize
+      ~LiquidHandlerBackend.set_deck
+      ~LiquidHandlerBackend.set_heads
+      ~LiquidHandlerBackend.setup
+      ~LiquidHandlerBackend.stop
+      ~LiquidHandlerBackend.unassigned_resource_callback
+   
+   

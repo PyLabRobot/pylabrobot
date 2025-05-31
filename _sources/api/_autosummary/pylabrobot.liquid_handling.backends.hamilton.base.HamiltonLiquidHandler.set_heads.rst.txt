@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.base.HamiltonLiquidHandler.set\_heads
+===================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.base
+
+.. automethod:: HamiltonLiquidHandler.set_heads

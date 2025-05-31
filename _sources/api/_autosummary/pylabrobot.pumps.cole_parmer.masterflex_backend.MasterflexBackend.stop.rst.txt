@@ -1,0 +1,6 @@
+pylabrobot.pumps.cole\_parmer.masterflex\_backend.MasterflexBackend.stop
+========================================================================
+
+.. currentmodule:: pylabrobot.pumps.cole_parmer.masterflex_backend
+
+.. automethod:: MasterflexBackend.stop

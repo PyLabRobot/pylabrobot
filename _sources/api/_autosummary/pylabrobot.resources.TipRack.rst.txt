@@ -1,0 +1,91 @@
+﻿pylabrobot.resources.TipRack
+============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: TipRack
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TipRack.items
+      ~TipRack.name
+      ~TipRack.num_items
+      ~TipRack.num_items_x
+      ~TipRack.num_items_y
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TipRack.__init__
+      ~TipRack.assign_child_resource
+      ~TipRack.at
+      ~TipRack.center
+      ~TipRack.centers
+      ~TipRack.column
+      ~TipRack.copy
+      ~TipRack.deregister_did_assign_resource_callback
+      ~TipRack.deregister_did_unassign_resource_callback
+      ~TipRack.deregister_state_update_callback
+      ~TipRack.deregister_will_assign_resource_callback
+      ~TipRack.deregister_will_unassign_resource_callback
+      ~TipRack.deserialize
+      ~TipRack.disable_tip_trackers
+      ~TipRack.empty
+      ~TipRack.enable_tip_trackers
+      ~TipRack.fill
+      ~TipRack.get_absolute_location
+      ~TipRack.get_absolute_rotation
+      ~TipRack.get_absolute_size_x
+      ~TipRack.get_absolute_size_y
+      ~TipRack.get_absolute_size_z
+      ~TipRack.get_all_children
+      ~TipRack.get_all_items
+      ~TipRack.get_all_tips
+      ~TipRack.get_anchor
+      ~TipRack.get_child_identifier
+      ~TipRack.get_highest_known_point
+      ~TipRack.get_item
+      ~TipRack.get_items
+      ~TipRack.get_resource
+      ~TipRack.get_root
+      ~TipRack.get_size_x
+      ~TipRack.get_size_y
+      ~TipRack.get_size_z
+      ~TipRack.get_tip
+      ~TipRack.get_tips
+      ~TipRack.index_of_item
+      ~TipRack.load_all_state
+      ~TipRack.load_from_json_file
+      ~TipRack.load_state
+      ~TipRack.load_state_from_file
+      ~TipRack.register_did_assign_resource_callback
+      ~TipRack.register_did_unassign_resource_callback
+      ~TipRack.register_state_update_callback
+      ~TipRack.register_will_assign_resource_callback
+      ~TipRack.register_will_unassign_resource_callback
+      ~TipRack.rotate
+      ~TipRack.rotated
+      ~TipRack.row
+      ~TipRack.save
+      ~TipRack.save_state_to_file
+      ~TipRack.serialize
+      ~TipRack.serialize_all_state
+      ~TipRack.serialize_state
+      ~TipRack.set_tip_state
+      ~TipRack.summary
+      ~TipRack.traverse
+      ~TipRack.unassign
+      ~TipRack.unassign_child_resource
+   
+   

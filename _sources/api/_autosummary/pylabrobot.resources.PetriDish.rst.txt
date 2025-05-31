@@ -1,0 +1,73 @@
+﻿pylabrobot.resources.PetriDish
+==============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: PetriDish
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PetriDish.material_z_thickness
+      ~PetriDish.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PetriDish.__init__
+      ~PetriDish.assign_child_resource
+      ~PetriDish.at
+      ~PetriDish.center
+      ~PetriDish.centers
+      ~PetriDish.compute_height_from_volume
+      ~PetriDish.compute_volume_from_height
+      ~PetriDish.copy
+      ~PetriDish.deregister_did_assign_resource_callback
+      ~PetriDish.deregister_did_unassign_resource_callback
+      ~PetriDish.deregister_state_update_callback
+      ~PetriDish.deregister_will_assign_resource_callback
+      ~PetriDish.deregister_will_unassign_resource_callback
+      ~PetriDish.deserialize
+      ~PetriDish.get_absolute_location
+      ~PetriDish.get_absolute_rotation
+      ~PetriDish.get_absolute_size_x
+      ~PetriDish.get_absolute_size_y
+      ~PetriDish.get_absolute_size_z
+      ~PetriDish.get_all_children
+      ~PetriDish.get_anchor
+      ~PetriDish.get_highest_known_point
+      ~PetriDish.get_resource
+      ~PetriDish.get_root
+      ~PetriDish.get_size_x
+      ~PetriDish.get_size_y
+      ~PetriDish.get_size_z
+      ~PetriDish.load_all_state
+      ~PetriDish.load_from_json_file
+      ~PetriDish.load_state
+      ~PetriDish.load_state_from_file
+      ~PetriDish.register_did_assign_resource_callback
+      ~PetriDish.register_did_unassign_resource_callback
+      ~PetriDish.register_state_update_callback
+      ~PetriDish.register_will_assign_resource_callback
+      ~PetriDish.register_will_unassign_resource_callback
+      ~PetriDish.rotate
+      ~PetriDish.rotated
+      ~PetriDish.save
+      ~PetriDish.save_state_to_file
+      ~PetriDish.serialize
+      ~PetriDish.serialize_all_state
+      ~PetriDish.serialize_state
+      ~PetriDish.unassign
+      ~PetriDish.unassign_child_resource
+   
+   

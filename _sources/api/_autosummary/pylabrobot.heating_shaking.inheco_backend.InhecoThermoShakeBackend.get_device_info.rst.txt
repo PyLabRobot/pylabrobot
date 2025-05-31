@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.inheco\_backend.InhecoThermoShakeBackend.get\_device\_info
+======================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.inheco_backend
+
+.. automethod:: InhecoThermoShakeBackend.get_device_info
