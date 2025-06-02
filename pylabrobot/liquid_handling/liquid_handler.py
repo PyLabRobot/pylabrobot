@@ -19,6 +19,7 @@ from typing import (
   Sequence,
   Set,
   Tuple,
+  Type,
   Union,
   cast,
 )
@@ -60,6 +61,7 @@ from pylabrobot.resources.errors import CrossContaminationError, HasTipError
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.tilting.tilter import Tilter
+from pylabrobot.error_handling import handles_errors
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -146,6 +148,8 @@ class LiquidHandler(Resource, Machine):
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
     self._resource_pickup: Optional[ResourcePickup] = None
+
+    self._error_handlers: Dict[Type[Exception], Callable] = {}
 
   async def setup(self, **backend_kwargs):
     """Prepare the robot for use."""
@@ -333,7 +337,8 @@ class LiquidHandler(Resource, Machine):
     if not len(invalid_channels) == 0:
       raise ValueError(f"Invalid channels: {invalid_channels}")
 
-  @need_setup_finished
+  @handles_errors
+  # @need_setup_finished
   async def pick_up_tips(
     self,
     tip_spots: List[TipSpot],
@@ -1179,6 +1184,9 @@ class LiquidHandler(Resource, Machine):
         use_channels=[0],
         **backend_kwargs,
       )
+
+    if error is not None:
+      raise error
 
   @contextlib.contextmanager
   def use_channels(self, channels: List[int]):
@@ -2146,6 +2154,21 @@ class LiquidHandler(Resource, Machine):
     """Move channel to absolute z position"""
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
     await self.backend.move_channel_z(channel=channel, z=z)
+  
+  @contextlib.contextmanager
+  def on_fail(self, error_cls: Type[Exception], handler: Callable):
+    """Register a handler to be called when an error occurs.
+
+    Args:
+      error_cls: The exception class to handle.
+      handler: The handler function to call.
+    """
+
+    self._error_handlers[error_cls] = handler
+    try:
+      yield
+    finally:
+      del self._error_handlers[error_cls]
 
   # -- Resource methods --
 
