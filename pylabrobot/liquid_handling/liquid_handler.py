@@ -1837,7 +1837,7 @@ class LiquidHandler(Resource, Machine):
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
     elif isinstance(destination, (Plate, ResourceStack)) and isinstance(resource, Lid):
       lid = resource
-      if isinstance (destination, ResourceStack):
+      if isinstance(destination, ResourceStack):
         if destination.direction != "z":
           raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
         top_item = destination.get_top_item()
