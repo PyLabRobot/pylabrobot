@@ -1840,11 +1840,14 @@ class LiquidHandler(Resource, Machine):
       if isinstance(destination, ResourceStack):
         if destination.direction != "z":
           raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
-        top_item = destination.get_top_item()
-        if isinstance(top_item, Plate):
-          destination = top_item
-        else:
+        if len(destination.children) == 0:
           to_location = destination.get_absolute_location(z="top")
+        else:
+          top_item = destination.get_top_item()
+          if isinstance(top_item, Plate):
+            destination = top_item
+          else:
+            to_location = destination.get_absolute_location(z="top")
       if isinstance(destination, Plate):
         plate_location = destination.get_absolute_location()
         child_wrt_parent = destination.get_lid_location(
