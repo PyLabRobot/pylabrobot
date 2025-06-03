@@ -1813,7 +1813,7 @@ class LiquidHandler(Resource, Machine):
     )
 
     # get the location of the destination
-    if isinstance(destination, ResourceStack):
+    if isinstance(destination, ResourceStack) and not isinstance(resource, Lid):
       assert (
         destination.direction == "z"
       ), "Only ResourceStacks with direction 'z' are currently supported"
@@ -1835,13 +1835,22 @@ class LiquidHandler(Resource, Machine):
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
-    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+    elif isinstance(destination, (Plate, ResourceStack)) and isinstance(resource, Lid):
       lid = resource
-      plate_location = destination.get_absolute_location()
-      child_wrt_parent = destination.get_lid_location(
-        lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      ).rotated(destination.get_absolute_rotation())
-      to_location = plate_location + child_wrt_parent
+      if isinstance (destination, ResourceStack):
+        if destination.direction != "z":
+          raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
+        top_item = destination.get_top_item()
+        if isinstance(top_item, Plate):
+          destination = top_item
+        else:
+          to_location = destination.get_absolute_location(z="top")
+      if isinstance(destination, Plate):
+        plate_location = destination.get_absolute_location()
+        child_wrt_parent = destination.get_lid_location(
+          lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
+        ).rotated(destination.get_absolute_rotation())
+        to_location = plate_location + child_wrt_parent
     else:
       to_location = destination.get_absolute_location()
 

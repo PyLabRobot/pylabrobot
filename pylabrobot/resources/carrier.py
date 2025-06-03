@@ -234,7 +234,17 @@ class PlateHolder(ResourceHolder):
     Args:
       resource: The Resource on the ResourceStack tht was assigned.
     """
-    resource_stack = resource.parent
+
+    if isinstance(resource, Lid):
+      lid_parent = resource.parent
+      if isinstance(lid_parent, ResourceStack):
+        resource_stack = lid_parent
+      elif isinstance(lid_parent.parent, ResourceStack):
+        resource_stack = lid_parent.parent
+      else:
+        raise ValueError("ResourceStack not found for Lid")
+    else:
+      resource_stack = resource.parent
     assert isinstance(resource_stack, ResourceStack)
     if resource_stack.children[0] == resource:
       resource_stack.location = self.get_default_child_location(resource)
