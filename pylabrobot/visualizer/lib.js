@@ -10,8 +10,6 @@ var selectedResource;
 
 var canvasWidth, canvasHeight;
 
-const robotWidthMM = 100 + 30 * 22.5; // mm, just the deck
-const robotHeightMM = 653.5; // mm
 var scaleX, scaleY;
 
 var resources = {}; // name -> Resource object
