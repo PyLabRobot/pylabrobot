@@ -948,7 +948,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tip_spot_a1 = pickup.resource.get_item("A1")
     prototypical_tip = None
     for tip_spot in pickup.resource.get_all_items():
-      if tip_spot.has_tip:
+      if tip_spot.has_tip():
         prototypical_tip = tip_spot.get_tip()
         break
     if prototypical_tip is None:
