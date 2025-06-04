@@ -2181,9 +2181,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Pick up tips using the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
-    tip_a1 = tip_spot_a1.get_tip()
-    assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(tip_a1)
+    prototypical_tip = None
+    for tip_spot in pickup.resource.get_all_items():
+      if tip_spot.has_tip:
+        prototypical_tip = tip_spot.get_tip()
+        break
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     z_deposit_position += round(pickup.offset.z * 10)
 
@@ -2213,8 +2219,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     if isinstance(drop.resource, TipRack):
-      tip_a1 = drop.resource.get_item("A1")
-      position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
+      prototypical_tip = drop.resource.get_item("A1")
+      position = prototypical_tip.get_absolute_location() + prototypical_tip.center() + drop.offset
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
