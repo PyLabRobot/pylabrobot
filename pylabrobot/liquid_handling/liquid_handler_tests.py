@@ -1015,6 +1015,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     reagent_reservoir = agilent_1_reservoir_290ml(name="reservoir")
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(reagent_reservoir.get_item("A1"), volume=100)
+  
+  async def test_pick_up_tips96_incomplete_rack(self):
+    set_tip_tracking(enabled=True)
+
+    # Test that picking up tips from an incomplete rack works
+    self.tip_rack.fill()
+    self.tip_rack.get_item("A1").tracker.remove_tip()
+    
+    await self.lh.pick_up_tips96(self.tip_rack)
+    
+    # Check that the tips were picked up correctly
+    self.assertFalse(self.lh.head96[0].has_tip)
+    for i in range(1, 96):
+      self.assertTrue(self.lh.head96[i].has_tip)
+
+    set_tip_tracking(enabled=False)
 
 
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
