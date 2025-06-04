@@ -1243,8 +1243,11 @@ class LiquidHandler(Resource, Machine):
     for i, tip_spot in enumerate(tip_rack.get_all_items()):
       if not does_tip_tracking() and self.head96[i].has_tip:
         self.head96[i].remove_tip()
-      self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
-      if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+      # only add tips where there is one present.
+      # it's possible only some tips are present in the tip rack.
+      if tip_spot.has_tip():
+        self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
+      if does_tip_tracking() and not tip_spot.tracker.is_disabled and tip_spot.has_tip():
         tip_spot.tracker.remove_tip()
 
     pickup_operation = PickupTipRack(resource=tip_rack, offset=offset)
@@ -1302,6 +1305,9 @@ class LiquidHandler(Resource, Machine):
 
     # queue operation on all tip trackers
     for i in range(96):
+      # it's possible not every channel on this head has a tip.
+      if not self.head96[i].has_tip:
+        continue
       tip = self.head96[i].get_tip()
       if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
         error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
