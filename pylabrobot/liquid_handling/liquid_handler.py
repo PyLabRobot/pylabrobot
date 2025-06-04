@@ -1245,7 +1245,7 @@ class LiquidHandler(Resource, Machine):
         self.head96[i].remove_tip()
       # only add tips where there is one present.
       # it's possible only some tips are present in the tip rack.
-      if self.head96[i].has_tip:
+      if tip_spot.has_tip():
         self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
       if does_tip_tracking() and not tip_spot.tracker.is_disabled:
         tip_spot.tracker.remove_tip()
