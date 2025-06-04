@@ -2219,8 +2219,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     if isinstance(drop.resource, TipRack):
-      prototypical_tip = drop.resource.get_item("A1")
-      position = prototypical_tip.get_absolute_location() + prototypical_tip.center() + drop.offset
+      tip_spot_a1 = drop.resource.get_item("A1")
+      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
