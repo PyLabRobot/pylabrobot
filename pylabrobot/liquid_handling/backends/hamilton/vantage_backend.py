@@ -952,7 +952,7 @@ class VantageBackend(HamiltonLiquidHandler):
         prototypical_tip = tip_spot.get_tip()
         break
     if prototypical_tip is None:
-      raise ValueError("No tips found in the tip rack.") 
+      raise ValueError("No tips found in the tip rack.")
     assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
