@@ -13,7 +13,6 @@ try:
   import websockets.exceptions
   import websockets.legacy
   import websockets.legacy.server
-  import websockets.server
 
   HAS_WEBSOCKETS = True
 except ImportError:
@@ -284,7 +283,7 @@ class Visualizer:
       self._stop_ = self.loop.create_future()
       while True:
         try:
-          async with websockets.server.serve(self._socket_handler, self.ws_host, self.ws_port):
+          async with websockets.legacy.server.serve(self._socket_handler, self.ws_host, self.ws_port):
             print(f"Websocket server started at http://{self.ws_host}:{self.ws_port}")
             lock.release()
             await self.stop_
