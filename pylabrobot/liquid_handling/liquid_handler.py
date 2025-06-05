@@ -333,6 +333,21 @@ class LiquidHandler(Resource, Machine):
     if not len(invalid_channels) == 0:
       raise ValueError(f"Invalid channels: {invalid_channels}")
 
+  def _format_param(self, value: Any) -> Any:
+    """Format parameters for logging."""
+    if isinstance(value, Resource):
+      return value.name
+    try:
+      if isinstance(value, Sequence) and len(value) > 0 and isinstance(value[0], Resource):
+        return [v.name for v in value]
+    except Exception:
+      pass
+    return value
+
+  def _log_command(self, name: str, **kwargs) -> None:
+    params = ", ".join(f"{k}={self._format_param(v)}" for k, v in kwargs.items())
+    logger.debug("%s(%s)", name, params)
+
   @need_setup_finished
   async def pick_up_tips(
     self,
@@ -384,6 +399,13 @@ class LiquidHandler(Resource, Machine):
 
       NoTipError: If a spot does not have a tip.
     """
+
+    self._log_command(
+      "pick_up_tips",
+      tip_spots=tip_spots,
+      use_channels=use_channels,
+      offsets=offsets,
+    )
 
     not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, TipSpot)]
     if len(not_tip_spots) > 0:
@@ -513,6 +535,14 @@ class LiquidHandler(Resource, Machine):
       HasTipError: If a spot already has a tip.
     """
 
+    self._log_command(
+      "drop_tips",
+      tip_spots=tip_spots,
+      use_channels=use_channels,
+      offsets=offsets,
+      allow_nonzero_volume=allow_nonzero_volume,
+    )
+
     not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, (TipSpot, Trash))]
     if len(not_tip_spots) > 0:
       raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
@@ -615,6 +645,12 @@ class LiquidHandler(Resource, Machine):
       RuntimeError: If no tips have been picked up.
     """
 
+    self._log_command(
+      "return_tips",
+      use_channels=use_channels,
+      allow_nonzero_volume=allow_nonzero_volume,
+    )
+
     tip_spots: List[TipSpot] = []
     channels: List[int] = []
 
@@ -662,6 +698,13 @@ class LiquidHandler(Resource, Machine):
       allow_nonzero_volume: If `True`, tips will be returned even if their volumes are not zero.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    self._log_command(
+      "discard_tips",
+      use_channels=use_channels,
+      allow_nonzero_volume=allow_nonzero_volume,
+      offsets=offsets,
+    )
 
     # Different default value from drop_tips: here we factor in the tip tracking.
     if use_channels is None:
@@ -764,6 +807,17 @@ class LiquidHandler(Resource, Machine):
 
       ValueError: If all channels are `None`.
     """
+
+    self._log_command(
+      "aspirate",
+      resources=resources,
+      vols=vols,
+      use_channels=use_channels,
+      flow_rates=flow_rates,
+      offsets=offsets,
+      liquid_height=liquid_height,
+      blow_out_air_volume=blow_out_air_volume,
+    )
 
     self._check_containers(resources)
 
@@ -963,6 +1017,17 @@ class LiquidHandler(Resource, Machine):
       ValueError: If all channels are `None`.
     """
 
+    self._log_command(
+      "dispense",
+      resources=resources,
+      vols=vols,
+      use_channels=use_channels,
+      flow_rates=flow_rates,
+      offsets=offsets,
+      liquid_height=liquid_height,
+      blow_out_air_volume=blow_out_air_volume,
+    )
+
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
@@ -1150,6 +1215,17 @@ class LiquidHandler(Resource, Machine):
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
     """
 
+    self._log_command(
+      "transfer",
+      source=source,
+      targets=targets,
+      source_vol=source_vol,
+      ratios=ratios,
+      target_vols=target_vols,
+      aspiration_flow_rate=aspiration_flow_rate,
+      dispense_flow_rates=dispense_flow_rates,
+    )
+
     if target_vols is not None:
       if ratios is not None:
         raise TypeError("Cannot specify ratios and target_vols at the same time")
@@ -1228,6 +1304,12 @@ class LiquidHandler(Resource, Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    self._log_command(
+      "pick_up_tips96",
+      tip_rack=tip_rack,
+      offset=offset,
+    )
+
     if not isinstance(tip_rack, TipRack):
       raise TypeError(f"Resource must be a TipRack, got {tip_rack}")
     if not tip_rack.num_items == 96:
@@ -1291,6 +1373,13 @@ class LiquidHandler(Resource, Machine):
         volume.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    self._log_command(
+      "drop_tips96",
+      resource=resource,
+      offset=offset,
+      allow_nonzero_volume=allow_nonzero_volume,
+    )
 
     if not isinstance(resource, (TipRack, Trash)):
       raise TypeError(f"Resource must be a TipRack or Trash, got {resource}")
@@ -1371,6 +1460,11 @@ class LiquidHandler(Resource, Machine):
       RuntimeError: If no tips have been picked up.
     """
 
+    self._log_command(
+      "return_tips96",
+      allow_nonzero_volume=allow_nonzero_volume,
+    )
+
     tip_rack = self._get_96_head_origin_tip_rack()
     if tip_rack is None:
       raise RuntimeError("No tips have been picked up with the 96 head")
@@ -1399,6 +1493,11 @@ class LiquidHandler(Resource, Machine):
     Raises:
       ImplementationError: If the deck does not implement the `get_trash_area96` method.
     """
+
+    self._log_command(
+      "discard_tips96",
+      allow_nonzero_volume=allow_nonzero_volume,
+    )
 
     return await self.drop_tips96(
       self.deck.get_trash_area96(),
@@ -1434,6 +1533,15 @@ class LiquidHandler(Resource, Machine):
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    self._log_command(
+      "aspirate96",
+      resource=resource,
+      volume=volume,
+      offset=offset,
+      flow_rate=flow_rate,
+      blow_out_air_volume=blow_out_air_volume,
+    )
 
     if not (
       isinstance(resource, (Plate, Container))
@@ -1572,6 +1680,15 @@ class LiquidHandler(Resource, Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    self._log_command(
+      "dispense96",
+      resource=resource,
+      volume=volume,
+      offset=offset,
+      flow_rate=flow_rate,
+      blow_out_air_volume=blow_out_air_volume,
+    )
+
     if not (
       isinstance(resource, (Plate, Container))
       or (isinstance(resource, list) and all(isinstance(w, Well) for w in resource))
@@ -1698,6 +1815,15 @@ class LiquidHandler(Resource, Machine):
         will be used.
     """
 
+    self._log_command(
+      "stamp",
+      source=source,
+      target=target,
+      volume=volume,
+      aspiration_flow_rate=aspiration_flow_rate,
+      dispense_flow_rate=dispense_flow_rate,
+    )
+
     assert (source.num_items_x, source.num_items_y) == (
       target.num_items_x,
       target.num_items_y,
@@ -1714,6 +1840,14 @@ class LiquidHandler(Resource, Machine):
     direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs,
   ):
+    self._log_command(
+      "pick_up_resource",
+      resource=resource,
+      offset=offset,
+      pickup_distance_from_top=pickup_distance_from_top,
+      direction=direction,
+    )
+
     if self._resource_pickup is not None:
       raise RuntimeError(f"Resource {self._resource_pickup.resource.name} already picked up")
 
@@ -1745,6 +1879,12 @@ class LiquidHandler(Resource, Machine):
     offset: Coordinate = Coordinate.zero(),
     **backend_kwargs,
   ):
+    self._log_command(
+      "move_picked_up_resource",
+      to=to,
+      offset=offset,
+    )
+
     if self._resource_pickup is None:
       raise RuntimeError("No resource picked up")
     await self.backend.move_picked_up_resource(
@@ -1765,6 +1905,13 @@ class LiquidHandler(Resource, Machine):
     direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs,
   ):
+    self._log_command(
+      "drop_resource",
+      destination=destination,
+      offset=offset,
+      direction=direction,
+    )
+
     if self._resource_pickup is None:
       raise RuntimeError("No resource picked up")
     resource = self._resource_pickup.resource
@@ -1933,6 +2080,18 @@ class LiquidHandler(Resource, Machine):
       drop_direction: The direction from which to put down the resource.
     """
 
+    self._log_command(
+      "move_resource",
+      resource=resource,
+      to=to,
+      intermediate_locations=intermediate_locations,
+      pickup_offset=pickup_offset,
+      destination_offset=destination_offset,
+      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_direction=pickup_direction,
+      drop_direction=drop_direction,
+    )
+
     extra = self._check_args(
       self.backend.pick_up_resource,
       backend_kwargs,
@@ -2003,6 +2162,18 @@ class LiquidHandler(Resource, Machine):
       ValueError: If the lid is not assigned to a resource.
     """
 
+    self._log_command(
+      "move_lid",
+      lid=lid,
+      to=to,
+      intermediate_locations=intermediate_locations,
+      pickup_offset=pickup_offset,
+      destination_offset=destination_offset,
+      pickup_direction=pickup_direction,
+      drop_direction=drop_direction,
+      pickup_distance_from_top=pickup_distance_from_top,
+    )
+
     await self.move_resource(
       lid,
       to=to,
@@ -2059,6 +2230,18 @@ class LiquidHandler(Resource, Machine):
       destination_offset: The offset from the location's origin, optional (rarely necessary).
     """
 
+    self._log_command(
+      "move_plate",
+      plate=plate,
+      to=to,
+      intermediate_locations=intermediate_locations,
+      pickup_offset=pickup_offset,
+      destination_offset=destination_offset,
+      pickup_direction=pickup_direction,
+      drop_direction=drop_direction,
+      pickup_distance_from_top=pickup_distance_from_top,
+    )
+
     await self.move_resource(
       plate,
       to=to,
@@ -2099,21 +2282,29 @@ class LiquidHandler(Resource, Machine):
       return cls.deserialize(json.load(f))
 
   async def prepare_for_manual_channel_operation(self, channel: int):
+    self._log_command(
+      "prepare_for_manual_channel_operation",
+      channel=channel,
+    )
+
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
     await self.backend.prepare_for_manual_channel_operation(channel=channel)
 
   async def move_channel_x(self, channel: int, x: float):
     """Move channel to absolute x position"""
+    self._log_command("move_channel_x", channel=channel, x=x)
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
     await self.backend.move_channel_x(channel=channel, x=x)
 
   async def move_channel_y(self, channel: int, y: float):
     """Move channel to absolute y position"""
+    self._log_command("move_channel_y", channel=channel, y=y)
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
     await self.backend.move_channel_y(channel=channel, y=y)
 
   async def move_channel_z(self, channel: int, z: float):
     """Move channel to absolute z position"""
+    self._log_command("move_channel_z", channel=channel, z=z)
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
     await self.backend.move_channel_z(channel=channel, z=z)
 
