@@ -1,0 +1,85 @@
+﻿pylabrobot.centrifuge.centrifuge.Centrifuge
+===========================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. autoclass:: Centrifuge
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Centrifuge.at_bucket
+      ~Centrifuge.door_open
+      ~Centrifuge.name
+      ~Centrifuge.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Centrifuge.__init__
+      ~Centrifuge.assign_child_resource
+      ~Centrifuge.at
+      ~Centrifuge.center
+      ~Centrifuge.centers
+      ~Centrifuge.close_door
+      ~Centrifuge.copy
+      ~Centrifuge.deregister_did_assign_resource_callback
+      ~Centrifuge.deregister_did_unassign_resource_callback
+      ~Centrifuge.deregister_state_update_callback
+      ~Centrifuge.deregister_will_assign_resource_callback
+      ~Centrifuge.deregister_will_unassign_resource_callback
+      ~Centrifuge.deserialize
+      ~Centrifuge.get_absolute_location
+      ~Centrifuge.get_absolute_rotation
+      ~Centrifuge.get_absolute_size_x
+      ~Centrifuge.get_absolute_size_y
+      ~Centrifuge.get_absolute_size_z
+      ~Centrifuge.get_all_children
+      ~Centrifuge.get_anchor
+      ~Centrifuge.get_highest_known_point
+      ~Centrifuge.get_resource
+      ~Centrifuge.get_root
+      ~Centrifuge.get_size_x
+      ~Centrifuge.get_size_y
+      ~Centrifuge.get_size_z
+      ~Centrifuge.go_to_bucket1
+      ~Centrifuge.go_to_bucket2
+      ~Centrifuge.load_all_state
+      ~Centrifuge.load_from_json_file
+      ~Centrifuge.load_state
+      ~Centrifuge.load_state_from_file
+      ~Centrifuge.lock_bucket
+      ~Centrifuge.lock_door
+      ~Centrifuge.open_door
+      ~Centrifuge.register_did_assign_resource_callback
+      ~Centrifuge.register_did_unassign_resource_callback
+      ~Centrifuge.register_state_update_callback
+      ~Centrifuge.register_will_assign_resource_callback
+      ~Centrifuge.register_will_unassign_resource_callback
+      ~Centrifuge.rotate
+      ~Centrifuge.rotate_distance
+      ~Centrifuge.rotated
+      ~Centrifuge.save
+      ~Centrifuge.save_state_to_file
+      ~Centrifuge.serialize
+      ~Centrifuge.serialize_all_state
+      ~Centrifuge.serialize_state
+      ~Centrifuge.setup
+      ~Centrifuge.start_spin_cycle
+      ~Centrifuge.stop
+      ~Centrifuge.unassign
+      ~Centrifuge.unassign_child_resource
+      ~Centrifuge.unlock_bucket
+      ~Centrifuge.unlock_door
+   
+   

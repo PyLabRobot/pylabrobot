@@ -1,0 +1,76 @@
+﻿pylabrobot.scales.scale.Scale
+=============================
+
+.. currentmodule:: pylabrobot.scales.scale
+
+.. autoclass:: Scale
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Scale.name
+      ~Scale.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Scale.__init__
+      ~Scale.assign_child_resource
+      ~Scale.at
+      ~Scale.center
+      ~Scale.centers
+      ~Scale.copy
+      ~Scale.deregister_did_assign_resource_callback
+      ~Scale.deregister_did_unassign_resource_callback
+      ~Scale.deregister_state_update_callback
+      ~Scale.deregister_will_assign_resource_callback
+      ~Scale.deregister_will_unassign_resource_callback
+      ~Scale.deserialize
+      ~Scale.get_absolute_location
+      ~Scale.get_absolute_rotation
+      ~Scale.get_absolute_size_x
+      ~Scale.get_absolute_size_y
+      ~Scale.get_absolute_size_z
+      ~Scale.get_all_children
+      ~Scale.get_anchor
+      ~Scale.get_highest_known_point
+      ~Scale.get_resource
+      ~Scale.get_root
+      ~Scale.get_size_x
+      ~Scale.get_size_y
+      ~Scale.get_size_z
+      ~Scale.get_weight
+      ~Scale.load_all_state
+      ~Scale.load_from_json_file
+      ~Scale.load_state
+      ~Scale.load_state_from_file
+      ~Scale.register_did_assign_resource_callback
+      ~Scale.register_did_unassign_resource_callback
+      ~Scale.register_state_update_callback
+      ~Scale.register_will_assign_resource_callback
+      ~Scale.register_will_unassign_resource_callback
+      ~Scale.rotate
+      ~Scale.rotated
+      ~Scale.save
+      ~Scale.save_state_to_file
+      ~Scale.serialize
+      ~Scale.serialize_all_state
+      ~Scale.serialize_state
+      ~Scale.setup
+      ~Scale.stop
+      ~Scale.tare
+      ~Scale.unassign
+      ~Scale.unassign_child_resource
+      ~Scale.zero
+   
+   

@@ -1,0 +1,74 @@
+﻿pylabrobot.resources.TipCarrier
+===============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: TipCarrier
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TipCarrier.capacity
+      ~TipCarrier.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TipCarrier.__init__
+      ~TipCarrier.assign_child_resource
+      ~TipCarrier.assign_resource_to_site
+      ~TipCarrier.at
+      ~TipCarrier.center
+      ~TipCarrier.centers
+      ~TipCarrier.copy
+      ~TipCarrier.deregister_did_assign_resource_callback
+      ~TipCarrier.deregister_did_unassign_resource_callback
+      ~TipCarrier.deregister_state_update_callback
+      ~TipCarrier.deregister_will_assign_resource_callback
+      ~TipCarrier.deregister_will_unassign_resource_callback
+      ~TipCarrier.deserialize
+      ~TipCarrier.get_absolute_location
+      ~TipCarrier.get_absolute_rotation
+      ~TipCarrier.get_absolute_size_x
+      ~TipCarrier.get_absolute_size_y
+      ~TipCarrier.get_absolute_size_z
+      ~TipCarrier.get_all_children
+      ~TipCarrier.get_anchor
+      ~TipCarrier.get_free_sites
+      ~TipCarrier.get_highest_known_point
+      ~TipCarrier.get_resource
+      ~TipCarrier.get_resources
+      ~TipCarrier.get_root
+      ~TipCarrier.get_size_x
+      ~TipCarrier.get_size_y
+      ~TipCarrier.get_size_z
+      ~TipCarrier.load_all_state
+      ~TipCarrier.load_from_json_file
+      ~TipCarrier.load_state
+      ~TipCarrier.load_state_from_file
+      ~TipCarrier.register_did_assign_resource_callback
+      ~TipCarrier.register_did_unassign_resource_callback
+      ~TipCarrier.register_state_update_callback
+      ~TipCarrier.register_will_assign_resource_callback
+      ~TipCarrier.register_will_unassign_resource_callback
+      ~TipCarrier.rotate
+      ~TipCarrier.rotated
+      ~TipCarrier.save
+      ~TipCarrier.save_state_to_file
+      ~TipCarrier.serialize
+      ~TipCarrier.serialize_all_state
+      ~TipCarrier.serialize_state
+      ~TipCarrier.unassign
+      ~TipCarrier.unassign_child_resource
+   
+   

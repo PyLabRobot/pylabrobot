@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.rotate\_distance
+============================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.rotate_distance
