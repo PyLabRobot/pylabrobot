@@ -1906,14 +1906,11 @@ class LiquidHandler(Resource, Machine):
     resource: Resource,
     to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Optional[Coordinate] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
     pickup_direction: GripDirection = GripDirection.FRONT,
     drop_direction: GripDirection = GripDirection.FRONT,
-    get_direction: Optional[GripDirection] = None,
-    put_direction: Optional[GripDirection] = None,
     **backend_kwargs,
   ):
     """Move a resource to a new location.
@@ -1935,17 +1932,6 @@ class LiquidHandler(Resource, Machine):
       pickup_direction: The direction from which to pick up the resource.
       drop_direction: The direction from which to put down the resource.
     """
-
-    # TODO: move conditional statements from move_plate into move_resource to enable
-    # movement to other types besides Coordinate
-
-    # https://github.com/PyLabRobot/pylabrobot/issues/329
-    if resource_offset is not None:
-      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
-    if get_direction is not None:
-      raise NotImplementedError("get_direction is deprecated, use pickup_direction instead")
-    if put_direction is not None:
-      raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
 
     extra = self._check_args(
       self.backend.pick_up_resource,
@@ -1986,13 +1972,10 @@ class LiquidHandler(Resource, Machine):
     lid: Lid,
     to: Union[Plate, ResourceStack, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Optional[Coordinate] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     pickup_direction: GripDirection = GripDirection.FRONT,
     drop_direction: GripDirection = GripDirection.FRONT,
-    get_direction: Optional[GripDirection] = None,
-    put_direction: Optional[GripDirection] = None,
     pickup_distance_from_top: float = 5.7 - 3.33,
     **backend_kwargs,
   ):
@@ -2020,14 +2003,6 @@ class LiquidHandler(Resource, Machine):
       ValueError: If the lid is not assigned to a resource.
     """
 
-    # https://github.com/PyLabRobot/pylabrobot/issues/329
-    if resource_offset is not None:
-      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
-    if get_direction is not None:
-      raise NotImplementedError("get_direction is deprecated, use pickup_direction instead")
-    if put_direction is not None:
-      raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
-
     await self.move_resource(
       lid,
       to=to,
@@ -2045,13 +2020,10 @@ class LiquidHandler(Resource, Machine):
     plate: Plate,
     to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Optional[Coordinate] = None,
     pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     drop_direction: GripDirection = GripDirection.FRONT,
     pickup_direction: GripDirection = GripDirection.FRONT,
-    get_direction: Optional[GripDirection] = None,
-    put_direction: Optional[GripDirection] = None,
     pickup_distance_from_top: float = 13.2 - 3.33,
     **backend_kwargs,
   ):
@@ -2086,14 +2058,6 @@ class LiquidHandler(Resource, Machine):
       pickup_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
     """
-
-    # https://github.com/PyLabRobot/pylabrobot/issues/329
-    if resource_offset is not None:
-      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
-    if get_direction is not None:
-      raise NotImplementedError("get_direction is deprecated, use pickup_direction instead")
-    if put_direction is not None:
-      raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
 
     await self.move_resource(
       plate,
