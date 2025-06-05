@@ -253,7 +253,7 @@ def STF_Slim(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=STF_Slim_L.__name__,
+    model=STF_Slim.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
