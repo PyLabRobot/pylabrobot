@@ -329,6 +329,47 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_aspirate_custom_flow_rate(self):
+    op = SingleChannelAspiration(
+      resource=self.plate.get_item("A1"),
+      offset=Coordinate.zero(),
+      tip=self.tr.get_tip("A1"),
+      volume=100,
+      flow_rate=200,
+      liquid_height=10,
+      blow_out_air_volume=0,
+      liquids=[(None, 100)],
+    )
+    await self.evo.aspirate([op], use_channels=[0])
+    self.evo.send_command.assert_any_call(
+      module="C5",
+      command="SSZ",
+      params=[60, None, None, None, None, None, None, None],
+    )
+    self.evo.send_command.assert_any_call(
+      module="C5",
+      command="SEP",
+      params=[2400, None, None, None, None, None, None, None],
+    )
+
+  async def test_dispense_custom_flow_rate(self):
+    op = SingleChannelDispense(
+      resource=self.plate.get_item("A1"),
+      offset=Coordinate.zero(),
+      tip=self.tr.get_tip("A1"),
+      volume=100,
+      flow_rate=200,
+      liquid_height=10,
+      blow_out_air_volume=0,
+      liquids=[(None, 100)],
+    )
+    await self.evo.dispense([op], use_channels=[0])
+    self.evo.send_command.assert_any_call(
+      module="C5",
+      command="SEP",
+      params=[2400, None, None, None, None, None, None, None],
+    )
+
   async def test_move_resource(self):
     pickup = ResourcePickup(
       resource=self.plate,
