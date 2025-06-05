@@ -156,6 +156,65 @@ def _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
 #     "Relative Deviation (%)": [0, 99.07, 9.01, -1.76, -0.66, 0.27, -0.16, -0.22, -0.17]
 # }
 
+def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.76,
+  #   size_y=85.48,
+  #   size_z=5,
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid",
+  # )
+
+
+def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = False) -> Plate:
+  """Thermo Fisher Scientific/Fisher Scientific cat. no.: 4483354/15273005 (= with barcode)
+  - Part no.: 16698853 (FS) (= **without** barcode).
+  - See `./engineering_diagrams/` directory for more part numbers (different colours).
+  - Material: Polycarbonate, Polypropylene.
+  - Sterilization compatibility: ?
+  - Chemical resistance: ?
+  - Thermal resistance: ?
+  - Cleanliness: 'Certified DNA-, RNAse-, and PCR inhibitor-free with in-process sampling tests'.
+  - ANSI/SLAS-format for compatibility with automated systems.
+  - optimal pickup_distance_from_top=4 mm.
+  - total_volume = 300 ul.
+  - working_volume = 200 ul (recommended by manufacturer).
+  """
+  return Plate(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=20.1 + 1.6 - 0.5,  # cavity_depth + material_z_thickness - well_extruding_over_plate
+    lid=Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name + "_lid") if with_lid else None,
+    model="Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate",
+    plate_type="semi-skirted",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=11.63,
+      dy=9.95,
+      dz=0.0,  # check that plate is semi-skirted
+      item_dx=9,
+      item_dy=9,
+      size_x=5.49,
+      size_y=5.49,
+      size_z=20.1,
+      bottom_type=WellBottomType.V,
+      material_z_thickness=1.6,
+      cross_section_type=CrossSectionType.CIRCLE,
+      compute_volume_from_height=(
+        _compute_volume_from_height_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate
+      ),
+      compute_height_from_volume=(
+        _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate
+      ),
+    ),
+  )
+
 
 def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
   """
