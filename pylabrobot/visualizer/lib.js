@@ -1,60 +1,45 @@
-// ===========================================================================
-// Global Color Map (edit this to try new combinations)
-// ===========================================================================
-const RESOURCE_COLORS = {
-  Resource: "#BDB163",
-  HamiltonSTARDeck: "#F5FAFC",
-  Carrier: "#5C6C8F",
-  TipCarrier: "#756793",
-  Plate: "#3A3A3A",
-  Well: "#F5FAFC",
-  TipRack: "#2B2D42",
-  TubeRack: "#122D42",
-  ResourceHolder: "#8D99AE",
-  PlateHolder: "#5B6277",
-};
-
-// ===========================================================================
-// Mode and Layers (unchanged)
-// ===========================================================================
-
 var mode;
 const MODE_VISUALIZER = "visualizer";
 const MODE_GUI = "gui";
 
-let layer = new Konva.Layer();
-let resourceLayer = new Konva.Layer();
-let tooltip;
-let stage;
-let selectedResource;
+var layer = new Konva.Layer();
+var resourceLayer = new Konva.Layer();
+var tooltip;
+var stage;
+var selectedResource;
 
-let canvasWidth, canvasHeight;
+var canvasWidth, canvasHeight;
 
 const robotWidthMM = 100 + 30 * 22.5; // mm, just the deck
 const robotHeightMM = 653.5; // mm
-let scaleX, scaleY;
+var scaleX, scaleY;
 
-let resources = {}; // name -> Resource instance
+var resources = {}; // name -> Resource object
 
 let trash;
+
 let gif;
 
-// Used in GIF generation
+let resourceImage;
+
+// Used in gif generation
 let isRecording = false;
-let recordingCounter = 0;
-let frameImages = [];
+let recordingCounter = 0; // Counter to track the number of recorded frames
+var frameImages = [];
 let frameInterval = 8;
 
-// ===========================================================================
-// Snapping Helpers (unchanged)
-// ===========================================================================
-
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
-  if (!snappingEnabled) return undefined;
+  // Return the snapping resource that the given point is within, or undefined if there is no such resource.
+  // A snapping resource is a spot within a plate/tip carrier or the OT deck.
+  // This can probably be simplified a lot.
+  // Returns {resource, location wrt resource}
 
-  // Check Trash
+  if (!snappingEnabled) {
+    return undefined;
+  }
+
+  // Check if the resource is in the trash.
   if (
-    trash &&
     x > trash.x() &&
     x < trash.x() + trash.width() &&
     y > trash.y() &&
@@ -72,105 +57,120 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
     };
   }
 
-  const deck = resources["deck"];
-  if (!deck) return undefined;
+  // Check if the resource is in a ResourceHolder.
+  let deck = resources["deck"];
+  for (let resource_name in deck.children) {
+    const resource = deck.children[resource_name];
 
-  // Check ResourceHolder children (PlateCarrier / TipCarrier)
-  for (let child of deck.children) {
-    const isPlateCarrier =
+    // Check if we have a resource to snap
+    let canSnapPlate =
       resourceToSnap.constructor.name === "Plate" &&
-      child.constructor.name === "PlateCarrier";
-    const isTipCarrier =
+      resource.constructor.name === "PlateCarrier";
+    let canSnapTipRack =
       resourceToSnap.constructor.name === "TipRack" &&
-      child.constructor.name === "TipCarrier";
-    if (!isPlateCarrier && !isTipCarrier) continue;
+      resource.constructor.name === "TipCarrier";
+    if (!(canSnapPlate || canSnapTipRack)) {
+      continue;
+    }
 
-    for (let site of child.children) {
-      const { x: resX, y: resY } = site.getAbsoluteLocation();
+    for (let carrier_site_name in resource.children) {
+      let carrier_site = resource.children[carrier_site_name];
+      const { x: resourceX, y: resourceY } = carrier_site.getAbsoluteLocation();
       if (
-        x > resX &&
-        x < resX + site.size_x &&
-        y > resY &&
-        y < resY + site.size_y
+        x > resourceX &&
+        x < resourceX + carrier_site.size_x &&
+        y > resourceY &&
+        y < resourceY + carrier_site.size_y
       ) {
         return {
-          resource: site,
+          resource: carrier_site,
           location: { x: 0, y: 0 },
           snappingBox: {
-            x: resX,
-            y: resY,
-            width: site.size_x,
-            height: site.size_y,
+            x: resourceX,
+            y: resourceY,
+            width: carrier_site.size_x,
+            height: carrier_site.size_y,
           },
         };
       }
     }
   }
 
-  // Check OTDeck sites
+  // Check if the resource is in the OT Deck.
   if (deck.constructor.name === "OTDeck") {
-    const SITE_WIDTH = 128.0;
-    const SITE_HEIGHT = 86.0;
-    for (let siteLocation of otDeckSiteLocations) {
-      const absX = deck.location.x + siteLocation.x;
-      const absY = deck.location.y + siteLocation.y;
+    const siteWidth = 128.0;
+    const siteHeight = 86.0;
+
+    for (let i = 0; i < otDeckSiteLocations.length; i++) {
+      let siteLocation = otDeckSiteLocations[i];
       if (
-        x > absX &&
-        x < absX + SITE_WIDTH &&
-        y > absY &&
-        y < absY + SITE_HEIGHT
+        x > deck.location.x + siteLocation.x &&
+        x < deck.location.x + siteLocation.x + siteWidth &&
+        y > deck.location.y + siteLocation.y &&
+        y < deck.location.y + siteLocation.y + siteHeight
       ) {
         return {
           resource: deck,
           location: { x: siteLocation.x, y: siteLocation.y },
           snappingBox: {
-            x: absX,
-            y: absY,
-            width: SITE_WIDTH,
-            height: SITE_HEIGHT,
+            x: deck.location.x + siteLocation.x,
+            y: deck.location.y + siteLocation.y,
+            width: siteWidth,
+            height: siteHeight,
           },
         };
       }
     }
   }
 
+  // Check if the resource is in an OTDeck.
   return undefined;
 }
 
 function getSnappingGrid(x, y, width, height) {
-  if (!snappingEnabled) return {};
+  // Get the snapping lines for the given resource (defined by x, y, width, height).
+  // Returns {resourceX, resourceY, snapX, snapY} where resourceX and resourceY are the
+  // location where the resource should be snapped to, and snapX and snapY are the
+  // snapping lines that should be drawn.
+
+  if (!snappingEnabled) {
+    return {};
+  }
 
   const SNAP_MARGIN = 5;
-  let snappingLines = {};
-  const deck = resources["deck"];
-  if (!deck) return {};
 
+  let snappingLines = {};
+
+  const deck = resources["deck"];
   if (deck.constructor.name === "HamiltonSTARDeck") {
-    // Snap Y to top rail boundary
-    const topRailY = deck.location.y + 63;
-    if (Math.abs(y - topRailY) < SNAP_MARGIN) {
-      snappingLines.resourceY = topRailY;
+    // TODO: vantage
+    if (Math.abs(y - deck.location.y - 63) < SNAP_MARGIN) {
+      snappingLines.resourceY = deck.location.y + 63;
     }
-    // Snap bottom of resource to bottom of rail region
-    const bottomRailY = topRailY + deck.railHeight;
-    if (Math.abs(y - (bottomRailY - height)) < SNAP_MARGIN) {
-      snappingLines.resourceY = bottomRailY - height;
-      snappingLines.snappingY = bottomRailY;
+
+    if (
+      Math.abs(y - deck.location.y - 63 - deck.railHeight + height) <
+      SNAP_MARGIN
+    ) {
+      snappingLines.resourceY = deck.location.y + 63 + deck.railHeight - height;
+      snappingLines.snappingY = deck.location.y + 63 + deck.railHeight;
     }
-    // Snap X to deck origin
+
     if (Math.abs(x - deck.location.x) < SNAP_MARGIN) {
       snappingLines.resourceX = deck.location.x;
     }
-    // Snap X to any rail center
-    for (let i = 0; i < deck.num_rails; i++) {
-      const railX = 100 + i * 22.5;
+
+    // Check if the resource is on a Hamilton deck rail. (100 + 22.5 * i)
+    for (let rail = 0; rail < deck.num_rails; rail++) {
+      const railX = 100 + 22.5 * rail;
       if (Math.abs(x - railX) < SNAP_MARGIN) {
         snappingLines.resourceX = railX;
       }
     }
   }
 
-  // If we have a resourceX but no snappingX, align them
+  // if resource snapping position defined, but not the snapping line, set the snapping line to the
+  // resource snapping position.
   if (
     snappingLines.resourceX !== undefined &&
     snappingLines.snappingX === undefined
@@ -187,91 +187,111 @@ function getSnappingGrid(x, y, width, height) {
   return snappingLines;
 }
 
-// ===========================================================================
-// Base Resource Class (color now read dynamically from RESOURCE_COLORS)
-// ===========================================================================
-
 class Resource {
   constructor(resourceData, parent = undefined) {
     const { name, location, size_x, size_y, size_z, children } = resourceData;
     this.name = name;
-    this.location = location;
     this.size_x = size_x;
     this.size_y = size_y;
     this.size_z = size_z;
+    this.location = location;
     this.parent = parent;
+
+    this.color = "#5B6D8F";
+
     this.children = [];
-
-    // Instantiate and assign child resources
-    for (let childData of children) {
-      const ChildClass = classForResourceType(childData.type);
-      const childInstance = new ChildClass(childData, this);
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const childClass = classForResourceType(child.type);
+      const childInstance = new childClass(child, this);
       this.assignChild(childInstance);
-      resources[childData.name] = childInstance;
+
+      // Save in global lookup
+      resources[child.name] = childInstance;
     }
   }
 
-  // Dynamically compute the color based on RESOURCE_COLORS
-  getColor() {
-    if (RESOURCE_COLORS.hasOwnProperty(this.constructor.name)) {
-      return RESOURCE_COLORS[this.constructor.name];
-    } else if (
-      this.constructor.name === "Resource" &&
-      this.name.toLowerCase().includes("workcell")
-    ) {
-      return "lightgrey";
-    } else if (RESOURCE_COLORS["Resource"]) {
-      return RESOURCE_COLORS["Resource"];
-    } else {
-      return "#eab676";
-    }
-  }
+  draggable = mode === MODE_GUI;
+  canDelete = mode === MODE_GUI;
 
-  // Properties influenced by mode
-  get draggable() {
-    return mode === MODE_GUI;
-  }
-  get canDelete() {
-    return mode === MODE_GUI;
-  }
-
-  // Top-level draw: destroys previous group, creates a new group, calls drawMainShape & children
   draw(layer) {
-    if (this.group) {
+    // On draw, destroy the old shape.
+    if (this.group !== undefined) {
       this.group.destroy();
     }
 
+    // Add all children to this shape's group.
     this.group = new Konva.Group({
       x: this.location.x,
       y: this.location.y,
       draggable: this.draggable,
     });
-
     this.mainShape = this.drawMainShape();
-    if (this.mainShape) {
+    if (this.mainShape !== undefined) {
       this.group.add(this.mainShape);
-      this._attachTooltipHandlers(layer);
     }
-
-    // Draw children recursively
-    for (let child of this.children) {
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
       child.draw(layer);
     }
-
-    // Add to layers and parent group
     layer.add(this.group);
-    if (this.parent && this.parent.group) {
+    // Add a reference to this to the shape (so that it may be accessed in event handlers)
+    this.group.resource = this;
+
+    // Add this group to parent group.
+    if (this.parent !== undefined) {
       this.parent.group.add(this.group);
     }
-    this.group.resource = this;
+
+    // If a shape is drawn, add event handlers and other things.
+    if (this.mainShape !== undefined) {
+      this.mainShape.resource = this;
+      this.mainShape.on("mouseover", () => {
+        const { x, y } = this.getAbsoluteLocation();
+        if (tooltip !== undefined) {
+          tooltip.destroy();
+        }
+        tooltip = new Konva.Label({
+          x: x + this.size_x / 2,
+          y: y + this.size_y / 2,
+          opacity: 0.75,
+        });
+        tooltip.add(
+          new Konva.Tag({
+            fill: "black",
+            pointerDirection: "down",
+            pointerWidth: 10,
+            pointerHeight: 10,
+            lineJoin: "round",
+            shadowColor: "black",
+            shadowBlur: 10,
+            shadowOffset: 10,
+            shadowOpacity: 0.5,
+          })
+        );
+        tooltip.add(
+          new Konva.Text({
+            text: this.tooltipLabel(),
+            fontFamily: "Arial",
+            fontSize: 18,
+            padding: 5,
+            fill: "white",
+          })
+        );
+        tooltip.scaleY(-1);
+        layer.add(tooltip);
+      });
+      this.mainShape.on("mouseout", () => {
+        tooltip.destroy();
+      });
+    }
   }
 
-  // Default rectangular shape—uses getColor() now
   drawMainShape() {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: this.getColor(),
+      fill: this.color,
       stroke: "black",
       strokeWidth: 1,
     });
@@ -281,71 +301,39 @@ class Resource {
     return `${this.name} (${this.constructor.name})`;
   }
 
-  _attachTooltipHandlers(layer) {
-    this.mainShape.resource = this;
-    this.mainShape.on("mouseover", () => {
-      const { x, y } = this.getAbsoluteLocation();
-      if (tooltip) tooltip.destroy();
-
-      tooltip = new Konva.Label({
-        x: x + this.size_x / 2,
-        y: y + this.size_y / 2,
-        opacity: 0.75,
-      });
-      tooltip.add(
-        new Konva.Tag({
-          fill: "black",
-          pointerDirection: "down",
-          pointerWidth: 10,
-          pointerHeight: 10,
-          lineJoin: "round",
-          shadowColor: "black",
-          shadowBlur: 10,
-          shadowOffset: 10,
-          shadowOpacity: 0.5,
-        })
-      );
-      tooltip.add(
-        new Konva.Text({
-          text: this.tooltipLabel(),
-          fontFamily: "Arial",
-          fontSize: 18,
-          padding: 5,
-          fill: "white",
-        })
-      );
-      tooltip.scaleY(-1);
-      layer.add(tooltip);
-    });
-
-    this.mainShape.on("mouseout", () => {
-      if (tooltip) tooltip.destroy();
-    });
-  }
-
   getAbsoluteLocation() {
-    if (this.parent) {
-      const parentLoc = this.parent.getAbsoluteLocation();
+    if (this.parent !== undefined) {
+      const parentLocation = this.parent.getAbsoluteLocation();
       return {
-        x: parentLoc.x + this.location.x,
-        y: parentLoc.y + this.location.y,
-        z: (parentLoc.z || 0) + this.location.z,
+        x: parentLocation.x + this.location.x,
+        y: parentLocation.y + this.location.y,
+        z: parentLocation.z + this.location.z,
       };
     }
     return this.location;
   }
 
   serialize() {
-    let serializedChildren = this.children.map((c) => c.serialize());
+    const serializedChildren = [];
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
+      serializedChildren.push(child.serialize());
+    }
+
     return {
       name: this.name,
       type: this.constructor.name,
-      location: { ...this.location, type: "Coordinate" },
+      location: {
+        ...this.location,
+        ...{
+          type: "Coordinate",
+        },
+      },
       size_x: this.size_x,
       size_y: this.size_y,
       size_z: this.size_z,
       children: serializedChildren,
-      parent_name: this.parent ? this.parent.name : null,
+      parent_name: this.parent === undefined ? null : this.parent.name,
     };
   }
 
@@ -354,120 +342,136 @@ class Resource {
       console.error("Cannot assign a resource to itself", this);
       return;
     }
+
+    // Update layout tree.
     child.parent = this;
     this.children.push(child);
-    if (this.group && child.group) {
+
+    // Add child group to UI.
+    if (this.group !== undefined && child.group !== undefined) {
       this.group.add(child.group);
     }
   }
 
   unassignChild(child) {
     child.parent = undefined;
-    const idx = this.children.indexOf(child);
-    if (idx > -1) this.children.splice(idx, 1);
+    const index = this.children.indexOf(child);
+    if (index > -1) {
+      this.children.splice(index, 1);
+    }
   }
 
   destroy() {
-    // Destroy children first
+    // Destroy children
     for (let i = this.children.length - 1; i >= 0; i--) {
-      this.children[i].destroy();
+      const child = this.children[i];
+      child.destroy();
     }
+
+    // Remove from global lookup
     delete resources[this.name];
-    if (this.group) this.group.destroy();
-    if (this.parent) this.parent.unassignChild(this);
+
+    // Remove from UI
+    if (this.group !== undefined) {
+      this.group.destroy();
+    }
+
+    // Remove from parent
+    if (this.parent !== undefined) {
+      this.parent.unassignChild(this);
+    }
   }
 
   update() {
     this.draw(resourceLayer);
+
     if (isRecording) {
-      if (recordingCounter % frameInterval === 0) {
+      if (recordingCounter % frameInterval == 0) {
         stageToBlob(stage, handleBlob);
       }
-      recordingCounter++;
+      recordingCounter += 1;
     }
   }
 
-  setState() {
-    // Default no-op
-  }
+  setState() {}
 }
 
-// ===========================================================================
-// Deck Classes
-// ===========================================================================
-
 class Deck extends Resource {
-  get draggable() {
-    return false;
-  }
-  get canDelete() {
-    return false;
-  }
+  draggable = false;
+  canDelete = false;
 }
 
 class HamiltonSTARDeck extends Deck {
   constructor(resourceData) {
-    super(resourceData);
-    this.num_rails = resourceData.num_rails;
+    super(resourceData, undefined);
+    const { num_rails } = resourceData;
+    this.num_rails = num_rails;
     this.railHeight = 497;
   }
 
   drawMainShape() {
-    const group = new Konva.Group();
+    // Draw a transparent rectangle with an outline
+    let mainShape = new Konva.Group();
+    mainShape.add(
+      new Konva.Rect({
+        y: 63,
+        width: this.size_x,
+        height: this.railHeight,
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
 
-    // Add a tinted background using getColor()
-    const background = new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: this.getColor(),
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    group.add(background);
+    // draw border around the deck
+    mainShape.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
 
-    // Rail area (white on top of tinted background)
-    const railArea = new Konva.Rect({
-      y: 63,
-      width: this.size_x,
-      height: this.railHeight,
-      fill: "white",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    group.add(railArea);
-
-    // Draw vertical rails and labels
+    // Draw vertical rails as lines
     for (let i = 0; i < this.num_rails; i++) {
-      const xPos = 100 + i * 22.5;
-      const railLine = new Konva.Line({
-        points: [xPos, 63, xPos, 63 + this.railHeight],
+      const rail = new Konva.Line({
+        points: [
+          100 + i * 22.5, // 22.5 mm per rail
+          63,
+          100 + i * 22.5, // 22.5 mm per rail
+          this.railHeight + 63,
+        ],
         stroke: "black",
         strokeWidth: 1,
       });
-      group.add(railLine);
+      mainShape.add(rail);
 
+      // Add a text label every 5 rails. Rails are 1-indexed.
+      // Keep in mind that the stage is flipped vertically.
       if ((i + 1) % 5 === 0) {
-        const label = new Konva.Text({
-          x: xPos,
+        const railLabel = new Konva.Text({
+          x: 100 + i * 22.5, // 22.5 mm per rail
           y: 50,
           text: i + 1,
           fontSize: 12,
           fill: "black",
         });
-        label.scaleY(-1);
-        group.add(label);
+        railLabel.scaleY(-1); // Flip the text vertically
+        mainShape.add(railLabel);
       }
     }
-
-    return group;
+    return mainShape;
   }
 
   serialize() {
     return {
       ...super.serialize(),
-      num_rails: this.num_rails,
-      with_trash: false,
-      with_trash96: false,
+      ...{
+        num_rails: this.num_rails,
+        with_trash: false,
+        with_trash96: false,
+      },
     };
   }
 }
@@ -490,54 +494,52 @@ const otDeckSiteLocations = [
 class OTDeck extends Deck {
   constructor(resourceData) {
     resourceData.location = { x: 115.65, y: 68.03 };
-    super(resourceData);
+    super(resourceData, undefined);
   }
 
   drawMainShape() {
-    const group = new Konva.Group();
-
-    // Tinted background
-    const background = new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: this.getColor(),
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    group.add(background);
-
-    const SITE_WIDTH = 128.0;
-    const SITE_HEIGHT = 86.0;
-
-    // Draw each deck site
+    let group = new Konva.Group({});
+    const width = 128.0;
+    const height = 86.0;
+    // Draw the sites
     for (let i = 0; i < otDeckSiteLocations.length; i++) {
-      const loc = otDeckSiteLocations[i];
-      const siteRect = new Konva.Rect({
-        x: loc.x,
-        y: loc.y,
-        width: SITE_WIDTH,
-        height: SITE_HEIGHT,
+      const siteLocation = otDeckSiteLocations[i];
+      const site = new Konva.Rect({
+        x: siteLocation.x,
+        y: siteLocation.y,
+        width: width,
+        height: height,
         fill: "white",
         stroke: "black",
         strokeWidth: 1,
       });
-      group.add(siteRect);
+      group.add(site);
 
-      // Label the site
+      // Add a text label in the site
       const siteLabel = new Konva.Text({
-        x: loc.x,
-        y: loc.y + SITE_HEIGHT,
+        x: siteLocation.x,
+        y: siteLocation.y + height,
         text: i + 1,
-        width: SITE_WIDTH,
-        height: SITE_HEIGHT,
+        width: width,
+        height: height,
         fontSize: 16,
         fill: "black",
         align: "center",
         verticalAlign: "middle",
+        scaleY: -1, // Flip the text vertically
       });
-      siteLabel.scaleY(-1);
       group.add(siteLabel);
     }
+
+    // draw border around the deck
+    group.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
 
     return group;
   }
@@ -545,89 +547,95 @@ class OTDeck extends Deck {
   serialize() {
     return {
       ...super.serialize(),
-      with_trash: false,
+      ...{
+        with_trash: false,
+      },
     };
   }
 }
 
-// ===========================================================================
-// Plate and Container Classes
-// ===========================================================================
+let snapLines = [];
+let snappingBox = undefined;
 
 class Plate extends Resource {
-  constructor(resourceData, parent) {
+  constructor(resourceData, parent = undefined) {
     super(resourceData, parent);
-    this.num_items_x = resourceData.num_items_x;
-    this.num_items_y = resourceData.num_items_y;
+    const { num_items_x, num_items_y } = resourceData;
+    this.num_items_x = num_items_x;
+    this.num_items_y = num_items_y;
   }
 
   drawMainShape() {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: this.getColor(),
+      fill: "#2B2D42",
       stroke: "black",
       strokeWidth: 1,
     });
   }
 
-  update() {
-    super.update();
-    // Rename wells based on grid position
-    for (let i = 0; i < this.num_items_x; i++) {
-      for (let j = 0; j < this.num_items_y; j++) {
-        let idx = i * this.num_items_y + j;
-        if (this.children[idx]) {
-          this.children[idx].name = `${this.name}_well_${i}_${j}`;
-        }
-      }
-    }
-  }
-
   serialize() {
     return {
       ...super.serialize(),
-      num_items_x: this.num_items_x,
-      num_items_y: this.num_items_y,
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
     };
+  }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_well_${i}_${j}`;
+      }
+    }
   }
 }
 
 class Container extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    this.maxVolume = resourceData.max_volume;
+    const { max_volume } = resourceData;
+    this.maxVolume = max_volume;
     this.liquids = resourceData.liquids || [];
   }
 
   static colorForVolume(volume, maxVolume) {
-    const alpha = maxVolume > 0 ? volume / maxVolume : 0;
-    return `rgba(239, 35, 60, ${alpha})`;
+    return `rgba(239, 35, 60, ${volume / maxVolume})`;
   }
 
   getVolume() {
-    return this.liquids.reduce((sum, l) => sum + l.volume, 0);
+    return this.liquids.reduce((acc, liquid) => acc + liquid.volume, 0);
   }
 
-<<<<<<< Updated upstream
-=======
   aspirate(volume) {
-    let currentVol = this.getVolume();
-    if (volume > currentVol) {
+    if (volume > this.getVolume()) {
       throw new Error(
-        `Cannot aspirate ${volume}uL from ${this.name} (only ${currentVol}uL available)`
+        `Aspirating ${volume}uL from well ${
+          this.name
+        } with ${this.getVolume()}uL`
       );
     }
-    let toRemove = volume;
-    for (let i = this.liquids.length - 1; i >= 0 && toRemove > 0; i--) {
-      if (this.liquids[i].volume <= toRemove) {
-        toRemove -= this.liquids[i].volume;
+
+    // Remove liquids top down until we have removed the desired volume.
+    let volumeToRemove = volume;
+    for (let i = this.liquids.length - 1; i >= 0; i--) {
+      const liquid = this.liquids[i];
+      if (volumeToRemove >= liquid.volume) {
+        volumeToRemove -= liquid.volume;
         this.liquids.splice(i, 1);
       } else {
-        this.liquids[i].volume -= toRemove;
-        toRemove = 0;
+        liquid.volume -= volumeToRemove;
+        volumeToRemove = 0;
       }
     }
+
     this.update();
   }
 
@@ -636,174 +644,149 @@ class Container extends Resource {
     this.update();
   }
 
->>>>>>> Stashed changes
   setLiquids(liquids) {
     this.liquids = liquids;
     this.update();
   }
 
   setState(state) {
-    const newLiquids = state.liquids.map(([name, vol]) => ({ name, volume: vol }));
-    this.setLiquids(newLiquids);
+    let liquids = [];
+    for (let i = 0; i < state.liquids.length; i++) {
+      const liquid = state.liquids[i];
+      liquids.push({
+        name: liquid[0],
+        volume: liquid[1],
+      });
+    }
+    this.setLiquids(liquids);
   }
 
-<<<<<<< Updated upstream
-=======
   dispense(volume) {
-    const totalVol = this.getVolume();
-    if (volume + totalVol > this.maxVolume) {
+    if (volume + this.volume > this.maxVolume) {
       throw new Error(
-        `Cannot dispense ${volume}uL into ${this.name} (exceeds max volume ${this.maxVolume}uL)`
+        `Adding ${volume}uL to well ${this.name} with ${this.volume}uL would exceed max volume of ${this.maxVolume}uL`
       );
     }
-    this.addLiquid({ name: "Unknown liquid", volume });
+
+    this.addLiquid({
+      volume: volume,
+      name: "Unknown liquid", // TODO: get liquid name from parameter?
+    });
   }
 
->>>>>>> Stashed changes
   serializeState() {
     return {
       liquids: this.liquids,
-      pending_liquids: [...this.liquids],
+      pending_liquids: this.liquids,
     };
   }
 
   serialize() {
     return {
       ...super.serialize(),
-      max_volume: this.maxVolume,
+      ...{
+        max_volume: this.maxVolume,
+      },
     };
   }
 }
 
 class Trough extends Container {
   drawMainShape() {
-    const group = new Konva.Group();
+    let mainShape = new Konva.Group();
 
-    const background = new Konva.Rect({
+    let background = new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
       fill: "white",
       stroke: "black",
       strokeWidth: 1,
     });
-    const liquidLayer = new Konva.Rect({
+
+    let liquidLayer = new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
       fill: Trough.colorForVolume(this.getVolume(), this.maxVolume),
       stroke: "black",
       strokeWidth: 1,
     });
-    group.add(background, liquidLayer);
-    return group;
+
+    mainShape.add(background);
+    mainShape.add(liquidLayer);
+    return mainShape;
   }
 }
 
 class Well extends Container {
+  draggable = false;
+  canDelete = false;
+
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    this.cross_section_type = resourceData.cross_section_type;
-  }
-
-  get draggable() {
-    return false;
-  }
-  get canDelete() {
-    return false;
+    const { cross_section_type } = resourceData;
+    this.cross_section_type = cross_section_type;
   }
 
   drawMainShape() {
-    const volume = this.getVolume();
-    const alpha = this.maxVolume > 0 ? volume / this.maxVolume : 0;
-    const liquidColor = `rgba(239, 35, 60, ${alpha})`;
-
-    // Create a group so we can draw a white background and then the liquid overlay
-    const group = new Konva.Group();
-
     if (this.cross_section_type === "circle") {
-      // Draw a white circular background
-      const background = new Konva.Circle({
+      return new Konva.Circle({
         radius: this.size_x / 2,
-        fill: "#E0EAEE",
+        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
         offsetX: -this.size_x / 2,
         offsetY: -this.size_y / 2,
       });
-      group.add(background);
-
-      // Draw the liquid layer on top (may be fully transparent if empty)
-      const liquidLayer = new Konva.Circle({
-        radius: this.size_x / 2,
-        fill: liquidColor,
-        offsetX: -this.size_x / 2,
-        offsetY: -this.size_y / 2,
-      });
-      group.add(liquidLayer);
     } else {
-      // Draw a white rectangular background
-      const background = new Konva.Rect({
+      return new Konva.Rect({
         width: this.size_x,
         height: this.size_y,
-        fill: "#E0EAEE",
+        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
       });
-      group.add(background);
-
-      // Draw the liquid layer on top (transparent if empty)
-      const liquidLayer = new Konva.Rect({
-        width: this.size_x,
-        height: this.size_y,
-        fill: liquidColor,
-      });
-      group.add(liquidLayer);
     }
-
-    return group;
   }
 }
-
-
-// ===========================================================================
-// TipRack and TipSpot Classes
-// ===========================================================================
 
 class TipRack extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    this.num_items_x = resourceData.num_items_x;
-    this.num_items_y = resourceData.num_items_y;
+    const { num_items_x, num_items_y } = resourceData;
+    this.num_items_x = num_items_x;
+    this.num_items_y = num_items_y;
   }
 
   drawMainShape() {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: this.getColor(),
+      fill: "#2B2D42",
       stroke: "black",
       strokeWidth: 1,
     });
   }
 
-  update() {
-    super.update();
-    // Rename tip spots based on grid position
-    for (let i = 0; i < this.num_items_x; i++) {
-      for (let j = 0; j < this.num_items_y; j++) {
-        let idx = i * this.num_items_y + j;
-        if (this.children[idx]) {
-          this.children[idx].name = `${this.name}_tipspot_${i}_${j}`;
-        }
-      }
-    }
-  }
-
   serialize() {
     return {
       ...super.serialize(),
-      num_items_x: this.num_items_x,
-      num_items_y: this.num_items_y,
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
     };
+  }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_tipspot_${i}_${j}`;
+      }
+    }
   }
 }
 
@@ -811,15 +794,11 @@ class TipSpot extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
     this.has_tip = false;
-    this.tip = resourceData.prototype_tip;
+    this.tip = resourceData.prototype_tip; // not really a creator, but good enough for now.
   }
 
-  get draggable() {
-    return false;
-  }
-  get canDelete() {
-    return false;
-  }
+  draggable = false;
+  canDelete = false;
 
   drawMainShape() {
     return new Konva.Circle({
@@ -837,134 +816,132 @@ class TipSpot extends Resource {
     this.update();
   }
 
-  setTip(hasTip, layer) {
-    this.has_tip = hasTip;
+  setTip(has_tip, layer) {
+    this.has_tip = has_tip;
     this.draw(layer);
   }
 
   pickUpTip(layer) {
-    if (!this.has_tip) throw new Error("No tip to pick up");
+    if (!this.has_tip) {
+      throw new Error("No tip to pick up");
+    }
     this.setTip(false, layer);
   }
 
   dropTip(layer) {
-    if (this.has_tip) throw new Error("Tip spot already occupied");
+    if (this.has_tip) {
+      throw new Error("Already has tip");
+    }
     this.setTip(true, layer);
   }
 
   serialize() {
     return {
       ...super.serialize(),
-      prototype_tip: this.tip,
+      ...{
+        prototype_tip: this.tip,
+      },
     };
   }
 
   serializeState() {
     if (this.has_tip) {
-      return { tip: this.tip, pending_tip: this.tip };
+      return {
+        tip: this.tip,
+        pending_tip: this.tip,
+      };
     }
-    return { tip: null, pending_tip: null };
+    return {
+      tip: null,
+      pending_tip: null,
+    };
   }
 }
 
-// ===========================================================================
-// Trash, Carrier, ResourceHolder, TubeRack, Tube Classes
-// ===========================================================================
-
+// Nothing special.
 class Trash extends Resource {
+  dropTip(layer) {} // just ignore
+
   drawMainShape() {
-    // Do not draw if deck exists
-    if (resources["deck"]) return undefined;
+    if (resources["deck"].constructor.name) {
+      return undefined;
+    }
     return super.drawMainShape();
   }
-
-  dropTip(layer) {
-    // No-op
-  }
 }
 
-class Carrier extends Resource {
-  getColor() {
-    return RESOURCE_COLORS["Carrier"];
-  }
-}
-
+// Nothing special.
+class Carrier extends Resource {}
 class PlateCarrier extends Carrier {}
-class TipCarrier extends Carrier {
-  getColor() {
-    return RESOURCE_COLORS["TipCarrier"];
-  }
-}
-class MFXCarrier extends Carrier {}
+class TipCarrier extends Carrier {}
 
 class ResourceHolder extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    this.spot = resourceData.spot;
+    const { spot } = resourceData;
+    this.spot = spot;
   }
 
-  get draggable() {
-    return false;
-  }
-  get canDelete() {
-    return false;
-  }
+  draggable = false;
+  canDelete = false;
 
   serialize() {
     return {
       ...super.serialize(),
-      spot: this.spot,
+      ...{
+        spot: this.spot,
+      },
     };
   }
 }
 
 class TubeRack extends Resource {
-  constructor(resourceData, parent) {
+  constructor(resourceData, parent = undefined) {
     super(resourceData, parent);
-    this.num_items_x = resourceData.num_items_x;
-    this.num_items_y = resourceData.num_items_y;
+    const { num_items_x, num_items_y } = resourceData;
+    this.num_items_x = num_items_x;
+    this.num_items_y = num_items_y;
   }
 
   drawMainShape() {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: this.getColor(),
+      fill: "#122D42",
       stroke: "black",
       strokeWidth: 1,
     });
   }
 
-  update() {
-    super.update();
-    // Rename tubes based on grid position
-    for (let i = 0; i < this.num_items_x; i++) {
-      for (let j = 0; j < this.num_items_y; j++) {
-        let idx = i * this.num_items_y + j;
-        if (this.children[idx]) {
-          this.children[idx].name = `${this.name}_tube_${i}_${j}`;
-        }
-      }
-    }
-  }
-
   serialize() {
     return {
       ...super.serialize(),
-      num_items_x: this.num_items_x,
-      num_items_y: this.num_items_y,
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
     };
+  }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_tube_${i}_${j}`;
+      }
+    }
   }
 }
 
-class PlateHolder extends ResourceHolder {}
-
 class Tube extends Container {
-  get draggable() {
-    return false;
-  }
-  get canDelete() {
-    return false;
+  draggable = false;
+  canDelete = false;
+
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
   }
 
   drawMainShape() {
@@ -981,19 +958,15 @@ class Tube extends Container {
 
 class LiquidHandler extends Resource {
   drawMainShape() {
-    return undefined; // Only children (deck, etc.) are drawn
+    return undefined; // just draw the children (deck and so on)
   }
 }
-
-// ===========================================================================
-// Utility for mapping resource type strings to classes
-// ===========================================================================
 
 function classForResourceType(type) {
   switch (type) {
     case "Deck":
       return Deck;
-    case "HamiltonSTARDeck":
+    case ("HamiltonDeck", "HamiltonSTARDeck"):
       return HamiltonSTARDeck;
     case "Trash":
       return Trash;
@@ -1009,20 +982,21 @@ function classForResourceType(type) {
       return TipSpot;
     case "ResourceHolder":
       return ResourceHolder;
-    case "PlateHolder":
-      return PlateHolder;
     case "Carrier":
       return Carrier;
     case "PlateCarrier":
       return PlateCarrier;
     case "TipCarrier":
       return TipCarrier;
-    case "MFXCarrier":
-      return Carrier;
     case "Container":
       return Container;
     case "Trough":
       return Trough;
+    case "VantageDeck":
+      alert(
+        "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
+      );
+      return HamiltonSTARDeck;
     case "LiquidHandler":
       return LiquidHandler;
     case "TubeRack":
@@ -1035,16 +1009,22 @@ function classForResourceType(type) {
 }
 
 function loadResource(resourceData) {
-  const ResourceClass = classForResourceType(resourceData.type);
+  const resourceClass = classForResourceType(resourceData.type);
+
   const parentName = resourceData.parent_name;
-  let parent = parentName ? resources[parentName] : undefined;
-  let resource = new ResourceClass(resourceData, parent);
+  var parent = undefined;
+  if (parentName !== undefined) {
+    parent = resources[parentName];
+  }
+
+  const resource = new resourceClass(resourceData, parent);
   resources[resource.name] = resource;
+
   return resource;
 }
 
 // ===========================================================================
-// Initialization and GIF Utilities (unchanged)
+// init
 // ===========================================================================
 
 window.addEventListener("load", function () {
@@ -1061,28 +1041,40 @@ window.addEventListener("load", function () {
   stage.scaleY(-1);
   stage.offsetY(canvasHeight);
 
-  let halfW = canvasWidth / 2;
-  let halfH = canvasHeight / 2;
-  const dragBound = (pos) => ({
-    x: Math.max(-halfW, Math.min(halfW, pos.x)),
-    y: Math.max(-halfH, Math.min(halfH, pos.y)),
-  });
-  stage.dragBoundFunc(dragBound);
+  let minX = -(1 / 2) * canvasWidth;
+  let minY = -(1 / 2) * canvasHeight;
+  let maxX = (1 / 2) * canvasWidth;
+  let maxY = (1 / 2) * canvasHeight;
 
-  // White background
-  const background = new Konva.Rect({
-    x: -halfW,
-    y: -halfH,
-    width: canvasWidth,
-    height: canvasHeight,
+  // limit draggable area to size of canvas
+  stage.dragBoundFunc(function (pos) {
+    // Set the bounds of the draggable area to 1/2 off the canvas.
+    let newX = Math.max(minX, Math.min(maxX, pos.x));
+    let newY = Math.max(minY, Math.min(maxY, pos.y));
+
+    return {
+      x: newX,
+      y: newY,
+    };
+  });
+
+  // add white background
+  var background = new Konva.Rect({
+    x: minX,
+    y: minY,
+    width: canvasWidth - minX + maxX,
+    height: canvasHeight - minY + maxY,
     fill: "white",
     listening: false,
   });
-  layer.add(background);
 
+  // add the layer to the stage
   stage.add(layer);
   stage.add(resourceLayer);
 
+  layer.add(background);
+
+  // Check if there is an after stage setup callback, and if so, call it.
   if (typeof afterStageSetup === "function") {
     afterStageSetup();
   }
@@ -1112,11 +1104,18 @@ function gifShowDownloadUI() {
 }
 
 async function startRecording() {
+  // Turn recording on
   isRecording = true;
+
+  // Reset saved frames buffer
   frameImages = [];
-  recordingCounter = 0;
-  document.getElementById("progressBar").innerText = " GIF Rendering Progress: 0%";
+
+  // Reset the render progress
+  var info = document.getElementById("progressBar");
+  info.innerText = " GIF Rendering Progress: " + Math.round(0 * 100) + "%";
+
   stageToBlob(stage, handleBlob);
+
   gifResetUI();
   gifShowRecordingUI();
 }
@@ -1124,8 +1123,13 @@ async function startRecording() {
 function stopRecording() {
   gifResetUI();
   gifShowProcessingUI();
+
+  // Turn recording off
   isRecording = false;
-  // Capture final frames
+
+  // Render the final image
+  // Do it twice bc it looks better
+
   stageToBlob(stage, handleBlob);
   stageToBlob(stage, handleBlob);
 
@@ -1137,16 +1141,18 @@ function stopRecording() {
     height: stage.height(),
   });
 
-  for (let img of frameImages) {
-    gif.addFrame(img, { delay: 1 });
+  // Add each frame to the GIF
+  for (var i = 0; i < frameImages.length; i++) {
+    gif.addFrame(frameImages[i], { delay: 1 });
   }
 
+  // Add progress bar based on how much the gif is rendered
   gif.on("progress", function (p) {
-    document.getElementById(
-      "progressBar"
-    ).innerText = " GIF Rendering Progress: " + Math.round(p * 100) + "%";
+    var info = document.getElementById("progressBar");
+    info.innerText = " GIF Rendering Progress: " + Math.round(p * 100) + "%";
   });
 
+  // Load gif into right portion of screen
   gif.on("finished", function (blob) {
     renderedGifBlob = blob;
     gifResetUI();
@@ -1157,31 +1163,40 @@ function stopRecording() {
   gif.render();
 }
 
-function stageToBlob(stageObj, callback) {
-  stageObj.toBlob({
+// convert stage to a blob and handle the blob
+function stageToBlob(stage, callback) {
+  stage.toBlob({
     callback: callback,
     mimeType: "image/jpg",
     quality: 0.3,
   });
 }
 
+// handle the blob (e.g., create an Image element and add it to frameImages)
 function handleBlob(blob) {
   const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.src = url;
-  img.width = stage.width();
-  img.height = stage.height();
-  frameImages.push(img);
-  img.onload = () => URL.revokeObjectURL(url);
+  const myImg = new Image();
+
+  myImg.src = url;
+  myImg.width = stage.width();
+  myImg.height = stage.height();
+
+  frameImages.push(myImg);
+
+  myImg.onload = function () {
+    URL.revokeObjectURL(url); // Free up memory
+  };
 }
 
-// Button event listeners
+// Set up event listeners for the buttons
 document
   .getElementById("start-recording-button")
   .addEventListener("click", startRecording);
+
 document
   .getElementById("stop-recording-button")
   .addEventListener("click", stopRecording);
+
 document
   .getElementById("gif-download-button")
   .addEventListener("click", function () {
@@ -1189,25 +1204,36 @@ document
       alert("No GIF rendered yet. Please stop the recording first.");
       return;
     }
-    let fileName = document.getElementById("fileName").value || "plr-visualizer";
-    if (!fileName.endsWith(".gif")) fileName += ".gif";
-    const url = URL.createObjectURL(renderedGifBlob);
-    const a = document.createElement("a");
+
+    var fileName =
+      document.getElementById("fileName").value || "plr-visualizer";
+    var url = URL.createObjectURL(renderedGifBlob);
+    var a = document.createElement("a");
     a.href = url;
+    if (!fileName.endsWith(".gif")) {
+      fileName += ".gif";
+    }
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   });
+
 document
   .getElementById("gif-frame-rate")
   .addEventListener("input", function () {
-    let val = Math.round(parseInt(this.value) / 8) * 8;
-    val = Math.max(1, Math.min(96, val));
-    this.value = val;
+    let value = parseInt(this.value);
+    // Adjust the value to the nearest multiple of 8
+    value = Math.round(value / 8) * 8;
+    // Ensure the value stays within the allowed range
+    if (value < 1) value = 1;
+    if (value > 96) value = 96;
+
+    this.value = value; // Update the slider value
     document.getElementById("current-value").textContent =
-      "Frame Save Interval: " + val;
-    frameInterval = val;
+      "Frame Save Interval: " + value;
+
+    frameInterval = value;
   });
 
 window.addEventListener("load", function () {
