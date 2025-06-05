@@ -45,6 +45,5 @@
     "editor.wordWrap": "bounded",
     "editor.wordWrapColumn": 100
   },
-  "mypy.runUsingActiveInterpreter": true,
-  "ros.distro": "humble"
+  "mypy.runUsingActiveInterpreter": true
 }
