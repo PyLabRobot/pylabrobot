@@ -797,8 +797,9 @@ class EVOBackend(TecanLiquidHandler):
       tlc = tecan_liquid_classes[i]
       z = zadd[channel]
       assert tlc is not None and z is not None
-      sep[channel] = int(tlc.aspirate_speed * 12)  # 6?
-      ssz[channel] = round(z * tlc.aspirate_speed / ops[i].volume)
+      flow_rate = ops[i].flow_rate or tlc.aspirate_speed
+      sep[channel] = int(flow_rate * 12)  # 6?
+      ssz[channel] = round(z * flow_rate / ops[i].volume)
       volume = tlc.compute_corrected_volume(ops[i].volume)
       mtr[channel] = round(volume * 6)  # 3?
       ssz_r[channel] = int(tlc.aspirate_retract_speed * 10)
@@ -833,7 +834,8 @@ class EVOBackend(TecanLiquidHandler):
     for i, channel in enumerate(use_channels):
       tlc = tecan_liquid_classes[i]
       assert tlc is not None
-      sep[channel] = int(tlc.dispense_speed * 12)  # 6?
+      flow_rate = ops[i].flow_rate or tlc.dispense_speed
+      sep[channel] = int(flow_rate * 12)  # 6?
       spp[channel] = int(tlc.dispense_breakoff * 12)  # 6?
       stz[channel] = 0
       volume = (
