@@ -23,7 +23,6 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     roma_x: Optional[float] = None,
     roma_y: Optional[float] = None,
     roma_z_safe: Optional[float] = None,
-    roma_z_travel: Optional[float] = None,
     roma_z_end: Optional[float] = None,
     sites: Optional[Dict[int, PlateHolder]] = None,
     category="tecan_plate_carrier",
@@ -44,7 +43,6 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     self.roma_x = roma_x
     self.roma_y = roma_y
     self.roma_z_safe = roma_z_safe
-    self.roma_z_travel = roma_z_travel
     self.roma_z_end = roma_z_end
 
 
@@ -106,7 +104,6 @@ def MP_3Pos_PCR(name: str) -> TecanPlateCarrier:
     roma_x=1876,
     roma_y=423,
     roma_z_safe=946,
-    roma_z_travel=1938,
     roma_z_end=2566,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -136,7 +133,6 @@ def MP_3Pos_TePS(name: str) -> TecanPlateCarrier:
     roma_x=1876,
     roma_y=405,
     roma_z_safe=780,
-    roma_z_travel=2012,
     roma_z_end=2543,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -166,7 +162,6 @@ def LI___MP_3Pos(name: str) -> TecanPlateCarrier:
     roma_x=1878,
     roma_y=423,
     roma_z_safe=946,
-    roma_z_travel=1938,
     roma_z_end=2537,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -359,7 +354,6 @@ def MP_3Pos(name: str) -> TecanPlateCarrier:
     roma_x=1878,
     roma_y=423,
     roma_z_safe=946,
-    roma_z_travel=1938,
     roma_z_end=2537,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -389,7 +383,6 @@ def MP_3Pos_Cooled(name: str) -> TecanPlateCarrier:
     roma_x=1810,
     roma_y=421,
     roma_z_safe=946,
-    roma_z_travel=1853,
     roma_z_end=2534,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -418,7 +411,6 @@ def MP_3Pos_Fixed(name: str) -> TecanPlateCarrier:
     roma_x=1870,
     roma_y=420,
     roma_z_safe=946,
-    roma_z_travel=1938,
     roma_z_end=2537,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -472,7 +464,6 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
     roma_x=2056,
     roma_y=441,
     roma_z_safe=610,
-    roma_z_travel=2418,
     roma_z_end=2503,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -527,7 +518,6 @@ def MP_4Pos(name: str) -> TecanPlateCarrier:
     roma_x=1840,
     roma_y=386,
     roma_z_safe=946,
-    roma_z_travel=1938,
     roma_z_end=2476,
     sites=create_homogeneous_resources(
       klass=PlateHolder,
@@ -558,7 +548,6 @@ def MP_4Pos_flat(name: str) -> TecanPlateCarrier:
     roma_x=1835,
     roma_y=388,
     roma_z_safe=946,
-    roma_z_travel=1938,
     roma_z_end=2475,
     sites=create_homogeneous_resources(
       klass=PlateHolder,

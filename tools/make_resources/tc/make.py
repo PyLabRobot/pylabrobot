@@ -118,7 +118,7 @@ def main(pc, tc, p, tr, tcr):
 
       size_x = round(float(dim[2][2]) / 10 + dx, 2)
       size_y = round(float(dim[2][3]) / 10 + dy, 2)
-      z_travel = float(dim[3][3])
+      # z_travel = float(dim[3][3])
       z_start = float(dim[3][1])
       z_dispense = float(dim[3][2])
       z_max = float(dim[3][0])
@@ -189,7 +189,6 @@ def main(pc, tc, p, tr, tcr):
         if bc == "TecanPlate":
           o.write(f'    lid={lid_name}(name=name + "_lid") if with_lid else None,\n')
         o.write(f'    model="{name}",\n')
-        o.write(f"    z_travel={z_travel},\n")
         o.write(f"    z_start={z_start},\n")
         o.write(f"    z_dispense={z_dispense},\n")
         o.write(f"    z_max={z_max},\n")
