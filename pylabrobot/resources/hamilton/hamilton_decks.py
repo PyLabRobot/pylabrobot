@@ -419,7 +419,7 @@ class HamiltonSTARDeck(HamiltonDeck):
         for i in range(8)
       ]
       for i, ts in enumerate(tip_spots):
-        ts.location = Coordinate(x=0, y=7*9 - 9*i, z=23.1) # A1 == index 0, topmost tip
+        ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=23.1)  # A1 == index 0, topmost tip
 
       teaching_tip_rack = TipRack(
         name="teaching_tip_rack",
@@ -430,9 +430,7 @@ class HamiltonSTARDeck(HamiltonDeck):
         with_tips=True,
         model="hamilton_teaching_tip_rack",
       )
-      waste_block.assign_child_resource(
-        teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
-      )
+      waste_block.assign_child_resource(teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0))
       self.assign_child_resource(
         waste_block,
         location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
