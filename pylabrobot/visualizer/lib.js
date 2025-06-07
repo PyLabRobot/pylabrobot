@@ -1,3 +1,27 @@
+// ===========================================================================
+// Global Color Map (edit this to try new combinations)
+// ===========================================================================
+const RESOURCE_COLORS = {
+  Resource: "#BDB163",
+  HamiltonSTARDeck: "#F5FAFC",
+  Carrier: "#5C6C8F",
+  MFXCarrier: "#536181",
+  PlateCarrier: "#5C6C8F",
+  TipCarrier: "#64405d",
+  TroughCarrier: "#756793",
+  TubeCarrier: "#756793",
+  Plate: "#3A3A3A",
+  Well: "#F5FAFC",
+  TipRack: "#8f5c85",
+  TubeRack: "#122D42",
+  ResourceHolder: "#5B6277",
+  PlateHolder: "#8D99AE",
+};
+
+// ===========================================================================
+// Mode and Layers
+// ===========================================================================
+
 var mode;
 const MODE_VISUALIZER = "visualizer";
 const MODE_GUI = "gui";
@@ -209,8 +233,29 @@ class Resource {
     }
   }
 
-  draggable = mode === MODE_GUI;
-  canDelete = mode === MODE_GUI;
+  // Dynamically compute the color based on RESOURCE_COLORS
+  getColor() {
+    if (RESOURCE_COLORS.hasOwnProperty(this.constructor.name)) {
+      return RESOURCE_COLORS[this.constructor.name];
+    } else if (
+      this.constructor.name === "Resource" &&
+      this.name.toLowerCase().includes("workcell")
+    ) {
+      return "lightgrey";
+    } else if (RESOURCE_COLORS["Resource"]) {
+      return RESOURCE_COLORS["Resource"];
+    } else {
+      return "#eab676";
+    }
+  }
+
+  // Properties influenced by mode
+  get draggable() {
+    return mode === MODE_GUI;
+  }
+  get canDelete() {
+    return mode === MODE_GUI;
+  }
 
   draw(layer) {
     // On draw, destroy the old shape.
@@ -289,7 +334,7 @@ class Resource {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: this.color,
+      fill: this.getColor(),
       stroke: "black",
       strokeWidth: 1,
     });
@@ -567,7 +612,7 @@ class Plate extends Resource {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: "#2B2D42",
+      fill: this.getColor(),
       stroke: "black",
       strokeWidth: 1,
     });
@@ -689,61 +734,133 @@ class Container extends Resource {
   }
 }
 
-class Trough extends Container {
-  drawMainShape() {
-    let mainShape = new Konva.Group();
-
-    let background = new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: "white",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-
-    let liquidLayer = new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: Trough.colorForVolume(this.getVolume(), this.maxVolume),
-      stroke: "black",
-      strokeWidth: 1,
-    });
-
-    mainShape.add(background);
-    mainShape.add(liquidLayer);
-    return mainShape;
-  }
-}
-
 class Well extends Container {
-  draggable = false;
-  canDelete = false;
-
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    const { cross_section_type } = resourceData;
-    this.cross_section_type = cross_section_type;
+    this.cross_section_type = resourceData.cross_section_type;
+  }
+
+  get draggable() {
+    return false;
+  }
+  get canDelete() {
+    return false;
   }
 
   drawMainShape() {
+    const volume = this.getVolume();
+    const alpha = this.maxVolume > 0 ? volume / this.maxVolume : 0;
+    const liquidColor = `rgba(239, 35, 60, ${alpha})`;
+
+    // Create a group so we can draw a white background and then the liquid overlay
+    const group = new Konva.Group();
+
     if (this.cross_section_type === "circle") {
-      return new Konva.Circle({
+      // Draw a white circular background
+      const background = new Konva.Circle({
         radius: this.size_x / 2,
-        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
+        fill: "#E0EAEE",
         stroke: "black",
         strokeWidth: 1,
         offsetX: -this.size_x / 2,
         offsetY: -this.size_y / 2,
       });
+      group.add(background);
+
+      // Draw the liquid layer on top (may be fully transparent if empty)
+      const liquidLayer = new Konva.Circle({
+        radius: this.size_x / 2,
+        fill: liquidColor,
+        offsetX: -this.size_x / 2,
+        offsetY: -this.size_y / 2,
+      });
+      group.add(liquidLayer);
     } else {
-      return new Konva.Rect({
+      // Draw a white rectangular background
+      const background = new Konva.Rect({
         width: this.size_x,
         height: this.size_y,
-        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
+        fill: "#E0EAEE",
         stroke: "black",
         strokeWidth: 1,
       });
+      group.add(background);
+
+      // Draw the liquid layer on top (transparent if empty)
+      const liquidLayer = new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        fill: liquidColor,
+      });
+      group.add(liquidLayer);
     }
+
+    return group;
+  }
+}
+
+class Trough extends Container {
+  drawMainShape() {
+    // exactly the same pattern as Well (rect background + liquid overlay)
+    const volume = this.getVolume();
+    const alpha = this.maxVolume > 0 ? volume / this.maxVolume : 0;
+    const liquidColor = `rgba(239, 35, 60, ${alpha})`;
+
+    const group = new Konva.Group();
+
+    // white background
+    const background = new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: "#E0EAEE",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+
+    // red liquid overlay
+    const liquidLayer = new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: liquidColor,
+    });
+
+    group.add(background);
+    group.add(liquidLayer);
+    return group;
+  }
+}
+
+class Tube extends Container {
+  drawMainShape() {
+    // exactly the same pattern as Well (circle background + liquid overlay)
+    const volume = this.getVolume();
+    const alpha = this.maxVolume > 0 ? volume / this.maxVolume : 0;
+    const liquidColor = `rgba(239, 35, 60, ${alpha})`;
+
+    const radius = (1.25 * this.size_x) / 2;
+    const group = new Konva.Group();
+
+    // white circular background
+    const background = new Konva.Circle({
+      radius: radius,
+      fill: "#E0EAEE",
+      stroke: "black",
+      strokeWidth: 1,
+      offsetX: -radius,
+      offsetY: -radius,
+    });
+
+    // red liquid overlay
+    const liquidLayer = new Konva.Circle({
+      radius: radius,
+      fill: liquidColor,
+      offsetX: -radius,
+      offsetY: -radius,
+    });
+
+    group.add(background);
+    group.add(liquidLayer);
+    return group;
   }
 }
 
@@ -759,7 +876,7 @@ class TipRack extends Resource {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: "#2B2D42",
+      fill: this.getColor(),
       stroke: "black",
       strokeWidth: 1,
     });
@@ -868,10 +985,41 @@ class Trash extends Resource {
   }
 }
 
-// Nothing special.
-class Carrier extends Resource {}
-class PlateCarrier extends Carrier {}
-class TipCarrier extends Carrier {}
+class Carrier extends Resource {
+  getColor() {
+    return RESOURCE_COLORS["Carrier"];
+  }
+}
+
+class MFXCarrier extends Carrier {
+  getColor() {
+    return RESOURCE_COLORS["MFXCarrier"];
+  }
+}
+
+class PlateCarrier extends Carrier {
+  getColor() {
+    return RESOURCE_COLORS["PlateCarrier"];
+  }
+}
+
+class TipCarrier extends Carrier {
+  getColor() {
+    return RESOURCE_COLORS["TipCarrier"];
+  }
+}
+
+class TroughCarrier extends Carrier {
+  getColor() {
+    return RESOURCE_COLORS["TroughCarrier"];
+  }
+}
+
+class TubeCarrier extends Carrier {
+  getColor() {
+    return RESOURCE_COLORS["TubeCarrier"];
+  }
+}
 
 class ResourceHolder extends Resource {
   constructor(resourceData, parent) {
@@ -905,7 +1053,7 @@ class TubeRack extends Resource {
     return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: "#122D42",
+      fill: this.getColor(),
       stroke: "black",
       strokeWidth: 1,
     });
@@ -934,31 +1082,17 @@ class TubeRack extends Resource {
   }
 }
 
-class Tube extends Container {
-  draggable = false;
-  canDelete = false;
-
-  constructor(resourceData, parent) {
-    super(resourceData, parent);
-  }
-
-  drawMainShape() {
-    return new Konva.Circle({
-      radius: (1.25 * this.size_x) / 2,
-      fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
-      stroke: "black",
-      strokeWidth: 1,
-      offsetX: -this.size_x / 2,
-      offsetY: -this.size_y / 2,
-    });
-  }
-}
+class PlateHolder extends ResourceHolder {}
 
 class LiquidHandler extends Resource {
   drawMainShape() {
     return undefined; // just draw the children (deck and so on)
   }
 }
+
+// ===========================================================================
+// Utility for mapping resource type strings to classes
+// ===========================================================================
 
 function classForResourceType(type) {
   switch (type) {
@@ -980,12 +1114,20 @@ function classForResourceType(type) {
       return TipSpot;
     case "ResourceHolder":
       return ResourceHolder;
+    case "PlateHolder":
+      return PlateHolder;
     case "Carrier":
       return Carrier;
     case "PlateCarrier":
       return PlateCarrier;
     case "TipCarrier":
       return TipCarrier;
+    case "TroughCarrier":
+      return TroughCarrier;
+    case "TubeCarrier":
+      return TubeCarrier;
+    case "MFXCarrier":
+      return Carrier;
     case "Container":
       return Container;
     case "Trough":
