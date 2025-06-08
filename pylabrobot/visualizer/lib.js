@@ -237,16 +237,17 @@ class Resource {
   getColor() {
     if (RESOURCE_COLORS.hasOwnProperty(this.constructor.name)) {
       return RESOURCE_COLORS[this.constructor.name];
-    } else if (
+    }
+    if (
       this.constructor.name === "Resource" &&
       this.name.toLowerCase().includes("workcell")
     ) {
       return "lightgrey";
-    } else if (RESOURCE_COLORS["Resource"]) {
-      return RESOURCE_COLORS["Resource"];
-    } else {
-      return "#eab676";
     }
+    if (RESOURCE_COLORS["Resource"]) {
+      return RESOURCE_COLORS["Resource"];
+    }
+    return "#eab676";
   }
 
   // Properties influenced by mode
@@ -657,36 +658,6 @@ class Container extends Resource {
     return this.liquids.reduce((acc, liquid) => acc + liquid.volume, 0);
   }
 
-  aspirate(volume) {
-    if (volume > this.getVolume()) {
-      throw new Error(
-        `Aspirating ${volume}uL from well ${
-          this.name
-        } with ${this.getVolume()}uL`
-      );
-    }
-
-    // Remove liquids top down until we have removed the desired volume.
-    let volumeToRemove = volume;
-    for (let i = this.liquids.length - 1; i >= 0; i--) {
-      const liquid = this.liquids[i];
-      if (volumeToRemove >= liquid.volume) {
-        volumeToRemove -= liquid.volume;
-        this.liquids.splice(i, 1);
-      } else {
-        liquid.volume -= volumeToRemove;
-        volumeToRemove = 0;
-      }
-    }
-
-    this.update();
-  }
-
-  addLiquid(liquid) {
-    this.liquids.push(liquid);
-    this.update();
-  }
-
   setLiquids(liquids) {
     this.liquids = liquids;
     this.update();
@@ -702,19 +673,6 @@ class Container extends Resource {
       });
     }
     this.setLiquids(liquids);
-  }
-
-  dispense(volume) {
-    if (volume + this.volume > this.maxVolume) {
-      throw new Error(
-        `Adding ${volume}uL to well ${this.name} with ${this.volume}uL would exceed max volume of ${this.maxVolume}uL`
-      );
-    }
-
-    this.addLiquid({
-      volume: volume,
-      name: "Unknown liquid", // TODO: get liquid name from parameter?
-    });
   }
 
   serializeState() {
