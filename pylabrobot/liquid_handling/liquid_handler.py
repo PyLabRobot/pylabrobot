@@ -1835,6 +1835,7 @@ class LiquidHandler(Resource, Machine):
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
+    # Automatically assign lid to plate as child when dropping a lid to a plate (on or off resource stack)
     elif isinstance(destination, (Plate, ResourceStack)) and isinstance(resource, Lid):
       lid = resource
       if isinstance(destination, ResourceStack):
