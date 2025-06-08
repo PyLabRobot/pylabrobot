@@ -1617,15 +1617,16 @@ class LiquidHandler(Resource, Machine):
       for well, channel in zip(containers, self.head96.values()):
         # superfluous to have append in two places but the type checker is very angry and does not
         # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-        if well.tracker.is_disabled or not does_volume_tracking():
+        if well.tracker.is_disabled:
           liquids = [(None, volume)]
           all_liquids.append(liquids)
         else:
+          # tracker is enabled: update tracker liquid history
           liquids = well.tracker.remove_liquid(volume=volume)  # type: ignore
           all_liquids.append(liquids)
 
-        for liquid, vol in reversed(liquids):
-          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
+          for liquid, vol in reversed(liquids):
+            channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
       aspiration = MultiHeadAspirationPlate(
         wells=cast(List[Well], containers),
@@ -1760,15 +1761,22 @@ class LiquidHandler(Resource, Machine):
       if not len(containers) == 96:
         raise ValueError(f"dispense96 expects 96 wells, got {len(containers)}")
 
-      for channel, well in zip(self.head96.values(), containers):
+      for well, channel in zip(containers, self.head96.values()):
         # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
         # during the aspiration command
-        liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
-        reversed_liquids = list(reversed(liquids))
-        all_liquids.append(reversed_liquids)
 
-        for liquid, vol in reversed_liquids:
-          well.tracker.add_liquid(liquid=liquid, volume=vol)
+        # --> but why? tracking even when tracking is disabled causes errors since tracking can be turned off for aspirate96
+        # added tracking condition below:
+        if well.tracker.is_disabled:
+          reversed_liquids = [(None, volume)]
+          all_liquids.append(reversed_liquids)
+        else:
+          liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
+          reversed_liquids = list(reversed(liquids))
+          all_liquids.append(reversed_liquids)
+
+          for liquid, vol in reversed_liquids:
+            well.tracker.add_liquid(liquid=liquid, volume=vol)
 
       dispense = MultiHeadDispensePlate(
         wells=cast(List[Well], containers),
