@@ -689,32 +689,6 @@ class Container extends Resource {
   }
 }
 
-class Trough extends Container {
-  drawMainShape() {
-    const mainShape = new Konva.Group();
-
-    const background = new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: RESOURCE_COLORS["ContainerBackground"],
-      stroke: "black",
-      strokeWidth: 1,
-    });
-
-    const liquidLayer = new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: Trough.colorForVolume(this.getVolume(), this.maxVolume),
-      stroke: "black",
-      strokeWidth: 1,
-    });
-
-    mainShape.add(background);
-    mainShape.add(liquidLayer);
-    return mainShape;
-  }
-}
-
 class Well extends Container {
   get draggable() { return false; }
   get canDelete() { return false; }
