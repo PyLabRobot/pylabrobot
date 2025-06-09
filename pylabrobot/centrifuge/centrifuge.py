@@ -58,11 +58,11 @@ class Centrifuge(Machine, Resource):
         size_z=0,
         child_location=Coordinate.zero(),
       )
-      # TODO: figure out good locations for this.
-      self.assign_child_resource(self.bucket1, location=Coordinate.zero())
-      self.assign_child_resource(self.bucket2, location=Coordinate.zero())
     else:
       self.bucket1, self.bucket2 = buckets
+    # TODO: figure out good locations for this.
+    self.assign_child_resource(self.bucket1, location=Coordinate.zero())
+    self.assign_child_resource(self.bucket2, location=Coordinate.zero())
 
   async def open_door(self) -> None:
     await self.backend.open_door()
@@ -121,7 +121,7 @@ class Centrifuge(Machine, Resource):
     }
 
   @classmethod
-  def deserialize(cls, data: dict, allow_marshall: bool = False):
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
     backend = CentrifugeBackend.deserialize(data["backend"])
     buckets = tuple(ResourceHolder.deserialize(bucket) for bucket in data["buckets"])
     assert len(buckets) == 2
@@ -215,7 +215,7 @@ class Loader(Machine, ResourceHolder):
     }
 
   @classmethod
-  def deserialize(cls, data: dict, allow_marshall: bool = False):
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
     return cls(
       backend=LoaderBackend.deserialize(data["machine"]["backend"]),
       centrifuge=Centrifuge.deserialize(data["centrifuge"]),

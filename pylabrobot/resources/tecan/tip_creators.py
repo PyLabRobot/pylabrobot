@@ -323,11 +323,9 @@ def DiTi_1000ul_SBS_LiHa_tip() -> TecanTip:
 
 def DiTi_200ul_SBS_LiHa_tip() -> TecanTip:
   """Tip for DiTi_200ul_SBS_LiHa"""
-  print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
-    total_tip_length=-5.0,
+    total_tip_length=21.0,
     maximal_volume=220.0,
     tip_type=TipType.DITI,
   )

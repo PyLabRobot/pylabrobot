@@ -285,7 +285,7 @@ class MFXCarrier(Carrier[ResourceHolder]):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Dict[int, ResourceHolder],
+    sites: Optional[Dict[int, ResourceHolder]] = None,
     category="mfx_carrier",
     model: Optional[str] = None,
   ):

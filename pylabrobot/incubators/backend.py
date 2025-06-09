@@ -7,6 +7,7 @@ from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
   def __init__(self):
+    super().__init__()
     self._racks: Optional[List[PlateCarrier]] = None
 
   @property

@@ -30,10 +30,12 @@ To instantiate an ``ItemizedResource``, it is convenient to use the ``pylabrobot
      )
    )
 
-Subclasseses of :class:`ItemizedResource`
+
 ------------------------------------------
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
    plate/plate
+   tiprack/tiprack

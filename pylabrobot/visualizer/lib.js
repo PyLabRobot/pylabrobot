@@ -10,8 +10,6 @@ var selectedResource;
 
 var canvasWidth, canvasHeight;
 
-const robotWidthMM = 100 + 30 * 22.5; // mm, just the deck
-const robotHeightMM = 653.5; // mm
 var scaleX, scaleY;
 
 var resources = {}; // name -> Resource object
@@ -614,36 +612,6 @@ class Container extends Resource {
     return this.liquids.reduce((acc, liquid) => acc + liquid.volume, 0);
   }
 
-  aspirate(volume) {
-    if (volume > this.getVolume()) {
-      throw new Error(
-        `Aspirating ${volume}uL from well ${
-          this.name
-        } with ${this.getVolume()}uL`
-      );
-    }
-
-    // Remove liquids top down until we have removed the desired volume.
-    let volumeToRemove = volume;
-    for (let i = this.liquids.length - 1; i >= 0; i--) {
-      const liquid = this.liquids[i];
-      if (volumeToRemove >= liquid.volume) {
-        volumeToRemove -= liquid.volume;
-        this.liquids.splice(i, 1);
-      } else {
-        liquid.volume -= volumeToRemove;
-        volumeToRemove = 0;
-      }
-    }
-
-    this.update();
-  }
-
-  addLiquid(liquid) {
-    this.liquids.push(liquid);
-    this.update();
-  }
-
   setLiquids(liquids) {
     this.liquids = liquids;
     this.update();
@@ -659,19 +627,6 @@ class Container extends Resource {
       });
     }
     this.setLiquids(liquids);
-  }
-
-  dispense(volume) {
-    if (volume + this.volume > this.maxVolume) {
-      throw new Error(
-        `Adding ${volume}uL to well ${this.name} with ${this.volume}uL would exceed max volume of ${this.maxVolume}uL`
-      );
-    }
-
-    this.addLiquid({
-      volume: volume,
-      name: "Unknown liquid", // TODO: get liquid name from parameter?
-    });
   }
 
   serializeState() {

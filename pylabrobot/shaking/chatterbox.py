@@ -6,6 +6,12 @@ class ShakerChatterboxBackend(ShakerBackend):
 
   temperature: float = 0
 
+  async def setup(self):
+    print("Setting up shaker")
+
+  async def stop(self):
+    print("Stopping shaker")
+
   async def shake(self, speed: float):
     print("Shaking at speed", speed)
 

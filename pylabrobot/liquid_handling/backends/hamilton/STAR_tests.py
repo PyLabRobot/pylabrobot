@@ -16,6 +16,7 @@ from pylabrobot.resources import (
   PLT_CAR_P3AC_A01,
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
+  AGenBio_1_troughplate_190000uL_Fl,
   CellTreat_96_wellplate_350ul_Ub,
   Container,
   Coordinate,
@@ -23,10 +24,11 @@ from pylabrobot.resources import (
   Lid,
   ResourceStack,
   no_volume_tracking,
+  set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import STF, STARLetDeck
 
-from .STAR import (
+from .STAR_backend import (
   STAR,
   CommandSyntaxError,
   HamiltonNoTipError,
@@ -144,7 +146,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.star = STAR(read_timeout=2, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
-    self.star.io = unittest.mock.MagicMock()
+    self.star.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
 
   async def test_send_command_correct_response(self):
@@ -262,6 +264,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
     await self.lh.setup()
+
+    set_tip_tracking(enabled=False)
 
   async def asyncTearDown(self):
     await self.lh.stop()
@@ -654,10 +658,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs03479xd0yj3062yd0zj1874zd0th2840te2840gr1go1308ga0",
+          "C0PRid0002xs03479xd0yj3062yd0zj1874zd0th2800te2800gr1go1308ga0gc0",
         ),
       ]
     )
@@ -670,7 +674,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       size_y=0,
       size_z=0,
     )
-    self.lh.deck.assign_child_resource(
+    self.deck.assign_child_resource(
       plate_reader, location=Coordinate(1000, 264.7, 200 - 3.03)
     )  # 666: 00002
 
@@ -684,10 +688,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1924zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs03479xd0yj1142yd0zj1924zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs10427xd0yj3286yd0zj2063zd0th2840te2840gr4go1308ga0",
+          "C0PRid0002xs10427xd0yj3286yd0zj2063zd0th2800te2800gr4go1308ga0gc0",
         ),
       ]
     )
@@ -707,10 +711,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0003xs10427xd0yj3286yd0zj2063zd0gr4th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0003xs10427xd0yj3286yd0zj2063zd0gr4th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs03479xd0yj1142yd0zj1924zd0th2840te2840gr1go1308ga0",
+          "C0PRid0004xs03479xd0yj1142yd0zj1924zd0th2800te2800gr1go1308ga0gc0",
         ),
       ]
     )
@@ -723,10 +727,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs03479xd0yj2102yd0zj1950zd0th2840te2840gr1go1308ga0"
+          "C0PRid0002xs03479xd0yj2102yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -735,18 +739,18 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     stacking_area = ResourceStack("stacking_area", direction="z")
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
-    # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
+    # f.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
+    self.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
 
     assert self.plate.lid is not None
     await self.lh.move_lid(self.plate.lid, stacking_area)
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs00699xd0yj4567yd0zj2305zd0th2840te2840gr1go1308ga0"
+          "C0PRid0002xs00699xd0yj4567yd0zj2305zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -757,10 +761,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0003xs00699xd0yj4567yd0zj2305zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0003xs00699xd0yj4567yd0zj2305zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs03479xd0yj1142yd0zj1950zd0th2840te2840gr1go1308ga0"
+          "C0PRid0004xs03479xd0yj1142yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -769,7 +773,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     stacking_area = ResourceStack("stacking_area", direction="z")
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
+    self.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
 
     assert self.plate.lid is not None and self.other_plate.lid is not None
 
@@ -777,10 +781,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs00699xd0yj4567yd0zj2305zd0th2840te2840gr1go1308ga0"
+          "C0PRid0002xs00699xd0yj4567yd0zj2305zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -790,10 +794,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0003xs03479xd0yj2102yd0zj1950zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0003xs03479xd0yj2102yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs00699xd0yj4567yd0zj2405zd0th2840te2840gr1go1308ga0"
+          "C0PRid0004xs00699xd0yj4567yd0zj2405zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -806,10 +810,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0005xs00699xd0yj4567yd0zj2405zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0005xs00699xd0yj4567yd0zj2405zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
         _any_write_and_read_command_call(
-          "C0PRid0006xs03479xd0yj1142yd0zj1950zd0th2840te2840gr1go1308ga0"
+          "C0PRid0006xs03479xd0yj1142yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -821,10 +825,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0007xs00699xd0yj4567yd0zj2305zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0007xs00699xd0yj4567yd0zj2305zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
         _any_write_and_read_command_call(
-          "C0PRid0008xs03479xd0yj2102yd0zj1950zd0th2840te2840gr1go1308ga0"
+          "C0PRid0008xs03479xd0yj2102yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -844,12 +848,12 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
-        _any_write_and_read_command_call("C0PMid0002xs03979xd0yj3062yd0zj2432zd0gr1th2840ga1xe4 1"),
-        _any_write_and_read_command_call("C0PMid0003xs02979xd0yj4022yd0zj2432zd0gr1th2840ga1xe4 1"),
+        _any_write_and_read_command_call("C0PMid0002xs03979xd0yj3062yd0zj2405zd0gr1th2800ga1xe4 1"),
+        _any_write_and_read_command_call("C0PMid0003xs02979xd0yj4022yd0zj2405zd0gr1th2800ga1xe4 1"),
         _any_write_and_read_command_call(
-          "C0PRid0004xs03479xd0yj2102yd0zj1874zd0th2840te2840gr1go1308ga0"
+          "C0PRid0004xs03479xd0yj2102yd0zj1874zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -918,16 +922,16 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0ZTid0001xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2840tt14"
+          "C0ZTid0001xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2800tt14"
         ),
         _any_write_and_read_command_call(
-          "C0ZPid0002xs03479xd0yj1142yv0050zj1876zy0500yo0885yg0825yw15" "th2840te2840"
+          "C0ZPid0002xs03479xd0yj1142yv0050zj1876zy0500yo0885yg0825yw15" "th2800te2800"
         ),
         _any_write_and_read_command_call(
-          "C0ZRid0003xs03479xd0yj2102zj1876zi000zy0500yo0885th2840te2840"
+          "C0ZRid0003xs03479xd0yj2102zj1876zi000zy0500yo0885th2800te2800"
         ),
         _any_write_and_read_command_call(
-          "C0ZSid0004xs07975xd0ya1240yb1065tp2150tz2050th2840te2840"
+          "C0ZSid0004xs07975xd0ya1240yb1065tp2150tz2050th2800te2800"
         ),
       ]
     )
@@ -962,16 +966,16 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs04829xd0yj2101yd0zj2143zd0th2840te2840gr1go1308ga0",
+          "C0PRid0002xs04829xd0yj2101yd0zj2143zd0th2800te2800gr1go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs04829xd0yj2101yd0zj2143zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0003xs04829xd0yj2101yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2840te2840gr1go1308ga0"
+          "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2800te2800gr1go1308ga0gc0"
         ),
       ]
     )
@@ -983,16 +987,16 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs02317xd0yj1644yd0zj1884zd0th2840te2840gr4go1308ga0",
+          "C0PRid0002xs02317xd0yj1644yd0zj1884zd0th2800te2800gr4go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2840te2840gw4go0881gb0818gt20ga0gc1",
+          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2800te2800gw4go0881gb0818gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2840te2840gr4go0881ga0",
+          "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2800te2800gr4go0881ga0gc0",
         ),
       ]
     )
@@ -1004,16 +1008,16 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs02317xd0yj1644yd0zj1884zd0th2840te2840gr2go1308ga0",
+          "C0PRid0002xs02317xd0yj1644yd0zj1884zd0th2800te2800gr2go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2840te2840gw4go0881gb0818gt20ga0gc1",
+          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2800te2800gw4go0881gb0818gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2840te2840gr2go0881ga0",
+          "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2800te2800gr2go0881ga0gc0",
         ),
       ]
     )
@@ -1039,22 +1043,227 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1142yd0zj2242zd0gr1th2840te2840gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1142yd0zj2242zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0002xs02318xd0yj1644yd0zj1983zd0th2840te2840gr4go1308ga0",
+          "C0PRid0002xs02318xd0yj1644yd0zj1983zd0th2800te2800gr4go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02318xd0yj1644yd0zj1983zd0gr1th2840te2840gw4go0885gb0822gt20ga0gc1",
+          "C0PPid0003xs02318xd0yj1644yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0004xs02315xd0yj3104yd0zj1983zd0th2840te2840gr3go0885ga0",
+          "C0PRid0004xs02315xd0yj3104yd0zj1983zd0th2800te2800gr3go0885ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0005xs02315xd0yj3104yd0zj1983zd0gr1th2840te2840gw4go0885gb0822gt20ga0gc1",
+          "C0PPid0005xs02315xd0yj3104yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc1",
         ),
         _any_write_and_read_command_call(
-          "C0PRid0006xs04829xd0yj1142yd0zj2242zd0th2840te2840gr4go0885ga0",
+          "C0PRid0006xs04829xd0yj1142yd0zj2242zd0th2800te2800gr4go0885ga0gc0",
         ),
+      ]
+    )
+
+
+class STARFoilTests(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.star = STAR()
+    self.star._write_and_read_command = unittest.mock.AsyncMock()
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.star, deck=self.deck)
+
+    tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
+    tip_carrier[1] = self.tip_rack = HT(name="tip_rack")
+    self.deck.assign_child_resource(tip_carrier, rails=1)
+
+    plt_carrier = PLT_CAR_L5AC_A00(name="plt_carrier")
+    plt_carrier[0] = self.plate = AGenBio_1_troughplate_190000uL_Fl(name="plate")
+    self.well = self.plate.get_well("A1")
+    self.deck.assign_child_resource(plt_carrier, rails=10)
+
+    self.star._num_channels = 8
+    self.star.core96_head_installed = True
+    self.star.iswap_installed = True
+    self.star.setup = unittest.mock.AsyncMock()
+    self.star._core_parked = True
+    self.star._iswap_parked = True
+    await self.lh.setup()
+
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+
+  async def test_pierce_foil_wide(self):
+    aspiration_channels = [1, 2, 3, 4, 5, 6]
+    hold_down_channels = [0, 7]
+    self.star._write_and_read_command.side_effect = [
+      "C0JXid0051er00/00",
+      "C0RYid0052er00/00ry+1530 +1399 +1297 +1196 +1095 +0994 +0892 +0755",
+      "C0JYid0053er00/00",
+      "C0RZid0054er00/00rz+2476 +2476 +2476 +2476 +2476 +2476 +2476 +2476",
+      "C0JZid0055er00/00",
+      "C0RYid0056er00/00ry+1530 +1399 +1297 +1196 +1095 +0994 +0892 +0755",
+      "C0JYid0057er00/00",
+      "C0KZid0058er00/00",
+      "C0KZid0059er00/00",
+      "C0RZid0060er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0RZid0061er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0JZid0062er00/00",
+      "C0ZAid0063er00/00",
+    ]
+    await self.star.pierce_foil(
+      wells=[self.well],
+      piercing_channels=aspiration_channels,
+      hold_down_channels=hold_down_channels,
+      move_inwards=4,
+      one_by_one=False,
+      spread="wide",
+    )
+    self.star._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call("C0JXid0003xs03702"),
+        _any_write_and_read_command_call("C0RYid0004"),
+        _any_write_and_read_command_call("C0JYid0005yp1530 1399 1297 1196 1095 0994 0892 0755"),
+        _any_write_and_read_command_call("C0RZid0006"),
+        _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
+        _any_write_and_read_command_call("C0RYid0008"),
+        _any_write_and_read_command_call("C0JYid0009yp1530 1399 1297 1196 1095 0994 0892 0755"),
+        _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
+        _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
+        _any_write_and_read_command_call("C0RZid0012"),
+        _any_write_and_read_command_call("C0RZid0013"),
+        _any_write_and_read_command_call("C0JZid0014zp2256 2406 2406 2406 2406 2406 2406 2256"),
+        _any_write_and_read_command_call("C0ZAid0015"),
+      ]
+    )
+
+  async def test_pierce_foil_tight(self):
+    aspiration_channels = [1, 2, 3, 4, 5, 6]
+    hold_down_channels = [0, 7]
+    self.star._write_and_read_command.side_effect = [
+      "C0JXid0064er00/00",
+      "C0RYid0065er00/00ry+1530 +1399 +1297 +1196 +1095 +0994 +0892 +0755",
+      "C0JYid0066er00/00",
+      "C0RZid0067er00/00rz+2476 +2476 +2476 +2476 +2476 +2476 +2476 +2476",
+      "C0JZid0068er00/00",
+      "C0RYid0069er00/00ry+1530 +1370 +1280 +1190 +1100 +1010 +0920 +0755",
+      "C0JYid0070er00/00",
+      "C0KZid0071er00/00",
+      "C0KZid0072er00/00",
+      "C0RZid0073er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0RZid0074er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0JZid0075er00/00",
+      "C0ZAid0076er00/00",
+    ]
+    await self.star.pierce_foil(
+      wells=[self.well],
+      piercing_channels=aspiration_channels,
+      hold_down_channels=hold_down_channels,
+      move_inwards=4,
+      one_by_one=False,
+      spread="tight",
+    )
+    self.star._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call("C0JXid0003xs03702"),
+        _any_write_and_read_command_call("C0RYid0004"),
+        _any_write_and_read_command_call("C0JYid0005yp1530 1370 1280 1190 1100 1010 0920 0755"),
+        _any_write_and_read_command_call("C0RZid0006"),
+        _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
+        _any_write_and_read_command_call("C0RYid0008"),
+        _any_write_and_read_command_call("C0JYid0009yp1530 1370 1280 1190 1100 1010 0920 0755"),
+        _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
+        _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
+        _any_write_and_read_command_call("C0RZid0012"),
+        _any_write_and_read_command_call("C0RZid0013"),
+        _any_write_and_read_command_call("C0JZid0014zp2256 2406 2406 2406 2406 2406 2406 2256"),
+        _any_write_and_read_command_call("C0ZAid0015"),
+      ]
+    )
+
+  async def test_pierce_foil_portrait_wide(self):
+    self.plate.rotate(z=90)
+    aspiration_channels = [1, 2, 3, 4, 5, 6]
+    hold_down_channels = [0, 7]
+    self.star._write_and_read_command.side_effect = [
+      "C0JXid0170er00/00",
+      "C0RYid0171er00/00ry+1530 +1399 +1297 +1196 +1095 +0994 +0892 +0755",
+      "C0JYid0172er00/00",
+      "C0RZid0173er00/00rz+2476 +2476 +2476 +2476 +2476 +2476 +2476 +2476",
+      "C0JZid0174er00/00",
+      "C0RYid0175er00/00ry+1825 +1735 +1582 +1429 +1275 +1122 +0969 +0755",
+      "C0JYid0176er00/00",
+      "C0KZid0177er00/00",
+      "C0KZid0178er00/00",
+      "C0RZid0179er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0RZid0180er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0JZid0181er00/00",
+      "C0ZAid0182er00/00",
+    ]
+    await self.star.pierce_foil(
+      wells=[self.well],
+      piercing_channels=aspiration_channels,
+      hold_down_channels=hold_down_channels,
+      move_inwards=4,
+      one_by_one=False,
+      spread="tight",
+    )
+    self.star._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call("C0JXid0003xs02634"),
+        _any_write_and_read_command_call("C0RYid0004"),
+        _any_write_and_read_command_call("C0JYid0005yp1667 1577 1487 1397 1307 1217 1127 0755"),
+        _any_write_and_read_command_call("C0RZid0006"),
+        _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
+        _any_write_and_read_command_call("C0RYid0008"),
+        _any_write_and_read_command_call("C0JYid0009yp1953 1735 1582 1429 1275 1122 0969 0755"),
+        _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
+        _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
+        _any_write_and_read_command_call("C0RZid0012"),
+        _any_write_and_read_command_call("C0RZid0013"),
+        _any_write_and_read_command_call("C0JZid0014zp2256 2406 2406 2406 2406 2406 2406 2256"),
+        _any_write_and_read_command_call("C0ZAid0015"),
+      ]
+    )
+
+  async def test_pierce_foil_portrait_tight(self):
+    self.plate.rotate(z=90)
+    aspiration_channels = [1, 2, 3, 4, 5, 6]
+    hold_down_channels = [0, 7]
+    self.star._write_and_read_command.side_effect = [
+      "C0JXid0183er00/00",
+      "C0RYid0184er00/00ry+1953 +1735 +1582 +1429 +1275 +1122 +0969 +0755",
+      "C0JYid0185er00/00",
+      "C0RZid0186er00/00rz+2476 +2476 +2476 +2476 +2476 +2476 +2476 +2476",
+      "C0JZid0187er00/00",
+      "C0RYid0188er00/00ry+1953 +1577 +1487 +1397 +1307 +1217 +1127 +0755",
+      "C0JYid0189er00/00",
+      "C0KZid0190er00/00",
+      "C0KZid0191er00/00",
+      "C0RZid0192er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0RZid0193er00/00rz+2256 +2083 +2083 +2083 +2083 +2083 +2083 +2256",
+      "C0JZid0194er00/00",
+      "C0ZAid0195er00/00",
+    ]
+    await self.star.pierce_foil(
+      wells=[self.well],
+      piercing_channels=aspiration_channels,
+      hold_down_channels=hold_down_channels,
+      move_inwards=4,
+      one_by_one=False,
+      spread="tight",
+    )
+    self.star._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call("C0JXid0003xs02634"),
+        _any_write_and_read_command_call("C0RYid0004"),
+        _any_write_and_read_command_call("C0JYid0005yp1953 1577 1487 1397 1307 1217 1127 0755"),
+        _any_write_and_read_command_call("C0RZid0006"),
+        _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
+        _any_write_and_read_command_call("C0RYid0008"),
+        _any_write_and_read_command_call("C0JYid0009yp1953 1577 1487 1397 1307 1217 1127 0755"),
+        _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
+        _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
+        _any_write_and_read_command_call("C0RZid0012"),
+        _any_write_and_read_command_call("C0RZid0013"),
+        _any_write_and_read_command_call("C0JZid0014zp2256 2406 2406 2406 2406 2406 2406 2256"),
+        _any_write_and_read_command_call("C0ZAid0015"),
       ]
     )

@@ -17,13 +17,58 @@ JSON: TypeAlias = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, 
 
 
 def get_plr_class_from_string(klass_type: str):
-  import pylabrobot.liquid_handling as lh_module
-  import pylabrobot.resources as resource_module
+  import pylabrobot.centrifuge as centrifuge_module
+  import pylabrobot.config as config_module
+  import pylabrobot.gui as gui_module
+  import pylabrobot.heating_shaking as heating_shaking_module
+  import pylabrobot.incubators as incubators_module
+  import pylabrobot.io as io_module
+  import pylabrobot.liquid_handling as liquid_handling_module
+  import pylabrobot.machines as machines_module
+  import pylabrobot.only_fans as only_fans_module
+  import pylabrobot.plate_reading as plate_reading_module
+  import pylabrobot.powder_dispensing as powder_dispensing_module
+  import pylabrobot.pumps as pumps_module
+  import pylabrobot.resources as resources_module
+  import pylabrobot.scales as scales_module
+  import pylabrobot.shaking as shaking_module
+  import pylabrobot.temperature_controlling as temperature_controlling_module
+  import pylabrobot.testing as testing_module
+  import pylabrobot.tests as tests_module
+  import pylabrobot.tilting as tilting_module
+  import pylabrobot.utils as utils_module
+  import pylabrobot.visualizer as visualizer_module
 
-  for name, obj in inspect.getmembers(resource_module) + inspect.getmembers(lh_module):
+  modules = [
+    centrifuge_module,
+    config_module,
+    gui_module,
+    heating_shaking_module,
+    incubators_module,
+    io_module,
+    liquid_handling_module,
+    machines_module,
+    only_fans_module,
+    plate_reading_module,
+    powder_dispensing_module,
+    pumps_module,
+    resources_module,
+    scales_module,
+    shaking_module,
+    temperature_controlling_module,
+    testing_module,
+    tests_module,
+    tilting_module,
+    utils_module,
+    visualizer_module,
+  ]
+
+  for name, obj in [
+    member for mod in modules for member in inspect.getmembers(mod, predicate=inspect.isclass)
+  ]:
     if inspect.isclass(obj) and name == klass_type:
       return obj
-  raise ValueError(f"Could not find class {klass_type}")
+  raise ValueError(f"Could not find class '{klass_type}'")
 
 
 def serialize(obj: Any) -> JSON:
@@ -65,7 +110,15 @@ def serialize(obj: Any) -> JSON:
 def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
   """Deserialize an object."""
 
-  if isinstance(data, (int, float, str, bool, type(None))):
+  if isinstance(data, str):
+    if data == "Infinity":
+      return math.inf
+    if data == "-Infinity":
+      return -math.inf
+    if data == "nan":
+      return math.nan
+    return data
+  if isinstance(data, (int, float, bool, type(None))):
     return data
   if isinstance(data, list):
     return [deserialize(item, allow_marshal=allow_marshal) for item in data]
@@ -73,15 +126,17 @@ def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
     if "type" in data:  # deserialize a class
       data = data.copy()
       klass_type = cast(str, data.pop("type"))
-      if klass_type == "function" and allow_marshal:
-        assert isinstance(data["code"], str)
-        code = marshal.loads(bytes.fromhex(data["code"]))
-        closure = (
-          tuple(deserialize(data["closure"], allow_marshal=allow_marshal))
-          if data["closure"]
-          else None
-        )
-        return types.FunctionType(code, globals(), closure=closure)
+      if klass_type == "function":
+        if allow_marshal:
+          assert isinstance(data["code"], str)
+          code = marshal.loads(bytes.fromhex(data["code"]))
+          closure = (
+            tuple(deserialize(data["closure"], allow_marshal=allow_marshal))
+            if data["closure"]
+            else None
+          )
+          return types.FunctionType(code, globals(), closure=closure)
+        return None
       if klass_type == "cell":
         return types.CellType(deserialize(data["contents"], allow_marshal=allow_marshal))
       klass = get_plr_class_from_string(klass_type)

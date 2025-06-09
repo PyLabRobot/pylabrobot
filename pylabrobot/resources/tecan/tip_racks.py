@@ -1,4 +1,6 @@
-"""Tecan tip racks"""
+# pylint: disable=empty-docstring
+# pylint: disable=invalid-name
+# pylint: disable=line-too-long
 
 from typing import Dict, Optional
 
@@ -88,15 +90,7 @@ class TecanTipRack(TipRack, TecanResource):
     category: str = "tecan_plate",
     model: Optional[str] = None,
   ):
-    super().__init__(
-      name,
-      size_x,
-      size_y,
-      size_z,
-      ordered_items=ordered_items,
-      category=category,
-      model=model,
-    )
+    super().__init__(name, size_x, size_y, size_z, ordered_items, category=category, model=model)
 
     self.z_travel = z_travel
     self.z_start = z_start

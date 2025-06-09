@@ -19,6 +19,23 @@ Special :class:`Plate` Tutorials
 
 ----
 
+Plate
+=====
+
+PLR is not actively enforcing a specific plate naming standard but recommends the following:
+
+.. image:: img/PLR_plate_naming_standards.png
+   :alt: PLR plate naming standards
+
+This standard is similar to the `Opentrons API labware naming standard <https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516>`_ but:
+
+1. Further sub-categorizes "wellplates" to facilitate communication with day-to-day users, and
+2. Adds information about the well-bottom geometry.
+
+*(WIP)*
+
+----
+
 Lids
 ----
 

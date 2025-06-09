@@ -22,4 +22,4 @@ Backends
   :recursive:
 
     chatterbox.ScaleChatterboxBackend
-    mettler_toledo.MettlerToledoWXS205SDU
+    mettler_toledo_backend.MettlerToledoWXS205SDU

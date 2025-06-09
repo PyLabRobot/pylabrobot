@@ -264,7 +264,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     wait: bool = True,
   ) -> Optional[str]:
     """Write a command to the Hamilton machine and read the response."""
-    self.io.write(cmd.encode(), timeout=write_timeout)
+    await self.io.write(cmd.encode(), timeout=write_timeout)
 
     if not wait:
       return None
@@ -296,7 +296,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     # Start reading thread if it is not already running.
     if len(self._waiting_tasks) == 1:  # self._reading_thread is None
-      self._reading_thread = threading.Thread(target=self._continuously_read)
+      self._reading_thread = threading.Thread(target=self._reading_thread_main)
       self._reading_thread.start()
 
   @abstractmethod
@@ -311,7 +311,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   def _parse_response(self, resp: str, fmt: Any) -> dict:
     """Parse a firmware response."""
 
-  def _continuously_read(self) -> None:
+  def _reading_thread_main(self) -> None:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(self._continuously_read())
+
+  async def _continuously_read(self) -> None:
     """Continuously read from the USB port until all tasks are completed.
 
     Tasks are stored in the `self._waiting_tasks` list, and contain a future that will be
@@ -335,7 +340,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
           del self._waiting_tasks[idx]
 
       try:
-        resp = self.io.read().decode("utf-8")
+        resp = (await self.io.read()).decode("utf-8")
       except TimeoutError:
         continue
 

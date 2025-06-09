@@ -22,4 +22,4 @@ Backends
   :recursive:
 
     chatterbox.PumpChatterboxBackend
-    cole_parmer.masterflex.Masterflex
+    cole_parmer.masterflex_backend.MasterflexBackend

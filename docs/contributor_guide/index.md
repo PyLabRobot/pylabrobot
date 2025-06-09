@@ -12,4 +12,5 @@ how-to-open-source
 
 new-machine-type
 new-concrete-backend
+visualizer
 ```

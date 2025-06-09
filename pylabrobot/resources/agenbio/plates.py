@@ -62,7 +62,7 @@ def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plat
   )
 
 
-def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
+def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. RES-75-4MW
   - Material: Polypropylene
@@ -96,7 +96,7 @@ def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.48,  # from spec
     size_z=43.80,  # measured
     lid=lid,
-    model=AGenBio_4_wellplate_Vb.__name__,
+    model=AGenBio_4_troughplate_75000_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=4,
@@ -147,7 +147,7 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
     name=name,
     size_x=127.76,  # from spec
     size_y=85.48,  # from spec
-    size_z=31.4,  # from spec
+    size_z=44.2,  # measured
     lid=lid,
     model=AGenBio_1_wellplate_Fl.__name__,
     ordered_items=create_ordered_items_2d(
