@@ -59,4 +59,7 @@ class VantageDeck(HamiltonDeck):
     return Coordinate(x=x, y=63, z=100)
 
   def serialize(self) -> dict:
-    return {"size": self.size, **super().serialize()}
+    super_serialized = super().serialize()
+    for key in ["size_x", "size_y", "size_z", "num_rails"]:
+      super_serialized.pop(key)
+    return {"size": self.size, **super_serialized}

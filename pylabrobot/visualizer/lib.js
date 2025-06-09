@@ -482,9 +482,14 @@ class HamiltonSTARDeck extends Deck {
 class VantageDeck extends Deck {
   constructor(resourceData) {
     super(resourceData, undefined);
-    const { num_rails, size } = resourceData;
-    this.num_rails = num_rails;
+    const { size } = resourceData;
     this.size = size;
+    if (size === 1.3) {
+      this.num_rails = 54;
+    } else {
+      alert(`Unsupported Vantage Deck size: ${size}. Only 1.3 is supported.`);
+      this.num_rails = 0;
+    }
     this.railHeight = 497;
   }
 
@@ -538,9 +543,6 @@ class VantageDeck extends Deck {
     return {
       ...super.serialize(),
       ...{
-        num_rails: this.num_rails,
-        with_trash: false,
-        with_trash96: false,
         size: this.size,
       },
     };
