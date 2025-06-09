@@ -44,7 +44,7 @@ def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plat
     name=name,
     size_x=127.76,  # from spec
     size_y=85.48,  # from spec
-    size_z=42.0,  # measured
+    size_z=42.5,  # from spec
     lid=lid,
     model=AGenBio_96_wellplate_Ub_2200ul.__name__,
     ordered_items=create_ordered_items_2d(
@@ -112,54 +112,6 @@ def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
 
 def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError("deprecated. use AGenBio_1_troughplate_190000uL_Fl instead")
-
-def AGenBio_1_troughplate_290000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-  """
-  AGenBio Catalog No. RES-290-F
-  - Material: Polypropylene
-  - Max. volume: 290 mL
-  """
-  INNER_WELL_WIDTH = 107.2  # measured
-  INNER_WELL_HEIGHT = 70.9  # measured
-
-  well_kwargs = {
-    "size_x": INNER_WELL_WIDTH,  # measured
-    "size_y": INNER_WELL_HEIGHT,  # measured
-    "size_z": 39.3,  # measured to bottom of well
-    "bottom_type": WellBottomType.FLAT,
-    "cross_section_type": CrossSectionType.RECTANGLE,
-    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_rectangle(
-      liquid_volume,
-      INNER_WELL_HEIGHT,
-      INNER_WELL_WIDTH,
-    ),
-    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_rectangle(
-      liquid_height,
-      INNER_WELL_HEIGHT,
-      INNER_WELL_WIDTH,
-    ),
-    "material_z_thickness": 1,
-  }
-
-  return Plate(
-    name=name,
-    size_x=127.76,  # from spec
-    size_y=85.48,  # from spec
-    size_z=45.0,  # measured with pipette
-    lid=lid,
-    model=AGenBio_1_wellplate_Fl.__name__,
-    ordered_items=create_ordered_items_2d(
-      Well,
-      num_items_x=1,
-      num_items_y=1,
-      dx=10.1,
-      dy=7.6,
-      dz=5.88,
-      item_dx=INNER_WELL_WIDTH,
-      item_dy=INNER_WELL_HEIGHT,
-      **well_kwargs,
-    ),
-  )
 
 
 def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
