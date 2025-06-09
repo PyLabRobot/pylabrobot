@@ -692,68 +692,61 @@ class Container extends Resource {
   }
 }
 
+class Trough extends Container {
+  drawMainShape() {
+    let mainShape = new Konva.Group();
+
+    let background = new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: "white",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+
+    let liquidLayer = new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: Trough.colorForVolume(this.getVolume(), this.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+    });
+
+    mainShape.add(background);
+    mainShape.add(liquidLayer);
+    return mainShape;
+  }
+}
+
 class Well extends Container {
+  draggable = false;
+  canDelete = false;
+
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    this.cross_section_type = resourceData.cross_section_type;
-  }
-
-  get draggable() {
-    return false;
-  }
-  get canDelete() {
-    return false;
+    const { cross_section_type } = resourceData;
+    this.cross_section_type = cross_section_type;
   }
 
   drawMainShape() {
-    const volume = this.getVolume();
-    const alpha = this.maxVolume > 0 ? volume / this.maxVolume : 0;
-    const liquidColor = `rgba(239, 35, 60, ${alpha})`;
-
-    // Create a group so we can draw a white background and then the liquid overlay
-    const group = new Konva.Group();
-
     if (this.cross_section_type === "circle") {
-      // Draw a white circular background
-      const background = new Konva.Circle({
+      return new Konva.Circle({
         radius: this.size_x / 2,
-        fill: "#E0EAEE",
+        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
         offsetX: -this.size_x / 2,
         offsetY: -this.size_y / 2,
       });
-      group.add(background);
-
-      // Draw the liquid layer on top (may be fully transparent if empty)
-      const liquidLayer = new Konva.Circle({
-        radius: this.size_x / 2,
-        fill: liquidColor,
-        offsetX: -this.size_x / 2,
-        offsetY: -this.size_y / 2,
-      });
-      group.add(liquidLayer);
     } else {
-      // Draw a white rectangular background
-      const background = new Konva.Rect({
+      return new Konva.Rect({
         width: this.size_x,
         height: this.size_y,
-        fill: "#E0EAEE",
+        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
       });
-      group.add(background);
-
-      // Draw the liquid layer on top (transparent if empty)
-      const liquidLayer = new Konva.Rect({
-        width: this.size_x,
-        height: this.size_y,
-        fill: liquidColor,
-      });
-      group.add(liquidLayer);
     }
-
-    return group;
   }
 }
 
@@ -780,40 +773,6 @@ class Trough extends Container {
       width: this.size_x,
       height: this.size_y,
       fill: liquidColor,
-    });
-
-    group.add(background);
-    group.add(liquidLayer);
-    return group;
-  }
-}
-
-class Tube extends Container {
-  drawMainShape() {
-    // exactly the same pattern as Well (circle background + liquid overlay)
-    const volume = this.getVolume();
-    const alpha = this.maxVolume > 0 ? volume / this.maxVolume : 0;
-    const liquidColor = `rgba(239, 35, 60, ${alpha})`;
-
-    const radius = (1.25 * this.size_x) / 2;
-    const group = new Konva.Group();
-
-    // white circular background
-    const background = new Konva.Circle({
-      radius: radius,
-      fill: "#E0EAEE",
-      stroke: "black",
-      strokeWidth: 1,
-      offsetX: -radius,
-      offsetY: -radius,
-    });
-
-    // red liquid overlay
-    const liquidLayer = new Konva.Circle({
-      radius: radius,
-      fill: liquidColor,
-      offsetX: -radius,
-      offsetY: -radius,
     });
 
     group.add(background);
@@ -889,25 +848,6 @@ class TipSpot extends Resource {
     this.update();
   }
 
-  setTip(has_tip, layer) {
-    this.has_tip = has_tip;
-    this.draw(layer);
-  }
-
-  pickUpTip(layer) {
-    if (!this.has_tip) {
-      throw new Error("No tip to pick up");
-    }
-    this.setTip(false, layer);
-  }
-
-  dropTip(layer) {
-    if (this.has_tip) {
-      throw new Error("Already has tip");
-    }
-    this.setTip(true, layer);
-  }
-
   serialize() {
     return {
       ...super.serialize(),
@@ -931,10 +871,28 @@ class TipSpot extends Resource {
   }
 }
 
+class Tube extends Container {
+  draggable = false;
+  canDelete = false;
+
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+  }
+
+  drawMainShape() {
+    return new Konva.Circle({
+      radius: (1.25 * this.size_x) / 2,
+      fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+      offsetX: -this.size_x / 2,
+      offsetY: -this.size_y / 2,
+    });
+  }
+}
+
 // Nothing special.
 class Trash extends Resource {
-  dropTip(layer) {} // just ignore
-
   drawMainShape() {
     if (resources["deck"].constructor.name) {
       return undefined;
