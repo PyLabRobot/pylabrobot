@@ -1970,7 +1970,18 @@ class LiquidHandler(Resource, Machine):
       assert (
         destination.direction == "z"
       ), "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = destination.get_absolute_location(z="top")
+
+      # the resource can be rotated wrt the ResourceStack. This is allowed as long
+      # as it's in multiples of 180 degrees. 90 degrees is not allowed.
+      if resource_rotation_wrt_destination % 180 != 0:
+        raise ValueError(
+          "Resource rotation wrt ResourceStack must be a multiple of 180 degrees, "
+          f"got {resource_rotation_wrt_destination} degrees"
+        )
+
+      to_location = destination.get_absolute_location() + destination.get_new_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      ).rotated(destination.get_absolute_rotation())
     elif isinstance(destination, Coordinate):
       to_location = destination
     elif isinstance(destination, ResourceHolder):
@@ -1979,7 +1990,7 @@ class LiquidHandler(Resource, Machine):
       child_wrt_parent = destination.get_default_child_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
-      to_location = (destination.get_absolute_location()) + child_wrt_parent
+      to_location = destination.get_absolute_location() + child_wrt_parent
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
