@@ -214,19 +214,13 @@ class Plate(ItemizedResource["Well"]):
     """Disable volume tracking for all wells in the plate."""
 
     for well in self.get_all_items():
-      # get_all_items() returns all items, including the lid
-      # ignore the lid since it does not have a tracker
-      if not isinstance(well, Lid):
-        well.tracker.disable()
+      well.tracker.disable()
 
   def enable_volume_trackers(self) -> None:
     """Enable volume tracking for all wells in the plate."""
 
     for well in self.get_all_items():
-      # get_all_items() returns all items, including the lid
-      # ignore the lid since it does not have a tracker
-      if not isinstance(well, Lid):
-        well.tracker.enable()
+      well.tracker.enable()
 
   def get_quadrant(
     self,
