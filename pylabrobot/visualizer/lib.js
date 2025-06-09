@@ -881,41 +881,12 @@ class Trash extends Resource {
   }
 }
 
-class Carrier extends Resource {
-  getColor() {
-    return RESOURCE_COLORS["Carrier"];
-  }
-}
-
-class MFXCarrier extends Carrier {
-  getColor() {
-    return RESOURCE_COLORS["MFXCarrier"];
-  }
-}
-
-class PlateCarrier extends Carrier {
-  getColor() {
-    return RESOURCE_COLORS["PlateCarrier"];
-  }
-}
-
-class TipCarrier extends Carrier {
-  getColor() {
-    return RESOURCE_COLORS["TipCarrier"];
-  }
-}
-
-class TroughCarrier extends Carrier {
-  getColor() {
-    return RESOURCE_COLORS["TroughCarrier"];
-  }
-}
-
-class TubeCarrier extends Carrier {
-  getColor() {
-    return RESOURCE_COLORS["TubeCarrier"];
-  }
-}
+class Carrier extends Resource {}
+class MFXCarrier extends Carrier {}
+class PlateCarrier extends Carrier {}
+class TipCarrier extends Carrier {}
+class TroughCarrier extends Carrier {}
+class TubeCarrier extends Carrier {}
 
 class ResourceHolder extends Resource {
   constructor(resourceData, parent) {
