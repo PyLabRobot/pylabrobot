@@ -1617,7 +1617,7 @@ class LiquidHandler(Resource, Machine):
       for well, channel in zip(containers, self.head96.values()):
         # superfluous to have append in two places but the type checker is very angry and does not
         # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-        if well.tracker.is_disabled:
+        if well.tracker.is_disabled or not does_volume_tracking():
           liquids = [(None, volume)]
           all_liquids.append(liquids)
         else:
@@ -1762,12 +1762,8 @@ class LiquidHandler(Resource, Machine):
         raise ValueError(f"dispense96 expects 96 wells, got {len(containers)}")
 
       for well, channel in zip(containers, self.head96.values()):
-        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
-        # during the aspiration command
-
-        # --> but why? tracking even when tracking is disabled causes errors since tracking can be turned off for aspirate96
-        # added tracking condition below:
-        if well.tracker.is_disabled:
+        # check if volume tracking is disabled
+        if well.tracker.is_disabled or not does_volume_tracking():
           reversed_liquids = [(None, volume)]
           all_liquids.append(reversed_liquids)
         else:
