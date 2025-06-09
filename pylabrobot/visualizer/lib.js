@@ -239,16 +239,7 @@ class Resource {
     if (RESOURCE_COLORS.hasOwnProperty(this.constructor.name)) {
       return RESOURCE_COLORS[this.constructor.name];
     }
-    if (
-      this.constructor.name === "Resource" &&
-      this.name.toLowerCase().includes("workcell")
-    ) {
-      return "lightgrey";
-    }
-    if (RESOURCE_COLORS["Resource"]) {
-      return RESOURCE_COLORS["Resource"];
-    }
-    return "#eab676";
+    return RESOURCE_COLORS["Resource"];
   }
 
   // Properties influenced by mode
