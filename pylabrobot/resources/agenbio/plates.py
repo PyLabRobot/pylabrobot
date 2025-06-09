@@ -12,6 +12,7 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
+
 def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. P-2.2-SQG-96
