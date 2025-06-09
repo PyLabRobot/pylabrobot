@@ -13,6 +13,55 @@ from pylabrobot.resources.well import (
 )
 
 
+def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plate:
+  """
+  AGenBio Catalog No. P-2.2-SQG-96
+  - Material: Polypropylene
+  - Max. volume: 2200 uL
+  """
+  INNER_WELL_WIDTH = 8  # measured
+  INNER_WELL_LENGTH = 8  # measured
+
+  well_kwargs = {
+    "size_x": INNER_WELL_WIDTH,  # measured
+    "size_y": INNER_WELL_LENGTH,  # measured
+    "size_z": 38.2,  # measured to bottom of well
+    "bottom_type": WellBottomType.FLAT,
+    "cross_section_type": CrossSectionType.RECTANGLE,
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_rectangle(
+      liquid_volume,
+      INNER_WELL_LENGTH,
+      INNER_WELL_WIDTH,
+    ),
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_rectangle(
+      liquid_height,
+      INNER_WELL_LENGTH,
+      INNER_WELL_WIDTH,
+    ),
+    "material_z_thickness": 1,
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.76,  # from spec
+    size_y=85.48,  # from spec
+    size_z=42.5,  # from spec
+    lid=lid,
+    model=AGenBio_96_wellplate_Ub_2200ul.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=9.38,  # measured
+      dy=6.24,  # measured
+      dz=3.8,  # measured
+      item_dx=9,
+      item_dy=9,
+      **well_kwargs,
+    ),
+  )
+
+
 def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. RES-75-4MW
