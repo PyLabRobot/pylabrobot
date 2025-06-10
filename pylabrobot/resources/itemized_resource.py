@@ -1,5 +1,6 @@
 import sys
 from abc import ABCMeta
+from collections import OrderedDict
 from string import ascii_uppercase as LETTERS
 from typing import (
   Dict,
@@ -47,7 +48,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     size_y: float,
     size_z: float,
     ordered_items: Optional[Dict[str, T]] = None,
-    ordering: Optional[List[str]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
@@ -62,8 +63,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         :func:`pylabrobot.resources.create_ordered_items_2d`. If this is specified, `ordering` must
         be `None`. Keys must be in transposed MS Excel style notation, e.g. "A1" for the first item,
         "B1" for the item below that, "A2" for the item to the right, etc.
-      ordering: The order of the items on the resource. This is a list of identifiers. If this is
-        specified, `ordered_items` must be `None`. See `ordered_items` for the format of the
+      ordering: The order of the items on the resource. This is a dict of item identifier <> item name.
+        If this is specified, `ordered_items` must be `None`. See `ordered_items` for the format of the
         identifiers.
       category: The category of the resource.
 
@@ -95,7 +96,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
           raise ValueError("Item location must be specified if supplied at initialization.")
         item.name = f"{self.name}_{item.name}"  # prefix item name with resource name
         self.assign_child_resource(item, location=item.location)
-      self._ordering = list(ordered_items.keys())
+      self._ordering = OrderedDict(
+        (identifier, item.name) for identifier, item in ordered_items.items()
+      )
     else:
       if ordering is None:
         raise ValueError("Must specify either `ordered_items` or `ordering`.")
@@ -155,11 +158,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if isinstance(identifier, (slice, range)):
       start, stop = identifier.start, identifier.stop
       if isinstance(identifier.start, str):
-        start = self._ordering.index(identifier.start)
+        start = list(self._ordering.keys()).index(identifier.start)
       elif identifier.start is None:
         start = 0
       if isinstance(identifier.stop, str):
-        stop = self._ordering.index(identifier.stop)
+        stop = list(self._ordering.keys()).index(identifier.stop)
       elif identifier.stop is None:
         stop = self.num_items
       identifier = list(range(start, stop, identifier.step or 1))
@@ -188,7 +191,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       identifier = LETTERS[row] + str(column + 1)  # standard transposed-Excel style notation
     if isinstance(identifier, str):
       try:
-        identifier = self._ordering.index(identifier)
+        identifier = list(self._ordering.keys()).index(identifier)
       except ValueError as e:
         raise IndexError(
           f"Item with identifier '{identifier}' does not exist on " f"resource '{self.name}'."
@@ -413,17 +416,17 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   def index_of_item(self, item: T) -> Optional[int]:
     """Return the index of the given item in the resource, or `None` if not found."""
-    for i, i_item in enumerate(self.children):
-      if i_item == item:
+    for i, i_item_name in enumerate(self._ordering.values()):
+      if i_item_name == item.name:
         return i
     return None
 
   def get_child_identifier(self, item: T) -> str:
     """Get the identifier of the item."""
-    index = self.index_of_item(item)
-    if index is None:
-      raise ValueError(f"Item {item} not found in resource.")
-    return self._ordering[index]
+    for identifier, i_item_name in self._ordering.items():
+      if i_item_name == item.name:
+        return identifier
+    raise ValueError(f"Item {item} not found in resource.")
 
   def get_all_items(self) -> List[T]:
     """Get all items in the resource. Items are in a 1D list, starting from the top left and going
