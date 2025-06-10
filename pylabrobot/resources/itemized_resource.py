@@ -1,6 +1,6 @@
-from collections import OrderedDict
 import sys
 from abc import ABCMeta
+from collections import OrderedDict
 from string import ascii_uppercase as LETTERS
 from typing import (
   Dict,
@@ -96,7 +96,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
           raise ValueError("Item location must be specified if supplied at initialization.")
         item.name = f"{self.name}_{item.name}"  # prefix item name with resource name
         self.assign_child_resource(item, location=item.location)
-      self._ordering = OrderedDict((identifier, item.name) for identifier, item in ordered_items.items())
+      self._ordering = OrderedDict(
+        (identifier, item.name) for identifier, item in ordered_items.items()
+      )
     else:
       if ordering is None:
         raise ValueError("Must specify either `ordered_items` or `ordering`.")
