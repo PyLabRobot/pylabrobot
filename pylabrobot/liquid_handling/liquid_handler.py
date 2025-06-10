@@ -2347,7 +2347,7 @@ class LiquidHandler(Resource, Machine):
     """
 
     if use_channels is None:
-      use_channels = list(range(self.backend.num_channels))
+      use_channels = list(range(len(tip_spots)))
 
     if len(use_channels) > self.backend.num_channels:
       raise ValueError(
@@ -2377,8 +2377,6 @@ class LiquidHandler(Resource, Machine):
     # Step 2: Probe each cluster
     for cluster in sorted_clusters:
       tip_subset, channel_subset, index_subset = zip(*cluster)
-
-      # TODO: what if there are more than self.backend.num_channels items in a cluster?
 
       try:
         await self.pick_up_tips(
