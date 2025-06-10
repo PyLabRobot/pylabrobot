@@ -102,6 +102,11 @@ class TemperatureController(ResourceHolder, Machine):
     self.target_temperature = None
     return await self.backend.deactivate()
 
+  async def stop(self):
+    """Stop the temperature controller and close the backend connection."""
+    await self.deactivate()
+    await super().stop()
+
   def serialize(self) -> dict:
     return {
       **Machine.serialize(self),
