@@ -158,7 +158,7 @@ class TecanDeck(Deck):
     summary_ = "Rail" + " " * 5 + "Resource" + " " * 19 + "Type" + " " * 16 + "Coordinates (mm)\n"
     summary_ += "=" * 95 + "\n"
 
-    def parse_resource(resource):
+    def parse_resource(resource) -> str:
       # TODO: print something else if resource is not assigned to a rails.
       rails = self._rails_for_x_coordinate(resource.location.x)
       rail_label = f"({rails})" if rails is not None else "     "

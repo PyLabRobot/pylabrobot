@@ -1,7 +1,7 @@
 Liquid Handling
 ===============
 
-Everything that that touches a liquid directly.
+Everything that touches a liquid directly.
 Examples:
 - Liquid handlers
 - Pumps
