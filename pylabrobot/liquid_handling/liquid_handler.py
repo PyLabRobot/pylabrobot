@@ -2334,3 +2334,80 @@ class LiquidHandler(Resource, Machine):
       "Cannot assign child resource to liquid handler. Use "
       "lh.deck.assign_child_resource() instead."
     )
+
+  async def probe_tip_presence_via_pickup(
+    self, tip_spots: List[TipSpot], use_channels: Optional[List[int]] = None
+  ) -> List[bool]:
+    """Probe tip presence by attempting pickup on each TipSpot.
+
+    Args:
+      tip_spots: TipSpots to probe.
+      use_channels: Channels to use (must match tip_spots length).
+
+    Returns:
+      List[bool]: True if tip is present, False otherwise.
+    """
+
+    if use_channels is None:
+      use_channels = list(range(len(tip_spots)))
+
+    if len(use_channels) > self.backend.num_channels:
+      raise ValueError(
+        "Liquid handler given more channels to use than exist: "
+        f"Given {len(use_channels)} channels to use but liquid handler "
+        f"only has {self.backend.num_channels}."
+      )
+
+    if len(use_channels) != len(tip_spots):
+      raise ValueError(
+        f"Length mismatch: received {len(use_channels)} channels for "
+        f"{len(tip_spots)} tip spots. One channel must be assigned per tip spot."
+      )
+
+    presence_flags = [True] * len(tip_spots)
+    z_height = tip_spots[0].get_absolute_location(z="top").z + 5
+
+    # Step 1: Cluster tip spots by x-coordinate
+    clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
+    for idx, tip_spot in enumerate(tip_spots):
+      assert tip_spot.location is not None, "TipSpot location must be at a location"
+      x = tip_spot.location.x
+      clusters_by_x.setdefault(x, []).append((tip_spot, use_channels[idx], idx))
+
+    sorted_clusters = [clusters_by_x[x] for x in sorted(clusters_by_x)]
+
+    # Step 2: Probe each cluster
+    for cluster in sorted_clusters:
+      tip_subset, channel_subset, index_subset = zip(*cluster)
+
+      try:
+        await self.pick_up_tips(
+          list(tip_subset),
+          use_channels=list(channel_subset),
+          minimum_traverse_height_at_beginning_of_a_command=z_height,
+          z_position_at_end_of_a_command=z_height,
+        )
+      except ChannelizedError as e:
+        for ch in e.errors:
+          if ch in channel_subset:
+            failed_local_idx = channel_subset.index(ch)
+            presence_flags[index_subset[failed_local_idx]] = False
+          else:
+            raise
+
+      # Step 3: Drop tips immediately after probing
+      if any(presence_flags[index] for index in index_subset):
+        spots = [ts for ts, _, i in cluster if presence_flags[i]]
+        use_channels = [uc for _, uc, i in cluster if presence_flags[i]]
+        try:
+          await self.drop_tips(
+            spots,
+            use_channels=use_channels,
+            # minimum_traverse_height_at_beginning_of_a_command=z_height,
+            z_position_at_end_of_a_command=z_height,
+          )
+        except Exception as e:
+          assert cluster[0][0].location is not None, "TipSpot location must be at a location"
+          print(f"Warning: drop_tips failed for cluster at x={cluster[0][0].location.x}: {e}")
+
+    return presence_flags
