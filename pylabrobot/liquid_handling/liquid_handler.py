@@ -2518,7 +2518,7 @@ class LiquidHandler(Resource, Machine):
 
   async def probe_tip_presence_via_pickup(
     self, tip_spots: List[TipSpot], use_channels: Optional[List[int]] = None
-  ) -> List[bool]:
+  ) -> Dict[str, bool]:
     """Probe tip presence by attempting pickup on each TipSpot.
 
     Args:
@@ -2526,7 +2526,7 @@ class LiquidHandler(Resource, Machine):
       use_channels: Channels to use (must match tip_spots length).
 
     Returns:
-      List[bool]: True if tip is present, False otherwise.
+      Dict[str, bool]: Mapping of tip spot names to presence flags.
     """
 
     if use_channels is None:
@@ -2591,4 +2591,4 @@ class LiquidHandler(Resource, Machine):
           assert cluster[0][0].location is not None, "TipSpot location must be at a location"
           print(f"Warning: drop_tips failed for cluster at x={cluster[0][0].location.x}: {e}")
 
-    return presence_flags
+    return {ts.name: flag for ts, flag in zip(tip_spots, presence_flags)}
