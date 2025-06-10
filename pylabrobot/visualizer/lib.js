@@ -470,10 +470,11 @@ class HamiltonSTARDeck extends Deck {
 
     // Draw vertical rails as lines
     for (let i = 0; i < this.num_rails; i++) {
+      const railBottomTickHeight = 10;
       const rail = new Konva.Line({
         points: [
           100 + i * 22.5, // 22.5 mm per rail
-          63,
+          63 - railBottomTickHeight,
           100 + i * 22.5, // 22.5 mm per rail
           this.railHeight + 63,
         ],
@@ -549,8 +550,9 @@ class VantageDeck extends Deck {
 
     for (let i = 0; i < this.num_rails; i++) {
       const railX = 32.5 + i * 22.5;
+      const railBottomTickHeight = 10;
       const rail = new Konva.Line({
-        points: [railX, 63, railX, this.railHeight + 63],
+        points: [railX, 63 - railBottomTickHeight, railX, this.railHeight + 63],
         stroke: "black",
         strokeWidth: 1,
       });
