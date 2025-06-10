@@ -2336,15 +2336,14 @@ class LiquidHandler(Resource, Machine):
   async def probe_tip_presence_via_pickup(
     self, tip_spots: List[TipSpot], use_channels: Optional[List[int]] = None
   ) -> List[bool]:
-    """
-    Probe tip presence by attempting pickup on each TipSpot.
+    """Probe tip presence by attempting pickup on each TipSpot.
 
     Args:
-        tip_spots: TipSpots to probe.
-        use_channels: Channels to use (must match tip_spots length).
+      tip_spots: TipSpots to probe.
+      use_channels: Channels to use (must match tip_spots length).
 
     Returns:
-        List[bool]: True if tip is present, False otherwise.
+      List[bool]: True if tip is present, False otherwise.
     """
 
     if use_channels is None:
@@ -2367,8 +2366,9 @@ class LiquidHandler(Resource, Machine):
     z_height = tip_spots[0].get_absolute_location(z="top").z + 5
 
     # Step 1: Cluster tip spots by x-coordinate
-    clusters_by_x = {}
+    clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
     for idx, tip_spot in enumerate(tip_spots):
+      assert tip_spot.location is not None, "TipSpot location must be at a location"
       x = tip_spot.location.x
       clusters_by_x.setdefault(x, []).append((tip_spot, use_channels[idx], idx))
 
@@ -2377,6 +2377,8 @@ class LiquidHandler(Resource, Machine):
     # Step 2: Probe each cluster
     for cluster in sorted_clusters:
       tip_subset, channel_subset, index_subset = zip(*cluster)
+
+      # TODO: what if there are more than self.backend.num_channels items in a cluster?
 
       try:
         await self.pick_up_tips(
@@ -2390,18 +2392,22 @@ class LiquidHandler(Resource, Machine):
           if ch in channel_subset:
             failed_local_idx = channel_subset.index(ch)
             presence_flags[index_subset[failed_local_idx]] = False
+          else:
+            raise
 
       # Step 3: Drop tips immediately after probing
-      successful = [(spot, ch) for spot, ch, i in cluster if presence_flags[i]]
-      if successful:
+      if any(presence_flags[index] for index in index_subset):
+        spots = [ts for ts, _, i in cluster if presence_flags[i]]
+        use_channels = [uc for _, uc, i in cluster if presence_flags[i]]
         try:
           await self.drop_tips(
-            [spot for spot, _ in successful],
-            use_channels=[ch for _, ch in successful],
+            spots,
+            use_channels=use_channels,
             # minimum_traverse_height_at_beginning_of_a_command=z_height,
             z_position_at_end_of_a_command=z_height,
           )
         except Exception as e:
+          assert cluster[0][0].location is not None, "TipSpot location must be at a location"
           print(f"Warning: drop_tips failed for cluster at x={cluster[0][0].location.x}: {e}")
 
     return presence_flags
