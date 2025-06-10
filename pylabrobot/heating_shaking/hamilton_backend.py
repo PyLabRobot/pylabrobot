@@ -60,6 +60,10 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
 class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   """Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box"""
 
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
+
   def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
     """
     Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
@@ -76,6 +80,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
     await self._initialize_lock()
+    await self._initialize_shaker_drive()
 
   async def stop(self):
     pass
@@ -136,6 +141,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
     return await self.interface.send_hhs_command(index=self.index, command="LI")
+
+  async def _initialize_shaker_drive(self):
+    """Initialize the shaker drive, homing to absolute position 0"""
+    return await self.interface.send_hhs_command(index=self.index, command="SI")
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """Firmware command for starting shaking."""

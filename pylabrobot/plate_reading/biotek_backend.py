@@ -129,19 +129,18 @@ class Cytation5Backend(ImageReaderBackend):
     logger.info("[cytation5] setting up")
 
     await self.io.setup()
-    self.io.usb_reset()
-    self.io.set_latency_timer(16)
-    self.io.set_baudrate(9600)  # 0x38 0x41
-    self.io.set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
+    await self.io.usb_reset()
+    await self.io.set_latency_timer(16)
+    await self.io.set_baudrate(9600)  # 0x38 0x41
     SIO_RTS_CTS_HS = 0x1 << 8
-    self.io.set_flowctrl(SIO_RTS_CTS_HS)
-    self.io.set_rts(True)
+    await self.io.set_flowctrl(SIO_RTS_CTS_HS)
+    await self.io.set_rts(True)
 
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
       self._version = await self.get_firmware_version()
     except TimeoutError:
-      self.io.set_baudrate(38_461)  # 4e c0
+      await self.io.set_baudrate(38_461)  # 4e c0
       self._version = await self.get_firmware_version()
 
     self._shaking = False
@@ -409,8 +408,8 @@ class Cytation5Backend(ImageReaderBackend):
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
     for _ in range(6):
-      self.io.usb_purge_rx_buffer()
-    self.io.usb_purge_tx_buffer()
+      await self.io.usb_purge_rx_buffer()
+    await self.io.usb_purge_tx_buffer()
 
   async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
     """If timeout is None, use self.timeout"""
@@ -589,7 +588,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
-    checksum = str(sum(cmd.encode()) % 100)
+    checksum = str(sum(cmd.encode()) % 100).zfill(2)
     cmd = cmd + checksum + "\x03"
     await self.send_command("D", cmd)
 
@@ -641,7 +640,7 @@ class Cytation5Backend(ImageReaderBackend):
       f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
       f"{emission_wavelength_str}000000000000000000210011"
     )
-    checksum = str((sum(cmd.encode()) + 7) % 100)  # don't know why +7
+    checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
     cmd = cmd + checksum + "\x03"
     resp = await self.send_command("D", cmd)
 
@@ -680,7 +679,7 @@ class Cytation5Backend(ImageReaderBackend):
       duration = str(max_duration).zfill(3)
       assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}{frequency}01"
-      checksum = str((sum(cmd.encode()) + 73) % 100)  # don't know why +73
+      checksum = str((sum(cmd.encode()) + 73) % 100).zfill(2)  # don't know why +73
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
 

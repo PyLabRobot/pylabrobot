@@ -31,6 +31,7 @@ from pylabrobot.resources import (
   Coordinate,
   Liquid,
   Resource,
+  Tip,
   TipRack,
   Well,
 )
@@ -945,9 +946,15 @@ class VantageBackend(HamiltonLiquidHandler):
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
-    tip_a1 = tip_spot_a1.get_tip()
-    assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(tip_a1)
+    prototypical_tip = None
+    for tip_spot in pickup.resource.get_all_items():
+      if tip_spot.has_tip():
+        prototypical_tip = tip_spot.get_tip()
+        break
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     offset_z = pickup.offset.z
 
@@ -1380,6 +1387,13 @@ class VantageBackend(HamiltonLiquidHandler):
     """Move the specified channel to the specified z coordinate."""
 
     return await self.position_single_channel_in_z_direction(channel + 1, round(z * 10))
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    return True
 
   # ============== Firmware Commands ==============
 

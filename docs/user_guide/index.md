@@ -18,6 +18,7 @@ _getting-started/rpi
 :caption: Machines
 :hidden:
 
+machines
 00_liquid-handling/_liquid-handling
 01_material-handling/_material-handling
 02_analytical/_analytical
@@ -49,12 +50,13 @@ This guide helps you get started with PyLabRobot (PLR) and shows you how to buil
 
 The guide is divided into three parts:
 
-- **Getting Started** – Learn how how to install PLR, and how its core system is designed.
+- **Getting Started** – Learn how to install PLR, and how its core system is designed.
 
 - **Machines** – Explore how to use the different types of lab hardware supported by PyLabRobot.
 
 - **Machine-Agnostic Features** – Discover powerful tools that work across all devices, like the visualizer, trackers, reusable protocol patterns, validation tools, and error handling.
 
+Check out [the list of supported machines](/user_guide/machines).
 
 <hr>
 

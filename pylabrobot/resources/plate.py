@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import (
   TYPE_CHECKING,
   Dict,
@@ -73,7 +74,7 @@ class Plate(ItemizedResource["Well"]):
     size_y: float,
     size_z: float,
     ordered_items: Optional[Dict[str, "Well"]] = None,
-    ordering: Optional[List[str]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
     category: str = "plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
