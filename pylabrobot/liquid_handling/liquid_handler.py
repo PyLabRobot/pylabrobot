@@ -2335,7 +2335,7 @@ class LiquidHandler(Resource, Machine):
 
   async def probe_tip_presence_via_pickup(
     self, tip_spots: List[TipSpot], use_channels: Optional[List[int]] = None
-  ) -> List[int]:
+  ) -> List[bool]:
     """
     Probe tip presence by attempting pickup on each TipSpot.
 
@@ -2344,7 +2344,7 @@ class LiquidHandler(Resource, Machine):
         use_channels: Channels to use (must match tip_spots length).
 
     Returns:
-        List[int]: 1 if tip is present, 0 otherwise.
+        List[bool]: True if tip is present, False otherwise.
     """
 
     if use_channels is None:
@@ -2363,7 +2363,7 @@ class LiquidHandler(Resource, Machine):
         f"{len(tip_spots)} tip spots. One channel must be assigned per tip spot."
       )
 
-    presence_flags = [1] * len(tip_spots)
+    presence_flags = [True] * len(tip_spots)
     z_height = tip_spots[0].get_absolute_location(z="top").z + 5
 
     # Step 1: Cluster tip spots by x-coordinate
@@ -2389,10 +2389,10 @@ class LiquidHandler(Resource, Machine):
         for ch in e.errors:
           if ch in channel_subset:
             failed_local_idx = channel_subset.index(ch)
-            presence_flags[index_subset[failed_local_idx]] = 0
+            presence_flags[index_subset[failed_local_idx]] = False
 
       # Step 3: Drop tips immediately after probing
-      successful = [(spot, ch) for spot, ch, i in cluster if presence_flags[i] == 1]
+      successful = [(spot, ch) for spot, ch, i in cluster if presence_flags[i]]
       if successful:
         try:
           await self.drop_tips(
