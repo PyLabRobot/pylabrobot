@@ -2344,7 +2344,7 @@ class LiquidHandler(Resource, Machine):
 
   from typing import List, Any, Generator
 
-  async def consolidate_tip_inventory(self, ignore_tiprack_list: List[str] = ["teaching_tip_rack"]):
+  async def consolidate_tip_inventory(self, tip_racks: List[TipRack]):
     """
     Consolidate partial tip racks on the deck by redistributing tips.
 
@@ -2354,14 +2354,6 @@ class LiquidHandler(Resource, Machine):
     as possible, grouped by tip model.
     Tips are moved efficiently to minimize pipetting steps, avoiding redundant
     visits to the same drop columns.
-
-    Args:
-        lh: The liquid handler instance providing access to deck resources and
-            pick/drop operations.
-        ignore_tiprack_list: List of tip rack names to exclude from consolidation.
-
-    Returns:
-        None. The function performs in-place tip redistribution via async pick/drop.
     """
 
     def merge_sublists(lists: List[List[int]], max_len: int) -> List[List[int]]:
@@ -2403,15 +2395,9 @@ class LiquidHandler(Resource, Machine):
       for i in range(0, len(list_l), chunk_size):
         yield list_l[i : i + chunk_size]
 
-    all_tipracks_on_deck_list = [
-      item
-      for item in self.get_all_children()
-      if isinstance(item, TipRack) and item.name not in ignore_tiprack_list
-    ]
-
     clusters_by_model: Dict[int, List[Tuple[TipRack, int]]] = {}
 
-    for idx, tip_rack in enumerate(all_tipracks_on_deck_list):
+    for idx, tip_rack in enumerate(tip_racks):
       # Only consider partially-filled tip_racks
       tip_status = [tip_spot.tracker.has_tip for tip_spot in tip_rack.children]
       partially_filled = any(tip_status) and not all(tip_status)
