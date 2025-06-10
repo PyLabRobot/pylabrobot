@@ -2422,32 +2422,29 @@ class LiquidHandler(Resource, Machine):
   async def probe_tip_inventory(
     self,
     tip_spots: List[TipSpot],
-    probing_fn: TipPresenceProbingMethod | None = None,
+    probing_fn: Optional[TipPresenceProbingMethod] = None,
+    use_channels: Optional[List[int]] = None,
   ) -> Dict[str, bool]:
     """Probe the presence of tips in multiple tip spots.
 
     The provided ``probing_fn`` is used for probing batches of tip spots. The
     default uses :meth:`probe_tip_presence_via_pickup`.
 
-    Examples
-    --------
-    Probe all tip spots in one or more tip racks.
+    Examples:
+      Probe all tip spots in one or more tip racks.
 
-    >>> import pylabrobot.resources.functional as F
-    >>> spots = F.get_all_tip_spots([tip_rack_1, tip_rack_2])
-    >>> presence = await lh.probe_tip_inventory(spots)
+      >>> import pylabrobot.resources.functional as F
+      >>> spots = F.get_all_tip_spots([tip_rack_1, tip_rack_2])
+      >>> presence = await lh.probe_tip_inventory(spots)
 
-    Parameters
-    ----------
-    tip_spots:
-      Tip spots to probe for presence of a tip.
-    probing_fn:
-      Function used to probe a batch of tip spots. Must accept ``tip_spots`` and
-      ``use_channels`` and return a mapping of tip spot names to boolean flags.
+    Args:
+      tip_spots:
+        Tip spots to probe for presence of a tip.
+      probing_fn:
+        Function used to probe a batch of tip spots. Must accept ``tip_spots`` and
+        ``use_channels`` and return a mapping of tip spot names to boolean flags.
 
-    Returns
-    -------
-    Dict[str, bool]
+    Returns:
       Mapping from tip spot names to whether a tip is present.
     """
 
@@ -2455,7 +2452,11 @@ class LiquidHandler(Resource, Machine):
       probing_fn = self.probe_tip_presence_via_pickup
 
     results: Dict[str, bool] = {}
+
     num_channels = self.backend.num_channels
+    if use_channels is None:
+      use_channels = list(range(num_channels))
+
     for i in range(0, len(tip_spots), num_channels):
       subset = tip_spots[i : i + num_channels]
       use_channels = list(range(len(subset)))
