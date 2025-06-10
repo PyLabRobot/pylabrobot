@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
@@ -120,7 +121,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     size_y: float,
     size_z: float,
     ordered_items: Optional[Dict[str, TipSpot]] = None,
-    ordering: Optional[List[str]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,
@@ -230,7 +231,7 @@ class NestedTipRack(TipRack):
     size_z: float,
     stacking_z_height: float,
     ordered_items: Optional[Dict[str, TipSpot]] = None,
-    ordering: Optional[List[str]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,

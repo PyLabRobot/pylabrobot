@@ -318,7 +318,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stack.get_absolute_size_z(), 30)
 
   async def test_move_plate_rotation(self):
-    rotations = [0, 90, 270, 360]
+    rotations = [0, 180, 360]  # rotation wrt site before AND after move
     grip_directions = [
       (GripDirection.LEFT, GripDirection.RIGHT),
       (GripDirection.FRONT, GripDirection.BACK),
@@ -343,7 +343,6 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         pickup_direction=pickup_direction,
         drop_direction=drop_direction,
       ):
-        print()
         self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
 
         plate = Plate(
