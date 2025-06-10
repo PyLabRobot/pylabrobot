@@ -11,11 +11,11 @@ import threading
 import warnings
 from typing import (
   Any,
+  Awaitable,
   Callable,
   Dict,
   List,
   Literal,
-  Awaitable,
   Optional,
   Sequence,
   Set,
