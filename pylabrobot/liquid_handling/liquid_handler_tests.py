@@ -1091,6 +1091,19 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     # test volume doens't change on failed dispense
     assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
 
+  async def test_96_head_volume_tracking(self):
+    for item in self.plate.get_all_items():
+      item.tracker.set_liquids([(Liquid.WATER, 10)])
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate96(self.plate, volume=10)
+    for i in range(96):
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
+      self.plate.get_item(i).tracker.get_used_volume() == 0
+    await self.lh.dispense96(self.plate, volume=10)
+    for i in range(96):
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
+      self.plate.get_item(i).tracker.get_used_volume() == 10
+
 
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):

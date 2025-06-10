@@ -1621,6 +1621,7 @@ class LiquidHandler(Resource, Machine):
           liquids = [(None, volume)]
           all_liquids.append(liquids)
         else:
+          # tracker is enabled: update tracker liquid history
           liquids = well.tracker.remove_liquid(volume=volume)  # type: ignore
           all_liquids.append(liquids)
 
@@ -1760,15 +1761,16 @@ class LiquidHandler(Resource, Machine):
       if not len(containers) == 96:
         raise ValueError(f"dispense96 expects 96 wells, got {len(containers)}")
 
-      for channel, well in zip(self.head96.values(), containers):
+      for well, channel in zip(containers, self.head96.values()):
         # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
         # during the aspiration command
         liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
         all_liquids.append(reversed_liquids)
 
-        for liquid, vol in reversed_liquids:
-          well.tracker.add_liquid(liquid=liquid, volume=vol)
+        if not well.tracker.is_disabled and does_volume_tracking():
+          for liquid, vol in reversed_liquids:
+            well.tracker.add_liquid(liquid=liquid, volume=vol)
 
       dispense = MultiHeadDispensePlate(
         wells=cast(List[Well], containers),
