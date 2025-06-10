@@ -15,6 +15,7 @@ from typing import (
   Dict,
   List,
   Literal,
+  Awaitable,
   Optional,
   Sequence,
   Set,
@@ -80,6 +81,12 @@ from .standard import (
 )
 
 logger = logging.getLogger("pylabrobot")
+
+
+TipPresenceProbingMethod = Callable[
+  [List[TipSpot], Optional[List[int]]],
+  Awaitable[Dict[str, bool]],
+]
 
 
 def check_contaminated(liquid_history_tip, liquid_history_well):
@@ -2411,3 +2418,48 @@ class LiquidHandler(Resource, Machine):
           print(f"Warning: drop_tips failed for cluster at x={cluster[0][0].location.x}: {e}")
 
     return {ts.name: flag for ts, flag in zip(tip_spots, presence_flags)}
+
+  async def probe_tip_inventory(
+    self,
+    tip_spots: List[TipSpot],
+    probing_fn: TipPresenceProbingMethod | None = None,
+  ) -> Dict[str, bool]:
+    """Probe the presence of tips in multiple tip spots.
+
+    The provided ``probing_fn`` is used for probing batches of tip spots. The
+    default uses :meth:`probe_tip_presence_via_pickup`.
+
+    Examples
+    --------
+    Probe all tip spots in one or more tip racks.
+
+    >>> import pylabrobot.resources.functional as F
+    >>> spots = F.get_all_tip_spots([tip_rack_1, tip_rack_2])
+    >>> presence = await lh.probe_tip_inventory(spots)
+
+    Parameters
+    ----------
+    tip_spots:
+      Tip spots to probe for presence of a tip.
+    probing_fn:
+      Function used to probe a batch of tip spots. Must accept ``tip_spots`` and
+      ``use_channels`` and return a mapping of tip spot names to boolean flags.
+
+    Returns
+    -------
+    Dict[str, bool]
+      Mapping from tip spot names to whether a tip is present.
+    """
+
+    if probing_fn is None:
+      probing_fn = self.probe_tip_presence_via_pickup
+
+    results: Dict[str, bool] = {}
+    num_channels = self.backend.num_channels
+    for i in range(0, len(tip_spots), num_channels):
+      subset = tip_spots[i : i + num_channels]
+      use_channels = list(range(len(subset)))
+      batch_result = await probing_fn(subset, use_channels)
+      results.update(batch_result)
+
+    return results
