@@ -16,7 +16,6 @@ from typing import (
 
 import pylabrobot.utils
 
-from . import plate
 from .resource import Resource
 
 if sys.version_info >= (3, 8):
@@ -201,10 +200,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       )
 
     # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
-    if not isinstance(
-      self.children[identifier], plate.Lid
-    ):  # can add more unwanted types here if needed later on
-      return cast(T, self.children[identifier])
+    return cast(T, self.children[identifier])
 
   def get_items(self, identifiers: Union[str, Sequence[int], Sequence[str]]) -> List[T]:
     """Get the items with the given identifier.
@@ -232,7 +228,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifiers, str):
       identifiers = pylabrobot.utils.expand_string_range(identifiers)
-    return [self.get_item(i) for i in identifiers if self.get_item(i) is not None]
+    return [self.get_item(i) for i in identifiers]
 
   @property
   def num_items(self) -> int:
