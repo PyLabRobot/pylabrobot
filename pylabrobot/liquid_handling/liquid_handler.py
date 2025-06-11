@@ -14,6 +14,7 @@ from typing import (
   Awaitable,
   Callable,
   Dict,
+  Generator,
   List,
   Literal,
   Optional,
@@ -2338,8 +2339,7 @@ class LiquidHandler(Resource, Machine):
   ):
     """Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute."""
     raise NotImplementedError(
-      "Cannot assign child resource to liquid handler. Use "
-      "lh.deck.assign_child_resource() instead."
+      "Cannot assign child resource to liquid handler. Use lh.deck.assign_child_resource() instead."
     )
 
   async def probe_tip_presence_via_pickup(
@@ -2464,3 +2464,168 @@ class LiquidHandler(Resource, Machine):
       results.update(batch_result)
 
     return results
+
+  async def consolidate_tip_inventory(self, tip_racks: List[TipRack]):
+    """
+    Consolidate partial tip racks on the deck by redistributing tips.
+
+    This function identifies partially-filled tip racks (excluding any in
+    `ignore_tiprack_list`) in the 'tip_inventory`, the subset of the deck tree
+    that is of type TipRack, and consolidates their tips into as few tip racks
+    as possible, grouped by tip model.
+    Tips are moved efficiently to minimize pipetting steps, avoiding redundant
+    visits to the same drop columns.
+    """
+
+    def merge_sublists(lists: List[List[TipSpot]], max_len: int) -> List[List[TipSpot]]:
+      """Merge adjacent sublists if combined length <= max_len, without splitting sublists."""
+      merged: List[List[TipSpot]] = []
+      buffer: List[TipSpot] = []
+
+      for sublist in lists:
+        if len(sublist) == 0:
+          continue  # skip empty sublists
+
+        if len(buffer) + len(sublist) <= max_len:
+          buffer.extend(sublist)
+        else:
+          if buffer:
+            merged.append(buffer)
+          buffer = sublist  # start new buffer
+
+      if len(buffer) > 0:
+        merged.append(buffer)
+
+      return merged
+
+    def divide_list_into_chunks(
+      list_l: List[TipSpot], chunk_size: int
+    ) -> Generator[List[TipSpot], None, None]:
+      """Divides a list into smaller chunks of a specified size.
+
+      Parameters:
+        - list_l: The list to be divided into chunks.
+        - chunk_size: The size of each chunk.
+
+      Returns:
+        A generator that yields chunks of the list.
+      """
+      for i in range(0, len(list_l), chunk_size):
+        yield list_l[i : i + chunk_size]
+
+    clusters_by_model: Dict[int, List[Tuple[TipRack, int]]] = {}
+
+    for idx, tip_rack in enumerate(tip_racks):
+      # Only consider partially-filled tip_racks
+      tip_status = [tip_spot.tracker.has_tip for tip_spot in tip_rack.get_all_items()]
+
+      if not (any(tip_status) and not all(tip_status)):
+        continue  # ignore non-partially-filled tip_racks
+
+      tipspots_w_tips = [
+        tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.get_all_items()) if has_tip
+      ]
+
+      # Identify model by hashed unique physical characteristics
+      current_model = hash(tipspots_w_tips[0].tracker.get_tip())
+      if not all(
+        hash(tip_spot.tracker.get_tip()) == current_model for tip_spot in tipspots_w_tips[1:]
+      ):
+        raise ValueError(
+          f"Tip rack {tip_rack.name} has mixed tip models, cannot consolidate: "
+          f"{[tip_spot.tracker.get_tip() for tip_spot in tipspots_w_tips]}"
+        )
+
+      num_empty_tipspots = len(tip_status) - len(tipspots_w_tips)
+      clusters_by_model.setdefault(current_model, []).append((tip_rack, num_empty_tipspots))
+
+    # Sort partially-filled tipracks from most to least empty
+    for model, rack_list in clusters_by_model.items():
+      rack_list.sort(key=lambda x: x[1])
+
+    # Consolidate one tip model at a time across all tip_racks of that model
+    for model, rack_list in clusters_by_model.items():
+      print(f"Consolidating: - {', '.join([rack.name for rack, _ in rack_list])}")
+
+      all_tip_spots_list = [
+        tip_spot for tip_rack, _ in rack_list for tip_spot in tip_rack.get_all_items()
+      ]
+
+      # 1: Record current tip state
+      current_tip_presence_list = [tip_spot.has_tip() for tip_spot in all_tip_spots_list]
+
+      # 2: Generate target/consolidated tip state
+      total_length = len(all_tip_spots_list)
+      num_tips_per_model = sum(current_tip_presence_list)
+
+      target_tip_presence_list = [i < num_tips_per_model for i in range(total_length)]
+
+      # 3: Calculate tip_spots involved in tip movement
+      tip_movement_list = [
+        c - t for c, t in zip(current_tip_presence_list, target_tip_presence_list)
+      ]
+
+      tip_origin_indices = [i for i, v in enumerate(tip_movement_list) if v == 1]
+      all_origin_tip_spots = [all_tip_spots_list[idx] for idx in tip_origin_indices]
+
+      tip_target_indices = [i for i, v in enumerate(tip_movement_list) if v == -1]
+      all_target_tip_spots = [all_tip_spots_list[idx] for idx in tip_target_indices]
+
+      # Only continue if tip_racks are not already consolidated
+      if len(all_target_tip_spots) == 0:
+        print("Tips already optimally consolidated!")
+        continue
+
+      # 4: Cluster target tip_spots by BOTH parent tip_rack & x-coordinate
+      def key_for_tip_spot(tip_spot: TipSpot) -> Tuple[str, float]:
+        """Key function to sort tip spots by parent name and x-coordinate."""
+        assert tip_spot.parent is not None and tip_spot.location is not None
+        return (tip_spot.parent.name, round(tip_spot.location.x, 3))
+
+      sorted_tip_spots = sorted(all_target_tip_spots, key=key_for_tip_spot)
+
+      target_tip_clusters_by_parent_x: Dict[Tuple[str, float], List[TipSpot]] = {}
+
+      for tip_spot in sorted_tip_spots:
+        key = key_for_tip_spot(tip_spot)
+        if key not in target_tip_clusters_by_parent_x:
+          target_tip_clusters_by_parent_x[key] = []
+        target_tip_clusters_by_parent_x[key].append(tip_spot)
+
+      current_tip_model = all_origin_tip_spots[0].tracker.get_tip()
+
+      # Ensure there are channels that can pick up the tip model
+      num_channels_available = len(
+        [
+          c
+          for c in range(self.backend.num_channels)
+          if self.backend.can_pick_up_tip(c, current_tip_model)
+        ]
+      )
+
+      # 5: Optimize speed
+      if num_channels_available == 0:
+        raise ValueError(f"No channel capable of handling tips on deck: {current_tip_model}")
+
+      # by aggregating drop columns i.e. same drop column should not be visited twice!
+      if num_channels_available >= 8:  # physical constraint of tip_rack's having 8 rows
+        merged_target_tip_clusters = merge_sublists(
+          list(target_tip_clusters_by_parent_x.values()), max_len=8
+        )
+      else:  # by chunking drop tip_spots list into size of available channels
+        merged_target_tip_clusters = list(
+          divide_list_into_chunks(all_target_tip_spots, chunk_size=num_channels_available)
+        )
+
+      len_transfers = len(merged_target_tip_clusters)
+
+      # 6: Execute tip movement/consolidation
+      for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
+        print(f"   - tip transfer cycle: {idx+1} / {len_transfers}")
+        num_channels = len(target_tip_spots)
+        use_channels = list(range(num_channels))
+
+        origin_tip_spots = [all_origin_tip_spots.pop(0) for _ in range(num_channels)]
+
+        await self.pick_up_tips(origin_tip_spots, use_channels=use_channels)
+        await self.drop_tips(target_tip_spots, use_channels=use_channels)
