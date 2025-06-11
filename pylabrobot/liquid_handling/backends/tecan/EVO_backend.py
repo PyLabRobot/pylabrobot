@@ -212,8 +212,10 @@ class EVOBackend(TecanLiquidHandler):
     self._pnp_connected: Optional[bool] = None
     self._mca_connected: Optional[bool] = None
 
-    self._z_traversal_height = 210 # mm, the default value for SHZ command
-    self._z_roma_traversal_height = 68.7  # mm, is what was used to develop this but possibly too low
+    self._z_traversal_height = 210  # mm, the default value for SHZ command
+    self._z_roma_traversal_height = (
+      68.7  # mm, is what was used to develop this but possibly too low
+    )
 
   @property
   def num_channels(self) -> int:
@@ -853,10 +855,10 @@ class EVOBackend(TecanLiquidHandler):
   ) -> Tuple[int, int, Dict[str, int]]:
     """Creates x, y, and z positions used by RoMa ops."""
 
-    parent = resource.parent # PlateHolder
+    parent = resource.parent  # PlateHolder
     if parent is None:
       raise ValueError(f"Operation is not supported by resource {resource}.")
-    parent = parent.parent # PlateCarrier
+    parent = parent.parent  # PlateCarrier
     # TODO: this is probably the current plate carrier, not the destination.
     # Also, we should just support any coordinate as the destination.
     if not isinstance(parent, TecanPlateCarrier):
@@ -873,7 +875,7 @@ class EVOBackend(TecanLiquidHandler):
     y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + parent.roma_y)
     z_positions = {
       "safe": z_range - int(parent.roma_z_safe),
-      "travel": int(self._z_roma_traversal_height  * 10),
+      "travel": int(self._z_roma_traversal_height * 10),
       "end": z_range - int(parent.roma_z_end - offset.z * 10),
     }
 
