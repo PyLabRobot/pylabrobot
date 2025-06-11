@@ -2587,45 +2587,44 @@ class LiquidHandler(Resource, Machine):
 
       # Only continue if tip_racks are not already consolidated
       if len(target_tip_clusters_by_parent_x) > 0:
-        current_tip_model = all_origin_tip_spots[0].tracker.get_tip()
-
-        # Ensure there are channels that can pick up the tip model
-        num_channels_available = len(
-          [
-            c
-            for c in range(self.backend.num_channels)
-            if self.backend.can_pick_up_tip(c, current_tip_model)
-          ]
-        )
-
-        # 5: Optimise speed
-        if num_channels_available > 0:
-          # by aggregating drop columns i.e. same drop column should not be visited twice!
-          if num_channels_available >= 8:  # physical constraint of tip_rack's having 8 rows
-            merged_target_tip_clusters = merge_sublists(
-              target_tip_clusters_by_parent_x.values(), max_len=8
-            )
-
-          else:  # by chunking drop tip_spots list into size of available channels
-            merged_target_tip_clusters = list(
-              divide_list_into_chunks(all_target_tip_spots, chunk_size=num_channels_available)
-            )
-
-          len_transfers = len(merged_target_tip_clusters)
-
-          # 6: Execute tip movement/consolidation
-          for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
-            print(f"     - tip transfer cycle: {idx} / {len_transfers - 1}")
-            num_channels = len(target_tip_spots)
-            use_channels = list(range(num_channels))
-
-            origin_tip_spots = [all_origin_tip_spots.pop(0) for idx in range(num_channels)]
-
-            await self.pick_up_tips(origin_tip_spots, use_channels=use_channels)
-
-            await self.drop_tips(target_tip_spots, use_channels=use_channels)
-        else:
-          print("Tips already optimally consolidated!")
-
-      else:
         raise ValueError(f"No channel capable of handling tips on deck: {current_tip_model}")
+
+      current_tip_model = all_origin_tip_spots[0].tracker.get_tip()
+
+      # Ensure there are channels that can pick up the tip model
+      num_channels_available = len(
+        [
+          c
+          for c in range(self.backend.num_channels)
+          if self.backend.can_pick_up_tip(c, current_tip_model)
+        ]
+      )
+
+      # 5: Optimise speed
+      if num_channels_available > 0:
+        # by aggregating drop columns i.e. same drop column should not be visited twice!
+        if num_channels_available >= 8:  # physical constraint of tip_rack's having 8 rows
+          merged_target_tip_clusters = merge_sublists(
+            target_tip_clusters_by_parent_x.values(), max_len=8
+          )
+
+        else:  # by chunking drop tip_spots list into size of available channels
+          merged_target_tip_clusters = list(
+            divide_list_into_chunks(all_target_tip_spots, chunk_size=num_channels_available)
+          )
+
+        len_transfers = len(merged_target_tip_clusters)
+
+        # 6: Execute tip movement/consolidation
+        for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
+          print(f"     - tip transfer cycle: {idx} / {len_transfers - 1}")
+          num_channels = len(target_tip_spots)
+          use_channels = list(range(num_channels))
+
+          origin_tip_spots = [all_origin_tip_spots.pop(0) for idx in range(num_channels)]
+
+          await self.pick_up_tips(origin_tip_spots, use_channels=use_channels)
+
+          await self.drop_tips(target_tip_spots, use_channels=use_channels)
+      else:
+        print("Tips already optimally consolidated!")
