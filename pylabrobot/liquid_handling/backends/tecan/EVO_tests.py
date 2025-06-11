@@ -119,7 +119,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
           command="PPR",
           params=[30, None, None, None, None, None, None, None],
         ),
-        call(module="C5", command="AGT", params=[1, 768, 210, 0]),
+        call(module="C5", command="AGT", params=[1, 1023, 210, 0]),
       ]
     )
 

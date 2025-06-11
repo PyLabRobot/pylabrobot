@@ -32,3 +32,7 @@ class HeaterShaker(TemperatureController, Shaker):
       model=model,
     )
     self.backend: HeaterShakerBackend = backend  # fix type
+
+  async def stop(self):
+    await TemperatureController.stop(self)
+    await Shaker.stop(self)

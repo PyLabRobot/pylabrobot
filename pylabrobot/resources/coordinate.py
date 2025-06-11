@@ -46,6 +46,16 @@ class Coordinate:
   def __neg__(self) -> Coordinate:
     return Coordinate(-self.x, -self.y, -self.z)
 
+  def __mul__(self, other) -> Coordinate:
+    if isinstance(other, (int, float)):
+      return Coordinate(self.x * other, self.y * other, self.z * other)
+    raise TypeError(f"Cannot multiply Coordinate by {type(other)}")
+
+  def __truediv__(self, other) -> Coordinate:
+    if isinstance(other, (int, float)):
+      return Coordinate(self.x / other, self.y / other, self.z / other)
+    raise TypeError(f"Cannot divide Coordinate by {type(other)}")
+
   def vector(self) -> list[float]:
     return [self.x, self.y, self.z]
 
