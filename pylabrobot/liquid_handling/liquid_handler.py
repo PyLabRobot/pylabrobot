@@ -2522,7 +2522,9 @@ class LiquidHandler(Resource, Machine):
       if not (any(tip_status) and not all(tip_status)):
         continue  # ignore non-partially-filled tip_racks
 
-      tipspots_w_tips = [tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.children) if has_tip]
+      tipspots_w_tips = [
+        tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.children) if has_tip
+      ]
 
       # Identify model by hashed unique physical characteristics
       current_model = hash(tipspots_w_tips[0].tracker.get_tip())
