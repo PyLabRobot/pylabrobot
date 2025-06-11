@@ -213,7 +213,7 @@ class EVOBackend(TecanLiquidHandler):
     self._mca_connected: Optional[bool] = None
 
     self._z_traversal_height = 210 # mm, the default value for SHZ command
-    self._z_roma_traversal_height = 200  # mm, seems to be a good default for RoMa
+    self._z_roma_traversal_height = 68.7  # mm, is what was used to develop this but possibly too low
 
   @property
   def num_channels(self) -> int:
@@ -691,9 +691,7 @@ class EVOBackend(TecanLiquidHandler):
       tip_length = int(ops[i].tip.total_tip_length * 10)
       # z travel seems to only be used for aspiration and dispense right now
       if isinstance(op, (SingleChannelAspiration, SingleChannelDispense)):
-        z_positions["travel"][channel] = get_z_position(
-          self._z_traversal_height * 10, par.get_absolute_location().z + op.offset.z, tip_length
-        )
+        z_positions["travel"][channel] = self._z_traversal_height * 10
       z_positions["start"][channel] = get_z_position(
         par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
       )
@@ -875,7 +873,7 @@ class EVOBackend(TecanLiquidHandler):
     y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + parent.roma_y)
     z_positions = {
       "safe": z_range - int(parent.roma_z_safe),
-      "travel": z_range - int(self._z_traversal_height * 10),
+      "travel": int(self._z_roma_traversal_height  * 10),
       "end": z_range - int(parent.roma_z_end - offset.z * 10),
     }
 
