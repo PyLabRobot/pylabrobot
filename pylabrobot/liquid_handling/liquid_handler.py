@@ -2477,10 +2477,10 @@ class LiquidHandler(Resource, Machine):
     visits to the same drop columns.
     """
 
-    def merge_sublists(lists: List[List[int]], max_len: int) -> List[List[int]]:
+    def merge_sublists(lists: List[List[TipSpot]], max_len: int) -> List[List[TipSpot]]:
       """Merge adjacent sublists if combined length <= max_len, without splitting sublists."""
-      merged: List[List[int]] = []
-      buffer: List[int] = []
+      merged: List[List[TipSpot]] = []
+      buffer: List[TipSpot] = []
 
       for sublist in lists:
         if len(sublist) == 0:
@@ -2499,8 +2499,8 @@ class LiquidHandler(Resource, Machine):
       return merged
 
     def divide_list_into_chunks(
-      list_l: List[Any], chunk_size: int
-    ) -> Generator[List[Any], None, None]:
+      list_l: List[TipSpot], chunk_size: int
+    ) -> Generator[List[TipSpot], None, None]:
       """Divides a list into smaller chunks of a specified size.
 
       Parameters:
@@ -2523,7 +2523,7 @@ class LiquidHandler(Resource, Machine):
         continue  # ignore non-partially-filled tip_racks
 
       tipspots_w_tips = [
-        tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.children) if has_tip
+        tip_spot for has_tip, tip_spot in zip(tip_status, tip_rack.get_all_items()) if has_tip
       ]
 
       # Identify model by hashed unique physical characteristics
@@ -2547,7 +2547,9 @@ class LiquidHandler(Resource, Machine):
     for model, rack_list in clusters_by_model.items():
       print(f"Consolidating: - {', '.join([rack.name for rack, _ in rack_list])}")
 
-      all_tip_spots_list = [tip_spot for tip_rack, _ in rack_list for tip_spot in tip_rack.children]
+      all_tip_spots_list = [
+        tip_spot for tip_rack, _ in rack_list for tip_spot in tip_rack.get_all_items()
+      ]
 
       # 1: Record current tip state
       current_tip_presence_list = [tip_spot.has_tip() for tip_spot in all_tip_spots_list]
@@ -2575,14 +2577,17 @@ class LiquidHandler(Resource, Machine):
         continue
 
       # 4: Cluster target tip_spots by BOTH parent tip_rack & x-coordinate
-      sorted_tip_spots = sorted(
-        all_target_tip_spots, key=lambda tip: (tip.parent.name, round(tip.location.x, 3))
-      )
+      def key_for_tip_spot(tip_spot: TipSpot) -> Tuple[str, float]:
+        """Key function to sort tip spots by parent name and x-coordinate."""
+        assert tip_spot.parent is not None and tip_spot.location is not None
+        return (tip_spot.parent.name, round(tip_spot.location.x, 3))
+
+      sorted_tip_spots = sorted(all_target_tip_spots, key=key_for_tip_spot)
 
       target_tip_clusters_by_parent_x: Dict[Tuple[str, float], List[TipSpot]] = {}
 
       for tip_spot in sorted_tip_spots:
-        key = (tip_spot.parent.name, round(tip_spot.location.x, 3))
+        key = key_for_tip_spot(tip_spot)
         if key not in target_tip_clusters_by_parent_x:
           target_tip_clusters_by_parent_x[key] = []
         target_tip_clusters_by_parent_x[key].append(tip_spot)
@@ -2605,7 +2610,7 @@ class LiquidHandler(Resource, Machine):
       # by aggregating drop columns i.e. same drop column should not be visited twice!
       if num_channels_available >= 8:  # physical constraint of tip_rack's having 8 rows
         merged_target_tip_clusters = merge_sublists(
-          target_tip_clusters_by_parent_x.values(), max_len=8
+          list(target_tip_clusters_by_parent_x.values()), max_len=8
         )
       else:  # by chunking drop tip_spots list into size of available channels
         merged_target_tip_clusters = list(
