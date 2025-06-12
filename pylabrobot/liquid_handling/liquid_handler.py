@@ -2610,7 +2610,7 @@ class LiquidHandler(Resource, Machine):
             if self.backend.can_pick_up_tip(c, current_tip_model)
           ]
         )
-        use_channels = list(range(len(target_tip_spots)))
+        use_channels = list(range(num_channels_available))
       num_channels_available = len(use_channels)
 
       # 5: Optimize speed
