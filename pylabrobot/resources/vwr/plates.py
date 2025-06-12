@@ -1,5 +1,4 @@
 from pylabrobot.resources.plate import Plate
-from pylabrobot.resources.trough import Trough
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
   CrossSectionType,
@@ -8,25 +7,13 @@ from pylabrobot.resources.well import (
 )
 
 
-def VWRReagentReservoirs25mL(name: str) -> Trough:
-  """part number 89094"""
-  return Trough(
-    name=name,
-    size_x=44,
-    size_y=127,
-    size_z=25,
-    max_volume=25000,
-    model="VWR Reagent Reservoirs 25mL",
-  )
-
-
-def VWR_96_ReagentReservoir_195mL_Ub(name: str) -> Trough:
+def VWR_96_ReagentReservoir_195mL_Ub(name: str) -> Plate:
   """
   VWR NA Cat. No. 77575-302
 
-  For trough carriers and trough stacks
+  For plate carriers and plate stacks
   """
-  return Trough(
+  return Plate(
     name=name,
     size_x=127.76,
     size_y=85.48,
