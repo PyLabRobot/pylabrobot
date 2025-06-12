@@ -18,5 +18,6 @@ This includes machines for temperature and motion control (as neither machines p
    fans/fans
    temperature
    tilting
+   incubators/cytomat
 
 
