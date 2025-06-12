@@ -2453,19 +2453,21 @@ class LiquidHandler(Resource, Machine):
 
     results: Dict[str, bool] = {}
 
-    num_channels = self.backend.num_channels
     if use_channels is None:
-      use_channels = list(range(num_channels))
+      use_channels = list(range(self.backend.num_channels))
+    num_channels = len(use_channels)
 
     for i in range(0, len(tip_spots), num_channels):
       subset = tip_spots[i : i + num_channels]
-      use_channels = list(range(len(subset)))
+      use_channels = use_channels[: len(subset)]
       batch_result = await probing_fn(subset, use_channels)
       results.update(batch_result)
 
     return results
 
-  async def consolidate_tip_inventory(self, tip_racks: List[TipRack]):
+  async def consolidate_tip_inventory(
+    self, tip_racks: List[TipRack], use_channels: Optional[List[int]] = None
+  ):
     """
     Consolidate partial tip racks on the deck by redistributing tips.
 
@@ -2475,6 +2477,11 @@ class LiquidHandler(Resource, Machine):
     as possible, grouped by tip model.
     Tips are moved efficiently to minimize pipetting steps, avoiding redundant
     visits to the same drop columns.
+
+    Args:
+      tip_racks: List of TipRack objects to consolidate.
+      use_channels: Optional list of channels to use for consolidation. If not
+        provided, the first 8 available channels will be used.
     """
 
     def merge_sublists(lists: List[List[TipSpot]], max_len: int) -> List[List[TipSpot]]:
@@ -2595,13 +2602,16 @@ class LiquidHandler(Resource, Machine):
       current_tip_model = all_origin_tip_spots[0].tracker.get_tip()
 
       # Ensure there are channels that can pick up the tip model
-      num_channels_available = len(
-        [
-          c
-          for c in range(self.backend.num_channels)
-          if self.backend.can_pick_up_tip(c, current_tip_model)
-        ]
-      )
+      if use_channels is None:
+        num_channels_available = len(
+          [
+            c
+            for c in range(self.backend.num_channels)
+            if self.backend.can_pick_up_tip(c, current_tip_model)
+          ]
+        )
+        use_channels = list(range(len(target_tip_spots)))
+      num_channels_available = len(use_channels)
 
       # 5: Optimize speed
       if num_channels_available == 0:
@@ -2622,10 +2632,9 @@ class LiquidHandler(Resource, Machine):
       # 6: Execute tip movement/consolidation
       for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
         print(f"   - tip transfer cycle: {idx+1} / {len_transfers}")
-        num_channels = len(target_tip_spots)
-        use_channels = list(range(num_channels))
 
-        origin_tip_spots = [all_origin_tip_spots.pop(0) for _ in range(num_channels)]
+        origin_tip_spots = [all_origin_tip_spots.pop(0) for _ in range(len(target_tip_spots))]
 
-        await self.pick_up_tips(origin_tip_spots, use_channels=use_channels)
-        await self.drop_tips(target_tip_spots, use_channels=use_channels)
+        these_channels = use_channels[: len(target_tip_spots)]
+        await self.pick_up_tips(origin_tip_spots, use_channels=these_channels)
+        await self.drop_tips(target_tip_spots, use_channels=these_channels)
