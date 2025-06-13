@@ -129,6 +129,7 @@ container/container
 deck/deck
 itemized-resource/itemized-resource
 resource-holder/resource-holder
+resource-holder/plate-holder
 plate-adapter/plate-adapter
 resource-stack/resource-stack
 ```
