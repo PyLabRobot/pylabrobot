@@ -182,6 +182,7 @@ library/nest
 library/opentrons
 library/porvair
 library/revvity
+library/sergi
 library/thermo_fisher
 library/vwr
 ```
