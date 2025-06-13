@@ -33,8 +33,8 @@ def VWR_96_ReagentReservoir_195mL_Ub(name: str) -> Plate:
       material_z_thickness=1,  # 31.4 - (26.85 + 3.55) from spec
       item_dx=9.0,  # from spec
       item_dy=9.0,  # from spec
-      num_items_x=12,  # from spec
-      num_items_y=8,  # from spec
+      num_items_x=1,  # from spec
+      num_items_y=1,  # from spec
       cross_section_type=CrossSectionType.RECTANGLE,
       bottom_type=WellBottomType.U,
       max_volume=195000,  # from spec
