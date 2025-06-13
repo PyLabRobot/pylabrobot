@@ -727,11 +727,11 @@ class EVOBackend(TecanLiquidHandler):
       assert tlc is not None
       pvl[channel] = 0
       if airgap == "lag":
-        sep[channel] = int(tlc.aspirate_lag_speed * 12)  # 6? TODO: verify step unit
-        ppr[channel] = int(tlc.aspirate_lag_volume * 6)  # 3?
+        sep[channel] = int(tlc.aspirate_lag_speed * 6)  # 6? TODO: verify step unit (half step per second)
+        ppr[channel] = int(tlc.aspirate_lag_volume * 3)  # 3? (Relative position in full steps)
       elif airgap == "tag":
-        sep[channel] = int(tlc.aspirate_tag_speed * 12)  # 6?
-        ppr[channel] = int(tlc.aspirate_tag_volume * 6)  # 3?
+        sep[channel] = int(tlc.aspirate_tag_speed * 6)  # 6?
+        ppr[channel] = int(tlc.aspirate_tag_volume * 3)  # 3?
 
     return pvl, sep, ppr
 
@@ -798,10 +798,10 @@ class EVOBackend(TecanLiquidHandler):
       z = zadd[channel]
       assert tlc is not None and z is not None
       flow_rate = ops[i].flow_rate or tlc.aspirate_speed
-      sep[channel] = int(flow_rate * 12)  # 6?
+      sep[channel] = int(flow_rate * 6)  # 6?
       ssz[channel] = round(z * flow_rate / ops[i].volume)
       volume = tlc.compute_corrected_volume(ops[i].volume)
-      mtr[channel] = round(volume * 6)  # 3?
+      mtr[channel] = round(volume * 3)  # 3?  # Relative position in full steps
       ssz_r[channel] = int(tlc.aspirate_retract_speed * 10)
 
     return ssz, sep, stz, mtr, ssz_r
@@ -835,15 +835,15 @@ class EVOBackend(TecanLiquidHandler):
       tlc = tecan_liquid_classes[i]
       assert tlc is not None
       flow_rate = ops[i].flow_rate or tlc.dispense_speed
-      sep[channel] = int(flow_rate * 12)  # 6?
-      spp[channel] = int(tlc.dispense_breakoff * 12)  # 6?
+      sep[channel] = int(flow_rate * 6)  # 6?
+      spp[channel] = int(tlc.dispense_breakoff * 6)  # 6? half step per second
       stz[channel] = 0
       volume = (
         tlc.compute_corrected_volume(ops[i].volume)
         + tlc.aspirate_lag_volume
         + tlc.aspirate_tag_volume
       )
-      mtr[channel] = -round(volume * 6)  # 3?
+      mtr[channel] = -round(volume * 3)  # 3?
 
     return sep, spp, stz, mtr
 
