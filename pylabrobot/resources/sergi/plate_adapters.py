@@ -19,28 +19,30 @@ def SergiLabSupplies_96_MagneticRack_250ul_Vb(name: str) -> PlateAdapter:
   - Pulls magnetic beads ~1-2 mm above bottom
   """
 
+  # measurements from technical drawing:
+  # https://sergilabsupplies.com/collections/magnetic-racks/products/96-wells-magnetic-rack-for-dna-rna-and-other-molecules-purification
   return PlateAdapter(
     name=name,
-    size_x=127.76,
-    size_y=85.48,
-    size_z=22.0,
+    size_x=127.76,  # from spec
+    size_y=85.48,  # from spec
+    size_z=22.0,  # from spec
     model="SergiLabSupplies_96_MagneticRack_250ul_Vb",
     lid=None,
     ordered_items=create_ordered_items_2d(
       Well,
-      num_items_x=12,
-      num_items_y=8,
-      dx=10.87,  # 14.3-6.86/2
-      dy=7.77,  # 11.2-6.86/2
-      dz=3.03,
-      item_dx=9.0,
-      item_dy=9.0,
-      size_x=8.0,
-      size_y=8.0,
-      size_z=16.0,
-      material_z_thickness=0.5,
+      num_items_x=12,  # from spec
+      num_items_y=8,  # from spec
+      dx=10.87,  # 14.3-6.86/2 measured
+      dy=7.77,  # 11.2-6.86/2 measured
+      dz=3.03,  # measured
+      item_dx=9.0,  # measured
+      item_dy=9.0,  # measured
+      size_x=8.0,  # measured
+      size_y=8.0,  # measured
+      size_z=16.0,  # measured
+      material_z_thickness=0.5,  # estimated
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.CIRCLE,
-      max_volume=250,
+      max_volume=250,  # from spec
     ),
   )
