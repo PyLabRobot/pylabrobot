@@ -1,1 +1,2 @@
-from .troughs import VWR_96_ReagentReservoir_195mL_Ub, VWRReagentReservoirs25mL
+from .plates import VWR_96_troughplate_195000uL_Ub
+from .troughs import VWRReagentReservoirs25mL

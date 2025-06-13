@@ -1,6 +1,5 @@
 """Sergi Lab Supplies plate adapters"""
 
-from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
@@ -27,7 +26,6 @@ def SergiLabSupplies_96_MagneticRack_250ul_Vb(name: str) -> PlateAdapter:
     size_y=85.48,  # from spec
     size_z=22.0,  # from spec
     model="SergiLabSupplies_96_MagneticRack_250ul_Vb",
-    lid=None,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,  # from spec

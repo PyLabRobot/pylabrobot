@@ -7,12 +7,8 @@ from pylabrobot.resources.well import (
 )
 
 
-def VWR_96_ReagentReservoir_195mL_Ub(name: str) -> Plate:
-  """
-  VWR NA Cat. No. 77575-302
-
-  For plate carriers and plate stacks
-  """
+def VWR_96_troughplate_195000uL_Ub(name: str) -> Plate:
+  """VWR NA Cat. No. 77575-302"""
   # technical drawing:
   # https://github.com/PyLabRobot/pylabrobot/pull/574#issuecomment-2967988150
   return Plate(
