@@ -1,0 +1,72 @@
+﻿pylabrobot.resources.ResourceHolder
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: ResourceHolder
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ResourceHolder.name
+      ~ResourceHolder.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ResourceHolder.__init__
+      ~ResourceHolder.assign_child_resource
+      ~ResourceHolder.at
+      ~ResourceHolder.center
+      ~ResourceHolder.centers
+      ~ResourceHolder.copy
+      ~ResourceHolder.deregister_did_assign_resource_callback
+      ~ResourceHolder.deregister_did_unassign_resource_callback
+      ~ResourceHolder.deregister_state_update_callback
+      ~ResourceHolder.deregister_will_assign_resource_callback
+      ~ResourceHolder.deregister_will_unassign_resource_callback
+      ~ResourceHolder.deserialize
+      ~ResourceHolder.get_absolute_location
+      ~ResourceHolder.get_absolute_rotation
+      ~ResourceHolder.get_absolute_size_x
+      ~ResourceHolder.get_absolute_size_y
+      ~ResourceHolder.get_absolute_size_z
+      ~ResourceHolder.get_all_children
+      ~ResourceHolder.get_anchor
+      ~ResourceHolder.get_default_child_location
+      ~ResourceHolder.get_highest_known_point
+      ~ResourceHolder.get_resource
+      ~ResourceHolder.get_root
+      ~ResourceHolder.get_size_x
+      ~ResourceHolder.get_size_y
+      ~ResourceHolder.get_size_z
+      ~ResourceHolder.load_all_state
+      ~ResourceHolder.load_from_json_file
+      ~ResourceHolder.load_state
+      ~ResourceHolder.load_state_from_file
+      ~ResourceHolder.register_did_assign_resource_callback
+      ~ResourceHolder.register_did_unassign_resource_callback
+      ~ResourceHolder.register_state_update_callback
+      ~ResourceHolder.register_will_assign_resource_callback
+      ~ResourceHolder.register_will_unassign_resource_callback
+      ~ResourceHolder.rotate
+      ~ResourceHolder.rotated
+      ~ResourceHolder.save
+      ~ResourceHolder.save_state_to_file
+      ~ResourceHolder.serialize
+      ~ResourceHolder.serialize_all_state
+      ~ResourceHolder.serialize_state
+      ~ResourceHolder.unassign
+      ~ResourceHolder.unassign_child_resource
+   
+   

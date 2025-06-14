@@ -1,0 +1,92 @@
+﻿pylabrobot.resources.Plate
+==========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Plate
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Plate.items
+      ~Plate.lid
+      ~Plate.name
+      ~Plate.num_items
+      ~Plate.num_items_x
+      ~Plate.num_items_y
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Plate.__init__
+      ~Plate.assign_child_resource
+      ~Plate.at
+      ~Plate.center
+      ~Plate.centers
+      ~Plate.column
+      ~Plate.copy
+      ~Plate.deregister_did_assign_resource_callback
+      ~Plate.deregister_did_unassign_resource_callback
+      ~Plate.deregister_state_update_callback
+      ~Plate.deregister_will_assign_resource_callback
+      ~Plate.deregister_will_unassign_resource_callback
+      ~Plate.deserialize
+      ~Plate.disable_volume_trackers
+      ~Plate.enable_volume_trackers
+      ~Plate.get_absolute_location
+      ~Plate.get_absolute_rotation
+      ~Plate.get_absolute_size_x
+      ~Plate.get_absolute_size_y
+      ~Plate.get_absolute_size_z
+      ~Plate.get_all_children
+      ~Plate.get_all_items
+      ~Plate.get_anchor
+      ~Plate.get_child_identifier
+      ~Plate.get_highest_known_point
+      ~Plate.get_item
+      ~Plate.get_items
+      ~Plate.get_lid_location
+      ~Plate.get_quadrant
+      ~Plate.get_resource
+      ~Plate.get_root
+      ~Plate.get_size_x
+      ~Plate.get_size_y
+      ~Plate.get_size_z
+      ~Plate.get_well
+      ~Plate.get_wells
+      ~Plate.has_lid
+      ~Plate.index_of_item
+      ~Plate.load_all_state
+      ~Plate.load_from_json_file
+      ~Plate.load_state
+      ~Plate.load_state_from_file
+      ~Plate.register_did_assign_resource_callback
+      ~Plate.register_did_unassign_resource_callback
+      ~Plate.register_state_update_callback
+      ~Plate.register_will_assign_resource_callback
+      ~Plate.register_will_unassign_resource_callback
+      ~Plate.rotate
+      ~Plate.rotated
+      ~Plate.row
+      ~Plate.save
+      ~Plate.save_state_to_file
+      ~Plate.serialize
+      ~Plate.serialize_all_state
+      ~Plate.serialize_state
+      ~Plate.set_well_liquids
+      ~Plate.summary
+      ~Plate.traverse
+      ~Plate.unassign
+      ~Plate.unassign_child_resource
+   
+   

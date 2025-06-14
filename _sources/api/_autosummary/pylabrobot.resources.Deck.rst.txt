@@ -1,0 +1,76 @@
+﻿pylabrobot.resources.Deck
+=========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Deck
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Deck.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Deck.__init__
+      ~Deck.assign_child_resource
+      ~Deck.at
+      ~Deck.center
+      ~Deck.centers
+      ~Deck.clear
+      ~Deck.copy
+      ~Deck.deregister_did_assign_resource_callback
+      ~Deck.deregister_did_unassign_resource_callback
+      ~Deck.deregister_state_update_callback
+      ~Deck.deregister_will_assign_resource_callback
+      ~Deck.deregister_will_unassign_resource_callback
+      ~Deck.deserialize
+      ~Deck.get_absolute_location
+      ~Deck.get_absolute_rotation
+      ~Deck.get_absolute_size_x
+      ~Deck.get_absolute_size_y
+      ~Deck.get_absolute_size_z
+      ~Deck.get_all_children
+      ~Deck.get_all_resources
+      ~Deck.get_anchor
+      ~Deck.get_highest_known_point
+      ~Deck.get_resource
+      ~Deck.get_root
+      ~Deck.get_size_x
+      ~Deck.get_size_y
+      ~Deck.get_size_z
+      ~Deck.get_trash_area
+      ~Deck.get_trash_area96
+      ~Deck.has_resource
+      ~Deck.load_all_state
+      ~Deck.load_from_json_file
+      ~Deck.load_state
+      ~Deck.load_state_from_file
+      ~Deck.register_did_assign_resource_callback
+      ~Deck.register_did_unassign_resource_callback
+      ~Deck.register_state_update_callback
+      ~Deck.register_will_assign_resource_callback
+      ~Deck.register_will_unassign_resource_callback
+      ~Deck.rotate
+      ~Deck.rotated
+      ~Deck.save
+      ~Deck.save_state_to_file
+      ~Deck.serialize
+      ~Deck.serialize_all_state
+      ~Deck.serialize_state
+      ~Deck.summary
+      ~Deck.unassign
+      ~Deck.unassign_child_resource
+   
+   

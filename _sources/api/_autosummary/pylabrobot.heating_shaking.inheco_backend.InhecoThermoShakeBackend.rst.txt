@@ -1,0 +1,51 @@
+﻿pylabrobot.heating\_shaking.inheco\_backend.InhecoThermoShakeBackend
+====================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.inheco_backend
+
+.. autoclass:: InhecoThermoShakeBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoThermoShakeBackend.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoThermoShakeBackend.__init__
+      ~InhecoThermoShakeBackend.activate_touchscreen
+      ~InhecoThermoShakeBackend.deactivate
+      ~InhecoThermoShakeBackend.deactivate_touchscreen
+      ~InhecoThermoShakeBackend.deserialize
+      ~InhecoThermoShakeBackend.get_all_instances
+      ~InhecoThermoShakeBackend.get_current_temperature
+      ~InhecoThermoShakeBackend.get_device_info
+      ~InhecoThermoShakeBackend.lock_plate
+      ~InhecoThermoShakeBackend.reset_action_display
+      ~InhecoThermoShakeBackend.send_command
+      ~InhecoThermoShakeBackend.serialize
+      ~InhecoThermoShakeBackend.set_shaker_shape
+      ~InhecoThermoShakeBackend.set_shaker_speed
+      ~InhecoThermoShakeBackend.set_target_temperature
+      ~InhecoThermoShakeBackend.set_temperature
+      ~InhecoThermoShakeBackend.setup
+      ~InhecoThermoShakeBackend.shake
+      ~InhecoThermoShakeBackend.start_shaking
+      ~InhecoThermoShakeBackend.start_temperature_control
+      ~InhecoThermoShakeBackend.stop
+      ~InhecoThermoShakeBackend.stop_shaking
+      ~InhecoThermoShakeBackend.stop_temperature_control
+      ~InhecoThermoShakeBackend.unlock_plate
+   
+   

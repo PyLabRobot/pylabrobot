@@ -1,0 +1,73 @@
+﻿pylabrobot.resources.ResourceStack
+==================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: ResourceStack
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ResourceStack.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ResourceStack.__init__
+      ~ResourceStack.assign_child_resource
+      ~ResourceStack.at
+      ~ResourceStack.center
+      ~ResourceStack.centers
+      ~ResourceStack.copy
+      ~ResourceStack.deregister_did_assign_resource_callback
+      ~ResourceStack.deregister_did_unassign_resource_callback
+      ~ResourceStack.deregister_state_update_callback
+      ~ResourceStack.deregister_will_assign_resource_callback
+      ~ResourceStack.deregister_will_unassign_resource_callback
+      ~ResourceStack.deserialize
+      ~ResourceStack.get_absolute_location
+      ~ResourceStack.get_absolute_rotation
+      ~ResourceStack.get_absolute_size_x
+      ~ResourceStack.get_absolute_size_y
+      ~ResourceStack.get_absolute_size_z
+      ~ResourceStack.get_all_children
+      ~ResourceStack.get_anchor
+      ~ResourceStack.get_highest_known_point
+      ~ResourceStack.get_new_child_location
+      ~ResourceStack.get_resource
+      ~ResourceStack.get_resource_stack_edge
+      ~ResourceStack.get_root
+      ~ResourceStack.get_size_x
+      ~ResourceStack.get_size_y
+      ~ResourceStack.get_size_z
+      ~ResourceStack.get_top_item
+      ~ResourceStack.load_all_state
+      ~ResourceStack.load_from_json_file
+      ~ResourceStack.load_state
+      ~ResourceStack.load_state_from_file
+      ~ResourceStack.register_did_assign_resource_callback
+      ~ResourceStack.register_did_unassign_resource_callback
+      ~ResourceStack.register_state_update_callback
+      ~ResourceStack.register_will_assign_resource_callback
+      ~ResourceStack.register_will_unassign_resource_callback
+      ~ResourceStack.rotate
+      ~ResourceStack.rotated
+      ~ResourceStack.save
+      ~ResourceStack.save_state_to_file
+      ~ResourceStack.serialize
+      ~ResourceStack.serialize_all_state
+      ~ResourceStack.serialize_state
+      ~ResourceStack.unassign
+      ~ResourceStack.unassign_child_resource
+   
+   

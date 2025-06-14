@@ -1,0 +1,70 @@
+﻿pylabrobot.resources.Lid
+========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Lid
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Lid.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Lid.__init__
+      ~Lid.assign_child_resource
+      ~Lid.at
+      ~Lid.center
+      ~Lid.centers
+      ~Lid.copy
+      ~Lid.deregister_did_assign_resource_callback
+      ~Lid.deregister_did_unassign_resource_callback
+      ~Lid.deregister_state_update_callback
+      ~Lid.deregister_will_assign_resource_callback
+      ~Lid.deregister_will_unassign_resource_callback
+      ~Lid.deserialize
+      ~Lid.get_absolute_location
+      ~Lid.get_absolute_rotation
+      ~Lid.get_absolute_size_x
+      ~Lid.get_absolute_size_y
+      ~Lid.get_absolute_size_z
+      ~Lid.get_all_children
+      ~Lid.get_anchor
+      ~Lid.get_highest_known_point
+      ~Lid.get_resource
+      ~Lid.get_root
+      ~Lid.get_size_x
+      ~Lid.get_size_y
+      ~Lid.get_size_z
+      ~Lid.load_all_state
+      ~Lid.load_from_json_file
+      ~Lid.load_state
+      ~Lid.load_state_from_file
+      ~Lid.register_did_assign_resource_callback
+      ~Lid.register_did_unassign_resource_callback
+      ~Lid.register_state_update_callback
+      ~Lid.register_will_assign_resource_callback
+      ~Lid.register_will_unassign_resource_callback
+      ~Lid.rotate
+      ~Lid.rotated
+      ~Lid.save
+      ~Lid.save_state_to_file
+      ~Lid.serialize
+      ~Lid.serialize_all_state
+      ~Lid.serialize_state
+      ~Lid.unassign
+      ~Lid.unassign_child_resource
+   
+   
