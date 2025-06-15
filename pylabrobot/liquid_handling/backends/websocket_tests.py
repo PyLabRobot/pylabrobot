@@ -3,7 +3,6 @@ import unittest
 
 import pytest
 import websockets
-import websockets.client
 
 from pylabrobot.liquid_handling.backends import WebSocketBackend
 
@@ -39,7 +38,7 @@ class WebSocketBackendServerTests(unittest.IsolatedAsyncioTestCase):
 
     ws_port = self.backend.ws_port  # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
-    self.client = await websockets.client.connect(self.uri)
+    self.client = await websockets.connect(self.uri)
 
   async def asyncTearDown(self):
     await super().asyncTearDown()
