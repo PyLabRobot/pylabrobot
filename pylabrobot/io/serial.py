@@ -202,6 +202,7 @@ class SerialValidator(Serial):
     stopbits: int = 1,  # serial.STOPBITS_ONE,
     write_timeout=1,
     timeout=1,
+    rtscts: bool = False,
   ):
     super().__init__(
       port=port,
@@ -211,6 +212,7 @@ class SerialValidator(Serial):
       stopbits=stopbits,
       write_timeout=write_timeout,
       timeout=timeout,
+      rtscts=rtscts,
     )
     self.cr = cr
 
