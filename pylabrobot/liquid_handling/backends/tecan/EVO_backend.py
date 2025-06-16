@@ -459,7 +459,7 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height(z if z else self._z_range for z in z_positions["travel"])
+    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
@@ -727,7 +727,9 @@ class EVOBackend(TecanLiquidHandler):
       assert tlc is not None
       pvl[channel] = 0
       if airgap == "lag":
-        sep[channel] = int(tlc.aspirate_lag_speed * 6)  # 6? TODO: verify step unit (half step per second)
+        sep[channel] = int(
+          tlc.aspirate_lag_speed * 6
+        )  # 6? TODO: verify step unit (half step per second)
         ppr[channel] = int(tlc.aspirate_lag_volume * 3)  # 3? (Relative position in full steps)
       elif airgap == "tag":
         sep[channel] = int(tlc.aspirate_tag_speed * 6)  # 6?
