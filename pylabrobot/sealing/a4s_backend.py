@@ -1,9 +1,11 @@
 import asyncio
 import dataclasses
 import enum
-import serial
 import time
 from typing import Optional, Set
+
+import serial
+
 from pylabrobot.io.serial import Serial
 from pylabrobot.sealing.backend import SealerBackend
 
@@ -12,7 +14,6 @@ class A4SBackend(SealerBackend):
   def __init__(self, port: str, timeout=20) -> None:
     super().__init__()
     self.port = port
-    self.io: Optional[serial.Serial] = None
     self.timeout = timeout
     self.io = Serial(
       port=self.port,
@@ -29,7 +30,7 @@ class A4SBackend(SealerBackend):
   async def stop(self):
     await self.set_heater(on=False)
     await self.io.stop()
-  
+
   async def set_heater(self, on: bool):
     """Set the heater on or off."""
     command = "*00H1ZZ" if on else "*00H0ZZ"
@@ -91,7 +92,7 @@ class A4SBackend(SealerBackend):
 
   async def get_status(self) -> Status:
     # read until we get a system status message
-    message: bytes
+    message: str
     while True:
       message = await self._read_message()
       if message[1] == "T":  # read system status
@@ -157,9 +158,11 @@ class A4SBackend(SealerBackend):
     await self.set_time(duration)
     await self.send_command("*00GS=zz!")  # Command to conduct seal action
     await self._wait_for_status({A4SBackend.Status.SystemStatus.single_cycle})
-    return await self._wait_for_status({A4SBackend.Status.SystemStatus.idle, A4SBackend.Status.SystemStatus.finish})
+    return await self._wait_for_status(
+      {A4SBackend.Status.SystemStatus.idle, A4SBackend.Status.SystemStatus.finish}
+    )
 
-  async def _wait_for_temperature(self, degrees: int, timeout: float, tolerance: float = 0.5):
+  async def _wait_for_temperature(self, degrees: float, timeout: float, tolerance: float = 0.5):
     start = time.time()
     while True:
       current_temperature = await self.get_temperature()
@@ -168,20 +171,20 @@ class A4SBackend(SealerBackend):
       if time.time() - start > timeout:
         raise TimeoutError("Timeout while waiting for temperature")
       await asyncio.sleep(0.1)
-  
-  async def _wait_for_shuttle_open_sensor(self, shuttle_open: bool, timeout: float = 30.0):
+
+  async def _wait_for_shuttle_open_sensor(self, shuttle_open: bool, timeout: float = 30.0) -> Status:
     start = time.time()
     while True:
       status = await self.get_status()
       if status.sensor_status.shuttle_open_sensor == shuttle_open:
-        break
+        return status
       if time.time() - start > timeout:
         raise TimeoutError("Timeout while waiting for shuttle open sensor")
 
-  async def set_temperature(self, temperature: int):
+  async def set_temperature(self, temperature: float):
     if not (50 <= temperature <= 200):
       raise ValueError("Temperature out of range. Please enter a value between 50 and 200.")
-    command = f"*00DH={temperature:04d}zz!"
+    command = f"*00DH={round(temperature):04d}zz!"
     await self.send_command(command)
     await self._wait_for_temperature(temperature, timeout=300)
 

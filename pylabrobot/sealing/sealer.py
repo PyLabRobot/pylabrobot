@@ -18,11 +18,11 @@ class Sealer(Machine):
 
   async def close(self):
     return await self.backend.close()
-  
-  async def set_temperature(self, temperature: int):
+
+  async def set_temperature(self, temperature: float):
     """Set the temperature of the sealer in degrees Celsius."""
     return await self.backend.set_temperature(temperature=temperature)
 
   async def get_temperature(self) -> float:
     """Get the current temperature of the sealer in degrees Celsius."""
-    return await self.backend.get_temperature() 
+    return await self.backend.get_temperature()
