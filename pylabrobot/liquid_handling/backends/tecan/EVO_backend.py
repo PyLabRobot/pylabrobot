@@ -693,7 +693,7 @@ class EVOBackend(TecanLiquidHandler):
       tip_length = int(ops[i].tip.total_tip_length * 10)
       # z travel seems to only be used for aspiration and dispense right now
       if isinstance(op, (SingleChannelAspiration, SingleChannelDispense)):
-        z_positions["travel"][channel] = self._z_traversal_height * 10
+        z_positions["travel"][channel] = round(self._z_traversal_height * 10)
       z_positions["start"][channel] = get_z_position(
         par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
       )
