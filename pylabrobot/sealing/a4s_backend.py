@@ -2,7 +2,7 @@ import asyncio
 import dataclasses
 import enum
 import time
-from typing import Optional, Set
+from typing import Set
 
 import serial
 
@@ -172,7 +172,9 @@ class A4SBackend(SealerBackend):
         raise TimeoutError("Timeout while waiting for temperature")
       await asyncio.sleep(0.1)
 
-  async def _wait_for_shuttle_open_sensor(self, shuttle_open: bool, timeout: float = 30.0) -> Status:
+  async def _wait_for_shuttle_open_sensor(
+    self, shuttle_open: bool, timeout: float = 30.0
+  ) -> Status:
     start = time.time()
     while True:
       status = await self.get_status()

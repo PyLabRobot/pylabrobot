@@ -17,11 +17,11 @@ class SealerBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def close(self):
     ...
-  
+
   @abstractmethod
   async def set_temperature(self, temperature: float):
     """Set the temperature of the sealer in degrees Celsius."""
-  
+
   @abstractmethod
   async def get_temperature(self) -> float:
     """Get the current temperature of the sealer in degrees Celsius."""
