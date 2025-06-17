@@ -13,3 +13,6 @@ build/lib
 myenv
 env/*
 .venv
+
+docs/protocol_library/turbidostat.db
+docs/protocol_library/data.csv
