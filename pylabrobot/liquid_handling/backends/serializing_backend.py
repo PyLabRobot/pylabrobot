@@ -20,7 +20,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Resource, Tip
 from pylabrobot.serializer import serialize
 
 if sys.version_info >= (3, 8):
@@ -222,7 +222,8 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "destination": serialize(drop.destination),
         "offset": serialize(drop.offset),
         "pickup_distance_from_top": drop.pickup_distance_from_top,
-        "direction": serialize(drop.direction),
+        "pickup_direction": serialize(drop.pickup_direction),
+        "drop_direction": serialize(drop.drop_direction),
         "rotation": drop.rotation,
       },
       **backend_kwargs,
@@ -242,6 +243,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   async def move_channel_z(self, channel: int, z: float):
     await self.send_command(command="move_channel_z", data={"channel": channel, "z": z})
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    return True
 
 
 class SerializingSavingBackend(SerializingBackend):

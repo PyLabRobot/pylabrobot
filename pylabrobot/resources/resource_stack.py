@@ -113,11 +113,14 @@ class ResourceStack(Resource):
 
     return resource_location
 
+  def get_new_child_location(self, resource: Resource) -> Coordinate:
+    """Get the location where a new child resource should be placed in the stack."""
+    return get_child_location(resource) + self.get_resource_stack_edge()
+
   def assign_child_resource(
     self, resource: Resource, location: Optional[Coordinate] = None, reassign: bool = True
   ):
-    default_location = get_child_location(resource) + self.get_resource_stack_edge()
-    location = location or default_location
+    location = location or self.get_new_child_location(resource)
     return super().assign_child_resource(resource=resource, location=location, reassign=reassign)
 
   def unassign_child_resource(self, resource: Resource):

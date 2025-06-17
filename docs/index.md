@@ -1,38 +1,52 @@
 # Welcome to PyLabRobot's documentation!
 
-PyLabRobot is a hardware agnostic, pure Python SDK for liquid handling robots and accessories.
+<hr>
 
-- GitHub repository: [https://github.com/PyLabRobot/pylabrobot](https://github.com/PyLabRobot/pylabrobot)
-- Community: [https://discuss.pylabrobot.org](https://discuss.pylabrobot.org)
-- Paper: [https://www.cell.com/device/fulltext/S2666-9986(23)00170-9](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>)
+**PyLabRobot is a hardware- and operating system-agnostic, pure Python Software Development Kit (SDK) for Automated & Autonomous Laboratories.**
 
-![Graphical abstract of PyLabRobot](/img/plr.jpg)
+<hr>
+
+- **GitHub repository**: [https://github.com/PyLabRobot/pylabrobot](https://github.com/PyLabRobot/pylabrobot)
+- **Community & Developer Forum**: [https://discuss.pylabrobot.org](https://discuss.pylabrobot.org)
+- **Publication**: [Wierenga et al 2023, PyLabRobot: An Open-Source, Hardware Agnostic Interface for Liquid-Handling Robots and Accessories (Device)](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>)
+- **Supported Machines**: [supported machines](user_guide/machines.md)
+
+<hr>
+
+```{figure} /img/plr.jpg
+:width: 500px
+:align: center
+:alt: Graphical abstract of PyLabRobot
+```
 
 ```{note}
-PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton). While both packages are created by the same lab and both provide a Python interfaces to Hamilton robots, PyLabRobot aims to provide a universal interface to many different robots runnable on many different computers, where PyHamilton is a Windows only interface to Hamilton's VENUS.
+PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton).
+While both packages are created by the same lab and both provide a Python interfaces to Hamilton robots, PyLabRobot aims to provide a **universal interface to many different robots** runnable on many **different computers/operating systems**.
+PyHamilton is a Windows only interface to Hamilton's VENUS.
 ```
+<hr>
 
 ## Used by
 
-```{image} /img/used_by/mit.jpg
+```{image} /img/used_by/logo_mit.jpg
 :alt: MIT
 :class: company
 :target: https://www.mit.edu/
 ```
 
-```{image} /img/used_by/retrobio.webp
+```{image} /img/used_by/logo_retrobio.webp
 :alt: Retro
 :class: company
 :target: https://www.retro.bio/
 ```
 
-```{image} /img/used_by/tt.png
+```{image} /img/used_by/logo_ttx.jpg
 :alt: T-Therapeutics
 :class: company tt
 :target: https://www.t-therapeutics.com/
 ```
 
-```{image} /img/used_by/duke.png
+```{image} /img/used_by/logo_duke.png
 :alt: Duke
 :class: company
 ```
@@ -45,37 +59,42 @@ PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton
   margin: 0 1em;
 }
 .tt {
-  max-width: 300px; /* T-Therapeutics logo is wider */
+  max-width: 240px; /* T-Therapeutics logo is wider */
 }
 </style>
 ```
 
-## Documentation
+<hr>
+
 
 ```{toctree}
 :maxdepth: 2
 :caption: User Guide
+:hidden:
 
 user_guide/index
 ```
 
 ```{toctree}
+:maxdepth: 0
+:caption: Resource Management
+:hidden:
+
+ Resource Management <resources/index>
+```
+
+```{toctree}
 :maxdepth: 2
 :caption: Development
+:hidden:
 
 contributor_guide/index
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: Resource Library
-
-resources/index
-```
-
-```{toctree}
-:maxdepth: 2
 :caption: API documentation
+:hidden:
 
 api/pylabrobot
 ```

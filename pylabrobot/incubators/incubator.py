@@ -178,7 +178,7 @@ class Incubator(Machine, Resource):
 
     header = [f"Rack {i}" for i in range(len(self._racks))]
     sites = [
-      [site.resource.name if site.resource else "empty" for site in rack.sites.values()]
+      [site.resource.name if site.resource else "<empty>" for site in reversed(rack.sites.values())]
       for rack in self._racks
     ]
     return create_pretty_table(header, *sites)
@@ -193,7 +193,7 @@ class Incubator(Machine, Resource):
     }
 
   @classmethod
-  def deserialize(cls, data: dict, allow_marshall: bool = False):
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
     backend = IncubatorBackend.deserialize(data.pop("backend"))
     return cls(
       backend=backend,

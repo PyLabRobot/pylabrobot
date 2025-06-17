@@ -1,1 +1,1 @@
-from .agrowdosepump import AgrowPumpArray
+from .agrowdosepump_backend import AgrowPumpArray, AgrowPumpArrayBackend

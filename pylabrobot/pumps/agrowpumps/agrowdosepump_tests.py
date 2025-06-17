@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, call
 from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 
 from pylabrobot.pumps import PumpArray
-from pylabrobot.pumps.agrowpumps import AgrowPumpArray
+from pylabrobot.pumps.agrowpumps import AgrowPumpArrayBackend
 
 
 class SimulatedModbusClient(AsyncModbusSerialClient):
@@ -45,7 +45,7 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
   """TestAgrowPumps allows users to test AgrowPumps."""
 
   async def asyncSetUp(self):
-    self.agrow_backend = AgrowPumpArray(port="simulated", address=1)
+    self.agrow_backend = AgrowPumpArrayBackend(port="simulated", address=1)
 
     async def _mock_setup_modbus():
       self.agrow_backend._modbus = SimulatedModbusClient()

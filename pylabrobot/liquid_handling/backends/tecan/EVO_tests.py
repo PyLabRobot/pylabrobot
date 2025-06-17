@@ -2,9 +2,8 @@ import unittest
 import unittest.mock
 from unittest.mock import call
 
-from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends.tecan.EVO import (
-  EVO,
+from pylabrobot.liquid_handling.backends.tecan.EVO_backend import (
+  EVOBackend,
   LiHa,
   RoMa,
 )
@@ -34,7 +33,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     super().setUp()
 
     # mock the EVO
-    self.evo = EVO(diti_count=8)
+    self.evo = EVOBackend(diti_count=8)
     self.evo.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
 
     async def send_command(module, command, params=None):
@@ -49,7 +48,6 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo.send_command.side_effect = send_command  # type: ignore[method-assign]
 
     self.deck = EVO150Deck()
-    self.lh = LiquidHandler(backend=self.evo, deck=self.deck)
 
     # setup
     self.evo.setup = unittest.mock.AsyncMock()  # type: ignore[method-assign]
@@ -59,8 +57,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo._z_range = 2000
     self.evo._roma_connected = True
     self.evo._liha_connected = True
-    self.evo.liha = LiHa(self.evo, EVO.LIHA)
-    self.evo.roma = RoMa(self.evo, EVO.ROMA)
+    self.evo.liha = LiHa(self.evo, EVOBackend.LIHA)
+    self.evo.roma = RoMa(self.evo, EVOBackend.ROMA)
 
     # deck setup
     self.tr_carrier = DiTi_SBS_3_Pos_MCA96(name="tip_rack_carrier")
@@ -121,7 +119,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
           command="PPR",
           params=[30, None, None, None, None, None, None, None],
         ),
-        call(module="C5", command="AGT", params=[1, 768, 210, 0]),
+        call(module="C5", command="AGT", params=[1, 1023, 210, 0]),
       ]
     )
 
@@ -162,7 +160,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
             3829,
             2051,
             90,
-            1455,
+            2100,
             2000,
             2000,
             2000,
@@ -216,7 +214,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
         call(
           module="C5",
           command="SHZ",
-          params=[1455, 1455, 1455, 1455, 1455, 1455, 1455, 1455],
+          params=[2100, 2100, 2100, 2100, 2100, 2100, 2100, 2100],
         ),
         call(
           module="C5",
@@ -344,7 +342,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       destination_absolute_rotation=Rotation(0, 0, 0),
       offset=Coordinate.zero(),
       pickup_distance_from_top=13.2,
-      direction=GripDirection.FRONT,
+      pickup_direction=GripDirection.FRONT,
+      drop_direction=GripDirection.FRONT,
       rotation=0,
     )
 

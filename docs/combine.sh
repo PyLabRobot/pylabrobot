@@ -1,5 +1,5 @@
 SOURCE_DIR="docs/build/_sources"
-OUTPUT_FILE="docs/build/llm.md"
+OUTPUT_FILE="docs/build/llms.txt"
 
 if [ -f $OUTPUT_FILE ]; then
   rm $OUTPUT_FILE

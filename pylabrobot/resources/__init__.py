@@ -13,15 +13,14 @@ from .carrier import (
   create_homogeneous_resources,
   create_resources,
 )
+from .celltreat import *
 from .cellvis import *
 from .container import Container
 from .coordinate import Coordinate
-from .corning_axygen import *
-from .corning_costar import *
+from .corning import *
 from .deck import Deck
 from .eppendorf import *
 from .errors import ResourceNotFoundError
-from .falcon import *
 from .hamilton import *
 from .itemized_resource import ItemizedResource
 from .liquid import Liquid

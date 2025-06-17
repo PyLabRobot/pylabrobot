@@ -683,6 +683,7 @@ def PLT_CAR_L5_DWP(name: str) -> PlateCarrier:
       resource_size_x=127.0,
       resource_size_y=86.0,
       name_prefix=name,
+      pedestal_size_z=0,
     ),
     model="PLT_CAR_L5_DWP",
   )

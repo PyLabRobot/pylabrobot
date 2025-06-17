@@ -1,5 +1,3 @@
-"""Tests for LiquidHandler"""
-
 import itertools
 import tempfile
 import unittest
@@ -8,10 +6,12 @@ from typing import Any, Dict, List, Optional, Union, cast
 
 import pytest
 
+from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
+from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -44,7 +44,7 @@ from pylabrobot.resources.volume_tracker import (
 from pylabrobot.resources.well import Well
 
 from . import backends
-from .liquid_handler import LiquidHandler, OperationCallback
+from .liquid_handler import LiquidHandler
 from .standard import (
   Drop,
   DropTipRack,
@@ -318,7 +318,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stack.get_absolute_size_z(), 30)
 
   async def test_move_plate_rotation(self):
-    rotations = [0, 90, 270, 360]
+    rotations = [0, 180, 360]  # rotation wrt site before AND after move
     grip_directions = [
       (GripDirection.LEFT, GripDirection.RIGHT),
       (GripDirection.FRONT, GripDirection.BACK),
@@ -374,6 +374,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
           drop_direction=drop_direction,
         )
         new_center = plate.get_absolute_location(x="c", y="c", z="c")
+        assert plate.rotation.z == (rotation + 180) % 360
 
         self.assertEqual(
           new_center,
@@ -852,8 +853,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4])
     await self.lh.discard_tips()
     trash = self.deck.get_trash_area()
-    offsets = list(reversed(trash.centers(yn=4)))
-    offsets = [o - trash.center() for o in offsets]  # offset is wrt trash center
+    offsets = get_tight_single_resource_liquid_op_offsets(trash, num_channels=4)
 
     self.assertEqual(
       self.get_first_command("drop_tips"),
@@ -1000,6 +1000,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(reagent_reservoir.get_item("A1"), volume=100)
 
+  async def test_pick_up_tips96_incomplete_rack(self):
+    set_tip_tracking(enabled=True)
+
+    # Test that picking up tips from an incomplete rack works
+    self.tip_rack.fill()
+    self.tip_rack.get_item("A1").tracker.remove_tip()
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+
+    # Check that the tips were picked up correctly
+    self.assertFalse(self.lh.head96[0].has_tip)
+    for i in range(1, 96):
+      self.assertTrue(self.lh.head96[i].has_tip)
+
+    set_tip_tracking(enabled=False)
+
 
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
@@ -1042,6 +1058,36 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
       await self.lh.aspirate([self.plate.get_item("A1")], vols=[10])
       await self.lh.dispense([self.plate.get_item("A2")], vols=[10])
+
+  async def test_dispense_fails(self):
+    well = self.plate.get_item("A1")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+
+    async def error_func(*args, **kwargs):
+      raise ChannelizedError(errors={0: Exception("This is an error")})
+
+    self.backend.dispense = error_func  # type: ignore
+    well.tracker.set_liquids([(None, 200)])
+
+    await self.lh.aspirate([well], vols=[200])
+    assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
+    with self.assertRaises(ChannelizedError):
+      await self.lh.dispense([well], vols=[60])
+    # test volume doens't change on failed dispense
+    assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
+
+  async def test_96_head_volume_tracking(self):
+    for item in self.plate.get_all_items():
+      item.tracker.set_liquids([(Liquid.WATER, 10)])
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate96(self.plate, volume=10)
+    for i in range(96):
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
+      self.plate.get_item(i).tracker.get_used_volume() == 0
+    await self.lh.dispense96(self.plate, volume=10)
+    for i in range(96):
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
+      self.plate.get_item(i).tracker.get_used_volume() == 10
 
 
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):
@@ -1099,65 +1145,3 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
     )  # order matters
     with self.assertRaises(CrossContaminationError):
       await self.lh.aspirate([pure_blood_well], vols=[10])
-
-
-class LiquidHandlerForTesting(LiquidHandler):
-  ALLOWED_CALLBACKS = {
-    "test_operation",
-    "test_duplicate",
-    "test_operation_without_error",
-    "test_callback_not_registered_with_error",
-  }
-
-  def trigger_callback(self, method_name: str, *args, **kwargs):
-    self._trigger_callback(method_name, *args, **kwargs)
-
-
-class TestLiquidHandlerCallbacks(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
-    self.backend = backends.SaverBackend(num_channels=8)
-    self.deck = STARLetDeck()
-    self.lh = LiquidHandlerForTesting(self.backend, deck=self.deck)
-    self.callback = unittest.mock.Mock(spec=OperationCallback)
-
-  def test_register_callback(self):
-    self.lh.register_callback("test_operation", self.callback)
-    assert "test_operation" in self.lh.callbacks
-
-  def test_duplicate_register_callback(self):
-    self.lh.register_callback("test_duplicate", self.callback)
-    with pytest.raises(RuntimeError):
-      self.lh.register_callback("test_duplicate", self.callback)
-
-  def test_register_disallowed_callback(self):
-    with pytest.raises(RuntimeError):
-      self.lh.register_callback("not_allowed", self.callback)
-
-  def test_trigger_callback_without_error(self):
-    self.lh.register_callback("test_operation_without_error", self.callback)
-    self.lh.trigger_callback("test_operation_without_error")
-    self.callback.assert_called_once()
-
-  def test_trigger_callback_with_error_raised(self):
-    callback = unittest.mock.Mock(spec=OperationCallback, side_effect=RuntimeError)
-    self.lh.register_callback("test_operation", callback)
-    with pytest.raises(RuntimeError):
-      self.lh.trigger_callback("test_operation", error=RuntimeError("test"))
-    error_passed = callback.call_args[1].get("error")
-    assert isinstance(error_passed, Exception)
-
-  def test_trigger_callback_with_error_not_raised(self):
-    error = RuntimeError("test")
-    self.lh.register_callback("test_operation", self.callback)
-    try:
-      self.lh.trigger_callback("test_operation", error=error)
-    except RuntimeError as e:
-      pytest.fail(f"Unexpected exception raised: {e}")
-    self.callback.assert_called_with(self.lh, error=error)
-
-  def test_trigger_callback_not_found_with_error(self):
-    with pytest.raises(RuntimeError):
-      self.lh.trigger_callback(
-        "test_callback_not_registered_with_error",
-        error=RuntimeError("test"),
-      )

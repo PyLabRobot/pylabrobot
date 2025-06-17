@@ -26,6 +26,7 @@ from pylabrobot.resources import (
   ItemizedResource,
   Plate,
   Resource,
+  Tip,
   TipRack,
   TipSpot,
 )
@@ -36,6 +37,10 @@ PYTHON_VERSION = sys.version_info[:2]
 if PYTHON_VERSION == (3, 10):
   try:
     import ot_api
+
+    # for run cancellation
+    import ot_api.requestor as _req
+    from requests import HTTPError
 
     USE_OT = True
   except ImportError:
@@ -114,6 +119,25 @@ class OpentronsBackend(LiquidHandlerBackend):
     return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
 
   async def stop(self):
+    """Cancel any active OT run, then clear labware definitions."""
+    # cancel the HTTP-API run if it exists (helpful to make device available again in official Opentrons app)
+    run_id = getattr(ot_api, "run_id", None)
+    if run_id:
+      try:
+        _req.post(f"/runs/{run_id}/cancel")
+      except HTTPError as err:
+        if err.response.status_code == 404:
+          _req.post(f"/runs/{run_id}/actions/cancel")
+        else:
+          raise
+      except Exception:
+        # fallback: delete the run entirely
+        try:
+          _req.delete(f"/runs/{run_id}")
+        except Exception:
+          pass
+
+    # then clear local labware mapping
     self.defined_labware = {}
 
   def _get_resource_ot_location(self, resource: Resource) -> Union[str, int]:
@@ -290,29 +314,26 @@ class OpentronsBackend(LiquidHandlerBackend):
     # instead, we move the labware off deck as a workaround
     ot_api.labware.move_labware(labware_id=name, off_deck=True)
 
-  def select_tip_pipette(self, tip_max_volume: float, with_tip: bool) -> Optional[str]:
+  def select_tip_pipette(self, tip: Tip, with_tip: bool) -> Optional[str]:
     """Select a pipette based on maximum tip volume for tip pick up or drop.
 
     The volume of the head must match the maximum tip volume. If both pipettes have the same
     maximum volume, the left pipette is selected.
 
     Args:
-      tip_max_volume: The maximum volume of the tip.
-      prefer_tip: If True, get a channel that has a tip.
+      with_tip: If True, get a channel that has a tip.
 
     Returns:
       The id of the pipette, or None if no pipette is available.
     """
 
-    if self.left_pipette is not None:
-      left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
-      if left_volume == tip_max_volume and with_tip == self.left_pipette_has_tip:
-        return cast(str, self.left_pipette["pipetteId"])
+    if self.can_pick_up_tip(0, tip) and with_tip == self.left_pipette_has_tip:
+      assert self.left_pipette is not None
+      return cast(str, self.left_pipette["pipetteId"])
 
-    if self.right_pipette is not None:
-      right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
-      if right_volume == tip_max_volume and with_tip == self.right_pipette_has_tip:
-        return cast(str, self.right_pipette["pipetteId"])
+    if self.can_pick_up_tip(1, tip) and with_tip == self.right_pipette_has_tip:
+      assert self.right_pipette is not None
+      return cast(str, self.right_pipette["pipetteId"])
 
     return None
 
@@ -320,14 +341,12 @@ class OpentronsBackend(LiquidHandlerBackend):
     """Pick up tips from the specified resource."""
 
     assert len(ops) == 1, "only one channel supported for now"
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]  # for channel in channels
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
 
     labware_id = self.defined_labware[op.resource.parent.name]  # get name of tip rack
-    tip_max_volume = op.tip.maximal_volume
-    pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=False)
+    pipette_id = self.select_tip_pipette(op.tip, with_tip=False)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
@@ -338,7 +357,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     )
 
     # ad-hoc offset adjustment that makes it smoother.
-    offset_z += 50
+    offset_z += op.tip.total_tip_length
 
     ot_api.lh.pick_up_tip(
       labware_id,
@@ -361,7 +380,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     # how do we do that with trash, assuming we don't want to have a child for the trash?
 
     assert len(ops) == 1  # only one channel supported for now
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]  # for channel in channels
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -374,8 +392,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       labware_id = "fixedTrash"
     else:
       labware_id = self.defined_labware[op.resource.parent.name]  # get name of tip rack
-    tip_max_volume = op.tip.maximal_volume
-    pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=True)
+    pipette_id = self.select_tip_pipette(op.tip, with_tip=True)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 
@@ -475,7 +492,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     """Aspirate liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -536,7 +552,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     """Dispense liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
-    assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0]
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
@@ -638,3 +653,16 @@ class OpentronsBackend(LiquidHandlerBackend):
       speed=speed,
       force_direct=force_direct,
     )
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if channel_idx == 0:
+      if self.left_pipette is None:
+        return False
+      left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
+      return left_volume == tip.maximal_volume
+    if channel_idx == 1:
+      if self.right_pipette is None:
+        return False
+      right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
+      return right_volume == tip.maximal_volume
+    return False

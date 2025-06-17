@@ -14,6 +14,20 @@ from pylabrobot.centrifuge.chatterbox import CentrifugeChatterboxBackend, Loader
 from pylabrobot.resources import Coordinate, Cor_96_wellplate_360ul_Fb
 
 
+class CentrifugeTests(unittest.IsolatedAsyncioTestCase):
+  def test_serialization(self):
+    centrifuge = Centrifuge(
+      backend=CentrifugeChatterboxBackend(),
+      name="centrifuge",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+    )
+    serialized = centrifuge.serialize()
+    deserialized = Centrifuge.deserialize(serialized)
+    self.assertEqual(deserialized, centrifuge)
+
+
 class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.mock_centrifuge_backend = unittest.mock.MagicMock(spec=CentrifugeBackend)
