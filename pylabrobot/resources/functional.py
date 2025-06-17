@@ -11,6 +11,9 @@ from pylabrobot.resources.tip_rack import TipRack, TipSpot
 logger = logging.getLogger("pylabrobot.resources")
 
 
+TipGenerator = AsyncGenerator[TipSpot, None]
+
+
 def get_all_tip_spots(tip_racks: List[TipRack]) -> List[TipSpot]:
   return [spot for rack in tip_racks for spot in rack.get_all_items()]
 
@@ -67,7 +70,7 @@ async def randomized_tip_spot_generator(
   tip_spots: List[TipSpot],
   K: int,
   cache_file_path: Optional[str] = None,
-) -> AsyncGenerator[TipSpot, None]:
+) -> TipGenerator:
   """Randomized tip spot generator with disk caching. Don't return tip spots that have been
   sampled in the last K samples."""
 
