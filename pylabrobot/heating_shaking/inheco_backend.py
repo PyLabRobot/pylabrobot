@@ -5,11 +5,15 @@ from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.hid import HID
 
 
-class InhecoThermoShake(HeaterShakerBackend):
+class InhecoThermoShakeBackend(HeaterShakerBackend):
   """Backend for Inheco Thermoshake devices
 
   https://www.inheco.com/thermoshake-ac.html
   """
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return True
 
   def __init__(self, vid=0x03EB, pid=0x2023, serial_number=None):
     self.io = HID(vid=vid, pid=pid, serial_number=serial_number)
@@ -85,12 +89,12 @@ class InhecoThermoShake(HeaterShakerBackend):
       num -= 1
     return crc
 
-  def _read_until_end(self, timeout: int) -> str:
+  async def _read_until_end(self, timeout: int) -> str:
     """Read until a packet ends with a \\x00 byte. May read multiple packets."""
     start = time.time()
     response = b""
     while time.time() - start < timeout:
-      packet = self.io.read(64, timeout=timeout)
+      packet = await self.io.read(64, timeout=timeout)
       if packet is not None and packet != b"":
         if packet.endswith(b"\x00"):
           response += packet.rstrip(b"\x00")  # strip trailing \x00's
@@ -105,7 +109,7 @@ class InhecoThermoShake(HeaterShakerBackend):
 
     return response.decode("unicode_escape")
 
-  def _read_response(self, command: str, timeout: int = 60) -> str:
+  async def _read_response(self, command: str, timeout: int = 60) -> str:
     """Read the response for a given command.
 
     "The MTC/STC replies to the first four characters of every command with a modified echo. The
@@ -116,7 +120,7 @@ class InhecoThermoShake(HeaterShakerBackend):
 
     start = time.time()
     while time.time() - start < timeout:
-      response = self._read_until_end(timeout=int(timeout - (time.time() - start)))
+      response = await self._read_until_end(timeout=int(timeout - (time.time() - start)))
 
       if response[:4] == command[:4].lower():
         return response
@@ -127,9 +131,9 @@ class InhecoThermoShake(HeaterShakerBackend):
     """Send a command to the device and return the response"""
     packets = self._generate_packets(command)
     for packet in packets:
-      self.io.write(bytes(packet))
+      await self.io.write(bytes(packet))
 
-    response = self._read_response(command, timeout=timeout)
+    response = await self._read_response(command, timeout=timeout)
 
     if response[4] != "0":
       raise RuntimeError(f"Error response from device: {response}")
@@ -247,3 +251,14 @@ class InhecoThermoShake(HeaterShakerBackend):
     """De/activate the touchscreen"""
 
     return await self.send_command("0ADD0")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class InhecoThermoShake:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`InhecoThermoShake` is deprecated. Please use `InhecoThermoShakeBackend` instead. "
+    )

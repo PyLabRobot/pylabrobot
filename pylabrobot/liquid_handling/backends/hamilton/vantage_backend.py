@@ -2,6 +2,7 @@ import asyncio
 import random
 import re
 import sys
+import warnings
 from typing import Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
@@ -30,6 +31,7 @@ from pylabrobot.resources import (
   Coordinate,
   Liquid,
   Resource,
+  Tip,
   TipRack,
   Well,
 )
@@ -339,7 +341,7 @@ def _get_dispense_mode(jet: bool, empty: bool, blow_out: bool) -> Literal[0, 1, 
     return 3 if blow_out else 2
 
 
-class Vantage(HamiltonLiquidHandler):
+class VantageBackend(HamiltonLiquidHandler):
   """A Hamilton Vantage liquid handler."""
 
   def __init__(
@@ -944,9 +946,15 @@ class Vantage(HamiltonLiquidHandler):
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
-    tip_a1 = tip_spot_a1.get_tip()
-    assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(tip_a1)
+    prototypical_tip = None
+    for tip_spot in pickup.resource.get_all_items():
+      if tip_spot.has_tip():
+        prototypical_tip = tip_spot.get_tip()
+        break
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     offset_z = pickup.offset.z
 
@@ -1049,10 +1057,14 @@ class Vantage(HamiltonLiquidHandler):
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
     else:
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
+      y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        aspiration.container.get_absolute_location(y="b")
+        aspiration.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
         + aspiration.offset
-        + Coordinate(z=aspiration.container.material_z_thickness)
       )
       bottom = position.z
       lld_search_height = bottom + aspiration.container.get_absolute_size_z() + 2.7 - 1
@@ -1194,10 +1206,14 @@ class Vantage(HamiltonLiquidHandler):
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
     else:
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
+      y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        dispense.container.get_absolute_location(y="b")
+        dispense.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
         + dispense.offset
-        + Coordinate(z=dispense.container.material_z_thickness)
       )
       bottom = position.z
       lld_search_height = bottom + dispense.container.get_absolute_size_z() + 2.7 - 1
@@ -1371,6 +1387,13 @@ class Vantage(HamiltonLiquidHandler):
     """Move the specified channel to the specified z coordinate."""
 
     return await self.position_single_channel_in_z_direction(channel + 1, round(z * 10))
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    return True
 
   # ============== Firmware Commands ==============
 
@@ -5246,3 +5269,18 @@ class Vantage(HamiltonLiquidHandler):
       blue=100,
       uv=0,
     )
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class Vantage(VantageBackend):
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`Vantage` is deprecated and will be removed in a future release. "
+      "Please use `VantageBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)

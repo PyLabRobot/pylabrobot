@@ -73,7 +73,9 @@ class _CaptureWriter:
     self._path = None
 
     global _capture_or_validation_active
-    _capture_or_validation_active = True
+    _capture_or_validation_active = False
+
+    self._tempfile = None
 
   @property
   def capture_active(self):

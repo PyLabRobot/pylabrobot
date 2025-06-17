@@ -142,6 +142,8 @@ class ResourceMove:
   resource: Resource
   location: Coordinate
   gripped_direction: GripDirection
+  pickup_distance_from_top: float
+  offset: Coordinate
 
 
 @dataclass(frozen=True)

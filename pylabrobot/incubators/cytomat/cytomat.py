@@ -25,6 +25,7 @@ from pylabrobot.incubators.cytomat.errors import (
   CytomatCommandUnknownError,
   CytomatTelegramStructureError,
   error_map,
+  error_register_map,
 )
 from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
@@ -43,7 +44,7 @@ from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 logger = logging.getLogger(__name__)
 
 
-class Cytomat(IncubatorBackend):
+class CytomatBackend(IncubatorBackend):
   default_baud = 9600
   serial_message_encoding = "utf-8"
 
@@ -99,8 +100,8 @@ class Cytomat(IncubatorBackend):
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
       logging.debug(command_str.encode(self.serial_message_encoding))
-      self.io.write(command_str.encode(self.serial_message_encoding))
-      resp = self.io.read(128).decode(self.serial_message_encoding)
+      await self.io.write(command_str.encode(self.serial_message_encoding))
+      resp = (await self.io.read(128)).decode(self.serial_message_encoding)
       if len(resp) == 0:
         raise RuntimeError("Cytomat did not respond to command, is it turned on?")
       key, *values = resp.split()
@@ -145,14 +146,16 @@ class Cytomat(IncubatorBackend):
       timeout: The maximum time to wait for the command to complete. If None, the command will not
         wait for completion.
     """
-    resp = await self.send_command(command_type, command, params)
+    await self.send_command(command_type, command, params)
     if timeout is not None:
-      await self.wait_for_task_completion(timeout=timeout)
-    return OverviewRegisterState.from_resp(resp)
+      overview_register = await self.wait_for_task_completion(timeout=timeout)
+    return overview_register
 
   def _site_to_firmware_string(self, site: PlateHolder) -> str:
     rack = cast(PlateCarrier, site.parent)
-    rack_idx = self._racks.index(rack)
+    rack_idx = [rack.name for rack in self._racks].index(
+      rack.name
+    )  # autoreload resistant, should work
     site_idx = next(idx for idx, s in rack.sites.items() if s == site)
 
     if self.model in [CytomatType.C2C_425]:
@@ -206,7 +209,7 @@ class Cytomat(IncubatorBackend):
     await self.send_command("rs", "be", "")
 
   async def initialize(self) -> None:
-    await self.send_action("ll", "in", "", timeout=120)  # this command sometimes times out
+    await self.send_action("ll", "in", "", timeout=300)  # this command sometimes times out
 
   async def open_door(self):
     return await self.send_action("ll", "gp", "002")
@@ -316,12 +319,23 @@ class Cytomat(IncubatorBackend):
     while (await self.get_overview_register()).transfer_station_occupied != occupied:
       await asyncio.sleep(1)
 
-  async def wait_for_task_completion(self, timeout=60):
+  async def wait_for_task_completion(self, timeout=60) -> OverviewRegisterState:
+    """
+    Wait for the cytomat to finish the current task. This is done by checking the overview register
+    until the busy bit is not set. If the cytomat is busy for too long, a TimeoutError is raised.
+    If the error bit is set in the overview register, the error register is read and the corresponding
+    error is raised.
+    """
     start = time.time()
     while True:
       overview_register = await self.get_overview_register()
       if not overview_register.busy_bit_set:
-        break
+        # only check for errors once the cytomat is done, so that the user has the chance to
+        # handle the error and proceed if desired.
+        if overview_register.error_register_set:
+          error_register = await self.get_error_register()
+          raise error_register_map[error_register]
+        return overview_register
       await asyncio.sleep(1)
       if time.time() - start > timeout:
         raise TimeoutError("Cytomat did not complete task in time")
@@ -387,7 +401,7 @@ class Cytomat(IncubatorBackend):
     }
 
 
-class CytomatChatterbox(Cytomat):
+class CytomatChatterbox(CytomatBackend):
   async def setup(self):
     await self.wait_for_task_completion()
 
@@ -405,3 +419,12 @@ class CytomatChatterbox(Cytomat):
   async def wait_for_transfer_station(self, occupied: bool = False):
     # send the command, but don't wait when we are in chatting mode.
     _ = await self.get_overview_register()
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class Cytomat:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`Cytomat` is deprecated. Please use `CytomatBackend` instead. ")

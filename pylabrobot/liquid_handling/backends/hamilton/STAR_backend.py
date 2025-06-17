@@ -3,6 +3,7 @@ import enum
 import functools
 import logging
 import re
+import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -19,6 +20,7 @@ from typing import (
 )
 
 from pylabrobot import audio
+from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
@@ -51,6 +53,7 @@ from pylabrobot.resources import (
   Carrier,
   Coordinate,
   Resource,
+  Tip,
   TipRack,
   TipSpot,
   Well,
@@ -1120,10 +1123,8 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
     return 3 if blow_out else 2
 
 
-class STAR(HamiltonLiquidHandler):
-  """
-  Interface for the Hamilton STAR.
-  """
+class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
+  """Interface for the Hamilton STAR."""
 
   def __init__(
     self,
@@ -1216,6 +1217,10 @@ class STAR(HamiltonLiquidHandler):
     except Exception as e:
       self._iswap_traversal_height = orig
       raise e
+
+  @property
+  def iswap_traversal_height(self) -> float:
+    return self._iswap_traversal_height
 
   @property
   def module_id_length(self):
@@ -2176,9 +2181,15 @@ class STAR(HamiltonLiquidHandler):
     """Pick up tips using the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
-    tip_a1 = tip_spot_a1.get_tip()
-    assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(tip_a1)
+    prototypical_tip = None
+    for tip_spot in pickup.resource.get_all_items():
+      if tip_spot.has_tip():
+        prototypical_tip = tip_spot.get_tip()
+        break
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     z_deposit_position += round(pickup.offset.z * 10)
 
@@ -2208,8 +2219,8 @@ class STAR(HamiltonLiquidHandler):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     if isinstance(drop.resource, TipRack):
-      tip_a1 = drop.resource.get_item("A1")
-      position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
+      tip_spot_a1 = drop.resource.get_item("A1")
+      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
@@ -2314,7 +2325,15 @@ class STAR(HamiltonLiquidHandler):
         + aspiration.offset
       )
     else:
-      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
+      y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
+      position = (
+        aspiration.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + aspiration.offset
+      )
 
     tip = aspiration.tips[0]
 
@@ -2491,7 +2510,17 @@ class STAR(HamiltonLiquidHandler):
         + dispense.offset
       )
     else:
-      position = dispense.container.get_absolute_location(y="b") + dispense.offset
+      # dispense in the center of the container
+      # but we have to get the position of the center of tip A1
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
+      y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
+      position = (
+        dispense.container.get_absolute_location(z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + dispense.offset
+      )
     tip = dispense.tips[0]
 
     liquid_height = position.z + liquid_height
@@ -2591,8 +2620,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def iswap_move_picked_up_resource(
     self,
-    location: Coordinate,
-    resource: Resource,
+    center: Coordinate,
     grip_direction: GripDirection,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     collision_control_level: int = 1,
@@ -2605,14 +2633,12 @@ class STAR(HamiltonLiquidHandler):
 
     assert self.iswap_installed, "iswap must be installed"
 
-    center = location + resource.center()
-
     await self.move_plate_to_position(
       x_position=round(center.x * 10),
       x_direction=0,
       y_position=round(center.y * 10),
       y_direction=0,
-      z_position=round((location.z + resource.get_absolute_size_z() / 2) * 10),
+      z_position=round(center.z * 10),
       z_direction=0,
       grip_direction={
         GripDirection.FRONT: 1,
@@ -2686,8 +2712,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def core_move_picked_up_resource(
     self,
-    location: Coordinate,
-    resource: Resource,
+    center: Coordinate,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     acceleration_index: int = 4,
     z_speed: float = 50.0,
@@ -2697,7 +2722,6 @@ class STAR(HamiltonLiquidHandler):
 
     Args:
       location: Location to move to.
-      resource: Resource to move.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
         command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
         between 0 and 3600. Default 3600.
@@ -2706,8 +2730,6 @@ class STAR(HamiltonLiquidHandler):
         between 0 and 7. Default 4.
       z_speed: Z speed [0.1mm/s]. Must be between 3 and 1600. Default 500.
     """
-
-    center = location + resource.center()
 
     await self.core_move_plate_to_position(
       x_position=round(center.x * 10),
@@ -2841,9 +2863,9 @@ class STAR(HamiltonLiquidHandler):
         )
       else:
         await self.iswap_get_plate(
-          x_position=round(x * 10),
-          y_position=round(y * 10),
-          z_position=round(z * 10),
+          x_position=round(abs(x) * 10),
+          y_position=round(abs(y) * 10),
+          z_position=round(abs(z) * 10),
           x_direction=0 if x >= 0 else 1,
           y_direction=0 if y >= 0 else 1,
           z_direction=0 if z >= 0 else 1,
@@ -2886,10 +2908,16 @@ class STAR(HamiltonLiquidHandler):
   async def move_picked_up_resource(
     self, move: ResourceMove, use_arm: Literal["iswap", "core"] = "iswap"
   ):
+    center = (
+      move.location
+      + move.resource.get_anchor("c", "c", "t")
+      - Coordinate(z=move.pickup_distance_from_top)
+      + move.offset
+    )
+
     if use_arm == "iswap":
       await self.iswap_move_picked_up_resource(
-        location=move.location,
-        resource=move.resource,
+        center=center,
         grip_direction=move.gripped_direction,
         minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         collision_control_level=1,
@@ -2898,8 +2926,7 @@ class STAR(HamiltonLiquidHandler):
       )
     else:
       await self.core_move_picked_up_resource(
-        location=move.location,
-        resource=move.resource,
+        center=center,
         minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         acceleration_index=4,
       )
@@ -3074,6 +3101,13 @@ class STAR(HamiltonLiquidHandler):
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
     )
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, HamiltonTip):
+      return False
+    if tip.tip_size in {TipSize.XL}:
+      return False
+    return True
 
   async def core_check_resource_exists_at_location_center(
     self,
@@ -5732,46 +5766,67 @@ class STAR(HamiltonLiquidHandler):
 
   async def move_core_96_head_to_defined_position(
     self,
-    dispensing_mode: int = 0,
-    x_position: int = 0,
-    x_direction: int = 0,
-    y_position: int = 0,
-    z_position: int = 0,
-    minimum_height_at_beginning_of_a_command: int = 3425,
+    x: float = 0,
+    y: float = 0,
+    z: float = 0,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
     """Move CoRe 96 Head to defined position
 
     Args:
-      dispensing_mode: Type of dispensing mode 0 = Partial volume in jet mode 1 = Blow out
-        in jet mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix
-        position. Must be between 0 and 4. Default 0.
-      x_position: X-Position [0.1mm] of well A1. Must be between 0 and 30000. Default 0.
-      x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      y_position: Y-Position [0.1mm]. Must be between 1080 and 5600. Default 0.
-      z_position: Z-Position [0.1mm]. Must be between 0 and 5600. Default 0.
-      minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command 0.1mm]
+      x: X-Position [1mm] of well A1. Must be between 0 and 3000.0. Default 0.
+      y: Y-Position [1mm]. Must be between 108.0 and 560.0. Default 0.
+      z: Z-Position [1mm]. Must be between 0 and 560.0. Default 0.
+      minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
         (refers to all channels independent of tip pattern parameter 'tm'). Must be between 0 and
-        3425. Default 3425.
+        342.5. Default 342.5.
     """
 
-    assert 0 <= dispensing_mode <= 4, "dispensing_mode must be between 0 and 4"
-    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
-    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
-    assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
-    assert 0 <= y_position <= 5600, "z_position must be between 0 and 5600"
+    assert 0 <= x <= 3000.0, "x_position must be between 0 and 30000"
+    assert 108.0 <= y <= 560.0, "y_position must be between 1080 and 5600"
+    assert 0 <= y <= 560.0, "z_position must be between 0 and 5600"
     assert (
-      0 <= minimum_height_at_beginning_of_a_command <= 3425
+      0 <= minimum_height_at_beginning_of_a_command <= 342.5
     ), "minimum_height_at_beginning_of_a_command must be between 0 and 3425"
 
     return await self.send_command(
       module="C0",
       command="EM",
-      dm=dispensing_mode,
-      xs=x_position,
-      xd=x_direction,
-      yh=y_position,
-      za=z_position,
-      zh=minimum_height_at_beginning_of_a_command,
+      xs=f"{round(x*10):05}",
+      xd=0 if x >= 0 else 1,
+      yh=f"{round(y*10):04}",
+      za=f"{round(z*10):04}",
+      zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
+    )
+
+  async def move_core_96_head_x(self, x_position: float):
+    """Move CoRe 96 Head X to absolute position"""
+    loc = await self.request_position_of_core_96_head()
+    await self.move_core_96_head_to_defined_position(
+      x=x_position,
+      y=loc["yh"],
+      z=loc["za"],
+      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+    )
+
+  async def move_core_96_head_y(self, y_position: float):
+    """Move CoRe 96 Head Y to absolute position"""
+    loc = await self.request_position_of_core_96_head()
+    await self.move_core_96_head_to_defined_position(
+      x=loc["xs"],
+      y=y_position,
+      z=loc["za"],
+      minimum_height_at_beginning_of_a_command=loc["za"],
+    )
+
+  async def move_core_96_head_z(self, z_position: float):
+    """Move CoRe 96 Head Z to absolute position"""
+    loc = await self.request_position_of_core_96_head()
+    await self.move_core_96_head_to_defined_position(
+      x=loc["xs"],
+      y=loc["yh"],
+      z=z_position,
+      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
     )
 
   # -------------- 3.10.5 Wash procedure commands using CoRe 96 Head --------------
@@ -5794,13 +5849,17 @@ class STAR(HamiltonLiquidHandler):
     """Request position of CoRe 96 Head (A1 considered to tip length)
 
     Returns:
-      xs: A1 X direction [0.1mm]
+      xs: A1 X direction [1mm]
       xd: X direction 0 = positive 1 = negative
-      yh: A1 Y direction [0.1mm]
-      za: Z height [0.1mm]
+      yh: A1 Y direction [1mm]
+      za: Z height [1mm]
     """
 
-    return await self.send_command(module="C0", command="QI", fmt="xs#####xd#hy####za####")
+    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
+    resp["xs"] = resp["xs"] / 10
+    resp["yh"] = resp["yh"] / 10
+    resp["za"] = resp["za"] / 10
+    return resp
 
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
@@ -6349,6 +6408,30 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
+    )
+
+  async def move_iswap_x(self, x_position: float):
+    """Move iSWAP X to absolute position"""
+    loc = await self.request_iswap_position()
+    await self.move_iswap_x_relative(
+      step_size=x_position - loc["xs"],
+      allow_splitting=True,
+    )
+
+  async def move_iswap_y(self, y_position: float):
+    """Move iSWAP Y to absolute position"""
+    loc = await self.request_iswap_position()
+    await self.move_iswap_y_relative(
+      step_size=y_position - loc["yj"],
+      allow_splitting=True,
+    )
+
+  async def move_iswap_z(self, z_position: float):
+    """Move iSWAP Z to absolute position"""
+    loc = await self.request_iswap_position()
+    await self.move_iswap_z_relative(
+      step_size=z_position - loc["zj"],
+      allow_splitting=True,
     )
 
   async def open_not_initialized_gripper(self):
@@ -6978,277 +7061,6 @@ class STAR(HamiltonLiquidHandler):
 
     resp = await self.send_command(module="C0", command="QC", fmt="qc#")
     return bool(resp["qc"])
-
-  # -------------- 4.0 Direct Device Integration --------------
-  # Communication occurs directly through STAR "TCC" connections,
-  # i.e. firmware commands. This means devices can be seen as part
-  # of the STAR machine directly (if number of devices =< 2).
-
-  # -------------- 4.1 Hamilton Heater Shaker (HHS) --------------
-
-  async def check_type_is_hhs(self, device_number: int):
-    """
-    Convenience method to check that connected device is an HHS.
-    Executed through firmware query
-    """
-
-    firmware_version = await self.send_command(module=f"T{device_number}", command="RF")
-    if "Heater Shaker" not in firmware_version:
-      raise ValueError(
-        f"Device number {device_number} does not connect to a Hamilton"
-        f" Heater Shaker, found {firmware_version} instead."
-        f"Have you called the wrong device number?"
-      )
-
-  async def initialize_hhs(self, device_number: int) -> str:
-    """Initialize Hamilton Heater Shaker (HHS) at specified TCC port
-
-    Args:
-      device_number: TCC connect number to the HHS
-
-    Returns:
-      Information string about the initialization status
-    """
-
-    module_pointer = f"T{device_number}"
-
-    # Request module configuration
-    try:
-      await self.send_command(module=module_pointer, command="QU")
-    except TimeoutError as exc:
-      error_message = (
-        f"No Hamilton Heater Shaker found at device_number {device_number}"
-        f", have you checked your connections? Original error: {exc}"
-      )
-      raise ValueError(error_message) from exc
-
-    await self.check_type_is_hhs(device_number)
-
-    # Request module configuration
-    hhs_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
-    hhs_init_status = hhs_init_status["qw"]
-
-    # Initializing HHS if necessary
-    info = "HHS already initialized"
-    if hhs_init_status != 1:
-      await self.send_command(module=module_pointer, command="LI")
-      info = f"HHS at device number {device_number} initialized."
-
-    return info
-
-  # -------------- 4.1.1 HHS Plate Lock --------------
-
-  async def open_plate_lock(self, device_number: int):
-    """Open HHS plate lock"""
-
-    await self.check_type_is_hhs(device_number)
-
-    return await self.send_command(
-      module=f"T{device_number}",
-      command="LP",
-      lp="0",  # => open plate lock
-    )
-
-  async def close_plate_lock(self, device_number: int):
-    """Close HHS plate lock"""
-
-    await self.check_type_is_hhs(device_number)
-
-    return await self.send_command(
-      module=f"T{device_number}",
-      command="LP",
-      lp="1",  # => close plate lock
-    )
-
-  # -------------- 4.1.2 HHS Shaking --------------
-  async def start_shaking_at_hhs(
-    self,
-    device_number: int,
-    rpm: int,
-    rotation: int = 0,
-    plate_locked_during_shaking: bool = True,
-  ):
-    """Start shaking of specified HHS
-
-    Args:
-      rpm: round per minute
-      rotation: 0: clockwise rotation, 1: counter-clockwise rotation
-      plate_locked_during_shaking: True if plate is locked during shaking
-    """
-
-    await self.check_type_is_hhs(device_number)
-
-    # Ensure plate is locked before shaking starts
-    # allow over-writing of default (perhaps special holder system)
-    if plate_locked_during_shaking:
-      await self.close_plate_lock(device_number)
-
-    return await self.send_command(
-      module=f"T{device_number}",
-      command="SB",
-      st=str(rotation),
-      sv=str(rpm).zfill(4),
-      sr="00500",  # ??? maybe shakingAccRamp rate?
-    )
-
-  async def stop_shaking_at_hhs(self, device_number: int):
-    """Close HHS plate lock"""
-
-    await self.check_type_is_hhs(device_number)
-
-    return await self.send_command(module="T1", command="SC")
-
-  # -------------- 4.1.3 HHS Heating/Temperature Control --------------
-
-  async def start_temperature_control_at_hhs(
-    self,
-    device_number: int,
-    temp: Union[float, int],
-  ):
-    """Start temperature regulation of specified HHS"""
-
-    await self.check_type_is_hhs(device_number)
-    assert 0 < temp <= 105
-
-    # Ensure proper temperature input handling
-    if isinstance(temp, (float, int)):
-      safe_temp_str = f"{int(temp * 10):04d}"
-    else:
-      safe_temp_str = str(temp)
-
-    return await self.send_command(
-      module=f"T{device_number}",
-      command="TA",  # temperature adjustment
-      ta=safe_temp_str,
-    )
-
-  async def get_temperature_at_hhs(self, device_number: int) -> dict:
-    """Query current temperatures of both sensors of specified HHS
-
-    Returns:
-      Dictionary with keys "middle_T" and "edge_T" for the middle and edge temperature
-    """
-
-    await self.check_type_is_hhs(device_number)
-
-    request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
-    processed_t_info = [int(x) / 10 for x in request_temperature.split("+")[-2:]]
-
-    return {
-      "middle_T": processed_t_info[0],
-      "edge_T": processed_t_info[-1],
-    }
-
-  async def stop_temperature_control_at_hhs(self, device_number: int):
-    """Stop temperature regulation of specified HHS"""
-
-    await self.check_type_is_hhs(device_number)
-
-    return await self.send_command(module=f"T{device_number}", command="TO")
-
-  # -------------- 4.2 Hamilton Heater Cooler (HHS) --------------
-
-  async def check_type_is_hhc(self, device_number: int):
-    """
-    Convenience method to check that connected device is an HHC.
-    Executed through firmware query
-    """
-
-    firmware_version = await self.send_command(module=f"T{device_number}", command="RF")
-    if "Hamilton Heater Cooler" not in firmware_version:
-      raise ValueError(
-        f"Device number {device_number} does not connect to a Hamilton"
-        f" Heater-Cooler, found {firmware_version} instead."
-        f"Have you called the wrong device number?"
-      )
-
-  async def initialize_hhc(self, device_number: int) -> str:
-    """Initialize Hamilton Heater Cooler (HHC) at specified TCC port
-
-    Args:
-      device_number: TCC connect number to the HHC
-    """
-
-    module_pointer = f"T{device_number}"
-
-    # Request module configuration
-    try:
-      await self.send_command(module=module_pointer, command="QU")
-    except TimeoutError as exc:
-      error_message = (
-        f"No Hamilton Heater Cooler found at device_number {device_number}"
-        f", have you checked your connections? Original error: {exc}"
-      )
-      raise ValueError(error_message) from exc
-
-    await self.check_type_is_hhc(device_number)
-
-    # Request module configuration
-    hhc_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
-    hhc_init_status = hhc_init_status["qw"]
-
-    info = "HHC already initialized"
-    # Initializing HHS if necessary
-    if hhc_init_status != 1:
-      # Initialize device
-      await self.send_command(module=module_pointer, command="LI")
-      info = f"HHS at device number {device_number} initialized."
-
-    return info
-
-  async def start_temperature_control_at_hhc(
-    self,
-    device_number: int,
-    temp: Union[float, int],
-  ):
-    """Start temperature regulation of specified HHC"""
-
-    await self.check_type_is_hhc(device_number)
-    assert 0 < temp <= 105
-
-    # Ensure proper temperature input handling
-    if isinstance(temp, (float, int)):
-      safe_temp_str = f"{round(temp * 10):04d}"
-    else:
-      safe_temp_str = str(temp)
-
-    return await self.send_command(
-      module=f"T{device_number}",
-      command="TA",  # temperature adjustment
-      ta=safe_temp_str,
-      tb="1800",  # TODO: identify precise purpose?
-      tc="0020",  # TODO: identify precise purpose?
-    )
-
-  async def get_temperature_at_hhc(self, device_number: int) -> dict:
-    """Query current temperatures of both sensors of specified HHC"""
-
-    await self.check_type_is_hhc(device_number)
-
-    request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
-    processed_t_info = [int(x) / 10 for x in request_temperature.split("+")[-2:]]
-
-    return {
-      "middle_T": processed_t_info[0],
-      "edge_T": processed_t_info[-1],
-    }
-
-  async def query_whether_temperature_reached_at_hhc(self, device_number: int):
-    """Stop temperature regulation of specified HHC"""
-
-    await self.check_type_is_hhc(device_number)
-    query_current_control_status = await self.send_command(
-      module=f"T{device_number}", command="QD", fmt="qd#"
-    )
-
-    return query_current_control_status["qd"] == 0
-
-  async def stop_temperature_control_at_hhc(self, device_number: int):
-    """Stop temperature regulation of specified HHC"""
-
-    await self.check_type_is_hhc(device_number)
-
-    return await self.send_command(module=f"T{device_number}", command="TO")
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
@@ -7891,6 +7703,17 @@ class STAR(HamiltonLiquidHandler):
       await self.send_command("R0", "AA", wv=original_wv)
       await self.send_command("R0", "AA", tv=original_tv)
 
+  # HamiltonHeaterShakerInterface
+
+  async def send_hhs_command(self, index: int, command: str, **kwargs) -> str:
+    resp = await self.send_command(
+      module=f"T{index}",
+      command=command,
+      **kwargs,
+    )
+    assert isinstance(resp, str)
+    return resp
+
 
 class UnSafe:
   """
@@ -7898,7 +7721,7 @@ class UnSafe:
   For example, actions that send the iSWAP outside of the Hamilton Deck
   """
 
-  def __init__(self, star: "STAR"):
+  def __init__(self, star: "STARBackend"):
     self.star = star
 
   async def put_in_hotel(
@@ -8058,3 +7881,18 @@ class UnSafe:
       Consider this method an easter egg. Not for serious use.
     """
     await self.star.send_command(module=STAR.channel_id(channel_idx), command="SI")
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class STAR(STARBackend):
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "`STAR` is deprecated and will be removed in a future release. "
+      "Please use `STARBackend` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    super().__init__(*args, **kwargs)

@@ -110,7 +110,15 @@ def serialize(obj: Any) -> JSON:
 def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
   """Deserialize an object."""
 
-  if isinstance(data, (int, float, str, bool, type(None))):
+  if isinstance(data, str):
+    if data == "Infinity":
+      return math.inf
+    if data == "-Infinity":
+      return -math.inf
+    if data == "nan":
+      return math.nan
+    return data
+  if isinstance(data, (int, float, bool, type(None))):
     return data
   if isinstance(data, list):
     return [deserialize(item, allow_marshal=allow_marshal) for item in data]

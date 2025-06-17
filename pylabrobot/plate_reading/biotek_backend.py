@@ -123,24 +123,24 @@ class Cytation5Backend(ImageReaderBackend):
     self._shaking = False
     self._pos_x, self._pos_y = 0.0, 0.0
     self._objective: Optional[Objective] = None
+    self._slow_mode: Optional[bool] = None
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
 
     await self.io.setup()
-    self.io.usb_reset()
-    self.io.set_latency_timer(16)
-    self.io.set_baudrate(9600)  # 0x38 0x41
-    self.io.set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
+    await self.io.usb_reset()
+    await self.io.set_latency_timer(16)
+    await self.io.set_baudrate(9600)  # 0x38 0x41
     SIO_RTS_CTS_HS = 0x1 << 8
-    self.io.set_flowctrl(SIO_RTS_CTS_HS)
-    self.io.set_rts(True)
+    await self.io.set_flowctrl(SIO_RTS_CTS_HS)
+    await self.io.set_rts(True)
 
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
       self._version = await self.get_firmware_version()
     except TimeoutError:
-      self.io.set_baudrate(38_461)  # 4e c0
+      await self.io.set_baudrate(38_461)  # 4e c0
       self._version = await self.get_firmware_version()
 
     self._shaking = False
@@ -403,12 +403,13 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._objectives = None
     self._filters = None
+    self._slow_mode = None
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
     for _ in range(6):
-      self.io.usb_purge_rx_buffer()
-    self.io.usb_purge_tx_buffer()
+      await self.io.usb_purge_rx_buffer()
+    await self.io.usb_purge_tx_buffer()
 
   async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
     """If timeout is None, use self.timeout"""
@@ -418,7 +419,7 @@ class Cytation5Backend(ImageReaderBackend):
     res = b""
     t0 = time.time()
     while x != char:
-      x = self.io.read(1)
+      x = await self.io.read(1)
       res += x
 
       if time.time() - t0 > timeout:
@@ -440,7 +441,7 @@ class Cytation5Backend(ImageReaderBackend):
   ) -> Optional[bytes]:
     await self._purge_buffers()
 
-    self.io.write(command.encode())
+    await self.io.write(command.encode())
     logger.debug("[cytation5] sent %s", command)
     response: Optional[bytes] = None
     if wait_for_response or parameter is not None:
@@ -449,7 +450,7 @@ class Cytation5Backend(ImageReaderBackend):
       )
 
     if parameter is not None:
-      self.io.write(parameter.encode())
+      await self.io.write(parameter.encode())
       logger.debug("[cytation5] sent %s", parameter)
       if wait_for_response:
         response = await self._read_until(b"\x03", timeout=timeout)
@@ -467,13 +468,27 @@ class Cytation5Backend(ImageReaderBackend):
     return " ".join(resp[1:-1].decode().split(" ")[3:4])
 
   async def _set_slow_mode(self, slow: bool):
+    if self._slow_mode == slow:
+      return
     await self.send_command("&", "S1" if slow else "S0")
+    self._slow_mode = slow
 
   async def open(self, slow: bool = False):
     await self._set_slow_mode(slow)
     return await self.send_command("J")
 
   async def close(self, plate: Optional[Plate], slow: bool = False):
+    # reset cache
+    self._plate = None
+    self._exposure = None
+    self._focal_height = None
+    self._gain = None
+    self._imaging_mode = None
+    self._row = None
+    self._column = None
+    self._pos_x, self._pos_y = 0, 0
+    self._objective = None
+
     await self._set_slow_mode(slow)
     if plate is not None:
       await self.set_plate(plate)
@@ -571,11 +586,9 @@ class Cytation5Backend(ImageReaderBackend):
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
-    await self.set_plate(plate)
-
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
-    checksum = str(sum(cmd.encode()) % 100)
+    checksum = str(sum(cmd.encode()) % 100).zfill(2)
     cmd = cmd + checksum + "\x03"
     await self.send_command("D", cmd)
 
@@ -593,8 +606,6 @@ class Cytation5Backend(ImageReaderBackend):
 
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
-
-    await self.set_plate(plate)
 
     cmd = "008401010108120001200100001100100000123000500200200-001000-00300000000000000000001351092"
     await self.send_command("D", cmd)
@@ -623,15 +634,13 @@ class Cytation5Backend(ImageReaderBackend):
     cmd = f"{614220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
 
-    await self.set_plate(plate)
-
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
     cmd = (
       f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
       f"{emission_wavelength_str}000000000000000000210011"
     )
-    checksum = str((sum(cmd.encode()) + 7) % 100)  # don't know why +7
+    checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
     cmd = cmd + checksum + "\x03"
     resp = await self.send_command("D", cmd)
 
@@ -670,7 +679,7 @@ class Cytation5Backend(ImageReaderBackend):
       duration = str(max_duration).zfill(3)
       assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}{frequency}01"
-      checksum = str((sum(cmd.encode()) + 73) % 100)  # don't know why +73
+      checksum = str((sum(cmd.encode()) + 73) % 100).zfill(2)  # don't know why +73
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
 
@@ -1152,7 +1161,6 @@ class Cytation5Backend(ImageReaderBackend):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
-    await self.set_plate(plate)
     await self.set_objective(objective)
     await self.set_imaging_mode(mode, led_intensity=led_intensity)
     await self.select(row, column)

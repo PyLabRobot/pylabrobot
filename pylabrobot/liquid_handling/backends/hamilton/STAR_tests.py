@@ -24,10 +24,11 @@ from pylabrobot.resources import (
   Lid,
   ResourceStack,
   no_volume_tracking,
+  set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import STF, STARLetDeck
 
-from .STAR import (
+from .STAR_backend import (
   STAR,
   CommandSyntaxError,
   HamiltonNoTipError,
@@ -145,7 +146,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.star = STAR(read_timeout=2, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
-    self.star.io = unittest.mock.MagicMock()
+    self.star.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
 
   async def test_send_command_correct_response(self):
@@ -263,6 +264,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
     await self.lh.setup()
+
+    set_tip_tracking(enabled=False)
 
   async def asyncTearDown(self):
     await self.lh.stop()
@@ -847,8 +850,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call(
           "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
         ),
-        _any_write_and_read_command_call("C0PMid0002xs03979xd0yj3062yd0zj2432zd0gr1th2800ga1xe4 1"),
-        _any_write_and_read_command_call("C0PMid0003xs02979xd0yj4022yd0zj2432zd0gr1th2800ga1xe4 1"),
+        _any_write_and_read_command_call("C0PMid0002xs03979xd0yj3062yd0zj2405zd0gr1th2800ga1xe4 1"),
+        _any_write_and_read_command_call("C0PMid0003xs02979xd0yj4022yd0zj2405zd0gr1th2800ga1xe4 1"),
         _any_write_and_read_command_call(
           "C0PRid0004xs03479xd0yj2102yd0zj1874zd0th2800te2800gr1go1308ga0gc0"
         ),

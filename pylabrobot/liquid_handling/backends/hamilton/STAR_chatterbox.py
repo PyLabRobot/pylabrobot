@@ -2,11 +2,11 @@ from contextlib import asynccontextmanager
 from typing import List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import STARBackend
 from pylabrobot.resources.well import Well
 
 
-class STARChatterboxBackend(STAR):
+class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
 
   def __init__(self, num_channels: int = 8):

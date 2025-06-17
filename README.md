@@ -5,7 +5,7 @@
 <div style="text-align: center" align="center">
 <a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> |
 <a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> |
-<a href="https://docs.pylabrobot.org/installation.html"><strong>Installation</strong></a> |
+<a href="https://docs.pylabrobot.org/user_guide/_getting-started/installation.html"><strong>Installation</strong></a> |
 <a href="https://docs.pylabrobot.org/basic.html"><strong>Getting started</strong></a>
 </div>
 
@@ -55,9 +55,9 @@ lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
 Or **Tecan** (also works on any operating system!):
 
 ```python
-from pylabrobot.liquid_handling.backends import EVO
+from pylabrobot.liquid_handling.backends import EVOBackend
 deck = Deck.load_from_json_file("tecan-layout.json")
-lh = LiquidHandler(backend=EVO(), deck=deck)
+lh = LiquidHandler(backend=EVOBackend(), deck=deck)
 ```
 
 We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and can be used to develop and test protocols without a physical robot.
@@ -128,10 +128,9 @@ weight = await scale.get_weight()
 Setting the temperature of a heater shaker to 37&deg;C:
 
 ```python
-from pylabrobot.heating_shaking import HeaterShaker
-from pylabrobot.heating_shaking import InhecoThermoShake
+from pylabrobot.heating_shaking import HeaterShaker, InhecoThermoShakeBackend
 
-backend = InhecoThermoShake()
+backend = InhecoThermoShakeBackend()
 hs = HeaterShaker(backend=backend, name="HeaterShaker", size_x=0, size_y=0, size_z=0)
 await hs.setup()
 await hs.set_temperature(37)
@@ -143,9 +142,9 @@ Running a fan at 100% intensity for one minute:
 
 ```python
 from pylabrobot.only_fans import Fan
-from pylabrobot.only_fans import HamiltonHepaFan
+from pylabrobot.only_fans import HamiltonHepaFanBackend
 
-fan = Fan(backend=HamiltonHepaFan(), name="my fan")
+fan = Fan(backend=HamiltonHepaFanBackend(), name="my fan")
 await fan.setup()
 await fan.turn_on(intensity=100, duration=60)
 ```

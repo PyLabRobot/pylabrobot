@@ -30,7 +30,7 @@ class Access2Backend(LoaderBackend):
     r = None
     start = time.time()
     while r != b"" or x == b"":
-      r = self.io.read(1)
+      r = await self.io.read(1)
       x += r
       if r == b"":
         await asyncio.sleep(0.1)
@@ -40,14 +40,14 @@ class Access2Backend(LoaderBackend):
 
   async def send_command(self, command: bytes) -> bytes:
     logger.debug("[loader] Sending %s", command.hex())
-    self.io.write(command)
+    await self.io.write(command)
     return await self._read()
 
   async def setup(self):
     logger.debug("[loader] setup")
 
     await self.io.setup()
-    self.io.set_baudrate(115384)
+    await self.io.set_baudrate(115384)
 
     status = await self.get_status()
     if not status.startswith(bytes.fromhex("1105")):
@@ -125,7 +125,7 @@ class Access2Backend(LoaderBackend):
     await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
 
-class VSpin(CentrifugeBackend):
+class VSpinBackend(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
@@ -157,9 +157,9 @@ class VSpin(CentrifugeBackend):
     await self.send(b"\xaa\x00\x21\x03\xff\x23")
     await self.send(b"\xaa\xff\x1a\x14\x2d")
 
-    self.io.set_baudrate(57600)
-    self.io.set_rts(True)
-    self.io.set_dtr(True)
+    await self.io.set_baudrate(57600)
+    await self.io.set_rts(True)
+    await self.io.set_dtr(True)
 
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x12\x1f\x32")
@@ -294,7 +294,7 @@ class VSpin(CentrifugeBackend):
     start_time = time.time()
 
     while True:
-      chunk = self.io.read(25)
+      chunk = await self.io.read(25)
       if chunk:
         data += chunk
         end_byte_found = data[-1] == 0x0D
@@ -309,7 +309,7 @@ class VSpin(CentrifugeBackend):
     return data
 
   async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    written = self.io.write(bytes(cmd))  # TODO: why decode? .decode("latin-1")
+    written = await self.io.write(bytes(cmd))  # TODO: why decode? .decode("latin-1")
 
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
@@ -330,16 +330,16 @@ class VSpin(CentrifugeBackend):
 
   async def set_configuration_data(self):
     """Set the device configuration data."""
-    self.io.set_latency_timer(16)
-    self.io.set_line_property(bits=8, stopbits=1, parity=0)
-    self.io.set_flowctrl(0)
-    self.io.set_baudrate(19200)
+    await self.io.set_latency_timer(16)
+    await self.io.set_line_property(bits=8, stopbits=1, parity=0)
+    await self.io.set_flowctrl(0)
+    await self.io.set_baudrate(19200)
 
   async def initialize(self):
-    self.io.write(b"\x00" * 20)
+    await self.io.write(b"\x00" * 20)
     for i in range(33):
       packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
-      self.io.write(packet)
+      await self.io.write(packet)
     await self.send(b"\xaa\xff\x0f\x0e")
 
   # Centrifuge operations
@@ -491,3 +491,12 @@ class VSpin(CentrifugeBackend):
     ]
 
     await self.send_payloads(payloads)
+
+
+# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
+# https://github.com/PyLabRobot/pylabrobot/issues/466
+
+
+class VSpin:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError("`VSpin` is deprecated. Please use `VSpinBackend` instead. ")

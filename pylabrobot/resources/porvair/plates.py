@@ -63,6 +63,8 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
   - Cleanliness: 390015: Free of detectable DNase, RNase
   - ANSI/SLAS-format for compatibility with automated systems
   - Tolerances: "Uniform external dimensions and tolerances"
+  - Each well is segmented into four V bottom wells similar to Cor_Axy_24_wellplate_10mL_Vb.
+  - The bottom can only be reached when using 2 or 4 channels.
   """
   return Plate(
     name=name,
@@ -77,33 +79,18 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
       num_items_y=1,
       dx=9.3,
       dy=5.7,
-      dz=2.24,
+      dz=0.97,
       item_dx=18.5,
       item_dy=6.9,
       size_x=16.8,
       size_y=70.8,
       size_z=42.5,
+      material_z_thickness=1.4,
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=_compute_volume_from_height_Porvair_6_reservoir_47ml_Vb,
       compute_height_from_volume=_compute_height_from_volume_Porvair_6_reservoir_47ml_Vb,
     ),
-  )
-
-
-#: Porvair_6_reservoir_47ml_Vb_L
-def Porvair_6_reservoir_47ml_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  # https://github.com/PyLabRobot/pylabrobot/issues/252
-  raise NotImplementedError(
-    "_L and _P definitions are deprecated. Use " "Porvair_6_reservoir_47ml_Vb instead."
-  )
-
-
-#: Porvair_6_reservoir_47ml_Vb_P
-def Porvair_6_reservoir_47ml_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  # https://github.com/PyLabRobot/pylabrobot/issues/252
-  raise NotImplementedError(
-    "_L and _P definitions are deprecated. Use " "Porvair_6_reservoir_47ml_Vb.rotated(90) instead."
   )
 
 

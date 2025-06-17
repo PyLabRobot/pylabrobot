@@ -10,10 +10,11 @@ from pylabrobot.resources import (
   TIP_CAR_480_A00,
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
+  set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import VantageDeck
 
-from .vantage import (
+from .vantage_backend import (
   Vantage,
   VantageFirmwareError,
   parse_vantage_fw_string,
@@ -258,6 +259,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.maxDiff = None
 
     await self.lh.setup()
+
+    set_tip_tracking(enabled=False)
 
   async def asyncTearDown(self):
     await self.lh.stop()
