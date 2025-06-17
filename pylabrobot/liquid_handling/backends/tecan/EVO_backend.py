@@ -11,7 +11,6 @@ from typing import (
 )
 
 from pylabrobot.io.usb import USB
-from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -289,13 +288,6 @@ class EVOBackend(TecanLiquidHandler):
 
     # Initialize plungers. Assumes wash station assigned at rail 1.
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    wash = self.deck.get_resource("wash_waste")
-    wash_offsets = get_tight_single_resource_liquid_op_offsets(wash, self.num_channels)
-    location = wash.get_absolute_location() + wash_offsets
-    x = int(location.x * 10)
-    y = int(location.y * 10)
-    z = int(wash.get_size_z() * 10)  # place pipettes above waste
-    await self.liha.position_absolute_all_axis(x,y,90,[z]*self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
     await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
     await self.liha.position_valve_logical([1] * self.num_channels)
@@ -303,7 +295,7 @@ class EVOBackend(TecanLiquidHandler):
     await self.liha.position_valve_logical([0] * self.num_channels)
     await self.liha.set_end_speed_plunger([1800] * self.num_channels)
     await self.liha.move_plunger_relative([-100] * self.num_channels)
-    await self.liha.position_absolute_all_axis(x, y, 90, [self._z_range] * self.num_channels)
+    await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
 
   async def setup_arm(self, module):
     try:
@@ -375,10 +367,7 @@ class EVOBackend(TecanLiquidHandler):
       for op in ops
     ]
 
-    if len(set([op.resource for op in ops]))==1:  # if the resource is the same, the span will stay at min
-      ys=90
-    else:
-      ys = int(ops[0].resource.get_absolute_size_y() * 10)  # for plate this number should be 90
+    ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
     for i, channel in enumerate(use_channels):
       par = ops[i].resource.parent
@@ -454,10 +443,7 @@ class EVOBackend(TecanLiquidHandler):
     """
 
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
-    if len(set([op.resource for op in ops]))==1:  # if the resource is the same, the span will stay at min
-      ys=90
-    else:
-      ys = int(ops[0].resource.get_absolute_size_y() * 10)  # for plate this number should be 90
+    ys = int(ops[0].resource.get_absolute_size_y() * 10)
 
     tecan_liquid_classes = [
       get_liquid_class(
@@ -528,7 +514,7 @@ class EVOBackend(TecanLiquidHandler):
     first_z_start, _ = self._first_valid(z_positions["start"])
     assert first_z_start is not None, "Could not find a valid z_start position"
     await self.liha.get_disposable_tip(
-      self._bin_use_channels(use_channels), first_z_start, 300
+      self._bin_use_channels(use_channels), first_z_start - 227, 210
     )
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
@@ -692,8 +678,8 @@ class EVOBackend(TecanLiquidHandler):
 
     for i, (op, channel) in enumerate(zip(ops, use_channels)):
       location = ops[i].resource.get_absolute_location() + op.resource.center()
-      x_positions[channel] = int((location.x + op.offset.x) * 10)
-      y_positions[channel] = int((location.y + op.offset.y) * 10)  # TODO: verify
+      x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
+      y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
 
       par = ops[i].resource.parent
       if not isinstance(par, (TecanPlate, TecanTipRack)):

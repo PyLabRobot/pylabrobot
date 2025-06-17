@@ -71,12 +71,12 @@ def Wash_Station(name: str) -> TecanWashStation:
 
 
 def Wash_Station_Waste(name: str) -> Trash:
-  return Trash(name=name, size_x=12.0, size_y=100.0, size_z=100.0)
+  return Trash(name=name, size_x=12.0, size_y=100.0, size_z=140.0)
 
 
 def Wash_Station_Cleaner_shallow(name: str) -> Trash:
-  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=100.0)
+  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=140.0)
 
 
 def Wash_Station_Cleaner_deep(name: str) -> Trash:
-  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=100.0)
+  return Trash(name=name, size_x=12.0, size_y=73.0, size_z=140.0)
