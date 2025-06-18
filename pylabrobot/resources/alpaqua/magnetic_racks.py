@@ -19,6 +19,5 @@ def Alpaqua_96_magnum_flx(name: str) -> PlateAdapter:
     adapter_hole_size_x=8.0,
     adapter_hole_size_y=8.0,
     adapter_hole_size_z=8.0,  # guesstimate
-    site_pedestal_z=6.2,
     model="Alpaqua_96_magnum_flx",
   )
