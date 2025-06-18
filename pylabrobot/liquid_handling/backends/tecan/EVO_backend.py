@@ -382,11 +382,8 @@ class EVOBackend(TecanLiquidHandler):
         continue
       if not isinstance(par, TecanPlate):
         raise ValueError(f"Operation is not supported by resource {par}.")
-      # Calculate distance to travel during aspiration
-      try:
-        zadd[channel] = int(ops[i].resource.compute_height_from_volume(ops[i].volume) * 10)
-      except NotImplementedError:
-        zadd[channel] = int(32)
+      # TODO: calculate defaults when area is not specified
+      zadd[channel] = round(ops[i].volume / par.area * 10)
 
     # moves such that first channel is over first location
     x, _ = self._first_valid(x_positions)
