@@ -6,7 +6,6 @@ import unittest.mock
 import pytest
 import requests
 import websockets
-import websockets.client
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import (
@@ -51,7 +50,7 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
 
     ws_port = self.vis.ws_port  # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
-    self.client = await websockets.client.connect(self.uri)
+    self.client = await websockets.connect(self.uri)
 
   async def asyncTearDown(self):
     await super().asyncTearDown()

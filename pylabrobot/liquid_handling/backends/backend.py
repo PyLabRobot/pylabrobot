@@ -19,7 +19,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.resources import Deck, Resource
+from pylabrobot.resources import Deck, Resource, Tip
 from pylabrobot.resources.tip_tracker import TipTracker
 
 
@@ -158,3 +158,9 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """Move the specified channel to the specified z coordinate."""
 
     raise NotImplementedError()
+
+  @abstractmethod
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    """Check if the tip can be picked up by the specified channel. Does not consider
+    if a tip is already mounted - just whether the tip can be picked up by the channel.
+    """

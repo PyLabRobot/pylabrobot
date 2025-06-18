@@ -1,5 +1,7 @@
+import asyncio
 import ctypes
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
 from typing import Optional, cast
 
@@ -30,43 +32,53 @@ class FTDI(IOBase):
   def __init__(self, device_id: Optional[str] = None):
     self._dev = Device(lazy_open=True, device_id=device_id)
     self._device_id = device_id or "None"  # for io
-
+    self._executor: Optional[ThreadPoolExecutor] = None
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new FTDI object while capture or validation is active")
 
   async def setup(self):
     if not HAS_PYLIBFTDI:
       raise RuntimeError("pyserial not installed.")
-
     self._dev.open()
+    self._executor = ThreadPoolExecutor(max_workers=1)
 
-  def set_baudrate(self, baudrate: int):
-    self._dev.baudrate = baudrate
+  async def set_baudrate(self, baudrate: int):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(self._executor, lambda: setattr(self._dev, "baudrate", baudrate))
 
-  def set_rts(self, level: bool):
-    self._dev.ftdi_fn.ftdi_setrts(level)
+  async def set_rts(self, level: bool):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_setrts(level))
     logger.log(LOG_LEVEL_IO, "[%s] set_rts %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_rts", data=str(level)))
 
-  def set_dtr(self, level: bool):
-    self._dev.ftdi_fn.ftdi_setdtr(level)
+  async def set_dtr(self, level: bool):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_setdtr(level))
     logger.log(LOG_LEVEL_IO, "[%s] set_dtr %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_dtr", data=str(level)))
 
-  def usb_reset(self):
-    self._dev.ftdi_fn.ftdi_usb_reset()
+  async def usb_reset(self):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_usb_reset())
     logger.log(LOG_LEVEL_IO, "[%s] usb_reset", self._device_id)
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_reset", data=""))
 
-  def set_latency_timer(self, latency: int):
-    self._dev.ftdi_fn.ftdi_set_latency_timer(latency)
+  async def set_latency_timer(self, latency: int):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+      self._executor, lambda: self._dev.ftdi_fn.ftdi_set_latency_timer(latency)
+    )
     logger.log(LOG_LEVEL_IO, "[%s] set_latency_timer %s", self._device_id, latency)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="set_latency_timer", data=str(latency))
     )
 
-  def set_line_property(self, bits: int, stopbits: int, parity: int):
-    self._dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
+  async def set_line_property(self, bits: int, stopbits: int, parity: int):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+      self._executor, lambda: self._dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
+    )
     logger.log(
       LOG_LEVEL_IO, "[%s] set_line_property %s,%s,%s", self._device_id, bits, stopbits, parity
     )
@@ -76,26 +88,32 @@ class FTDI(IOBase):
       )
     )
 
-  def set_flowctrl(self, flowctrl: int):
-    self._dev.ftdi_fn.ftdi_setflowctrl(flowctrl)
+  async def set_flowctrl(self, flowctrl: int):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_setflowctrl(flowctrl))
     logger.log(LOG_LEVEL_IO, "[%s] set_flowctrl %s", self._device_id, flowctrl)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="set_flowctrl", data=str(flowctrl))
     )
 
-  def usb_purge_rx_buffer(self):
-    self._dev.ftdi_fn.ftdi_usb_purge_rx_buffer()
+  async def usb_purge_rx_buffer(self):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_usb_purge_rx_buffer())
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_rx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_purge_rx_buffer", data=""))
 
-  def usb_purge_tx_buffer(self):
-    self._dev.ftdi_fn.ftdi_usb_purge_tx_buffer()
+  async def usb_purge_tx_buffer(self):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_usb_purge_tx_buffer())
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_tx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_purge_tx_buffer", data=""))
 
-  def poll_modem_status(self) -> int:
+  async def poll_modem_status(self) -> int:
+    loop = asyncio.get_running_loop()
     stat = ctypes.c_ushort(0)
-    self._dev.ftdi_fn.ftdi_poll_modem_status(ctypes.byref(stat))
+    await loop.run_in_executor(
+      self._executor, lambda: self._dev.ftdi_fn.ftdi_poll_modem_status(ctypes.byref(stat))
+    )
     logger.log(LOG_LEVEL_IO, "[%s] poll_modem_status %s", self._device_id, stat.value)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="poll_modem_status", data=str(stat.value))
@@ -104,6 +122,9 @@ class FTDI(IOBase):
 
   async def stop(self):
     self._dev.close()
+    if self._executor is not None:
+      self._executor.shutdown(wait=True)
+      self._executor = None
 
   async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
@@ -141,7 +162,7 @@ class FTDIValidator(FTDI):
   async def setup(self):
     pass
 
-  def set_baudrate(self, baudrate: int):
+  async def set_baudrate(self, baudrate: int):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -151,7 +172,7 @@ class FTDIValidator(FTDI):
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_baudrate {baudrate}")
 
-  def set_rts(self, level: bool):
+  async def set_rts(self, level: bool):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -161,7 +182,7 @@ class FTDIValidator(FTDI):
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_rts {level}")
 
-  def set_dtr(self, level: bool):
+  async def set_dtr(self, level: bool):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -171,7 +192,7 @@ class FTDIValidator(FTDI):
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_dtr {level}")
 
-  def usb_reset(self):
+  async def usb_reset(self):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -182,7 +203,7 @@ class FTDIValidator(FTDI):
         f"Next line is {next_command}, expected FTDI usb_reset {self._device_id}"
       )
 
-  def set_latency_timer(self, latency: int):
+  async def set_latency_timer(self, latency: int):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -194,7 +215,7 @@ class FTDIValidator(FTDI):
         f"Next line is {next_command}, expected FTDI set_latency_timer {latency}"
       )
 
-  def set_line_property(self, bits: int, stopbits: int, parity: int):
+  async def set_line_property(self, bits: int, stopbits: int, parity: int):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -206,7 +227,7 @@ class FTDIValidator(FTDI):
         f"Next line is {next_command}, expected FTDI set_line_property {bits},{stopbits},{parity}"
       )
 
-  def set_flowctrl(self, flowctrl: int):
+  async def set_flowctrl(self, flowctrl: int):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -216,7 +237,7 @@ class FTDIValidator(FTDI):
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_flowctrl {flowctrl}")
 
-  def usb_purge_rx_buffer(self):
+  async def usb_purge_rx_buffer(self):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -227,7 +248,7 @@ class FTDIValidator(FTDI):
         f"Next line is {next_command}, expected FTDI usb_purge_rx_buffer {self._device_id}"
       )
 
-  def usb_purge_tx_buffer(self):
+  async def usb_purge_tx_buffer(self):
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
@@ -238,7 +259,7 @@ class FTDIValidator(FTDI):
         f"Next line is {next_command}, expected FTDI usb_purge_tx_buffer {self._device_id}"
       )
 
-  def poll_modem_status(self) -> int:
+  async def poll_modem_status(self) -> int:
     next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"

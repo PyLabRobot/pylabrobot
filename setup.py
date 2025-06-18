@@ -14,7 +14,7 @@ extras_plate_reading = [
   "pylibftdi",
 ]
 
-extras_websockets = ["websockets==12.0"]
+extras_websockets = ["websockets==15.0.1"]
 
 extras_visualizer = extras_websockets
 

@@ -47,7 +47,7 @@ class Access2Backend(LoaderBackend):
     logger.debug("[loader] setup")
 
     await self.io.setup()
-    self.io.set_baudrate(115384)
+    await self.io.set_baudrate(115384)
 
     status = await self.get_status()
     if not status.startswith(bytes.fromhex("1105")):
@@ -157,9 +157,9 @@ class VSpinBackend(CentrifugeBackend):
     await self.send(b"\xaa\x00\x21\x03\xff\x23")
     await self.send(b"\xaa\xff\x1a\x14\x2d")
 
-    self.io.set_baudrate(57600)
-    self.io.set_rts(True)
-    self.io.set_dtr(True)
+    await self.io.set_baudrate(57600)
+    await self.io.set_rts(True)
+    await self.io.set_dtr(True)
 
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x12\x1f\x32")
@@ -330,10 +330,10 @@ class VSpinBackend(CentrifugeBackend):
 
   async def set_configuration_data(self):
     """Set the device configuration data."""
-    self.io.set_latency_timer(16)
-    self.io.set_line_property(bits=8, stopbits=1, parity=0)
-    self.io.set_flowctrl(0)
-    self.io.set_baudrate(19200)
+    await self.io.set_latency_timer(16)
+    await self.io.set_line_property(bits=8, stopbits=1, parity=0)
+    await self.io.set_flowctrl(0)
+    await self.io.set_baudrate(19200)
 
   async def initialize(self):
     await self.io.write(b"\x00" * 20)

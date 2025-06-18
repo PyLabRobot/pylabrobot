@@ -119,7 +119,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
           command="PPR",
           params=[30, None, None, None, None, None, None, None],
         ),
-        call(module="C5", command="AGT", params=[1, 768, 210, 0]),
+        call(module="C5", command="AGT", params=[1, 1023, 210, 0]),
       ]
     )
 
@@ -160,7 +160,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
             3829,
             2051,
             90,
-            1455,
+            2100,
             2000,
             2000,
             2000,
@@ -214,7 +214,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
         call(
           module="C5",
           command="SHZ",
-          params=[1455, 1455, 1455, 1455, 1455, 1455, 1455, 1455],
+          params=[2100, 2100, 2100, 2100, 2100, 2100, 2100, 2100],
         ),
         call(
           module="C5",
