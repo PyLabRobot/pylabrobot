@@ -24,6 +24,7 @@ from pylabrobot.resources import (
   Lid,
   ResourceStack,
   no_volume_tracking,
+  set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import STF, STARLetDeck
 
@@ -263,6 +264,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
     await self.lh.setup()
+
+    set_tip_tracking(enabled=False)
 
   async def asyncTearDown(self):
     await self.lh.stop()

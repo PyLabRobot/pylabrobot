@@ -94,22 +94,6 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
   )
 
 
-#: Porvair_6_reservoir_47ml_Vb_L
-def Porvair_6_reservoir_47ml_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  # https://github.com/PyLabRobot/pylabrobot/issues/252
-  raise NotImplementedError(
-    "_L and _P definitions are deprecated. Use " "Porvair_6_reservoir_47ml_Vb instead."
-  )
-
-
-#: Porvair_6_reservoir_47ml_Vb_P
-def Porvair_6_reservoir_47ml_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  # https://github.com/PyLabRobot/pylabrobot/issues/252
-  raise NotImplementedError(
-    "_L and _P definitions are deprecated. Use " "Porvair_6_reservoir_47ml_Vb.rotated(90) instead."
-  )
-
-
 def Porvair_24_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Porvair cat. no.: 390108
