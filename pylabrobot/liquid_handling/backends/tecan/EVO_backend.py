@@ -10,6 +10,7 @@ from typing import (
   Union,
 )
 
+from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
 from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -288,14 +289,20 @@ class EVOBackend(TecanLiquidHandler):
 
     # Initialize plungers. Assumes wash station assigned at rail 1.
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
+    wash = self.deck.get_resource("wash_waste")
+    wash_offsets = get_tight_single_resource_liquid_op_offsets(wash, self.num_channels)
+    location = wash.get_absolute_location() + wash.center() + wash_offsets[0]
+    location.x = int(location.x * 10)
+    location.y = int((352 - location.y) * 10)
+    location.z = int(wash.get_size_z() * 10)
+    await self.liha.position_absolute_all_axis(location.x, location.y,90, [location.z] * self.num_channels)
     await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
     await self.liha.position_valve_logical([1] * self.num_channels)
     await self.liha.move_plunger_relative([100] * self.num_channels)
     await self.liha.position_valve_logical([0] * self.num_channels)
     await self.liha.set_end_speed_plunger([1800] * self.num_channels)
     await self.liha.move_plunger_relative([-100] * self.num_channels)
-    await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
+    await self.liha.position_absolute_all_axis(location.x, location.y, 90, [self._z_range] * self.num_channels)
 
   async def setup_arm(self, module):
     try:
@@ -375,8 +382,11 @@ class EVOBackend(TecanLiquidHandler):
         continue
       if not isinstance(par, TecanPlate):
         raise ValueError(f"Operation is not supported by resource {par}.")
-      # TODO: calculate defaults when area is not specified
-      zadd[channel] = round(ops[i].volume / par.area * 10)
+      # Calculate distance to travel during aspiration
+      try:
+        zadd[channel] = int(ops[i].resource.compute_height_from_volume(ops[i].volume) * 10)
+      except NotImplementedError:
+        zadd[channel] = int(32)
 
     # moves such that first channel is over first location
     x, _ = self._first_valid(x_positions)
@@ -459,7 +469,7 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height(z if z else self._z_range for z in z_positions["travel"])
+    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
@@ -487,6 +497,7 @@ class EVOBackend(TecanLiquidHandler):
 
     # Get positions including offsets
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
+    z_positions["start"] = [int(op.resource.parent.z_start) for op in ops if op.resource.parent.z_start]  # directly get z_position from z_start to avoid tip length issue?
 
     # move channels
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
@@ -678,8 +689,8 @@ class EVOBackend(TecanLiquidHandler):
 
     for i, (op, channel) in enumerate(zip(ops, use_channels)):
       location = ops[i].resource.get_absolute_location() + op.resource.center()
-      x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
-      y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
+      x_positions[channel] = int((location.x + op.offset.x) * 10)
+      y_positions[channel] = int((352 - (location.y + op.offset.y)) * 10)  # TODO: verify
 
       par = ops[i].resource.parent
       if not isinstance(par, (TecanPlate, TecanTipRack)):
@@ -692,12 +703,15 @@ class EVOBackend(TecanLiquidHandler):
       z_positions["start"][channel] = get_z_position(
         par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
       )
+      # container.get_absolute_position(z="cavity_bottom") + lld_search_height
       z_positions["dispense"][channel] = get_z_position(
         par.z_dispense, par.get_absolute_location().z + op.offset.z, tip_length
       )
+      # container.get_absolute_position(z="cavity_bottom") + liquid_height
       z_positions["max"][channel] = get_z_position(
         par.z_max, par.get_absolute_location().z + op.offset.z, tip_length
       )
+      # container.get_absolute_position(z="cavity_bottom")
 
     return x_positions, y_positions, z_positions
 

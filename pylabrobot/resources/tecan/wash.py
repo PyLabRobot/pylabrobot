@@ -46,14 +46,14 @@ def Wash_Station(name: str) -> TecanWashStation:
     size_x=25.0,
     size_y=390.0,
     size_z=0.0,
-    off_x=12.5,
-    off_y=24.7,
+    off_y= -13,
+    off_x=0,
     sites=create_resources(
       klass=ResourceHolder,
       locations=[
-        Coordinate(12.2, 106.7, 0.0),
-        Coordinate(11.0, 180.7, 0.0),
-        Coordinate(12.2, 281.7, 0.0),
+        Coordinate(12.2, 107, 0.0),
+        Coordinate(11.0, 181, 0.0),
+        Coordinate(12.2, 282, 0.0),
       ],
       resource_size_x=[
         12.0,
