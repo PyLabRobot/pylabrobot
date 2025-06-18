@@ -4,6 +4,10 @@ PyLabRobot ships with a growing library of resource definitions for common labwa
 If you define a new resource it helps the community when you contribute it back.
 This page describes the information to include and how to format it.
 
+```{attention}
+PLEASE TEST YOUR RESOURCE DEFINITION BEFORE CONTRIBUTING!
+```
+
 ## 1. Update the resource library
 
 Add an entry for your resource under the appropriate manufacturer page in
@@ -18,6 +22,9 @@ Existing entries use a table format like this:
 ```
 
 Use the same style and folder structure for images.
+
+If a section for your resource type (e.g. "Plates"/"Troughs"/etc.) already exists, add your resource to it. Add no new line between the rows.
+If a section does not exist, create a new section (see other files for examples).
 
 ## 2. Document attribute sources
 

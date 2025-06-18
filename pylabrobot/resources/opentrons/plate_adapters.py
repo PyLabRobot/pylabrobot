@@ -19,6 +19,5 @@ def Opentrons_96_adapter_Vb(name: str) -> PlateAdapter:
     adapter_hole_size_x=5.46,
     adapter_hole_size_y=5.46,
     adapter_hole_size_z=13.55,
-    site_pedestal_z=15.5,
     model="Opentrons_96_adapter_Vb",
   )
