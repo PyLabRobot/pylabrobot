@@ -7,7 +7,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def VWR_96_troughplate_195000uL_Ub(name: str) -> Plate:
+def VWR_1_troughplate_195000uL_Ub(name: str) -> Plate:
   """VWR NA Cat. No. 77575-302"""
   # technical drawing:
   # https://github.com/PyLabRobot/pylabrobot/pull/574#issuecomment-2967988150
@@ -21,11 +21,11 @@ def VWR_96_troughplate_195000uL_Ub(name: str) -> Plate:
     size_y=85.48,  # from spec
     size_z=31.4,  # from spec
     lid=None,
-    model="VWR_96_troughplate_195000uL_Ub",
+    model=VWR_1_troughplate_195000uL_Ub.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
-      size_x=8.9,  # from spec
-      size_y=8.9,  # from spec
+      size_x=127.76 - (14.38 - 8.9 / 2) * 2,  # from spec
+      size_y=85.48 - (11.24 - 8.9 / 2) * 2,  # from spec
       size_z=26.85,  # from spec
       dx=9.93,  # 14.38 - (8.9/2) from spec
       dy=6.79,  # 11.24 - (8.9/2) from spec
