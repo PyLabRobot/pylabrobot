@@ -35,6 +35,7 @@ from .resource import Resource
 from .resource_stack import ResourceStack
 from .revvity import *
 from .rotation import Rotation
+from .sergi import *
 from .tecan import *
 from .thermo_fisher import *
 from .tip_rack import TipRack, TipSpot
