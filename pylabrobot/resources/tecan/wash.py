@@ -47,7 +47,7 @@ def Wash_Station(name: str) -> TecanWashStation:
     size_y=390.0,
     size_z=0.0,
     off_y= -13,
-    off_x=0,
+    off_x=12.5,
     sites=create_resources(
       klass=ResourceHolder,
       locations=[

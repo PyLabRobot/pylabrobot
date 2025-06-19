@@ -147,14 +147,14 @@ def DiTi_3Pos(name: str) -> TecanTipCarrier:
     size_x=149.0,
     size_y=374.0,
     size_z=123.2,
-    off_x=0,
+    off_x=12,
     off_y=60,
     sites=create_homogeneous_resources(
       klass=ResourceHolder,
       locations=[
-        Coordinate(14.7, 13.4, 4.5),
-        Coordinate(14.7, 113.4, 4.5),
-        Coordinate(14.7, 213.4, 4.5),
+        Coordinate(13.3, 13.4, 4.5),
+        Coordinate(13.3, 113.4, 4.5),
+        Coordinate(13.3, 213.4, 4.5),
       ],
       resource_size_x=127.0,
       resource_size_y=88.5,
