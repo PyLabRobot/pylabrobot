@@ -12,4 +12,4 @@ Company page: [Wikipedia](https://en.wikipedia.org/wiki/VWR_International)
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| VWR_96_troughplate_195000uL_Ub''<br>Part no.: 77575-302<br>[manufacturer website](https://www.avantorsciences.com/us/en/product/47763965/vwr-multi-channel-polypropylene-reagent-reservoirs?isCatNumSearch=true&searchedCatalogNumber=77575-302)<br>Polypropylene multi-channel reagent reservoirs | ![](img/vwr/VWR_96_troughplate_195000uL_Ub.jpg) | `VWR_96_troughplate_195000uL_Ub` |
+| VWR_1_troughplate_195000uL_Ub''<br>Part no.: 77575-302<br>[manufacturer website](https://www.avantorsciences.com/us/en/product/47763965/vwr-multi-channel-polypropylene-reagent-reservoirs?isCatNumSearch=true&searchedCatalogNumber=77575-302)<br>Polypropylene multi-channel reagent reservoirs | ![](img/vwr/VWR_1_troughplate_195000uL_Ub.jpg) | `VWR_1_troughplate_195000uL_Ub` |
