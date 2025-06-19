@@ -1,2 +1,2 @@
-from .plates import VWR_96_DWP_2mL_Vb, VWR_96_troughplate_195000uL_Ub
+from .plates import VWR_1_troughplate_195000uL_Ub, VWR_96_wellplate_2mL_Vb
 from .troughs import VWRReagentReservoirs25mL
