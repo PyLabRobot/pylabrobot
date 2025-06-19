@@ -26,6 +26,10 @@ Use the same style and folder structure for images.
 If a section for your resource type (e.g. "Plates"/"Troughs"/etc.) already exists, add your resource to it. Add no new line between the rows.
 If a section does not exist, create a new section (see other files for examples).
 
+Please add an image of the resource to the `resources/library/img/<manufacturer>` folder.
+The image should have the same name as the resource definition you will create.
+The file type can be anything. Please compress and scale down the image to reduce its size (ideally below 100kB).
+
 ## 2. Document attribute sources
 
 When writing a resource definition annotate each attribute with its origin.
@@ -37,26 +41,26 @@ If you measured a value yourself append `# measured`.
 # example
 
 def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plate:
-    """
-    AGenBio Catalog No. P-2.2-SQG-96
-    - Material: Polypropylene
-    - Max. volume: 2200 uL
-    """
-    INNER_WELL_WIDTH = 8  # measured
-    INNER_WELL_LENGTH = 8  # measured
+ """
+  AGenBio Catalog No. P-2.2-SQG-96
+  - Material: Polypropylene
+  - Max. volume: 2200 uL
+  """
+  INNER_WELL_WIDTH = 8  # measured
+  INNER_WELL_LENGTH = 8  # measured
 
-    well_kwargs = {
-        "size_x": INNER_WELL_WIDTH,  # measured
-        ...
-    }
+  well_kwargs = {
+    "size_x": INNER_WELL_WIDTH,  # measured
+    ...
+  }
 
-    return Plate(
-        name=name,
-        size_x=127.76,  # from spec
-        size_y=85.48,  # from spec
-        size_z=42.5,   # from spec
-        ...
-    )
+  return Plate(
+    name=name,
+    size_x=127.76,  # from spec
+    size_y=85.48,  # from spec
+    size_z=42.5,   # from spec
+    ...
+  )
 ````
 
 ## 3. Add imports
@@ -65,3 +69,17 @@ If you place your resource in a new module, remember to import it from the
 package's `__init__.py` so users can load it directly.
 
 Thank you for helping expand the resource library!
+
+## 4. Submit a pull request
+
+Once you have:
+- [ ] added your resource to the library
+- [ ] documented the sources of your attributes (measured, from spec, etc.)
+- [ ] added the name, part number, link and image to the docs
+- [ ] added the imports
+- [ ] verified that your resource works as expected
+
+You are ready to submit a pull request.
+
+Please create a separate new pull request for each resource you add.
+This makes it easier to review and faster to merge.
