@@ -42,7 +42,7 @@ def VWR_1_troughplate_195000uL_Ub(name: str) -> Plate:
   )
 
 
-def VWR_96_DWP_2mL_Vb(name: str) -> Plate:
+def VWR_96_wellplate_2mL_Vb(name: str) -> Plate:
   """VWR NA Cat. No. 76329-998"""
   # product info
   # https://us-prod2.vwr.com/store/product/26915641/vwr-96-well-deep-well-plates-with-automation-notches
@@ -55,7 +55,7 @@ def VWR_96_DWP_2mL_Vb(name: str) -> Plate:
     size_y=85.48,  # standard
     size_z=44.0,  # measured
     lid=None,
-    model="VWR_96_DWP_2mL_Vb",
+    model=VWR_96_wellplate_2mL_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       size_x=10.0,  # measured
