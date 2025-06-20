@@ -464,7 +464,7 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height(z if z else self._z_range for z in z_positions["travel"])
+    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
@@ -732,11 +732,13 @@ class EVOBackend(TecanLiquidHandler):
       assert tlc is not None
       pvl[channel] = 0
       if airgap == "lag":
-        sep[channel] = int(tlc.aspirate_lag_speed * 12)  # 6? TODO: verify step unit
-        ppr[channel] = int(tlc.aspirate_lag_volume * 6)  # 3?
+        sep[channel] = int(
+          tlc.aspirate_lag_speed * 6
+        )  # 6? TODO: verify step unit (half step per second)
+        ppr[channel] = int(tlc.aspirate_lag_volume * 3)  # 3? (Relative position in full steps)
       elif airgap == "tag":
-        sep[channel] = int(tlc.aspirate_tag_speed * 12)  # 6?
-        ppr[channel] = int(tlc.aspirate_tag_volume * 6)  # 3?
+        sep[channel] = int(tlc.aspirate_tag_speed * 6)  # 6?
+        ppr[channel] = int(tlc.aspirate_tag_volume * 3)  # 3?
 
     return pvl, sep, ppr
 
@@ -802,10 +804,11 @@ class EVOBackend(TecanLiquidHandler):
       tlc = tecan_liquid_classes[i]
       z = zadd[channel]
       assert tlc is not None and z is not None
-      sep[channel] = int(tlc.aspirate_speed * 12)  # 6?
-      ssz[channel] = round(z * tlc.aspirate_speed / ops[i].volume)
+      flow_rate = ops[i].flow_rate or tlc.aspirate_speed
+      sep[channel] = int(flow_rate * 6)  # 6?
+      ssz[channel] = round(z * flow_rate / ops[i].volume)
       volume = tlc.compute_corrected_volume(ops[i].volume)
-      mtr[channel] = round(volume * 6)  # 3?
+      mtr[channel] = round(volume * 3)  # 3?  # Relative position in full steps
       ssz_r[channel] = int(tlc.aspirate_retract_speed * 10)
 
     return ssz, sep, stz, mtr, ssz_r
@@ -838,15 +841,16 @@ class EVOBackend(TecanLiquidHandler):
     for i, channel in enumerate(use_channels):
       tlc = tecan_liquid_classes[i]
       assert tlc is not None
-      sep[channel] = int(tlc.dispense_speed * 12)  # 6?
-      spp[channel] = int(tlc.dispense_breakoff * 12)  # 6?
+      flow_rate = ops[i].flow_rate or tlc.dispense_speed
+      sep[channel] = int(flow_rate * 6)  # 6?
+      spp[channel] = int(tlc.dispense_breakoff * 6)  # 6? half step per second
       stz[channel] = 0
       volume = (
         tlc.compute_corrected_volume(ops[i].volume)
         + tlc.aspirate_lag_volume
         + tlc.aspirate_tag_volume
       )
-      mtr[channel] = -round(volume * 6)  # 3?
+      mtr[channel] = -round(volume * 3)  # 3?
 
     return sep, spp, stz, mtr
 
