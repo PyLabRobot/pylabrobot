@@ -118,6 +118,9 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
     raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
   # replace None values in list with default values.
   val = [v if v is not None else d for v, d in zip(val, default)]
+  # allow float if default is int. if so, convert to float.
+  if t is int and all(isinstance(v, (int, float)) for v in val):
+    return [float(v) for v in val]  # type: ignore
   # the values must be of the right type. automatically handle int and float.
   if t in [int, float]:
     return [t(v) for v in val]  # type: ignore
