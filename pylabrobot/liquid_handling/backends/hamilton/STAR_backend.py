@@ -1760,7 +1760,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     clot_detection_height = _fill_in_defaults(
       clot_detection_height,
       default=[
-        hlc.aspiration_clot_retract_height if hlc is not None else 0
+        hlc.aspiration_clot_retract_height if hlc is not None else 0.0
         for hlc in hamilton_liquid_classes
       ],
     )
@@ -1769,61 +1769,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
     # TODO: I think minimum height should be the minimum height of the well
-    immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
+    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
-    surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
+    surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
-      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     transport_air_volume = _fill_in_defaults(
       transport_air_volume,
       default=[
-        hlc.aspiration_air_transport_volume if hlc is not None else 0
+        hlc.aspiration_air_transport_volume if hlc is not None else 0.0
         for hlc in hamilton_liquid_classes
       ],
     )
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0))
+      (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0.0))
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
-    pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0] * n)
+    pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0.0] * n)
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
     dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1] * n)
     aspirate_position_above_z_touch_off = _fill_in_defaults(
-      aspirate_position_above_z_touch_off, [0] * n
+      aspirate_position_above_z_touch_off, [0.0] * n
     )
     detection_height_difference_for_dual_lld = _fill_in_defaults(
-      detection_height_difference_for_dual_lld, [0] * n
+      detection_height_difference_for_dual_lld, [0.0] * n
     )
     swap_speed = _fill_in_defaults(
       swap_speed,
       default=[
-        hlc.aspiration_swap_speed if hlc is not None else 100 for hlc in hamilton_liquid_classes
+        hlc.aspiration_swap_speed if hlc is not None else 100.0 for hlc in hamilton_liquid_classes
       ],
     )
     settling_time = _fill_in_defaults(
       settling_time,
       default=[
-        hlc.aspiration_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.aspiration_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0] * n)
+    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
-    mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
+    mix_position_from_liquid_surface = _fill_in_defaults(
+      mix_position_from_liquid_surface, [0.0] * n
+    )
     mix_speed = _fill_in_defaults(
       mix_speed,
       default=[
         hlc.aspiration_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
+    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
     use_2nd_section_aspiration = _fill_in_defaults(use_2nd_section_aspiration, [False] * n)
     retract_height_over_2nd_section_to_empty_tip = _fill_in_defaults(
-      retract_height_over_2nd_section_to_empty_tip, [0] * n
+      retract_height_over_2nd_section_to_empty_tip, [0.0] * n
     )
     dispensation_speed_during_emptying_tip = _fill_in_defaults(
       dispensation_speed_during_emptying_tip, [50.0] * n
@@ -1834,9 +1836,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_drive_speed_during_2nd_section_search = _fill_in_defaults(
       z_drive_speed_during_2nd_section_search, [30.0] * n
     )
-    cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0] * n)
+    cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0.0] * n)
     ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
-    immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0] * n)
+    immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
 
     try:
       return await self.aspirate_pip(
@@ -2060,29 +2062,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
-    immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
+    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
-    surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
+    surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
-      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     cut_off_speed = _fill_in_defaults(cut_off_speed, [5.0] * n)
     stop_back_volume = _fill_in_defaults(
       stop_back_volume,
       default=[
-        hlc.dispense_stop_back_volume if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
     transport_air_volume = _fill_in_defaults(
       transport_air_volume,
       default=[
-        hlc.dispense_air_transport_volume if hlc is not None else 0
+        hlc.dispense_air_transport_volume if hlc is not None else 0.0
         for hlc in hamilton_liquid_classes
       ],
     )
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0.0))
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
@@ -2100,19 +2102,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     settling_time = _fill_in_defaults(
       settling_time,
       default=[
-        hlc.dispense_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0] * n)
+    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
-    mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
+    mix_position_from_liquid_surface = _fill_in_defaults(
+      mix_position_from_liquid_surface, [0.0] * n
+    )
     mix_speed = _fill_in_defaults(
       mix_speed,
       default=[
         hlc.dispense_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
+    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
     try:
