@@ -163,7 +163,7 @@ class FTDIValidator(FTDI):
     pass
 
   async def set_baudrate(self, baudrate: int):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -173,7 +173,7 @@ class FTDIValidator(FTDI):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_baudrate {baudrate}")
 
   async def set_rts(self, level: bool):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -183,7 +183,7 @@ class FTDIValidator(FTDI):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_rts {level}")
 
   async def set_dtr(self, level: bool):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -193,7 +193,7 @@ class FTDIValidator(FTDI):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_dtr {level}")
 
   async def usb_reset(self):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -204,7 +204,7 @@ class FTDIValidator(FTDI):
       )
 
   async def set_latency_timer(self, latency: int):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -216,7 +216,7 @@ class FTDIValidator(FTDI):
       )
 
   async def set_line_property(self, bits: int, stopbits: int, parity: int):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -228,7 +228,7 @@ class FTDIValidator(FTDI):
       )
 
   async def set_flowctrl(self, flowctrl: int):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -238,7 +238,7 @@ class FTDIValidator(FTDI):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_flowctrl {flowctrl}")
 
   async def usb_purge_rx_buffer(self):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -249,7 +249,7 @@ class FTDIValidator(FTDI):
       )
 
   async def usb_purge_tx_buffer(self):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -260,7 +260,7 @@ class FTDIValidator(FTDI):
       )
 
   async def poll_modem_status(self) -> int:
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -272,7 +272,7 @@ class FTDIValidator(FTDI):
     return int(next_command.data)
 
   async def write(self, data: bytes):
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -284,7 +284,7 @@ class FTDIValidator(FTDI):
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
@@ -295,7 +295,7 @@ class FTDIValidator(FTDI):
     return bytes.fromhex(next_command.data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    next_command = FTDICommand(**self.cr.next_command())
+    next_command = FTDICommand(**self.cr.next_command(self._device_id))
     if not (
       next_command.module == "ftdi"
       and next_command.device_id == self._device_id
