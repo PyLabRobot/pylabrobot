@@ -1,0 +1,77 @@
+﻿pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck
+==========================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.hamilton_decks
+
+.. autoclass:: HamiltonDeck
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HamiltonDeck.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HamiltonDeck.__init__
+      ~HamiltonDeck.assign_child_resource
+      ~HamiltonDeck.at
+      ~HamiltonDeck.center
+      ~HamiltonDeck.centers
+      ~HamiltonDeck.clear
+      ~HamiltonDeck.copy
+      ~HamiltonDeck.deregister_did_assign_resource_callback
+      ~HamiltonDeck.deregister_did_unassign_resource_callback
+      ~HamiltonDeck.deregister_state_update_callback
+      ~HamiltonDeck.deregister_will_assign_resource_callback
+      ~HamiltonDeck.deregister_will_unassign_resource_callback
+      ~HamiltonDeck.deserialize
+      ~HamiltonDeck.get_absolute_location
+      ~HamiltonDeck.get_absolute_rotation
+      ~HamiltonDeck.get_absolute_size_x
+      ~HamiltonDeck.get_absolute_size_y
+      ~HamiltonDeck.get_absolute_size_z
+      ~HamiltonDeck.get_all_children
+      ~HamiltonDeck.get_all_resources
+      ~HamiltonDeck.get_anchor
+      ~HamiltonDeck.get_highest_known_point
+      ~HamiltonDeck.get_resource
+      ~HamiltonDeck.get_root
+      ~HamiltonDeck.get_size_x
+      ~HamiltonDeck.get_size_y
+      ~HamiltonDeck.get_size_z
+      ~HamiltonDeck.get_trash_area
+      ~HamiltonDeck.get_trash_area96
+      ~HamiltonDeck.has_resource
+      ~HamiltonDeck.load_all_state
+      ~HamiltonDeck.load_from_json_file
+      ~HamiltonDeck.load_state
+      ~HamiltonDeck.load_state_from_file
+      ~HamiltonDeck.rails_to_location
+      ~HamiltonDeck.register_did_assign_resource_callback
+      ~HamiltonDeck.register_did_unassign_resource_callback
+      ~HamiltonDeck.register_state_update_callback
+      ~HamiltonDeck.register_will_assign_resource_callback
+      ~HamiltonDeck.register_will_unassign_resource_callback
+      ~HamiltonDeck.rotate
+      ~HamiltonDeck.rotated
+      ~HamiltonDeck.save
+      ~HamiltonDeck.save_state_to_file
+      ~HamiltonDeck.serialize
+      ~HamiltonDeck.serialize_all_state
+      ~HamiltonDeck.serialize_state
+      ~HamiltonDeck.summary
+      ~HamiltonDeck.unassign
+      ~HamiltonDeck.unassign_child_resource
+   
+   

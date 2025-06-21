@@ -1,0 +1,41 @@
+﻿pylabrobot.heating\_shaking.chatterbox.HeaterShakerChatterboxBackend
+====================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.chatterbox
+
+.. autoclass:: HeaterShakerChatterboxBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HeaterShakerChatterboxBackend.supports_active_cooling
+      ~HeaterShakerChatterboxBackend.temperature
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HeaterShakerChatterboxBackend.__init__
+      ~HeaterShakerChatterboxBackend.deactivate
+      ~HeaterShakerChatterboxBackend.deserialize
+      ~HeaterShakerChatterboxBackend.get_all_instances
+      ~HeaterShakerChatterboxBackend.get_current_temperature
+      ~HeaterShakerChatterboxBackend.lock_plate
+      ~HeaterShakerChatterboxBackend.serialize
+      ~HeaterShakerChatterboxBackend.set_temperature
+      ~HeaterShakerChatterboxBackend.setup
+      ~HeaterShakerChatterboxBackend.shake
+      ~HeaterShakerChatterboxBackend.stop
+      ~HeaterShakerChatterboxBackend.stop_shaking
+      ~HeaterShakerChatterboxBackend.unlock_plate
+   
+   

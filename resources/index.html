@@ -1,0 +1,908 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Resource Management System &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'resources/index';</script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/resources/index.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Resources Introduction" href="introduction.html" />
+    <link rel="prev" title="Configuring PLR" href="../user_guide/configuration.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Resources Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom-resources.html">Defining custom resources</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Ontology</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="carrier/carrier.html">Carrier</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="carrier/mfx-carrier/mfx_carrier.html">MFXCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/plate-carrier/plate_carrier.html">PlateCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/tip-carrier/tip-carrier.html">TipCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="container/container.html">Container</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="container/petri-dish/petri-dish.html">PetriDish</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/trough/trough.html">Trough</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/tube/tube.html">Tube</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/well/well.html">Well</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="deck/deck.html">Deck</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="itemized-resource/itemized-resource.html">ItemizedResource</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="itemized-resource/plate/plate.html">Plates</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="itemized-resource/plate/definition-plate.html">Tutorial: Plate Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="itemized-resource/plate/plate-quadrants.html">Tutorial: Plate Quadrants</a></li>
+</ul>
+</details></li>
+
+<li class="toctree-l2"><a class="reference internal" href="itemized-resource/tiprack/tiprack.html">TipRack</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="resource-holder/resource-holder.html">ResourceHolder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource-holder/plate-holder.html">PlateHolder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plate-adapter/plate-adapter.html">PlateAdapter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource-stack/resource-stack.html">ResourceStack</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Library</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="library/agenbio.html">Agenbio</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/alpaqua.html">Alpaqua Engineering, LLC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/azenta.html">Azenta</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/biorad.html">Biorad</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/boekel.html">Boekel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/celltreat.html">CellTreat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/cellvis.html">Cellvis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/corning_axygen.html">Corning - Axygen</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/corning_costar.html">Corning Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/eppendorf.html">Eppendorf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/falcon.html">Falcon</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="library/hamilton.html">Hamilton STAR “ML_STAR”</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/nest.html">Wuxi Nest</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/opentrons.html">Opentrons</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/porvair.html">Porvair</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/revvity.html">Revvity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/sergi.html">Sergi Lab Supplies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/thermo_fisher.html">Thermo Fisher Scientific Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/vwr.html">VWR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Resource Management System</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="resource-management-system">
+<h1>Resource Management System<a class="headerlink" href="#resource-management-system" title="Link to this heading">#</a></h1>
+<hr>
+<p>The PyLabRobot (PLR) Resource Management System (RMS) is a <strong>framework</strong> that <strong>models</strong> both the <strong>physical components</strong> of an automation setup and the <strong>distinct physical behaviors of each component</strong>.
+(It does not provide electronic control of machines.
+This is the role of PLR’s <em>machine control system</em>.)
+It provides a structured approach for dynamically constructing precise and adaptable automation system layouts.</p>
+<p>The PLR Resource Management System consists of two key components, each serving a distinct role:</p>
+<ol class="arabic simple">
+<li><p><strong>Resource Ontology System</strong></p>
+<ul class="simple">
+<li><p>The <em><strong>‘blueprint’</strong></em> of PLR’s physical definition framework, responsible for defining physical resources, modeling their distinct behaviors, and dynamically managing their relationships (i.e. tracking their <em>state</em>).</p></li>
+</ul>
+</li>
+<li><p><strong>Resource Library</strong></p>
+<ul class="simple">
+<li><p>The <em><strong>‘catalog’</strong></em> of premade resource definitions.
+This provides reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
+This ensures smooth integration, scalability, and efficient resource utilization.</p></li>
+</ul>
+</li>
+</ol>
+<div class="toctree-wrapper compound">
+</div>
+<hr>
+<section id="resource-ontology-system">
+<h2>Resource Ontology System<a class="headerlink" href="#resource-ontology-system" title="Link to this heading">#</a></h2>
+<p>In PLR every physical object is a subclass of the <code class="docutils literal notranslate"><span class="pre">Resource</span></code> superclass (except for <code class="docutils literal notranslate"><span class="pre">Tip</span></code>).
+Each subclass adds unique methods or attributes to represent its unique physical specifications and behavior.</p>
+<p>PLR’s <code class="docutils literal notranslate"><span class="pre">Resource</span></code> subclasses in the inheritance tree are:</p>
+<style>
+  .tree {
+    border: 3px solid black;      /* Thick border around the entire table */
+    border-collapse: collapse;    /* Ensures borders don’t double */
+    background-color: #FAF3DD;    /* Light background */
+    margin-left: 5px;             /* A bit of left margin */
+  }
+
+  .tree td {
+    font-family: "Fira Code", monospace;  /* Code-like font */
+    font-size: 15px;                     /* Matches code cell output */
+    font-weight: bold;                   /* Make all text bold */
+    line-height: 1.2;                    /* Slightly tighten vertical spacing */
+    padding: 0 10px;                   /* Padding around each line */
+    border: none;                        /* Remove inner borders */
+    white-space: pre;                    /* Preserve spacing exactly */
+  }
+</style>
+<table class="tree">
+  <tr><td><a href="introduction.html">Resource</a></td></tr>
+  <!-- Arm subtree -->
+  <tr><td>├── <a href="deck/deck.html">Arm</a></td></tr>
+  <tr><td>│   ├── ArticulatedArm</td></tr>
+  <tr><td>│   ├── CartesianArm</td></tr>
+  <tr><td>│   └── SCARA</td></tr>
+  <!-- Carrier subtree -->
+  <tr><td>├── <a href="carrier/carrier.html">Carrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/mfx-carrier/mfx_carrier.html">MFXCarrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/plate-carrier/plate_carrier.html">PlateCarrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/tip-carrier/tip-carrier.html">TipCarrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></td></tr>
+  <tr><td>│   └── <a href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></td></tr>
+  <!-- <tr><td>├── ChannelHeadTool</td></tr>
+  <tr><td>│   ├── <a href="container/trough/trough.html">Gripper</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">Tip (to be made a resource)</a></td></tr>
+ -->
+  <!-- Container subtree -->
+  <tr><td>├── <a href="container/container.html">Container</a></td></tr>
+  <tr><td>│   ├── <a href="container/petri-dish/petri-dish.html">PetriDish</a></td></tr>
+  <tr><td>│   ├── <a href="container/trough/trough.html">Trough</a></td></tr>
+  <tr><td>│   ├── <a href="container/tube/tube.html">Tube</a></td></tr>
+  <tr><td>│   └── <a href="container/well/well.html">Well</a></td></tr>
+  <!-- Deck subtree -->
+  <tr><td>├── <a href="deck/deck.html">Deck</a></td></tr>
+  <tr><td>│   ├── OTDeck</td></tr>
+  <tr><td>│   ├── HamiltonDeck</td></tr>
+  <tr><td>│   └── TecanDeck</td></tr>
+  <!-- ItemizedResource subtree -->
+  <tr><td>├── <a href="itemized-resource/itemized-resource.html">ItemizedResource</a></td></tr>
+  <tr><td>│   ├── <a href="itemized-resource/plate/plate.html">Plate</a></td></tr>
+  <tr><td>│   ├── TipRack</td></tr>
+  <tr><td>│   └── TubeRack</td></tr>
+  <!-- ResourceHolder subtree -->
+  <tr><td>├── <a href="resource-holder/resource-holder.html">ResourceHolder</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">PlateHolder</a></td></tr>
+  <!-- Others -->
+  <tr><td>├── Lid</td></tr>
+  <tr><td>├── <a href="plate-adapter/plate-adapter.html">PlateAdapter</a></td></tr>
+  <tr><td>├── ResourceStack</td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
+  <tr><td>└── Workcell (to be made)</td></tr>
+</table>
+<hr>
+<details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
+    <summary style="font-weight: bold; cursor: pointer;">Note: On the meaning of the terms "Resource" vs "Labware"</summary>
+    <hr>
+    <p>Most automation software systems (e.g. SDKs, APIs, GUIs) use the term "labware" to describe items on a machine's deck.
+    However, in our discussions, it became evident that the term "labware" has different meanings to different stakeholders
+    (e.g., "A plate is clearly labware, but is a liquid handler or a plate reader labware?").
+    As a result, PLR avoids the ambiguous term "labware".</p>
+    <p><u>Every physical item (describable via its <code>item_x</code>, <code>item_y</code>, <code>item_z</code>) is a "resource"</u>.</p>
+</details>
+<hr>
+<div class="toctree-wrapper compound">
+</div>
+</section>
+<section id="resource-library">
+<h2>Resource Library<a class="headerlink" href="#resource-library" title="Link to this heading">#</a></h2>
+<p>The PyLabRobot Resource Library (PLR-RL) is PyLabRobot’s open-source, crowd-sourced collection of pre-made resource definitions.
+Laboratories across the world use an almost infinite number of different resources (e.g. plates, tubes, liquid handlers, microscopes, arms, …).
+We believe the way to most efficiently capture the largest portion of this resource superset is via crowd-sourcing and iteratively peer-reviewing definitions.
+If you cannot find something, please contribute what you are looking for!</p>
+<hr>
+<details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
+    <summary style="font-weight: bold; cursor: pointer;">Note: On the universality of resource definitions</summary>
+    <hr>
+    <p>Resource definitions are subject to numerous sources of variability, including (but not limited to) the following:</p>
+    <ul>
+        <li>Resource batch-to-batch variability (e.g., a plate's wells height might vary ±1.5mm between different purchases of the same well).</li>
+        <li>Machine calibration differences (e.g., person A's liquid handler's pipettes are tilted in the x-dimension by 1mm compared to person B's).</li>
+    </ul>
+    <p>As a result, many automation software systems believe that it is impossible to reuse resource definitions.
+    In contrast, PyLabRobot is convinced that carefully created resource definitions combined with smart automation can be reused most of the time.</p>
+    <p>PLR is actively addressing these resource resuse constraints in numerous ways:</p>
+    <ul>
+        <li>Development of self-correcting machine backend methods.</li>
+        <li>Using Coordinate Measurement Machine-based generation of resource "ground truths" (e.g., via liquid handler-based resource probing or 3D scanning).</li>
+    </ul>
+</details>
+<hr>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Library</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="library/agenbio.html">Agenbio</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/agenbio.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/alpaqua.html">Alpaqua Engineering, LLC</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/alpaqua.html#labware">Labware</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/azenta.html">Azenta</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/azenta.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/biorad.html">Biorad</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/biorad.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/boekel.html">Boekel</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/boekel.html#tube-carrier">Tube carrier</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/celltreat.html">CellTreat</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/celltreat.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/cellvis.html">Cellvis</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/cellvis.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/corning_axygen.html">Corning - Axygen</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/corning_axygen.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/corning_costar.html">Corning Inc.</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/corning_costar.html#corning-axygen">Corning - Axygen</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/corning_costar.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/corning_costar.html#corning-costar">Corning - Costar</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/corning_costar.html#costar-plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/corning_costar.html#falcon">Falcon</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/corning_costar.html#falcon-plates">Plates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/corning_costar.html#tubes">Tubes</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/eppendorf.html">Eppendorf</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/eppendorf.html#plates">Plates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/eppendorf.html#tubes">Tubes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/falcon.html">Falcon</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/falcon.html#plates">Plates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/falcon.html#tubes">Tubes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/hamilton.html">Hamilton STAR “ML_STAR”</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/hamilton.html#carriers">Carriers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#tip-carriers">Tip carriers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#plate-carriers">Plate carriers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#mfx-carriers">MFX carriers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#mfx-modules">MFX modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#tube-carriers">Tube carriers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#trough-carriers">Trough carriers</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/hamilton.html#labware">Labware</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#tipracks">TipRacks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/hamilton.html#troughs">Troughs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/hamilton.html#adapters">Adapters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/nest.html">Wuxi Nest</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/nest.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/opentrons.html">Opentrons</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/opentrons.html#plates">Plates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/opentrons.html#tip-racks">Tip racks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/opentrons.html#reservoirs">Reservoirs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/opentrons.html#tube-racks">Tube racks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/opentrons.html#plate-adapters">Plate Adapters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/porvair.html">Porvair</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/porvair.html#plates">Plates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/porvair.html#reservoirs">Reservoirs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/revvity.html">Revvity</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/revvity.html#plates">Plates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/sergi.html">Sergi Lab Supplies</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/sergi.html#plate-adaptors">Plate Adaptors</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/thermo_fisher.html">Thermo Fisher Scientific Inc.</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/thermo_fisher.html#plates">Plates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/thermo_fisher.html#troughs">Troughs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library/vwr.html">VWR</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/vwr.html#troughs">Troughs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/vwr.html#plates">Plates</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../user_guide/configuration.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Configuring PLR</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="introduction.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Resources Introduction</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-ontology-system">Resource Ontology System</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resource-library">Resource Library</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/resources/index.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/resources/index.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,74 @@
+﻿pylabrobot.resources.TubeCarrier
+================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: TubeCarrier
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TubeCarrier.capacity
+      ~TubeCarrier.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TubeCarrier.__init__
+      ~TubeCarrier.assign_child_resource
+      ~TubeCarrier.assign_resource_to_site
+      ~TubeCarrier.at
+      ~TubeCarrier.center
+      ~TubeCarrier.centers
+      ~TubeCarrier.copy
+      ~TubeCarrier.deregister_did_assign_resource_callback
+      ~TubeCarrier.deregister_did_unassign_resource_callback
+      ~TubeCarrier.deregister_state_update_callback
+      ~TubeCarrier.deregister_will_assign_resource_callback
+      ~TubeCarrier.deregister_will_unassign_resource_callback
+      ~TubeCarrier.deserialize
+      ~TubeCarrier.get_absolute_location
+      ~TubeCarrier.get_absolute_rotation
+      ~TubeCarrier.get_absolute_size_x
+      ~TubeCarrier.get_absolute_size_y
+      ~TubeCarrier.get_absolute_size_z
+      ~TubeCarrier.get_all_children
+      ~TubeCarrier.get_anchor
+      ~TubeCarrier.get_free_sites
+      ~TubeCarrier.get_highest_known_point
+      ~TubeCarrier.get_resource
+      ~TubeCarrier.get_resources
+      ~TubeCarrier.get_root
+      ~TubeCarrier.get_size_x
+      ~TubeCarrier.get_size_y
+      ~TubeCarrier.get_size_z
+      ~TubeCarrier.load_all_state
+      ~TubeCarrier.load_from_json_file
+      ~TubeCarrier.load_state
+      ~TubeCarrier.load_state_from_file
+      ~TubeCarrier.register_did_assign_resource_callback
+      ~TubeCarrier.register_did_unassign_resource_callback
+      ~TubeCarrier.register_state_update_callback
+      ~TubeCarrier.register_will_assign_resource_callback
+      ~TubeCarrier.register_will_unassign_resource_callback
+      ~TubeCarrier.rotate
+      ~TubeCarrier.rotated
+      ~TubeCarrier.save
+      ~TubeCarrier.save_state_to_file
+      ~TubeCarrier.serialize
+      ~TubeCarrier.serialize_all_state
+      ~TubeCarrier.serialize_state
+      ~TubeCarrier.unassign
+      ~TubeCarrier.unassign_child_resource
+   
+   

@@ -1,0 +1,74 @@
+﻿pylabrobot.resources.Tube
+=========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Tube
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Tube.material_z_thickness
+      ~Tube.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Tube.__init__
+      ~Tube.assign_child_resource
+      ~Tube.at
+      ~Tube.center
+      ~Tube.centers
+      ~Tube.compute_height_from_volume
+      ~Tube.compute_volume_from_height
+      ~Tube.copy
+      ~Tube.deregister_did_assign_resource_callback
+      ~Tube.deregister_did_unassign_resource_callback
+      ~Tube.deregister_state_update_callback
+      ~Tube.deregister_will_assign_resource_callback
+      ~Tube.deregister_will_unassign_resource_callback
+      ~Tube.deserialize
+      ~Tube.get_absolute_location
+      ~Tube.get_absolute_rotation
+      ~Tube.get_absolute_size_x
+      ~Tube.get_absolute_size_y
+      ~Tube.get_absolute_size_z
+      ~Tube.get_all_children
+      ~Tube.get_anchor
+      ~Tube.get_highest_known_point
+      ~Tube.get_resource
+      ~Tube.get_root
+      ~Tube.get_size_x
+      ~Tube.get_size_y
+      ~Tube.get_size_z
+      ~Tube.load_all_state
+      ~Tube.load_from_json_file
+      ~Tube.load_state
+      ~Tube.load_state_from_file
+      ~Tube.register_did_assign_resource_callback
+      ~Tube.register_did_unassign_resource_callback
+      ~Tube.register_state_update_callback
+      ~Tube.register_will_assign_resource_callback
+      ~Tube.register_will_unassign_resource_callback
+      ~Tube.rotate
+      ~Tube.rotated
+      ~Tube.save
+      ~Tube.save_state_to_file
+      ~Tube.serialize
+      ~Tube.serialize_all_state
+      ~Tube.serialize_state
+      ~Tube.set_liquids
+      ~Tube.unassign
+      ~Tube.unassign_child_resource
+   
+   

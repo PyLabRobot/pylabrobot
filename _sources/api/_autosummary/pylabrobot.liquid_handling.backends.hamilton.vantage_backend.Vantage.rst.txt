@@ -1,0 +1,148 @@
+﻿pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage
+======================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. autoclass:: Vantage
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Vantage.deck
+      ~Vantage.head
+      ~Vantage.head96
+      ~Vantage.module_id_length
+      ~Vantage.num_channels
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Vantage.__init__
+      ~Vantage.arm_pre_initialize
+      ~Vantage.arm_request_instrument_initialization_status
+      ~Vantage.aspirate
+      ~Vantage.aspirate96
+      ~Vantage.assigned_resource_callback
+      ~Vantage.calculates_check_sums_and_compares_them_with_the_value_saved_in_flash_eprom
+      ~Vantage.can_pick_up_tip
+      ~Vantage.check_fw_string_error
+      ~Vantage.core96_aspiration_of_liquid
+      ~Vantage.core96_dispensing_of_liquid
+      ~Vantage.core96_empty_washed_tips
+      ~Vantage.core96_initialize
+      ~Vantage.core96_move_to_defined_position
+      ~Vantage.core96_query_tip_presence
+      ~Vantage.core96_request_initialization_status
+      ~Vantage.core96_request_position
+      ~Vantage.core96_request_tadm_error_status
+      ~Vantage.core96_search_for_teach_in_signal_in_x_direction
+      ~Vantage.core96_set_any_parameter
+      ~Vantage.core96_tip_discard
+      ~Vantage.core96_tip_pick_up
+      ~Vantage.core96_wash_tips
+      ~Vantage.define_tip_needle
+      ~Vantage.deserialize
+      ~Vantage.discard_core_gripper_tool
+      ~Vantage.disco_mode
+      ~Vantage.dispense
+      ~Vantage.dispense96
+      ~Vantage.dispense_on_fly
+      ~Vantage.drop_resource
+      ~Vantage.drop_tips
+      ~Vantage.drop_tips96
+      ~Vantage.expose_channel_n
+      ~Vantage.get_all_instances
+      ~Vantage.get_id_from_fw_response
+      ~Vantage.get_or_assign_tip_type_index
+      ~Vantage.get_ttti
+      ~Vantage.grip_plate
+      ~Vantage.ipg_expose_channel_n
+      ~Vantage.ipg_get_parking_status
+      ~Vantage.ipg_grip_plate
+      ~Vantage.ipg_initialize
+      ~Vantage.ipg_move_to_defined_position
+      ~Vantage.ipg_park
+      ~Vantage.ipg_prepare_gripper_orientation
+      ~Vantage.ipg_put_plate
+      ~Vantage.ipg_query_tip_presence
+      ~Vantage.ipg_release_object
+      ~Vantage.ipg_request_access_range
+      ~Vantage.ipg_request_actual_angular_dimensions
+      ~Vantage.ipg_request_configuration
+      ~Vantage.ipg_request_initialization_status
+      ~Vantage.ipg_request_position
+      ~Vantage.ipg_search_for_teach_in_signal_in_x_direction
+      ~Vantage.ipg_set_any_parameter_within_this_module
+      ~Vantage.loading_cover_initialize
+      ~Vantage.loading_cover_request_initialization_status
+      ~Vantage.move_channel_x
+      ~Vantage.move_channel_y
+      ~Vantage.move_channel_z
+      ~Vantage.move_picked_up_resource
+      ~Vantage.move_to_defined_position
+      ~Vantage.move_to_position
+      ~Vantage.nano_pulse_dispense
+      ~Vantage.pick_up_resource
+      ~Vantage.pick_up_tips
+      ~Vantage.pick_up_tips96
+      ~Vantage.pip_aspirate
+      ~Vantage.pip_dispense
+      ~Vantage.pip_initialize
+      ~Vantage.pip_request_initialization_status
+      ~Vantage.pip_tip_discard
+      ~Vantage.pip_tip_pick_up
+      ~Vantage.position_all_channels_in_y_direction
+      ~Vantage.position_all_channels_in_z_direction
+      ~Vantage.position_single_channel_in_y_direction
+      ~Vantage.position_single_channel_in_z_direction
+      ~Vantage.prepare_for_manual_channel_operation
+      ~Vantage.put_plate
+      ~Vantage.query_tip_presence
+      ~Vantage.release_object
+      ~Vantage.request_channel_dispense_on_fly_status
+      ~Vantage.request_height_of_last_lld
+      ~Vantage.request_y_position_of_channel_n
+      ~Vantage.request_y_positions_of_all_channels
+      ~Vantage.request_z_position_of_channel_n
+      ~Vantage.request_z_positions_of_all_channels
+      ~Vantage.russian_roulette
+      ~Vantage.search_for_teach_in_signal_in_x_direction
+      ~Vantage.send_command
+      ~Vantage.send_raw_command
+      ~Vantage.serialize
+      ~Vantage.set_any_parameter_within_this_module
+      ~Vantage.set_deck
+      ~Vantage.set_heads
+      ~Vantage.set_led_color
+      ~Vantage.set_loading_cover
+      ~Vantage.set_minimum_traversal_height
+      ~Vantage.setup
+      ~Vantage.simultaneous_aspiration_dispensation_of_liquid
+      ~Vantage.stop
+      ~Vantage.teach_rack_using_channel_n
+      ~Vantage.unassigned_resource_callback
+      ~Vantage.wash_tips
+      ~Vantage.x_arm_initialize
+      ~Vantage.x_arm_move_arm_relatively_in_x
+      ~Vantage.x_arm_move_to_x_position
+      ~Vantage.x_arm_move_to_x_position_with_all_attached_components_in_z_safety_position
+      ~Vantage.x_arm_request_arm_x_position
+      ~Vantage.x_arm_request_error_code
+      ~Vantage.x_arm_request_x_drive_recorded_data
+      ~Vantage.x_arm_search_x_for_teach_signal
+      ~Vantage.x_arm_send_message_to_motion_controller
+      ~Vantage.x_arm_set_any_parameter_within_this_module
+      ~Vantage.x_arm_set_x_drive_angle_of_alignment
+      ~Vantage.x_arm_turn_x_drive_off
+   
+   

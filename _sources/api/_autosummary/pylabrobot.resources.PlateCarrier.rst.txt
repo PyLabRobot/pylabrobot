@@ -1,0 +1,74 @@
+﻿pylabrobot.resources.PlateCarrier
+=================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: PlateCarrier
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateCarrier.capacity
+      ~PlateCarrier.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateCarrier.__init__
+      ~PlateCarrier.assign_child_resource
+      ~PlateCarrier.assign_resource_to_site
+      ~PlateCarrier.at
+      ~PlateCarrier.center
+      ~PlateCarrier.centers
+      ~PlateCarrier.copy
+      ~PlateCarrier.deregister_did_assign_resource_callback
+      ~PlateCarrier.deregister_did_unassign_resource_callback
+      ~PlateCarrier.deregister_state_update_callback
+      ~PlateCarrier.deregister_will_assign_resource_callback
+      ~PlateCarrier.deregister_will_unassign_resource_callback
+      ~PlateCarrier.deserialize
+      ~PlateCarrier.get_absolute_location
+      ~PlateCarrier.get_absolute_rotation
+      ~PlateCarrier.get_absolute_size_x
+      ~PlateCarrier.get_absolute_size_y
+      ~PlateCarrier.get_absolute_size_z
+      ~PlateCarrier.get_all_children
+      ~PlateCarrier.get_anchor
+      ~PlateCarrier.get_free_sites
+      ~PlateCarrier.get_highest_known_point
+      ~PlateCarrier.get_resource
+      ~PlateCarrier.get_resources
+      ~PlateCarrier.get_root
+      ~PlateCarrier.get_size_x
+      ~PlateCarrier.get_size_y
+      ~PlateCarrier.get_size_z
+      ~PlateCarrier.load_all_state
+      ~PlateCarrier.load_from_json_file
+      ~PlateCarrier.load_state
+      ~PlateCarrier.load_state_from_file
+      ~PlateCarrier.register_did_assign_resource_callback
+      ~PlateCarrier.register_did_unassign_resource_callback
+      ~PlateCarrier.register_state_update_callback
+      ~PlateCarrier.register_will_assign_resource_callback
+      ~PlateCarrier.register_will_unassign_resource_callback
+      ~PlateCarrier.rotate
+      ~PlateCarrier.rotated
+      ~PlateCarrier.save
+      ~PlateCarrier.save_state_to_file
+      ~PlateCarrier.serialize
+      ~PlateCarrier.serialize_all_state
+      ~PlateCarrier.serialize_state
+      ~PlateCarrier.unassign
+      ~PlateCarrier.unassign_child_resource
+   
+   

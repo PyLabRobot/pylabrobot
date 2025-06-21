@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.discard\_core\_gripper\_tool
+===================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. automethod:: Vantage.discard_core_gripper_tool

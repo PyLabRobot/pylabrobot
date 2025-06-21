@@ -1,0 +1,79 @@
+﻿pylabrobot.shaking.shaker.Shaker
+================================
+
+.. currentmodule:: pylabrobot.shaking.shaker
+
+.. autoclass:: Shaker
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Shaker.name
+      ~Shaker.resource
+      ~Shaker.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Shaker.__init__
+      ~Shaker.assign_child_resource
+      ~Shaker.at
+      ~Shaker.center
+      ~Shaker.centers
+      ~Shaker.copy
+      ~Shaker.deregister_did_assign_resource_callback
+      ~Shaker.deregister_did_unassign_resource_callback
+      ~Shaker.deregister_state_update_callback
+      ~Shaker.deregister_will_assign_resource_callback
+      ~Shaker.deregister_will_unassign_resource_callback
+      ~Shaker.deserialize
+      ~Shaker.get_absolute_location
+      ~Shaker.get_absolute_rotation
+      ~Shaker.get_absolute_size_x
+      ~Shaker.get_absolute_size_y
+      ~Shaker.get_absolute_size_z
+      ~Shaker.get_all_children
+      ~Shaker.get_anchor
+      ~Shaker.get_default_child_location
+      ~Shaker.get_highest_known_point
+      ~Shaker.get_resource
+      ~Shaker.get_root
+      ~Shaker.get_size_x
+      ~Shaker.get_size_y
+      ~Shaker.get_size_z
+      ~Shaker.load_all_state
+      ~Shaker.load_from_json_file
+      ~Shaker.load_state
+      ~Shaker.load_state_from_file
+      ~Shaker.lock_plate
+      ~Shaker.register_did_assign_resource_callback
+      ~Shaker.register_did_unassign_resource_callback
+      ~Shaker.register_state_update_callback
+      ~Shaker.register_will_assign_resource_callback
+      ~Shaker.register_will_unassign_resource_callback
+      ~Shaker.rotate
+      ~Shaker.rotated
+      ~Shaker.save
+      ~Shaker.save_state_to_file
+      ~Shaker.serialize
+      ~Shaker.serialize_all_state
+      ~Shaker.serialize_state
+      ~Shaker.setup
+      ~Shaker.shake
+      ~Shaker.stop
+      ~Shaker.stop_shaking
+      ~Shaker.unassign
+      ~Shaker.unassign_child_resource
+      ~Shaker.unlock_plate
+   
+   

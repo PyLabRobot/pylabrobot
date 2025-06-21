@@ -1,0 +1,37 @@
+﻿pylabrobot.plate\_reading.clario\_star\_backend.CLARIOStarBackend
+=================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.clario_star_backend
+
+.. autoclass:: CLARIOStarBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CLARIOStarBackend.__init__
+      ~CLARIOStarBackend.close
+      ~CLARIOStarBackend.deserialize
+      ~CLARIOStarBackend.get_all_instances
+      ~CLARIOStarBackend.get_stat
+      ~CLARIOStarBackend.initialize
+      ~CLARIOStarBackend.open
+      ~CLARIOStarBackend.read_absorbance
+      ~CLARIOStarBackend.read_command_status
+      ~CLARIOStarBackend.read_fluorescence
+      ~CLARIOStarBackend.read_luminescence
+      ~CLARIOStarBackend.read_resp
+      ~CLARIOStarBackend.request_eeprom_data
+      ~CLARIOStarBackend.send
+      ~CLARIOStarBackend.serialize
+      ~CLARIOStarBackend.setup
+      ~CLARIOStarBackend.stop
+   
+   
