@@ -106,7 +106,6 @@ def need_iswap_parked(method: Callable):
 
 def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
   """Util for converting an argument to the appropriate format for low level star methods."""
-  t = type(default[0])
   # if the val is None, use the default.
   if val is None:
     return default
@@ -118,8 +117,8 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
     raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
   # replace None values in list with default values.
   val = [v if v is not None else d for v, d in zip(val, default)]
-  if not all(isinstance(v, t) for v in val):
-    raise ValueError(f"Value must be a list of {t}, but is {val}")
+  if not all(isinstance(v, (float, int)) for v in val):
+    raise ValueError(f"Value must be a list of float or int, but is {val}")
   # the value is ready to be used.
   return val
 
