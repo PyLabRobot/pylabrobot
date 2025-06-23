@@ -109,9 +109,6 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
   # if the val is None, use the default.
   if val is None:
     return default
-  # repeat val if it is not a list.
-  if not isinstance(val, list):
-    return [val] * len(default)
   # if the val is a list, it must be of the correct length.
   if len(val) != len(default):
     raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
