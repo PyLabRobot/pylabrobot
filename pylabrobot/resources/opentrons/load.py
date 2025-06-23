@@ -11,7 +11,7 @@ except ImportError:
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
-from pylabrobot.resources.tip import Tip, TipCreator
+from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tube import Tube
 from pylabrobot.resources.tube_rack import TubeRack
@@ -106,23 +106,19 @@ def ot_definition_to_resource(
           wells.append(well)
         elif display_category == "tipRack":
           # closure
-          def make_make_tip(well_data) -> TipCreator:
-            def make_tip() -> Tip:
-              total_tip_length = well_data["depth"]
-              return Tip(
-                total_tip_length=total_tip_length,
-                has_filter="Filter" in data["metadata"]["displayName"],
-                maximal_volume=volume_from_name(data["metadata"]["displayName"]),
-                fitting_depth=data["parameters"]["tipOverlap"],
-              )
-
-            return make_tip
+          def make_tip() -> Tip:
+            return Tip(
+              total_tip_length=data["parameters"]["tipLength"],
+              has_filter="Filter" in data["metadata"]["displayName"],
+              maximal_volume=volume_from_name(data["metadata"]["displayName"]),
+              fitting_depth=data["parameters"]["tipOverlap"],
+            )
 
           tip_spot = TipSpot(
             name=item,
             size_x=well_size_x,
             size_y=well_size_y,
-            make_tip=make_make_tip(well_data),
+            make_tip=make_tip,
           )
           tip_spot.location = location
           wells.append(tip_spot)
