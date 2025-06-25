@@ -1887,8 +1887,19 @@ class LiquidHandler(Resource, Machine):
     self,
     to: Coordinate,
     offset: Coordinate = Coordinate.zero(),
+    direction: Optional[GripDirection] = None,
     **backend_kwargs,
   ):
+    """Move a resource that has been picked up to a new location.
+
+    Args:
+      to: The new location to move the resource to. (LFB of plate)
+      offset: The offset to apply to the new location.
+      direction: The direction in which the resource is gripped. If `None`, the current direction
+        will be used.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
+    """
+
     self._log_command(
       "move_picked_up_resource",
       to=to,
@@ -1901,7 +1912,7 @@ class LiquidHandler(Resource, Machine):
       ResourceMove(
         location=to,
         resource=self._resource_pickup.resource,
-        gripped_direction=self._resource_pickup.direction,
+        gripped_direction=direction or self._resource_pickup.direction,
         pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
         offset=offset,
       ),
