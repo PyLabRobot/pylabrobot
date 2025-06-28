@@ -1,0 +1,6 @@
+pylabrobot.resources.PetriDish.get\_absolute\_size\_z
+=====================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PetriDish.get_absolute_size_z

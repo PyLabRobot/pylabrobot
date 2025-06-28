@@ -1,0 +1,691 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Contributing a new type of machine to PLR &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'contributor_guide/new-machine-type';</script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/contributor_guide/new-machine-type.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Adding support for a new machine of an existing type" href="new-concrete-backend.html" />
+    <link rel="prev" title="How to Open Source" href="how-to-open-source.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to PyLabRobot</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing-new-resources.html">Contributing new resources</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how-to-open-source.html">How to Open Source</a></li>
+</ul>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Contributing a new type of machine to PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="new-concrete-backend.html">Adding support for a new machine of an existing type</a></li>
+<li class="toctree-l1"><a class="reference internal" href="visualizer.html">Visualizer Architecture and Contributing</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Contributor guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Contributing a new type of machine to PLR</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="contributing-a-new-type-of-machine-to-plr">
+<h1>Contributing a new type of machine to PLR<a class="headerlink" href="#contributing-a-new-type-of-machine-to-plr" title="Link to this heading">#</a></h1>
+<p>PyLabRobot supports a number of different types of machines. Currently, these are:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../user_guide/00_liquid-handling/hamilton-star/basic.html"><span class="doc std std-doc">Liquid handlers</span></a></p></li>
+<li><p><a class="reference internal" href="../user_guide/02_analytical/plate-reading/plate-reading.html"><span class="doc std std-doc">Plate readers</span></a></p></li>
+<li><p><a class="reference internal" href="../user_guide/00_liquid-handling/pumps/_pumps.html"><span class="doc std std-doc">Pumps</span></a></p></li>
+<li><p><a class="reference internal" href="../user_guide/01_material-handling/temperature.html"><span class="doc std std-doc">Temperature controllers</span></a></p></li>
+<li><p><a class="reference internal" href="../user_guide/01_material-handling/heating_shaking/heating_shaking.html"><span class="doc std std-doc">Heater shakers</span></a></p></li>
+</ul>
+<p>If you want to add support for a new type of machine, this guide will explain the process. If you want to add a new machine for a type that already exists, you should read <a class="reference internal" href="new-concrete-backend.html"><span class="doc">this guide</span></a> instead.</p>
+<p>This guide is not a definitive step-by-step guide (otherwise we would have automated it), but rather a collection of high-level ideas and suggestions. Often, it only becomes clear what the best abstractions are after two or more machines for a type have been implemented, so it is totally valid (and encouraged) to make some assumptions and then refactor later.</p>
+<p>Two documents that you can read before you start are:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>: This document contains general information about contributing to PyLabRobot, and covers things like installation and testing.</p></li>
+<li><p><a class="reference external" href="https://docs.pylabrobot.org/how-to-open-source.html">How to Open Source</a>: This document contains step-by-step instructions for contributing to an open source project. It is not specific to PyLabRobot, and serves as a reference.</p></li>
+</ul>
+<p>Thank you for contributing to PyLabRobot!</p>
+<section id="get-in-touch">
+<h2>0. Get in touch<a class="headerlink" href="#get-in-touch" title="Link to this heading">#</a></h2>
+<p>Please make a post on <a class="reference external" href="https://discuss.pylabrobot.org">the PyLabRobot Development forum</a> to let us know what you are working on. This will help you avoid duplicating work, and it is also a good place to get support.</p>
+</section>
+<section id="creating-a-new-module">
+<h2>1. Creating a new module<a class="headerlink" href="#creating-a-new-module" title="Link to this heading">#</a></h2>
+<p>Each machine type has its own module in PLR. For example, the liquid handling module is located at <code class="docutils literal notranslate"><span class="pre">pylabrobot.liquid_handling</span></code>. This module contains:</p>
+<ul class="simple">
+<li><p>the machine front end: the user-facing API for the machine type. Example: <code class="docutils literal notranslate"><span class="pre">LiquidHandler</span></code>.</p></li>
+<li><p>the abstract base class for the machine type: the minimal set of atomic commands that the machine type is expected to support. Example: <code class="docutils literal notranslate"><span class="pre">LiquidHandlerBackend</span></code>.</p></li>
+<li><p>the concrete backends: the actual implementations of the abstract base class for specific machines. See <a class="reference internal" href="new-concrete-backend.html"><span class="doc">the concrete backends guide</span></a> for more information. Example: <code class="docutils literal notranslate"><span class="pre">STAR</span></code>.</p></li>
+</ul>
+</section>
+<section id="creating-a-new-abstract-backend-class">
+<h2>2. Creating a new abstract backend class<a class="headerlink" href="#creating-a-new-abstract-backend-class" title="Link to this heading">#</a></h2>
+<p>Abstract backends are used to define the interface for a type of machine in terms of the minimal set of atomic commands. For example, all liquid handlers should have an <code class="docutils literal notranslate"><span class="pre">aspirate</span></code> method.</p>
+<p>The commands should be interactive and minimal. Interactive means that the command is expected to be executed immediately when its method is called. Minimal means the commands cannot be broken into sub-commands that a user would reasonably want to use. For example, the abstract liquid handler backend contains commands for <code class="docutils literal notranslate"><span class="pre">aspirate</span></code> and <code class="docutils literal notranslate"><span class="pre">dispense</span></code>, but not <code class="docutils literal notranslate"><span class="pre">transfer</span></code> (a convenience method that exists on the frontend). At the same time, <code class="docutils literal notranslate"><span class="pre">aspirate</span></code> does move the pipetting head to a certain location because this move and the actual aspiration are reasonably expected to always occur together. For new machines, it is fine to make some assumptions and revisit them later.</p>
+<p>The purpose of minimality is to make adding new concrete backends as easy as possible. The purpose of interactivity is to make the iteration cycle when developing new methods as short as possible.</p>
+<p>You must put the abstract base class in <code class="docutils literal notranslate"><span class="pre">backend.py</span></code> in the module you created in step 1. The abstract class <code class="xref py py-class docutils literal notranslate"><span class="pre">MachineBackend</span></code> must be used as the base class for all backends. This class defines the <code class="docutils literal notranslate"><span class="pre">setup</span></code> and <code class="docutils literal notranslate"><span class="pre">stop</span></code> methods, which are used to initialize and stop the machine.</p>
+</section>
+<section id="creating-a-new-front-end-class">
+<h2>3. Creating a new front end class<a class="headerlink" href="#creating-a-new-front-end-class" title="Link to this heading">#</a></h2>
+<p>Front ends are used to define the user-facing interface for a specific machine type, and shared across all machines of this type in PLR. They expose the atomic backend commands in addition to providing higher level utilities and orchestrating state. For example, <code class="docutils literal notranslate"><span class="pre">LiquidHandler</span></code> has a <code class="docutils literal notranslate"><span class="pre">transfer</span></code> method that is not defined in the abstract backend (it is not minimal), but instead simply calls <code class="docutils literal notranslate"><span class="pre">aspirate</span></code> and <code class="docutils literal notranslate"><span class="pre">dispense</span></code> on the backend. This way, the <code class="docutils literal notranslate"><span class="pre">transfer</span></code> implementation is shared across all supported liquid handling robots. <code class="docutils literal notranslate"><span class="pre">LiquidHandler</span></code> also maintains a reference to the deck, to make sure the requested operations are valid given the current state of the deck.</p>
+<p>The abstract class <code class="xref py py-class docutils literal notranslate"><span class="pre">MachineFrontend</span></code> must be used as the base class for all front ends. This class defines the <code class="docutils literal notranslate"><span class="pre">setup</span></code> and <code class="docutils literal notranslate"><span class="pre">stop</span></code> methods, which are used to initialize and stop the machine. It also defines the <code class="docutils literal notranslate"><span class="pre">backend</span></code> attribute, which is used to access the backend.</p>
+<p>You should put the front end in a file called <code class="docutils literal notranslate"><span class="pre">&lt;machine_type&gt;.py</span></code> in the module you created in step 1. For example, the liquid handling front end is located at <code class="docutils literal notranslate"><span class="pre">pylabrobot.liquid_handling.liquid_handler.py</span></code>.</p>
+<p>If your devices updates the resource tree or its state, the front end should handle this. See <a class="reference internal" href="../resources/introduction.html"><span class="std std-doc">the resources guide</span></a> for more information.</p>
+</section>
+<section id="creating-a-new-concrete-backend-for-a-specific-machine">
+<h2>4. Creating a new concrete backend for a specific machine<a class="headerlink" href="#creating-a-new-concrete-backend-for-a-specific-machine" title="Link to this heading">#</a></h2>
+<p>Refer to the <a class="reference internal" href="new-concrete-backend.html"><span class="doc">the concrete backends guide</span></a>.</p>
+</section>
+<section id="adding-documentation-strongly-recommended">
+<h2>5. Adding documentation (strongly recommended)<a class="headerlink" href="#adding-documentation-strongly-recommended" title="Link to this heading">#</a></h2>
+<p>Each module should have a corresponding documentation page in the <code class="docutils literal notranslate"><span class="pre">docs</span></code> directory. Experience has shown that this is the best way to get people to actually use the new module.</p>
+<section id="api-documentation">
+<h3>API documentation<a class="headerlink" href="#api-documentation" title="Link to this heading">#</a></h3>
+<p>API documentation is generated automatically based on docstrings, but has to be linked to from the main API documentation.</p>
+<ol class="arabic simple">
+<li><p>Create a new file in the <code class="docutils literal notranslate"><span class="pre">docs</span></code> directory called <code class="docutils literal notranslate"><span class="pre">pylabrobot.&lt;module_name&gt;.rst</span></code>. You can look at the existing files for examples.</p></li>
+<li><p>Add a link to this file to the API documentation in <a class="reference external" href="https://github.com/PyLabRobot/pylabrobot/blob/main/docs/pylabrobot.rst"><code class="docutils literal notranslate"><span class="pre">docs/pylabrobot.rst</span></code></a>.</p></li>
+</ol>
+</section>
+<section id="brief-introduction">
+<h3>Brief introduction<a class="headerlink" href="#brief-introduction" title="Link to this heading">#</a></h3>
+<p>It is also recommended to add a brief introduction to the module which explains what it is and how to use it. You can write this introduction in Markdown, reStructuredText, or a Jupyter notebook (recommended). You can look at <a class="reference external" href="https://github.com/PyLabRobot/pylabrobot/blob/main/docs/basic.ipynb"><code class="docutils literal notranslate"><span class="pre">basic.ipynb</span></code></a> for an example.</p>
+<ol class="arabic simple">
+<li><p>Put the introduction in the <code class="docutils literal notranslate"><span class="pre">docs</span></code> folder.</p></li>
+<li><p>Link to the new file from <a class="reference external" href="https://github.com/PyLabRobot/pylabrobot/blob/main/docs/index.rst"><code class="docutils literal notranslate"><span class="pre">docs/index.rst</span></code></a>.</p></li>
+</ol>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="how-to-open-source.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">How to Open Source</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="new-concrete-backend.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Adding support for a new machine of an existing type</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#get-in-touch">0. Get in touch</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-a-new-module">1. Creating a new module</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-a-new-abstract-backend-class">2. Creating a new abstract backend class</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-a-new-front-end-class">3. Creating a new front end class</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#creating-a-new-concrete-backend-for-a-specific-machine">4. Creating a new concrete backend for a specific machine</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-documentation-strongly-recommended">5. Adding documentation (strongly recommended)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#api-documentation">API documentation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#brief-introduction">Brief introduction</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/contributor_guide/new-machine-type.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/contributor_guide/new-machine-type.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

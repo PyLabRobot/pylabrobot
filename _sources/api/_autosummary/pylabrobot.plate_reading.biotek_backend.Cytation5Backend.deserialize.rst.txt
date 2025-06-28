@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.biotek\_backend.Cytation5Backend.deserialize
+======================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.biotek_backend
+
+.. automethod:: Cytation5Backend.deserialize

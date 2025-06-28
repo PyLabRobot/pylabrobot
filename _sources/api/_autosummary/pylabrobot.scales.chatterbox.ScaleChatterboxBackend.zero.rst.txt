@@ -1,0 +1,6 @@
+pylabrobot.scales.chatterbox.ScaleChatterboxBackend.zero
+========================================================
+
+.. currentmodule:: pylabrobot.scales.chatterbox
+
+.. automethod:: ScaleChatterboxBackend.zero

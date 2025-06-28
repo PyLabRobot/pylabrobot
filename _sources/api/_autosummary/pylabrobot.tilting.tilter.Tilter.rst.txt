@@ -1,0 +1,82 @@
+﻿pylabrobot.tilting.tilter.Tilter
+================================
+
+.. currentmodule:: pylabrobot.tilting.tilter
+
+.. autoclass:: Tilter
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Tilter.absolute_angle
+      ~Tilter.hinge_coordinate
+      ~Tilter.name
+      ~Tilter.resource
+      ~Tilter.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Tilter.__init__
+      ~Tilter.assign_child_resource
+      ~Tilter.at
+      ~Tilter.center
+      ~Tilter.centers
+      ~Tilter.copy
+      ~Tilter.deregister_did_assign_resource_callback
+      ~Tilter.deregister_did_unassign_resource_callback
+      ~Tilter.deregister_state_update_callback
+      ~Tilter.deregister_will_assign_resource_callback
+      ~Tilter.deregister_will_unassign_resource_callback
+      ~Tilter.deserialize
+      ~Tilter.experimental_get_plate_drain_offsets
+      ~Tilter.experimental_get_well_drain_offsets
+      ~Tilter.experimental_rotate_coordinate_around_hinge
+      ~Tilter.get_absolute_location
+      ~Tilter.get_absolute_rotation
+      ~Tilter.get_absolute_size_x
+      ~Tilter.get_absolute_size_y
+      ~Tilter.get_absolute_size_z
+      ~Tilter.get_all_children
+      ~Tilter.get_anchor
+      ~Tilter.get_default_child_location
+      ~Tilter.get_highest_known_point
+      ~Tilter.get_resource
+      ~Tilter.get_root
+      ~Tilter.get_size_x
+      ~Tilter.get_size_y
+      ~Tilter.get_size_z
+      ~Tilter.load_all_state
+      ~Tilter.load_from_json_file
+      ~Tilter.load_state
+      ~Tilter.load_state_from_file
+      ~Tilter.register_did_assign_resource_callback
+      ~Tilter.register_did_unassign_resource_callback
+      ~Tilter.register_state_update_callback
+      ~Tilter.register_will_assign_resource_callback
+      ~Tilter.register_will_unassign_resource_callback
+      ~Tilter.rotate
+      ~Tilter.rotated
+      ~Tilter.save
+      ~Tilter.save_state_to_file
+      ~Tilter.serialize
+      ~Tilter.serialize_all_state
+      ~Tilter.serialize_state
+      ~Tilter.set_angle
+      ~Tilter.setup
+      ~Tilter.stop
+      ~Tilter.tilt
+      ~Tilter.unassign
+      ~Tilter.unassign_child_resource
+   
+   
