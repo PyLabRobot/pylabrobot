@@ -420,11 +420,9 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resources must be `TipSpot`s, got {not_tip_spots}")
 
     # fix arguments
-    if use_channels is None:
-      if self._default_use_channels is None:
-        use_channels = list(range(len(tip_spots)))
-      else:
-        use_channels = self._default_use_channels
+    use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
+
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
 
     if not all(
@@ -556,11 +554,9 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
 
     # fix arguments
-    if use_channels is None:
-      if self._default_use_channels is None:
-        use_channels = list(range(len(tip_spots)))
-      else:
-        use_channels = self._default_use_channels
+    use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
+
     tips = []
     for channel in use_channels:
       tip = self.head[channel].get_tip()
@@ -830,6 +826,7 @@ class LiquidHandler(Resource, Machine):
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
 
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(use_channels)
@@ -1043,6 +1040,7 @@ class LiquidHandler(Resource, Machine):
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
 
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(use_channels)
