@@ -76,9 +76,11 @@ async def _golden_ratio_search(
 
   return (b + a) / 2
 
+
 class CytationType(enum.Enum):
   Cytation5 = "Cytation5"
   Cytation1 = "Cytation1"
+
 
 @dataclass
 class CytationImagingConfig:
@@ -89,6 +91,7 @@ class CytationImagingConfig:
   # if not specified, these will be loaded from machine configuration (register with gen5.exe)
   objectives: Optional[List[Optional[Objective]]] = None
   filters: Optional[List[Optional[ImagingMode]]] = None
+
 
 _FOV: dict[CytationType, dict[int, Optional[tuple[float, float]]]] = {
   CytationType.Cytation1: {
@@ -102,6 +105,7 @@ _FOV: dict[CytationType, dict[int, Optional[tuple[float, float]]]] = {
     40: (347 / 1000, 347 / 1000),
   },
 }
+
 
 class Cytation5Backend(ImageReaderBackend):
   """Backend for biotek cytation 5 image reader.
@@ -142,7 +146,6 @@ class Cytation5Backend(ImageReaderBackend):
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
-
 
     await self.io.setup()
     await self.io.usb_reset()
@@ -1192,9 +1195,11 @@ class Cytation5Backend(ImageReaderBackend):
       try:
         size = _FOV[self.imaging_config.model][magnification]
       except KeyError:
-        raise ValueError(f"Don't know image size for model {self.imaging_config.model} and magnification {magnification}")
+        raise ValueError(
+          f"Don't know image size for model {self.imaging_config.model} and magnification {magnification}"
+        )
       return size
-    
+
     if self._objective is None:
       raise RuntimeError("Objective not set. Run set_objective() first.")
     magnification = self._objective.magnification
