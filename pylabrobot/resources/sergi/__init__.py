@@ -1,0 +1,1 @@
+from .plate_adapters import SergiLabSupplies_96_MagneticRack_250ul_Vb

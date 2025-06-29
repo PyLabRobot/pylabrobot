@@ -99,7 +99,7 @@ Below is a list of machines that are currently supported in PyLabRobot, and mach
 
 | Device | Status |
 |--------|-------------|
-| A4S Sealer | WIP [#304](https://github.com/PyLabRobot/pylabrobot/pull/304) |
+| A4S Sealer | Supported |
 
 ## Flow cytometers
 

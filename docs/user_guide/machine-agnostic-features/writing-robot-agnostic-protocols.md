@@ -38,9 +38,9 @@ lh.pick_up_tip(tip_rack["A1"])
 
 Strictness checking is a feature that allows you to specify how strictly you want the {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` to enforce the protocol. The following levels are available:
 
-- {attr}`STRICT <pylabrobot.liquid_handling.strictness.Strictness.IGNORE>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will raise an exception if you are doing something that is not legal on the robot.
+- {attr}`STRICT <pylabrobot.liquid_handling.strictness.Strictness.STRICT>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will raise an exception if you are doing something that is not legal on the robot.
 - {attr}`WARN <pylabrobot.liquid_handling.strictness.Strictness.WARN>`: The default. The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will warn you if you are doing something that is not recommended, but will not stop you from doing it.
-- {attr}`IGNORE <pylabrobot.liquid_handling.strictness.Strictness.STRICT>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will silently log on the debug level if you are doing something that is not legal on the robot.
+- {attr}`IGNORE <pylabrobot.liquid_handling.strictness.Strictness.IGNORE>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will silently log on the debug level if you are doing something that is not legal on the robot.
 
 You can set the strictness level for the entire protocol using {func}`pylabrobot.liquid_handling.strictness.set_strictness`.
 

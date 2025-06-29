@@ -132,6 +132,7 @@ class Cytation5Backend(ImageReaderBackend):
     await self.io.usb_reset()
     await self.io.set_latency_timer(16)
     await self.io.set_baudrate(9600)  # 0x38 0x41
+    await self.io.set_line_property(8, 2, 0)  # 8 data bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
     await self.io.set_flowctrl(SIO_RTS_CTS_HS)
     await self.io.set_rts(True)
