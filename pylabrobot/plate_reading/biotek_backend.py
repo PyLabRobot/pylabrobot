@@ -76,7 +76,9 @@ async def _golden_ratio_search(
 
   return (b + a) / 2
 
+
 CytationModel = Literal["cytation1", "cytation5"]
+
 
 @dataclass
 class CytationImagingConfig:
@@ -91,11 +93,11 @@ class CytationImagingConfig:
 
 _FOV: dict[str, dict[int, Optional[tuple[float, float]]]] = {
   "cytation1": {
-    4:  (1288 / 596, 964 / 596),
+    4: (1288 / 596, 964 / 596),
     20: (1288 / 3000, 964 / 3000),
   },
   "cytation5": {
-    4:  (3474 / 1000, 3474 / 1000),
+    4: (3474 / 1000, 3474 / 1000),
     20: (694 / 1000, 694 / 1000),
     40: (347 / 1000, 347 / 1000),
   },
