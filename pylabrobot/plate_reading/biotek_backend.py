@@ -1,5 +1,4 @@
 import asyncio
-import enum
 import logging
 import math
 import re
@@ -76,15 +75,11 @@ async def _golden_ratio_search(
 
   return (b + a) / 2
 
-
-class CytationType(enum.Enum):
-  Cytation5 = "Cytation5"
-  Cytation1 = "Cytation1"
-
+CytationModel = Literal["Cytation1", "Cytation5"]
 
 @dataclass
 class CytationImagingConfig:
-  model: CytationType = CytationType.Cytation5
+  model: CytationModel = "Cytation5"
   camera_serial_number: Optional[str] = None
   max_image_read_attempts: int = 8
 
@@ -93,14 +88,13 @@ class CytationImagingConfig:
   filters: Optional[List[Optional[ImagingMode]]] = None
 
 
-_FOV: dict[CytationType, dict[int, Optional[tuple[float, float]]]] = {
-  CytationType.Cytation1: {
-    4: (1288 / 596, 964 / 596),
+_FOV: dict[str, dict[int, Optional[tuple[float, float]]]] = {
+  "Cytation1": {
+    4:  (1288 / 596, 964 / 596),
     20: (1288 / 3000, 964 / 3000),
-    40: None,  # not calibrated
   },
-  CytationType.Cytation5: {
-    4: (3474 / 1000, 3474 / 1000),
+  "Cytation5": {
+    4:  (3474 / 1000, 3474 / 1000),
     20: (694 / 1000, 694 / 1000),
     40: (347 / 1000, 347 / 1000),
   },
@@ -1227,7 +1221,7 @@ class Cytation5Backend(ImageReaderBackend):
     images: List[Image] = []
     for x_pos, y_pos in positions:
       await self.set_position(x=x_pos, y=y_pos)
-      await asyncio.sleep(0.1)
+      await asyncio.sleep(0.2)
       images.append(
         await self._acquire_image(
           color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
