@@ -1,4 +1,4 @@
-from .biotek_backend import Cytation5Backend, Cytation5ImagingConfig
+from .biotek_backend import Cytation5Backend, CytationImagingConfig
 from .clario_star_backend import CLARIOStarBackend
 from .image_reader import ImageReader
 from .imager import Imager
