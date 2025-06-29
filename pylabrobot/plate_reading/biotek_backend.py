@@ -1222,7 +1222,7 @@ class Cytation5Backend(ImageReaderBackend):
     images: List[Image] = []
     for x_pos, y_pos in positions:
       await self.set_position(x=x_pos, y=y_pos)
-      await asyncio.sleep(0.2)
+      await asyncio.sleep(0.1)
       images.append(
         await self._acquire_image(
           color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
