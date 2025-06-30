@@ -1196,9 +1196,10 @@ class Cytation5Backend(ImageReaderBackend):
           f"Don't know image size for model {self.imaging_config.model} and magnification {magnification}"
         )
       return size
+
     if self._objective is None:
       raise RuntimeError("Objective not set. Run set_objective() first.")
-    
+
     magnification = self._objective.magnification
     img_width, img_height = image_size(magnification)
 
