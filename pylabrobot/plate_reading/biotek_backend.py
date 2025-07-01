@@ -518,16 +518,20 @@ class Cytation5Backend(ImageReaderBackend):
     num_rows = 8
     rows = body[start_index:end_index].split(b"\r\n,")[:num_rows]
 
-    parsed_data: List[List[float]] = []
-    for row_idx, row in enumerate(rows):
-      parsed_data.append([])
+    parsed_data: List[List[float]] = [
+      [None for _ in range(self._plate.num_items_x)] for _ in range(self._plate.num_items_y)
+    ]
+    for row in rows:
       values = row.split(b",")
       grouped_values = [values[i : i + 3] for i in range(0, len(values), 3)]
 
       for group in grouped_values:
         assert len(group) == 3
+        row_index = int(group[0].decode()) - 1  # 1-based index in the response
+        column_index = int(group[1].decode()) - 1  # 1-based index in the response
         value = float(group[2].decode())
-        parsed_data[row_idx].append(value)
+        parsed_data[row_index][column_index] = value
+
     return parsed_data
 
   async def set_plate(self, plate: Plate):
