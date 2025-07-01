@@ -51,6 +51,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :class: company
 ```
 
+```{image} /img/used_by/logo_cheshire_labs.png
+:alt: Cheshire-Labs
+:class: company
+:target: https://www.cheshirelabs.io/
+```
+
 ```{raw} html
 <style>
 .company {
