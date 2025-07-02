@@ -5,7 +5,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union, cast
 
 try:
   import cv2  # type: ignore
@@ -518,7 +518,8 @@ class Cytation5Backend(ImageReaderBackend):
     num_rows = 8
     rows = body[start_index:end_index].split(b"\r\n,")[:num_rows]
 
-    parsed_data: List[List[float]] = [
+    assert self._plate is not None, "Plate must be set before reading data"
+    parsed_data: List[List[Optional[float]]] = [
       [None for _ in range(self._plate.num_items_x)] for _ in range(self._plate.num_items_y)
     ]
     for row in rows:
@@ -532,7 +533,7 @@ class Cytation5Backend(ImageReaderBackend):
         value = float(group[2].decode())
         parsed_data[row_index][column_index] = value
 
-    return parsed_data
+    return cast(List[List[float]], parsed_data)
 
   async def set_plate(self, plate: Plate):
     # 08120112207434014351135308559127881422
