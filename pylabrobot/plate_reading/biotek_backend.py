@@ -77,14 +77,31 @@ async def _golden_ratio_search(
   return (b + a) / 2
 
 
+CytationModel = Literal["cytation1", "cytation5"]
+
+
 @dataclass
-class Cytation5ImagingConfig:
+class CytationImagingConfig:
+  model: CytationModel = "cytation5"
   camera_serial_number: Optional[str] = None
   max_image_read_attempts: int = 8
 
   # if not specified, these will be loaded from machine configuration (register with gen5.exe)
   objectives: Optional[List[Optional[Objective]]] = None
   filters: Optional[List[Optional[ImagingMode]]] = None
+
+
+_FOV: dict[str, dict[float, tuple[float, float]]] = {
+  "cytation1": {
+    4: (1288 / 596, 964 / 596),
+    20: (1288 / 3000, 964 / 3000),
+  },
+  "cytation5": {
+    4: (3474 / 1000, 3474 / 1000),
+    20: (694 / 1000, 694 / 1000),
+    40: (347 / 1000, 347 / 1000),
+  },
+}
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -98,16 +115,15 @@ class Cytation5Backend(ImageReaderBackend):
     self,
     timeout: float = 20,
     device_id: Optional[str] = None,
-    imaging_config: Optional[Cytation5ImagingConfig] = None,
+    imaging_config: Optional[CytationImagingConfig] = None,
   ) -> None:
     super().__init__()
     self.timeout = timeout
 
     self.io = FTDI(device_id=device_id)
-
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
-    self.imaging_config = imaging_config or Cytation5ImagingConfig()
+    self.imaging_config = imaging_config or CytationImagingConfig()
     self._filters: Optional[List[Optional[ImagingMode]]] = self.imaging_config.filters
     self._objectives: Optional[List[Optional[Objective]]] = self.imaging_config.objectives
     self._version: Optional[str] = None
@@ -1178,16 +1194,17 @@ class Cytation5Backend(ImageReaderBackend):
       # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
       # simply take the wide fov option.
       # um to mm (plr unit)
-      if magnification == 4:
-        return (3474 / 1000, 3474 / 1000)
-      if magnification == 20:
-        return (694 / 1000, 694 / 1000)
-      if magnification == 40:
-        return (347 / 1000, 347 / 1000)
-      raise ValueError(f"Don't know image size for magnification {magnification}")
+      try:
+        size = _FOV[self.imaging_config.model][magnification]
+      except KeyError:
+        raise ValueError(
+          f"Don't know image size for model {self.imaging_config.model} and magnification {magnification}"
+        )
+      return size
 
     if self._objective is None:
       raise RuntimeError("Objective not set. Run set_objective() first.")
+
     magnification = self._objective.magnification
     img_width, img_height = image_size(magnification)
 
