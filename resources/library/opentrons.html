@@ -1,0 +1,773 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Opentrons &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'resources/library/opentrons';</script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/resources/library/opentrons.html" />
+    <link rel="icon" href="../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Porvair" href="porvair.html" />
+    <link rel="prev" title="Wuxi Nest" href="nest.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../introduction.html">Resources Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../custom-resources.html">Defining custom resources</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Ontology</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../carrier/carrier.html">Carrier</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../carrier/mfx-carrier/mfx_carrier.html">MFXCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../carrier/plate-carrier/plate_carrier.html">PlateCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../carrier/tip-carrier/tip-carrier.html">TipCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../container/container.html">Container</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../container/petri-dish/petri-dish.html">PetriDish</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../container/trough/trough.html">Trough</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../container/tube/tube.html">Tube</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../container/well/well.html">Well</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../deck/deck.html">Deck</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../itemized-resource/itemized-resource.html">ItemizedResource</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../itemized-resource/plate/plate.html">Plates</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../itemized-resource/plate/definition-plate.html">Tutorial: Plate Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../itemized-resource/plate/plate-quadrants.html">Tutorial: Plate Quadrants</a></li>
+</ul>
+</details></li>
+
+<li class="toctree-l2"><a class="reference internal" href="../itemized-resource/tiprack/tiprack.html">TipRack</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../resource-holder/resource-holder.html">ResourceHolder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../resource-holder/plate-holder.html">PlateHolder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../plate-adapter/plate-adapter.html">PlateAdapter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../resource-stack/resource-stack.html">ResourceStack</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Library</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="agenbio.html">Agenbio</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alpaqua.html">Alpaqua Engineering, LLC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azenta.html">Azenta</a></li>
+<li class="toctree-l1"><a class="reference internal" href="biorad.html">Biorad</a></li>
+<li class="toctree-l1"><a class="reference internal" href="boekel.html">Boekel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="celltreat.html">CellTreat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cellvis.html">Cellvis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="corning_axygen.html">Corning - Axygen</a></li>
+<li class="toctree-l1"><a class="reference internal" href="corning_costar.html">Corning Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="eppendorf.html">Eppendorf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="falcon.html">Falcon</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="hamilton.html">Hamilton STAR “ML_STAR”</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nest.html">Wuxi Nest</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Opentrons</a></li>
+<li class="toctree-l1"><a class="reference internal" href="porvair.html">Porvair</a></li>
+<li class="toctree-l1"><a class="reference internal" href="revvity.html">Revvity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sergi.html">Sergi Lab Supplies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="thermo_fisher.html">Thermo Fisher Scientific Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vwr.html">VWR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Resource Management System</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Opentrons</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="opentrons">
+<h1>Opentrons<a class="headerlink" href="#opentrons" title="Link to this heading">#</a></h1>
+<p>Company page: <a class="reference external" href="https://en.wikipedia.org/wiki/Opentrons">Opentrons Wikipedia</a></p>
+<blockquote>
+<div><p>Opentrons Labworks, Inc. (or Opentrons) is a biotechnology company that manufactures liquid handling robots that use open-source software, which at one point used open-source hardware but no longer does.</p>
+</div></blockquote>
+<p>NB: The <a class="reference external" href="https://labware.opentrons.com/">Opentrons Labware Library</a> is a wonderful resource to see what Opentrons offers in terms of resources.</p>
+<p>We can automatically convert Opentrons resources to PLR resources using two methods in <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources.opentrons</span></code>:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.opentrons.load.load_opentrons_resource.html#pylabrobot.resources.opentrons.load.load_opentrons_resource" title="pylabrobot.resources.opentrons.load.load_opentrons_resource"><code class="xref py py-func docutils literal notranslate"><span class="pre">pylabrobot.resources.opentrons.load.load_opentrons_resource()</span></code></a>: loading from a file</p></li>
+<li><p><a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.opentrons.load.load_shared_opentrons_resource.html#pylabrobot.resources.opentrons.load.load_shared_opentrons_resource" title="pylabrobot.resources.opentrons.load.load_shared_opentrons_resource"><code class="xref py py-func docutils literal notranslate"><span class="pre">pylabrobot.resources.opentrons.load.load_shared_opentrons_resource()</span></code></a>: load from https://pypi.org/project/opentrons-shared-data/ (https://github.com/Opentrons/opentrons/tree/edge/shared-data)</p></li>
+</ul>
+<p>In addition, we provide convenience methods for loading many resources (see below).</p>
+<section id="plates">
+<h2>Plates<a class="headerlink" href="#plates" title="Link to this heading">#</a></h2>
+<p>Note that Opentrons definitions typically lack information that is required to make them work on other robots.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">corning_384_wellplate_112ul_flat</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">corning_96_wellplate_360ul_flat</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nest_96_wellplate_2ml_deep</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nest_96_wellplate_100ul_pcr_full_skirt</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">appliedbiosystemsmicroamp_384_wellplate_40ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">thermoscientificnunc_96_wellplate_2000ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">usascientific_96_wellplate_2point4ml_deep</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">thermoscientificnunc_96_wellplate_1300ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nest_96_wellplate_200ul_flat</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">corning_6_wellplate_16point8ml_flat</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">corning_24_wellplate_3point4ml_flat</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">corning_12_wellplate_6point9ml_flat</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">biorad_96_wellplate_200ul_pcr</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">corning_48_wellplate_1point6ml_flat</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">biorad_384_wellplate_50ul</span></code></p></li>
+</ul>
+</section>
+<section id="tip-racks">
+<h2>Tip racks<a class="headerlink" href="#tip-racks" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">eppendorf_96_tiprack_1000ul_eptips</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tipone_96_tiprack_200ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_tiprack_300ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_tiprack_10ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_filtertiprack_10ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geb_96_tiprack_10ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_filtertiprack_200ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">eppendorf_96_tiprack_10ul_eptips</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_tiprack_1000ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_tiprack_20ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_filtertiprack_1000ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_filtertiprack_20ul</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geb_96_tiprack_1000ul</span></code></p></li>
+</ul>
+</section>
+<section id="reservoirs">
+<h2>Reservoirs<a class="headerlink" href="#reservoirs" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">agilent_1_reservoir_290ml</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">axygen_1_reservoir_90ml</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nest_12_reservoir_15ml</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nest_1_reservoir_195ml</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nest_1_reservoir_290ml</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">usascientific_12_reservoir_22ml</span></code></p></li>
+</ul>
+</section>
+<section id="tube-racks">
+<h2>Tube racks<a class="headerlink" href="#tube-racks" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_eppendorf_2ml_safelock_snapcap_acrylic</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_6_tuberack_falcon_50ml_conical</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_15_tuberack_nest_15ml_conical</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_nest_2ml_screwcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_generic_0point75ml_snapcap_acrylic</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_10_tuberack_nest_4x50ml_6x15ml_conical</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical_acrylic</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_nest_1point5ml_screwcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_nest_1point5ml_snapcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_nest_2ml_snapcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_nest_0point5ml_screwcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_eppendorf_1point5ml_safelock_snapcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_6_tuberack_nest_50ml_conical</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_15_tuberack_falcon_15ml_conical</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_tuberack_generic_2ml_screwcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_96_well_aluminum_block</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_aluminumblock_generic_2ml_screwcap</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">opentrons_24_aluminumblock_nest_1point5ml_snapcap</span></code></p></li>
+</ul>
+</section>
+<section id="plate-adapters">
+<h2>Plate Adapters<a class="headerlink" href="#plate-adapters" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Description</p></th>
+<th class="head"><p>Image</p></th>
+<th class="head"><p>PLR definition</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>‘Opentrons_96_adapter_Vb’<br>Part no.: 999-00028 (one of the three adapters purchased in the “Aluminum Block Set”)<br><a class="reference external" href="https://opentrons.com/products/aluminum-block-set">manufacturer website</a></p></td>
+<td><p><img alt="" src="../../_images/Opentrons_96_adapter_Vb.jpg" /></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Opentrons_96_adapter_Vb</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="nest.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Wuxi Nest</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="porvair.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Porvair</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plates">Plates</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tip-racks">Tip racks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reservoirs">Reservoirs</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tube-racks">Tube racks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-adapters">Plate Adapters</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/resources/library/opentrons.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/resources/library/opentrons.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

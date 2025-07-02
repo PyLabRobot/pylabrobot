@@ -1,0 +1,88 @@
+﻿pylabrobot.resources.TubeRack
+=============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: TubeRack
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TubeRack.items
+      ~TubeRack.name
+      ~TubeRack.num_items
+      ~TubeRack.num_items_x
+      ~TubeRack.num_items_y
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TubeRack.__init__
+      ~TubeRack.assign_child_resource
+      ~TubeRack.at
+      ~TubeRack.center
+      ~TubeRack.centers
+      ~TubeRack.column
+      ~TubeRack.copy
+      ~TubeRack.deregister_did_assign_resource_callback
+      ~TubeRack.deregister_did_unassign_resource_callback
+      ~TubeRack.deregister_state_update_callback
+      ~TubeRack.deregister_will_assign_resource_callback
+      ~TubeRack.deregister_will_unassign_resource_callback
+      ~TubeRack.deserialize
+      ~TubeRack.disable_volume_trackers
+      ~TubeRack.enable_volume_trackers
+      ~TubeRack.get_absolute_location
+      ~TubeRack.get_absolute_rotation
+      ~TubeRack.get_absolute_size_x
+      ~TubeRack.get_absolute_size_y
+      ~TubeRack.get_absolute_size_z
+      ~TubeRack.get_all_children
+      ~TubeRack.get_all_items
+      ~TubeRack.get_anchor
+      ~TubeRack.get_child_identifier
+      ~TubeRack.get_highest_known_point
+      ~TubeRack.get_item
+      ~TubeRack.get_items
+      ~TubeRack.get_resource
+      ~TubeRack.get_root
+      ~TubeRack.get_size_x
+      ~TubeRack.get_size_y
+      ~TubeRack.get_size_z
+      ~TubeRack.get_tube
+      ~TubeRack.get_tubes
+      ~TubeRack.index_of_item
+      ~TubeRack.load_all_state
+      ~TubeRack.load_from_json_file
+      ~TubeRack.load_state
+      ~TubeRack.load_state_from_file
+      ~TubeRack.register_did_assign_resource_callback
+      ~TubeRack.register_did_unassign_resource_callback
+      ~TubeRack.register_state_update_callback
+      ~TubeRack.register_will_assign_resource_callback
+      ~TubeRack.register_will_unassign_resource_callback
+      ~TubeRack.rotate
+      ~TubeRack.rotated
+      ~TubeRack.row
+      ~TubeRack.save
+      ~TubeRack.save_state_to_file
+      ~TubeRack.serialize
+      ~TubeRack.serialize_all_state
+      ~TubeRack.serialize_state
+      ~TubeRack.set_tube_liquids
+      ~TubeRack.summary
+      ~TubeRack.traverse
+      ~TubeRack.unassign
+      ~TubeRack.unassign_child_resource
+   
+   

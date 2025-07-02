@@ -1,0 +1,74 @@
+﻿pylabrobot.resources.Carrier
+============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Carrier
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Carrier.capacity
+      ~Carrier.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Carrier.__init__
+      ~Carrier.assign_child_resource
+      ~Carrier.assign_resource_to_site
+      ~Carrier.at
+      ~Carrier.center
+      ~Carrier.centers
+      ~Carrier.copy
+      ~Carrier.deregister_did_assign_resource_callback
+      ~Carrier.deregister_did_unassign_resource_callback
+      ~Carrier.deregister_state_update_callback
+      ~Carrier.deregister_will_assign_resource_callback
+      ~Carrier.deregister_will_unassign_resource_callback
+      ~Carrier.deserialize
+      ~Carrier.get_absolute_location
+      ~Carrier.get_absolute_rotation
+      ~Carrier.get_absolute_size_x
+      ~Carrier.get_absolute_size_y
+      ~Carrier.get_absolute_size_z
+      ~Carrier.get_all_children
+      ~Carrier.get_anchor
+      ~Carrier.get_free_sites
+      ~Carrier.get_highest_known_point
+      ~Carrier.get_resource
+      ~Carrier.get_resources
+      ~Carrier.get_root
+      ~Carrier.get_size_x
+      ~Carrier.get_size_y
+      ~Carrier.get_size_z
+      ~Carrier.load_all_state
+      ~Carrier.load_from_json_file
+      ~Carrier.load_state
+      ~Carrier.load_state_from_file
+      ~Carrier.register_did_assign_resource_callback
+      ~Carrier.register_did_unassign_resource_callback
+      ~Carrier.register_state_update_callback
+      ~Carrier.register_will_assign_resource_callback
+      ~Carrier.register_will_unassign_resource_callback
+      ~Carrier.rotate
+      ~Carrier.rotated
+      ~Carrier.save
+      ~Carrier.save_state_to_file
+      ~Carrier.serialize
+      ~Carrier.serialize_all_state
+      ~Carrier.serialize_state
+      ~Carrier.unassign
+      ~Carrier.unassign_child_resource
+   
+   

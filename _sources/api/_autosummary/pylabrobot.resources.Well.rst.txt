@@ -1,0 +1,75 @@
+﻿pylabrobot.resources.Well
+=========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Well
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Well.material_z_thickness
+      ~Well.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Well.__init__
+      ~Well.assign_child_resource
+      ~Well.at
+      ~Well.center
+      ~Well.centers
+      ~Well.compute_height_from_volume
+      ~Well.compute_volume_from_height
+      ~Well.copy
+      ~Well.deregister_did_assign_resource_callback
+      ~Well.deregister_did_unassign_resource_callback
+      ~Well.deregister_state_update_callback
+      ~Well.deregister_will_assign_resource_callback
+      ~Well.deregister_will_unassign_resource_callback
+      ~Well.deserialize
+      ~Well.get_absolute_location
+      ~Well.get_absolute_rotation
+      ~Well.get_absolute_size_x
+      ~Well.get_absolute_size_y
+      ~Well.get_absolute_size_z
+      ~Well.get_all_children
+      ~Well.get_anchor
+      ~Well.get_highest_known_point
+      ~Well.get_identifier
+      ~Well.get_resource
+      ~Well.get_root
+      ~Well.get_size_x
+      ~Well.get_size_y
+      ~Well.get_size_z
+      ~Well.load_all_state
+      ~Well.load_from_json_file
+      ~Well.load_state
+      ~Well.load_state_from_file
+      ~Well.register_did_assign_resource_callback
+      ~Well.register_did_unassign_resource_callback
+      ~Well.register_state_update_callback
+      ~Well.register_will_assign_resource_callback
+      ~Well.register_will_unassign_resource_callback
+      ~Well.rotate
+      ~Well.rotated
+      ~Well.save
+      ~Well.save_state_to_file
+      ~Well.serialize
+      ~Well.serialize_all_state
+      ~Well.serialize_state
+      ~Well.set_liquids
+      ~Well.unassign
+      ~Well.unassign_child_resource
+   
+   

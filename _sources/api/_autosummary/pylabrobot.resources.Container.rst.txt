@@ -1,0 +1,73 @@
+﻿pylabrobot.resources.Container
+==============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Container
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Container.material_z_thickness
+      ~Container.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Container.__init__
+      ~Container.assign_child_resource
+      ~Container.at
+      ~Container.center
+      ~Container.centers
+      ~Container.compute_height_from_volume
+      ~Container.compute_volume_from_height
+      ~Container.copy
+      ~Container.deregister_did_assign_resource_callback
+      ~Container.deregister_did_unassign_resource_callback
+      ~Container.deregister_state_update_callback
+      ~Container.deregister_will_assign_resource_callback
+      ~Container.deregister_will_unassign_resource_callback
+      ~Container.deserialize
+      ~Container.get_absolute_location
+      ~Container.get_absolute_rotation
+      ~Container.get_absolute_size_x
+      ~Container.get_absolute_size_y
+      ~Container.get_absolute_size_z
+      ~Container.get_all_children
+      ~Container.get_anchor
+      ~Container.get_highest_known_point
+      ~Container.get_resource
+      ~Container.get_root
+      ~Container.get_size_x
+      ~Container.get_size_y
+      ~Container.get_size_z
+      ~Container.load_all_state
+      ~Container.load_from_json_file
+      ~Container.load_state
+      ~Container.load_state_from_file
+      ~Container.register_did_assign_resource_callback
+      ~Container.register_did_unassign_resource_callback
+      ~Container.register_state_update_callback
+      ~Container.register_will_assign_resource_callback
+      ~Container.register_will_unassign_resource_callback
+      ~Container.rotate
+      ~Container.rotated
+      ~Container.save
+      ~Container.save_state_to_file
+      ~Container.serialize
+      ~Container.serialize_all_state
+      ~Container.serialize_state
+      ~Container.unassign
+      ~Container.unassign_child_resource
+   
+   

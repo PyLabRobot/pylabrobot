@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.rotate
+==========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.rotate

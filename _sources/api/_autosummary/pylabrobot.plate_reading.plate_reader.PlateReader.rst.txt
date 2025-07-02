@@ -1,0 +1,81 @@
+﻿pylabrobot.plate\_reading.plate\_reader.PlateReader
+===================================================
+
+.. currentmodule:: pylabrobot.plate_reading.plate_reader
+
+.. autoclass:: PlateReader
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateReader.name
+      ~PlateReader.resource
+      ~PlateReader.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateReader.__init__
+      ~PlateReader.assign_child_resource
+      ~PlateReader.at
+      ~PlateReader.center
+      ~PlateReader.centers
+      ~PlateReader.close
+      ~PlateReader.copy
+      ~PlateReader.deregister_did_assign_resource_callback
+      ~PlateReader.deregister_did_unassign_resource_callback
+      ~PlateReader.deregister_state_update_callback
+      ~PlateReader.deregister_will_assign_resource_callback
+      ~PlateReader.deregister_will_unassign_resource_callback
+      ~PlateReader.deserialize
+      ~PlateReader.get_absolute_location
+      ~PlateReader.get_absolute_rotation
+      ~PlateReader.get_absolute_size_x
+      ~PlateReader.get_absolute_size_y
+      ~PlateReader.get_absolute_size_z
+      ~PlateReader.get_all_children
+      ~PlateReader.get_anchor
+      ~PlateReader.get_default_child_location
+      ~PlateReader.get_highest_known_point
+      ~PlateReader.get_plate
+      ~PlateReader.get_resource
+      ~PlateReader.get_root
+      ~PlateReader.get_size_x
+      ~PlateReader.get_size_y
+      ~PlateReader.get_size_z
+      ~PlateReader.load_all_state
+      ~PlateReader.load_from_json_file
+      ~PlateReader.load_state
+      ~PlateReader.load_state_from_file
+      ~PlateReader.open
+      ~PlateReader.read_absorbance
+      ~PlateReader.read_fluorescence
+      ~PlateReader.read_luminescence
+      ~PlateReader.register_did_assign_resource_callback
+      ~PlateReader.register_did_unassign_resource_callback
+      ~PlateReader.register_state_update_callback
+      ~PlateReader.register_will_assign_resource_callback
+      ~PlateReader.register_will_unassign_resource_callback
+      ~PlateReader.rotate
+      ~PlateReader.rotated
+      ~PlateReader.save
+      ~PlateReader.save_state_to_file
+      ~PlateReader.serialize
+      ~PlateReader.serialize_all_state
+      ~PlateReader.serialize_state
+      ~PlateReader.setup
+      ~PlateReader.stop
+      ~PlateReader.unassign
+      ~PlateReader.unassign_child_resource
+   
+   

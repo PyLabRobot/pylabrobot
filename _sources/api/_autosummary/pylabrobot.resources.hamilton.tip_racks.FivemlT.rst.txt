@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_racks.FivemlT
+================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
+
+.. autofunction:: FivemlT

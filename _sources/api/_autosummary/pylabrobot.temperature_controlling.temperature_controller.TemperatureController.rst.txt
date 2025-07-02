@@ -1,0 +1,79 @@
+﻿pylabrobot.temperature\_controlling.temperature\_controller.TemperatureController
+=================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.temperature_controller
+
+.. autoclass:: TemperatureController
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureController.name
+      ~TemperatureController.resource
+      ~TemperatureController.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureController.__init__
+      ~TemperatureController.assign_child_resource
+      ~TemperatureController.at
+      ~TemperatureController.center
+      ~TemperatureController.centers
+      ~TemperatureController.copy
+      ~TemperatureController.deactivate
+      ~TemperatureController.deregister_did_assign_resource_callback
+      ~TemperatureController.deregister_did_unassign_resource_callback
+      ~TemperatureController.deregister_state_update_callback
+      ~TemperatureController.deregister_will_assign_resource_callback
+      ~TemperatureController.deregister_will_unassign_resource_callback
+      ~TemperatureController.deserialize
+      ~TemperatureController.get_absolute_location
+      ~TemperatureController.get_absolute_rotation
+      ~TemperatureController.get_absolute_size_x
+      ~TemperatureController.get_absolute_size_y
+      ~TemperatureController.get_absolute_size_z
+      ~TemperatureController.get_all_children
+      ~TemperatureController.get_anchor
+      ~TemperatureController.get_default_child_location
+      ~TemperatureController.get_highest_known_point
+      ~TemperatureController.get_resource
+      ~TemperatureController.get_root
+      ~TemperatureController.get_size_x
+      ~TemperatureController.get_size_y
+      ~TemperatureController.get_size_z
+      ~TemperatureController.get_temperature
+      ~TemperatureController.load_all_state
+      ~TemperatureController.load_from_json_file
+      ~TemperatureController.load_state
+      ~TemperatureController.load_state_from_file
+      ~TemperatureController.register_did_assign_resource_callback
+      ~TemperatureController.register_did_unassign_resource_callback
+      ~TemperatureController.register_state_update_callback
+      ~TemperatureController.register_will_assign_resource_callback
+      ~TemperatureController.register_will_unassign_resource_callback
+      ~TemperatureController.rotate
+      ~TemperatureController.rotated
+      ~TemperatureController.save
+      ~TemperatureController.save_state_to_file
+      ~TemperatureController.serialize
+      ~TemperatureController.serialize_all_state
+      ~TemperatureController.serialize_state
+      ~TemperatureController.set_temperature
+      ~TemperatureController.setup
+      ~TemperatureController.stop
+      ~TemperatureController.unassign
+      ~TemperatureController.unassign_child_resource
+      ~TemperatureController.wait_for_temperature
+   
+   

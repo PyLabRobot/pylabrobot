@@ -1,0 +1,83 @@
+﻿pylabrobot.resources.ItemizedResource
+=====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: ItemizedResource
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ItemizedResource.items
+      ~ItemizedResource.name
+      ~ItemizedResource.num_items
+      ~ItemizedResource.num_items_x
+      ~ItemizedResource.num_items_y
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ItemizedResource.__init__
+      ~ItemizedResource.assign_child_resource
+      ~ItemizedResource.at
+      ~ItemizedResource.center
+      ~ItemizedResource.centers
+      ~ItemizedResource.column
+      ~ItemizedResource.copy
+      ~ItemizedResource.deregister_did_assign_resource_callback
+      ~ItemizedResource.deregister_did_unassign_resource_callback
+      ~ItemizedResource.deregister_state_update_callback
+      ~ItemizedResource.deregister_will_assign_resource_callback
+      ~ItemizedResource.deregister_will_unassign_resource_callback
+      ~ItemizedResource.deserialize
+      ~ItemizedResource.get_absolute_location
+      ~ItemizedResource.get_absolute_rotation
+      ~ItemizedResource.get_absolute_size_x
+      ~ItemizedResource.get_absolute_size_y
+      ~ItemizedResource.get_absolute_size_z
+      ~ItemizedResource.get_all_children
+      ~ItemizedResource.get_all_items
+      ~ItemizedResource.get_anchor
+      ~ItemizedResource.get_child_identifier
+      ~ItemizedResource.get_highest_known_point
+      ~ItemizedResource.get_item
+      ~ItemizedResource.get_items
+      ~ItemizedResource.get_resource
+      ~ItemizedResource.get_root
+      ~ItemizedResource.get_size_x
+      ~ItemizedResource.get_size_y
+      ~ItemizedResource.get_size_z
+      ~ItemizedResource.index_of_item
+      ~ItemizedResource.load_all_state
+      ~ItemizedResource.load_from_json_file
+      ~ItemizedResource.load_state
+      ~ItemizedResource.load_state_from_file
+      ~ItemizedResource.register_did_assign_resource_callback
+      ~ItemizedResource.register_did_unassign_resource_callback
+      ~ItemizedResource.register_state_update_callback
+      ~ItemizedResource.register_will_assign_resource_callback
+      ~ItemizedResource.register_will_unassign_resource_callback
+      ~ItemizedResource.rotate
+      ~ItemizedResource.rotated
+      ~ItemizedResource.row
+      ~ItemizedResource.save
+      ~ItemizedResource.save_state_to_file
+      ~ItemizedResource.serialize
+      ~ItemizedResource.serialize_all_state
+      ~ItemizedResource.serialize_state
+      ~ItemizedResource.summary
+      ~ItemizedResource.traverse
+      ~ItemizedResource.unassign
+      ~ItemizedResource.unassign_child_resource
+   
+   
