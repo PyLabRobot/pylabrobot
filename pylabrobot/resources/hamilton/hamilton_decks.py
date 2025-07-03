@@ -498,3 +498,33 @@ def STARDeck(
     with_trash96=with_trash96,
     with_teaching_rack=with_teaching_rack,
   )
+
+
+class PrepDeck(Deck):
+  def __init__(
+    self, name="deck", size_x=0, size_y=0.5, size_z=0, origin=Coordinate.zero(), category="deck"
+  ):
+    super().__init__(
+      name=name, size_x=size_x, size_y=size_y, size_z=size_z, origin=origin, category=category
+    )
+    for column in range(2):
+      for row in range(4):
+        x = column * 140
+        y = row * 100  # ?
+        spot = ResourceHolder(
+          name=f"spot_{column}_{row}",
+          size_x=127.76,
+          size_y=96.52,
+          size_z=0,
+        )
+        self.assign_child_resource(spot, location=Coordinate(x, y, 0))
+
+    trash = Trash(name="trash", size_x=0, size_y=0, size_z=0)
+    # TODO: y coordinate
+    self.assign_child_resource(trash, location=Coordinate(287.0, 0, 0))
+
+  def __getitem__(self, key: int) -> ResourceHolder:
+    return self.children[key]
+
+  def __setitem__(self, key: int, value: Resource):
+    self.children[key].assign_child_resource(value)
