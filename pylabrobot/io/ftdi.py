@@ -38,7 +38,7 @@ class FTDI(IOBase):
 
   async def setup(self):
     if not HAS_PYLIBFTDI:
-      raise RuntimeError("pyserial not installed.")
+      raise RuntimeError("pylibftdi not installed.")
     self._dev.open()
     self._executor = ThreadPoolExecutor(max_workers=1)
 
