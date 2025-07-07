@@ -119,7 +119,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._imaging_mode: Optional["ImagingMode"] = None
     self._row: Optional[int] = None
     self._column: Optional[int] = None
-    self._auto_focus_search_range: Optional[Tuple[float, float]] = None
+    self._auto_focus_search_range: Tuple[float, float] = (1.8, 2.5)
     self._shaking = False
     self._pos_x, self._pos_y = 0.0, 0.0
     self._objective: Optional[Objective] = None
@@ -898,7 +898,7 @@ class Cytation5Backend(ImageReaderBackend):
       return sharpness
 
     # Use golden ratio search to find the best focus value
-    focus_min, focus_max = self._auto_focus_search_range or (1.8, 2.5)
+    focus_min, focus_max = self._auto_focus_search_range
     best_focal_height = await _golden_ratio_search(
       func=evaluate_focus,
       a=focus_min,
