@@ -12,3 +12,4 @@ Tools for working with Hamilton-STAR specific functions.
    z-probing
    foil
    96head
+   debug
