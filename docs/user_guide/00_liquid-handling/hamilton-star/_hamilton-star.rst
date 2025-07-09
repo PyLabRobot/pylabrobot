@@ -13,3 +13,4 @@ Tools for working with Hamilton-STAR specific functions.
    foil
    96head
    debug
+   hardware/index
