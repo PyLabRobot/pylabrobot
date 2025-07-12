@@ -1,0 +1,6 @@
+pylabrobot.resources.Rotation.get\_rotation\_matrix
+===================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Rotation.get_rotation_matrix

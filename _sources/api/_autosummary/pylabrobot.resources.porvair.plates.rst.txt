@@ -1,0 +1,31 @@
+﻿pylabrobot.resources.porvair.plates
+===================================
+
+.. currentmodule:: pylabrobot.resources.porvair
+
+.. automodule:: pylabrobot.resources.porvair.plates
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      Porvair_24_wellplate_Vb
+      Porvair_6_reservoir_47ml_Vb
+      Porvair_6_reservoir_47ml_Vb_Lid
+   
+   
+
+   
+   
+   
+
+   
+   
+   

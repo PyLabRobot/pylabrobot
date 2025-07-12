@@ -1,0 +1,687 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Visualizer Architecture and Contributing &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'contributor_guide/visualizer';</script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/contributor_guide/visualizer.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="API" href="../api/pylabrobot.html" />
+    <link rel="prev" title="Adding support for a new machine of an existing type" href="new-concrete-backend.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to PyLabRobot</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing-new-resources.html">Contributing new resources</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how-to-open-source.html">How to Open Source</a></li>
+</ul>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="new-machine-type.html">Contributing a new type of machine to PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="new-concrete-backend.html">Adding support for a new machine of an existing type</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Visualizer Architecture and Contributing</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Contributor guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Visualizer Architecture and Contributing</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="visualizer-architecture-and-contributing">
+<h1>Visualizer Architecture and Contributing<a class="headerlink" href="#visualizer-architecture-and-contributing" title="Link to this heading">#</a></h1>
+<p>The PyLabRobot visualizer renders the state of a running protocol in a browser.
+It is implemented as a lightweight web application served by the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Visualizer</span></code> class in Python.  The
+visualizer itself does not perform any simulation logic; instead it receives
+messages over a websocket from Python and passively updates the drawing.</p>
+<p>This document gives an overview of how the visualizer is structured and where the
+code lives so new contributors can quickly get started.</p>
+<section id="file-layout">
+<h2>File layout<a class="headerlink" href="#file-layout" title="Link to this heading">#</a></h2>
+<p>The source lives in the :mod:<code class="docutils literal notranslate"><span class="pre">pylabrobot.visualizer</span></code> package:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>pylabrobot/visualizer/
+├── index.html            # entry point served to the browser
+├── lib.js                # helper functions and resource definitions
+├── vis.js                # websocket setup and event handling
+├── main.css              # styling for the page
+├── gif.js, gif.worker.js # GIF recording utilities
+└── visualizer.py         # Python server component
+</pre></div>
+</div>
+<p>The HTML/JS/CSS files make up a static web page.  The Python
+:mod:<code class="docutils literal notranslate"><span class="pre">visualizer.visualizer</span></code> module exposes a :class:<code class="docutils literal notranslate"><span class="pre">Visualizer</span></code> class which
+spins up two threads:</p>
+<ol class="arabic simple">
+<li><p><strong>File server</strong> – a simple HTTP server that serves the static files above.</p></li>
+<li><p><strong>Websocket server</strong> – used to push state updates from Python to the browser.</p></li>
+</ol>
+<p>When <code class="docutils literal notranslate"><span class="pre">Visualizer.setup()</span></code> is called, it launches both servers and optionally
+opens a browser pointing to the file server.  As resources are assigned to the
+root resource or their state changes, callbacks in Python send JSON messages to
+the browser via the websocket.</p>
+</section>
+<section id="browser-side">
+<h2>Browser side<a class="headerlink" href="#browser-side" title="Link to this heading">#</a></h2>
+<p>The web page establishes a websocket connection when loaded.  Incoming messages
+are dispatched in <code class="docutils literal notranslate"><span class="pre">vis.js</span></code> and update the Konva.js drawing.  The main events are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">set_root_resource</span></code> – initial resource tree sent when the connection is ready.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">resource_assigned</span></code> / <code class="docutils literal notranslate"><span class="pre">resource_unassigned</span></code> – update the tree structure.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_state</span></code> – update tracker state such as volumes or tip usage.</p></li>
+</ul>
+<p>The JavaScript does not compute new state on its own; it simply renders what it
+receives.</p>
+</section>
+<section id="developing-the-visualizer">
+<h2>Developing the visualizer<a class="headerlink" href="#developing-the-visualizer" title="Link to this heading">#</a></h2>
+<p>To work on the frontend, run a Python script that starts the
+:class:<code class="docutils literal notranslate"><span class="pre">Visualizer</span></code> and open the provided URL in your browser.  Changes to the
+HTML/JS/CSS files require a reload in the browser.  If you modify the Python
+side you may need to restart the script.</p>
+<p>Useful entry points are the examples in the user guide or the unit tests in
+<code class="docutils literal notranslate"><span class="pre">pylabrobot/visualizer/visualizer_tests.py</span></code> which demonstrate typical usage.</p>
+<p>Because communication happens over websockets, you can also drive the visualizer
+from unit tests or scripts without a physical robot.  The
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ChatterboxBackend</span></code> works
+well for this purpose.</p>
+</section>
+<section id="contributing-tips">
+<h2>Contributing tips<a class="headerlink" href="#contributing-tips" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Keep the Python server lightweight.  All rendering logic should stay in the
+JavaScript code.</p></li>
+<li><p>When sending new events from Python, add matching handlers in <code class="docutils literal notranslate"><span class="pre">vis.js</span></code> and
+document the payload format in comments.</p></li>
+<li><p>Try to keep the websocket protocol stable; update the
+<code class="docutils literal notranslate"><span class="pre">STANDARD_FORM_JSON_VERSION</span></code> if breaking changes are introduced.</p></li>
+</ul>
+<p>If you have ideas for improvements or run into issues, feel free to open a topic
+on the development forum before submitting a pull request.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="new-concrete-backend.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Adding support for a new machine of an existing type</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../api/pylabrobot.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#file-layout">File layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#browser-side">Browser side</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#developing-the-visualizer">Developing the visualizer</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#contributing-tips">Contributing tips</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/contributor_guide/visualizer.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/contributor_guide/visualizer.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

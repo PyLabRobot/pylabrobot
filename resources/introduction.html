@@ -1,0 +1,788 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Resources Introduction &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'resources/introduction';</script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/resources/introduction.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Defining custom resources" href="custom-resources.html" />
+    <link rel="prev" title="Resource Management System" href="index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Resources Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom-resources.html">Defining custom resources</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Ontology</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="carrier/carrier.html">Carrier</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="carrier/mfx-carrier/mfx_carrier.html">MFXCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/plate-carrier/plate_carrier.html">PlateCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/tip-carrier/tip-carrier.html">TipCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="container/container.html">Container</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="container/petri-dish/petri-dish.html">PetriDish</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/trough/trough.html">Trough</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/tube/tube.html">Tube</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/well/well.html">Well</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="deck/deck.html">Deck</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="itemized-resource/itemized-resource.html">ItemizedResource</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="itemized-resource/plate/plate.html">Plates</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="itemized-resource/plate/definition-plate.html">Tutorial: Plate Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="itemized-resource/plate/plate-quadrants.html">Tutorial: Plate Quadrants</a></li>
+</ul>
+</details></li>
+
+<li class="toctree-l2"><a class="reference internal" href="itemized-resource/tiprack/tiprack.html">TipRack</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="resource-holder/resource-holder.html">ResourceHolder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource-holder/plate-holder.html">PlateHolder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plate-adapter/plate-adapter.html">PlateAdapter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource-stack/resource-stack.html">ResourceStack</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Library</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="library/agenbio.html">Agenbio</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/alpaqua.html">Alpaqua Engineering, LLC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/azenta.html">Azenta</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/biorad.html">Biorad</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/boekel.html">Boekel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/celltreat.html">CellTreat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/cellvis.html">Cellvis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/corning_axygen.html">Corning - Axygen</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/corning_costar.html">Corning Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/eppendorf.html">Eppendorf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/falcon.html">Falcon</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="library/hamilton.html">Hamilton STAR “ML_STAR”</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/nest.html">Wuxi Nest</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/opentrons.html">Opentrons</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/porvair.html">Porvair</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/revvity.html">Revvity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/sergi.html">Sergi Lab Supplies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/thermo_fisher.html">Thermo Fisher Scientific Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/vwr.html">VWR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Resource Management System</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Resources Introduction</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="resources-introduction">
+<h1>Resources Introduction<a class="headerlink" href="#resources-introduction" title="Link to this heading">#</a></h1>
+<p>This document introduces PyLabRobot Resources (labware and deck definitions) and general subclasses. You can find more information on creating custom resources in the <a class="reference internal" href="custom-resources.html"><span class="doc">Defining custom resources</span></a> section.</p>
+<p>In PyLabRobot, a <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.resource.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource</span></code></a> is a piece of labware or equipment used in a protocol or program, a part of a labware item (such as a Well) or a container of labware items (such as a Deck). All resources inherit from a single base class <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.resource.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource</span></code></a> that provides most of the functionality, such as the name, sizing, type, model, as well as methods for dealing with state. The name and sizing are required for all resources, with the name being a unique identifier for the resource and the sizing being the x, y and z-dimensions of the resource in millimeters when conceptualized as a cuboid.</p>
+<p>While you can instantiate a <code class="docutils literal notranslate"><span class="pre">Resource</span></code> directly, several subclasses of methods exist to provide additional functionality and model specific resource attributes. For example, a <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Plate.html#pylabrobot.resources.Plate" title="pylabrobot.resources.plate.Plate"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.resources.plate.Plate</span></code></a> has methods for easily accessing <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Well.html#pylabrobot.resources.Well" title="pylabrobot.resources.well.Well"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.resources.well.Well</span></code></a>s.</p>
+<p>The relation between resources is modelled by a tree, specifically an <a class="reference external" href="https://en.wikipedia.org/wiki/Arborescence_(graph_theory)"><em>arborescence</em></a> (a directed, rooted tree). The location of a resource in the tree is a Cartesian coordinate and always relative to the bottom front left corner of its immediate parent. The absolute location can be computed using <code class="xref py py-meth docutils literal notranslate"><span class="pre">get_absolute_location()</span></code>. The x-axis is left (smaller) and right (larger); the y-axis is front (small) and back (larger); the z-axis is down (smaller) and up (higher). Each resource has <code class="docutils literal notranslate"><span class="pre">children</span></code> and <code class="docutils literal notranslate"><span class="pre">parent</span></code> attributes that allow you to navigate the tree.</p>
+<p><a class="reference internal" href="../api/_autosummary/pylabrobot.machines.machine.Machine.html#pylabrobot.machines.machine.Machine" title="pylabrobot.machines.machine.Machine"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.machines.machine.Machine</span></code></a> is a special type of resource that represents a physical machine, such as a liquid handling robot (<a class="reference internal" href="../api/_autosummary/pylabrobot.liquid_handling.liquid_handler.LiquidHandler.html#pylabrobot.liquid_handling.liquid_handler.LiquidHandler" title="pylabrobot.liquid_handling.liquid_handler.LiquidHandler"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.liquid_handling.liquid_handler.LiquidHandler</span></code></a>) or a plate reader (<a class="reference internal" href="../api/_autosummary/pylabrobot.plate_reading.plate_reader.PlateReader.html#pylabrobot.plate_reading.plate_reader.PlateReader" title="pylabrobot.plate_reading.plate_reader.PlateReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.plate_reading.plate_reader.PlateReader</span></code></a>). Machines have a <code class="docutils literal notranslate"><span class="pre">backend</span></code> attribute linking to the backend that is responsible for converting PyLabRobot commands into commands that a specific machine can understand. Other than that, Machines, including <a class="reference internal" href="../api/_autosummary/pylabrobot.liquid_handling.liquid_handler.LiquidHandler.html#pylabrobot.liquid_handling.liquid_handler.LiquidHandler" title="pylabrobot.liquid_handling.liquid_handler.LiquidHandler"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.liquid_handling.liquid_handler.LiquidHandler</span></code></a>, are just like any other Resource.</p>
+<section id="defining-a-simple-resource">
+<h2>Defining a simple resource<a class="headerlink" href="#defining-a-simple-resource" title="Link to this heading">#</a></h2>
+<p>The simplest way to define a resource is to subclass <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.resource.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource</span></code></a> and define the <code class="docutils literal notranslate"><span class="pre">name</span></code> and <code class="docutils literal notranslate"><span class="pre">size_x</span></code>, <code class="docutils literal notranslate"><span class="pre">size_y</span></code> and <code class="docutils literal notranslate"><span class="pre">size_z</span></code> attributes. Here’s an example of a simple resource:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resource</span>
+<span class="n">resource</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;resource&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>To assign a child resource, you can use the <code class="docutils literal notranslate"><span class="pre">assign_child_resource</span></code> method:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resource</span><span class="p">,</span> <span class="n">Coordinate</span>
+<span class="n">child</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;child&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<span class="c1"># assign to bottom front left corner of parent</span>
+<span class="n">resource</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="saving-and-loading-resources">
+<h2>Saving and loading resources<a class="headerlink" href="#saving-and-loading-resources" title="Link to this heading">#</a></h2>
+<p>PyLabRobot provide utilities to save and load resources and their states to and from files, as well as to serialize and deserialize resources and their states to and from Python dictionaries.</p>
+<section id="definitions">
+<h3>Definitions<a class="headerlink" href="#definitions" title="Link to this heading">#</a></h3>
+<section id="saving-to-and-loading-from-a-file">
+<h4>Saving to and loading from a file<a class="headerlink" href="#saving-to-and-loading-from-a-file" title="Link to this heading">#</a></h4>
+<p>Resource definitions, that includes deck definitions, can be saved to and loaded from a file using the <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.save</span></code> and <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.load</span></code> methods. The file format is JSON.</p>
+<p>To save a resource to a file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resource</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;resource.json&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This will create a file <code class="docutils literal notranslate"><span class="pre">resource.json</span></code> with the resource definition.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resource&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Resource&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;size_x&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;size_y&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;size_z&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;location&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;children&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">&quot;parent_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>To load the resource from the file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resource</span> <span class="o">=</span> <span class="n">Resource</span><span class="o">.</span><span class="n">load_from_json_file</span><span class="p">(</span><span class="s2">&quot;resource.json&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="serialization-and-deserialization">
+<h4>Serialization and deserialization<a class="headerlink" href="#serialization-and-deserialization" title="Link to this heading">#</a></h4>
+<p>To simply serialize a resource to a Python dictionary:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resource_dict</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">serialize</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>To load a resource from a Python dictionary:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resource</span> <span class="o">=</span> <span class="n">Resource</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">resource_dict</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="state">
+<h3>State<a class="headerlink" href="#state" title="Link to this heading">#</a></h3>
+<p>Each Resource is responsible for managing its own state, as deep down in the arborescence as possible (eg a Well instead of a Plate). The state of a resource is a Python dictionary that contains all the information necessary to restore the resource to a given state as far as PyLabRobot is concerned. This includes the liquids in a container, the presence of tips in a tip rack, and so on.</p>
+<section id="serializing-and-deserializing-state">
+<h4>Serializing and deserializing state<a class="headerlink" href="#serializing-and-deserializing-state" title="Link to this heading">#</a></h4>
+<p>The state of a single resource, that includes the volume of a container, can be serialized to and deserialized from a Python dictionary using the <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.serialize_state</span></code> and <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.deserialize_state</span></code> methods.</p>
+<p>To serialize the state of a resource:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Container</span>
+<span class="n">c</span> <span class="o">=</span> <span class="n">Container</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;container&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">c</span><span class="o">.</span><span class="n">serialize_state</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This will return a dictionary with the state of the resource:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;liquids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"> </span><span class="nt">&quot;pending_liquids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>To deserialize the state of a resource:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">c</span> <span class="o">=</span> <span class="n">Container</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;container&quot;</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">c</span><span class="o">.</span><span class="n">load_state</span><span class="p">({</span> <span class="s2">&quot;liquids&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;pending_liquids&quot;</span><span class="p">:</span> <span class="p">[]</span> <span class="p">})</span>
+</pre></div>
+</div>
+<p>This is convenient if you want to use PLR state in your own state management system, or save to a database.</p>
+<p>Note that above, only the state of a single resource is serialized. If you want to serialize the state of a resource and all its children, you can use the <code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.serialize_all_state()</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.load_all_state()</span></code> methods. These methods are used internally by the <code class="docutils literal notranslate"><span class="pre">save_state_to_file</span></code> and <code class="docutils literal notranslate"><span class="pre">load_state_from_file</span></code> methods.</p>
+</section>
+<section id="saving-and-loading-state-to-and-from-a-file">
+<h4>Saving and loading state to and from a file<a class="headerlink" href="#saving-and-loading-state-to-and-from-a-file" title="Link to this heading">#</a></h4>
+<p>The state of a resource, that includes the volume of a container, can be saved to and loaded from a file using the <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.save_state_to_file</span></code> and <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources.resource.Resource.load_state_from_file</span></code> methods. The file format is JSON.</p>
+<p>To save the state of a resource to a file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resource</span><span class="o">.</span><span class="n">save_state_to_file</span><span class="p">(</span><span class="s2">&quot;resource_state.json&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>By default, a Resource will not have a state:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{}</span>
+</pre></div>
+</div>
+<p>If you had serialized a <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Container.html#pylabrobot.resources.Container" title="pylabrobot.resources.Container"><code class="xref py py-class docutils literal notranslate"><span class="pre">pylabrobot.resources.Container</span></code></a> with a volume of 1000 uL, the file would look like this:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;liquids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"> </span><span class="nt">&quot;pending_liquids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>To load the state of a resource from a file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">resource</span><span class="o">.</span><span class="n">load_state_from_file</span><span class="p">(</span><span class="s2">&quot;resource_state.json&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Resource Management System</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="custom-resources.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Defining custom resources</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#defining-a-simple-resource">Defining a simple resource</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#saving-and-loading-resources">Saving and loading resources</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#definitions">Definitions</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#saving-to-and-loading-from-a-file">Saving to and loading from a file</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#serialization-and-deserialization">Serialization and deserialization</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#state">State</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#serializing-and-deserializing-state">Serializing and deserializing state</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#saving-and-loading-state-to-and-from-a-file">Saving and loading state to and from a file</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/resources/introduction.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/resources/introduction.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,1408 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Using Trackers &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/machine-agnostic-features/using-trackers';</script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/machine-agnostic-features/using-trackers.html" />
+    <link rel="icon" href="../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Writing Machine-Agnostic Protocols" href="writing-robot-agnostic-protocols.html" />
+    <link rel="prev" title="Using the Visualizer" href="using-the-visualizer.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../_getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="simple">
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../machines.html">Supported Machines</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../00_liquid-handling/hamilton-star/_hamilton-star.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/hamilton-star/basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/hamilton-star/iswap-module.html">iSWAP Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/hamilton-star/star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/hamilton-star/z-probing.html">Z-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/hamilton-star/foil.html">Foil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/hamilton-star/96head.html">Using the 96 head</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/hamilton-star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../00_liquid-handling/hamilton-star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../00_liquid-handling/hamilton-star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../00_liquid-handling/hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../00_liquid-handling/hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../00_liquid-handling/opentrons-ot2/_opentrons-ot2.html">Opentrons OT-2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../00_liquid-handling/tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../00_liquid-handling/pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../00_liquid-handling/pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../01_material-handling/_material-handling.html">Material Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../01_material-handling/arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html">PreciseFlex PF400</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/centrifuge/_centrifuge.html">Centrifuge</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/centrifuge/agilent_vspin.html">Agilent VSpin</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/heating_shaking/inheco.html">Inheco ThermoShake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../01_material-handling/fans/fans.html">Fans</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../01_material-handling/temperature.html">Temperature controllers (heaters and coolers)</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../01_material-handling/sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../01_material-handling/sealers/a4s.html">Automated Roll Heat Sealer (formerly a4S)</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../01_material-handling/tilting.html">Tilting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../01_material-handling/incubators/cytomat.html">Hello World, “Cytomat Incubator”!</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../02_analytical/_analytical.html">Analytical</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../02_analytical/flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../02_analytical/plate-reading/plate-reading.html">Plate Readers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/bmg-clariostar.html">BMG ClarioSTAR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02_analytical/plate-reading/cytation5.html">Cytation 1 and 5</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../02_analytical/scales.html">Scales</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="validation.html">aP Validation Against Log File Example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="error-handling-general.html">Error Handling in PLR</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">User guide</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Using Trackers</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="using-trackers">
+<h1>Using Trackers<a class="headerlink" href="#using-trackers" title="Link to this heading">#</a></h1>
+<p>Trackers in PyLabRobot are objects that keep track of the state of the deck throughout a protocol. Two types of trackers currently exist: tip trackers (tracking the presence of tips in tip racks and on the pipetting channels) and volume trackers (tracking the volume in pipetting tips and wells).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling</span><span class="w"> </span><span class="kn">import</span> <span class="n">LiquidHandler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling.backends.chatterbox</span><span class="w"> </span><span class="kn">import</span> <span class="n">LiquidHandlerChatterboxBackend</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+  <span class="n">TIP_CAR_480_A00</span><span class="p">,</span>
+  <span class="n">HTF</span><span class="p">,</span>
+  <span class="n">PLT_CAR_L5AC_A00</span><span class="p">,</span>
+  <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">,</span>
+  <span class="n">set_tip_tracking</span><span class="p">,</span>
+  <span class="n">set_volume_tracking</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.hamilton</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARLetDeck</span>
+
+<span class="n">lh</span> <span class="o">=</span> <span class="n">LiquidHandler</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">LiquidHandlerChatterboxBackend</span><span class="p">(</span><span class="n">num_channels</span><span class="o">=</span><span class="mi">8</span><span class="p">),</span> <span class="n">deck</span><span class="o">=</span><span class="n">STARLetDeck</span><span class="p">())</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Setting up the liquid handler.
+Resource deck was assigned to the liquid handler.
+Resource trash was assigned to the liquid handler.
+Resource trash_core96 was assigned to the liquid handler.
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tip carrier&quot;</span><span class="p">)</span> <span class="c1"># initialize a tip carrier</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_carrier</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate carrier&quot;</span><span class="p">)</span> <span class="c1"># initialize a plate carrier</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>We enable tip and volume tracking globally using the <code class="docutils literal notranslate"><span class="pre">set_volume_tracking</span></code> and <code class="docutils literal notranslate"><span class="pre">set_tip_tracking</span></code> methods.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">set_volume_tracking</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">set_tip_tracking</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="tip-trackers">
+<h2>Tip trackers<a class="headerlink" href="#tip-trackers" title="Link to this heading">#</a></h2>
+<p>The tip tracker is a simple class that keeps track of the current tip, and the previous operations that have been performed on an object. This enables features like <a class="reference internal" href="../../api/_autosummary/pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips.html#pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips" title="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips"><code class="xref py py-meth docutils literal notranslate"><span class="pre">return_tips()</span></code></a> and automated tip type detection.</p>
+<section id="initializing-tip-racks">
+<h3>Initializing tip racks<a class="headerlink" href="#initializing-tip-racks" title="Link to this heading">#</a></h3>
+<p>Whether or not tip tracking is turned on, spots on a tip rack initialize with a tip tracker that defaults to having a tip. The tip tracker only comes into play with performing operations.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack</span> <span class="o">=</span> <span class="n">HTF</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tip rack&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>True
+</pre></div>
+</div>
+</div>
+</div>
+<p>To initialize a tip rack without tips, pass <code class="docutils literal notranslate"><span class="pre">with_tips=False</span></code>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_carrier</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">empty_tip_rack</span> <span class="o">=</span> <span class="n">HTF</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;empty tip rack&quot;</span><span class="p">,</span> <span class="n">with_tips</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>False
+</pre></div>
+</div>
+</div>
+</div>
+<p>To “empty” a tip rack after initialization, use the <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.TipRack.empty.html#pylabrobot.resources.TipRack.empty" title="pylabrobot.resources.TipRack.empty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">empty()</span></code></a> method. To “fill” a tip rack after initialization, use the <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.TipRack.fill.html#pylabrobot.resources.TipRack.fill" title="pylabrobot.resources.TipRack.fill"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fill()</span></code></a> method.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">fill</span><span class="p">()</span>
+<span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>True
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+<span class="n">empty_tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">has_tip</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>False
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Resource tip carrier was assigned to the liquid handler.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="tip-tracker-errors">
+<h3>Tip tracker errors<a class="headerlink" href="#tip-tracker-errors" title="Link to this heading">#</a></h3>
+<p>The tip tracker is most useful for catching hardware errors before they happen. With tip tracking turned on, the following errors can be raised:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">HasTipError</span><span class="p">,</span> <span class="n">NoTipError</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="notiperror-when-picking-up-a-tip">
+<h4><code class="docutils literal notranslate"><span class="pre">NoTipError</span></code> when picking up a tip<a class="headerlink" href="#notiperror-when-picking-up-a-tip" title="Link to this heading">#</a></h4>
+<p>This error is raised when the tip tracker is trying to access a spot that has no tip.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">empty_tip_rack</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="k">except</span> <span class="n">NoTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_0_0 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+Dropping tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: empty tip rack_tipspot_0_0 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+As expected: Tip spot does not have a tip.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="hastiperror-when-dropping-a-tip">
+<h4><code class="docutils literal notranslate"><span class="pre">HasTipError</span></code> when dropping a tip<a class="headerlink" href="#hastiperror-when-dropping-a-tip" title="Link to this heading">#</a></h4>
+<p>This error is raised when the tip tracker is trying to access a spot that has a tip.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">empty_tip_rack</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="k">except</span> <span class="n">HasTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_0_1 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+As expected: Tip spot already has a tip.
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">empty_tip_rack</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Dropping tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: empty tip rack_tipspot_0_1 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="notiperror-when-dropping-a-tip">
+<h4><code class="docutils literal notranslate"><span class="pre">NoTipError</span></code> when dropping a tip<a class="headerlink" href="#notiperror-when-dropping-a-tip" title="Link to this heading">#</a></h4>
+<p>This error is raised when the tip tracker is trying to use a channel that has no tip.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">drop_tips</span><span class="p">(</span><span class="n">empty_tip_rack</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="k">except</span> <span class="n">NoTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>As expected: Channel 0 does not have a tip.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="hastiperror-when-picking-up-a-tip">
+<h4><code class="docutils literal notranslate"><span class="pre">HasTipError</span></code> when picking up a tip<a class="headerlink" href="#hastiperror-when-picking-up-a-tip" title="Link to this heading">#</a></h4>
+<p>This error is raised when the tip tracker is trying to use a channel that has a tip.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="k">except</span> <span class="n">HasTipError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_0_2 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+As expected: Channel has tip
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="disabling-the-tip-tracker">
+<h3>Disabling the tip tracker<a class="headerlink" href="#disabling-the-tip-tracker" title="Link to this heading">#</a></h3>
+<p>The tip tracker can be disabled in three different ways, depending on the desired behavior.</p>
+<section id="using-a-context-manager">
+<h4>Using a context manager<a class="headerlink" href="#using-a-context-manager" title="Link to this heading">#</a></h4>
+<p>The <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.no_tip_tracking.html#pylabrobot.resources.no_tip_tracking" title="pylabrobot.resources.no_tip_tracking"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.no_tip_tracking()</span></code></a> context manager can be used to disable the tip tracker for a set of operations.</p>
+<p>Note that we use the <a class="reference internal" href="../../api/_autosummary/pylabrobot.liquid_handling.liquid_handler.LiquidHandler.clear_head_state.html#pylabrobot.liquid_handling.liquid_handler.LiquidHandler.clear_head_state" title="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.clear_head_state"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.liquid_handling.liquid_handler.LiquidHandler.clear_head_state()</span></code></a> method to forget the tips that are currently mounted on the channels. This is needed because even though the tip tracker is disabled, the channels still keep track of the tips that are mounted on them.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">clear_head_state</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">no_tip_tracking</span>
+
+<span class="k">with</span> <span class="n">no_tip_tracking</span><span class="p">():</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">use_channels</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="c1"># no error</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_0_4 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p1: tip rack_tipspot_0_4 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="for-a-single-tip-spot">
+<h4>For a single tip spot<a class="headerlink" href="#for-a-single-tip-spot" title="Link to this heading">#</a></h4>
+<p>The tip tracker can be disabled for a single object by calling <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.tip_tracker.TipTracker.disable.html#pylabrobot.resources.tip_tracker.TipTracker.disable" title="pylabrobot.resources.tip_tracker.TipTracker.disable"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.tip_tracker.TipTracker.disable()</span></code></a> on the tracker object.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">clear_head_state</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">use_channels</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="c1"># no error</span>
+
+<span class="n">tip_rack</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">enable</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_0_5 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p1: tip rack_tipspot_0_5 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="for-a-single-tip-rack">
+<h3>For a single tip rack<a class="headerlink" href="#for-a-single-tip-rack" title="Link to this heading">#</a></h3>
+<p>Disable the tip tracker for a single tip rack by calling <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.TipRack.disable_tip_trackers.html#pylabrobot.resources.TipRack.disable_tip_trackers" title="pylabrobot.resources.TipRack.disable_tip_trackers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.TipRack.disable_tip_trackers()</span></code></a> and <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.TipRack.enable_tip_trackers.html#pylabrobot.resources.TipRack.enable_tip_trackers" title="pylabrobot.resources.TipRack.enable_tip_trackers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.TipRack.enable_tip_trackers()</span></code></a> on the tip rack object.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">clear_head_state</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_rack</span><span class="o">.</span><span class="n">disable_tip_trackers</span><span class="p">()</span>
+
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">use_channels</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="c1"># no error</span>
+
+<span class="n">tip_rack</span><span class="o">.</span><span class="n">enable_tip_trackers</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_0_5 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p1: tip rack_tipspot_0_5 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+</pre></div>
+</div>
+</div>
+</div>
+<section id="globally">
+<h4>Globally<a class="headerlink" href="#globally" title="Link to this heading">#</a></h4>
+<p>The tip tracker can be disabled globally by using <a class="reference internal" href="../../api/_autosummary/pylabrobot.resources.set_tip_tracking.html#pylabrobot.resources.set_tip_tracking" title="pylabrobot.resources.set_tip_tracking"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pylabrobot.resources.set_tip_tracking()</span></code></a>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">clear_head_state</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_tip_tracking</span>
+
+<span class="n">set_tip_tracking</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">6</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">use_channels</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="c1"># no error</span>
+
+<span class="n">set_tip_tracking</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_0_6 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p1: tip rack_tipspot_0_6 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+</section>
+<section id="volume-trackers">
+<h2>Volume trackers<a class="headerlink" href="#volume-trackers" title="Link to this heading">#</a></h2>
+<p>The volume tracker is a simple class that keeps track of the current volume, and the previous operations that have been performed on an object. This enables features like automated liquid class selection in STAR, and raises errors before they happen on the robot.</p>
+<section id="initializing-wells">
+<h3>Initializing wells<a class="headerlink" href="#initializing-wells" title="Link to this heading">#</a></h3>
+<p>Wells automatically initialize with a volume tracker that defaults to having no volume.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>0
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>360
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.liquid</span><span class="w"> </span><span class="kn">import</span> <span class="n">Liquid</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_liquids</span><span class="p">([(</span><span class="n">Liquid</span><span class="o">.</span><span class="n">WATER</span><span class="p">,</span> <span class="mi">10</span><span class="p">)])</span>
+<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(10, 350)
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plt_carrier</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Resource plate carrier was assigned to the liquid handler.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="inspecting-volume-tracker-operation-history">
+<h3>Inspecting volume tracker operation history<a class="headerlink" href="#inspecting-volume-tracker-operation-history" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 10.0     plate_well_0_0       0,0,0            None       None       None       
+</pre></div>
+</div>
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(0, 360)
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+<span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_used_volume</span><span class="p">(),</span> <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="s2">&quot;A1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">get_free_volume</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Dispensing:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 10.0     plate_well_0_0       0,0,0            None       None       None       
+</pre></div>
+</div>
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>(10, 350)
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="volume-tracker-errors">
+<h3>Volume tracker errors<a class="headerlink" href="#volume-tracker-errors" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources.volume_tracker</span><span class="w"> </span><span class="kn">import</span> <span class="n">TooLittleLiquidError</span><span class="p">,</span> <span class="n">TooLittleVolumeError</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="toolittleliquiderror-when-dispensing">
+<h4><code class="docutils literal notranslate"><span class="pre">TooLittleLiquidError</span></code> when dispensing<a class="headerlink" href="#toolittleliquiderror-when-dispensing" title="Link to this heading">#</a></h4>
+<p>This error is raised when the volume tracker is trying to dispense from a tip that has less liquid than the requested volume.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span> <span class="c1"># this is less liquid than is currently in the tip</span>
+<span class="k">except</span> <span class="n">TooLittleLiquidError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>As expected: Tracker only has 0uL
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="toolittlevolumeerror-when-aspirating">
+<h4><code class="docutils literal notranslate"><span class="pre">TooLittleVolumeError</span></code> when aspirating<a class="headerlink" href="#toolittlevolumeerror-when-aspirating" title="Link to this heading">#</a></h4>
+<p>This error is raised when the volume tracker is trying to aspirate from a tip that has less free volume than the requested volume.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">clear_head_state</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_1_0 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># fill the first two columns</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">):</span>
+  <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_liquids</span><span class="p">([(</span><span class="n">Liquid</span><span class="o">.</span><span class="n">WATER</span><span class="p">,</span> <span class="mi">100</span><span class="p">)])</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="c1"># aspirate from the first two columns - this is more liquid than the tip can hold</span>
+  <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">):</span>
+    <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span>
+<span class="k">except</span> <span class="n">TooLittleVolumeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_0       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_1       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_2       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_3       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_4       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_5       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_6       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_7       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_1_0       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_1_1       0,0,0            None       None       None       
+As expected: Container has too little volume: 100uL &gt; 65uL.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="toolittleliquiderror-when-aspirating">
+<h4><code class="docutils literal notranslate"><span class="pre">TooLittleLiquidError</span></code> when aspirating<a class="headerlink" href="#toolittleliquiderror-when-aspirating" title="Link to this heading">#</a></h4>
+<p>This error is raised when trying to dispense into a well that has less free volume than the requested volume.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span> <span class="c1"># this is less liquid than is currently in the well</span>
+<span class="k">except</span> <span class="n">TooLittleLiquidError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>As expected: Tracker only has 0uL
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="toolittlevolumeerror-when-dispensing">
+<h4><code class="docutils literal notranslate"><span class="pre">TooLittleVolumeError</span></code> when dispensing<a class="headerlink" href="#toolittlevolumeerror-when-dispensing" title="Link to this heading">#</a></h4>
+<p>This error is raised when trying to aspirate from a well that has less liquid than the requested volume.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">lh</span><span class="o">.</span><span class="n">clear_head_state</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="mi">9</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Picking up tips:
+pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    
+  p0: tip rack_tipspot_1_1 0,0,0            HamiltonTip  1065             8                    95.1             Yes       
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># fill the first column</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
+  <span class="n">plate</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">tracker</span><span class="o">.</span><span class="n">set_liquids</span><span class="p">([(</span><span class="n">Liquid</span><span class="o">.</span><span class="n">WATER</span><span class="p">,</span> <span class="mi">100</span><span class="p">)])</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="c1"># aspirate liquid from the first column into the first well</span>
+  <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">):</span>
+    <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">aspirate</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span>
+    <span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">dispense</span><span class="p">(</span><span class="n">plate</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">],</span> <span class="n">vols</span><span class="o">=</span><span class="p">[</span><span class="mi">100</span><span class="p">])</span>
+<span class="k">except</span> <span class="n">TooLittleVolumeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;As expected:&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_1       0,0,0            None       None       None       
+Dispensing:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_0       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_2       0,0,0            None       None       None       
+Dispensing:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_0       0,0,0            None       None       None       
+Aspirating:
+pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       
+  p0: 100.0    plate_well_0_3       0,0,0            None       None       None       
+As expected: Container has too little volume: 100uL &gt; 60uL.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="using-the-visualizer.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Using the Visualizer</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="writing-robot-agnostic-protocols.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Writing Machine-Agnostic Protocols</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tip-trackers">Tip trackers</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#initializing-tip-racks">Initializing tip racks</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tip-tracker-errors">Tip tracker errors</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#notiperror-when-picking-up-a-tip"><code class="docutils literal notranslate"><span class="pre">NoTipError</span></code> when picking up a tip</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#hastiperror-when-dropping-a-tip"><code class="docutils literal notranslate"><span class="pre">HasTipError</span></code> when dropping a tip</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#notiperror-when-dropping-a-tip"><code class="docutils literal notranslate"><span class="pre">NoTipError</span></code> when dropping a tip</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#hastiperror-when-picking-up-a-tip"><code class="docutils literal notranslate"><span class="pre">HasTipError</span></code> when picking up a tip</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#disabling-the-tip-tracker">Disabling the tip tracker</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#using-a-context-manager">Using a context manager</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#for-a-single-tip-spot">For a single tip spot</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#for-a-single-tip-rack">For a single tip rack</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#globally">Globally</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#volume-trackers">Volume trackers</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#initializing-wells">Initializing wells</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#inspecting-volume-tracker-operation-history">Inspecting volume tracker operation history</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#volume-tracker-errors">Volume tracker errors</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#toolittleliquiderror-when-dispensing"><code class="docutils literal notranslate"><span class="pre">TooLittleLiquidError</span></code> when dispensing</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#toolittlevolumeerror-when-aspirating"><code class="docutils literal notranslate"><span class="pre">TooLittleVolumeError</span></code> when aspirating</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#toolittleliquiderror-when-aspirating"><code class="docutils literal notranslate"><span class="pre">TooLittleLiquidError</span></code> when aspirating</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#toolittlevolumeerror-when-dispensing"><code class="docutils literal notranslate"><span class="pre">TooLittleVolumeError</span></code> when dispensing</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/machine-agnostic-features/using-trackers.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/user_guide/machine-agnostic-features/using-trackers.ipynb.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

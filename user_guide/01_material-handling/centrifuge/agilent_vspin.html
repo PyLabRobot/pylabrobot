@@ -1,0 +1,908 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Agilent VSpin &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/01_material-handling/centrifuge/agilent_vspin';</script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html" />
+    <link rel="icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Heater Shakers" href="../heating_shaking/heating_shaking.html" />
+    <link rel="prev" title="Centrifuge" href="_centrifuge.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../_getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="simple">
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/_hamilton-star.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/iswap-module.html">iSWAP Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/z-probing.html">Z-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/foil.html">Foil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/96head.html">Using the 96 head</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../00_liquid-handling/hamilton-star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/opentrons-ot2/_opentrons-ot2.html">Opentrons OT-2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../00_liquid-handling/pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../_material-handling.html">Material Handling</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html">PreciseFlex PF400</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="_centrifuge.html">Centrifuge</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">Agilent VSpin</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../heating_shaking/inheco.html">Inheco ThermoShake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../fans/fans.html">Fans</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../temperature.html">Temperature controllers (heaters and coolers)</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sealers/a4s.html">Automated Roll Heat Sealer (formerly a4S)</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../tilting.html">Tilting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../incubators/cytomat.html">Hello World, “Cytomat Incubator”!</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../02_analytical/_analytical.html">Analytical</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../02_analytical/flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../02_analytical/plate-reading/plate-reading.html">Plate Readers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/bmg-clariostar.html">BMG ClarioSTAR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/cytation5.html">Cytation 1 and 5</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../02_analytical/scales.html">Scales</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/validation.html">aP Validation Against Log File Example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../_material-handling.html" class="nav-link">Material Handling</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="_centrifuge.html" class="nav-link">Centrifuge</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Agilent VSpin</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="agilent-vspin">
+<h1>Agilent VSpin<a class="headerlink" href="#agilent-vspin" title="Link to this heading">#</a></h1>
+<p>PyLabRobot supports the following centrifuges:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#vspin"><span class="std std-ref">VSpin</span></a></p></li>
+</ul>
+<p>Centrifuges are controlled by the <a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.html#pylabrobot.centrifuge.centrifuge.Centrifuge" title="pylabrobot.centrifuge.centrifuge.Centrifuge"><code class="xref py py-class docutils literal notranslate"><span class="pre">Centrifuge</span></code></a> class. This class takes a backend as an argument. The backend is responsible for communicating with the centrifuge and is specific to the hardware being used.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.centrifuge</span><span class="w"> </span><span class="kn">import</span> <span class="n">Centrifuge</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="n">SomeCentrifugeBackend</span><span class="p">()</span>
+<span class="n">pr</span> <span class="o">=</span> <span class="n">Centrifuge</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">pr</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The <a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.setup.html#pylabrobot.centrifuge.centrifuge.Centrifuge.setup" title="pylabrobot.centrifuge.centrifuge.Centrifuge.setup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setup()</span></code></a> method is used to initialize the centrifuge. This is where the backend will connect to the centrifuge and perform any necessary initialization.</p>
+<p>The <a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.html#pylabrobot.centrifuge.centrifuge.Centrifuge" title="pylabrobot.centrifuge.centrifuge.Centrifuge"><code class="xref py py-class docutils literal notranslate"><span class="pre">Centrifuge</span></code></a> class has a number of methods for controlling the centrifuge. These are:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.open_door.html#pylabrobot.centrifuge.centrifuge.Centrifuge.open_door" title="pylabrobot.centrifuge.centrifuge.Centrifuge.open_door"><code class="xref py py-meth docutils literal notranslate"><span class="pre">open_door()</span></code></a>: Open the centrifuge door.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.close_door.html#pylabrobot.centrifuge.centrifuge.Centrifuge.close_door" title="pylabrobot.centrifuge.centrifuge.Centrifuge.close_door"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close_door()</span></code></a>: Close the centrifuge door.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.lock_door.html#pylabrobot.centrifuge.centrifuge.Centrifuge.lock_door" title="pylabrobot.centrifuge.centrifuge.Centrifuge.lock_door"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_door()</span></code></a>: Lock the centrifuge door.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_door.html#pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_door" title="pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_door"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unlock_door()</span></code></a>: Unlock the centrifuge door.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.lock_bucket.html#pylabrobot.centrifuge.centrifuge.Centrifuge.lock_bucket" title="pylabrobot.centrifuge.centrifuge.Centrifuge.lock_bucket"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_bucket()</span></code></a>: Lock centrifuge buckets.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_bucket.html#pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_bucket" title="pylabrobot.centrifuge.centrifuge.Centrifuge.unlock_bucket"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unlock_bucket()</span></code></a>: Unlock centrifuge buckets.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket1.html#pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket1" title="pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket1"><code class="xref py py-meth docutils literal notranslate"><span class="pre">go_to_bucket1()</span></code></a>: Rotate to Bucket 1.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket2.html#pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket2" title="pylabrobot.centrifuge.centrifuge.Centrifuge.go_to_bucket2"><code class="xref py py-meth docutils literal notranslate"><span class="pre">go_to_bucket2()</span></code></a>: Rotate to Bucket 2.</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.rotate_distance.html#pylabrobot.centrifuge.centrifuge.Centrifuge.rotate_distance" title="pylabrobot.centrifuge.centrifuge.Centrifuge.rotate_distance"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rotate_distance()</span></code></a>: Rotate the buckets a specified distance (8000 = 360 degrees).</p></li>
+<li><p><a class="reference internal" href="../../../api/_autosummary/pylabrobot.centrifuge.centrifuge.Centrifuge.start_spin_cycle.html#pylabrobot.centrifuge.centrifuge.Centrifuge.start_spin_cycle" title="pylabrobot.centrifuge.centrifuge.Centrifuge.start_spin_cycle"><code class="xref py py-meth docutils literal notranslate"><span class="pre">start_spin_cycle()</span></code></a>: Start centrifuge spin cycle.</p></li>
+</ul>
+<p>Start spin cycle:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">cf</span><span class="o">.</span><span class="n">start_spin_cycle</span><span class="p">(</span><span class="n">g</span> <span class="o">=</span> <span class="mi">800</span><span class="p">,</span> <span class="n">duration</span> <span class="o">=</span> <span class="mi">60</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="vspin">
+<span id="id1"></span><h2>VSpin<a class="headerlink" href="#vspin" title="Link to this heading">#</a></h2>
+<p>The VSpin centrifuge is controlled by the <code class="xref py py-class docutils literal notranslate"><span class="pre">VSpinBackend</span></code> class.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.centrifuge</span><span class="w"> </span><span class="kn">import</span> <span class="n">Centrifuge</span><span class="p">,</span> <span class="n">VSpinBackend</span>
+<span class="n">cf</span> <span class="o">=</span> <span class="n">Centrifuge</span><span class="p">(</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;centrifuge&#39;</span><span class="p">,</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">VSpinBackend</span><span class="p">(</span><span class="n">bucket_1_position</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">size_x</span><span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="installation">
+<h3>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h3>
+<p>The VSpin centrifuge connects to your system via a COM port. Integrating it with <code class="docutils literal notranslate"><span class="pre">pylabrobot</span></code> library requires some setup. Follow this guide to get started.</p>
+<section id="preparing-your-environment">
+<h4>1. Preparing Your Environment<a class="headerlink" href="#preparing-your-environment" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p>Windows:</p></li>
+</ul>
+<section id="find-your-python-directory">
+<h5>Find Your Python Directory<a class="headerlink" href="#find-your-python-directory" title="Link to this heading">#</a></h5>
+<p>To use the necessary FTDI <code class="docutils literal notranslate"><span class="pre">.dll</span></code> files, you need to locate your Python environment:</p>
+<ol class="arabic">
+<li><p>Open Python in your terminal:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">python</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">sys</span><span class="o">.</span><span class="n">executable</span>
+</pre></div>
+</div>
+</li>
+<li><p>This will print a path, e.g., <code class="docutils literal notranslate"><span class="pre">C:\Python39\python.exe</span></code>.</p></li>
+<li><p>Navigate to the <code class="docutils literal notranslate"><span class="pre">Scripts</span></code> folder in the same directory as <code class="docutils literal notranslate"><span class="pre">python.exe</span></code>.</p></li>
+</ol>
+</section>
+<section id="download-ftdi-dlls">
+<h5><strong>Download FTDI DLLs</strong><a class="headerlink" href="#download-ftdi-dlls" title="Link to this heading">#</a></h5>
+<p>Download the required <code class="docutils literal notranslate"><span class="pre">.dll</span></code> files from the following link:
+<a class="reference external" href="https://sourceforge.net/projects/picusb/files/libftdi1-1.5_devkit_x86_x64_19July2020.zip/download">FTDI Development Kit</a> (link will start download).</p>
+<ol class="arabic simple">
+<li><p>Extract the downloaded zip file.</p></li>
+<li><p>Locate the <code class="docutils literal notranslate"><span class="pre">bin64</span></code> folder.</p></li>
+<li><p>Copy the files named:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">libftdi1.dll</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">libusb-1.0.dll</span></code></p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="place-dlls-in-python-scripts-folder">
+<h5>Place DLLs in Python Scripts Folder<a class="headerlink" href="#place-dlls-in-python-scripts-folder" title="Link to this heading">#</a></h5>
+<p>Paste the copied <code class="docutils literal notranslate"><span class="pre">.dll</span></code> files into the <code class="docutils literal notranslate"><span class="pre">Scripts</span></code> folder of your Python environment. This enables Python to communicate with FTDI devices.</p>
+<ul class="simple">
+<li><p>macOS:</p></li>
+</ul>
+<p>Install libftdi using <a class="reference external" href="https://brew.sh/">Homebrew</a>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>brew<span class="w"> </span>install<span class="w"> </span>libftdi
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Linux:</p></li>
+</ul>
+<p>Debian (rpi) / Ubuntu etc:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libftdi-dev
+</pre></div>
+</div>
+<p>Other distros may have similar packages.</p>
+</section>
+</section>
+<section id="configuring-the-driver-with-zadig">
+<h4>2. Configuring the Driver with Zadig<a class="headerlink" href="#configuring-the-driver-with-zadig" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p><strong>This step is only required on Windows.</strong></p></li>
+</ul>
+<p>Use Zadig to replace the default driver of the VSpin device with <code class="docutils literal notranslate"><span class="pre">libusbk</span></code>:</p>
+<ol class="arabic simple">
+<li><p><strong>Identify the VSpin Device</strong></p>
+<ul class="simple">
+<li><p>Open Zadig.</p></li>
+<li><p>To confirm the VSpin device, disconnect the RS232 port from the centrifuge while monitoring the Zadig device list.</p></li>
+<li><p>The device that disappears is your VSpin, likely titled “USB Serial Converter.”</p></li>
+</ul>
+</li>
+<li><p><strong>Replace the Driver</strong></p>
+<ul class="simple">
+<li><p>Select the identified VSpin device in Zadig.</p></li>
+<li><p>Replace its driver with <code class="docutils literal notranslate"><span class="pre">libusbk</span></code>.</p></li>
+<li><p>Optionally, rename the device to “VSpin” for easy identification.</p></li>
+</ul>
+</li>
+</ol>
+<blockquote>
+<div><p><strong>Note:</strong> If you need to revert to the original driver for tools like the Agilent Centrifuge Config Tool, go to <strong>Device Manager</strong> and uninstall the <code class="docutils literal notranslate"><span class="pre">libusbk</span></code> driver. The default driver will reinstall automatically.</p>
+</div></blockquote>
+</section>
+<section id="finding-the-ftdi-id">
+<h4>3. Finding the FTDI ID<a class="headerlink" href="#finding-the-ftdi-id" title="Link to this heading">#</a></h4>
+<p>To interact with the centrifuge programmatically, you need its FTDI device ID. Use the following steps to find it:</p>
+<ol class="arabic">
+<li><p>Open a terminal and run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pylibftdi.examples.list_devices
+</pre></div>
+</div>
+</li>
+<li><p>This will output something like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">FTDI</span><span class="p">:</span><span class="n">USB</span> <span class="n">Serial</span> <span class="n">Converter</span><span class="p">:</span><span class="n">FTE0RJ5T</span>
+</pre></div>
+</div>
+</li>
+<li><p>Copy the ID (<code class="docutils literal notranslate"><span class="pre">FTE0RJ5T</span></code> or your equivalent).</p></li>
+</ol>
+</section>
+<section id="setting-up-the-centrifuge">
+<h4><strong>4. Setting Up the Centrifuge</strong><a class="headerlink" href="#setting-up-the-centrifuge" title="Link to this heading">#</a></h4>
+<p>Use the following code to configure the centrifuge in Python:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.centrifuge</span><span class="w"> </span><span class="kn">import</span> <span class="n">Centrifuge</span><span class="p">,</span> <span class="n">VSpinBackend</span>
+
+<span class="c1"># Replace with your specific FTDI device ID and bucket position for profile in Agilent Centrifuge Config Tool.</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="n">VSpinBackend</span><span class="p">(</span><span class="n">bucket_1_position</span><span class="o">=</span><span class="mi">6969</span><span class="p">,</span> <span class="n">device_id</span><span class="o">=</span><span class="s2">&quot;XXXXXXXX&quot;</span><span class="p">)</span>
+<span class="n">centrifuge</span> <span class="o">=</span> <span class="n">Centrifuge</span><span class="p">(</span>
+   <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
+   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;centrifuge&quot;</span><span class="p">,</span>
+   <span class="n">size_x</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">1</span>
+<span class="p">)</span>
+
+<span class="c1"># Initialize the centrifuge.</span>
+<span class="k">await</span> <span class="n">centrifuge</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>You’re now ready to use your VSpin centrifuge with <code class="docutils literal notranslate"><span class="pre">pylabrobot</span></code>!</p>
+</section>
+</section>
+<section id="loader">
+<h3>Loader<a class="headerlink" href="#loader" title="Link to this heading">#</a></h3>
+<p>The VSpin can optionally be used with a loader (called Access2). The loader is optional because you can also use a robotic arm like an iSWAP to move a plate directly into the centrifuge.</p>
+<p>Here’s how to use the loader:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.centrifuge</span><span class="w"> </span><span class="kn">import</span> <span class="n">Access2</span><span class="p">,</span> <span class="n">VSpinBackend</span>
+<span class="n">v</span> <span class="o">=</span> <span class="n">VSpinBackend</span><span class="p">(</span><span class="n">device_id</span><span class="o">=</span><span class="s2">&quot;FTE1YWTI&quot;</span><span class="p">,</span> <span class="n">bucket_1_position</span><span class="o">=</span><span class="mi">1314</span><span class="p">)</span> <span class="c1"># bucket 1 position is empirically determined</span>
+<span class="n">centrifuge</span><span class="p">,</span> <span class="n">loader</span> <span class="o">=</span> <span class="n">Access2</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="n">vspin</span><span class="o">=</span><span class="n">v</span><span class="p">,</span> <span class="n">device_id</span><span class="o">=</span><span class="s2">&quot;FTE1YZC5&quot;</span><span class="p">)</span>
+
+<span class="c1"># initialize the centrifuge and loader in parallel</span>
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+  <span class="n">centrifuge</span><span class="o">.</span><span class="n">setup</span><span class="p">(),</span>
+  <span class="n">loader</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="c1"># go to a bucket and open the door before loading</span>
+<span class="k">await</span> <span class="n">centrifuge</span><span class="o">.</span><span class="n">go_to_bucket1</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">centrifuge</span><span class="o">.</span><span class="n">open_door</span><span class="p">()</span>
+
+<span class="c1"># assign a plate to the loader before loading. This can also be done implicitly by for example</span>
+<span class="c1"># lh.move_plate(plate, loader)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cor_96_wellplate_360ul_Fb</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plate&quot;</span><span class="p">)</span>
+<span class="n">loader</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+
+<span class="c1"># load and unload the plate</span>
+<span class="k">await</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">loader</span><span class="o">.</span><span class="n">unload</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="_centrifuge.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Centrifuge</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../heating_shaking/heating_shaking.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Heater Shakers</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vspin">VSpin</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#preparing-your-environment">1. Preparing Your Environment</a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#find-your-python-directory">Find Your Python Directory</a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#download-ftdi-dlls"><strong>Download FTDI DLLs</strong></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#place-dlls-in-python-scripts-folder">Place DLLs in Python Scripts Folder</a></li>
+</ul>
+</li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#configuring-the-driver-with-zadig">2. Configuring the Driver with Zadig</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#finding-the-ftdi-id">3. Finding the FTDI ID</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#setting-up-the-centrifuge"><strong>4. Setting Up the Centrifuge</strong></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#loader">Loader</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/01_material-handling/centrifuge/agilent_vspin.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../../_sources/user_guide/01_material-handling/centrifuge/agilent_vspin.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

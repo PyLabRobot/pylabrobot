@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.pick\_up\_resource
+=========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. automethod:: Vantage.pick_up_resource

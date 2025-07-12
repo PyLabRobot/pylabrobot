@@ -1,0 +1,56 @@
+﻿pylabrobot.liquid\_handling.backends.chatterbox.LiquidHandlerChatterboxBackend
+==============================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.chatterbox
+
+.. autoclass:: LiquidHandlerChatterboxBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LiquidHandlerChatterboxBackend.deck
+      ~LiquidHandlerChatterboxBackend.head
+      ~LiquidHandlerChatterboxBackend.head96
+      ~LiquidHandlerChatterboxBackend.num_channels
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LiquidHandlerChatterboxBackend.__init__
+      ~LiquidHandlerChatterboxBackend.aspirate
+      ~LiquidHandlerChatterboxBackend.aspirate96
+      ~LiquidHandlerChatterboxBackend.assigned_resource_callback
+      ~LiquidHandlerChatterboxBackend.can_pick_up_tip
+      ~LiquidHandlerChatterboxBackend.deserialize
+      ~LiquidHandlerChatterboxBackend.dispense
+      ~LiquidHandlerChatterboxBackend.dispense96
+      ~LiquidHandlerChatterboxBackend.drop_resource
+      ~LiquidHandlerChatterboxBackend.drop_tips
+      ~LiquidHandlerChatterboxBackend.drop_tips96
+      ~LiquidHandlerChatterboxBackend.get_all_instances
+      ~LiquidHandlerChatterboxBackend.move_channel_x
+      ~LiquidHandlerChatterboxBackend.move_channel_y
+      ~LiquidHandlerChatterboxBackend.move_channel_z
+      ~LiquidHandlerChatterboxBackend.move_picked_up_resource
+      ~LiquidHandlerChatterboxBackend.pick_up_resource
+      ~LiquidHandlerChatterboxBackend.pick_up_tips
+      ~LiquidHandlerChatterboxBackend.pick_up_tips96
+      ~LiquidHandlerChatterboxBackend.prepare_for_manual_channel_operation
+      ~LiquidHandlerChatterboxBackend.serialize
+      ~LiquidHandlerChatterboxBackend.set_deck
+      ~LiquidHandlerChatterboxBackend.set_heads
+      ~LiquidHandlerChatterboxBackend.setup
+      ~LiquidHandlerChatterboxBackend.stop
+      ~LiquidHandlerChatterboxBackend.unassigned_resource_callback
+   
+   
