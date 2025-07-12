@@ -6719,6 +6719,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tw=wrist_protection,
     )
 
+  async def iswap_dangerous_release_break(self):
+    return await self.send_command(module="R0", command="BA")
+
+  async def iswap_reengage_break(self):
+    return await self.send_command(module="R0", command="BO")
+  
+  async def iswap_initialize_z_axis(self):
+    return await self.send_command(module="R0", command="ZI")
+
   async def move_plate_to_position(
     self,
     x_position: int = 0,
