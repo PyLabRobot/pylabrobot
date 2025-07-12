@@ -60,20 +60,21 @@ class HID(IOBase):
 
     def _write():
       assert self.device is not None, "forgot to call setup?"
-      self.device.write(data)
+      return self.device.write(data)
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    await loop.run_in_executor(self._executor, _write)
+    r = await loop.run_in_executor(self._executor, _write)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
     capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.decode()))
+    return r
 
   async def read(self, size: int, timeout: int) -> bytes:
     loop = asyncio.get_running_loop()
 
     def _read():
       assert self.device is not None, "forgot to call setup?"
-      self.device.read(size, timeout=timeout)
+      return self.device.read(size, timeout=timeout)
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
