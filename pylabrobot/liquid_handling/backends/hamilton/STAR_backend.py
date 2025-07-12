@@ -6688,7 +6688,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_rotate(
     self,
-    position: int = 33,
+    rotation_drive: "RotationDriveOrientation",
+    grip_direction: GripDirection,
     gripper_velocity: int = 55_000,
     gripper_acceleration: int = 170,
     gripper_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
@@ -6707,6 +6708,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 20 <= wrist_velocity <= 65_000
     assert 20 <= wrist_acceleration <= 200
 
+    position = 0
+
+    if rotation_drive == STARBackend.RotationDriveOrientation.LEFT:
+      position += 10
+    elif rotation_drive == STARBackend.RotationDriveOrientation.FRONT:
+      position += 20
+    elif rotation_drive == STARBackend.RotationDriveOrientation.RIGHT:
+      position += 30
+    else:
+      raise ValueError("Invalid rotation drive orientation")
+
+    if grip_direction == GripDirection.FRONT:
+      position += 1
+    elif grip_direction == GripDirection.RIGHT:
+      position += 2
+    elif grip_direction == GripDirection.BACK:
+      position += 3
+    elif grip_direction == GripDirection.LEFT:
+      position += 4
+    else:
+      raise ValueError("Invalid grip direction")
+
     return await self.send_command(
       module="R0",
       command="PD",
@@ -6724,7 +6747,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_reengage_break(self):
     return await self.send_command(module="R0", command="BO")
-  
+
   async def iswap_initialize_z_axis(self):
     return await self.send_command(module="R0", command="ZI")
 
