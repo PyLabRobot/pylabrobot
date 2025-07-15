@@ -41,6 +41,7 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
       size_x=17.0,
       size_y=17.0,
       size_z=42,
+      material_z_thickness=1.46,
       bottom_type=WellBottomType.V,
       compute_volume_from_height=_compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb,
       cross_section_type=CrossSectionType.RECTANGLE,
