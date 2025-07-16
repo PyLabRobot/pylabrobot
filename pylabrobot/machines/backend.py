@@ -1,6 +1,6 @@
-import weakref
-import inspect
 from abc import ABC, abstractmethod
+import inspect
+import weakref
 
 from pylabrobot.utils.object_parsing import find_subclass
 
