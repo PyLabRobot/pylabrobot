@@ -5,7 +5,7 @@ This guide provides instructions for replacing the iSWAP arm on a Hamilton STAR 
 Caution/Disclaimer: 
 1. This procedure is a work in progress and the user assumes all responsibility for any damage that may be done as a result.
 2. This procedure should not be performed on any system that are either under the OEM Warranty period or currently on a service contract with the OEM or any third party service organization. This will certainly void the OEM Warranty/Service contract and likely invalidate any service agreement with third parties.
-3. This procedure DOES NOT encapsulate the entire OEM adjustment procedure which includes specialized tooling and software to perform.
+3. This procedure DOES NOT encapsulate the entire OEM adjustment procedure which includes specialized tooling and software to perform. Consult [iSWAP Auto Adjustment Guide](adjusting-iswap.md) for auto-calibrating arm after installation proceduce.
 4. Once completing this procedure it is necessary to check, and if needed, reteach the locations that are to be accessed by the iSWAP.
 
 Note: Due to the way the iSWAP is taught, the calibration positions from machine to machine are typically very close. This means an iSWAP can be SWAPPED (pun intended) and function largely the same with minor tweaks.

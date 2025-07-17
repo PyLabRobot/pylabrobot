@@ -2,5 +2,7 @@
 
 ```{toctree}
 :maxdepth: 1
+
 replacing-iswap
+adjusting-iswap
 ```
