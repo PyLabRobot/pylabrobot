@@ -66,7 +66,7 @@ class HID(IOBase):
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _write)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.decode()))
+    capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.hex()))
     return r
 
   async def read(self, size: int, timeout: int) -> bytes:
@@ -80,7 +80,7 @@ class HID(IOBase):
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _read)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.decode()))
+    capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
     return cast(bytes, r)
 
   def serialize(self):
