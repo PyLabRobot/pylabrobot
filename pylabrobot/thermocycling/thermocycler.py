@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, cast
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
@@ -49,8 +49,6 @@ class Thermocycler(ResourceHolder, Machine):
         # exactly like TemperatureController does
         self.backend: ThermocyclerBackend = backend
 
-    # ─── Control ──────────────────────────────────────────────────────────────
-
     async def open_lid(self):
         """Open the thermocycler lid."""
         return await self.backend.open_lid()
@@ -92,15 +90,79 @@ class Thermocycler(ResourceHolder, Machine):
         """
         return await self.backend.run_profile(profile, block_max_volume)
 
-    # ─── Status queries ───────────────────────────────────────────────────────
+    async def run_pcr_profile(
+        self,
+        denaturation_temp: float,
+        denaturation_time: float,
+        annealing_temp: float,
+        annealing_time: float,
+        extension_temp: float,
+        extension_time: float,
+        num_cycles: int,
+        block_max_volume: float,
+        lid_temperature: float,
+        pre_denaturation_temp: Optional[float] = None,
+        pre_denaturation_time: Optional[float] = None,
+        final_extension_temp: Optional[float] = None,
+        final_extension_time: Optional[float] = None,
+        storage_temp: Optional[float] = None,
+        storage_time: Optional[float] = None,
+    ):
+        """Run a PCR profile with specified parameters.
+
+        Args:
+          denaturation_temp: Denaturation temperature in °C.
+          denaturation_time: Denaturation time in seconds.
+          annealing_temp: Annealing temperature in °C.
+          annealing_time: Annealing time in seconds.
+          extension_temp: Extension temperature in °C.
+          extension_time: Extension time in seconds.
+          num_cycles: Number of PCR cycles.
+          block_max_volume: Maximum block volume (µL) for safety.
+          lid_temperature: Lid temperature to set during the profile.
+          pre_denaturation_temp: Optional pre-denaturation temperature in °C.
+          pre_denaturation_time: Optional pre-denaturation time in seconds.
+          final_extension_temp: Optional final extension temperature in °C.
+          final_extension_time: Optional final extension time in seconds.
+          storage_temp: Optional storage temperature in °C.
+          storage_time: Optional storage time in seconds.
+        """
+
+        await self.set_lid_temperature(lid_temperature)
+        await self.wait_for_lid()
+
+        profile = []
+
+        if pre_denaturation_temp is not None and pre_denaturation_time is not None:
+            profile.append({"celsius": pre_denaturation_temp, "holdSeconds": pre_denaturation_time})
+
+        # Main PCR cycles
+        pcr_step = [
+            {"celsius": denaturation_temp, "holdSeconds": denaturation_time},
+            {"celsius": annealing_temp, "holdSeconds": annealing_time},
+            {"celsius": extension_temp, "holdSeconds": extension_time},
+        ]
+        for _ in range(num_cycles):
+            profile.extend(pcr_step)
+
+        if final_extension_temp is not None and final_extension_time is not None:
+            profile.append({"celsius": final_extension_temp, "holdSeconds": final_extension_time})
+
+        if storage_temp is not None and storage_time is not None:
+            profile.append({"celsius": storage_temp, "holdSeconds": storage_time})
+
+        return await self.run_profile(
+            profile=profile,
+            block_max_volume=block_max_volume
+        )
 
     async def get_block_current_temperature(self) -> float:
         """Get the current block temperature (°C)."""
         return await self.backend.get_block_current_temperature()
 
-    async def get_block_target_temperature(self) -> float:
+    async def get_block_target_temperature(self) -> Optional[float]:
         """Get the block’s target temperature (°C)."""
-        return await self.backend.get_block_target_temperature()
+        return cast(Optional[float], await self.backend.get_block_target_temperature())
 
     async def get_lid_current_temperature(self) -> float:
         """Get the current lid temperature (°C)."""
@@ -112,7 +174,7 @@ class Thermocycler(ResourceHolder, Machine):
 
     async def get_lid_status(self) -> str:
         """Get whether the lid is “open” or “closed”."""
-        return await self.backend.get_lid_status()
+        return cast(str, await self.backend.get_lid_status())
 
     async def get_hold_time(self) -> float:
         """Get remaining hold time (s) for the current step."""
@@ -120,7 +182,7 @@ class Thermocycler(ResourceHolder, Machine):
 
     async def get_current_cycle_index(self) -> int:
         """Get the zero-based index of the current cycle."""
-        return await self.backend.get_current_cycle_index()
+        return (await self.backend.get_current_cycle_index()) - 1
 
     async def get_total_cycle_count(self) -> int:
         """Get the total number of cycles."""
@@ -128,17 +190,17 @@ class Thermocycler(ResourceHolder, Machine):
 
     async def get_current_step_index(self) -> int:
         """Get the zero-based index of the current step."""
-        return await self.backend.get_current_step_index()
+        return (await self.backend.get_current_step_index()) - 1
 
     async def get_total_step_count(self) -> int:
         """Get the total number of steps in the current cycle."""
         return await self.backend.get_total_step_count()
 
-    # ─── Optional wait helpers ────────────────────────────────────────────────
-
     async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5):
         """Wait until block temp reaches target ± tolerance."""
         target = await self.get_block_target_temperature()
+        if target is None:
+            return # No target temperature to wait for
         start = time.time()
         while time.time() - start < timeout:
             if abs((await self.get_block_current_temperature()) - target) < tolerance:
@@ -146,17 +208,21 @@ class Thermocycler(ResourceHolder, Machine):
             await asyncio.sleep(1)
         raise TimeoutError("Block temperature timeout.")
 
-    async def wait_for_lid(self, timeout: float = 600, tolerance: float = 0.5):
-        """Wait until lid temp reaches target ± tolerance."""
+    async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5):
+        """Wait until lid temp reaches target ± tolerance, or status is idle/holding at target."""
         target = await self.get_lid_target_temperature()
         start = time.time()
         while time.time() - start < timeout:
-            if abs((await self.get_lid_current_temperature()) - target) < tolerance:
-                return
+            if target is not None:
+                if abs((await self.get_lid_current_temperature()) - target) < tolerance:
+                    return
+            else:
+                # If no target temperature, check status
+                status = await self.get_lid_status()
+                if status in ["idle", "holding at target"]:
+                    return
             await asyncio.sleep(1)
         raise TimeoutError("Lid temperature timeout.")
-
-    # ─── Profile status helpers ──────────────────────────────────────────────
 
     async def is_profile_running(self) -> bool:
         """Return True if a profile is still in progress."""

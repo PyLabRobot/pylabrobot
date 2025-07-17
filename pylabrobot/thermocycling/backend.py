@@ -1,6 +1,7 @@
 """Abstract base for Thermocycler back-ends."""
 
 from abc import ABCMeta, abstractmethod
+from typing import Optional
 from pylabrobot.machines.backend import MachineBackend
 
 
@@ -40,7 +41,7 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Get the current block temperature in °C."""
 
   @abstractmethod
-  async def get_block_target_temperature(self) -> float:
+  async def get_block_target_temperature(self) -> Optional[float]:
     """Get the block target temperature in °C."""
 
   @abstractmethod
@@ -48,7 +49,7 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Get the current lid temperature in °C."""
 
   @abstractmethod
-  async def get_lid_target_temperature(self) -> float:
+  async def get_lid_target_temperature(self) -> Optional[float]:
     """Get the lid target temperature in °C."""
 
   @abstractmethod
@@ -65,7 +66,7 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def get_total_cycle_count(self) -> int:
-    """Get the total number of cycles."""
+    """Get the total cycle count."""
 
   @abstractmethod
   async def get_current_step_index(self) -> int:

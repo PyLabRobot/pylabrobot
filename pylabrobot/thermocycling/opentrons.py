@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, cast
 
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.resources.opentrons.module import OTModule
@@ -47,7 +47,7 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
     """Return a serialized representation of the thermocycler."""
     return {
       **super().serialize(),
-      "opentrons_id": self.backend.opentrons_id,
+      "opentrons_id": cast(OpentronsThermocyclerBackend, self.backend).opentrons_id,
     }
 
 class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
@@ -92,5 +92,5 @@ class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
     """Return a serialized representation of the thermocycler."""
     return {
       **super().serialize(),
-      "opentrons_id": self.backend.opentrons_id,
+      "opentrons_id": cast(OpentronsThermocyclerBackend, self.backend).opentrons_id,
     }
