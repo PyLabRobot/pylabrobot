@@ -59,7 +59,7 @@ Ensure none of the calibration tools are mounted on the iSWAP prior to starting 
 
     Will run for ~5 minutes before you are prompted to remove JUST the cylindrical tool. Keep the pin tool installed on the wrist joint like so:
 
-    ![](./img/cylinder-tool-removed.jpg)
+![](./img/cylinder-tool-removed.jpg)
 
 
 7. Resume automatic calibration.
