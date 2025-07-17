@@ -1,6 +1,6 @@
 # Auto-Adjustment of iSWAP
 
-STAR service macro scripts auto-define positions for every iSWAP arm/wrist conformation, resolving issues where properly defined labware is far off from the position an iSWAP repeatedly picks/places. This can be a cause for plate mishandling, especially when changing arm/wrist conformations between pickup & place.
+STAR service macro scripts auto-define positions for every iSWAP arm/wrist conformation, resolving issues where properly defined labware is far off from the position an iSWAP repeatedly picks/places. This can be a cause for plate mishandling, especially when changing arm/wrist conformations between pickup and placement.
 
 After adjustment, test all iSWAP movements, especially to locations external to the workcell. These will likely need change a few mm as the iSWAP is in an updated coordinate space.
 
@@ -8,9 +8,9 @@ Adjusting an iSWAP is essential to keeping a workcell healthy in demanding, high
 
 Email RoboticsServicePartQuote@hamiltoncompany.com for the most rapid quoting process for 182990 and 173960, required for the automatic calibration process.
 
-Hamilton may request in-person training before providing access to STAR service & service macros.
+Hamilton may request in-person training before providing access to STAR service and service macros.
 
-note: it is best to perform iSWAP adjustment after first fully defining the coordinate space of the STAR through gantry & pipette macros.
+note: it is best to perform iSWAP adjustment after first fully defining the coordinate space of the STAR with gantry and pipette macros.
 
 ## Calibration of iSWAP using Hamilton iSWAP auto-adjustment kit PN#182990
 
@@ -22,14 +22,14 @@ Ensure none of the calibration tools are mounted on the iSWAP prior to starting 
 
 2. Begin adjust_iswap.mcr, let robot initialize, and wait until prompted to install the gripper probe tool on iSWAP arm.
 
-    First loosen two indicated thumbscrews on wire guide & mount onto metal plate of iSWAP arm segment. Tighten & route gripper probe into gripper.
+    First loosen two indicated thumbscrews on wire guide, then mount onto metal plate of iSWAP arm segment. Tighten and route gripper probe into gripper.
 
     Make sure the connection wire is routed on the left side of the gripper tool exactly as pictured. Otherwise, the cable will bind on the iSWAP causing an error during macro execution
 
 ![](./img/gripper-probe-install.jpg)
 
 
-3. Mount wire holder at top of iSWAP using indicated thumbscrew & plug connector into leftmost position on top of iSWAP circuit board
+3. Mount wire holder at top of iSWAP using indicated thumbscrew and plug connector into leftmost position on top of iSWAP circuit board
     
     the blocked pin on the connector should line up with the missing pin on your iSWAP board as pictured
 
@@ -47,7 +47,7 @@ Ensure none of the calibration tools are mounted on the iSWAP prior to starting 
 
     ![](./img/cylindrical-tool.jpg)
     
-    the pin tool installs in two parts. place the pin through the bottom of the wrist joint, and catch this threaded pin with the indicated thumbscrew mounted on the top of the wrist joint. there is a thru-hole to accomadate the pin:
+    the pin tool installs in two parts. place the pin through the bottom of the wrist joint, and catch this threaded pin with the indicated thumbscrew mounted on the top of the wrist joint. there is a thru-hole to accommodate the pin:
 
     ![](./img/pin-tool.jpg)
 
