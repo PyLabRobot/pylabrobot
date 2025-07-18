@@ -106,23 +106,14 @@ def need_iswap_parked(method: Callable):
 
 def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
   """Util for converting an argument to the appropriate format for low level star methods."""
-  t = type(default[0])
   # if the val is None, use the default.
   if val is None:
     return default
-  # repeat val if it is not a list.
-  if not isinstance(val, list):
-    return [val] * len(default)
   # if the val is a list, it must be of the correct length.
   if len(val) != len(default):
     raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
   # replace None values in list with default values.
   val = [v if v is not None else d for v, d in zip(val, default)]
-  # the values must be of the right type. automatically handle int and float.
-  if t in [int, float]:
-    return [t(v) for v in val]  # type: ignore
-  if not all(isinstance(v, t) for v in val):
-    raise ValueError(f"Value must be a list of {t}, but is {val}")
   # the value is ready to be used.
   return val
 
@@ -1763,7 +1754,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     clot_detection_height = _fill_in_defaults(
       clot_detection_height,
       default=[
-        hlc.aspiration_clot_retract_height if hlc is not None else 0
+        hlc.aspiration_clot_retract_height if hlc is not None else 0.0
         for hlc in hamilton_liquid_classes
       ],
     )
@@ -1772,61 +1763,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
     # TODO: I think minimum height should be the minimum height of the well
-    immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
+    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
-    surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
+    surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
-      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     transport_air_volume = _fill_in_defaults(
       transport_air_volume,
       default=[
-        hlc.aspiration_air_transport_volume if hlc is not None else 0
+        hlc.aspiration_air_transport_volume if hlc is not None else 0.0
         for hlc in hamilton_liquid_classes
       ],
     )
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0))
+      (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0.0))
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
-    pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0] * n)
+    pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0.0] * n)
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
     dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1] * n)
     aspirate_position_above_z_touch_off = _fill_in_defaults(
-      aspirate_position_above_z_touch_off, [0] * n
+      aspirate_position_above_z_touch_off, [0.0] * n
     )
     detection_height_difference_for_dual_lld = _fill_in_defaults(
-      detection_height_difference_for_dual_lld, [0] * n
+      detection_height_difference_for_dual_lld, [0.0] * n
     )
     swap_speed = _fill_in_defaults(
       swap_speed,
       default=[
-        hlc.aspiration_swap_speed if hlc is not None else 100 for hlc in hamilton_liquid_classes
+        hlc.aspiration_swap_speed if hlc is not None else 100.0 for hlc in hamilton_liquid_classes
       ],
     )
     settling_time = _fill_in_defaults(
       settling_time,
       default=[
-        hlc.aspiration_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.aspiration_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0] * n)
+    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
-    mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
+    mix_position_from_liquid_surface = _fill_in_defaults(
+      mix_position_from_liquid_surface, [0.0] * n
+    )
     mix_speed = _fill_in_defaults(
       mix_speed,
       default=[
         hlc.aspiration_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
+    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
     use_2nd_section_aspiration = _fill_in_defaults(use_2nd_section_aspiration, [False] * n)
     retract_height_over_2nd_section_to_empty_tip = _fill_in_defaults(
-      retract_height_over_2nd_section_to_empty_tip, [0] * n
+      retract_height_over_2nd_section_to_empty_tip, [0.0] * n
     )
     dispensation_speed_during_emptying_tip = _fill_in_defaults(
       dispensation_speed_during_emptying_tip, [50.0] * n
@@ -1837,9 +1830,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_drive_speed_during_2nd_section_search = _fill_in_defaults(
       z_drive_speed_during_2nd_section_search, [30.0] * n
     )
-    cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0] * n)
+    cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0.0] * n)
     ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
-    immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0] * n)
+    immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
 
     try:
       return await self.aspirate_pip(
@@ -2063,29 +2056,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
-    immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
+    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
-    surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
+    surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
-      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     cut_off_speed = _fill_in_defaults(cut_off_speed, [5.0] * n)
     stop_back_volume = _fill_in_defaults(
       stop_back_volume,
       default=[
-        hlc.dispense_stop_back_volume if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
     transport_air_volume = _fill_in_defaults(
       transport_air_volume,
       default=[
-        hlc.dispense_air_transport_volume if hlc is not None else 0
+        hlc.dispense_air_transport_volume if hlc is not None else 0.0
         for hlc in hamilton_liquid_classes
       ],
     )
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0.0))
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
@@ -2103,19 +2096,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     settling_time = _fill_in_defaults(
       settling_time,
       default=[
-        hlc.dispense_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0] * n)
+    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
-    mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
+    mix_position_from_liquid_surface = _fill_in_defaults(
+      mix_position_from_liquid_surface, [0.0] * n
+    )
     mix_speed = _fill_in_defaults(
       mix_speed,
       default=[
         hlc.dispense_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
+    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
     try:
@@ -2181,9 +2176,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Pick up tips using the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
-    tip_a1 = tip_spot_a1.get_tip()
-    assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(tip_a1)
+    prototypical_tip = None
+    for tip_spot in pickup.resource.get_all_items():
+      if tip_spot.has_tip():
+        prototypical_tip = tip_spot.get_tip()
+        break
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     z_deposit_position += round(pickup.offset.z * 10)
 
@@ -2213,8 +2214,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     if isinstance(drop.resource, TipRack):
-      tip_a1 = drop.resource.get_item("A1")
-      position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
+      tip_spot_a1 = drop.resource.get_item("A1")
+      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
@@ -6687,7 +6688,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_rotate(
     self,
-    position: int = 33,
+    rotation_drive: "RotationDriveOrientation",
+    grip_direction: GripDirection,
     gripper_velocity: int = 55_000,
     gripper_acceleration: int = 170,
     gripper_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
@@ -6706,6 +6708,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 20 <= wrist_velocity <= 65_000
     assert 20 <= wrist_acceleration <= 200
 
+    position = 0
+
+    if rotation_drive == STARBackend.RotationDriveOrientation.LEFT:
+      position += 10
+    elif rotation_drive == STARBackend.RotationDriveOrientation.FRONT:
+      position += 20
+    elif rotation_drive == STARBackend.RotationDriveOrientation.RIGHT:
+      position += 30
+    else:
+      raise ValueError("Invalid rotation drive orientation")
+
+    if grip_direction == GripDirection.FRONT:
+      position += 1
+    elif grip_direction == GripDirection.RIGHT:
+      position += 2
+    elif grip_direction == GripDirection.BACK:
+      position += 3
+    elif grip_direction == GripDirection.LEFT:
+      position += 4
+    else:
+      raise ValueError("Invalid grip direction")
+
     return await self.send_command(
       module="R0",
       command="PD",
@@ -6717,6 +6741,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tr=f"{wrist_acceleration:03}",
       tw=wrist_protection,
     )
+
+  async def iswap_dangerous_release_break(self):
+    return await self.send_command(module="R0", command="BA")
+
+  async def iswap_reengage_break(self):
+    return await self.send_command(module="R0", command="BO")
+
+  async def iswap_initialize_z_axis(self):
+    return await self.send_command(module="R0", command="ZI")
 
   async def move_plate_to_position(
     self,

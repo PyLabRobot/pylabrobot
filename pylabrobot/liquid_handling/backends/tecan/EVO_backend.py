@@ -212,6 +212,11 @@ class EVOBackend(TecanLiquidHandler):
     self._pnp_connected: Optional[bool] = None
     self._mca_connected: Optional[bool] = None
 
+    self._z_traversal_height = 210  # mm, the default value for SHZ command
+    self._z_roma_traversal_height = (
+      68.7  # mm, is what was used to develop this but possibly too low
+    )
+
   @property
   def num_channels(self) -> int:
     """The number of pipette channels present on the robot."""
@@ -412,7 +417,7 @@ class EVOBackend(TecanLiquidHandler):
       await self.liha.set_search_z_start(z_positions["start"])
       await self.liha.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
       await self.liha.set_search_submerge(sbl)
-      shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels
+      shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels  # TODO: max?
       await self.liha.set_z_travel_height(shz)
       await self.liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
       await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
@@ -459,7 +464,7 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height(z if z else self._z_range for z in z_positions["travel"])
+    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
@@ -686,9 +691,9 @@ class EVOBackend(TecanLiquidHandler):
         raise ValueError(f"Operation is not supported by resource {par}.")
       # TODO: calculate defaults when z-attribs are not specified
       tip_length = int(ops[i].tip.total_tip_length * 10)
-      z_positions["travel"][channel] = get_z_position(
-        par.z_travel, par.get_absolute_location().z + op.offset.z, tip_length
-      )
+      # z travel seems to only be used for aspiration and dispense right now
+      if isinstance(op, (SingleChannelAspiration, SingleChannelDispense)):
+        z_positions["travel"][channel] = round(self._z_traversal_height * 10)
       z_positions["start"][channel] = get_z_position(
         par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
       )
@@ -727,11 +732,13 @@ class EVOBackend(TecanLiquidHandler):
       assert tlc is not None
       pvl[channel] = 0
       if airgap == "lag":
-        sep[channel] = int(tlc.aspirate_lag_speed * 12)  # 6? TODO: verify step unit
-        ppr[channel] = int(tlc.aspirate_lag_volume * 6)  # 3?
+        sep[channel] = int(
+          tlc.aspirate_lag_speed * 6
+        )  # 6? TODO: verify step unit (half step per second)
+        ppr[channel] = int(tlc.aspirate_lag_volume * 3)  # 3? (Relative position in full steps)
       elif airgap == "tag":
-        sep[channel] = int(tlc.aspirate_tag_speed * 12)  # 6?
-        ppr[channel] = int(tlc.aspirate_tag_volume * 6)  # 3?
+        sep[channel] = int(tlc.aspirate_tag_speed * 6)  # 6?
+        ppr[channel] = int(tlc.aspirate_tag_volume * 3)  # 3?
 
     return pvl, sep, ppr
 
@@ -797,10 +804,11 @@ class EVOBackend(TecanLiquidHandler):
       tlc = tecan_liquid_classes[i]
       z = zadd[channel]
       assert tlc is not None and z is not None
-      sep[channel] = int(tlc.aspirate_speed * 12)  # 6?
-      ssz[channel] = round(z * tlc.aspirate_speed / ops[i].volume)
+      flow_rate = ops[i].flow_rate or tlc.aspirate_speed
+      sep[channel] = int(flow_rate * 6)  # 6?
+      ssz[channel] = round(z * flow_rate / ops[i].volume)
       volume = tlc.compute_corrected_volume(ops[i].volume)
-      mtr[channel] = round(volume * 6)  # 3?
+      mtr[channel] = round(volume * 3)  # 3?  # Relative position in full steps
       ssz_r[channel] = int(tlc.aspirate_retract_speed * 10)
 
     return ssz, sep, stz, mtr, ssz_r
@@ -833,15 +841,16 @@ class EVOBackend(TecanLiquidHandler):
     for i, channel in enumerate(use_channels):
       tlc = tecan_liquid_classes[i]
       assert tlc is not None
-      sep[channel] = int(tlc.dispense_speed * 12)  # 6?
-      spp[channel] = int(tlc.dispense_breakoff * 12)  # 6?
+      flow_rate = ops[i].flow_rate or tlc.dispense_speed
+      sep[channel] = int(flow_rate * 6)  # 6?
+      spp[channel] = int(tlc.dispense_breakoff * 6)  # 6? half step per second
       stz[channel] = 0
       volume = (
         tlc.compute_corrected_volume(ops[i].volume)
         + tlc.aspirate_lag_volume
         + tlc.aspirate_tag_volume
       )
-      mtr[channel] = -round(volume * 6)  # 3?
+      mtr[channel] = -round(volume * 3)  # 3?
 
     return sep, spp, stz, mtr
 
@@ -850,27 +859,28 @@ class EVOBackend(TecanLiquidHandler):
   ) -> Tuple[int, int, Dict[str, int]]:
     """Creates x, y, and z positions used by RoMa ops."""
 
-    par = resource.parent
-    if par is None:
+    parent = resource.parent  # PlateHolder
+    if parent is None:
       raise ValueError(f"Operation is not supported by resource {resource}.")
-    par = par.parent
-    if not isinstance(par, TecanPlateCarrier):
-      raise ValueError(f"Operation is not supported by resource {par}.")
+    parent = parent.parent  # PlateCarrier
+    # TODO: this is probably the current plate carrier, not the destination.
+    # Also, we should just support any coordinate as the destination.
+    if not isinstance(parent, TecanPlateCarrier):
+      raise ValueError(f"Operation is not supported by resource {parent}.")
 
     if (
-      par.roma_x is None
-      or par.roma_y is None
-      or par.roma_z_safe is None
-      or par.roma_z_travel is None
-      or par.roma_z_end is None
+      parent.roma_x is None
+      or parent.roma_y is None
+      or parent.roma_z_safe is None
+      or parent.roma_z_end is None
     ):
-      raise ValueError(f"Operation is not supported by resource {par}.")
-    x_position = int((offset.x - 100) * 10 + par.roma_x)
-    y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + par.roma_y)
+      raise ValueError(f"Operation is not supported by resource {parent}.")
+    x_position = int((offset.x - 100) * 10 + parent.roma_x)
+    y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + parent.roma_y)
     z_positions = {
-      "safe": z_range - int(par.roma_z_safe),
-      "travel": z_range - int(par.roma_z_travel - offset.z * 10),
-      "end": z_range - int(par.roma_z_end - offset.z * 10),
+      "safe": z_range - int(parent.roma_z_safe),
+      "travel": int(self._z_roma_traversal_height * 10),
+      "end": z_range - int(parent.roma_z_end - offset.z * 10),
     }
 
     return x_position, y_position, z_positions
@@ -933,8 +943,20 @@ class LiHa(EVOArm):
   async def report_z_param(self, param: int) -> List[int]:
     """Report current parameters for z-axis.
 
-    Args:
-      param: 0 - current position, 5 - actual machine range
+    Param:
+    0   Report current position in 1/10 mm.
+    1   Report acceleration in 1/10 mm/s².
+    2   Report fast speed in 1/10 mm/s.
+    3   Report initialization speed in 1/10 mm.
+    4   Report initialization offset in 1/10 mm.
+    5   Report actual machine range in 1/10 mm.
+    6   Report deviation in encoder increments.
+    7   Report every time 0.
+    8   Report scale adjust factor.
+    9   Report slow speed in 1/10 mm/s.
+    10  Report axis scale factor.
+    11  Report target position in 1/10 mm.
+    12  Report travel position in 1/10 mm.
     """
 
     resp: List[int] = (

@@ -11,6 +11,10 @@ class InhecoThermoShakeBackend(HeaterShakerBackend):
   https://www.inheco.com/thermoshake-ac.html
   """
 
+  @property
+  def supports_active_cooling(self) -> bool:
+    return True
+
   def __init__(self, vid=0x03EB, pid=0x2023, serial_number=None):
     self.io = HID(vid=vid, pid=pid, serial_number=serial_number)
 

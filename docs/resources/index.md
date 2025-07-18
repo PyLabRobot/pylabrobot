@@ -129,6 +129,7 @@ container/container
 deck/deck
 itemized-resource/itemized-resource
 resource-holder/resource-holder
+resource-holder/plate-holder
 plate-adapter/plate-adapter
 resource-stack/resource-stack
 ```
@@ -173,8 +174,7 @@ library/biorad
 library/boekel
 library/celltreat
 library/cellvis
-library/corning_axygen
-library/corning_costar
+library/corning
 library/eppendorf
 library/falcon
 library/hamilton
@@ -182,6 +182,7 @@ library/nest
 library/opentrons
 library/porvair
 library/revvity
+library/sergi
 library/thermo_fisher
 library/vwr
 ```

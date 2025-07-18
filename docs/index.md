@@ -9,6 +9,7 @@
 - **GitHub repository**: [https://github.com/PyLabRobot/pylabrobot](https://github.com/PyLabRobot/pylabrobot)
 - **Community & Developer Forum**: [https://discuss.pylabrobot.org](https://discuss.pylabrobot.org)
 - **Publication**: [Wierenga et al 2023, PyLabRobot: An Open-Source, Hardware Agnostic Interface for Liquid-Handling Robots and Accessories (Device)](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>)
+- **Supported Machines**: [supported machines](user_guide/machines.md)
 
 <hr>
 
@@ -17,7 +18,6 @@
 :align: center
 :alt: Graphical abstract of PyLabRobot
 ```
-
 
 ```{note}
 PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton).
@@ -51,6 +51,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :class: company
 ```
 
+```{image} /img/used_by/logo_cheshire_labs.png
+:alt: Cheshire-Labs
+:class: company
+:target: https://www.cheshirelabs.io/
+```
+
 ```{raw} html
 <style>
 .company {
@@ -65,6 +71,7 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 ```
 
 <hr>
+
 
 ```{toctree}
 :maxdepth: 2
@@ -103,7 +110,6 @@ api/pylabrobot
 
 Community <https://discuss.pylabrobot.org/>
 ```
-
 
 ## Citing
 

@@ -5,7 +5,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union, cast
 
 try:
   import cv2  # type: ignore
@@ -119,7 +119,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._imaging_mode: Optional["ImagingMode"] = None
     self._row: Optional[int] = None
     self._column: Optional[int] = None
-    self._auto_focus_search_range: Optional[Tuple[float, float]] = None
+    self._auto_focus_search_range: Tuple[float, float] = (1.8, 2.5)
     self._shaking = False
     self._pos_x, self._pos_y = 0.0, 0.0
     self._objective: Optional[Objective] = None
@@ -129,19 +129,19 @@ class Cytation5Backend(ImageReaderBackend):
     logger.info("[cytation5] setting up")
 
     await self.io.setup()
-    self.io.usb_reset()
-    self.io.set_latency_timer(16)
-    self.io.set_baudrate(9600)  # 0x38 0x41
-    self.io.set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
+    await self.io.usb_reset()
+    await self.io.set_latency_timer(16)
+    await self.io.set_baudrate(9600)  # 0x38 0x41
+    await self.io.set_line_property(8, 2, 0)  # 8 data bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
-    self.io.set_flowctrl(SIO_RTS_CTS_HS)
-    self.io.set_rts(True)
+    await self.io.set_flowctrl(SIO_RTS_CTS_HS)
+    await self.io.set_rts(True)
 
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
       self._version = await self.get_firmware_version()
     except TimeoutError:
-      self.io.set_baudrate(38_461)  # 4e c0
+      await self.io.set_baudrate(38_461)  # 4e c0
       self._version = await self.get_firmware_version()
 
     self._shaking = False
@@ -409,8 +409,8 @@ class Cytation5Backend(ImageReaderBackend):
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
     for _ in range(6):
-      self.io.usb_purge_rx_buffer()
-    self.io.usb_purge_tx_buffer()
+      await self.io.usb_purge_rx_buffer()
+    await self.io.usb_purge_tx_buffer()
 
   async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
     """If timeout is None, use self.timeout"""
@@ -518,17 +518,22 @@ class Cytation5Backend(ImageReaderBackend):
     num_rows = 8
     rows = body[start_index:end_index].split(b"\r\n,")[:num_rows]
 
-    parsed_data: List[List[float]] = []
-    for row_idx, row in enumerate(rows):
-      parsed_data.append([])
+    assert self._plate is not None, "Plate must be set before reading data"
+    parsed_data: List[List[Optional[float]]] = [
+      [None for _ in range(self._plate.num_items_x)] for _ in range(self._plate.num_items_y)
+    ]
+    for row in rows:
       values = row.split(b",")
       grouped_values = [values[i : i + 3] for i in range(0, len(values), 3)]
 
       for group in grouped_values:
         assert len(group) == 3
+        row_index = int(group[0].decode()) - 1  # 1-based index in the response
+        column_index = int(group[1].decode()) - 1  # 1-based index in the response
         value = float(group[2].decode())
-        parsed_data[row_idx].append(value)
-    return parsed_data
+        parsed_data[row_index][column_index] = value
+
+    return cast(List[List[float]], parsed_data)
 
   async def set_plate(self, plate: Plate):
     # 08120112207434014351135308559127881422
@@ -589,7 +594,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
-    checksum = str(sum(cmd.encode()) % 100)
+    checksum = str(sum(cmd.encode()) % 100).zfill(2)
     cmd = cmd + checksum + "\x03"
     await self.send_command("D", cmd)
 
@@ -641,7 +646,7 @@ class Cytation5Backend(ImageReaderBackend):
       f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
       f"{emission_wavelength_str}000000000000000000210011"
     )
-    checksum = str((sum(cmd.encode()) + 7) % 100)  # don't know why +7
+    checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
     cmd = cmd + checksum + "\x03"
     resp = await self.send_command("D", cmd)
 
@@ -680,7 +685,7 @@ class Cytation5Backend(ImageReaderBackend):
       duration = str(max_duration).zfill(3)
       assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}{frequency}01"
-      checksum = str((sum(cmd.encode()) + 73) % 100)  # don't know why +73
+      checksum = str((sum(cmd.encode()) + 73) % 100).zfill(2)  # don't know why +73
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
 
@@ -893,7 +898,7 @@ class Cytation5Backend(ImageReaderBackend):
       return sharpness
 
     # Use golden ratio search to find the best focus value
-    focus_min, focus_max = self._auto_focus_search_range or (1.8, 2.5)
+    focus_min, focus_max = self._auto_focus_search_range
     best_focal_height = await _golden_ratio_search(
       func=evaluate_focus,
       a=focus_min,

@@ -41,6 +41,10 @@ if PYTHON_VERSION == (3, 10):
     import ot_api.requestor as _req
     from requests import HTTPError
 
+    # for run cancellation
+    import ot_api.requestor as _req
+    from requests import HTTPError
+
     USE_OT = True
   except ImportError:
     USE_OT = False

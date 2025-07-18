@@ -21,6 +21,10 @@ else:
 class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
   """Opentrons temperature module backend."""
 
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
+
   def __init__(self, opentrons_id: str):
     """Create a new Opentrons temperature module backend.
 

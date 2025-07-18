@@ -36,13 +36,37 @@ class TemperatureController(ResourceHolder, Machine):
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 
-  async def set_temperature(self, temperature: float):
+  async def set_temperature(self, temperature: float, passive: bool = False):
     """Set the temperature of the temperature controller.
 
     Args:
       temperature: Temperature in Celsius.
+      passive: If ``True`` and cooling is required, allow the device to cool
+        down naturally without calling ``set_temperature`` on the backend.
+        This can be used for backends that do not support active cooling or to
+        explicitly disable active cooling when it is available.
     """
+    current = await self.backend.get_current_temperature()
+
     self.target_temperature = temperature
+
+    if temperature < current:
+      # Cooling scenario.
+      if not self.backend.supports_active_cooling:
+        if passive:
+          # Device does not support active cooling and user opted for passive
+          # cooling. Nothing to do on the backend.
+          return
+        raise ValueError(
+          "Backend does not support active cooling. Use passive=True to allow "
+          "passive cooling or set a higher temperature."
+        )
+
+      # Backend supports active cooling.
+      if passive:
+        # Actively do nothing and let the device cool naturally.
+        return
+
     return await self.backend.set_temperature(temperature)
 
   async def get_temperature(self) -> float:
@@ -77,6 +101,11 @@ class TemperatureController(ResourceHolder, Machine):
     """
     self.target_temperature = None
     return await self.backend.deactivate()
+
+  async def stop(self):
+    """Stop the temperature controller and close the backend connection."""
+    await self.deactivate()
+    await super().stop()
 
   def serialize(self) -> dict:
     return {
