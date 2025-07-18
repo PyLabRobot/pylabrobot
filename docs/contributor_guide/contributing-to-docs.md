@@ -34,7 +34,7 @@ def resize_image(input_path, output_path=None, width=720, quality=80):
     output_path = f"{base}_resized.jpg"
 
   img.save(output_path, "JPEG", quality=quality, optimize=True)
-  print(f"Saved: {output_path} ({width}×{height}, quality={quality}%)")
+  print(f"Saved: {output_path} (quality={quality}%)")
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
