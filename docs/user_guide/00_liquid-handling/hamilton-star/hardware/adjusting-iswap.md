@@ -18,7 +18,7 @@ Ensure none of the calibration tools are mounted on the iSWAP prior to starting 
 
 1. Install the iswap adjustment tool in slot 15. Loosen the indicated thumbscrew before placing on-deck. Once on-deck, slide tool as far toward back of STAR as it will go, then tighten thumbscrew. Tool should be flush with STAR carrier backstops
 
-![](./img/iswap-tool-install.jpg)
+![](./img/adjust-iswap/iswap-tool-install.jpg)
 
 2. Begin adjust_iswap.mcr, let robot initialize, and wait until prompted to install the gripper probe tool on iSWAP arm.
 
@@ -26,18 +26,18 @@ Ensure none of the calibration tools are mounted on the iSWAP prior to starting 
 
     Make sure the connection wire is routed on the left side of the gripper tool exactly as pictured. Otherwise, the cable will bind on the iSWAP causing an error during macro execution
 
-![](./img/gripper-probe-install.jpg)
+![](./img/adjust-iswap/gripper-probe-install.jpg)
 
 
 3. Mount wire holder at top of iSWAP using indicated thumbscrew and plug connector into leftmost position on top of iSWAP circuit board
     
     the blocked pin on the connector should line up with the missing pin on your iSWAP board as pictured
 
-![](./img/iswap-board-connect.jpg)
+![](./img/adjust-iswap/iswap-board-connect.jpg)
 
 4. Ensure electrical contact sensing works:
 
-![](./img/ground-probe.jpg)
+![](./img/adjust-iswap/ground-probe.jpg)
 
 5. Begin automatic calibration.
     
@@ -45,21 +45,21 @@ Ensure none of the calibration tools are mounted on the iSWAP prior to starting 
     
     screw in the "cylindrical tool" directly onto the Z axis of the iSWAP:
 
-    ![](./img/cylindrical-tool.jpg)
+    ![](./img/adjust-iswap/cylindrical-tool.jpg)
     
     the pin tool installs in two parts. place the pin through the bottom of the wrist joint, and catch this threaded pin with the indicated thumbscrew mounted on the top of the wrist joint. there is a thru-hole to accommodate the pin:
 
-    ![](./img/pin-tool.jpg)
+    ![](./img/adjust-iswap/pin-tool.jpg)
 
     Connect the red wire plugs to the gripper tool. When ready, the final iSWAP calibration assembly looks like this:
 
-    ![](./img/iswap-calibration-assembly.jpg)
+    ![](./img/adjust-iswap/iswap-calibration-assembly.jpg)
 
 6. Resume automatic calibration.
 
     Will run for ~5 minutes before you are prompted to remove JUST the cylindrical tool. Keep the pin tool installed on the wrist joint like so:
 
-![](./img/cylinder-tool-removed.jpg)
+![](./img/adjust-iswap/cylinder-tool-removed.jpg)
 
 
 7. Resume automatic calibration.
@@ -74,4 +74,4 @@ __Critical__: The taller Pipetting Channel Calibration Tool is used during the A
 
 Steps are similar to the auto-adjustment process described above.
 
-![](./img/adjust-iswap-over-labware.jpg)
+![](./img/adjust-iswap/adjust-iswap-over-labware.jpg)

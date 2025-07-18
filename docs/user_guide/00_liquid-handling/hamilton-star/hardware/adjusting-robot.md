@@ -12,7 +12,7 @@ See [Microlab STAR Service Manual](https://archive.org/details/manual_Hamilton_M
 
 Install the channel calibration tool by loosening the circled thumbscrew, placing it on the deck, and sliding it along the submarines to the end stop at the back of the STAR. Tighten the thumbscrew when the tool is in position.
 
-![](./img/channel-calibration-tool.jpg)
+![](./img/adjust-robot/channel-calibration-tool.jpg)
 
 If there is trouble with conductive-probe sensing, clean the tool’s registration points with ethanol.
 
@@ -23,17 +23,17 @@ Using `adjust_arm_z.mcr`, measure the current gantry height and level the Z heig
 2. Loosen the fixing screws (6 on STAR, 5 on STARlet; indicated by red arrows in the example) with a 4 mm hex key.  
 3. The gantry now rests on two set screws at the top of the aluminum X‑slider assembly. These allow ±Z alignment with a 2 mm hex wrench. Each full turn is ~ 40 steps. Make small adjustments and test often until you meet the macro’s specifications.
 
-  ![](./img/adjust-arm-z.jpg)
+  ![](./img/adjust-robot/adjust-arm-z.jpg)
 
 ## Check X‑Arm Differential  
 Using `check_x_arm_diff.mcr`, adjust the Z rotation of the entire pipetting gantry—essential for controlling Z‑rotated iSWAPs and accurate pipetting.
 
 Once the macro finishes, you’ll be prompted to rotate the gantry per the measurements:
 
-![](./img/check-x-arm-diff-script-0.jpg)
+![](./img/adjust-robot/check-x-arm-diff-script-0.png)
 
 1. Loosen the eight nuts (red arrows) securing the pipetting gantry to the X‑drive sliders at its base.  
-   ![](./img/check-x-arm-diff.jpg)  
+   ![](./img/adjust-robot/check-x-arm-diff.jpg)  
 2. The gantry rests at three points: two at the back (pictured) and one at the front-top X‑slider.  
 3. The mounting holes are slotted to permit rotation around the Z axis.  
 4. An adjustment value of 30 is small. Fine‑tune by hand: press the gantry against the sliders, hand‑tighten, and re‑test often.  
@@ -41,32 +41,32 @@ Once the macro finishes, you’ll be prompted to rotate the gantry per the measu
 
 A negative X‑arm correction value means a counterclockwise rotation around Z (in the positive X direction):
 
-![](./img/rotate-x-arm-around-z.jpg)  
+![](./img/adjust-robot/rotate-x-arm-around-z.jpg)  
 ^ *Graphic sourced from [STAR Service Manual](https://archive.org/details/manual_Hamilton_Microlab_STAR_Service_Manual)*
 
 A successful adjustment looks like this:
 
-![](./img/check-x-arm-diff-script-1.jpg)
+![](./img/adjust-robot/check-x-arm-diff-script-1.png)
 
 ## Adjust Pip Manual  
 Using `adjust_pip_manual.mcr`, align each pipette’s X translation, Y rotation, and X rotation. Every channel is measured, and a report shows the required adjustments:
 
-![](./img/adjust-pip-script-0.jpg)
+![](./img/adjust-robot/adjust-pip-script-0.png)
 
 In this example, the pipette must shift left in X (front‑view) with no X‑axis rotation:
 
-![](./img/adjust-pip-0.jpg)
+![](./img/adjust-robot/adjust-pip-0.jpg)
 
 1. To shift left, loosen the upper or lower channel screw. Rotate the pipette up and away from the calibration tool slightly to achieve both rotation and translation along the red‑arrow axis:  
-   ![](./img/adjust-pip-1.jpg)  
+   ![](./img/adjust-robot/adjust-pip-1.jpg)  
 2. Tighten that screw, leaving the pipette offset:  
-   ![](./img/adjust-pip-2.jpg)  
+   ![](./img/adjust-robot/adjust-pip-2.jpg)  
 3. Loosen the remaining channel screw to finalize translation and correct rotation:  
-   ![](./img/adjust-pip-3.jpg)  
+   ![](./img/adjust-robot/adjust-pip-3.jpg)  
 4. Align the channel with the tool—perfect alignment isn’t always exact. When close, follow STAR Service’s guidance. An aligned pipette looks like this:  
-   ![](./img/adjust-pip-4.jpg)  
+   ![](./img/adjust-robot/adjust-pip-4.jpg)  
 5. Repeat for every channel until all are within specification:  
-   ![](./img/adjust-pip-script-1.jpg)  
+   ![](./img/adjust-robot/adjust-pip-script-1.png)  
 6. Click through dialogue boxes until the macro ends; values write to the STAR until the final step.
 
 ## Adjust Pip  
