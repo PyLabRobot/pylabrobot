@@ -23,19 +23,19 @@ Note: Due to the way the iSWAP is taught, the calibration positions from machine
 
 2. Undo the following two FFC cables:
 
-![](./img/ffc.jpg)
+![](./img/replace-iswap/ffc.jpg)
 
 3. Slightly loosen the two screws on the side using a 2mm hex key, enough to slide off the metal piece. It is easiest to keep the screws in place.
 
-![](./img/side-screws.jpg)
+![](./img/replace-iswap/side-screws.jpg)
 
 4. Undo the two main screws on the back of the iSWAP arm using a 4mm hex key. Remove them. Start with the adjustment screw (1), then the main screw (2). Be careful, the arm might fall off if you don't hold it.
 
-![](./img/main-screws.jpg)
+![](./img/replace-iswap/main-screws.jpg)
 
 5. The iSWAP arm can now be removed from the Hamilton STAR system. After removing the arm, you are left with this:
 
-![](./img/after-remove.jpg)
+![](./img/replace-iswap/after-remove.jpg)
 
 ## Attaching the New iSWAP Arm and rough leveling
 
