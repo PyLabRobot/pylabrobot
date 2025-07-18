@@ -16,8 +16,9 @@ try:
   import usb.util
 
   USE_USB = True
-except ImportError:
+except ImportError as e:
   USE_USB = False
+  _USB_IMPORT_ERROR = e
 
 
 if TYPE_CHECKING:
@@ -304,7 +305,8 @@ class USB(IOBase):
 
     if not USE_USB:
       raise RuntimeError(
-        "USB is not enabled. Please install pyusb and libusb. "
+        f"USB dependencies could not be imported due to the following error: {_USB_IMPORT_ERROR}. "
+        "Please install pyusb and libusb. "
         "https://docs.pylabrobot.org/installation.html"
       )
 
