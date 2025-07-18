@@ -30,7 +30,7 @@ Using `check_x_arm_diff.mcr`, adjust the Z rotation of the entire pipetting gant
 
 Once the macro finishes, you’ll be prompted to rotate the gantry per the measurements:
 
-![](./img/check-x-arm-diff-script-0.png)
+![](./img/check-x-arm-diff-script-0.jpg)
 
 1. Loosen the eight nuts (red arrows) securing the pipetting gantry to the X‑drive sliders at its base.  
    ![](./img/check-x-arm-diff.jpg)  
@@ -46,12 +46,12 @@ A negative X‑arm correction value means a counterclockwise rotation around Z (
 
 A successful adjustment looks like this:
 
-![](./img/check-x-arm-diff-script-1.png)
+![](./img/check-x-arm-diff-script-1.jpg)
 
 ## Adjust Pip Manual  
 Using `adjust_pip_manual.mcr`, align each pipette’s X translation, Y rotation, and X rotation. Every channel is measured, and a report shows the required adjustments:
 
-![](./img/adjust-pip-script-0.png)
+![](./img/adjust-pip-script-0.jpg)
 
 In this example, the pipette must shift left in X (front‑view) with no X‑axis rotation:
 
@@ -66,7 +66,7 @@ In this example, the pipette must shift left in X (front‑view) with no X‑axi
 4. Align the channel with the tool—perfect alignment isn’t always exact. When close, follow STAR Service’s guidance. An aligned pipette looks like this:  
    ![](./img/adjust-pip-4.jpg)  
 5. Repeat for every channel until all are within specification:  
-   ![](./img/adjust-pip-script-1.png)  
+   ![](./img/adjust-pip-script-1.jpg)  
 6. Click through dialogue boxes until the macro ends; values write to the STAR until the final step.
 
 ## Adjust Pip  
