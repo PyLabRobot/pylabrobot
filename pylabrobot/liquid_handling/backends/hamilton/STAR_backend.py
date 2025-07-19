@@ -3226,7 +3226,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def pre_initialize_instrument(self):
     """Pre-initialize instrument"""
-    return await self.send_command(module="C0", command="VI")
+    return await self.send_command(module="C0", command="VI", read_timeout=300)
 
   async def define_tip_needle(
     self,
