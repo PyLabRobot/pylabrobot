@@ -1,0 +1,29 @@
+﻿pylabrobot.only\_fans.hamilton\_hepa\_fan\_backend.HamiltonHepaFanBackend
+=========================================================================
+
+.. currentmodule:: pylabrobot.only_fans.hamilton_hepa_fan_backend
+
+.. autoclass:: HamiltonHepaFanBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HamiltonHepaFanBackend.__init__
+      ~HamiltonHepaFanBackend.deserialize
+      ~HamiltonHepaFanBackend.get_all_instances
+      ~HamiltonHepaFanBackend.send
+      ~HamiltonHepaFanBackend.serialize
+      ~HamiltonHepaFanBackend.setup
+      ~HamiltonHepaFanBackend.stop
+      ~HamiltonHepaFanBackend.turn_off
+      ~HamiltonHepaFanBackend.turn_on
+   
+   

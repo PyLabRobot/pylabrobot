@@ -1,0 +1,73 @@
+﻿pylabrobot.resources.Trough
+===========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Trough
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Trough.material_z_thickness
+      ~Trough.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Trough.__init__
+      ~Trough.assign_child_resource
+      ~Trough.at
+      ~Trough.center
+      ~Trough.centers
+      ~Trough.compute_height_from_volume
+      ~Trough.compute_volume_from_height
+      ~Trough.copy
+      ~Trough.deregister_did_assign_resource_callback
+      ~Trough.deregister_did_unassign_resource_callback
+      ~Trough.deregister_state_update_callback
+      ~Trough.deregister_will_assign_resource_callback
+      ~Trough.deregister_will_unassign_resource_callback
+      ~Trough.deserialize
+      ~Trough.get_absolute_location
+      ~Trough.get_absolute_rotation
+      ~Trough.get_absolute_size_x
+      ~Trough.get_absolute_size_y
+      ~Trough.get_absolute_size_z
+      ~Trough.get_all_children
+      ~Trough.get_anchor
+      ~Trough.get_highest_known_point
+      ~Trough.get_resource
+      ~Trough.get_root
+      ~Trough.get_size_x
+      ~Trough.get_size_y
+      ~Trough.get_size_z
+      ~Trough.load_all_state
+      ~Trough.load_from_json_file
+      ~Trough.load_state
+      ~Trough.load_state_from_file
+      ~Trough.register_did_assign_resource_callback
+      ~Trough.register_did_unassign_resource_callback
+      ~Trough.register_state_update_callback
+      ~Trough.register_will_assign_resource_callback
+      ~Trough.register_will_unassign_resource_callback
+      ~Trough.rotate
+      ~Trough.rotated
+      ~Trough.save
+      ~Trough.save_state_to_file
+      ~Trough.serialize
+      ~Trough.serialize_all_state
+      ~Trough.serialize_state
+      ~Trough.unassign
+      ~Trough.unassign_child_resource
+   
+   

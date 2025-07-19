@@ -1,0 +1,72 @@
+﻿pylabrobot.resources.PlateHolder
+================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: PlateHolder
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateHolder.name
+      ~PlateHolder.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateHolder.__init__
+      ~PlateHolder.assign_child_resource
+      ~PlateHolder.at
+      ~PlateHolder.center
+      ~PlateHolder.centers
+      ~PlateHolder.copy
+      ~PlateHolder.deregister_did_assign_resource_callback
+      ~PlateHolder.deregister_did_unassign_resource_callback
+      ~PlateHolder.deregister_state_update_callback
+      ~PlateHolder.deregister_will_assign_resource_callback
+      ~PlateHolder.deregister_will_unassign_resource_callback
+      ~PlateHolder.deserialize
+      ~PlateHolder.get_absolute_location
+      ~PlateHolder.get_absolute_rotation
+      ~PlateHolder.get_absolute_size_x
+      ~PlateHolder.get_absolute_size_y
+      ~PlateHolder.get_absolute_size_z
+      ~PlateHolder.get_all_children
+      ~PlateHolder.get_anchor
+      ~PlateHolder.get_default_child_location
+      ~PlateHolder.get_highest_known_point
+      ~PlateHolder.get_resource
+      ~PlateHolder.get_root
+      ~PlateHolder.get_size_x
+      ~PlateHolder.get_size_y
+      ~PlateHolder.get_size_z
+      ~PlateHolder.load_all_state
+      ~PlateHolder.load_from_json_file
+      ~PlateHolder.load_state
+      ~PlateHolder.load_state_from_file
+      ~PlateHolder.register_did_assign_resource_callback
+      ~PlateHolder.register_did_unassign_resource_callback
+      ~PlateHolder.register_state_update_callback
+      ~PlateHolder.register_will_assign_resource_callback
+      ~PlateHolder.register_will_unassign_resource_callback
+      ~PlateHolder.rotate
+      ~PlateHolder.rotated
+      ~PlateHolder.save
+      ~PlateHolder.save_state_to_file
+      ~PlateHolder.serialize
+      ~PlateHolder.serialize_all_state
+      ~PlateHolder.serialize_state
+      ~PlateHolder.unassign
+      ~PlateHolder.unassign_child_resource
+   
+   
