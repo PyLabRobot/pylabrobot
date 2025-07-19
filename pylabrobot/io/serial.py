@@ -11,8 +11,9 @@ try:
   import serial
 
   HAS_SERIAL = True
-except ImportError:
+except ImportError as e:
   HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
@@ -63,7 +64,7 @@ class Serial(IOBase):
 
   async def setup(self):
     if not HAS_SERIAL:
-      raise RuntimeError("pyserial not installed.")
+      raise RuntimeError(f"pyserial not installed. Import error: {_SERIAL_IMPORT_ERROR}")
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)
 

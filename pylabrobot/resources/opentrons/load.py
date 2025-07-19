@@ -6,8 +6,9 @@ try:
   import opentrons_shared_data.labware
 
   USE_OT = True
-except ImportError:
+except ImportError as e:
   USE_OT = False
+  _OT_IMPORT_ERROR = e
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
@@ -35,7 +36,9 @@ def ot_definition_to_resource(
 
   if not USE_OT:
     raise ImportError(
-      "opentrons_shared_data is not installed. " "run `pip install opentrons_shared_data`"
+      "opentrons_shared_data is not installed. "
+      f"Import error: {_OT_IMPORT_ERROR}. "
+      "run `pip install opentrons_shared_data`"
     )
 
   display_category = data["metadata"]["displayCategory"]

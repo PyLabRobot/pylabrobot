@@ -12,8 +12,9 @@ try:
   import hid  # type: ignore
 
   USE_HID = True
-except ImportError:
+except ImportError as e:
   USE_HID = False
+  _HID_IMPORT_ERROR = e
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,9 @@ class HID(IOBase):
 
   async def setup(self):
     if not USE_HID:
-      raise RuntimeError("This backend requires the `hid` package to be installed")
+      raise RuntimeError(
+        f"This backend requires the `hid` package to be installed. Import error: {_HID_IMPORT_ERROR}"
+      )
     self.device = hid.Device(vid=self.vid, pid=self.pid, serial=self.serial_number)
     self._executor = ThreadPoolExecutor(max_workers=1)
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)

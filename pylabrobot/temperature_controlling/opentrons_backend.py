@@ -12,8 +12,9 @@ if PYTHON_VERSION == (3, 10):
     import ot_api
 
     USE_OT = True
-  except ImportError:
+  except ImportError as e:
     USE_OT = False
+    _OT_IMPORT_ERROR = e
 else:
   USE_OT = False
 
@@ -37,6 +38,7 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
     if not USE_OT:
       raise RuntimeError(
         "Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
+        f" Import error: {_OT_IMPORT_ERROR}."
         " Only supported on Python 3.10."
       )
 
