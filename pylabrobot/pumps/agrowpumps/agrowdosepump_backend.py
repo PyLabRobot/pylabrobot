@@ -6,8 +6,11 @@ from typing import Dict, List, Optional, Union
 
 try:
   from pymodbus.client import AsyncModbusSerialClient  # type: ignore
-except ImportError:
+
+  _MODBUS_IMPORT_ERROR = None
+except ImportError as e:
   AsyncModbusSerialClient = None  # type: ignore
+  _MODBUS_IMPORT_ERROR = e
 
 from pylabrobot.pumps.backend import PumpArrayBackend
 
@@ -117,7 +120,10 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
 
   async def _setup_modbus(self):
     if AsyncModbusSerialClient is None:
-      raise RuntimeError("pymodbus is not installed. Please install it with 'pip install pymodbus'")
+      raise RuntimeError(
+        "pymodbus is not installed. Please install it with 'pip install pymodbus'."
+        f" Import error: {_MODBUS_IMPORT_ERROR}"
+      )
     self._modbus = AsyncModbusSerialClient(
       port=self.port,
       baudrate=115200,

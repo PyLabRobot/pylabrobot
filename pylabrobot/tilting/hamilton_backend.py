@@ -5,8 +5,9 @@ try:
   import serial
 
   HAS_SERIAL = True
-except ImportError:
+except ImportError as e:
   HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.tilting.tilter_backend import (
@@ -24,6 +25,11 @@ class HamiltonTiltModuleBackend(TilterBackend):
     write_timeout: float = 10,
     timeout: float = 10,
   ):
+    if not HAS_SERIAL:
+      raise RuntimeError(
+        f"pyserial is required for the Hamilton tilt module backend. Import error: {_SERIAL_IMPORT_ERROR}"
+      )
+
     self.setup_finished = False
     self.com_port = com_port
     self.timeout = timeout

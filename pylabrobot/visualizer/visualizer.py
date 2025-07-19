@@ -15,8 +15,9 @@ try:
   import websockets.legacy.server
 
   HAS_WEBSOCKETS = True
-except ImportError:
+except ImportError as e:
   HAS_WEBSOCKETS = False
+  _WEBSOCKETS_IMPORT_ERROR = e
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import Resource
@@ -277,7 +278,9 @@ class Visualizer:
     """
 
     if not HAS_WEBSOCKETS:
-      raise RuntimeError("The visualizer requires websockets to be installed.")
+      raise RuntimeError(
+        f"The visualizer requires websockets to be installed. Import error: {_WEBSOCKETS_IMPORT_ERROR}"
+      )
 
     async def run_server():
       self._stop_ = self.loop.create_future()
