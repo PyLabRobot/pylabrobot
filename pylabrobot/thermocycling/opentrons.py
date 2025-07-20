@@ -5,6 +5,7 @@ from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
 from pylabrobot.thermocycling.thermocycler import Thermocycler
 
+
 class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   """Opentrons Thermocycler GEN1/GEN2 wrapper.
 
@@ -21,17 +22,17 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
     **_ignored,
   ):
     """Args:
-      name:           Human-readable name.
-      opentrons_id:   OT-API module “id” for your thermocycler.
-      child_location: Position where a plate sits on the block.
-      child:          Optional plate/rack already loaded on the module.
+    name:           Human-readable name.
+    opentrons_id:   OT-API module “id” for your thermocycler.
+    child_location: Position where a plate sits on the block.
+    child:          Optional plate/rack already loaded on the module.
     """
     backend = backend or OpentronsThermocyclerBackend(opentrons_id=opentrons_id)
     super().__init__(
       name=name,
-      size_x=244.95,     # mm - front/back footprint
-      size_y=172.0,      # mm - left/right footprint
-      size_z=170.35,     # mm - closed-lid height
+      size_x=244.95,  # mm - front/back footprint
+      size_y=172.0,  # mm - left/right footprint
+      size_z=170.35,  # mm - closed-lid height
       backend=backend,
       child_location=child_location,
       category="thermocycler",
@@ -50,6 +51,7 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
       "opentrons_id": cast(OpentronsThermocyclerBackend, self.backend).opentrons_id,
     }
 
+
 class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
   """Opentrons Thermocycler GEN1/GEN2 wrapper.
 
@@ -66,17 +68,17 @@ class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
     **_ignored,
   ):
     """Args:
-      name:           Human-readable name.
-      opentrons_id:   OT-API module “id” for your thermocycler.
-      child_location: Position where a plate sits on the block.
-      child:          Optional plate/rack already loaded on the module.
+    name:           Human-readable name.
+    opentrons_id:   OT-API module “id” for your thermocycler.
+    child_location: Position where a plate sits on the block.
+    child:          Optional plate/rack already loaded on the module.
     """
     backend = backend or OpentronsThermocyclerBackend(opentrons_id=opentrons_id)
     super().__init__(
       name=name,
-      size_x=244.95,     # mm – front/back footprint
-      size_y=172.0,      # mm – left/right footprint
-      size_z=170.35,     # mm – closed-lid height
+      size_x=244.95,  # mm – front/back footprint
+      size_y=172.0,  # mm – left/right footprint
+      size_z=170.35,  # mm – closed-lid height
       backend=backend,
       child_location=child_location,
       category="thermocycler",

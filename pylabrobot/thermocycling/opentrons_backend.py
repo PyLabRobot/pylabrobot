@@ -1,19 +1,19 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
 import sys
-from typing import cast, Optional
+from typing import Optional, cast
 
 # OT-API HTTP client
 from ot_api.modules import (
   list_connected_modules,
-  thermocycler_open_lid,
   thermocycler_close_lid,
-  thermocycler_set_block_temperature,
-  thermocycler_set_lid_temperature,
   thermocycler_deactivate_block,
   thermocycler_deactivate_lid,
+  thermocycler_open_lid,
   thermocycler_run_profile_no_wait,
-  )
+  thermocycler_set_block_temperature,
+  thermocycler_set_lid_temperature,
+)
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 
@@ -68,15 +68,11 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
 
   async def set_block_temperature(self, celsius: float):
     """Set block temperature in °C."""
-    return thermocycler_set_block_temperature(
-      celsius=celsius, module_id=self.opentrons_id
-    )
+    return thermocycler_set_block_temperature(celsius=celsius, module_id=self.opentrons_id)
 
   async def set_lid_temperature(self, celsius: float):
     """Set lid temperature in °C."""
-    return thermocycler_set_lid_temperature(
-      celsius=celsius, module_id=self.opentrons_id
-    )
+    return thermocycler_set_lid_temperature(celsius=celsius, module_id=self.opentrons_id)
 
   async def deactivate_block(self):
     """Deactivate the block heater."""
@@ -89,16 +85,13 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def run_profile(self, profile: list[dict], block_max_volume: float):
     """Enqueue and return immediately (no wait) the PCR profile command."""
     return thermocycler_run_profile_no_wait(
-      profile=profile,
-      block_max_volume=block_max_volume,
-      module_id=self.opentrons_id
+      profile=profile, block_max_volume=block_max_volume, module_id=self.opentrons_id
     )
 
   def _find_module(self) -> dict:
     """Helper to locate this module’s live-data dict."""
     for m in list_connected_modules():
       if m["id"] == self.opentrons_id:
-        
         return cast(dict, m["data"])
     raise RuntimeError(f"Module '{self.opentrons_id}' not found")
 
