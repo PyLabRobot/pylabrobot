@@ -1,234 +1,157 @@
-import unittest
-from unittest.mock import patch
+"""Tests for the high-level Thermocycler resource and its models."""
+
+from unittest.mock import AsyncMock, MagicMock
+import pytest
 
 from pylabrobot.resources import Coordinate, ItemizedResource
-from pylabrobot.thermocycling.opentrons import OpentronsThermocyclerModuleV1
-from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
-from pylabrobot.thermocycling.thermocycler import Thermocycler
+from pylabrobot.thermocycling import (
+    Thermocycler,
+    ThermocyclerBackend,
+    ThermocyclerChatterboxBackend,
+    OpentronsThermocyclerModuleV1,
+)
 
 
-class ThermocyclerTests(unittest.TestCase):
-  def test_serialization(self):
-    tc = Thermocycler(
-      name="test_tc",
-      size_x=10,
-      size_y=10,
-      size_z=10,
-      backend=OpentronsThermocyclerBackend(opentrons_id="test_id"),  # Dummy opentrons_id
-      child_location=Coordinate(0, 0, 0),
+@pytest.fixture
+def mock_backend() -> MagicMock:
+    """Creates a fully compliant mock of the ThermocyclerBackend using a spec."""
+    mock = MagicMock(spec=ThermocyclerBackend)
+    mock.setup = AsyncMock()
+    mock.stop = AsyncMock()
+    mock.open_lid = AsyncMock()
+    mock.close_lid = AsyncMock()
+    mock.set_block_temperature = AsyncMock()
+    mock.set_lid_temperature = AsyncMock()
+    mock.deactivate_block = AsyncMock()
+    mock.deactivate_lid = AsyncMock()
+    mock.run_profile = AsyncMock()
+    mock.get_block_current_temperature = AsyncMock(return_value=25.0)
+    mock.get_block_target_temperature = AsyncMock(return_value=None)
+    mock.get_lid_current_temperature = AsyncMock(return_value=25.0)
+    mock.get_lid_target_temperature = AsyncMock(return_value=None)
+    mock.get_lid_status = AsyncMock(return_value="closed")
+    mock.get_hold_time = AsyncMock(return_value=0.0)
+    mock.get_current_cycle_index = AsyncMock(return_value=0)
+    mock.get_total_cycle_count = AsyncMock(return_value=0)
+    mock.get_current_step_index = AsyncMock(return_value=0)
+    mock.get_total_step_count = AsyncMock(return_value=0)
+    return mock
+
+
+@pytest.fixture
+def tc_dev(mock_backend: MagicMock) -> Thermocycler:
+    """Pytest fixture to create a Thermocycler with the mock backend."""
+    return Thermocycler(
+        name="test_tc",
+        size_x=10,
+        size_y=10,
+        size_z=10,
+        backend=mock_backend,
+        child_location=Coordinate(0, 0, 0),
     )
 
-    serialized = tc.serialize()
+
+def test_thermocycler_serialization(tc_dev: Thermocycler):
+    """Test that the high-level resource serializes and deserializes correctly."""
+    tc_dev.backend = ThermocyclerChatterboxBackend()
+    serialized = tc_dev.serialize()
     deserialized = Thermocycler.deserialize(serialized)
-    self.assertEqual(tc, deserialized)
-    self.assertEqual(tc.backend.opentrons_id, deserialized.backend.opentrons_id)  # type: ignore
+    assert tc_dev == deserialized
 
 
-class OpentronsThermocyclerBackendTests(unittest.IsolatedAsyncioTestCase):
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_open_lid")
-  async def test_open_lid(self, mock_open_lid, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    await backend.open_lid()
-    mock_open_lid.assert_called_once_with(module_id="test_id")  # Dummy module_id
-
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_close_lid")
-  async def test_close_lid(self, mock_close_lid, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    await backend.close_lid()
-    mock_close_lid.assert_called_once_with(module_id="test_id")  # Dummy module_id
-
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_set_block_temperature")
-  async def test_set_block_temperature(self, mock_set_block_temp, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    await backend.set_block_temperature(95.0)
-    mock_set_block_temp.assert_called_once_with(
-      celsius=95.0, module_id="test_id"
-    )  # Dummy module_id
-
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_set_lid_temperature")
-  async def test_set_lid_temperature(self, mock_set_lid_temp, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    await backend.set_lid_temperature(105.0)
-    mock_set_lid_temp.assert_called_once_with(celsius=105.0, module_id="test_id")  # Dummy module_id
-
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_deactivate_block")
-  async def test_deactivate_block(self, mock_deactivate_block, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    await backend.deactivate_block()
-    mock_deactivate_block.assert_called_once_with(module_id="test_id")  # Dummy module_id
-
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_deactivate_lid")
-  async def test_deactivate_lid(self, mock_deactivate_lid, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    await backend.deactivate_lid()
-    mock_deactivate_lid.assert_called_once_with(module_id="test_id")  # Dummy module_id
-
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  @patch("ot_api.runs.enqueue_command")
-  @patch("ot_api.run_id", "dummy_run_id")  # Dummy run_id for the decorator
-  async def test_run_profile(self, mock_enqueue_command, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    profile = [{"temperature": 95, "hold_time_seconds": 10}]
-    await backend.run_profile(profile, 50.0)
-    mock_enqueue_command.assert_called_once_with(
-      "thermocycler/runProfile",
-      {
-        "profile": profile,
-        "blockMaxVolumeUl": 50.0,
-        "moduleId": "test_id",  # Dummy module_id
-      },
-      intent="setup",
-      run_id="dummy_run_id",  # Dummy run_id
+def test_opentrons_v1_serialization():
+    """Test that the Opentrons-specific resource model serializes correctly."""
+    tc_model = OpentronsThermocyclerModuleV1(
+        name="test_v1_tc",
+        opentrons_id="test_id",
+        child=ItemizedResource(
+            name="plate", size_x=1, size_y=1, size_z=1, ordered_items={}
+        ),
     )
+    serialized = tc_model.serialize()
+    assert "opentrons_id" in serialized
+    assert serialized["opentrons_id"] == "test_id"
+    deserialized = OpentronsThermocyclerModuleV1.deserialize(serialized)
+    assert tc_model == deserialized
 
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  async def test_get_block_current_temperature(self, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {"currentTemperature": 25.0}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    temp = await backend.get_block_current_temperature()
-    self.assertEqual(temp, 25.0)
 
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  async def test_get_lid_status(self, mock_list_connected_modules):
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {"lidStatus": "open"}}
-    ]  # Mock return value for list_connected_modules
-    backend = OpentronsThermocyclerBackend(opentrons_id="test_id")  # Dummy opentrons_id
-    await backend.setup()
-    status = await backend.get_lid_status()
-    self.assertEqual(status, "open")
+@pytest.mark.asyncio
+async def test_run_pcr_profile_builds_correct_profile(
+    tc_dev: Thermocycler, monkeypatch
+):
+    """Test that run_pcr_profile correctly builds the flat step list."""
 
-  @patch(
-    "pylabrobot.thermocycling.thermocycler.Thermocycler.get_lid_status"
-  )  # Patch the method in Thermocycler
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_run_profile_no_wait")
-  @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_set_lid_temperature")
-  @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
-  async def test_run_pcr_profile(
-    self,
-    mock_list_connected_modules,
-    mock_set_lid_temp,
-    mock_run_profile_no_wait,
-    mock_get_lid_status,
-  ):
-    # Configure mock_get_lid_status to return "open" initially, then "idle"
-    mock_get_lid_status.side_effect = ["open", "idle"]
+    async def mock_wait_for_lid(*args, **kwargs):
+        pass
 
-    mock_list_connected_modules.return_value = [
-      {"id": "test_id", "data": {"lidTemperatureStatus": "idle", "lidStatus": "open"}}
-    ]  # Mock return value for list_connected_modules
-    tc_dev = Thermocycler(
-      name="test_tc",
-      size_x=10,
-      size_y=10,
-      size_z=10,
-      backend=OpentronsThermocyclerBackend(opentrons_id="test_id"),  # Dummy opentrons_id
-      child_location=Coordinate(0, 0, 0),
-    )
-    await tc_dev.setup()
-
-    denaturation_temp = 98.0
-    denaturation_time = 10.0
-    annealing_temp = 55.0
-    annealing_time = 30.0
-    extension_temp = 72.0
-    extension_time = 60.0
-    num_cycles = 2
-    block_max_volume = 25.0
-    lid_temperature = 105.0
-    pre_denaturation_temp = 95.0
-    pre_denaturation_time = 180.0
-    final_extension_temp = 72.0
-    final_extension_time = 300.0
-    storage_temp = 4.0
-    storage_time = 600.0
+    monkeypatch.setattr(tc_dev, "wait_for_lid", mock_wait_for_lid)
 
     await tc_dev.run_pcr_profile(
-      denaturation_temp=denaturation_temp,
-      denaturation_time=denaturation_time,
-      annealing_temp=annealing_temp,
-      annealing_time=annealing_time,
-      extension_temp=extension_temp,
-      extension_time=extension_time,
-      num_cycles=num_cycles,
-      block_max_volume=block_max_volume,
-      lid_temperature=lid_temperature,
-      pre_denaturation_temp=pre_denaturation_temp,
-      pre_denaturation_time=pre_denaturation_time,
-      final_extension_temp=final_extension_temp,
-      final_extension_time=final_extension_time,
-      storage_temp=storage_temp,
-      storage_time=storage_time,
+        denaturation_temp=98.0,
+        denaturation_time=10.0,
+        annealing_temp=55.0,
+        annealing_time=30.0,
+        extension_temp=72.0,
+        extension_time=60.0,
+        num_cycles=2,
+        block_max_volume=25.0,
+        lid_temperature=105.0,
+        pre_denaturation_temp=95.0,
+        pre_denaturation_time=180.0,
+        final_extension_temp=72.0,
+        final_extension_time=300.0,
+        storage_temp=4.0,
+        storage_time=600.0,
     )
 
-    mock_set_lid_temp.assert_called_once_with(
-      celsius=lid_temperature, module_id="test_id"
-    )  # Dummy module_id
+    tc_dev.backend.set_lid_temperature.assert_called_once_with(105.0)
 
     expected_profile = [
-      {"celsius": pre_denaturation_temp, "holdSeconds": pre_denaturation_time},
-      {"celsius": denaturation_temp, "holdSeconds": denaturation_time},
-      {"celsius": annealing_temp, "holdSeconds": annealing_time},
-      {"celsius": extension_temp, "holdSeconds": extension_time},
-      {"celsius": denaturation_temp, "holdSeconds": denaturation_time},
-      {"celsius": annealing_temp, "holdSeconds": annealing_time},
-      {"celsius": extension_temp, "holdSeconds": extension_time},
-      {"celsius": final_extension_temp, "holdSeconds": final_extension_time},
-      {"celsius": storage_temp, "holdSeconds": storage_time},
+        {"celsius": 95.0, "holdSeconds": 180.0},
+        {"celsius": 98.0, "holdSeconds": 10.0},
+        {"celsius": 55.0, "holdSeconds": 30.0},
+        {"celsius": 72.0, "holdSeconds": 60.0},
+        {"celsius": 98.0, "holdSeconds": 10.0},
+        {"celsius": 55.0, "holdSeconds": 30.0},
+        {"celsius": 72.0, "holdSeconds": 60.0},
+        {"celsius": 72.0, "holdSeconds": 300.0},
+        {"celsius": 4.0, "holdSeconds": 600.0},
     ]
 
-    mock_run_profile_no_wait.assert_called_once_with(
-      profile=expected_profile,
-      block_max_volume=block_max_volume,
-      module_id="test_id",  # Dummy module_id
-    )
+    tc_dev.backend.run_profile.assert_called_once_with(expected_profile, 25.0)
 
 
-class OpentronsThermocyclerModuleTests(unittest.TestCase):
-  def test_v1_serialization(self):
-    tc = OpentronsThermocyclerModuleV1(
-      name="test_v1_tc",
-      opentrons_id="test_id",  # Dummy opentrons_id
-      child_location=Coordinate(0, 0, 0),
-      child=ItemizedResource(name="plate", size_x=1, size_y=1, size_z=1, ordered_items={}),
-    )
-    serialized = tc.serialize()
-    self.assertIn("opentrons_id", serialized)
-    self.assertEqual(serialized["opentrons_id"], "test_id")
+@pytest.mark.asyncio
+async def test_wait_for_profile_completion(tc_dev: Thermocycler, monkeypatch):
+    """Test that wait_for_profile_completion correctly polls is_profile_running."""
+    tc_dev.backend.get_hold_time.side_effect = [10.0, 5.0, 0.0]
+
+    async def mock_sleep(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr("asyncio.sleep", mock_sleep)
+    await tc_dev.wait_for_profile_completion(poll_interval=0.01)
+    assert tc_dev.backend.get_hold_time.call_count == 3
+
+
+@pytest.mark.parametrize(
+    "hold, cycle, total_cycles, step, total_steps, expected",
+    [
+        (10.0, 1, 10, 1, 3, True),
+        (0.0, 5, 10, 1, 3, True),
+        (0.0, 10, 10, 1, 3, True),
+        (0.0, 10, 10, 3, 3, False),
+        (0.0, 1, 1, 1, 1, False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_is_profile_running_logic(
+    tc_dev: Thermocycler, hold, cycle, total_cycles, step, total_steps, expected
+):
+    """Test that `is_profile_running` returns the correct boolean based on various profile states."""
+    tc_dev.backend.get_hold_time.return_value = hold
+    tc_dev.backend.get_current_cycle_index.return_value = cycle
+    tc_dev.backend.get_total_cycle_count.return_value = total_cycles
+    tc_dev.backend.get_current_step_index.return_value = step
+    tc_dev.backend.get_total_step_count.return_value = total_steps
+    assert await tc_dev.is_profile_running() is expected

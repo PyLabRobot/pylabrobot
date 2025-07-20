@@ -81,8 +81,10 @@ class Thermocycler(ResourceHolder, Machine):
     """Turn off the lid heater."""
     return await self.backend.deactivate_lid()
 
-  async def run_profile(self, profile: List[Dict[str, float]], block_max_volume: float):
-    """Enqueue a multi-step temperature profile (fire-and-forget).
+    async def run_profile(
+        self, profile: List[Dict[str, float]], block_max_volume: float
+    ):
+        """Enqueue a multi-step temperature profile (fire-and-forget).
 
     Args:
       profile: List of {"celsius": float, "holdSeconds": float} steps.
@@ -133,8 +135,10 @@ class Thermocycler(ResourceHolder, Machine):
 
     profile = []
 
-    if pre_denaturation_temp is not None and pre_denaturation_time is not None:
-      profile.append({"celsius": pre_denaturation_temp, "holdSeconds": pre_denaturation_time})
+        if pre_denaturation_temp is not None and pre_denaturation_time is not None:
+            profile.append(
+                {"celsius": pre_denaturation_temp, "holdSeconds": pre_denaturation_time}
+            )
 
     # Main PCR cycles
     pcr_step = [
@@ -145,13 +149,17 @@ class Thermocycler(ResourceHolder, Machine):
     for _ in range(num_cycles):
       profile.extend(pcr_step)
 
-    if final_extension_temp is not None and final_extension_time is not None:
-      profile.append({"celsius": final_extension_temp, "holdSeconds": final_extension_time})
+        if final_extension_temp is not None and final_extension_time is not None:
+            profile.append(
+                {"celsius": final_extension_temp, "holdSeconds": final_extension_time}
+            )
 
     if storage_temp is not None and storage_time is not None:
       profile.append({"celsius": storage_temp, "holdSeconds": storage_time})
 
-    return await self.run_profile(profile=profile, block_max_volume=block_max_volume)
+        return await self.run_profile(
+            profile=profile, block_max_volume=block_max_volume
+        )
 
   async def get_block_current_temperature(self) -> float:
     """Get the current block temperature (°C)."""
@@ -177,33 +185,33 @@ class Thermocycler(ResourceHolder, Machine):
     """Get remaining hold time (s) for the current step."""
     return await self.backend.get_hold_time()
 
-  async def get_current_cycle_index(self) -> int:
-    """Get the zero-based index of the current cycle."""
-    return (await self.backend.get_current_cycle_index()) - 1
+    async def get_current_cycle_index(self) -> int:
+        """Get the one-based index of the current cycle."""
+        return await self.backend.get_current_cycle_index()
 
   async def get_total_cycle_count(self) -> int:
     """Get the total number of cycles."""
     return await self.backend.get_total_cycle_count()
 
-  async def get_current_step_index(self) -> int:
-    """Get the zero-based index of the current step."""
-    return (await self.backend.get_current_step_index()) - 1
+    async def get_current_step_index(self) -> int:
+        """Get the one-based index of the current step."""
+        return await self.backend.get_current_step_index()
 
   async def get_total_step_count(self) -> int:
     """Get the total number of steps in the current cycle."""
     return await self.backend.get_total_step_count()
 
-  async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5):
-    """Wait until block temp reaches target ± tolerance."""
-    target = await self.get_block_target_temperature()
-    if target is None:
-      return  # No target temperature to wait for
-    start = time.time()
-    while time.time() - start < timeout:
-      if abs((await self.get_block_current_temperature()) - target) < tolerance:
-        return
-      await asyncio.sleep(1)
-    raise TimeoutError("Block temperature timeout.")
+    async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5):
+        """Wait until block temp reaches target ± tolerance."""
+        target = await self.get_block_target_temperature()
+        if target is None:
+            return  # No target temperature to wait for
+        start = time.time()
+        while time.time() - start < timeout:
+            if abs((await self.get_block_current_temperature()) - target) < tolerance:
+                return
+            await asyncio.sleep(1)
+        raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5):
     """Wait until lid temp reaches target ± tolerance, or status is idle/holding at target."""
@@ -229,22 +237,22 @@ class Thermocycler(ResourceHolder, Machine):
     step = await self.get_current_step_index()
     total_steps = await self.get_total_step_count()
 
-    # if still holding in a step, it’s running
-    if hold and hold > 0:
-      return True
-    # if haven’t reached last cycle
-    if cycle < total_cycles - 1:
-      return True
-    # last cycle but not last step
-    if cycle == total_cycles - 1 and step < total_steps - 1:
-      return True
-    return False
+        # if still holding in a step, it’s running
+        if hold and hold > 0:
+            return True
+        # if haven’t reached last cycle
+        if cycle < total_cycles:
+            return True
+        # last cycle but not last step
+        if cycle == total_cycles and step < total_steps:
+            return True
+        return False
 
   async def wait_for_profile_completion(self, poll_interval: float = 60.0):
     """Block until the profile finishes, polling at `poll_interval` seconds."""
     while await self.is_profile_running():
       await asyncio.sleep(poll_interval)
 
-  def serialize(self) -> dict:
-    """JSON-serializable representation."""
-    return {**Machine.serialize(self), **ResourceHolder.serialize(self)}
+    def serialize(self) -> dict:
+        """JSON-serializable representation."""
+        return {**Machine.serialize(self), **ResourceHolder.serialize(self)}
