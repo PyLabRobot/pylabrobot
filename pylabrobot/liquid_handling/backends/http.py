@@ -10,8 +10,9 @@ try:
   import requests
 
   HAS_REQUESTS = True
-except ImportError:
+except ImportError as e:
   HAS_REQUESTS = False
+  _REQUESTS_IMPORT_ERROR = e
 
 
 class HTTPBackend(SerializingBackend):
@@ -44,7 +45,9 @@ class HTTPBackend(SerializingBackend):
     """
 
     if not HAS_REQUESTS:
-      raise RuntimeError("The http backend requires the requests module.")
+      raise RuntimeError(
+        f"The http backend requires the requests module. Import error: {_REQUESTS_IMPORT_ERROR}"
+      )
 
     super().__init__(num_channels=num_channels)
     self.session: Optional[requests.Session] = None

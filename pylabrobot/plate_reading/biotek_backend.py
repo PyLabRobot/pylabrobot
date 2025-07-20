@@ -9,8 +9,12 @@ from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Uni
 
 try:
   import cv2  # type: ignore
-except ImportError:
+
+  CV2_AVAILABLE = True
+except ImportError as e:
   cv2 = None  # type: ignore
+  CV2_AVAILABLE = False
+  _CV2_IMPORT_ERROR = e
 
 from pylabrobot.resources.plate import Plate
 
@@ -18,16 +22,18 @@ try:
   import numpy as np  # type: ignore
 
   USE_NUMPY = True
-except ImportError:
+except ImportError as e:
   USE_NUMPY = False
+  _NUMPY_IMPORT_ERROR = e
 
 try:
   import PySpin  # type: ignore
 
   # can be downloaded from https://www.teledynevisionsolutions.com/products/spinnaker-sdk/
   USE_PYSPIN = True
-except ImportError:
+except ImportError as e:
   USE_PYSPIN = False
+  _PYSPIN_IMPORT_ERROR = e
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import ImageReaderBackend
@@ -149,7 +155,10 @@ class Cytation5Backend(ImageReaderBackend):
 
     if use_cam:
       if not USE_PYSPIN:
-        raise RuntimeError("PySpin is not installed. Please follow the imaging setup instructions.")
+        raise RuntimeError(
+          "PySpin is not installed. Please follow the imaging setup instructions. "
+          f"Import error: {_PYSPIN_IMPORT_ERROR}"
+        )
       if self.imaging_config is None:
         raise RuntimeError("Imaging configuration is not set.")
 
@@ -866,7 +875,10 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError("Row and column not set. Run select() first.")
     if not USE_NUMPY:
       # This is strange, because Spinnaker requires numpy
-      raise RuntimeError("numpy is not installed. See Cytation5 installation instructions.")
+      raise RuntimeError(
+        "numpy is not installed. See Cytation5 installation instructions. "
+        f"Import error: {_NUMPY_IMPORT_ERROR}"
+      )
 
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
@@ -882,8 +894,10 @@ class Cytation5Backend(ImageReaderBackend):
       )
       image = images[0]  # self.capture returns List now
 
-      if cv2 is None:
-        raise RuntimeError("cv2 needs to be installed for auto focus")
+      if not CV2_AVAILABLE:
+        raise RuntimeError(
+          f"cv2 needs to be installed for auto focus. Import error: {_CV2_IMPORT_ERROR}"
+        )
 
       # NVMG: Normalized Variance of the Gradient Magnitude
       # Chat invented this i think

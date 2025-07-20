@@ -5,7 +5,7 @@ This guide provides instructions for replacing the iSWAP arm on a Hamilton STAR 
 Caution/Disclaimer: 
 1. This procedure is a work in progress and the user assumes all responsibility for any damage that may be done as a result.
 2. This procedure should not be performed on any system that are either under the OEM Warranty period or currently on a service contract with the OEM or any third party service organization. This will certainly void the OEM Warranty/Service contract and likely invalidate any service agreement with third parties.
-3. This procedure DOES NOT encapsulate the entire OEM adjustment procedure which includes specialized tooling and software to perform.
+3. This procedure DOES NOT encapsulate the entire OEM adjustment procedure which includes specialized tooling and software to perform. Consult [iSWAP Auto Adjustment Guide](adjusting-iswap.md) for auto-calibrating arm after installation proceduce.
 4. Once completing this procedure it is necessary to check, and if needed, reteach the locations that are to be accessed by the iSWAP.
 
 Note: Due to the way the iSWAP is taught, the calibration positions from machine to machine are typically very close. This means an iSWAP can be SWAPPED (pun intended) and function largely the same with minor tweaks.
@@ -23,19 +23,19 @@ Note: Due to the way the iSWAP is taught, the calibration positions from machine
 
 2. Undo the following two FFC cables:
 
-![](./img/ffc.jpg)
+![](./img/replace-iswap/ffc.jpg)
 
 3. Slightly loosen the two screws on the side using a 2mm hex key, enough to slide off the metal piece. It is easiest to keep the screws in place.
 
-![](./img/side-screws.jpg)
+![](./img/replace-iswap/side-screws.jpg)
 
 4. Undo the two main screws on the back of the iSWAP arm using a 4mm hex key. Remove them. Start with the adjustment screw (1), then the main screw (2). Be careful, the arm might fall off if you don't hold it.
 
-![](./img/main-screws.jpg)
+![](./img/replace-iswap/main-screws.jpg)
 
 5. The iSWAP arm can now be removed from the Hamilton STAR system. After removing the arm, you are left with this:
 
-![](./img/after-remove.jpg)
+![](./img/replace-iswap/after-remove.jpg)
 
 ## Attaching the New iSWAP Arm and rough leveling
 

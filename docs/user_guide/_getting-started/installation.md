@@ -97,6 +97,10 @@ You need to install [libusb](https://libusb.info/). You can do this using [Homeb
 brew install libusb
 ```
 
+```{warning}
+People have reported issues with not being able to find the machine on macOS 15 Sonoma. No solution to this is currently known. See [this thread](https://labautomation.io/t/usb-device-not-found-error-potential-macos-15-issue/4568).
+```
+
 ### On Windows
 
 #### Installing
