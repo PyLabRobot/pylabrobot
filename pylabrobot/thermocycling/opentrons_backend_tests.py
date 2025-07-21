@@ -2,6 +2,7 @@
 
 from typing import Generator
 from unittest.mock import patch
+
 import pytest
 
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend

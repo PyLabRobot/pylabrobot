@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Optional, List, Dict, cast
+from typing import Dict, List, Optional, cast
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder

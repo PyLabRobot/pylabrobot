@@ -1,18 +1,18 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
 import sys
-from typing import cast, Optional
+from typing import Optional, cast
 
 # OT-API HTTP client
 from ot_api.modules import (
   list_connected_modules,
-  thermocycler_open_lid,
   thermocycler_close_lid,
-  thermocycler_set_block_temperature,
-  thermocycler_set_lid_temperature,
   thermocycler_deactivate_block,
   thermocycler_deactivate_lid,
+  thermocycler_open_lid,
   thermocycler_run_profile_no_wait,
+  thermocycler_set_block_temperature,
+  thermocycler_set_lid_temperature,
 )
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend

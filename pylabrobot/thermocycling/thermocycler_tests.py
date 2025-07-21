@@ -1,14 +1,15 @@
 """Tests for the high-level Thermocycler resource and its models."""
 
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.thermocycling import (
+  OpentronsThermocyclerModuleV1,
   Thermocycler,
   ThermocyclerBackend,
   ThermocyclerChatterboxBackend,
-  OpentronsThermocyclerModuleV1,
 )
 
 

@@ -2,10 +2,9 @@
 
 from .backend import ThermocyclerBackend
 from .chatterbox import ThermocyclerChatterboxBackend
-from .thermocycler import Thermocycler
+from .opentrons import OpentronsThermocyclerModuleV1, OpentronsThermocyclerModuleV2
 from .opentrons_backend import OpentronsThermocyclerBackend
-from .opentrons import OpentronsThermocyclerModuleV1
-from .opentrons import OpentronsThermocyclerModuleV2
+from .thermocycler import Thermocycler
 
 __all__ = [
   "ThermocyclerBackend",
