@@ -3,24 +3,31 @@
 import sys
 from typing import Optional, cast
 
-# OT-API HTTP client
-from ot_api.modules import (
-  list_connected_modules,
-  thermocycler_close_lid,
-  thermocycler_deactivate_block,
-  thermocycler_deactivate_lid,
-  thermocycler_open_lid,
-  thermocycler_run_profile_no_wait,
-  thermocycler_set_block_temperature,
-  thermocycler_set_lid_temperature,
-)
-
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import Step
 
 # Only supported on Python 3.10 with the OT-API HTTP client installed
 PYTHON_VERSION = sys.version_info[:2]
-USE_OT = PYTHON_VERSION == (3, 10)
+
+if PYTHON_VERSION == (3, 10):
+  try:
+    from ot_api.modules import (
+      list_connected_modules,
+      thermocycler_close_lid,
+      thermocycler_deactivate_block,
+      thermocycler_deactivate_lid,
+      thermocycler_open_lid,
+      thermocycler_run_profile_no_wait,
+      thermocycler_set_block_temperature,
+      thermocycler_set_lid_temperature,
+    )
+
+    USE_OT = True
+  except ImportError as e:
+    USE_OT = False
+    _OT_IMPORT_ERROR = e
+else:
+  USE_OT = False
 
 
 class OpentronsThermocyclerBackend(ThermocyclerBackend):
@@ -39,8 +46,9 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     super().__init__()  # Call parent constructor
     if not USE_OT:
       raise RuntimeError(
-        "Opentrons HTTP-API client not available. "
-        "Install via pip install -e <path-to-opentrons-python-api> on Python 3.10."
+        "Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
+        f" Import error: {_OT_IMPORT_ERROR}."
+        " Only supported on Python 3.10 and below."
       )
     self.opentrons_id = opentrons_id
 

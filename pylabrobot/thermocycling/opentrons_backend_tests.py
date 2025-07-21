@@ -15,7 +15,7 @@ def _is_python_3_10():
 @unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
 class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    super().asyncSetUp()
+    await super().asyncSetUp()
     self.thermocycler_backend = OpentronsThermocyclerBackend(opentrons_id="test_id")
 
   def test_opentrons_v1_serialization(self):
