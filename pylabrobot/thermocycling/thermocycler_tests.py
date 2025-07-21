@@ -2,9 +2,8 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.resources import Coordinate, ItemizedResource
+from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling import (
-  OpentronsThermocyclerModuleV1,
   Thermocycler,
   ThermocyclerBackend,
   ThermocyclerChatterboxBackend,
@@ -55,19 +54,6 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     serialized = self.tc.serialize()
     deserialized = Thermocycler.deserialize(serialized)
     assert self.tc == deserialized
-
-  def test_opentrons_v1_serialization(self):
-    """Test that the Opentrons-specific resource model serializes correctly."""
-    tc_model = OpentronsThermocyclerModuleV1(
-      name="test_v1_tc",
-      opentrons_id="test_id",
-      child=ItemizedResource(name="plate", size_x=1, size_y=1, size_z=1, ordered_items={}),
-    )
-    serialized = tc_model.serialize()
-    assert "opentrons_id" in serialized
-    assert serialized["opentrons_id"] == "test_id"
-    deserialized = OpentronsThermocyclerModuleV1.deserialize(serialized)
-    assert tc_model == deserialized
 
   async def test_run_pcr_profile_builds_correct_profile(self):
     """Test that run_pcr_profile correctly builds the flat step list."""

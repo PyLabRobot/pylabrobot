@@ -2,6 +2,8 @@ import sys
 import unittest
 from unittest.mock import patch
 
+from pylabrobot.resources.itemized_resource import ItemizedResource
+from pylabrobot.thermocycling.opentrons import OpentronsThermocyclerModuleV1
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
 from pylabrobot.thermocycling.standard import Step
 
@@ -12,9 +14,22 @@ def _is_python_3_10():
 
 @unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
 class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
-  def __init__(self, methodName="runTest"):
-    super().__init__(methodName)
+  async def asyncSetUp(self):
+    super().asyncSetUp()
     self.thermocycler_backend = OpentronsThermocyclerBackend(opentrons_id="test_id")
+
+  def test_opentrons_v1_serialization(self):
+    """Test that the Opentrons-specific resource model serializes correctly."""
+    tc_model = OpentronsThermocyclerModuleV1(
+      name="test_v1_tc",
+      opentrons_id="test_id",
+      child=ItemizedResource(name="plate", size_x=1, size_y=1, size_z=1, ordered_items={}),
+    )
+    serialized = tc_model.serialize()
+    assert "opentrons_id" in serialized
+    assert serialized["opentrons_id"] == "test_id"
+    deserialized = OpentronsThermocyclerModuleV1.deserialize(serialized)
+    assert tc_model == deserialized
 
   @patch("pylabrobot.thermocycling.opentrons_backend.list_connected_modules")
   async def test_find_module_raises_error_if_not_found(self, mock_list_connected_modules):
