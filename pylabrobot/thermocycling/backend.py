@@ -1,5 +1,3 @@
-"""Abstract base for Thermocycler back-ends."""
-
 from abc import ABCMeta, abstractmethod
 from typing import List, Optional
 

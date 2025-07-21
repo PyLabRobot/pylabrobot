@@ -11,7 +11,7 @@ from pylabrobot.thermocycling.thermocycler import Thermocycler
 class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   """Opentrons Thermocycler GEN1/V1 wrapper.
 
-  Dimensions (closed-lid): 172 mm (x) × 316 mm (y) × 154 mm (z).
+  Dimensions (closed-lid): 172 mm (x) x 316 mm (y) x 154 mm (z).
   """
 
   def __init__(
@@ -25,7 +25,7 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   ):
     """Args:
     name:           Human-readable name.
-    opentrons_id:   OT-API module “id” for your thermocycler.
+    opentrons_id:   OT-API module "id" for your thermocycler.
     child_location: Position where a plate sits on the block.
     child:          Optional plate/rack already loaded on the module.
     """
@@ -38,7 +38,7 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
       backend=backend,
       child_location=child_location,
       category="thermocycler",
-      model="thermocyclerModuleV1",  # must match OT API “moduleModel”
+      model="thermocyclerModuleV1",  # must match OT API "moduleModel"
     )
 
     self.backend = backend
@@ -57,7 +57,7 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
 class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
   """Opentrons Thermocycler GEN2/V2 wrapper.
 
-  Dimensions (closed-lid): 172 mm (x) × 244.95 mm (y) × 170.35 mm (z).
+  Dimensions (closed-lid): 172 mm (x) x 244.95 mm (y) x 170.35 mm (z).
   """
 
   def __init__(
@@ -71,7 +71,7 @@ class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
   ):
     """Args:
     name:           Human-readable name.
-    opentrons_id:   OT-API module “id” for your thermocycler.
+    opentrons_id:   OT-API module "id" for your thermocycler.
     child_location: Position where a plate sits on the block.
     child:          Optional plate/rack already loaded on the module.
     """
@@ -84,7 +84,7 @@ class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
       backend=backend,
       child_location=child_location,
       category="thermocycler",
-      model="thermocyclerModuleV2",  # must match OT API “moduleModel”
+      model="thermocyclerModuleV2",  # must match OT API "moduleModel"
     )
 
     self.backend = backend

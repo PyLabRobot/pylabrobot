@@ -171,7 +171,7 @@ class Thermocycler(ResourceHolder, Machine):
     return await self.backend.get_lid_target_temperature()
 
   async def get_lid_status(self) -> str:
-    """Get whether the lid is “open” or “closed”."""
+    """Get whether the lid is "open" or "closed"."""
     return cast(str, await self.backend.get_lid_status())
 
   async def get_hold_time(self) -> float:

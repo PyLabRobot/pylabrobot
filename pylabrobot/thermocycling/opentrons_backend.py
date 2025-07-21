@@ -41,7 +41,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     """Create a new backend bound to a specific thermocycler.
 
     Args:
-      opentrons_id: The OT-API module “id” for your thermocycler.
+      opentrons_id: The OT-API module "id" for your thermocycler.
     """
     super().__init__()  # Call parent constructor
     if not USE_OT:
