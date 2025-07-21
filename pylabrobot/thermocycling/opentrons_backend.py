@@ -1,7 +1,7 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
 import sys
-from typing import Optional, cast
+from typing import cast, Optional
 
 # OT-API HTTP client
 from ot_api.modules import (

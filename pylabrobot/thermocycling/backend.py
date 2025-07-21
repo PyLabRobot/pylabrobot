@@ -2,7 +2,6 @@
 
 from abc import ABCMeta, abstractmethod
 from typing import Optional
-
 from pylabrobot.machines.backend import MachineBackend
 
 

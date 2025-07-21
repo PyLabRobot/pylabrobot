@@ -8,7 +8,6 @@ from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBack
 from pylabrobot.thermocycling.thermocycler import Thermocycler
 
 
-
 class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
     """Opentrons Thermocycler GEN1/GEN2 wrapper.
 
@@ -55,7 +54,6 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
                 OpentronsThermocyclerBackend, self.backend
             ).opentrons_id,
         }
-
 
 
 class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
