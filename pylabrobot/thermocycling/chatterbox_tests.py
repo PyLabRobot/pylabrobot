@@ -2,6 +2,7 @@
 
 import pytest
 
+from pylabrobot.thermocycling.standard import Step
 from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling import Thermocycler, ThermocyclerChatterboxBackend
 
@@ -23,8 +24,8 @@ def tc_dev() -> Thermocycler:
 async def test_chatterbox_run_profile(tc_dev: Thermocycler, capsys):
   """Test that the chatterbox produces the correct log for a generic profile."""
   profile = [
-    {"celsius": 95.0, "holdSeconds": 10},
-    {"celsius": 55.0, "holdSeconds": 20},
+    Step(temperature=95.0, hold_seconds=10),
+    Step(temperature=55.0, hold_seconds=20),
   ]
   await tc_dev.run_profile(profile, block_max_volume=25.0)
   await tc_dev.wait_for_profile_completion(0.01)
@@ -78,7 +79,7 @@ async def test_chatterbox_run_pcr_profile(tc_dev: Thermocycler, capsys):
 @pytest.mark.asyncio
 async def test_chatterbox_deactivate_cancels_profile(tc_dev: Thermocycler, capsys):
   """Test that deactivating the block prints a cancellation message."""
-  await tc_dev.run_profile([{"celsius": 50.0, "holdSeconds": 10}], 25.0)
+  await tc_dev.run_profile([Step(temperature=50.0, hold_seconds=10)], 25.0)
   await tc_dev.deactivate_block()
 
   captured = capsys.readouterr()

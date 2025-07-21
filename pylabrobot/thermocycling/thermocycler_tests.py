@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pylabrobot.thermocycling.standard import Step
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.thermocycling import (
   OpentronsThermocyclerModuleV1,
@@ -104,15 +105,15 @@ async def test_run_pcr_profile_builds_correct_profile(tc_dev: Thermocycler, monk
   tc_dev.backend.set_lid_temperature.assert_called_once_with(105.0)  # type: ignore
 
   expected_profile = [
-    {"celsius": 95.0, "holdSeconds": 180.0},
-    {"celsius": 98.0, "holdSeconds": 10.0},
-    {"celsius": 55.0, "holdSeconds": 30.0},
-    {"celsius": 72.0, "holdSeconds": 60.0},
-    {"celsius": 98.0, "holdSeconds": 10.0},
-    {"celsius": 55.0, "holdSeconds": 30.0},
-    {"celsius": 72.0, "holdSeconds": 60.0},
-    {"celsius": 72.0, "holdSeconds": 300.0},
-    {"celsius": 4.0, "holdSeconds": 600.0},
+    Step(temperature=95.0, hold_seconds=180.0),
+    Step(temperature=98.0, hold_seconds=10.0),
+    Step(temperature=55.0, hold_seconds=30.0),
+    Step(temperature=72.0, hold_seconds=60.0),
+    Step(temperature=98.0, hold_seconds=10.0),
+    Step(temperature=55.0, hold_seconds=30.0),
+    Step(temperature=72.0, hold_seconds=60.0),
+    Step(temperature=72.0, hold_seconds=300.0),
+    Step(temperature=4.0, hold_seconds=600.0),
   ]
 
   tc_dev.backend.run_profile.assert_called_once_with(expected_profile, 25.0)  # type: ignore

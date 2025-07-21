@@ -16,6 +16,7 @@ from ot_api.modules import (
 )
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
+from pylabrobot.thermocycling.standard import Step
 
 # Only supported on Python 3.10 with the OT-API HTTP client installed
 PYTHON_VERSION = sys.version_info[:2]
@@ -63,13 +64,13 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     """Close the thermocycler lid."""
     return thermocycler_close_lid(module_id=self.opentrons_id)
 
-  async def set_block_temperature(self, celsius: float):
+  async def set_block_temperature(self, temperature: float):
     """Set block temperature in °C."""
-    return thermocycler_set_block_temperature(celsius=celsius, module_id=self.opentrons_id)
+    return thermocycler_set_block_temperature(celsius=temperature, module_id=self.opentrons_id)
 
-  async def set_lid_temperature(self, celsius: float):
+  async def set_lid_temperature(self, temperature: float):
     """Set lid temperature in °C."""
-    return thermocycler_set_lid_temperature(celsius=celsius, module_id=self.opentrons_id)
+    return thermocycler_set_lid_temperature(celsius=temperature, module_id=self.opentrons_id)
 
   async def deactivate_block(self):
     """Deactivate the block heater."""
@@ -79,16 +80,20 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     """Deactivate the lid heater."""
     return thermocycler_deactivate_lid(module_id=self.opentrons_id)
 
-  async def run_profile(self, profile: list[dict], block_max_volume: float):
+  async def run_profile(self, profile: list[Step], block_max_volume: float):
     """Enqueue and return immediately (no wait) the PCR profile command."""
+    # in opentrons, the "celsius" key is used instead of "temperature"
+    ot_profile = [
+      {"celsius": step.temperature, "holdSeconds": step.hold_seconds} for step in profile
+    ]
     return thermocycler_run_profile_no_wait(
-      profile=profile,
+      profile=ot_profile,
       block_max_volume=block_max_volume,
       module_id=self.opentrons_id,
     )
 
   def _find_module(self) -> dict:
-    """Helper to locate this module’s live-data dict."""
+    """Helper to locate this module's live-data dict."""
     for m in list_connected_modules():
       if m["id"] == self.opentrons_id:
         return cast(dict, m["data"])

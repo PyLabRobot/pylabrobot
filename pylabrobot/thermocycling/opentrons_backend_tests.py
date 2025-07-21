@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from pylabrobot.thermocycling.standard import Step
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
 
 
@@ -77,10 +78,11 @@ async def test_deactivate_lid(mock_deactivate_lid, thermocycler_backend):
 @pytest.mark.asyncio
 async def test_run_profile(mock_run_profile, thermocycler_backend):
   """Test for `run_profile`"""
-  profile = [{"celsius": 95, "holdSeconds": 10}]
+  profile = [Step(temperature=95, hold_seconds=10)]
   await thermocycler_backend.run_profile(profile, 50.0)
+  # print all calls
   mock_run_profile.assert_called_once_with(
-    profile=profile, block_max_volume=50.0, module_id="test_id"
+    profile=[{"celsius": 95, "holdSeconds": 10}], block_max_volume=50.0, module_id="test_id"
   )
 
 

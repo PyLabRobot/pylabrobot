@@ -2,11 +2,12 @@
 
 import asyncio
 import time
-from typing import Dict, List, Optional, cast
+from typing import List, Optional, cast
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
+from pylabrobot.thermocycling.standard import Step
 
 
 class Thermocycler(ResourceHolder, Machine):
@@ -57,21 +58,21 @@ class Thermocycler(ResourceHolder, Machine):
     """Close the thermocycler lid."""
     return await self.backend.close_lid()
 
-  async def set_block_temperature(self, celsius: float):
+  async def set_block_temperature(self, temperature: float):
     """Set the block temperature.
 
     Args:
-      celsius: Target temperature in °C.
+      temperature: Target temperature in °C.
     """
-    return await self.backend.set_block_temperature(celsius)
+    return await self.backend.set_block_temperature(temperature)
 
-  async def set_lid_temperature(self, celsius: float):
+  async def set_lid_temperature(self, temperature: float):
     """Set the lid temperature.
 
     Args:
-      celsius: Target temperature in °C.
+      temperature: Target temperature in °C.
     """
-    return await self.backend.set_lid_temperature(celsius)
+    return await self.backend.set_lid_temperature(temperature)
 
   async def deactivate_block(self):
     """Turn off the block heater."""
@@ -81,11 +82,11 @@ class Thermocycler(ResourceHolder, Machine):
     """Turn off the lid heater."""
     return await self.backend.deactivate_lid()
 
-  async def run_profile(self, profile: List[Dict[str, float]], block_max_volume: float):
+  async def run_profile(self, profile: List[Step], block_max_volume: float):
     """Enqueue a multi-step temperature profile (fire-and-forget).
 
     Args:
-      profile: List of {"celsius": float, "holdSeconds": float} steps.
+      profile: List of {"temperature": float, "holdSeconds": float} steps.
       block_max_volume: Maximum block volume (µL) for safety.
     """
     return await self.backend.run_profile(profile, block_max_volume)
@@ -131,25 +132,25 @@ class Thermocycler(ResourceHolder, Machine):
     await self.set_lid_temperature(lid_temperature)
     await self.wait_for_lid()
 
-    profile = []
+    profile: List[Step] = []
 
     if pre_denaturation_temp is not None and pre_denaturation_time is not None:
-      profile.append({"celsius": pre_denaturation_temp, "holdSeconds": pre_denaturation_time})
+      profile.append(Step(temperature=pre_denaturation_temp, hold_seconds=pre_denaturation_time))
 
     # Main PCR cycles
     pcr_step = [
-      {"celsius": denaturation_temp, "holdSeconds": denaturation_time},
-      {"celsius": annealing_temp, "holdSeconds": annealing_time},
-      {"celsius": extension_temp, "holdSeconds": extension_time},
+      Step(temperature=denaturation_temp, hold_seconds=denaturation_time),
+      Step(temperature=annealing_temp, hold_seconds=annealing_time),
+      Step(temperature=extension_temp, hold_seconds=extension_time),
     ]
     for _ in range(num_cycles):
       profile.extend(pcr_step)
 
     if final_extension_temp is not None and final_extension_time is not None:
-      profile.append({"celsius": final_extension_temp, "holdSeconds": final_extension_time})
+      profile.append(Step(temperature=final_extension_temp, hold_seconds=final_extension_time))
 
     if storage_temp is not None and storage_time is not None:
-      profile.append({"celsius": storage_temp, "holdSeconds": storage_time})
+      profile.append(Step(temperature=storage_temp, hold_seconds=storage_time))
 
     return await self.run_profile(profile=profile, block_max_volume=block_max_volume)
 

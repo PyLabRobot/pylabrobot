@@ -1,9 +1,10 @@
 """Abstract base for Thermocycler back-ends."""
 
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.thermocycling.standard import Step
 
 
 class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
@@ -18,11 +19,11 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Close thermocycler lid."""
 
   @abstractmethod
-  async def set_block_temperature(self, celsius: float):
+  async def set_block_temperature(self, temperature: float):
     """Set the temperature of a thermocycler block."""
 
   @abstractmethod
-  async def set_lid_temperature(self, celsius: float):
+  async def set_lid_temperature(self, temperature: float):
     """Set the temperature of a thermocycler lid."""
 
   @abstractmethod
@@ -34,7 +35,7 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Deactivate thermocycler lid."""
 
   @abstractmethod
-  async def run_profile(self, profile: list[dict], block_max_volume: float):
+  async def run_profile(self, profile: List[Step], block_max_volume: float):
     """Execute thermocycler profile run."""
 
   @abstractmethod

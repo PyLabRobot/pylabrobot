@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
+from pylabrobot.thermocycling.standard import Step
 
 
 @dataclass
@@ -15,7 +16,7 @@ class ThermocyclerState:
   block_target: Optional[float] = None
   lid_target: Optional[float] = None
   lid_open: bool = True
-  profile: Optional[List[Dict[str, float]]] = None
+  profile: Optional[List[Step]] = None
   is_profile_running: bool = False
   current_step_index: int = 0
   total_steps: int = 0
@@ -51,18 +52,18 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print("Closing lid.")
     self._state.lid_open = False
 
-  async def set_block_temperature(self, celsius: float):
-    print(f"Setting block temperature to {celsius:.1f}°C.")
-    self._state.block_target = celsius
-    self._state.block_temp = celsius
+  async def set_block_temperature(self, temperature: float):
+    print(f"Setting block temperature to {temperature:.1f}°C.")
+    self._state.block_target = temperature
+    self._state.block_temp = temperature
     if self._state.is_profile_running:
       print("  - A running profile was cancelled.")
       self._state.is_profile_running = False
 
-  async def set_lid_temperature(self, celsius: float):
-    print(f"Setting lid temperature to {celsius:.1f}°C.")
-    self._state.lid_target = celsius
-    self._state.lid_temp = celsius
+  async def set_lid_temperature(self, temperature: float):
+    print(f"Setting lid temperature to {temperature:.1f}°C.")
+    self._state.lid_target = temperature
+    self._state.lid_temp = temperature
 
   async def deactivate_block(self):
     print("Deactivating block.")
@@ -75,7 +76,7 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print("Deactivating lid.")
     self._state.lid_target = None
 
-  async def run_profile(self, profile: list[dict], block_max_volume: float):
+  async def run_profile(self, profile: list[Step], block_max_volume: float):
     print("Running profile:")
 
     if not profile:
@@ -91,13 +92,15 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print(f"  {header}")
 
     for i, step in enumerate(profile):
-      celsius_val = step.get("celsius", "N/A")
-      celsius_str = f"{celsius_val:.1f}" if isinstance(celsius_val, (int, float)) else "N/A"
-      hold_val = step.get("holdSeconds", "N/A")
+      temperature_val = step.temperature
+      temperature_str = (
+        f"{temperature_val:.1f}" if isinstance(temperature_val, (int, float)) else "N/A"
+      )
+      hold_val = step.hold_seconds
       hold_str = f"{hold_val:.1f}" if isinstance(hold_val, (int, float)) else "N/A"
       row = (
         f"  {i + 1:<{self._step_length}} "
-        f"{celsius_str:<{self._temp_length}} "
+        f"{temperature_str:<{self._temp_length}} "
         f"{hold_str:<{self._hold_length}}"
       )
       print(row)
@@ -108,7 +111,7 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     self._state.is_profile_running = True
 
     first_step = self._state.profile[0]
-    first_temp = first_step.get("celsius")
+    first_temp = first_step.temperature
     if first_temp is not None:
       print(f"  - Starting Step 1/{self._state.total_steps}: setting block to {first_temp:.1f}°C.")
       self._state.block_target = first_temp
@@ -124,12 +127,12 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
 
     for i in range(self._state.total_steps):
       completed_step = self._state.profile[i]
-      hold_duration = completed_step.get("holdSeconds", 0)
+      hold_duration = completed_step.hold_seconds
       print(f"  - Step {i + 1}/{self._state.total_steps}: hold for {hold_duration:.1f}s complete.")
 
       if i < self._state.total_steps - 1:
         next_step = self._state.profile[i + 1]
-        next_temp = next_step.get("celsius")
+        next_temp = next_step.temperature
         if next_temp is not None:
           print(
             f"  - Starting Step {i + 2}/{self._state.total_steps}: "
@@ -139,7 +142,7 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print("  - Profile finished.")
     self._state.is_profile_running = False
     self._state.current_step_index = self._state.total_steps - 1
-    final_temp = self._state.profile[-1].get("celsius")
+    final_temp = self._state.profile[-1].temperature
     if final_temp is not None:
       self._state.block_target = final_temp
       self._state.block_temp = final_temp
