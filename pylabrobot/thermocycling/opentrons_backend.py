@@ -111,7 +111,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
         return cast(float, self._find_module()["lidTemperature"])
 
     async def get_lid_target_temperature(self) -> Optional[float]:
-        """Always None on Opentrons Thermocycler HTTP-API."""
+        """Get the lid target temperature in °C. Returns None if no target is active."""
         return cast(Optional[float], self._find_module().get("lidTargetTemperature"))
 
     async def get_lid_status(self) -> str:

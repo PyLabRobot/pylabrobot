@@ -9,9 +9,9 @@ from pylabrobot.thermocycling.thermocycler import Thermocycler
 
 
 class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
-    """Opentrons Thermocycler GEN1/GEN2 wrapper.
+    """Opentrons Thermocycler GEN1/V1 wrapper.
 
-    Dimensions (closed-lid): 244.95 mm (x) × 172 mm (y) × 170.35 mm (z).
+    Dimensions (closed-lid): 172 mm (x) × 316 mm (y) × 154 mm (z).
     """
 
     def __init__(
@@ -32,9 +32,9 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
         backend = backend or OpentronsThermocyclerBackend(opentrons_id=opentrons_id)
         super().__init__(
             name=name,
-            size_x=244.95,  # mm - front/back footprint
-            size_y=172.0,  # mm - left/right footprint
-            size_z=170.35,  # mm - closed-lid height
+            size_x=172.0,  # mm - left/right footprint
+            size_y=316.0,  # mm - front/back footprint
+            size_z=154.0,  # mm - closed-lid height
             backend=backend,
             child_location=child_location,
             category="thermocycler",
@@ -57,9 +57,9 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
 
 
 class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
-    """Opentrons Thermocycler GEN1/GEN2 wrapper.
+    """Opentrons Thermocycler GEN2/V2 wrapper.
 
-    Dimensions (closed-lid): 244.95 mm (x) × 172 mm (y) × 170.35 mm (z).
+    Dimensions (closed-lid): 172 mm (x) × 244.95 mm (y) × 170.35 mm (z).
     """
 
     def __init__(
@@ -80,9 +80,9 @@ class OpentronsThermocyclerModuleV2(Thermocycler, OTModule):
         backend = backend or OpentronsThermocyclerBackend(opentrons_id=opentrons_id)
         super().__init__(
             name=name,
-            size_x=244.95,  # mm – front/back footprint
-            size_y=172.0,  # mm – left/right footprint
-            size_z=170.35,  # mm – closed-lid height
+            size_x=172.0,  # mm - left/right footprint
+            size_y=244.95,  # mm - front/back footprint
+            size_z=170.35,  # mm - closed-lid height
             backend=backend,
             child_location=child_location,
             category="thermocycler",
