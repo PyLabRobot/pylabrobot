@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pylabrobot.thermocycling.standard import Step
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.thermocycling import (
   OpentronsThermocyclerModuleV1,
@@ -12,6 +11,7 @@ from pylabrobot.thermocycling import (
   ThermocyclerBackend,
   ThermocyclerChatterboxBackend,
 )
+from pylabrobot.thermocycling.standard import Step
 
 
 @pytest.fixture

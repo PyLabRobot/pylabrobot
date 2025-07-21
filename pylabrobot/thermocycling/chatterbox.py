@@ -1,7 +1,7 @@
 """A chatterbox backend for a thermocycler."""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import Step

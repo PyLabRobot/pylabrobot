@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from pylabrobot.thermocycling.standard import Step
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
+from pylabrobot.thermocycling.standard import Step
 
 
 @pytest.fixture

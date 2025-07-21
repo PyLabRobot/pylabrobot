@@ -2,9 +2,9 @@
 
 import pytest
 
-from pylabrobot.thermocycling.standard import Step
 from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling import Thermocycler, ThermocyclerChatterboxBackend
+from pylabrobot.thermocycling.standard import Step
 
 
 @pytest.fixture
