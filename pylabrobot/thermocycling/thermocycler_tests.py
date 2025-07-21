@@ -100,7 +100,7 @@ async def test_run_pcr_profile_builds_correct_profile(tc_dev: Thermocycler, monk
     storage_time=600.0,
   )
 
-  tc_dev.backend.set_lid_temperature.assert_called_once_with(105.0) # type: ignore
+  tc_dev.backend.set_lid_temperature.assert_called_once_with(105.0)  # type: ignore
 
   expected_profile = [
     {"celsius": 95.0, "holdSeconds": 180.0},
@@ -114,20 +114,20 @@ async def test_run_pcr_profile_builds_correct_profile(tc_dev: Thermocycler, monk
     {"celsius": 4.0, "holdSeconds": 600.0},
   ]
 
-  tc_dev.backend.run_profile.assert_called_once_with(expected_profile, 25.0) # type: ignore
+  tc_dev.backend.run_profile.assert_called_once_with(expected_profile, 25.0)  # type: ignore
 
 
 @pytest.mark.asyncio
 async def test_wait_for_profile_completion(tc_dev: Thermocycler, monkeypatch):
   """Test that wait_for_profile_completion correctly polls is_profile_running."""
-  tc_dev.backend.get_hold_time.side_effect = [10.0, 5.0, 0.0] # type: ignore
+  tc_dev.backend.get_hold_time.side_effect = [10.0, 5.0, 0.0]  # type: ignore
 
   async def mock_sleep(*args, **kwargs):
     pass
 
   monkeypatch.setattr("asyncio.sleep", mock_sleep)
   await tc_dev.wait_for_profile_completion(poll_interval=0.01)
-  assert tc_dev.backend.get_hold_time.call_count == 3 # type: ignore
+  assert tc_dev.backend.get_hold_time.call_count == 3  # type: ignore
 
 
 @pytest.mark.parametrize(
@@ -145,9 +145,9 @@ async def test_is_profile_running_logic(
   tc_dev: Thermocycler, hold, cycle, total_cycles, step, total_steps, expected
 ):
   """Test that `is_profile_running` returns the correct boolean based on various profile states."""
-  tc_dev.backend.get_hold_time.return_value = hold # type: ignore
-  tc_dev.backend.get_current_cycle_index.return_value = cycle # type: ignore
-  tc_dev.backend.get_total_cycle_count.return_value = total_cycles # type: ignore
-  tc_dev.backend.get_current_step_index.return_value = step # type: ignore
-  tc_dev.backend.get_total_step_count.return_value = total_steps # type: ignore
+  tc_dev.backend.get_hold_time.return_value = hold  # type: ignore
+  tc_dev.backend.get_current_cycle_index.return_value = cycle  # type: ignore
+  tc_dev.backend.get_total_cycle_count.return_value = total_cycles  # type: ignore
+  tc_dev.backend.get_current_step_index.return_value = step  # type: ignore
+  tc_dev.backend.get_total_step_count.return_value = total_steps  # type: ignore
   assert await tc_dev.is_profile_running() is expected
