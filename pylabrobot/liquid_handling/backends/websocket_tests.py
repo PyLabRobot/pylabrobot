@@ -1,7 +1,7 @@
 import json
 import unittest
 
-import pytest
+import asyncio
 import websockets
 
 from pylabrobot.liquid_handling.backends import WebSocketBackend
@@ -10,7 +10,6 @@ from pylabrobot.liquid_handling.backends import WebSocketBackend
 class WebSocketBackendSetupStopTests(unittest.IsolatedAsyncioTestCase):
   """Tests for the setup and stop methods of the websocket backend."""
 
-  @pytest.mark.timeout(20)
   async def test_setup_stop(self):
     """Test that the thread is started and stopped correctly."""
 
@@ -23,8 +22,8 @@ class WebSocketBackendSetupStopTests(unittest.IsolatedAsyncioTestCase):
       self.assertFalse(backend.has_connection())
 
     # setup and stop twice to ensure that everything is recycled correctly
-    await setup_stop_single()
-    await setup_stop_single()
+    await asyncio.wait_for(setup_stop_single(), timeout=20)
+    await asyncio.wait_for(setup_stop_single(), timeout=20)
 
 
 class WebSocketBackendServerTests(unittest.IsolatedAsyncioTestCase):

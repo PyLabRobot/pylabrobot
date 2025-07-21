@@ -22,7 +22,7 @@ Some VSCode Extensions I'd recommend:
 
 ## Testing, linting, formatting
 
-PyLabRobot uses `pytest` to run unit tests. Please make sure tests pass when you submit a PR. You can run tests as follows.
+PyLabRobot uses Python's built in `unittest` framework to run unit tests. Please make sure tests pass when you submit a PR. You can run tests as follows.
 
 ```bash
 make test # run test on the latest version

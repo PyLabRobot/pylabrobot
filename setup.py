@@ -43,8 +43,6 @@ extras_dev = (
     "pydata-sphinx-theme",
     "myst_nb",
     "sphinx_copybutton",
-    "pytest",
-    "pytest-timeout",
     "mypy",
     "responses",
     "sphinx-reredirects",

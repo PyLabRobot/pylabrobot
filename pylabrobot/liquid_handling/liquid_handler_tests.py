@@ -4,7 +4,6 @@ import unittest
 import unittest.mock
 from typing import Any, Dict, List, Optional, Union, cast
 
-import pytest
 
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
@@ -923,8 +922,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.lh.aspirate([well], vols=[10])
 
-  @pytest.mark.filterwarnings("ignore:Extra arguments to backend.pick_up_tips")
   async def test_strictness(self):
+    import warnings
+    warnings.filterwarnings("ignore", "Extra arguments to backend.pick_up_tips")
     class TestBackend(backends.SaverBackend):
       """Override pick_up_tips for testing."""
 

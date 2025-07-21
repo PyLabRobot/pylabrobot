@@ -31,7 +31,7 @@ format-check:
 	$(BIN)python -m ruff check pylabrobot --select I
 
 test:
-	$(BIN)python -m pytest -s -v
+	$(BIN)python -m unittest discover -s pylabrobot -p '*_tests.py' -v
 
 typecheck:
 	$(BIN)python -m mypy pylabrobot --check-untyped-defs

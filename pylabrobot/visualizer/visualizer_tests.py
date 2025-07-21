@@ -3,7 +3,7 @@ import time
 import unittest
 import unittest.mock
 
-import pytest
+import asyncio
 import requests
 import websockets
 
@@ -19,7 +19,6 @@ from pylabrobot.visualizer import Visualizer
 class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
   """Tests for the setup and stop methods of the visualizer backend."""
 
-  @pytest.mark.timeout(20)
   async def test_setup_stop(self):
     """Test that the thread is started and stopped correctly."""
 
@@ -35,8 +34,8 @@ class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
       self.assertFalse(vis.has_connection())
 
     # setup and stop twice to ensure that everything is recycled correctly
-    await setup_stop_single()
-    await setup_stop_single()
+    await asyncio.wait_for(setup_stop_single(), timeout=20)
+    await asyncio.wait_for(setup_stop_single(), timeout=20)
 
 
 class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
