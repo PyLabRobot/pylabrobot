@@ -62,7 +62,7 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
 
     @abstractmethod
     async def get_current_cycle_index(self) -> int:
-        """Get the zero-based index of the current cycle."""
+        """Get the one-based index of the current cycle."""
 
     @abstractmethod
     async def get_total_cycle_count(self) -> int:
@@ -70,7 +70,7 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
 
     @abstractmethod
     async def get_current_step_index(self) -> int:
-        """Get the zero-based index of the current step within the cycle."""
+        """Get the one-based index of the current step within the cycle."""
 
     @abstractmethod
     async def get_total_step_count(self) -> int:
