@@ -27,9 +27,6 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
 
     All core functions are supported. run_profile() is fire-and-forget,
     since PCR runs can outlive the decorator’s default timeout.
-
-    Note: Gen-2 via HTTP-API does not expose a separate lid target field,
-    so get_lid_target_temperature() will always return None.
     """
 
     def __init__(self, opentrons_id: str):
