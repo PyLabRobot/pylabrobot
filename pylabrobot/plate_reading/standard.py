@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 import enum
-from typing import List, Literal, Union
+from typing import Callable, List, Literal, Union
 
 Image = List[List[float]]
 
@@ -89,6 +90,14 @@ class NoPlateError(Exception):
   pass
 
 
-Exposure = Union[float, Literal["auto"]]
-FocalPosition = Union[float, Literal["auto"]]
-Gain = Union[float, Literal["auto"]]
+@dataclass
+class AutoExposure:
+  evaluate_exposure: Callable[[Image], Literal["higher", "lower", "good"]]
+  max_rounds: int
+  low: float
+  high: float
+
+
+Exposure = Union[float, Literal["machine-auto"]]
+FocalPosition = Union[float, Literal["machine-auto"]]
+Gain = Union[float, Literal["machine-auto"]]
