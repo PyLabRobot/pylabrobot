@@ -9,8 +9,8 @@ from pylabrobot.plate_reading.standard import (
   FocalPosition,
   Gain,
   ImagingMode,
-  Objective,
   ImagingResult,
+  Objective,
 )
 from pylabrobot.resources.plate import Plate
 

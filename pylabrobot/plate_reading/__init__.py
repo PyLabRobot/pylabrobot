@@ -8,6 +8,6 @@ from .standard import (
   FocalPosition,
   Gain,
   ImagingMode,
-  Objective,
   ImagingResult,
+  Objective,
 )

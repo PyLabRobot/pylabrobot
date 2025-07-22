@@ -43,8 +43,8 @@ from pylabrobot.plate_reading.standard import (
   Gain,
   Image,
   ImagingMode,
-  Objective,
   ImagingResult,
+  Objective,
 )
 
 logger = logging.getLogger("pylabrobot.plate_reading.biotek")
