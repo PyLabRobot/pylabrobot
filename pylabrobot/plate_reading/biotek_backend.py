@@ -1235,7 +1235,8 @@ class Cytation5Backend(ImageReaderBackend):
         )
       )
 
-    exposure_ms = float(self.cam.ExposureTime.GetValue()) / 1000 if self.cam is not None else 0.0
-    focal_height_val = float(self._focal_height) if self._focal_height is not None else 0.0
+    exposure_ms = float(self.cam.ExposureTime.GetValue()) / 1000
+    assert self._focal_height is not None, "Focal height not set. Run set_focus() first."
+    focal_height_val = float(self._focal_height)
 
     return ImagingResult(images=images, exposure_time=exposure_ms, focal_height=focal_height_val)
