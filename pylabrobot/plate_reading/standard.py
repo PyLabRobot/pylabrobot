@@ -1,6 +1,6 @@
-from dataclasses import dataclass
 import enum
-from typing import Callable, List, Literal, Union
+from dataclasses import dataclass
+from typing import Awaitable, Callable, List, Literal, Union
 
 Image = List[List[float]]
 
@@ -92,7 +92,7 @@ class NoPlateError(Exception):
 
 @dataclass
 class AutoExposure:
-  evaluate_exposure: Callable[[Image], Literal["higher", "lower", "good"]]
+  evaluate_exposure: Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]
   max_rounds: int
   low: float
   high: float

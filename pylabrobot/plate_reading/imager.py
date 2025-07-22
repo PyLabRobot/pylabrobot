@@ -1,5 +1,5 @@
 import math
-from typing import List, Literal, Optional, Tuple, Union, cast
+from typing import Awaitable, Callable, List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.machines import Machine
 from pylabrobot.plate_reading.backend import ImagerBackend
@@ -142,6 +142,8 @@ class Imager(Resource, Machine):
       row, column = divmod(idx, cast(Plate, well.parent).num_items_x)
 
     if isinstance(exposure_time, AutoExposure):
+      assert focal_height != "machine-auto", "Focal height must be specified for auto exposure"
+      assert gain != "machine-auto", "Gain must be specified for auto exposure"
       return await self._capture_auto_exposure(
         well=well,
         mode=mode,
@@ -165,7 +167,7 @@ class Imager(Resource, Machine):
     )
 
 
-def max_pixel_at_fraction(fraction: float, margin: float) -> Literal["higher", "lower", "good"]:
+def max_pixel_at_fraction(fraction: float, margin: float) -> Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]:
   """The maximum pixel value in a given image should be a fraction of the maximum possible pixel value (eg 255 for 8-bit images).
 
   Args:
@@ -187,7 +189,7 @@ def max_pixel_at_fraction(fraction: float, margin: float) -> Literal["higher", "
   return evaluate_exposure
 
 
-def fraction_overexposed(fraction: float, margin: float):
+def fraction_overexposed(fraction: float, margin: float) -> Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]:
   """A certain fraction of pixels in the image should be overexposed (e.g. 0.5%).
 
   Args:
