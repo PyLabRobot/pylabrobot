@@ -167,12 +167,14 @@ class Imager(Resource, Machine):
     )
 
 
-def max_pixel_at_fraction(fraction: float, margin: float) -> Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]:
+def max_pixel_at_fraction(
+  fraction: float, margin: float
+) -> Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]:
   """The maximum pixel value in a given image should be a fraction of the maximum possible pixel value (eg 255 for 8-bit images).
 
   Args:
-    fraction: the desired fraction of the maximum pixel value (e.g. 0.8 for 80%). If it is an 8-bit image, the maximum value would be 0.8 * 255 = 204.
-    margin: the margin of error for the maximum pixel value (e.g. 10 for 8-bit images, so the maximum pixel value should be between 194 and 214).
+    fraction: the desired fraction of the actual maximum pixel value over the theoretically maximum pixel value (e.g. 0.8 for 80%). If it is an 8-bit image, the maximum value would be 0.8 * 255 = 204.
+    margin: the margin of error that is accepted. A fraction of the theoretical maximum pixel value, e.g. 0.05 for 5%, so the maximum pixel value should be between 0.75 * 255 and 0.85 * 255.
   """
 
   if np is None:
@@ -181,7 +183,8 @@ def max_pixel_at_fraction(fraction: float, margin: float) -> Callable[[Image], A
   async def evaluate_exposure(im) -> Literal["higher", "lower", "good"]:
     array = np.array(im, dtype=np.float32)
     value = np.max(array) - (255.0 * fraction)
-    if abs(value) <= margin:
+    margin_value = 255.0 * margin
+    if abs(value) <= margin_value:
       return "good"
     # lower the exposure time if the max pixel value is too high
     return "lower" if value > 0 else "higher"
@@ -189,12 +192,17 @@ def max_pixel_at_fraction(fraction: float, margin: float) -> Callable[[Image], A
   return evaluate_exposure
 
 
-def fraction_overexposed(fraction: float, margin: float) -> Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]:
+def fraction_overexposed(
+  fraction: float, margin: float, max_pixel_value: int = 255
+) -> Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]:
   """A certain fraction of pixels in the image should be overexposed (e.g. 0.5%).
 
+  This is useful for images that are not well illuminated, as it ensures that a certain fraction of pixels is overexposed, which can help with image quality.
+
   Args:
-    fraction: the desired fraction of pixels that should be overexposed (e.g. 0.005 for 0.5%).
+    fraction: the desired fraction of pixels that should be overexposed (e.g. 0.005 for 0.5%). Overexposed is defined as pixels with a value greater than the maximum pixel value (e.g. 255 for 8-bit images). You can customize this number if needed.
     margin: the margin of error for the fraction of pixels that should be overexposed (e.g. 0.001 for 0.1%, so the fraction of overexposed pixels should be between 0.004 and 0.006).
+    max_pixel_value: the maximum pixel value for the image (e.g. 255 for 8-bit images). You can override it to change the definition of "overexposed" pixels.
   """
 
   if np is None:
@@ -203,7 +211,7 @@ def fraction_overexposed(fraction: float, margin: float) -> Callable[[Image], Aw
   async def evaluate_exposure(im) -> Literal["higher", "lower", "good"]:
     # count the number of pixels that are overexposed
     arr = np.asarray(im, dtype=np.uint8)
-    actual_fraction = np.count_nonzero(arr > 240) / arr.size
+    actual_fraction = np.count_nonzero(arr > max_pixel_value) / arr.size
     lower_bound, upper_bound = fraction - margin, fraction + margin
     if lower_bound <= actual_fraction <= upper_bound:
       return "good"
