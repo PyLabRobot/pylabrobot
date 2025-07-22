@@ -1,5 +1,5 @@
 import math
-from typing import Awaitable, Callable, List, Literal, Optional, Tuple, Union, cast
+from typing import Awaitable, Callable, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.machines import Machine
 from pylabrobot.plate_reading.backend import ImagerBackend
@@ -10,6 +10,7 @@ from pylabrobot.plate_reading.standard import (
   Gain,
   Image,
   ImagingMode,
+  ImagingResult,
   NoPlateError,
   Objective,
 )
@@ -68,7 +69,7 @@ class Imager(Resource, Machine):
     focal_height: float,
     gain: float,
     **backend_kwargs,
-  ) -> List[Image]:
+  ) -> ImagingResult:
     """
     Capture an image with auto exposure.
 
@@ -99,7 +100,7 @@ class Imager(Resource, Machine):
       rounds += 1
 
       p = _rms_split(low, high)
-      ims = await self.capture(
+      res = await self.capture(
         well=well,
         mode=mode,
         objective=objective,
@@ -108,18 +109,18 @@ class Imager(Resource, Machine):
         gain=gain,
         **backend_kwargs,
       )
-      assert len(ims) == 1, "Expected exactly one image to be returned"
-      im = ims[0]
-      result = await auto_exposure.evaluate_exposure(im)
+      assert len(res.images) == 1, "Expected exactly one image to be returned"
+      im = res.images[0]
+      evaluation = await auto_exposure.evaluate_exposure(im)
 
-      if result == "good":
-        return ims
-      if result == "lower":
+      if evaluation == "good":
+        return res
+      if evaluation == "lower":
         high = p
-      elif result == "higher":
+      elif evaluation == "higher":
         low = p
       else:
-        raise ValueError(f"Unexpected evaluation result: {result}")
+        raise ValueError(f"Unexpected evaluation result: {evaluation}")
 
     raise RuntimeError("Failed to find a good exposure time.")
 
@@ -132,7 +133,7 @@ class Imager(Resource, Machine):
     focal_height: FocalPosition = "machine-auto",
     gain: Gain = "machine-auto",
     **backend_kwargs,
-  ) -> List[Image]:
+  ) -> ImagingResult:
     if isinstance(well, tuple):
       row, column = well
     else:

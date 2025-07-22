@@ -101,3 +101,10 @@ class AutoExposure:
 Exposure = Union[float, Literal["machine-auto"]]
 FocalPosition = Union[float, Literal["machine-auto"]]
 Gain = Union[float, Literal["machine-auto"]]
+
+
+@dataclass
+class ImagingResult:
+  images: List[Image]
+  exposure_time: float
+  focal_height: float

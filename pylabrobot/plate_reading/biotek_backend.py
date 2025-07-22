@@ -43,6 +43,7 @@ from pylabrobot.plate_reading.standard import (
   Gain,
   Image,
   ImagingMode,
+  ImagingResult,
   Objective,
 )
 
@@ -882,7 +883,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
-      images = await self.capture(  # TODO: _acquire_image
+      result = await self.capture(  # TODO: _acquire_image
         plate=plate,
         row=row,
         column=column,
@@ -892,7 +893,7 @@ class Cytation5Backend(ImageReaderBackend):
         exposure_time=exposure,
         gain=gain,
       )
-      image = images[0]  # self.capture returns List now
+      image = result.images[0]
 
       if not CV2_AVAILABLE:
         raise RuntimeError(
@@ -1158,7 +1159,7 @@ class Cytation5Backend(ImageReaderBackend):
     overlap: Optional[float] = None,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
-  ) -> List[Image]:
+  ) -> ImagingResult:
     """Capture image using the microscope
 
     speed: 211 ms ± 331 μs per loop (mean ± std. dev. of 7 runs, 10 loops each)
@@ -1234,4 +1235,8 @@ class Cytation5Backend(ImageReaderBackend):
         )
       )
 
-    return images
+    exposure_ms = float(self.cam.ExposureTime.GetValue()) / 1000
+    assert self._focal_height is not None, "Focal height not set. Run set_focus() first."
+    focal_height_val = float(self._focal_height)
+
+    return ImagingResult(images=images, exposure_time=exposure_ms, focal_height=focal_height_val)

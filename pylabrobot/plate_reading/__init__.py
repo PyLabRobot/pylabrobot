@@ -3,4 +3,11 @@ from .clario_star_backend import CLARIOStarBackend
 from .image_reader import ImageReader
 from .imager import Imager
 from .plate_reader import PlateReader
-from .standard import Exposure, FocalPosition, Gain, ImagingMode, Objective
+from .standard import (
+  Exposure,
+  FocalPosition,
+  Gain,
+  ImagingMode,
+  ImagingResult,
+  Objective,
+)
