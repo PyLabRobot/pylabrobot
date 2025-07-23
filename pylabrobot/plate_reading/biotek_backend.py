@@ -918,7 +918,7 @@ class Cytation5Backend(ImageReaderBackend):
       func=evaluate_focus,
       a=focus_min,
       b=focus_max,
-      tol=0.01,
+      tol=0.001,  # 1 micron
       timeout=timeout,
     )
     self._focal_height = best_focal_height
