@@ -2188,7 +2188,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     z_deposit_position += round(pickup.offset.z * 10)
 
-    x_direction = 0 if position.x > 0 else 1
+    x_direction = 0 if position.x >= 0 else 1
     return await self.pick_up_tips_core96(
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
@@ -2219,7 +2219,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
-    x_direction = 0 if position.x > 0 else 1
+    x_direction = 0 if position.x >= 0 else 1
     return await self.discard_tips_core96(
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
@@ -2379,9 +2379,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     #     aspiration_volumes=int(blow_out_air_volume * 10)
     #   )
 
+    x_direction = 0 if position.x >= 0 else 1
     return await self.aspirate_core_96(
-      x_position=round(position.x * 10),
-      x_direction=0,
+      x_position=abs(round(position.x * 10)),
+      x_direction=x_direction,
       y_positions=round(position.y * 10),
       aspiration_type=aspiration_type,
       minimum_traverse_height_at_beginning_of_a_command=round(
@@ -2551,10 +2552,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     channel_pattern = [True] * 12 * 8
 
+    x_direction = 0 if position.x >= 0 else 1
     ret = await self.dispense_core_96(
       dispensing_mode=dispense_mode,
-      x_position=round(position.x * 10),
-      x_direction=0,
+      x_position=abs(round(position.x * 10)),
+      x_direction=x_direction,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
@@ -5765,7 +5767,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move CoRe 96 Head to defined position
 
     Args:
-      x: X-Position [1mm] of well A1. Must be between 0 and 3000.0. Default 0.
+      x: X-Position [1mm] of well A1. Must be between -3000.0 and 3000.0. Default 0.
       y: Y-Position [1mm]. Must be between 108.0 and 560.0. Default 0.
       z: Z-Position [1mm]. Must be between 0 and 560.0. Default 0.
       minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
@@ -5773,7 +5775,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
-    assert 0 <= x <= 3000.0, "x_position must be between 0 and 30000"
+    assert -3000.0 <= x <= 3000.0, "x_position must be between -3000 and 3000"
     assert 108.0 <= y <= 560.0, "y_position must be between 1080 and 5600"
     assert 0 <= y <= 560.0, "z_position must be between 0 and 5600"
     assert (
@@ -5783,7 +5785,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(
       module="C0",
       command="EM",
-      xs=f"{round(x*10):05}",
+      xs=f"{abs(round(x*10)):05}",
       xd=0 if x >= 0 else 1,
       yh=f"{round(y*10):04}",
       za=f"{round(z*10):04}",
