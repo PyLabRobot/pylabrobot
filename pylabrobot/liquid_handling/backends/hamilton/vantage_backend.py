@@ -30,8 +30,8 @@ from pylabrobot.liquid_handling.standard import (
 from pylabrobot.resources import (
   Coordinate,
   Liquid,
-  Resource,
   Plate,
+  Resource,
   Tip,
   TipRack,
   Well,
