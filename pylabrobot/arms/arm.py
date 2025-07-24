@@ -26,4 +26,12 @@ class Arm(Machine):
         """Get the current speed of the arm's movement."""
         return await self.backend.get_speed()
 
+    async def open_gripper(self):
+        """Open the arm's gripper."""
+        return await self.backend.open_gripper()
+
+    async def close_gripper(self):
+        """Close the arm's gripper."""
+        return await self.backend.close_gripper()
+
 
