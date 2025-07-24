@@ -149,7 +149,7 @@ await fan.setup()
 await fan.turn_on(intensity=100, duration=60)
 ```
 
-### Thermocyclers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/thermocyclers/thermocyclers.html))
+### Thermocyclers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/thermocycling/thermocycling.html))
 
 Running a thermocycler with a simple protocol:
 
