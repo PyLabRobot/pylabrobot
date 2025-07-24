@@ -2310,11 +2310,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # get the first well and tip as representatives
     if isinstance(aspiration, MultiHeadAspirationPlate):
-      top_left_well = aspiration.wells[0]
+      plate = aspiration.wells[0].parent
+      assert plate is not None
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 in (0, 360):
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
+
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
-        + Coordinate(z=top_left_well.material_z_thickness)
+        ref_well.get_absolute_location()
+        + ref_well.center()
+        + Coordinate(z=ref_well.material_z_thickness)
         + aspiration.offset
       )
     else:
@@ -2493,11 +2504,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # get the first well and tip as representatives
     if isinstance(dispense, MultiHeadDispensePlate):
-      top_left_well = dispense.wells[0]
+      plate = dispense.wells[0].parent
+      assert plate is not None
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 in (0, 360):
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
+
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
-        + Coordinate(z=top_left_well.material_z_thickness)
+        ref_well.get_absolute_location()
+        + ref_well.center()
+        + Coordinate(z=ref_well.material_z_thickness)
         + dispense.offset
       )
     else:
