@@ -35,6 +35,7 @@ def get_plr_class_from_string(klass_type: str):
   import pylabrobot.temperature_controlling as temperature_controlling_module
   import pylabrobot.testing as testing_module
   import pylabrobot.tests as tests_module
+  import pylabrobot.thermocycling as thermocycling_module
   import pylabrobot.tilting as tilting_module
   import pylabrobot.utils as utils_module
   import pylabrobot.visualizer as visualizer_module
@@ -56,6 +57,7 @@ def get_plr_class_from_string(klass_type: str):
     scales_module,
     shaking_module,
     temperature_controlling_module,
+    thermocycling_module,
     testing_module,
     tests_module,
     tilting_module,

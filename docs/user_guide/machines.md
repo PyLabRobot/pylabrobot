@@ -90,7 +90,7 @@ Below is a list of machines that are currently supported in PyLabRobot, and mach
 
 | Device | Status |
 |--------|-------------|
-| Opentrons Thermocycler | WIP [#108](https://github.com/PyLabRobot/pylabrobot/pull/108) |
+| Opentrons Thermocycler | Supported |
 | ThermoFisher ATC | WIP |
 | Proflex | WIP [#367](https://github.com/PyLabRobot/pylabrobot/pull/367) |
 | Inheco ODTC | WIP |
