@@ -7,7 +7,7 @@ class PreciseFlexError(Exception):
     super().__init__(f"PreciseFlexError {replycode}: {message}")
 
 class PreciseFlexBackend(ArmBackend):
-  """Backend for the PreciseFlex robotic arm"""
+  """UNTESTED - Backend for the PreciseFlex robotic arm"""
   def __init__(self, host: str, port: int, timeout=20, profile=1) -> None:
     super().__init__()
     self.host = host
