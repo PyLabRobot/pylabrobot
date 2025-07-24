@@ -1,7 +1,7 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
 import sys
-from typing import Optional, cast
+from typing import cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import Step
@@ -110,15 +110,21 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def get_block_current_temperature(self) -> float:
     return cast(float, self._find_module()["currentTemperature"])
 
-  async def get_block_target_temperature(self) -> Optional[float]:
-    return cast(Optional[float], self._find_module().get("targetTemperature"))
+  async def get_block_target_temperature(self) -> float:
+    target_temp = self._find_module().get("targetTemperature")
+    if target_temp is None:
+      raise RuntimeError("Block target temperature is not set. is a cycle running?")
+    return cast(float, target_temp)
 
   async def get_lid_current_temperature(self) -> float:
     return cast(float, self._find_module()["lidTemperature"])
 
-  async def get_lid_target_temperature(self) -> Optional[float]:
-    """Get the lid target temperature in °C. Returns None if no target is active."""
-    return cast(Optional[float], self._find_module().get("lidTargetTemperature"))
+  async def get_lid_target_temperature(self) -> float:
+    """Get the lid target temperature in °C. Raises RuntimeError if no target is active."""
+    target_temp = self._find_module().get("lidTargetTemperature")
+    if target_temp is None:
+      raise RuntimeError("Lid target temperature is not set. is a cycle running?")
+    return cast(float, target_temp)
 
   async def get_lid_status(self) -> str:
     return cast(str, self._find_module()["lidStatus"])

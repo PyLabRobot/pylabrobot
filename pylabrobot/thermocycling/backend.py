@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional
+from typing import List
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.thermocycling.standard import Step
@@ -41,16 +41,16 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Get the current block temperature in °C."""
 
   @abstractmethod
-  async def get_block_target_temperature(self) -> Optional[float]:
-    """Get the block target temperature in °C."""
+  async def get_block_target_temperature(self) -> float:
+    """Get the block target temperature in °C. May raise RuntimeError if no target is set."""
 
   @abstractmethod
   async def get_lid_current_temperature(self) -> float:
     """Get the current lid temperature in °C."""
 
   @abstractmethod
-  async def get_lid_target_temperature(self) -> Optional[float]:
-    """Get the lid target temperature in °C."""
+  async def get_lid_target_temperature(self) -> float:
+    """Get the lid target temperature in °C. May raise RuntimeError if no target is set."""
 
   @abstractmethod
   async def get_lid_status(self):

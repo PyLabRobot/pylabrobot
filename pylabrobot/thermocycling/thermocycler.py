@@ -158,15 +158,15 @@ class Thermocycler(ResourceHolder, Machine):
     """Get the current block temperature (°C)."""
     return await self.backend.get_block_current_temperature()
 
-  async def get_block_target_temperature(self) -> Optional[float]:
+  async def get_block_target_temperature(self) -> float:
     """Get the block's target temperature (°C)."""
-    return cast(Optional[float], await self.backend.get_block_target_temperature())
+    return await self.backend.get_block_target_temperature()
 
   async def get_lid_current_temperature(self) -> float:
     """Get the current lid temperature (°C)."""
     return await self.backend.get_lid_current_temperature()
 
-  async def get_lid_target_temperature(self) -> Optional[float]:
+  async def get_lid_target_temperature(self) -> float:
     """Get the lid's target temperature (°C), if supported."""
     return await self.backend.get_lid_target_temperature()
 
@@ -197,8 +197,6 @@ class Thermocycler(ResourceHolder, Machine):
   async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5):
     """Wait until block temp reaches target ± tolerance."""
     target = await self.get_block_target_temperature()
-    if target is None:
-      return  # No target temperature to wait for
     start = time.time()
     while time.time() - start < timeout:
       if abs((await self.get_block_current_temperature()) - target) < tolerance:
@@ -208,7 +206,10 @@ class Thermocycler(ResourceHolder, Machine):
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5):
     """Wait until lid temp reaches target ± tolerance, or status is idle/holding at target."""
-    target = await self.get_lid_target_temperature()
+    try:
+      target = await self.get_lid_target_temperature()
+    except RuntimeError:
+      target = None
     start = time.time()
     while time.time() - start < timeout:
       if target is not None:
