@@ -159,7 +159,7 @@ class Thermocycler(ResourceHolder, Machine):
     return await self.backend.get_block_current_temperature()
 
   async def get_block_target_temperature(self) -> Optional[float]:
-    """Get the block’s target temperature (°C)."""
+    """Get the block's target temperature (°C)."""
     return cast(Optional[float], await self.backend.get_block_target_temperature())
 
   async def get_lid_current_temperature(self) -> float:
@@ -167,7 +167,7 @@ class Thermocycler(ResourceHolder, Machine):
     return await self.backend.get_lid_current_temperature()
 
   async def get_lid_target_temperature(self) -> Optional[float]:
-    """Get the lid’s target temperature (°C), if supported."""
+    """Get the lid's target temperature (°C), if supported."""
     return await self.backend.get_lid_target_temperature()
 
   async def get_lid_status(self) -> str:
@@ -230,14 +230,14 @@ class Thermocycler(ResourceHolder, Machine):
     step = await self.get_current_step_index()
     total_steps = await self.get_total_step_count()
 
-    # if still holding in a step, it’s running
+    # if still holding in a step, it's running
     if hold and hold > 0:
       return True
-    # if haven’t reached last cycle
-    if cycle < total_cycles:
+    # if haven't reached last cycle (zero-based indexing)
+    if cycle < total_cycles - 1:
       return True
-    # last cycle but not last step
-    if cycle == total_cycles and step < total_steps:
+    # last cycle but not last step (zero-based indexing)
+    if cycle == total_cycles - 1 and step < total_steps - 1:
       return True
     return False
 

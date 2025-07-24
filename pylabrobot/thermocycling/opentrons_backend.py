@@ -34,7 +34,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   """HTTP-API backend for the Opentrons GEN-1/GEN-2 Thermocycler.
 
   All core functions are supported. run_profile() is fire-and-forget,
-  since PCR runs can outlive the decorator’s default timeout.
+  since PCR runs can outlive the decorator's default timeout.
   """
 
   def __init__(self, opentrons_id: str):
@@ -127,15 +127,17 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     return cast(float, self._find_module().get("holdTime", 0.0))
 
   async def get_current_cycle_index(self) -> int:
-    """Get the one-based index of the current cycle from the Opentrons API."""
-    return cast(int, self._find_module()["currentCycleIndex"])
+    """Get the zero-based index of the current cycle from the Opentrons API."""
+    # Opentrons API returns one-based, convert to zero-based
+    return cast(int, self._find_module()["currentCycleIndex"]) - 1
 
   async def get_total_cycle_count(self) -> int:
     return cast(int, self._find_module()["totalCycleCount"])
 
   async def get_current_step_index(self) -> int:
-    """Get the one-based index of the current step from the Opentrons API."""
-    return cast(int, self._find_module()["currentStepIndex"])
+    """Get the zero-based index of the current step from the Opentrons API."""
+    # Opentrons API returns one-based, convert to zero-based
+    return cast(int, self._find_module()["currentStepIndex"]) - 1
 
   async def get_total_step_count(self) -> int:
     return cast(int, self._find_module()["totalStepCount"])
