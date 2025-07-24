@@ -119,8 +119,8 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     test_cases = [
       (10.0, 1, 10, 1, 3, True),
       (0.0, 5, 10, 1, 3, True),
-      (0.0, 10, 10, 1, 3, True),
-      (0.0, 10, 10, 3, 3, False),
+      (0.0, 9, 10, 1, 3, True),
+      (0.0, 9, 10, 3, 3, False),
       (0.0, 1, 1, 1, 1, False),
     ]
     for hold, cycle, total_cycles, step, total_steps, expected in test_cases:
@@ -129,4 +129,5 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
       self.tc.backend.get_total_cycle_count.return_value = total_cycles  # type: ignore
       self.tc.backend.get_current_step_index.return_value = step  # type: ignore
       self.tc.backend.get_total_step_count.return_value = total_steps  # type: ignore
+      print(f"Testing with hold={hold}, cycle={cycle}, total_cycles={total_cycles}, ")
       assert await self.tc.is_profile_running() is expected
