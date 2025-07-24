@@ -2505,7 +2505,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # get the first well and tip as representatives
     if isinstance(dispense, MultiHeadDispensePlate):
-      plate = Plate, dispense.wells[0].parent
+      plate = dispense.wells[0].parent
       assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
