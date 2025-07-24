@@ -3,7 +3,7 @@ from pylabrobot.machines import Machine
 from .backend import SealerBackend
 
 
-class Sealer(Machine):
+class  Sealer(Machine):
   """A microplate sealer"""
 
   def __init__(self, backend: SealerBackend):
