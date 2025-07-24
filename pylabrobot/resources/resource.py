@@ -133,7 +133,7 @@ class Resource:
 
   def __repr__(self) -> str:
     return (
-      f"{self.__class__.__name__}(name={self.name}, location={self.location}, "
+      f"{self.__class__.__name__}(name={self.name!r}, location={self.location}, "
       f"size_x={self._size_x}, size_y={self._size_y}, size_z={self._size_z}, "
       f"category={self.category})"
     )
