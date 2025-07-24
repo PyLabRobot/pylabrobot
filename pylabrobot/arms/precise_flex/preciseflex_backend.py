@@ -8,7 +8,7 @@ class PreciseFlexError(Exception):
 
 class PreciseFlexBackend(ArmBackend):
   """UNTESTED - Backend for the PreciseFlex robotic arm"""
-  def __init__(self, host: str, port: int, timeout=20, profile=1) -> None:
+  def __init__(self, host: str, port: int = 10100, timeout=20, profile=1) -> None:
     super().__init__()
     self.host = host
     self.port = port
