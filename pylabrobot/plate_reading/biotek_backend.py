@@ -43,6 +43,7 @@ from pylabrobot.plate_reading.standard import (
   Gain,
   Image,
   ImagingMode,
+  ImagingResult,
   Objective,
 )
 
@@ -788,7 +789,7 @@ class Cytation5Backend(ImageReaderBackend):
   async def set_focus(self, focal_position: FocalPosition):
     """focus position in mm"""
 
-    if focal_position == "auto":
+    if focal_position == "machine-auto":
       await self.auto_focus()
       return
 
@@ -882,7 +883,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
-      images = await self.capture(  # TODO: _acquire_image
+      result = await self.capture(  # TODO: _acquire_image
         plate=plate,
         row=row,
         column=column,
@@ -892,7 +893,7 @@ class Cytation5Backend(ImageReaderBackend):
         exposure_time=exposure,
         gain=gain,
       )
-      image = images[0]  # self.capture returns List now
+      image = result.images[0]
 
       if not CV2_AVAILABLE:
         raise RuntimeError(
@@ -917,7 +918,7 @@ class Cytation5Backend(ImageReaderBackend):
       func=evaluate_focus,
       a=focus_min,
       b=focus_max,
-      tol=0.01,
+      tol=0.001,  # 1 micron
       timeout=timeout,
     )
     self._focal_height = best_focal_height
@@ -938,7 +939,7 @@ class Cytation5Backend(ImageReaderBackend):
     )
 
   async def set_exposure(self, exposure: Exposure):
-    """exposure (integration time) in ms, or "auto" """
+    """exposure (integration time) in ms, or "machine-auto" """
 
     if exposure == self._exposure:
       logger.debug("Exposure time is already set to %s", exposure)
@@ -949,9 +950,9 @@ class Cytation5Backend(ImageReaderBackend):
 
     # either set auto exposure to continuous, or turn off
     if isinstance(exposure, str):
-      if exposure == "auto":
+      if exposure == "machine-auto":
         await self.set_auto_exposure("continuous")
-        self._exposure = "auto"
+        self._exposure = "machine-auto"
         return
       raise ValueError("exposure must be a number or 'auto'")
     self.cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
@@ -980,7 +981,7 @@ class Cytation5Backend(ImageReaderBackend):
     await self.set_position(0, 0)
 
   async def set_gain(self, gain: Gain):
-    """gain of unknown units, or "auto" """
+    """gain of unknown units, or "machine-auto" """
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
@@ -988,7 +989,7 @@ class Cytation5Backend(ImageReaderBackend):
       logger.debug("Gain is already set to %s", gain)
       return
 
-    if not (gain == "auto" or 0 <= gain <= 30):
+    if not (gain == "machine-auto" or 0 <= gain <= 30):
       raise ValueError("gain must be between 0 and 30 (inclusive), or 'auto'")
 
     nodemap = self.cam.GetNodeMap()
@@ -999,14 +1000,14 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError("unable to set automatic gain")
     node = (
       PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Continuous"))
-      if gain == "auto"
+      if gain == "machine-auto"
       else PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Off"))
     )
     if not PySpin.IsReadable(node):
       raise RuntimeError("unable to set automatic gain (enum entry retrieval)")
     node_gain_auto.SetIntValue(node.GetValue())
 
-    if not gain == "auto":
+    if not gain == "machine-auto":
       node_gain = PySpin.CFloatPtr(nodemap.GetNode("Gain"))
       if (
         not PySpin.IsReadable(node_gain)
@@ -1158,14 +1159,14 @@ class Cytation5Backend(ImageReaderBackend):
     overlap: Optional[float] = None,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
-  ) -> List[Image]:
+  ) -> ImagingResult:
     """Capture image using the microscope
 
     speed: 211 ms ± 331 μs per loop (mean ± std. dev. of 7 runs, 10 loops each)
 
     Args:
-      exposure_time: exposure time in ms, or `"auto"`
-      focal_height: focal height in mm, or `"auto"`
+      exposure_time: exposure time in ms, or `"machine-auto"`
+      focal_height: focal height in mm, or `"machine-auto"`
       coverage: coverage of the well, either `"full"` or a tuple of `(num_rows, num_columns)`.
         Around `center_position`.
       center_position: center position of the well, in mm from the center of the selected well. If
@@ -1234,4 +1235,8 @@ class Cytation5Backend(ImageReaderBackend):
         )
       )
 
-    return images
+    exposure_ms = float(self.cam.ExposureTime.GetValue()) / 1000
+    assert self._focal_height is not None, "Focal height not set. Run set_focus() first."
+    focal_height_val = float(self._focal_height)
+
+    return ImagingResult(images=images, exposure_time=exposure_ms, focal_height=focal_height_val)

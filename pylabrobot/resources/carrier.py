@@ -52,6 +52,10 @@ class Carrier(Resource, Generic[S]):
     """The number of sites on this carrier."""
     return len(self.sites)
 
+  def __len__(self) -> int:
+    """Return the number of sites on this carrier."""
+    return len(self.sites)
+
   def assign_child_resource(
     self,
     resource: Resource,

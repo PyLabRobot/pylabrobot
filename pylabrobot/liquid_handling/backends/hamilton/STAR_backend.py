@@ -2239,7 +2239,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     jet: bool = False,
     blow_out: bool = False,
     use_lld: bool = False,
-    liquid_height: float = 0,
     air_transport_retract_dist: float = 10,
     hlc: Optional[HamiltonLiquidClass] = None,
     aspiration_type: int = 0,
@@ -2277,7 +2276,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         automatically.
 
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
-      liquid_height: The height of the liquid above the bottom of the well, in millimeters.
       air_transport_retract_dist: The distance to retract after aspirating, in millimeters.
 
       aspiration_type: The type of aspiration to perform. (0 = simple; 1 = sequence; 2 = cup emptied
@@ -2332,7 +2330,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip = aspiration.tips[0]
 
-    liquid_height = position.z + liquid_height
+    liquid_height = position.z + (aspiration.liquid_height or 0)
 
     liquid_to_be_aspirated = Liquid.WATER
     if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
@@ -2430,7 +2428,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     empty: bool = False,
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
-    liquid_height: float = 0,
     dispense_mode: Optional[int] = None,
     air_transport_retract_dist=10,
     use_lld: bool = False,
@@ -2462,7 +2459,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dispense: The Dispense command to execute.
       jet: Whether to use jet dispense mode.
       blow_out: Whether to blow out after dispensing.
-      liquid_height: The height of the liquid in the well, in mm. Used if LLD is not used.
       dispense_mode: The dispense mode to use. 0 = Partial volume in jet mode 1 = Blow out in jet
         mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix position.
         If `None`, the mode will be determined based on the `jet`, `empty`, and `blow_out`
@@ -2518,7 +2514,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     tip = dispense.tips[0]
 
-    liquid_height = position.z + liquid_height
+    liquid_height = position.z + (dispense.liquid_height or 0)
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 

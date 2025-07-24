@@ -8,8 +8,8 @@ from pylabrobot.plate_reading.standard import (
   Exposure,
   FocalPosition,
   Gain,
-  Image,
   ImagingMode,
+  ImagingResult,
   Objective,
 )
 from pylabrobot.resources.plate import Plate
@@ -69,7 +69,7 @@ class ImagerBackend(MachineBackend, metaclass=ABCMeta):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
-  ) -> List[Image]:
+  ) -> ImagingResult:
     """Capture an image of the plate in the specified mode."""
 
 
