@@ -2318,7 +2318,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
       if rot.z % 360 == 180:
         ref_well = plate.get_well("H12")
-      elif rot.z % 360 in (0, 360):
+      elif rot.z % 360 == 0:
         ref_well = plate.get_well("A1")
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
@@ -2512,7 +2512,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
       if rot.z % 360 == 180:
         ref_well = plate.get_well("H12")
-      elif rot.z % 360 in (0, 360):
+      elif rot.z % 360 == 0:
         ref_well = plate.get_well("A1")
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
