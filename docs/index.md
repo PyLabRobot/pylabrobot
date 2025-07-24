@@ -69,6 +69,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://x.company/
 ```
 
+```{image} /img/used_by/logo_constructive.png
+:alt: Constructive Bio
+:class: company constructive
+:target: https://www.constructive.bio
+```
+
 ```{raw} html
 <style>
 .company {
@@ -78,6 +84,9 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 }
 .tt {
   max-width: 240px; /* T-Therapeutics logo is wider */
+}
+.constructive {
+  max-width: 300px; /* Constructive Bio logo is wider */
 }
 </style>
 ```
