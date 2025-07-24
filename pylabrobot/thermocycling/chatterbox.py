@@ -1,5 +1,3 @@
-"""A chatterbox backend for a thermocycler."""
-
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -166,13 +164,17 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
   async def get_block_current_temperature(self) -> float:
     return self._state.block_temp
 
-  async def get_block_target_temperature(self) -> Optional[float]:
+  async def get_block_target_temperature(self) -> float:
+    if self._state.block_target is None:
+      raise RuntimeError("Block target temperature is not set. Is a cycle running?")
     return self._state.block_target
 
   async def get_lid_current_temperature(self) -> float:
     return self._state.lid_temp
 
-  async def get_lid_target_temperature(self) -> Optional[float]:
+  async def get_lid_target_temperature(self) -> float:
+    if self._state.lid_target is None:
+      raise RuntimeError("Lid target temperature is not set. Is a cycle running?")
     return self._state.lid_target
 
   async def get_lid_status(self) -> str:
