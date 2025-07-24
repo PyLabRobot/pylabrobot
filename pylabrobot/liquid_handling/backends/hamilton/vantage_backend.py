@@ -31,6 +31,7 @@ from pylabrobot.resources import (
   Coordinate,
   Liquid,
   Resource,
+  Plate,
   Tip,
   TipRack,
   Well,
@@ -1047,7 +1048,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if isinstance(aspiration, MultiHeadAspirationPlate):
       plate = aspiration.wells[0].parent
-      assert plate is not None
+      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
@@ -1206,7 +1207,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if isinstance(dispense, MultiHeadDispensePlate):
       plate = dispense.wells[0].parent
-      assert plate is not None
+      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")

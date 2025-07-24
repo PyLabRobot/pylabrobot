@@ -52,6 +52,7 @@ from pylabrobot.liquid_handling.utils import (
 from pylabrobot.resources import (
   Carrier,
   Coordinate,
+  Plate,
   Resource,
   Tip,
   TipRack,
@@ -2311,7 +2312,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # get the first well and tip as representatives
     if isinstance(aspiration, MultiHeadAspirationPlate):
       plate = aspiration.wells[0].parent
-      assert plate is not None
+      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
@@ -2504,8 +2505,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # get the first well and tip as representatives
     if isinstance(dispense, MultiHeadDispensePlate):
-      plate = dispense.wells[0].parent
-      assert plate is not None
+      plate = Plate, dispense.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
       rot = plate.get_absolute_rotation()
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
