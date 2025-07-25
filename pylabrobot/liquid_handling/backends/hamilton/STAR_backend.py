@@ -5775,7 +5775,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
-    assert -271.0 <= x <= 300.0, "x_position must be between -271 and 300"
+    assert -271.0 <= x <= 974.0, "x_position must be between -271 and 974"
     assert 108.0 <= y <= 560.0, "y_position must be between 108 and 560"
     assert 0 <= y <= 560.0, "z_position must be between 0 and 560"
     assert (
