@@ -75,7 +75,7 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.constructive.bio
 ```
 
-```{image} /img/used_by/logo_constructive.png
+```{image} /img/used_by/logo_ukm.png
 :alt: UKM Biofoundry
 :class: company
 :target: https://www.ukm.my/inbiosis/en/ukm-biofoundry/
