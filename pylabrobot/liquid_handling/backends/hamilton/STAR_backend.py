@@ -5775,9 +5775,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
+    # TODO: these are values for a STAR. Find them for a STARlet.
     assert -271.0 <= x <= 974.0, "x_position must be between -271 and 974"
     assert 108.0 <= y <= 560.0, "y_position must be between 108 and 560"
-    assert 0 <= y <= 560.0, "z_position must be between 0 and 560"
+    assert 180.5 <= z <= 342.5, "z_position must be between 180.5 and 342.5"
     assert (
       0 <= minimum_height_at_beginning_of_a_command <= 342.5
     ), "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
