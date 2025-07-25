@@ -5761,13 +5761,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     x: float = 0,
     y: float = 0,
-    z: float = 0,
+    z: float = 342.5,
     minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
     """Move CoRe 96 Head to defined position
 
     Args:
-      x: X-Position [1mm] of well A1. Must be between -3000.0 and 3000.0. Default 0.
+      x: X-Position [1mm] of well A1. Must be between -300.0 and 300.0. Default 0.
       y: Y-Position [1mm]. Must be between 108.0 and 560.0. Default 0.
       z: Z-Position [1mm]. Must be between 0 and 560.0. Default 0.
       minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
@@ -5775,12 +5775,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
-    assert -3000.0 <= x <= 3000.0, "x_position must be between -3000 and 3000"
-    assert 108.0 <= y <= 560.0, "y_position must be between 1080 and 5600"
-    assert 0 <= y <= 560.0, "z_position must be between 0 and 5600"
+    assert -300.0 <= x <= 300.0, "x_position must be between -300 and 300"
+    assert 108.0 <= y <= 560.0, "y_position must be between 108 and 560"
+    assert 0 <= y <= 560.0, "z_position must be between 0 and 560"
     assert (
       0 <= minimum_height_at_beginning_of_a_command <= 342.5
-    ), "minimum_height_at_beginning_of_a_command must be between 0 and 3425"
+    ), "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
 
     return await self.send_command(
       module="C0",
