@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.is\_profile\_running
+=======================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.is_profile_running
