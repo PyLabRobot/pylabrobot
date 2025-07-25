@@ -375,6 +375,16 @@ class Resource:
       return self
     return self.parent.get_root()
 
+  def is_in_subtree_of(self, other: Resource) -> bool:
+    """Return ``True`` if ``self`` is in the subtree rooted at ``other``."""
+
+    current: Optional[Resource] = self
+    while current is not None:
+      if current is other:
+        return True
+      current = current.parent
+    return False
+
   def _check_naming_conflicts(self, resource: Resource):
     """Recursively check for naming conflicts in the resource tree."""
     if resource.name == self.name:
