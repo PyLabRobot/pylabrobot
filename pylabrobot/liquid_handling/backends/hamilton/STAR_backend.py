@@ -5759,8 +5759,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_core_96_head_to_defined_position(
     self,
-    x: float = 0,
-    y: float = 0,
+    x: float,
+    y: float,
     z: float = 342.5,
     minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
