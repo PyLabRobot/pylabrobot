@@ -114,12 +114,16 @@ class CytomatBackend(IncubatorBackend):
         logger.error("Command %s failed with: '%s'", command_str, resp)
         if value == "03":
           error_register = await self.get_error_register()
+          await self.reset_error_register()
           raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
         if int(value, base=16) in error_map:
+          await self.reset_error_register()
           raise error_map[int(value, base=16)]
+        await self.reset_error_register()
         raise Exception(f"Unknown cytomat error code in response: {resp}")
 
       logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
+      await self.reset_error_register()
       raise Exception(f"Unknown response from cytomat: {resp}")
 
     # Cytomats sometimes return a busy or command not recognized error even when the overview
@@ -136,6 +140,7 @@ class CytomatBackend(IncubatorBackend):
         await asyncio.sleep(0.1)
         continue
     assert exc is not None
+    await self.reset_error_register()
     raise exc
 
   async def send_action(
@@ -187,6 +192,7 @@ class CytomatBackend(IncubatorBackend):
         await asyncio.sleep(0.1)
         continue
       return OverviewRegisterState.from_resp(resp)
+    await self.reset_error_register()
     raise CytomatCommandUnknownError("Could not get overview register")
 
   async def get_warning_register(self) -> WarningRegister:
@@ -195,6 +201,7 @@ class CytomatBackend(IncubatorBackend):
       if hex_value == member.value:
         return member
 
+    await self.reset_error_register()
     raise Exception(f"Unknown warning register value: {hex_value}")
 
   async def get_error_register(self) -> ErrorRegister:
@@ -203,6 +210,7 @@ class CytomatBackend(IncubatorBackend):
       if hex_value == member.value:
         return member
 
+    await self.reset_error_register()
     raise Exception(f"Unknown error register value: {hex_value}")
 
   async def reset_error_register(self) -> None:
@@ -334,6 +342,7 @@ class CytomatBackend(IncubatorBackend):
         # handle the error and proceed if desired.
         if overview_register.error_register_set:
           error_register = await self.get_error_register()
+          await self.reset_error_register()
           raise error_register_map[error_register]
         return overview_register
       await asyncio.sleep(1)
