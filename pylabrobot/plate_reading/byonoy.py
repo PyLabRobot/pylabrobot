@@ -53,15 +53,11 @@ class Byonoy(PlateReaderBackend):
   async def _ping_loop(self) -> None:
     """Main ping loop that runs in the background thread."""
     while not self._stop_background.is_set():
-      try:
-        # Only send ping if pings are enabled
-        if self._sending_pings:
-          # Send ping command
-          cmd = "40000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
-          print("> " + cmd + " (background ping)")
-          await self.io.write(bytes.fromhex(cmd))
-      except Exception as e:
-        print(f"Error in background ping: {e}")
+      # Only send ping if pings are enabled
+      if self._sending_pings:
+        # Send ping command
+        cmd = "40000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
+        await self.io.write(bytes.fromhex(cmd))
 
       # Wait for the ping interval or until stop is requested
       self._stop_background.wait(self._ping_interval)
@@ -78,8 +74,6 @@ class Byonoy(PlateReaderBackend):
       chunk = await self.io.read(64, timeout=timeout)
       if not chunk:
         break
-      else:
-        print("< ", chunk.hex())
       data += chunk
 
       if chunk.startswith(b"\x70"):
@@ -99,8 +93,7 @@ class Byonoy(PlateReaderBackend):
       if len(data) > 64:
         break
       if time.time() - t0 > timeout:
-        print("Timeout waiting for response")
-        return data
+        raise TimeoutError("Timeout waiting for response")
       time.sleep(0.1)
     return data
 
@@ -152,7 +145,6 @@ class Byonoy(PlateReaderBackend):
     )
 
     t0 = time.time()
-    r = b""
     reading_data = False
     data = b""
 
@@ -169,7 +161,6 @@ class Byonoy(PlateReaderBackend):
         )
         in chunk
       ):
-        print("Received result")
         reading_data = True
         self._stop_background_pings()
 
@@ -180,35 +171,50 @@ class Byonoy(PlateReaderBackend):
           break
 
     cmd = "40000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
-    print("> " + cmd)
     await self.io.write(bytes.fromhex(cmd))
 
     self._start_background_pings()
 
     # split data in 64 byte chunks
-    data_chunks = [data[i : i + 64] for i in range(0, len(data), 64)]
+    start = 64 * 5
+    blob_size = 64 * 9
+    num_blobs = 8
+    blobs = [data[start + i * blob_size : start + (i + 1) * blob_size] for i in range(num_blobs)]
+    (
+      hybrid_result_b,
+      counting_result_b,
+      sampling_result_b,
+      micro_counting_result_b,
+      micro_integration_result_b,
+      repetition_count_b,
+      integration_time_b,
+      below_breakdown_measurement_b,
+    ) = blobs
 
-    measurements = []
-    reading_measurements = False
-    read_n_data_packets = 0
-    for line in data_chunks:
-      if reading_measurements:
-        segment = line
-        measurements.append(segment)
-        read_n_data_packets += 1
+    def get_floats(data):
+      """Extract floats from a 9 * 64 byte chunk.
+      First 64 bytes are ignored.
+      Then for each 64 byte chunk, the first 12 and lat 4 bytes are ignored,
+      """
+      chunks64 = [data[i : i + 64] for i in range(0, len(data), 64)]
+      floats = []
+      for chunk in chunks64[1:]:
+        float_bytes = chunk[12:-8]
+        floats.extend(
+          [struct.unpack("f", float_bytes[i : i + 4])[0] for i in range(0, len(float_bytes), 4)]
+        )
+      return floats
 
-      if b"hybrid result" in line:
-        reading_measurements = True
+    hybrid_result = get_floats(hybrid_result_b)
+    _ = get_floats(counting_result_b)
+    _ = get_floats(sampling_result_b)
+    _ = get_floats(micro_counting_result_b)  # don't know if they are floats
+    _ = get_floats(micro_integration_result_b)  # don't know if they are floats
+    _ = get_floats(repetition_count_b)
+    _ = get_floats(integration_time_b)
+    _ = get_floats(below_breakdown_measurement_b)
 
-      if read_n_data_packets == 8:
-        break
-
-    floats = [
-      f
-      for line in [l[12:-4] for l in measurements]
-      for f in struct.unpack("f" * (len(line) // 4), line)
-    ]
-    return floats
+    return hybrid_result
 
   async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
     """Read the absorbance from the plate reader. This should return a list of lists, where the
