@@ -58,20 +58,20 @@ class HID(IOBase):
       self._executor.shutdown(wait=True)
       self._executor = None
 
-  async def write(self, data: bytes, report_id: bytes = b'\x00'):
-    """ Writes data to the HID device.
+  async def write(self, data: bytes, report_id: bytes = b"\x00"):
+    """Writes data to the HID device.
 
     There is a non-obvious part in the HID API:
 
-    "The first byte of @p data[] must contain the Report ID. For
-			devices which only support a single report, this must be set
-			to 0x0. The remaining bytes contain the report data. Since
-			the Report ID is mandatory, calls to hid_write() will always
-			contain one more byte than the report contains. For example,
-			if a hid report is 16 bytes long, 17 bytes must be passed to
-			hid_write(), the Report ID (or 0x0, for devices with a
-			single report), followed by the report data (16 bytes). In
-			this example, the length passed in would be 17.
+    "The first byte of \@p data[] must contain the Report ID. For
+    devices which only support a single report, this must be set
+    to 0x0. The remaining bytes contain the report data. Since
+    the Report ID is mandatory, calls to hid_write() will always
+    contain one more byte than the report contains. For example,
+    if a hid report is 16 bytes long, 17 bytes must be passed to
+    hid_write(), the Report ID (or 0x0, for devices with a
+    single report), followed by the report data (16 bytes). In
+    this example, the length passed in would be 17.
     "
     https://github.com/libusb/hidapi/blob/9904cbe/hidapi/hidapi.h#L305
 
@@ -91,7 +91,9 @@ class HID(IOBase):
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _write)
-    logger.log(LOG_LEVEL_IO, "[%s] write %s (report_id: %s)", self._unique_id, data, report_id.hex())
+    logger.log(
+      LOG_LEVEL_IO, "[%s] write %s (report_id: %s)", self._unique_id, data, report_id.hex()
+    )
     capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=write_data.hex()))
     return r
 
@@ -146,7 +148,7 @@ class HIDValidator(HID):
     ):
       raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
 
-  async def write(self, data: bytes, report_id: bytes = b'\x00'):
+  async def write(self, data: bytes, report_id: bytes = b"\x00"):
     next_command = HIDCommand(**self.cr.next_command())
     if (
       not next_command.module == "hid"
