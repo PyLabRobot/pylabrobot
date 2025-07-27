@@ -14,7 +14,8 @@ class Byonoy(PlateReaderBackend):
   absorbance, or fluorescence from a plate."""
 
   def __init__(self) -> None:
-    self.io = HID(vid=0x16D0, pid=0x1199)  # 16d0:119B for fluorescence
+    # self.io = HID(vid=0x16D0, pid=0x1199)  # 16d0:119B for fluorescence
+    self.io = HID(vid=0x16D0, pid=0x119B)  # 16d0:119B for fluorescence
     self._background_thread: Optional[threading.Thread] = None
     self._stop_background = threading.Event()
     self._ping_interval = 1.0  # Send ping every second
@@ -68,22 +69,6 @@ class Byonoy(PlateReaderBackend):
   def _stop_background_pings(self) -> None:
     self._sending_pings = False
 
-  async def _read_until_empty(self, timeout=30):
-    data = b""
-    while True:
-      chunk = await self.io.read(64, timeout=timeout)
-      if not chunk:
-        break
-      data += chunk
-
-      if chunk.startswith(b"\x70"):
-        await self.io.write(
-          bytes.fromhex(
-            "20007000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-          )
-        )
-    return data
-
   async def _wait_for_response(self, timeout=30):
     time.sleep(1)
     data = b""
@@ -126,35 +111,38 @@ class Byonoy(PlateReaderBackend):
 
     # TODO: confirm that this particular device can read luminescence
 
-    await self.io.write(
+    await self.send_command(
       bytes.fromhex(
-        "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
+        "0010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
       )
     )
-    await self.io.write(
+    await self.send_command(
       bytes.fromhex(
-        "50000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
+        "0050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
       )
     )
-    await self.io.write(
+    await self.send_command(
       bytes.fromhex(
-        "00020700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
+        "0000020700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
       )
     )
-    await self.io.write(
+    await self.send_command(
       bytes.fromhex(
-        "40000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
-      )
+        "0040000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
+      ),
+      wait_for_response=False
     )
-    await self.io.write(
+    await self.send_command(
       bytes.fromhex(
-        "400380841e00ffffffffffffffffffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
-      )
+        "00400380841e00ffffffffffffffffffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"
+      ),
+      wait_for_response=False
     )
-    await self.io.write(
+    await self.send_command(
       bytes.fromhex(
-        "40000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
-      )
+        "0040000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
+      ),
+      wait_for_response=False
     )
 
     t0 = time.time()
@@ -166,7 +154,7 @@ class Byonoy(PlateReaderBackend):
       if time.time() - t0 > 120:
         break
 
-      chunk = await self._read_until_empty(timeout=30)
+      chunk = await self.io.read(64, timeout=30)
 
       if (
         bytes.fromhex(
@@ -189,7 +177,8 @@ class Byonoy(PlateReaderBackend):
     self._start_background_pings()
 
     # split data in 64 byte chunks
-    start = 64 * 5
+    chunks = [data[i : i + 64] for i in range(0, len(data), 64)]
+    start = 64 * (chunks.index(bytes.fromhex("30000000000034000000526573756c74732020546f7020526561646f75740a0a0000000000000000000000000000000000000000000000000000000000000000")) + 1)
     blob_size = 64 * 9
     num_blobs = 8
     blobs = [data[start + i * blob_size : start + (i + 1) * blob_size] for i in range(num_blobs)]
@@ -232,6 +221,14 @@ class Byonoy(PlateReaderBackend):
         response = await self.io.read(64, timeout=30)
         if len(response) == 0:
           continue
+
+        if True:
+          if response.startswith(b"\x70"):
+            await self.io.write(
+              bytes.fromhex(
+                "20007000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+              )
+            )
 
         # if the first 2 bytes do not match, we continue reading
         if not response.startswith(should_start):
