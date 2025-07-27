@@ -14,7 +14,7 @@ class Byonoy(PlateReaderBackend):
   absorbance, or fluorescence from a plate."""
 
   def __init__(self) -> None:
-    self.io = HID(vid=0x16D0, pid=0x119B)
+    self.io = HID(vid=0x16D0, pid=0x1199)  # 16d0:119B for fluorescence
     self._background_thread: Optional[threading.Thread] = None
     self._stop_background = threading.Event()
     self._ping_interval = 1.0  # Send ping every second
@@ -53,13 +53,13 @@ class Byonoy(PlateReaderBackend):
   async def _ping_loop(self) -> None:
     """Main ping loop that runs in the background thread."""
     while not self._stop_background.is_set():
-      # Only send ping if pings are enabled
       if self._sending_pings:
-        # Send ping command
-        cmd = "40000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
+        # TODO: are they the same?
+        # cmd = "40000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040" # fluor?
+        cmd = "40000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040" # abs?
         await self.io.write(bytes.fromhex(cmd))
+        # don't read in background thread, data might get lost here
 
-      # Wait for the ping interval or until stop is requested
       self._stop_background.wait(self._ping_interval)
 
   def _start_background_pings(self) -> None:
@@ -89,8 +89,8 @@ class Byonoy(PlateReaderBackend):
     data = b""
     t0 = time.time()
     while True:
-      data += await self._read_until_empty(timeout=timeout - (time.time() - t0))
-      if len(data) > 64:
+      data += await self.io.read(64, timeout=timeout - (time.time() - t0))
+      if len(data) >= 64:
         break
       if time.time() - t0 > timeout:
         raise TimeoutError("Timeout waiting for response")
@@ -106,6 +106,19 @@ class Byonoy(PlateReaderBackend):
     raise NotImplementedError(
       "byonoy cannot close by itself. you need to move the top module using a robot arm."
     )
+
+  def _get_floats(self, data):
+    """Extract floats from a 8 * 64 byte chunk.
+    Then for each 64 byte chunk, the first 12 and last 4 bytes are ignored,
+    """
+    chunks64 = [data[i : i + 64] for i in range(0, len(data), 64)]
+    floats = []
+    for chunk in chunks64:
+      float_bytes = chunk[12:-4] # fluor is 8?
+      floats.extend(
+        [struct.unpack("f", float_bytes[i : i + 4])[0] for i in range(0, len(float_bytes), 4)]
+      )
+    return floats
 
   async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
     """Read the luminescence from the plate reader. This should return a list of lists, where the
@@ -191,36 +204,114 @@ class Byonoy(PlateReaderBackend):
       below_breakdown_measurement_b,
     ) = blobs
 
-    def get_floats(data):
-      """Extract floats from a 9 * 64 byte chunk.
-      First 64 bytes are ignored.
-      Then for each 64 byte chunk, the first 12 and lat 4 bytes are ignored,
-      """
-      chunks64 = [data[i : i + 64] for i in range(0, len(data), 64)]
-      floats = []
-      for chunk in chunks64[1:]:
-        float_bytes = chunk[12:-8]
-        floats.extend(
-          [struct.unpack("f", float_bytes[i : i + 4])[0] for i in range(0, len(float_bytes), 4)]
-        )
-      return floats
-
-    hybrid_result = get_floats(hybrid_result_b)
-    _ = get_floats(counting_result_b)
-    _ = get_floats(sampling_result_b)
-    _ = get_floats(micro_counting_result_b)  # don't know if they are floats
-    _ = get_floats(micro_integration_result_b)  # don't know if they are floats
-    _ = get_floats(repetition_count_b)
-    _ = get_floats(integration_time_b)
-    _ = get_floats(below_breakdown_measurement_b)
+    hybrid_result = self._get_floats(hybrid_result_b[64:])
+    _ = self._get_floats(counting_result_b[64:])
+    _ = self._get_floats(sampling_result_b[64:])
+    _ = self._get_floats(micro_counting_result_b[64:])  # don't know if they are floats
+    _ = self._get_floats(micro_integration_result_b[64:])  # don't know if they are floats
+    _ = self._get_floats(repetition_count_b[64:])
+    _ = self._get_floats(integration_time_b[64:])
+    _ = self._get_floats(below_breakdown_measurement_b[64:])
 
     return hybrid_result
+
+  async def send_command(self, command: bytes, wait_for_response: bool = True) -> Optional[bytes]:
+    await self.io.write(command)
+    if wait_for_response:
+      response = b""
+
+      if command.startswith(bytes.fromhex("004000")):
+        should_start = bytes.fromhex("0005")
+      elif command.startswith(bytes.fromhex("002003")):
+        should_start = bytes.fromhex("3000")
+      else:
+        should_start = command[1:3] # ignore the Report ID byte. FIXME
+
+      # responses that start with 0x20 are just status, we ignore those
+      while len(response) == 0 or response.startswith(b"\x20"):
+        response = await self.io.read(64, timeout=30)
+        if len(response) == 0:
+          continue
+
+        # if the first 2 bytes do not match, we continue reading
+        if not response.startswith(should_start):
+          response = b""
+          continue
+      return response
+
+  async def get_available_absorbance_wavelengths(self) -> List[float]:
+    """Get the available absorbance wavelengths from the plate reader. Assumes this plate reader can read absorbance."""
+
+    available_wavelengths_r = await self.send_command(
+      bytes.fromhex(
+        "0030030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"
+      ),
+      wait_for_response=True,
+    )
+    assert available_wavelengths_r is not None, "Failed to get available wavelengths."
+    # cut out the first 2 bytes, then read the next 2 bytes as an integer
+    # 64 - 4 = 60. 60/2 = 30 16 bit integers
+    assert available_wavelengths_r.startswith(bytes.fromhex("3003"))
+    available_wavelengths = [
+      struct.unpack("H", available_wavelengths_r[i : i + 2])[0]
+      for i in range(2, 62, 2)
+    ]
+    available_wavelengths = [w for w in available_wavelengths if w != 0]
+    return available_wavelengths
 
   async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
     """Read the absorbance from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
 
-    # TODO: confirm that this particular device can read absorbance
+    await self.send_command(bytes.fromhex("0010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"))
+    await self.send_command(bytes.fromhex("0050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"))
+    await self.send_command(bytes.fromhex("0000020700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"))
+    # above this it checks if absorbance is supported. which command?
+
+    available_wavelengths = await self.get_available_absorbance_wavelengths()
+    if wavelength not in available_wavelengths:
+      raise ValueError(
+        f"Wavelength {wavelength} nm is not supported by this plate reader. "
+        f"Available wavelengths: {available_wavelengths}"
+      )
+
+    await self.send_command(bytes.fromhex("0000030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"))
+    await self.send_command(bytes.fromhex("0020035802000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"))
+    # first b"Received REP_ABS_TRIGGER_MEASUREMENT_OUT" response
+    await self.send_command(bytes.fromhex("0040000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"))
+    await self.send_command(bytes.fromhex("0000030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"))
+    await self.send_command(bytes.fromhex("0000030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"))
+    await self.send_command(bytes.fromhex("0000020700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"))
+    await self.send_command(bytes.fromhex("0020035802000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"))
+    await self.send_command(bytes.fromhex("0040000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008040"), wait_for_response=False)
+    self._stop_background_pings()
+
+    t0 = time.time()
+    data = b""
+
+    while True:
+      # read for 2 minutes max
+      if time.time() - t0 > 120:
+        break
+
+      chunk = await self.io.read(64, timeout=30)
+      data += chunk
+
+      if b"Slots" in chunk:
+        break
+
+    await self.send_command(bytes.fromhex("40000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040"), wait_for_response=False)
+
+    self._start_background_pings()
+
+    # split into 64 byte chunks
+    # get the 8 blobs that start with 0x0005
+    # splitting and then joining is not a great pattern.
+    blobs = [data[i : i + 64] for i in range(0, len(data), 64) if data[i:i+2] == b"\x00\x05"]
+    if len(blobs) != 8:
+      raise ValueError("Not enough blobs received. Expected 8, got {}".format(len(blobs)))
+    floats = self._get_floats(b"".join(blobs))
+    return floats
 
   async def read_fluorescence(
     self,
