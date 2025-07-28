@@ -9,7 +9,7 @@ from xml.dom import minidom
 from .backend import thermocyclerBackend
 
 
-class PCRProtocol:
+class ProflexPCRProtocol:
   def __init__(
     self,
     volume=50,
@@ -266,33 +266,28 @@ class Proflex(thermocyclerBackend):
     self.ip = ip
     self.port = port
     self.device_shared_secret = shared_secret
-    self.socket_reader = None
-    self.socket_writer = None
+    self._socket_reader = None
+    self._socket_writer = None
     self.num_blocks = 1
     self.num_temp_zones = 0
     self.available_blocks = []
-    self.debug = debug
-    self.logger = logging.getLogger()
+    self.logger = logging.getLogger("pylabrobot.thermocycler.proflex")
     self.current_run = None
     self.running_block = None
     self.prot_time_elapsed = 0
     self.prot_time_remaining = 0
-    if self.debug:
-      logging.basicConfig(level=logging.DEBUG)
-    else:
-      logging.basicConfig(level=logging.INFO)
 
   async def connect_device(self):
     """Establish a connection to the thermocycler."""
-    self.socket_reader, self.socket_writer = await asyncio.open_connection(self.ip, self.port)
+    self._socket_reader, self._socket_writer = await asyncio.open_connection(self.ip, self.port)
 
   async def disconnect_device(self):
     """Close the connection to the thermocycler."""
-    if self.socket_writer:
-      self.socket_writer.close()
-      await self.socket_writer.wait_closed()
-      self.socket_reader = None
-      self.socket_writer = None
+    if self._socket_writer:
+      self._socket_writer.close()
+      await self._socket_writer.wait_closed()
+      self._socket_reader = None
+      self._socket_writer = None
 
   def _get_auth_token(self, challenge: str):
     challenge_bytes = challenge.encode("utf-8")
@@ -429,13 +424,13 @@ class Proflex(thermocyclerBackend):
     return result
 
   async def _read_response(self, timeout=1, readonce=True):
-    if not self.socket_reader:
+    if not self._socket_reader:
       raise ConnectionError("Socket not connected.")
 
     chunks = []
     while True:
       try:
-        data = await asyncio.wait_for(self.socket_reader.read(1024), timeout=timeout)
+        data = await asyncio.wait_for(self._socket_reader.read(1024), timeout=timeout)
         if not data:
           break
         elif readonce:
@@ -449,20 +444,18 @@ class Proflex(thermocyclerBackend):
         continue
 
     response = "".join(chunks)
-    if self.debug:
-      self.logger.debug("Response received: %s", response)
+    self.logger.debug("Response received: %s", response)
     return response
 
   async def send_command(self, command: str, response_timeout=1, readonce=True):
-    if not self.socket_writer:
+    if not self._socket_writer:
       raise ConnectionError("Socket not connected.")
 
     command += "\r\n"
-    if self.debug:
-      self.logger.debug("Command sent: %s", command.strip())
+    self.logger.debug("Command sent: %s", command.strip())
 
-    self.socket_writer.write(command.encode("ascii"))
-    await self.socket_writer.drain()
+    self._socket_writer.write(command.encode("ascii"))
+    await self._socket_writer.drain()
 
     return await self._read_response(timeout=response_timeout, readonce=readonce)
 
@@ -690,12 +683,12 @@ class Proflex(thermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to power off")
 
-  async def _scpi_write_run_info(self, protocol: PCRProtocol, runName="testrun"):
+  async def _scpi_write_run_info(self, protocol: ProflexPCRProtocol, runName="testrun"):
     xmlfile, tmpfile = protocol.generate_run_info_files()
     await self.scpi_write_file(f"runs:{runName}/{protocol.protocol_name}.method", xmlfile)
     await self.scpi_write_file(f"runs:{runName}/{runName}.tmp", tmpfile)
 
-  async def _scpi_run_protocol(self, protocol: PCRProtocol, runName="testrun", user="Guest"):
+  async def _scpi_run_protocol(self, protocol: ProflexPCRProtocol, runName="testrun", user="Guest"):
     load_res = await self.scpi_send_data(
       protocol.gen_protocol_data(), response_timeout=5, readonce=False
     )
@@ -739,7 +732,7 @@ class Proflex(thermocyclerBackend):
       raise ValueError("Failed to abort protocol")
     logging.info("Protocol aborted")
 
-  async def check_if_running(self, protocol: PCRProtocol):
+  async def check_if_running(self, protocol: ProflexPCRProtocol):
     blockId = protocol.blockId
     progress = await self.scpi_get_run_progress(blockId=blockId)
     if not progress:
@@ -791,7 +784,7 @@ class Proflex(thermocyclerBackend):
       await self.scpi_set_block_idle_temp(temp=blockIdleTemp, blockId=block_index)
       await self.scpi_set_cover_idle_temp(temp=coverIdleTemp, blockId=block_index)
 
-  async def run_protocol(self, protocol: PCRProtocol, runName="testrun", user="Admin"):
+  async def run_protocol(self, protocol: ProflexPCRProtocol, runName="testrun", user="Admin"):
     run_exists = await self.scpi_check_run_exists(runName)
     if run_exists == "False":
       await self.scpi_create_run(runName)
