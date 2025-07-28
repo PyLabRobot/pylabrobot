@@ -1,25 +1,4 @@
-import typing
 from string import ascii_uppercase as LETTERS
-
-
-def string_to_position(
-  position_string: str,
-) -> typing.Tuple[int, int]:
-  raise NotImplementedError("Deprecated.")  # TODO(deprecate-ordered-items)
-
-
-def string_to_index(position_string: str, num_rows: int, num_columns: int) -> int:
-  raise NotImplementedError("Deprecated.")  # TODO(deprecate-ordered-items)
-
-
-def string_to_indices(position_range_string: str, num_rows: int) -> typing.List[int]:
-  raise NotImplementedError("Deprecated.")  # TODO(deprecate-ordered-items)
-
-
-def string_to_pattern(
-  position_range_string: str, num_rows: int, num_columns: int
-) -> typing.List[typing.List[bool]]:
-  raise NotImplementedError("Deprecated.")  # TODO(deprecate-ordered-items)
 
 
 def expand_string_range(range_str: str) -> list:
