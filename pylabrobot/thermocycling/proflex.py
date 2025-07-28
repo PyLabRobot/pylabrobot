@@ -277,13 +277,11 @@ class ProflexBackend(ThermocyclerBackend):
     self.prot_time_elapsed = 0
     self.prot_time_remaining = 0
 
-  async def connect_device(self):
-    """Establish a connection to the thermocycler."""
+  async def _connect_device(self):
     self._socket_reader, self._socket_writer = await asyncio.open_connection(self.ip, self.port)
 
-  async def disconnect_device(self):
-    """Close the connection to the thermocycler."""
-    if self._socket_writer:
+  async def _disconnect_device(self):
+    if self._socket_writer is not None:
       self._socket_writer.close()
       await self._socket_writer.wait_closed()
       self._socket_reader = None
@@ -464,7 +462,7 @@ class ProflexBackend(ThermocyclerBackend):
     return await self.send_command(msg, response_timeout=response_timeout, readonce=readonce)
 
   async def _scpi_authenticate(self):
-    await self.connect_device()
+    await self._connect_device()
     await self._read_response(timeout=5)
     challenge_res = await self.scpi_send_data({"cmd": "CHAL?"})
     challenge = self._parse_scpi_response(challenge_res)["args"][0]
@@ -807,4 +805,4 @@ class ProflexBackend(ThermocyclerBackend):
       asyncio.sleep(10)
     await self.scpi_set_cover_idle_temp(controlEnabled=0, blockId=blockId)
     await self.scpi_set_block_idle_temp(controlEnabled=0, blockId=blockId)
-    await self.disconnect_device()
+    await self._disconnect_device()
