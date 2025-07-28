@@ -453,10 +453,10 @@ class ProflexBackend(ThermocyclerBackend):
       raise ValueError("Access failed")
 
   async def _load_num_blocks_and_type(self):
-    block_present_val = await self.scpi_get_block_presence()
+    block_present_val = await self.get_block_presence()
     if block_present_val == "0":
       raise ValueError("Block not present")
-    self.bid = await self.scpi_get_block_id()
+    self.bid = await self.get_block_id()
     if self.bid == "12":
       self._num_blocks = 1
       self.num_temp_zones = 6
@@ -470,20 +470,20 @@ class ProflexBackend(ThermocyclerBackend):
     await self._scpi_authenticate()
     await self._load_num_blocks_and_type()
     for i in range(1, self._num_blocks + 1):
-      block_error = await self.scpi_get_error(block_id=i)
+      block_error = await self.get_error(block_id=i)
       if block_error != "0":
         raise ValueError(f"Block{i} has error: {block_error}")
-      run_title = await self.scpi_get_run_title(block_id=i)
+      run_title = await self.get_run_title(block_id=i)
       if run_title == "-":
         if i not in self.available_blocks:
           self.available_blocks.append(i)
     return self.available_blocks
 
-  async def scpi_get_block_temps(self, block_id=1):
+  async def get_block_temps(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:TBC:BlockTemperatures?"})
     return self._parse_scpi_response(res)["args"]
 
-  async def scpi_get_sample_temps(self, block_id=1):
+  async def get_sample_temps(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:TBC:SampleTemperatures?"})
     return self._parse_scpi_response(res)["args"]
 
@@ -496,7 +496,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to set nickname")
 
-  async def scpi_set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1):
+  async def set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
     res = await self.send_command(
@@ -508,7 +508,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set block idle temperature")
 
-  async def scpi_set_cover_idle_temp(self, temp: float = 105, control_enabled=1, block_id=1):
+  async def set_cover_idle_temp(self, temp: float = 105, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
@@ -520,7 +520,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set cover idle temperature")
 
-  async def scpi_ramp_block(self, target_temps: list[float], rate: float = 100, block_id=1):
+  async def ramp_block(self, target_temps: list[float], rate: float = 100, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
@@ -530,7 +530,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp block temperature")
 
-  async def scpi_block_ramp_single_temp(self, target_temp: float, rate: float = 100, block_id=1):
+  async def block_ramp_single_temp(self, target_temp: float, rate: float = 100, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
@@ -540,7 +540,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp block temperature")
 
-  async def scpi_cover_ramp(self, target_temp: float, block_id=1):
+  async def cover_ramp(self, target_temp: float, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
@@ -549,24 +549,24 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp cover temperature")
 
-  async def scpi_buzzer_on(self):
+  async def buzzer_on(self):
     res = await self.send_command({"cmd": "BUZZer+"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to turn on buzzer")
 
-  async def scpi_buzzer_off(self):
+  async def buzzer_off(self):
     res = await self.send_command({"cmd": "BUZZer-"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to turn off buzzer")
 
-  async def scpi_continue(self, block_id=1):
+  async def continue_(self, block_id=1):
     for _ in range(3):
       await asyncio.sleep(1)
       res = await self.send_command({"cmd": f"TBC{block_id}:CONTinue"})
       if self._parse_scpi_response(res)["status"] != "OK":
         raise ValueError("Failed to continue from indefinite hold")
 
-  async def scpi_write_file(self, filename: str, data: str, encoding="plain"):
+  async def _write_file(self, filename: str, data: str, encoding="plain"):
     write_res = await self.send_command(
       {
         "cmd": "FILe:WRITe",
@@ -581,19 +581,19 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(write_res)["status"] != "OK":
       raise ValueError("Failed to write file")
 
-  async def scpi_get_block_id(self):
+  async def get_block_id(self):
     res = await self.send_command({"cmd": "TBC:BID?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get block ID")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def scpi_get_block_presence(self):
+  async def get_block_presence(self):
     res = await self.send_command({"cmd": "TBC:BlockPresence?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get block presence")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def scpi_check_run_exists(self, run_name="testrun"):
+  async def check_run_exists(self, run_name="testrun"):
     res = await self.send_command(
       {"cmd": "RUNS:EXISTS?", "args": [run_name], "params": {"type": "folders"}}
     )
@@ -601,19 +601,19 @@ class ProflexBackend(ThermocyclerBackend):
       raise ValueError("Failed to check if run exists")
     return self._parse_scpi_response(res)["args"][1]
 
-  async def scpi_create_run(self, run_name="testrun"):
+  async def create_run(self, run_name="testrun"):
     res = await self.send_command({"cmd": "RUNS:NEW", "args": [run_name]}, response_timeout=10)
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to create run")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def scpi_get_run_title(self, block_id=1):
+  async def get_run_title(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:RUNTitle?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get run title")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def scpi_get_run_progress(self, block_id=1):
+  async def get_run_progress(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:RUNProgress?"})
     parsed_res = self._parse_scpi_response(res)
     if parsed_res["status"] != "OK":
@@ -623,44 +623,44 @@ class ProflexBackend(ThermocyclerBackend):
       return False
     return self._parse_scpi_response(res)["params"]
 
-  async def scpi_get_estimated_run_time(self, block_id=1):
+  async def get_estimated_run_time(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:ESTimatedTime?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get estimated run time")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def scpi_get_elapsed_run_time(self, block_id=1):
+  async def get_elapsed_run_time(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:ELAPsedTime?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get elapsed run time")
     return int(self._parse_scpi_response(res)["args"][0])
 
-  async def scpi_get_remaining_run_time(self, block_id=1):
+  async def get_remaining_run_time(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:REMainingTime?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get remaining run time")
     return int(self._parse_scpi_response(res)["args"][0])
 
-  async def scpi_get_error(self, block_id=1):
+  async def get_error(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:ERROR?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get error")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def scpi_power_on(self):
+  async def power_on(self):
     res = await self.send_command({"cmd": "POWER", "args": ["On"]}, response_timeout=20)
     if res == "" or self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to power on")
 
-  async def scpi_power_off(self):
+  async def power_off(self):
     res = await self.send_command({"cmd": "POWER", "args": ["Off"]})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to power off")
 
   async def _scpi_write_run_info(self, protocol: ProflexPCRProtocol, run_name="testrun"):
     xmlfile, tmpfile = protocol.generate_run_info_files()
-    await self.scpi_write_file(f"runs:{run_name}/{protocol.protocol_name}.method", xmlfile)
-    await self.scpi_write_file(f"runs:{run_name}/{run_name}.tmp", tmpfile)
+    await self._write_file(f"runs:{run_name}/{protocol.protocol_name}.method", xmlfile)
+    await self._write_file(f"runs:{run_name}/{run_name}.tmp", tmpfile)
 
   async def _scpi_run_protocol(
     self, protocol: ProflexPCRProtocol, run_name="testrun", user="Guest"
@@ -694,7 +694,7 @@ class ProflexBackend(ThermocyclerBackend):
       self.logger.error("Protocol failed to start")
       raise ValueError("Protocol failed to start")
 
-    total_time = await self.scpi_get_estimated_run_time(block_id=protocol.block_id)
+    total_time = await self.get_estimated_run_time(block_id=protocol.block_id)
     total_time = float(total_time)
     self.logger.info(f"Estimated run time: {total_time}")
     self.current_run = run_name
@@ -710,7 +710,7 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def check_if_running(self, protocol: ProflexPCRProtocol):
     block_id = protocol.block_id
-    progress = await self.scpi_get_run_progress(block_id=block_id)
+    progress = await self.get_run_progress(block_id=block_id)
     if not progress:
       self.logger.info("Protocol completed")
       return False, "completed", self.prot_time_elapsed, 0
@@ -727,7 +727,7 @@ class ProflexBackend(ThermocyclerBackend):
     if progress["Stage"] != "-" and progress["Step"] != "-":
       if [int(progress["Stage"]), int(progress["Step"])] in protocol.infinite_holds:
         while True:
-          block_temps = await self.scpi_get_block_temps(block_id=block_id)
+          block_temps = await self.get_block_temps(block_id=block_id)
           target_temps = protocol.get_target_temp(int(progress["Stage"]), int(progress["Step"]))
           if all(
             abs(float(block_temps[i]) - target_temps[i]) < 0.5 for i in range(len(block_temps))
@@ -737,9 +737,9 @@ class ProflexBackend(ThermocyclerBackend):
         self.logger.info("Infinite hold")
         return False, "infinite_hold", self.prot_time_elapsed, self.prot_time_remaining
 
-    time_elapsed = await self.scpi_get_elapsed_run_time(block_id=block_id)
+    time_elapsed = await self.get_elapsed_run_time(block_id=block_id)
     self.prot_time_elapsed = time_elapsed
-    remaining_time = await self.scpi_get_remaining_run_time(block_id=block_id)
+    remaining_time = await self.get_remaining_run_time(block_id=block_id)
     self.prot_time_remaining = remaining_time
 
     self.logger.info(f"Elapsed time: {time_elapsed}")
@@ -750,15 +750,15 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def setup(self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None):
     await self._scpi_authenticate()
-    await self.scpi_power_on()
+    await self.power_on()
     await self._load_num_blocks_and_type()
     if blocks_to_setup is None:
       await self._get_available_blocks()
     else:
       self.available_blocks = blocks_to_setup
     for block_index in self.available_blocks:
-      await self.scpi_set_block_idle_temp(temp=block_idle_temp, block_id=block_index)
-      await self.scpi_set_cover_idle_temp(temp=cover_idle_temp, block_id=block_index)
+      await self.set_block_idle_temp(temp=block_idle_temp, block_id=block_index)
+      await self.set_cover_idle_temp(temp=cover_idle_temp, block_id=block_index)
 
   async def open_lid(self):
     raise NotImplementedError("Open lid command is not implemented for Proflex thermocycler")
@@ -767,15 +767,20 @@ class ProflexBackend(ThermocyclerBackend):
     raise NotImplementedError("Close lid command is not implemented for Proflex thermocycler")
 
   async def deactivate_lid(self, block_id: int):
-    return await self.scpi_set_cover_idle_temp(control_enabled=0, block_id=block_id)
+    return await self.set_cover_idle_temp(control_enabled=0, block_id=block_id)
 
   async def deactivate_block(self, block_id: int):
-    return await self.scpi_set_block_idle_temp(control_enabled=0, block_id=block_id)
+    return await self.set_block_idle_temp(control_enabled=0, block_id=block_id)
+
+  async def get_lid_current_temperature(self, block_id=1) -> float:
+    res = await self.send_command({"cmd": f"TBC{block_id}:TBC:CoverTemperatures?"})
+    # TODO: this is a list of floats.
+    return self._parse_scpi_response(res)["args"]
 
   async def run_protocol(self, protocol: ProflexPCRProtocol, run_name="testrun", user="Admin"):
-    run_exists = await self.scpi_check_run_exists(run_name)
+    run_exists = await self.check_run_exists(run_name)
     if run_exists == "False":
-      await self.scpi_create_run(run_name)
+      await self.create_run(run_name)
     else:
       self.logger.warning(f"Run {run_name} already exists")
     await self._scpi_write_run_info(protocol, run_name)
@@ -783,7 +788,7 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def stop(self):
     for block_id in self.running_blocks:
-      is_running = (await self.scpi_get_run_title(block_id=block_id)) != "-"
+      is_running = (await self.get_run_title(block_id=block_id)) != "-"
       if is_running:
         await self._scpi_abort_run(block_id, self.current_run)
         await asyncio.sleep(10)
