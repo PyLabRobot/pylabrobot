@@ -71,18 +71,16 @@ class Socket(IOBase):
       await asyncio.wait_for(self._writer.drain(), timeout=timeout)
 
       logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data.strip())
-      capturer.record(
-        SocketCommand(device_id=self._unique_id, action="write", data=data)
-      )
+      capturer.record(SocketCommand(device_id=self._unique_id, action="write", data=data))
     except asyncio.TimeoutError as exc:
       raise TimeoutError(f"Timeout while writing to socket after {timeout} seconds") from exc
 
-  async def read(self, timeout: Optional[int] = None, readonce=True) -> str:
+  async def read(self, timeout: Optional[int] = None, read_once=True) -> str:
     """Read data from the socket.
     Args:
       timeout: The timeout for reading from the socket in seconds. If None, uses the default
         read_timeout set during initialization.
-      readonce: If True, reads until the first complete message is received. If False, continues
+      read_once: If True, reads until the first complete message is received. If False, continues
         reading until the connection is closed or a timeout occurs.
     """
 
@@ -101,6 +99,8 @@ class Socket(IOBase):
             # Connection closed
             break
           chunks.append(data)
+          if read_once:
+            break
         except asyncio.TimeoutError as exc:
           if chunks:
             # We have some data, return it
@@ -112,9 +112,7 @@ class Socket(IOBase):
 
       response = b"".join(chunks).decode("ascii")
       logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, response.strip())
-      capturer.record(
-        SocketCommand(device_id=self._unique_id, action="read", data=response)
-      )
+      capturer.record(SocketCommand(device_id=self._unique_id, action="read", data=response))
       return response
 
     except UnicodeDecodeError as e:
