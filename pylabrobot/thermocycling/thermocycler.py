@@ -2,12 +2,12 @@
 
 import asyncio
 import time
-from typing import List, Optional, cast
+from typing import List, Optional
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 
 
 class Thermocycler(ResourceHolder, Machine):
@@ -170,9 +170,17 @@ class Thermocycler(ResourceHolder, Machine):
     """Get the lid's target temperature (°C), if supported."""
     return await self.backend.get_lid_target_temperature(**backend_kwargs)
 
-  async def get_lid_status(self, **backend_kwargs) -> str:
-    """Get whether the lid is "open" or "closed"."""
-    return cast(str, await self.backend.get_lid_status(**backend_kwargs))
+  async def get_lid_open(self, **backend_kwargs) -> bool:
+    """Return ``True`` if the lid is open."""
+    return await self.backend.get_lid_open(**backend_kwargs)
+
+  async def get_lid_status(self, **backend_kwargs) -> LidStatus:
+    """Get the lid temperature status."""
+    return await self.backend.get_lid_status(**backend_kwargs)
+
+  async def get_block_status(self, **backend_kwargs) -> BlockStatus:
+    """Get the block status."""
+    return await self.backend.get_block_status(**backend_kwargs)
 
   async def get_hold_time(self, **backend_kwargs) -> float:
     """Get remaining hold time (s) for the current step."""
@@ -205,7 +213,7 @@ class Thermocycler(ResourceHolder, Machine):
     raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
-    """Wait until lid temp reaches target ± tolerance, or status is idle/holding at target."""
+    """Wait until the lid temperature reaches target ± ``tolerance`` or the lid temperature status is idle/holding at target."""
     try:
       target = await self.get_lid_target_temperature(**backend_kwargs)
     except RuntimeError:
