@@ -28,6 +28,8 @@ def mock_backend() -> MagicMock:
   mock.get_lid_current_temperature = AsyncMock(return_value=25.0)
   mock.get_lid_target_temperature = AsyncMock(return_value=None)
   mock.get_lid_open = AsyncMock(return_value=False)
+  mock.get_lid_temperature_status = AsyncMock(return_value="idle")
+  mock.get_block_status = AsyncMock(return_value="idle")
   mock.get_hold_time = AsyncMock(return_value=0.0)
   mock.get_current_cycle_index = AsyncMock(return_value=0)
   mock.get_total_cycle_count = AsyncMock(return_value=0)

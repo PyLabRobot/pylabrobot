@@ -174,6 +174,14 @@ class Thermocycler(ResourceHolder, Machine):
     """Return ``True`` if the lid is open."""
     return await self.backend.get_lid_open()
 
+  async def get_lid_temperature_status(self) -> str:
+    """Get the lid temperature status."""
+    return await self.backend.get_lid_temperature_status()
+
+  async def get_block_status(self) -> str:
+    """Get the block status."""
+    return await self.backend.get_block_status()
+
   async def get_hold_time(self) -> float:
     """Get remaining hold time (s) for the current step."""
     return await self.backend.get_hold_time()
@@ -217,7 +225,8 @@ class Thermocycler(ResourceHolder, Machine):
           return
       else:
         # If no target temperature, check status
-        if not await self.get_lid_open():
+        status = await self.get_lid_temperature_status()
+        if status in ["idle", "holding at target"]:
           return
       await asyncio.sleep(1)
     raise TimeoutError("Lid temperature timeout.")

@@ -57,6 +57,14 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Return ``True`` if the lid is open."""
 
   @abstractmethod
+  async def get_lid_temperature_status(self) -> str:
+    """Get the lid temperature status."""
+
+  @abstractmethod
+  async def get_block_status(self) -> str:
+    """Get the block status."""
+
+  @abstractmethod
   async def get_hold_time(self) -> float:
     """Get remaining hold time in seconds."""
 

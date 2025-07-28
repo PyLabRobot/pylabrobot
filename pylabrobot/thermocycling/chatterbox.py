@@ -179,3 +179,13 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
 
   async def get_lid_open(self) -> bool:
     return self._state.lid_open
+
+  async def get_lid_temperature_status(self) -> str:
+    if self._state.lid_target is not None:
+      return "holding at target"
+    return "idle"
+
+  async def get_block_status(self) -> str:
+    if self._state.block_target is not None:
+      return "holding at target"
+    return "idle"
