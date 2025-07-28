@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
@@ -9,15 +9,27 @@ from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 class ThermocyclerState:
   """The state of the thermocycler."""
 
-  block_temp: float = 25.0
-  lid_temp: float = 25.0
-  block_target: Optional[float] = None
-  lid_target: Optional[float] = None
-  lid_open: bool = True
-  profile: Optional[List[Step]] = None
-  is_profile_running: bool = False
-  current_step_index: int = 0
-  total_steps: int = 0
+  block_temp: List[float]
+  lid_temp: List[float]
+  block_target: Optional[List[float]]
+  lid_target: Optional[List[float]]
+  lid_open: bool
+  profile: Optional[List[Step]]
+  is_profile_running: bool
+  current_step_index: int
+  total_steps: int
+
+  def __init__(self, num_zones: int):
+    """Initialize the thermocycler state with a specified number of zones."""
+    self.block_temp = [25.0] * num_zones
+    self.lid_temp = [25.0] * num_zones
+    self.block_target = None
+    self.lid_target = None
+    self.lid_open = True
+    self.profile = None
+    self.is_profile_running = False
+    self.current_step_index = 0
+    self.total_steps = 0
 
 
 class ThermocyclerChatterboxBackend(ThermocyclerBackend):
@@ -31,10 +43,11 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
   _temp_length = 15
   _hold_length = 15
 
-  def __init__(self, name: str = "thermocycler_chatterbox"):
+  def __init__(self, name: str = "thermocycler_chatterbox", num_zones: int = 1):
     super().__init__()
     self.name = name
-    self._state = ThermocyclerState()
+    self._state = ThermocyclerState(num_zones=num_zones)
+    self.num_zones = num_zones
 
   async def setup(self):
     print("Setting up thermocycler.")
@@ -50,18 +63,28 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print("Closing lid.")
     self._state.lid_open = False
 
-  async def set_block_temperature(self, temperature: float):
-    print(f"Setting block temperature to {temperature:.1f}°C.")
-    self._state.block_target = temperature
-    self._state.block_temp = temperature
+  async def set_block_temperature(self, temperature: List[float]):
+    # Ensure we have the right number of temperatures
+    if len(temperature) != self.num_zones:
+      raise ValueError(f"Expected {self.num_zones} block temperatures, got {len(temperature)}")
+
+    temp_str = ", ".join(f"{t:.1f}" for t in temperature)
+    print(f"Setting block temperature(s) to {temp_str}°C.")
+    self._state.block_target = list(temperature)
+    self._state.block_temp = list(temperature)
     if self._state.is_profile_running:
       print("  - A running profile was cancelled.")
       self._state.is_profile_running = False
 
-  async def set_lid_temperature(self, temperature: float):
-    print(f"Setting lid temperature to {temperature:.1f}°C.")
-    self._state.lid_target = temperature
-    self._state.lid_temp = temperature
+  async def set_lid_temperature(self, temperature: List[float]):
+    # Ensure we have the right number of temperatures
+    if len(temperature) != self.num_zones:
+      raise ValueError(f"Expected {self.num_zones} lid temperatures, got {len(temperature)}")
+
+    temp_str = ", ".join(f"{t:.1f}" for t in temperature)
+    print(f"Setting lid temperature(s) to {temp_str}°C.")
+    self._state.lid_target = list(temperature)
+    self._state.lid_temp = list(temperature)
 
   async def deactivate_block(self):
     print("Deactivating block.")
@@ -112,8 +135,9 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     first_temp = first_step.temperature
     if first_temp is not None:
       print(f"  - Starting Step 1/{self._state.total_steps}: setting block to {first_temp:.1f}°C.")
-      self._state.block_target = first_temp
-      self._state.block_temp = first_temp
+      # Set block target to same temperature for all zones when running profile
+      self._state.block_target = [first_temp] * len(self._state.block_temp)
+      self._state.block_temp = [first_temp] * len(self._state.block_temp)
 
   async def get_hold_time(self) -> float:
     if not self._state.is_profile_running:
@@ -142,8 +166,8 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     self._state.current_step_index = self._state.total_steps - 1
     final_temp = self._state.profile[-1].temperature
     if final_temp is not None:
-      self._state.block_target = final_temp
-      self._state.block_temp = final_temp
+      self._state.block_target = [final_temp] * len(self._state.block_temp)
+      self._state.block_temp = [final_temp] * len(self._state.block_temp)
 
     return 0.0
 
@@ -161,18 +185,18 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
   async def get_total_step_count(self) -> int:
     return self._state.total_steps
 
-  async def get_block_current_temperature(self) -> float:
+  async def get_block_current_temperature(self) -> List[float]:
     return self._state.block_temp
 
-  async def get_block_target_temperature(self) -> float:
+  async def get_block_target_temperature(self) -> List[float]:
     if self._state.block_target is None:
       raise RuntimeError("Block target temperature is not set. Is a cycle running?")
     return self._state.block_target
 
-  async def get_lid_current_temperature(self) -> float:
+  async def get_lid_current_temperature(self) -> List[float]:
     return self._state.lid_temp
 
-  async def get_lid_target_temperature(self) -> float:
+  async def get_lid_target_temperature(self) -> List[float]:
     if self._state.lid_target is None:
       raise RuntimeError("Lid target temperature is not set. Is a cycle running?")
     return self._state.lid_target
