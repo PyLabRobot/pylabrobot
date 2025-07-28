@@ -6,7 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
-from .backend import thermocyclerBackend
+from .backend import ThermocyclerBackend
 
 
 class ProflexPCRProtocol:
@@ -259,7 +259,7 @@ class ProflexPCRProtocol:
     return pretty_xml_as_string, output2_string
 
 
-class Proflex(thermocyclerBackend):
+class ProflexBackend(ThermocyclerBackend):
   """Backend for Proflex thermocycler."""
 
   def __init__(self, ip: str, port: int = 7000, shared_secret: bytes = b"f4ct0rymt55", debug=False):
@@ -783,6 +783,12 @@ class Proflex(thermocyclerBackend):
     for block_index in self.available_blocks:
       await self.scpi_set_block_idle_temp(temp=blockIdleTemp, blockId=block_index)
       await self.scpi_set_cover_idle_temp(temp=coverIdleTemp, blockId=block_index)
+
+  async def open_lid(self):
+    raise NotImplementedError("Open lid command is not implemented for Proflex thermocycler")
+
+  async def close_lid(self):
+    raise NotImplementedError("Close lid command is not implemented for Proflex thermocycler")
 
   async def run_protocol(self, protocol: ProflexPCRProtocol, runName="testrun", user="Admin"):
     run_exists = await self.scpi_check_run_exists(runName)
