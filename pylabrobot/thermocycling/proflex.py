@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import logging
 import re
+from typing import List, Optional
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
@@ -131,8 +132,7 @@ class ProflexPCRProtocol:
     if self.data["multiline"]:
       self.data["_infinite_holds"] = self.infinite_holds
       return self.data
-    else:
-      raise ValueError("No stages added to the protocol")
+    raise ValueError("No stages added to the protocol")
 
   def generate_run_info_files(
     self,
@@ -274,15 +274,9 @@ class ProflexBackend(ThermocyclerBackend):
     self.available_blocks = []
     self.logger = logging.getLogger("pylabrobot.thermocycler.proflex")
     self.current_run = None
-    self.running_block = None
+    self.running_blocks = []
     self.prot_time_elapsed = 0
     self.prot_time_remaining = 0
-
-  async def _connect_device(self):
-    await self.io.setup()
-
-  async def _disconnect_device(self):
-    await self.io.stop()
 
   def _get_auth_token(self, challenge: str):
     challenge_bytes = challenge.encode("utf-8")
@@ -441,7 +435,7 @@ class ProflexBackend(ThermocyclerBackend):
     return await self.send_command(msg, response_timeout=response_timeout, read_once=read_once)
 
   async def _scpi_authenticate(self):
-    await self._connect_device()
+    await self.io.setup()
     await self._read_response(timeout=5)
     challenge_res = await self.scpi_send_data({"cmd": "CHAL?"})
     challenge = self._parse_scpi_response(challenge_res)["args"][0]
@@ -506,7 +500,9 @@ class ProflexBackend(ThermocyclerBackend):
   async def scpi_set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
-    res = await self.scpi_send_data({"cmd": f"TBC{block_id}:BLOCK", "args": [control_enabled, temp]})
+    res = await self.scpi_send_data(
+      {"cmd": f"TBC{block_id}:BLOCK", "args": [control_enabled, temp]}
+    )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set block idle temperature")
     follow_up = await self._read_response()
@@ -516,7 +512,9 @@ class ProflexBackend(ThermocyclerBackend):
   async def scpi_set_cover_idle_temp(self, temp: float = 105, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
-    res = await self.scpi_send_data({"cmd": f"TBC{block_id}:COVER", "args": [control_enabled, temp]})
+    res = await self.scpi_send_data(
+      {"cmd": f"TBC{block_id}:COVER", "args": [control_enabled, temp]}
+    )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set cover idle temperature")
     follow_up = await self._read_response()
@@ -665,7 +663,9 @@ class ProflexBackend(ThermocyclerBackend):
     await self.scpi_write_file(f"runs:{run_name}/{protocol.protocol_name}.method", xmlfile)
     await self.scpi_write_file(f"runs:{run_name}/{run_name}.tmp", tmpfile)
 
-  async def _scpi_run_protocol(self, protocol: ProflexPCRProtocol, run_name="testrun", user="Guest"):
+  async def _scpi_run_protocol(
+    self, protocol: ProflexPCRProtocol, run_name="testrun", user="Guest"
+  ):
     load_res = await self.scpi_send_data(
       protocol.gen_protocol_data(), response_timeout=5, read_once=False
     )
@@ -679,8 +679,8 @@ class ProflexBackend(ThermocyclerBackend):
         "cmd": f"TBC{protocol.block_id}:RunProtocol",
         "params": {
           "User": user,
-          "CoverTemperature": protocol.coverTemp,
-          "CoverEnabled": protocol.coverEnabled,
+          "CoverTemperature": protocol.cover_temp,
+          "CoverEnabled": protocol.cover_enabled,
         },
         "args": [protocol.protocol_name, run_name],
       },
@@ -699,7 +699,7 @@ class ProflexBackend(ThermocyclerBackend):
     total_time = float(total_time)
     logging.info(f"Estimated run time: {total_time}")
     self.current_run = run_name
-    self.running_block = protocol.block_id
+    self.running_blocks.append(protocol.block_id)
 
   async def _scpi_abort_run(self, block_id, run_name):
     abort_res = await self.scpi_send_data({"cmd": f"TBC{block_id}:AbortRun", "args": [run_name]})
@@ -749,7 +749,7 @@ class ProflexBackend(ThermocyclerBackend):
 
   # *************Three core methods for running a protocol***********************
 
-  async def setup(self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: list[int] = None):
+  async def setup(self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None):
     await self._scpi_authenticate()
     await self.scpi_power_on()
     await self._scpi_check_block_type()
@@ -767,6 +767,12 @@ class ProflexBackend(ThermocyclerBackend):
   async def close_lid(self):
     raise NotImplementedError("Close lid command is not implemented for Proflex thermocycler")
 
+  async def deactivate_lid(self, block_id: int):
+    return await self.scpi_set_cover_idle_temp(control_enabled=0, block_id=block_id)
+
+  async def deactivate_block(self, block_id: int):
+    return await self.scpi_set_block_idle_temp(control_enabled=0, block_id=block_id)
+
   async def run_protocol(self, protocol: ProflexPCRProtocol, run_name="testrun", user="Admin"):
     run_exists = await self.scpi_check_run_exists(run_name)
     if run_exists == "False":
@@ -777,11 +783,13 @@ class ProflexBackend(ThermocyclerBackend):
     await self._scpi_run_protocol(protocol, run_name, user)
 
   async def stop(self):
-    block_id = self.running_block
-    is_running = (await self.scpi_get_run_title(block_id=block_id)) != "-"
-    if is_running:
-      await self._scpi_abort_run(block_id, self.current_run)
-      asyncio.sleep(10)
-    await self.scpi_set_cover_idle_temp(control_enabled=0, block_id=block_id)
-    await self.scpi_set_block_idle_temp(control_enabled=0, block_id=block_id)
-    await self._disconnect_device()
+    for block_id in self.running_blocks:
+      is_running = (await self.scpi_get_run_title(block_id=block_id)) != "-"
+      if is_running:
+        await self._scpi_abort_run(block_id, self.current_run)
+        await asyncio.sleep(10)
+
+      await self.deactivate_lid(block_id=block_id)
+      await self.deactivate_block(block_id=block_id)
+
+    await self.io.stop()
