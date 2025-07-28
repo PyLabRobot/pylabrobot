@@ -1,5 +1,6 @@
 import enum
 from dataclasses import dataclass
+from typing import List, Optional, Union
 
 
 @dataclass
@@ -8,6 +9,22 @@ class Step:
 
   temperature: float
   hold_seconds: float
+  rate: Optional[float] = None  # degrees Celsius per second
+
+
+@dataclass
+class Stage:
+  """Represents a single stage in a thermocycler protocol."""
+
+  steps: List[Step]
+  repeats: int
+
+
+@dataclass
+class Protocol:
+  """Represents a thermocycler protocol ("cycle") with multiple stages."""
+
+  stages: List[Union[Stage, Step]]
 
 
 class LidStatus(enum.Enum):
