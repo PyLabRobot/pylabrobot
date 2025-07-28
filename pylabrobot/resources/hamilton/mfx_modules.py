@@ -41,36 +41,21 @@ def MFX_DWP_rackbased_module(name: str) -> PlateHolder:
   )
 
 
-def MFX_DWP_module_188042(name: str) -> PlateHolder:
+def Hamilton_MFX_DWP_plateholder_metal_tapped(name: str) -> PlateHolder:
   """Hamilton MFX DWP Module (cat.-no. 188042 / 188042-00).
-  This module contains a pedestal that elevates the plate by 6mm. The plate rests on the pedestal
   It also contains metal clamps at the corners.
   https://www.hamiltoncompany.com/other-robotics/188042
   """
-  # ── module footprint ──────────────
-  size_x = 135 # measured
-  size_y = 94 # measured
-
-  # ── vertical geometry ──────────────────────────────
-  pedestal_size_z = 6.45  # measured The height of the pedestal
-  size_z = (
-    184.745 - 18.195 - 100
-  )  # 60.10mm is module height above MFX carrier. This height includes pedestal.
-  # module.get_absolute_size_y() = 184.745 puts channel right on the pedestal with 50ul fil tip
-
-  # ── where the plate’s lower-left corner sits ───────
-  child_x = 4.0  # mm measured
-  child_y = 3.5  # mm measured
-  child_location = Coordinate(child_x, child_y, size_z)
 
   return PlateHolder(
     name=name,
-    size_x=size_x,
-    size_y=size_y,
-    size_z=size_z,
-    child_location=child_location,
-    model=MFX_DWP_module_188042.__name__,
-    pedestal_size_z=pedestal_size_z,
+    size_x=135.0,  # measured
+    size_y=94.0,  # measured
+    size_z=183.95 - 18.195 - 100,  # measured
+    # probe height - carrier_height - deck_height
+    child_location=Coordinate(4.0, 4.0, 183.95 - 18.195 - 100),  # measured
+    pedestal_size_z=-4.74,
+    model=Hamilton_MFX_DWP_plateholder_metal_tapped.__name__,
   )
 
 
