@@ -10,7 +10,9 @@ This package contains APIs for working with plate readers.
   :nosignatures:
   :recursive:
 
-    plate_reader.PlateReader
+   plate_reader.PlateReader
+   imager.Imager
+   standard.ImagingResult
 
 
 Backends
@@ -22,5 +24,5 @@ Backends
   :recursive:
 
     chatterbox.PlateReaderChatterboxBackend
-    clario_star.CLARIOStar
+    clario_star_backend.CLARIOStarBackend
     biotek_backend.Cytation5Backend

@@ -213,7 +213,7 @@ class VolumeTracker:
   def rollback(self) -> None:
     """Rollback the pending operations."""
     assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
-    self.pending_liquids.clear()
+    self.pending_liquids = copy.deepcopy(self.liquids)
 
   def clear_cross_contamination_history(self) -> None:
     """Resets the liquid_history for cross contamination tracking. Use when there is a wash step."""

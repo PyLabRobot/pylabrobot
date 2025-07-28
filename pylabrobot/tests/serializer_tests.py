@@ -1,3 +1,5 @@
+import math
+
 from pylabrobot.serializer import deserialize, serialize
 
 
@@ -41,3 +43,10 @@ def test_serialize_deserialize_function_with_closure():
   deserialized = deserialize(serialized, allow_marshal=True)
 
   assert func(5) == deserialized(5)
+
+
+def test_serialize_deserialize_special_floats():
+  assert deserialize(serialize(float("inf"))) == math.inf
+  assert deserialize(serialize(float("-inf"))) == -math.inf
+  result = deserialize(serialize(float("nan")))
+  assert math.isnan(result)

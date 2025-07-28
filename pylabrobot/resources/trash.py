@@ -10,7 +10,7 @@ class Trash(Container):
     size_x,
     size_y,
     size_z,
-    material_z_thickness=None,
+    material_z_thickness=0,
     max_volume=float("inf"),
     category="trash",
     model=None,

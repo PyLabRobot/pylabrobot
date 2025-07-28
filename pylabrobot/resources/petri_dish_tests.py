@@ -31,6 +31,7 @@ class TestPetriDish(unittest.TestCase):
         "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "max_volume": 121500.0,
         "model": None,
+        "barcode": None,
       },
     )
 
@@ -51,6 +52,7 @@ class TestPetriDish(unittest.TestCase):
         "location": None,
         "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "model": None,
+        "barcode": None,
       },
     )
 

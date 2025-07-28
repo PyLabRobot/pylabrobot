@@ -10,11 +10,11 @@ try:
   import websockets.exceptions
   import websockets.legacy
   import websockets.legacy.server
-  import websockets.server
 
   HAS_WEBSOCKETS = True
-except ImportError:
+except ImportError as e:
   HAS_WEBSOCKETS = False
+  _WEBSOCKETS_IMPORT_ERROR = e
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.liquid_handling.backends.serializing_backend import (
@@ -47,7 +47,9 @@ class WebSocketBackend(SerializingBackend):
     """
 
     if not HAS_WEBSOCKETS:
-      raise RuntimeError("The WebSocketBackend requires websockets to be installed.")
+      raise RuntimeError(
+        f"The WebSocketBackend requires websockets to be installed. Import error: {_WEBSOCKETS_IMPORT_ERROR}"
+      )
 
     super().__init__(num_channels=num_channels)
     self._websocket: Optional["websockets.legacy.server.WebSocketServerProtocol"] = None
@@ -253,13 +255,17 @@ class WebSocketBackend(SerializingBackend):
     """Start the websocket server. This will run in a separate thread."""
 
     if not HAS_WEBSOCKETS:
-      raise RuntimeError("The WebSocketBackend requires websockets to be installed.")
+      raise RuntimeError(
+        f"The WebSocketBackend requires websockets to be installed. Import error: {_WEBSOCKETS_IMPORT_ERROR}"
+      )
 
     async def run_server():
       self._stop_ = self.loop.create_future()
       while True:
         try:
-          async with websockets.server.serve(self._socket_handler, self.ws_host, self.ws_port):
+          async with websockets.legacy.server.serve(
+            self._socket_handler, self.ws_host, self.ws_port
+          ):
             print(f"Websocket server started at http://{self.ws_host}:{self.ws_port}")
             lock.release()
             await self.stop_

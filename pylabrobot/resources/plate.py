@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import (
   TYPE_CHECKING,
   Dict,
@@ -73,7 +74,7 @@ class Plate(ItemizedResource["Well"]):
     size_y: float,
     size_z: float,
     ordered_items: Optional[Dict[str, "Well"]] = None,
-    ordering: Optional[List[str]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
     category: str = "plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
@@ -117,8 +118,9 @@ class Plate(ItemizedResource["Well"]):
       self.assign_child_resource(lid)
     self._lid = lid
 
-  def _get_lid_location(self, lid: Lid) -> Coordinate:
-    return Coordinate(0, 0, self.get_size_z() - lid.nesting_z_height)
+  def get_lid_location(self, lid: Lid) -> Coordinate:
+    """Get location of the lid when assigned to the plate. Takes into account sinking and rotation."""
+    return get_child_location(lid) + Coordinate(0, 0, self.get_size_z() - lid.nesting_z_height)
 
   def assign_child_resource(
     self,
@@ -130,7 +132,7 @@ class Plate(ItemizedResource["Well"]):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self._lid = resource
-      default_location = get_child_location(resource) + self._get_lid_location(resource)
+      default_location = self.get_lid_location(resource)
       location = location or default_location
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."
@@ -143,7 +145,7 @@ class Plate(ItemizedResource["Well"]):
 
   def __repr__(self) -> str:
     return (
-      f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
       f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
     )
 
@@ -221,36 +223,88 @@ class Plate(ItemizedResource["Well"]):
     for well in self.get_all_items():
       well.tracker.enable()
 
-  # TODO: add quadrant definition for 96-well plates & specify current
-  # quadrant definition is only for 384-well plates
-  def get_quadrant(self, quadrant: int) -> List["Well"]:
-    """Return the wells in the specified quadrant. Quadrants are overlapping and refer to
-    alternating rows and columns of the plate. Quadrant 1 contains A1, A3, C1, etc. Quadrant 2
-    contains A2, quadrant 3 contains B1, and quadrant 4 contains B2."""
+  def get_quadrant(
+    self,
+    quadrant: Literal[
+      "tl", "top_left", "tr", "top_right", "bl", "bottom_left", "br", "bottom_right"
+    ],
+    quadrant_type: Literal["block", "checkerboard"] = "checkerboard",
+    quadrant_internal_fill_order: Literal["column-major", "row-major"] = "column-major",
+  ) -> List["Well"]:
+    """
+    Get wells from a specified quadrant.
 
-    if quadrant == 1:
-      return [
-        self.get_well((row, column))
-        for row in range(0, self.num_items_y, 2)
-        for column in range(0, self.num_items_x, 2)
-      ]
-    elif quadrant == 2:
-      return [
-        self.get_well((row, column))
-        for row in range(0, self.num_items_y, 2)
-        for column in range(1, self.num_items_x, 2)
-      ]
-    elif quadrant == 3:
-      return [
-        self.get_well((row, column))
-        for row in range(1, self.num_items_y, 2)
-        for column in range(0, self.num_items_x, 2)
-      ]
-    elif quadrant == 4:
-      return [
-        self.get_well((row, column))
-        for row in range(1, self.num_items_y, 2)
-        for column in range(1, self.num_items_x, 2)
-      ]
+    Args:
+      quadrant: The desired quadrant ("tl" / "top_left", "tr" / "top_right",
+        "bl" / "bottom_left", "br" / "bottom_right").
+      quadrant_type: Either "block" (divides plate into 4 sections) or
+        "checkerboard" (alternating well pattern).
+      quadrant_internal_fill_order: Whether to return wells in "column-major"
+        or "row-major" order.
+
+    Returns:
+      List of wells in the specified quadrant.
+
+    Raises:
+      ValueError: If an invalid quadrant or configuration is specified.
+    """
+
+    # Ensure plate dimensions are even for valid quadrant selection
+    if self.num_items_x % 2 != 0 or self.num_items_y % 2 != 0:
+      raise ValueError(
+        "Both num_items_x and num_items_y must be even for quadrant selection,"
+        f"\nare {self.num_items_x=}, {self.num_items_y=}"
+      )
+    assert quadrant_internal_fill_order in ["column-major", "row-major"], (
+      f"Invalid quadrant_internal_fill_order: {quadrant_internal_fill_order},"
+      "\nquadrant_internal_fill_order must be either 'column-major' or 'row-major',"
+    )
+
+    # Determine row and column start indices
+    if quadrant.lower() in ["tl", "top_left"]:
+      row_start, col_start = 0, 0
+    elif quadrant.lower() in ["tr", "top_right"]:
+      row_start, col_start = 0, 1
+    elif quadrant.lower() in ["bl", "bottom_left"]:
+      row_start, col_start = 1, 0
+    elif quadrant.lower() in ["br", "bottom_right"]:
+      row_start, col_start = 1, 1
     else:
-      raise ValueError(f"Invalid quadrant number: {quadrant}. Quadrant must be 1, 2, 3, or 4.")
+      raise ValueError(
+        f"Invalid quadrant: {quadrant}. Quadrant must be in  ['tl', 'tr', 'bl', 'br']"
+      )
+
+    wells = []
+
+    if quadrant_type == "checkerboard":
+      # Checkerboard pattern: Every other well
+      for row in range(row_start, self.num_items_y, 2):
+        for col in range(col_start, self.num_items_x, 2):
+          wells.append(self.get_well((row, col)))
+
+    elif quadrant_type == "block":
+      # Block pattern: Ensure plate can be evenly divided into 4 quadrants
+      row_half = self.num_items_y // 2
+      col_half = self.num_items_x // 2
+
+      row_range = range(row_start * row_half, (row_start + 1) * row_half)
+      col_range = range(col_start * col_half, (col_start + 1) * col_half)
+
+      for row in row_range:
+        for col in col_range:
+          wells.append(self.get_well((row, col)))
+
+    else:
+      raise ValueError(
+        f"Invalid quadrant_type: {quadrant_type}. "
+        "quadrant_type must be either 'checkerboard' (default) or 'block'"
+      )
+
+    # Apply internal fill order
+    assert all(well.location is not None for well in wells)
+    if quadrant_internal_fill_order == "row-major":
+      wells.sort(key=lambda well: (-well.location.y, well.location.x))  # type: ignore
+    else:
+      wells.sort(key=lambda well: (well.location.x, -well.location.y))  # type: ignore
+
+    return wells

@@ -1,8 +1,12 @@
+# mypy: disable-error-code = attr-defined
+
+
 import unittest
 import unittest.mock
 from typing import Iterator
 
 from pylabrobot.plate_reading.biotek_backend import Cytation5Backend
+from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
 def _byte_iter(s: str) -> Iterator[bytes]:
@@ -15,44 +19,57 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self):
     self.backend = Cytation5Backend(timeout=0.1)
-    self.backend.dev = unittest.mock.MagicMock()
-    self.backend.dev.open.return_value = 0
-    self.backend.dev.write.return_value = 0
+    self.backend.io = unittest.mock.MagicMock()
+    self.backend.io.setup = unittest.mock.AsyncMock()
+    self.backend.io.stop = unittest.mock.AsyncMock()
+    self.backend.io.read = unittest.mock.AsyncMock()
+    self.backend.io.write = unittest.mock.AsyncMock()
+    self.backend.io.usb_reset = unittest.mock.AsyncMock()
+    self.backend.io.usb_purge_rx_buffer = unittest.mock.AsyncMock()
+    self.backend.io.usb_purge_tx_buffer = unittest.mock.AsyncMock()
+    self.backend.io.set_latency_timer = unittest.mock.AsyncMock()
+    self.backend.io.set_baudrate = unittest.mock.AsyncMock()
+    self.backend.io.set_line_property = unittest.mock.AsyncMock()
+    self.backend.io.set_flowctrl = unittest.mock.AsyncMock()
+    self.backend.io.set_rts = unittest.mock.AsyncMock()
+    self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
   async def test_setup(self):
+    self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
     await self.backend.setup()
-    assert self.backend.dev.open.called
-    assert self.backend.dev.baudrate == 38400
-    self.backend.dev.ftdi_fn.ftdi_set_line_property.assert_called_with(8, 2, 0)
-    self.backend.dev.ftdi_fn.ftdi_setflowctrl.assert_called_with(0x100)
-    self.backend.dev.ftdi_fn.ftdi_setrts.assert_called_with(1)
+    assert self.backend.io.setup.called
+    self.backend.io.usb_reset.assert_called_once()
+    self.backend.io.set_latency_timer.assert_called_with(16)
+    self.backend.io.set_baudrate.assert_called_with(9600)
+    # self.backend.io.set_line_property.assert_called_with(8, 2, 0)  #?
+    self.backend.io.set_flowctrl.assert_called_with(0x100)
+    self.backend.io.set_rts.assert_called_with(1)
 
     await self.backend.stop()
-    assert self.backend.dev.close.called
+    assert self.backend.io.stop.called
 
   async def test_get_serial_number(self):
-    self.backend.dev.read.side_effect = _byte_iter("\x0600000000        0000\x03")
+    self.backend.io.read.side_effect = _byte_iter("\x0600000000        0000\x03")
     assert await self.backend.get_serial_number() == "00000000"
 
   async def test_open(self):
-    self.backend.dev.read.return_value = b"\x03"
+    self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x03"]
     await self.backend.open()
-    self.backend.dev.write.assert_called_with(b"J")
+    self.backend.io.write.assert_called_with(b"J")
 
   async def test_close(self):
-    self.backend.dev.read.return_value = b"\x03"
-    await self.backend.close()
-    self.backend.dev.write.assert_called_with(b"A")
+    self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x06", b"\x03", b"\x03"]
+    plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
+    await self.backend.close(plate=plate)
+    self.backend.io.write.assert_called_with(b"A")
 
   async def test_get_current_temperature(self):
-    self.backend.dev.read.side_effect = _byte_iter("\x062360000\x03")
+    self.backend.io.read.side_effect = _byte_iter("\x062360000\x03")
     assert await self.backend.get_current_temperature() == 23.6
 
   async def test_read_absorbance(self):
-    self.backend.dev.read.side_effect = _byte_iter(
+    self.backend.io.read.side_effect = _byte_iter(
       "\x06"
-      + "0000\x03"
-      + "\x06"
       + "0350000000000000010000000000490300000\x03"
       + "\x06"
       + "0000\x03"
@@ -77,15 +94,16 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       )
     )
 
-    resp = await self.backend.read_absorbance(wavelength=580)
+    self.backend._plate = CellVis_96_wellplate_350uL_Fb(
+      name="plate"
+    )  # lint: disable=protected-access
+    resp = await self.backend.read_absorbance(plate=self.plate, wavelength=580)
 
-    self.backend.dev.write.assert_any_call(b"y")
-    self.backend.dev.write.assert_any_call(b"08120112207434014351135308559127881772\x03")
-    self.backend.dev.write.assert_any_call(b"D")
-    self.backend.dev.write.assert_any_call(
+    self.backend.io.write.assert_any_call(b"D")
+    self.backend.io.write.assert_any_call(
       b"004701010108120001200100001100100000106000080580113\x03"
     )
-    self.backend.dev.write.assert_any_call(b"O")
+    self.backend.io.write.assert_any_call(b"O")
 
     assert resp == [
       [
@@ -103,18 +121,18 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
         0.2105,
       ],
       [
-        0.1986,
-        0.08,
-        0.0796,
-        0.0871,
-        0.1059,
-        0.0868,
-        0.0544,
-        0.0644,
-        0.0752,
-        0.0768,
-        0.0925,
         0.0802,
+        0.0925,
+        0.0768,
+        0.0752,
+        0.0644,
+        0.0544,
+        0.0868,
+        0.1059,
+        0.0871,
+        0.0796,
+        0.08,
+        0.1986,
       ],
       [
         0.0925,
@@ -131,82 +149,41 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
         0.1256,
       ],
       [
-        0.1525,
-        0.0711,
-        0.0858,
-        0.0753,
-        0.0787,
-        0.0778,
-        0.0895,
-        0.0733,
-        0.0711,
-        0.0672,
-        0.0719,
         0.0954,
-      ],
-      [
-        0.0841,
-        0.061,
-        0.0766,
-        0.0773,
-        0.0632,
+        0.0719,
+        0.0672,
+        0.0711,
+        0.0733,
+        0.0895,
+        0.0778,
         0.0787,
-        0.11,
-        0.0645,
-        0.0934,
-        0.1439,
-        0.1113,
-        0.1281,
-      ],
-      [
-        0.1649,
-        0.0707,
-        0.0892,
-        0.0712,
-        0.0935,
-        0.1079,
-        0.0704,
-        0.0978,
-        0.0596,
-        0.0794,
-        0.0776,
-        0.093,
-      ],
-      [
-        0.1255,
-        0.0742,
-        0.0747,
-        0.0694,
-        0.1004,
-        0.09,
-        0.0659,
+        0.0753,
         0.0858,
-        0.0876,
-        0.0815,
-        0.098,
-        0.1329,
+        0.0711,
+        0.1525,
       ],
+      [0.0841, 0.061, 0.0766, 0.0773, 0.0632, 0.0787, 0.11, 0.0645, 0.0934, 0.1439, 0.1113, 0.1281],
       [
-        0.1316,
-        0.129,
-        0.1103,
-        0.0667,
-        0.079,
-        0.0602,
-        0.067,
-        0.0732,
-        0.0657,
-        0.0684,
-        0.1174,
-        0.1427,
+        0.093,
+        0.0776,
+        0.0794,
+        0.0596,
+        0.0978,
+        0.0704,
+        0.1079,
+        0.0935,
+        0.0712,
+        0.0892,
+        0.0707,
+        0.1649,
       ],
+      [0.1255, 0.0742, 0.0747, 0.0694, 0.1004, 0.09, 0.0659, 0.0858, 0.0876, 0.0815, 0.098, 0.1329],
+      [0.1427, 0.1174, 0.0684, 0.0657, 0.0732, 0.067, 0.0602, 0.079, 0.0667, 0.1103, 0.129, 0.1316],
     ]
 
   async def test_read_fluorescence(self):
-    self.backend.dev.read.side_effect = _byte_iter(
+    self.backend.io.read.side_effect = _byte_iter(
       "\x06"
-      + "0000\x03"
-      + "\x06"
       + "0000\x03"
       + "\x06"
       + "0350000000000000010000000000490300000\x03"
@@ -232,134 +209,32 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       )
     )
 
+    self.backend._plate = CellVis_96_wellplate_350uL_Fb(
+      name="plate"
+    )  # lint: disable=protected-access
     resp = await self.backend.read_fluorescence(
+      plate=self.plate,
       excitation_wavelength=485,
       emission_wavelength=528,
       focal_height=7.5,
     )
 
-    self.backend.dev.write.assert_any_call(b"t")
-    self.backend.dev.write.assert_any_call(b"621720\x03")
-    self.backend.dev.write.assert_any_call(b"y")
-    self.backend.dev.write.assert_any_call(b"08120112207434014351135308559127881772\x03")
-    self.backend.dev.write.assert_any_call(b"D")
-    self.backend.dev.write.assert_any_call(
+    self.backend.io.write.assert_any_call(b"t")
+    self.backend.io.write.assert_any_call(b"621720\x03")
+    self.backend.io.write.assert_any_call(b"D")
+    self.backend.io.write.assert_any_call(
       b"0084010101081200012001000011001000001350001002002000485000052800000000000000000021001119"
       b"\x03"
     )
-    self.backend.dev.write.assert_any_call(b"O")
+    self.backend.io.write.assert_any_call(b"O")
 
     assert resp == [
-      [
-        427.0,
-        746.0,
-        598.0,
-        742.0,
-        1516.0,
-        704.0,
-        676.0,
-        734.0,
-        1126.0,
-        790.0,
-        531.0,
-        531.0,
-      ],
-      [
-        2066.0,
-        541.0,
-        618.0,
-        629.0,
-        891.0,
-        731.0,
-        484.0,
-        576.0,
-        465.0,
-        501.0,
-        2187.0,
-        462.0,
-      ],
-      [
-        728.0,
-        583.0,
-        472.0,
-        492.0,
-        501.0,
-        491.0,
-        580.0,
-        541.0,
-        556.0,
-        474.0,
-        532.0,
-        522.0,
-      ],
-      [
-        570.0,
-        523.0,
-        784.0,
-        441.0,
-        703.0,
-        591.0,
-        580.0,
-        479.0,
-        474.0,
-        414.0,
-        520.0,
-        427.0,
-      ],
-      [
-        486.0,
-        422.0,
-        612.0,
-        588.0,
-        805.0,
-        510.0,
-        1697.0,
-        615.0,
-        1137.0,
-        653.0,
-        558.0,
-        648.0,
-      ],
-      [
-        765.0,
-        487.0,
-        683.0,
-        1068.0,
-        721.0,
-        3269.0,
-        679.0,
-        532.0,
-        601.0,
-        491.0,
-        538.0,
-        688.0,
-      ],
-      [
-        653.0,
-        783.0,
-        522.0,
-        536.0,
-        673.0,
-        858.0,
-        526.0,
-        627.0,
-        574.0,
-        1993.0,
-        712.0,
-        970.0,
-      ],
-      [
-        523.0,
-        607.0,
-        3002.0,
-        900.0,
-        697.0,
-        542.0,
-        688.0,
-        622.0,
-        555.0,
-        542.0,
-        742.0,
-        1118.0,
-      ],
+      [427.0, 746.0, 598.0, 742.0, 1516.0, 704.0, 676.0, 734.0, 1126.0, 790.0, 531.0, 531.0],
+      [462.0, 2187.0, 501.0, 465.0, 576.0, 484.0, 731.0, 891.0, 629.0, 618.0, 541.0, 2066.0],
+      [728.0, 583.0, 472.0, 492.0, 501.0, 491.0, 580.0, 541.0, 556.0, 474.0, 532.0, 522.0],
+      [427.0, 520.0, 414.0, 474.0, 479.0, 580.0, 591.0, 703.0, 441.0, 784.0, 523.0, 570.0],
+      [486.0, 422.0, 612.0, 588.0, 805.0, 510.0, 1697.0, 615.0, 1137.0, 653.0, 558.0, 648.0],
+      [688.0, 538.0, 491.0, 601.0, 532.0, 679.0, 3269.0, 721.0, 1068.0, 683.0, 487.0, 765.0],
+      [653.0, 783.0, 522.0, 536.0, 673.0, 858.0, 526.0, 627.0, 574.0, 1993.0, 712.0, 970.0],
+      [1118.0, 742.0, 542.0, 555.0, 622.0, 688.0, 542.0, 697.0, 900.0, 3002.0, 607.0, 523.0],
     ]

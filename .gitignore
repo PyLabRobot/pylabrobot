@@ -11,3 +11,5 @@ pyhamilton/LAY-BACKUP
 build/lib
 
 myenv
+env/*
+.venv

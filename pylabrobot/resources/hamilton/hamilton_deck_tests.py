@@ -1,7 +1,7 @@
 import textwrap
 import unittest
 
-from pylabrobot.resources.corning_costar import (
+from pylabrobot.resources.corning import (
   Cor_96_wellplate_360ul_Fb,
 )
 from pylabrobot.resources.hamilton import (
@@ -62,7 +62,7 @@ class HamiltonDeckTests(unittest.TestCase):
           │   ├── <empty>
           │   ├── <empty>
           │
-    (31)  ├── teaching_carrier          Resource       (775.000, 051.800, 100.000)
+    (31)  ├── waste_block               Resource       (775.000, 115.000, 100.000)
           │   ├── teaching_tip_rack     TipRack        (780.900, 461.100, 100.000)
           │
     (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)

@@ -1,5 +1,6 @@
 import sys
 from abc import ABCMeta
+from collections import OrderedDict
 from string import ascii_uppercase as LETTERS
 from typing import (
   Dict,
@@ -47,7 +48,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     size_y: float,
     size_z: float,
     ordered_items: Optional[Dict[str, T]] = None,
-    ordering: Optional[List[str]] = None,
+    ordering: Optional[OrderedDict[str, str]] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
@@ -62,8 +63,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         :func:`pylabrobot.resources.create_ordered_items_2d`. If this is specified, `ordering` must
         be `None`. Keys must be in transposed MS Excel style notation, e.g. "A1" for the first item,
         "B1" for the item below that, "A2" for the item to the right, etc.
-      ordering: The order of the items on the resource. This is a list of identifiers. If this is
-        specified, `ordered_items` must be `None`. See `ordered_items` for the format of the
+      ordering: The order of the items on the resource. This is a dict of item identifier <> item name.
+        If this is specified, `ordered_items` must be `None`. See `ordered_items` for the format of the
         identifiers.
       category: The category of the resource.
 
@@ -95,7 +96,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
           raise ValueError("Item location must be specified if supplied at initialization.")
         item.name = f"{self.name}_{item.name}"  # prefix item name with resource name
         self.assign_child_resource(item, location=item.location)
-      self._ordering = list(ordered_items.keys())
+      self._ordering = OrderedDict(
+        (identifier, item.name) for identifier, item in ordered_items.items()
+      )
     else:
       if ordering is None:
         raise ValueError("Must specify either `ordered_items` or `ordering`.")
@@ -155,10 +158,14 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if isinstance(identifier, (slice, range)):
       start, stop = identifier.start, identifier.stop
       if isinstance(identifier.start, str):
-        start = self._ordering.index(identifier.start)
+        start = list(self._ordering.keys()).index(identifier.start)
+      elif identifier.start is None:
+        start = 0
       if isinstance(identifier.stop, str):
-        stop = self._ordering.index(identifier.stop)
-      identifier = list(range(start, stop))
+        stop = list(self._ordering.keys()).index(identifier.stop)
+      elif identifier.stop is None:
+        stop = self.num_items
+      identifier = list(range(start, stop, identifier.step or 1))
       return self.get_items(identifier)
 
     if isinstance(identifier, (list, tuple)):
@@ -184,7 +191,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       identifier = LETTERS[row] + str(column + 1)  # standard transposed-Excel style notation
     if isinstance(identifier, str):
       try:
-        identifier = self._ordering.index(identifier)
+        identifier = list(self._ordering.keys()).index(identifier)
       except ValueError as e:
         raise IndexError(
           f"Item with identifier '{identifier}' does not exist on " f"resource '{self.name}'."
@@ -233,6 +240,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def traverse(
     self,
     batch_size: int,
+    start: Literal["top_left", "bottom_left", "top_right", "bottom_right"],
     direction: Literal[
       "up",
       "down",
@@ -247,10 +255,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   ) -> Generator[List[T], None, None]:
     """Traverse the items in this resource.
 
-    Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
-    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`
-    and `"snake_left"` start at the top right (A12).
-
     The snake directions alternate between going in the given direction and going in the opposite
     direction. For example, `"snake_down"` will go from A1 to H1, then H2 to A2, then A3 to H3, etc.
 
@@ -263,12 +267,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     Args:
       batch_size: The number of items to return in each batch.
-      direction: The direction to traverse the items. Can be one of "up", "down", "right", "left",
-        "snake_up", "snake_down", "snake_left" or "snake_right".
+      direction: The direction to traverse the items. Can be one of "up", "down", "right",
+      "left", "snake_up", "snake_down", "snake_left" or "snake_right".
       repeat: Whether to repeat the traversal when the end of the resource is reached.
-
-    Returns:
-      A list of items.
 
     Raises:
       ValueError: If the direction is not valid.
@@ -276,107 +277,96 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
       Traverse the items in the resource from top to bottom, in batches of 3:
 
-        >>> items.traverse(batch_size=3, direction="down", repeat=False)
+        >>> items.traverse(batch_size=3, direction="down", start="top_left", repeat=False)
 
         [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
 
       Traverse the items in the resource from left to right, in batches of 5, repeating the
       traversal when the end of the resource is reached:
 
-        >>> items.traverse(batch_size=5, direction="right", repeat=True)
+        >>> items.traverse(batch_size=5, direction="right", start="top_left", repeat=True)
 
         [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
     """
 
-    def make_generator(indices, batch_size, repeat) -> Generator[List[T], None, None]:
+    def make_generator(
+      items: List[T], batch_size: int, repeat: int
+    ) -> Generator[List[T], None, None]:
       """Make a generator from a list, that returns items in batches, optionally repeating"""
 
-      # If we're repeating, we need to make a copy of the indices
+      # If we're repeating, we need to make a copy of the items
       if repeat:
-        indices = indices.copy()
+        items = items.copy()
 
       start = 0
 
       while True:
-        if (len(indices) - start) < batch_size:  # not enough items left
+        if (len(items) - start) < batch_size:  # not enough items left
           if repeat:
-            # if we're repeating, shift the indices and start over
-            indices = indices[start:] + indices[:start]
+            # if we're repeating, shift the items and start over
+            items = items[start:] + items[:start]
             start = 0
           else:
-            if start != len(indices):
+            if start != len(items):
               # there are items left, so yield last (partial) batch
-              batch = indices[start:]
-              batch = [self.get_item(i) for i in batch]
+              batch = items[start:]
               yield batch
             break
 
-        batch = indices[start : start + batch_size]
-        batch = [self.get_item(i) for i in batch]
+        batch = items[start : start + batch_size]
         yield batch
         start += batch_size
 
-    if direction == "up":
-      # start at the bottom, and go up in each column
-      indices = [(8 * y + x) for y in range(12) for x in range(7, -1, -1)]
-    elif direction == "down":
-      # start at the top, and go down in each column. This is how the items are stored in the
-      # list, so no need to do anything special.
-      indices = list(range(self.num_items))
-    elif direction == "right":
-      # Start at the top left, and go right in each row
-      indices = [(8 * y + x) for x in range(8) for y in range(0, 12)]
-    elif direction == "left":
-      # Start at the top right, and go left in each row
-      indices = [(8 * y + x) for x in range(8) for y in range(11, -1, -1)]
-    elif direction == "snake_right":
-      top_right = 88
-      indices = []
-      for x in range(8):
-        if x % 2 == 0:
-          # even rows go left to right
-          indices.extend((8 * y + x) for y in range(0, 12))
-        else:
-          # odd rows go right to left
-          indices.extend((top_right + x - 8 * y) for y in range(0, 12))
-    elif direction == "snake_down":
-      top_right = 88
-      indices = []
-      for x in range(12):
-        if x % 2 == 0:
-          # even columns go top to bottom
-          indices.extend(8 * x + y for y in range(0, 8))
-        else:
-          # odd columns go bottom to top
-          indices.extend(8 * x + (7 - y) for y in range(0, 8))
-    elif direction == "snake_left":
-      top_right = 88
-      indices = []
-      for x in range(8):
-        if x % 2 == 0:
-          # even rows go right to left
-          indices.extend((8 * y + x) for y in range(11, -1, -1))
-        else:
-          # odd rows go left to right
-          indices.extend((top_right + x - 8 * y) for y in range(11, -1, -1))
-    elif direction == "snake_up":
-      top_right = 88
-      indices = []
-      for x in range(12):
-        if x % 2 == 0:
-          # even columns go bottom to top
-          indices.extend(8 * x + y for y in range(7, -1, -1))
-        else:
-          # odd columns go top to bottom
-          indices.extend(8 * x + (7 - y) for y in range(7, -1, -1))
-    else:
-      raise ValueError(f"Invalid direction '{direction}'.")
+    rows = list(range(self.num_items_y))
+    cols = list(range(self.num_items_x))
 
-    return make_generator(indices, batch_size, repeat)
+    # Determine starting rows and cols based on start position
+    if "bottom" in start:
+      if "down" in direction:
+        raise ValueError(f"Cannot start from {start} and go {direction}.")
+      rows.reverse()
+
+    if "right" in start:
+      if "right" in direction:
+        raise ValueError(f"Cannot start from {start} and go {direction}.")
+      cols.reverse()
+
+    items: List[T] = []
+
+    if direction in {"up", "down"}:
+      for col_idx in cols:
+        for row_idx in rows:
+          items.append(self.get_item((row_idx, col_idx)))
+
+    elif direction in {"left", "right"}:
+      for row_idx in rows:
+        for col_idx in cols:
+          items.append(self.get_item((row_idx, col_idx)))
+
+    elif direction.startswith("snake_"):
+      axis = direction.split("_")[1]
+
+      if axis in {"up", "down"}:
+        # Snake up/down: alternate direction for each column
+        for i, col_idx in enumerate(cols):
+          row_order = rows if i % 2 == 0 else list(reversed(rows))
+
+          for row_idx in row_order:
+            items.append(self.get_item((row_idx, col_idx)))
+
+      else:  # snake_left or snake_right
+        # Snake left/right: alternate direction for each row
+        for i, row_idx in enumerate(rows):
+          col_order = cols if i % 2 == 0 else list(reversed(cols))
+
+          for col_idx in col_order:
+            items.append(self.get_item((row_idx, col_idx)))
+
+    return make_generator(items, batch_size, repeat)
 
   def __repr__(self) -> str:
     return (
-      f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
       f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
     )
 
@@ -384,7 +374,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def _occupied_func(item: T):
     return "O" if item.children else "-"
 
-  def make_grid(self, occupied_func=None):
+  def summary(self, occupied_func=None):
     # The "occupied_func" is a function that checks if a resource has something in it,
     # and returns a single character representing its status.
     if occupied_func is None:
@@ -418,9 +408,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return info_str + "\n" + header_row + "\n" + item_text + "\n" + footer_text
 
-  def print_grid(self, occupied_func=None):
-    print(self.make_grid(occupied_func=occupied_func))
-
   def serialize(self) -> dict:
     return {
       **super().serialize(),
@@ -429,17 +416,17 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   def index_of_item(self, item: T) -> Optional[int]:
     """Return the index of the given item in the resource, or `None` if not found."""
-    for i, i_item in enumerate(self.children):
-      if i_item == item:
+    for i, i_item_name in enumerate(self._ordering.values()):
+      if i_item_name == item.name:
         return i
     return None
 
   def get_child_identifier(self, item: T) -> str:
     """Get the identifier of the item."""
-    index = self.index_of_item(item)
-    if index is None:
-      raise ValueError(f"Item {item} not found in resource.")
-    return self._ordering[index]
+    for identifier, i_item_name in self._ordering.items():
+      if i_item_name == item.name:
+        return identifier
+    raise ValueError(f"Item {item} not found in resource.")
 
   def get_all_items(self) -> List[T]:
     """Get all items in the resource. Items are in a 1D list, starting from the top left and going
@@ -481,3 +468,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   @property
   def items(self) -> List[str]:
     raise NotImplementedError("Deprecated.")
+
+  def column(self, column: int) -> List[T]:
+    """Get all items in the given column."""
+    return self[column * self.num_items_y : (column + 1) * self.num_items_y]
+
+  def row(self, row: int) -> List[T]:
+    """Get all items in the given row."""
+    return self[row :: self.num_items_y]

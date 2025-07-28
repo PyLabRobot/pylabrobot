@@ -1,9 +1,16 @@
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 
 
 class TemperatureControllerBackend(MachineBackend, metaclass=ABCMeta):
+  """Abstract backend for temperature controllers."""
+
+  @property
+  @abstractmethod
+  def supports_active_cooling(self) -> bool:
+    """Whether this backend can actively cool below the current temperature."""
+
   @abstractmethod
   async def set_temperature(self, temperature: float):
     """Set the temperature of the temperature controller in Celsius."""

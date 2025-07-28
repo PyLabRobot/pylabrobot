@@ -43,7 +43,7 @@ def MFX_CAR_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
 def MFX_CAR_L4_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
   """Hamilton cat. no.: 187001
   Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton.
-  Template carrier with 4 positions for Hamilton Heater Shaker.
+  Template carrier with 4 positions for Hamilton Heater Shaker in landscape.
   Occupies 7 tracks (7T). Can be screwed onto the deck.
   """
   locations = [
@@ -64,4 +64,61 @@ def MFX_CAR_L4_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarri
     size_z=8.0,
     sites=sites,
     model="PLT_CAR_L4_SHAKER",
+  )
+
+
+def MFX_CAR_P3_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+  """Hamilton cat. no.: 187001
+  Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton, this one has extra holes for portrait orientation shakers.
+    (you can drill these yourself, if you're adventurous)
+  Some but not all of these carriers have:
+    - extra holes for 3 portrait positions
+    - extra holes for mounting a thermocycler
+  This is a template carrier for setups with 3 positions for Hamilton Heater Shakers in portrait.
+  Occupies 7 tracks (7T). Can be screwed onto the deck.
+  Tested with hamilton heated shaker: HeaterShaker(size_x=146.2, size_y=103.6, size_z=74.11, child_location=Coordinate(x=10, y=13, z=74.24))
+  """
+  locations = [
+    Coordinate(26.45, 0, 8.0),
+    Coordinate(26.45, 146.2 + 17.2, 8.0),
+    Coordinate(26.45, (146.2) * 2 + 17.2 + 11.6, 8.0),
+  ]
+  sites: Dict[int, ResourceHolder] = {}
+  for i, module in modules.items():
+    module.location = locations[i]
+    sites[i] = module
+
+  return MFXCarrier(
+    name=name,
+    size_x=157.5,
+    size_y=497.0,
+    size_z=8.0,
+    sites=sites,
+    model="MFX_CAR_P3_SHAKER",
+  )
+
+
+def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+  """Hamilton cat. no.: 188053
+  Labware carrier base for up to 3 Multiflex Modules in Portrait orientation
+  Does not support half-indices
+  Occupies 5 tracks (5T)
+  """
+  locations = [
+    Coordinate(16.6, 35.2, 18.195),
+    Coordinate(16.6, 179.2, 18.195),
+    Coordinate(16.6, 325.2, 18.195),
+  ]
+  sites: Dict[int, ResourceHolder] = {}
+  for i, module in modules.items():
+    module.location = locations[i]
+    sites[i] = module
+
+  return MFXCarrier(
+    name=name,
+    size_x=112.5,
+    size_y=497.0,
+    size_z=18.195,
+    sites=sites,
+    model="MFX_CAR_P3_base",
   )

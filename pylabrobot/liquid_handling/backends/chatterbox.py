@@ -4,21 +4,21 @@ from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Resource, Tip
 
 
 class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
@@ -126,7 +126,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def aspirate(
     self,
-    ops: List[Aspiration],
+    ops: List[SingleChannelAspiration],
     use_channels: List[int],
     **backend_kwargs,
   ):
@@ -167,7 +167,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def dispense(
     self,
-    ops: List[Dispense],
+    ops: List[SingleChannelDispense],
     use_channels: List[int],
     **backend_kwargs,
   ):
@@ -212,15 +212,17 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   async def drop_tips96(self, drop: DropTipRack, **backend_kwargs):
     print(f"Dropping tips to {drop.resource.name}.")
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
-    if isinstance(aspiration, AspirationPlate):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       resource = aspiration.wells[0].parent
     else:
       resource = aspiration.container
     print(f"Aspirating {aspiration.volume} from {resource}.")
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
-    if isinstance(dispense, DispensePlate):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
+    if isinstance(dispense, MultiHeadDispensePlate):
       resource = dispense.wells[0].parent
     else:
       resource = dispense.container
@@ -234,3 +236,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def drop_resource(self, drop: ResourceDrop):
     print(f"Dropping resource: {drop}")
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    return True

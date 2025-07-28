@@ -51,9 +51,7 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name: str, with_lid: bool = Fal
   - Thermal resistance: ?
   - Sealing options: ?
   - Cleanliness: ?
-  - Automation compatibility: "Rigid frame eliminates warping and distortion during
-    PCR. Ideal for use with robotic systems.' -> extra  rigid skirt option (4ti-0960/RIG)
-    available.
+  - Automation compatibility: "Rigid frame eliminates warping and distortion during PCR. Ideal for use with robotic systems.' -> extra  rigid skirt option (4ti-0960/RIG) available.
   """
   return Plate(
     name=name,
@@ -81,22 +79,4 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name: str, with_lid: bool = Fal
       ),
       cross_section_type=CrossSectionType.CIRCLE,
     ),
-  )
-
-
-#: Azenta4titudeFrameStar_96_wellplate_Vb_L
-def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  # https://github.com/PyLabRobot/pylabrobot/issues/252
-  raise NotImplementedError(
-    "_L and _P definitions are deprecated. Use "
-    "Azenta4titudeFrameStar_96_wellplate_200ul_Vb instead."
-  )
-
-
-#: Azenta4titudeFrameStar_96_wellplate_Vb_P
-def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  # https://github.com/PyLabRobot/pylabrobot/issues/252
-  raise NotImplementedError(
-    "_L and _P definitions are deprecated. For portrait, use "
-    "Azenta4titudeFrameStar_96_wellplate_200ul_Vb().rotated(z=90) instead."
   )

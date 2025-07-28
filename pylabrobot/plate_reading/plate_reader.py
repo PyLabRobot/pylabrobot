@@ -2,12 +2,9 @@ from typing import List, Optional, cast
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import PlateReaderBackend
+from pylabrobot.plate_reading.standard import NoPlateError
 from pylabrobot.resources import Coordinate, Plate, Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
-
-
-class NoPlateError(Exception):
-  pass
 
 
 class PlateReader(ResourceHolder, Machine):
@@ -19,8 +16,8 @@ class PlateReader(ResourceHolder, Machine):
 
   Here's an example of how to use this class in a Jupyter Notebook:
 
-  >>> from pylabrobot.plate_reading.clario_star import CLARIOStar
-  >>> pr = PlateReader(backend=CLARIOStar())
+  >>> from pylabrobot.plate_reading.clario_star import CLARIOStarBackend
+  >>> pr = PlateReader(backend=CLARIOStarBackend())
   >>> pr.setup()
   >>> await pr.read_luminescence()
   [[value1, value2, value3, ...], [value1, value2, value3, ...], ...
@@ -66,11 +63,12 @@ class PlateReader(ResourceHolder, Machine):
       raise NoPlateError("There is no plate in the plate reader.")
     return cast(Plate, self.children[0])
 
-  async def open(self) -> None:
-    await self.backend.open()
+  async def open(self, **backend_kwargs) -> None:
+    await self.backend.open(**backend_kwargs)
 
-  async def close(self) -> None:
-    await self.backend.close()
+  async def close(self, **backend_kwargs) -> None:
+    plate = self.get_plate() if len(self.children) > 0 else None
+    await self.backend.close(plate=plate, **backend_kwargs)
 
   @need_setup_finished
   async def read_luminescence(self, focal_height: float) -> List[List[float]]:
@@ -80,7 +78,7 @@ class PlateReader(ResourceHolder, Machine):
       focal_height: The focal height to read the luminescence at, in micrometers.
     """
 
-    return await self.backend.read_luminescence(focal_height=focal_height)
+    return await self.backend.read_luminescence(plate=self.get_plate(), focal_height=focal_height)
 
   @need_setup_finished
   async def read_absorbance(self, wavelength: int) -> List[List[float]]:
@@ -90,7 +88,7 @@ class PlateReader(ResourceHolder, Machine):
       wavelength: The wavelength to read the absorbance at, in nanometers.
     """
 
-    return await self.backend.read_absorbance(wavelength=wavelength)
+    return await self.backend.read_absorbance(plate=self.get_plate(), wavelength=wavelength)
 
   @need_setup_finished
   async def read_fluorescence(
@@ -108,6 +106,7 @@ class PlateReader(ResourceHolder, Machine):
     """
 
     return await self.backend.read_fluorescence(
+      plate=self.get_plate(),
       excitation_wavelength=excitation_wavelength,
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,

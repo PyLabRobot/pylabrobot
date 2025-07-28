@@ -137,7 +137,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       response = client.post(self.base_url + "/labware", json={"deck": deck.serialize()})
       assert response.status_code == 200
       assert self.lh.deck == deck
-      assert self.lh.deck.resources == deck.resources
+      assert self.lh.deck.get_all_children() == deck.get_all_children()
 
     client.post(self.base_url + "/setup")
     time.sleep(0.5)

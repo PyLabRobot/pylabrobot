@@ -3,9 +3,9 @@
 </div>
 
 <div style="text-align: center" align="center">
-<a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> | 
-<a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> | 
-<a href="https://docs.pylabrobot.org/installation.html"><strong>Installation</strong></a> | 
+<a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> |
+<a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> |
+<a href="https://docs.pylabrobot.org/user_guide/_getting-started/installation.html"><strong>Installation</strong></a> |
 <a href="https://docs.pylabrobot.org/basic.html"><strong>Getting started</strong></a>
 </div>
 
@@ -20,10 +20,10 @@ Advantages over proprietary software:
 - **Fast iteration**: PyLabRobot enables rapid development of protocols using atomic commands run interactively in Jupyter notebooks or the Python REPL. This decreases iteration time from minutes to seconds.
 - **Open-source**: PyLabRobot is open-source and free to use.
 - **Control**: With Python, you have ultimate flexibility to control your lab automation equipment. You can write Turing-complete protocols that include feedback loops.
-- **Modern**: PyLabRobot is built on modern Python 3.8+ features and async/await syntax.
+- **Modern**: PyLabRobot is built on modern Python 3.9+ features and async/await syntax.
 - **Fast support**: PyLabRobot has [an active community forum](https://discuss.pylabrobot.org) for support and discussion, and most pull requests are merged within a day.
 
-### Liquid handling robots ([docs](https://docs.pylabrobot.org/basic.html))
+### Liquid handling robots ([docs](https://docs.pylabrobot.org/user_guide/00_liquid-handling/_liquid-handling.html))
 
 PyLabRobot enables the use of any liquid handling robot through a single universal interface, that works on any modern operating system (Windows, macOS, Linux). We currently support Hamilton STAR, Hamilton Vantage, Tecan Freedom EVO, and Opentrons OT-2 robots, but we will soon support many more.
 
@@ -55,16 +55,16 @@ lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
 Or **Tecan** (also works on any operating system!):
 
 ```python
-from pylabrobot.liquid_handling.backends import EVO
+from pylabrobot.liquid_handling.backends import EVOBackend
 deck = Deck.load_from_json_file("tecan-layout.json")
-lh = LiquidHandler(backend=EVO(), deck=deck)
+lh = LiquidHandler(backend=EVOBackend(), deck=deck)
 ```
 
 We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and can be used to develop and test protocols without a physical robot.
 
 ![Visualizer](.github/img/visualizer.png)
 
-### Plate readers ([docs](https://docs.pylabrobot.org/plate_reading.html))
+### Plate readers ([docs](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/plate-reading.html))
 
 Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
 
@@ -83,7 +83,7 @@ data = await pr.read_luminescence()
 
 For Cytation5, use the `Cytation5` backend.
 
-### Centrifuges ([docs](https://docs.pylabrobot.org/user_guide/centrifuge.html))
+### Centrifuges ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/_centrifuge.html))
 
 Centrifugation at 800g for 60 seconds:
 
@@ -95,7 +95,7 @@ await cf.setup()
 await cf.start_spin_cycle(g = 800, duration = 60)
 ```
 
-### Pumps ([docs](https://docs.pylabrobot.org/pumps.html))
+### Pumps ([docs](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/_pumps.html))
 
 Pumping at 100 rpm for 30 seconds using a Masterflex pump:
 
@@ -108,7 +108,7 @@ await p.setup()
 await p.run_for_duration(speed=100, duration=30)
 ```
 
-### Scales ([docs](https://docs.pylabrobot.org/scales.html))
+### Scales ([docs](https://docs.pylabrobot.org/user_guide/02_analytical/scales.html))
 
 Taking a measurement from a Mettler Toledo scale:
 
@@ -123,31 +123,54 @@ await scale.setup()
 weight = await scale.get_weight()
 ```
 
-### Heater shakers ([docs](https://docs.pylabrobot.org/heater_shakers.html))
+### Heater shakers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/heating-shaking.html))
 
 Setting the temperature of a heater shaker to 37&deg;C:
 
 ```python
-from pylabrobot.heating_shaking import HeaterShaker
-from pylabrobot.heating_shaking import InhecoThermoShake
+from pylabrobot.heating_shaking import HeaterShaker, InhecoThermoShakeBackend
 
-backend = InhecoThermoShake()
+backend = InhecoThermoShakeBackend()
 hs = HeaterShaker(backend=backend, name="HeaterShaker", size_x=0, size_y=0, size_z=0)
 await hs.setup()
 await hs.set_temperature(37)
 ```
 
-### Fans ([docs](https://docs.pylabrobot.org/fans.html))
+### Fans ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/fans/fans.html))
 
 Running a fan at 100% intensity for one minute:
 
 ```python
 from pylabrobot.only_fans import Fan
-from pylabrobot.only_fans import HamiltonHepaFan
+from pylabrobot.only_fans import HamiltonHepaFanBackend
 
-fan = Fan(backend=HamiltonHepaFan(), name="my fan")
+fan = Fan(backend=HamiltonHepaFanBackend(), name="my fan")
 await fan.setup()
 await fan.turn_on(intensity=100, duration=60)
+```
+
+### Thermocyclers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/thermocycling/thermocycling.html))
+
+Running a thermocycler with a simple protocol:
+
+```python
+await tc.run_pcr_profile(
+  denaturation_temp=98.0,
+  denaturation_time=10.0,
+  annealing_temp=55.0,
+  annealing_time=30.0,
+  extension_temp=72.0,
+  extension_time=60.0,
+  num_cycles=2,
+  block_max_volume=25.0,
+  lid_temperature=105.0,
+  pre_denaturation_temp=95.0,
+  pre_denaturation_time=180.0,
+  final_extension_temp=72.0,
+  final_extension_time=300.0,
+  storage_temp=4.0,
+  storage_time=600.0,
+)
 ```
 
 ## Resources

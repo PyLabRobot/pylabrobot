@@ -1,12 +1,13 @@
 from abc import ABCMeta, abstractmethod
 from typing import List, Optional
 
-from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
   def __init__(self):
+    super().__init__()
     self._racks: Optional[List[PlateCarrier]] = None
 
   @property

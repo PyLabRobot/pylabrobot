@@ -1,7 +1,7 @@
 import textwrap
 import unittest
 
-from pylabrobot.resources.corning_costar.plates import (
+from pylabrobot.resources.corning.plates import (
   Cor_96_wellplate_360ul_Fb,
 )
 from pylabrobot.resources.opentrons.deck import OTDeck
