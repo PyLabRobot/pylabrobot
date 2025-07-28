@@ -5,7 +5,7 @@ from unittest.mock import patch
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.thermocycling.opentrons import OpentronsThermocyclerModuleV1
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 
 
 def _is_python_3_10():
@@ -104,8 +104,8 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     assert await self.thermocycler_backend.get_lid_current_temperature() == 37.1
     assert await self.thermocycler_backend.get_lid_target_temperature() == 105.0
     assert await self.thermocycler_backend.get_lid_open() is True
-    assert await self.thermocycler_backend.get_lid_status() == "holding at target"
-    assert await self.thermocycler_backend.get_block_status() == "holding at target"
+    assert await self.thermocycler_backend.get_lid_status() == LidStatus.HOLDING_AT_TARGET
+    assert await self.thermocycler_backend.get_block_status() == BlockStatus.HOLDING_AT_TARGET
     assert await self.thermocycler_backend.get_hold_time() == 12.0
     assert await self.thermocycler_backend.get_current_cycle_index() == 1  # 2 - 1 = 1 (zero-based)
     assert await self.thermocycler_backend.get_total_cycle_count() == 10
