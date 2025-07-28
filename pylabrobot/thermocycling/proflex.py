@@ -6,6 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
+from pylabrobot.io import Socket
 from .backend import ThermocyclerBackend
 
 
@@ -266,8 +267,7 @@ class ProflexBackend(ThermocyclerBackend):
     self.ip = ip
     self.port = port
     self.device_shared_secret = shared_secret
-    self._socket_reader = None
-    self._socket_writer = None
+    self._socket = Socket(host=ip, port=port)
     self.num_blocks = 1
     self.num_temp_zones = 0
     self.available_blocks = []
@@ -278,14 +278,10 @@ class ProflexBackend(ThermocyclerBackend):
     self.prot_time_remaining = 0
 
   async def _connect_device(self):
-    self._socket_reader, self._socket_writer = await asyncio.open_connection(self.ip, self.port)
+    await self._socket.setup()
 
   async def _disconnect_device(self):
-    if self._socket_writer is not None:
-      self._socket_writer.close()
-      await self._socket_writer.wait_closed()
-      self._socket_reader = None
-      self._socket_writer = None
+    await self._socket.stop()
 
   def _get_auth_token(self, challenge: str):
     challenge_bytes = challenge.encode("utf-8")
@@ -422,39 +418,21 @@ class ProflexBackend(ThermocyclerBackend):
     return result
 
   async def _read_response(self, timeout=1, readonce=True):
-    if not self._socket_reader:
-      raise ConnectionError("Socket not connected.")
-
-    chunks = []
-    while True:
-      try:
-        data = await asyncio.wait_for(self._socket_reader.read(1024), timeout=timeout)
-        if not data:
-          break
-        elif readonce:
-          chunks.append(data.decode("ascii"))
-          break
-        else:
-          chunks.append(data.decode("ascii"))
-      except asyncio.TimeoutError:
-        break
-      except UnicodeDecodeError:
-        continue
-
-    response = "".join(chunks)
-    self.logger.debug("Response received: %s", response)
-    return response
+    try:
+      response = await self._socket.read(timeout=timeout, readonce=readonce)
+      self.logger.debug("Response received: %s", response)
+      return response
+    except TimeoutError:
+      return ""
+    except Exception as e:
+      self.logger.error("Error reading from socket: %s", e)
+      return ""
 
   async def send_command(self, command: str, response_timeout=1, readonce=True):
-    if not self._socket_writer:
-      raise ConnectionError("Socket not connected.")
-
     command += "\r\n"
     self.logger.debug("Command sent: %s", command.strip())
 
-    self._socket_writer.write(command.encode("ascii"))
-    await self._socket_writer.drain()
-
+    await self._socket.write(command, timeout=response_timeout)
     return await self._read_response(timeout=response_timeout, readonce=readonce)
 
   async def scpi_send_data(self, data, response_timeout=1, readonce=True):
