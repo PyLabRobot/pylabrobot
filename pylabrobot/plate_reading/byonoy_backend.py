@@ -142,7 +142,7 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
       return response
 
 
-class ByonoyAbsorbance96Automate(_ByonoyBase):
+class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x1199, device_type=_ByonoyDevice.ABSORBANCE_96)
 
@@ -293,7 +293,7 @@ class ByonoyAbsorbance96Automate(_ByonoyBase):
     raise NotImplementedError("Absorbance plate reader does not support fluorescence reading.")
 
 
-class ByonoyFluorescence96Automate(_ByonoyBase):
+class ByonoyFluorescence96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x119B, device_type=_ByonoyDevice.FLUORESCENCE_96)
 
