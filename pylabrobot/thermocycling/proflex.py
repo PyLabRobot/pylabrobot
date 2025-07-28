@@ -670,8 +670,8 @@ class ProflexBackend(ThermocyclerBackend):
       protocol.gen_protocol_data(), response_timeout=5, read_once=False
     )
     if self._parse_scpi_response(load_res)["status"] != "OK":
-      logging.error(load_res)
-      logging.error("Protocol failed to load")
+      self.logger.error(load_res)
+      self.logger.error("Protocol failed to load")
       raise ValueError("Protocol failed to load")
 
     start_res = await self.scpi_send_data(
@@ -689,40 +689,40 @@ class ProflexBackend(ThermocyclerBackend):
     )
 
     if self._parse_scpi_response(start_res)["status"] == "NEXT":
-      logging.info("Protocol started")
+      self.logger.info("Protocol started")
     else:
-      logging.error(start_res)
-      logging.error("Protocol failed to start")
+      self.logger.error(start_res)
+      self.logger.error("Protocol failed to start")
       raise ValueError("Protocol failed to start")
 
     total_time = await self.scpi_get_estimated_run_time(block_id=protocol.block_id)
     total_time = float(total_time)
-    logging.info(f"Estimated run time: {total_time}")
+    self.logger.info(f"Estimated run time: {total_time}")
     self.current_run = run_name
     self.running_blocks.append(protocol.block_id)
 
   async def _scpi_abort_run(self, block_id, run_name):
     abort_res = await self.scpi_send_data({"cmd": f"TBC{block_id}:AbortRun", "args": [run_name]})
     if self._parse_scpi_response(abort_res)["status"] != "OK":
-      logging.error(abort_res)
-      logging.error("Failed to abort protocol")
+      self.logger.error(abort_res)
+      self.logger.error("Failed to abort protocol")
       raise ValueError("Failed to abort protocol")
-    logging.info("Protocol aborted")
+    self.logger.info("Protocol aborted")
 
   async def check_if_running(self, protocol: ProflexPCRProtocol):
     block_id = protocol.block_id
     progress = await self.scpi_get_run_progress(block_id=block_id)
     if not progress:
-      logging.info("Protocol completed")
+      self.logger.info("Protocol completed")
       return False, "completed", self.prot_time_elapsed, 0
 
     if progress["RunTitle"] == "-":
       await self._read_response(timeout=5)
-      logging.info("Protocol completed")
+      self.logger.info("Protocol completed")
       return False, "completed", self.prot_time_elapsed, 0
 
     if progress["Stage"] == "POSTRun":
-      logging.info("Protocol in POSTRun")
+      self.logger.info("Protocol in POSTRun")
       return True, "POSTRun", self.prot_time_elapsed, 0
 
     if progress["Stage"] != "-" and progress["Step"] != "-":
@@ -735,7 +735,7 @@ class ProflexBackend(ThermocyclerBackend):
           ):
             break
           await asyncio.sleep(5)
-        logging.info("Infinite hold")
+        self.logger.info("Infinite hold")
         return False, "infinite_hold", self.prot_time_elapsed, self.prot_time_remaining
 
     time_elapsed = await self.scpi_get_elapsed_run_time(block_id=block_id)
@@ -743,8 +743,8 @@ class ProflexBackend(ThermocyclerBackend):
     remaining_time = await self.scpi_get_remaining_run_time(block_id=block_id)
     self.prot_time_remaining = remaining_time
 
-    logging.info(f"Elapsed time: {time_elapsed}")
-    logging.info(f"Remaining time: {remaining_time}")
+    self.logger.info(f"Elapsed time: {time_elapsed}")
+    self.logger.info(f"Remaining time: {remaining_time}")
     return True, progress["Stage"], time_elapsed, remaining_time
 
   # *************Three core methods for running a protocol***********************
@@ -778,7 +778,7 @@ class ProflexBackend(ThermocyclerBackend):
     if run_exists == "False":
       await self.scpi_create_run(run_name)
     else:
-      logging.warning(f"Run {run_name} already exists")
+      self.logger.warning(f"Run {run_name} already exists")
     await self._scpi_write_run_info(protocol, run_name)
     await self._scpi_run_protocol(protocol, run_name, user)
 
