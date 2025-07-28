@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import List, Optional, cast
+from typing import List, Optional
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
@@ -170,9 +170,9 @@ class Thermocycler(ResourceHolder, Machine):
     """Get the lid's target temperature (°C), if supported."""
     return await self.backend.get_lid_target_temperature()
 
-  async def get_lid_status(self) -> str:
-    """Get whether the lid is "open" or "closed"."""
-    return cast(str, await self.backend.get_lid_status())
+  async def get_lid_open(self) -> bool:
+    """Return ``True`` if the lid is open."""
+    return await self.backend.get_lid_open()
 
   async def get_hold_time(self) -> float:
     """Get remaining hold time (s) for the current step."""
@@ -205,7 +205,7 @@ class Thermocycler(ResourceHolder, Machine):
     raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5):
-    """Wait until lid temp reaches target ± tolerance, or status is idle/holding at target."""
+    """Wait until the lid temperature reaches target ± ``tolerance`` or the lid closes."""
     try:
       target = await self.get_lid_target_temperature()
     except RuntimeError:
@@ -217,8 +217,7 @@ class Thermocycler(ResourceHolder, Machine):
           return
       else:
         # If no target temperature, check status
-        status = await self.get_lid_status()
-        if status in ["idle", "holding at target"]:
+        if not await self.get_lid_open():
           return
       await asyncio.sleep(1)
     raise TimeoutError("Lid temperature timeout.")

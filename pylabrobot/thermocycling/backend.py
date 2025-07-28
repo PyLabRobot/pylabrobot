@@ -53,8 +53,8 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Get the lid target temperature in °C. May raise RuntimeError if no target is set."""
 
   @abstractmethod
-  async def get_lid_status(self):
-    """Get the lid open/closed status."""
+  async def get_lid_open(self) -> bool:
+    """Return ``True`` if the lid is open."""
 
   @abstractmethod
   async def get_hold_time(self) -> float:

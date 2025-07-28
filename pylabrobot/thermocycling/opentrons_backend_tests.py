@@ -36,7 +36,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     """Test that an error is raised if the module is not found."""
     mock_list_connected_modules.return_value = [{"id": "some_other_id", "data": {}}]
     with self.assertRaises(RuntimeError) as e:
-      await self.thermocycler_backend.get_lid_status()
+      await self.thermocycler_backend.get_lid_open()
     self.assertEqual(str(e.exception), "Module 'test_id' not found")
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_open_lid")
@@ -101,7 +101,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     assert await self.thermocycler_backend.get_block_target_temperature() == 95.0
     assert await self.thermocycler_backend.get_lid_current_temperature() == 37.1
     assert await self.thermocycler_backend.get_lid_target_temperature() == 105.0
-    assert await self.thermocycler_backend.get_lid_status() == "open"
+    assert await self.thermocycler_backend.get_lid_open() is True
     assert await self.thermocycler_backend.get_hold_time() == 12.0
     assert await self.thermocycler_backend.get_current_cycle_index() == 1  # 2 - 1 = 1 (zero-based)
     assert await self.thermocycler_backend.get_total_cycle_count() == 10

@@ -126,8 +126,8 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
       raise RuntimeError("Lid target temperature is not set. is a cycle running?")
     return cast(float, target_temp)
 
-  async def get_lid_status(self) -> str:
-    return cast(str, self._find_module()["lidStatus"])
+  async def get_lid_open(self) -> bool:
+    return cast(str, self._find_module()["lidStatus"]) == "open"
 
   async def get_hold_time(self) -> float:
     return cast(float, self._find_module().get("holdTime", 0.0))

@@ -177,5 +177,5 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
       raise RuntimeError("Lid target temperature is not set. Is a cycle running?")
     return self._state.lid_target
 
-  async def get_lid_status(self) -> str:
-    return "open" if self._state.lid_open else "closed"
+  async def get_lid_open(self) -> bool:
+    return self._state.lid_open
