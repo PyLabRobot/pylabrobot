@@ -213,7 +213,7 @@ class Thermocycler(ResourceHolder, Machine):
     raise TimeoutError("Block temperature timeout.")
 
   async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5):
-    """Wait until the lid temperature reaches target ± ``tolerance`` or the lid closes."""
+    """Wait until the lid temperature reaches target ± ``tolerance`` or the lid temperature status is idle/holding at target."""
     try:
       target = await self.get_lid_target_temperature()
     except RuntimeError:
