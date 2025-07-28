@@ -47,49 +47,46 @@ class Thermocycler(ResourceHolder, Machine):
       model=model,
     )
     Machine.__init__(self, backend=backend)
-    # exactly like TemperatureController does
     self.backend: ThermocyclerBackend = backend
 
-  async def open_lid(self):
-    """Open the thermocycler lid."""
-    return await self.backend.open_lid()
+  async def open_lid(self, **backend_kwargs):
+    return await self.backend.open_lid(**backend_kwargs)
 
-  async def close_lid(self):
-    """Close the thermocycler lid."""
-    return await self.backend.close_lid()
+  async def close_lid(self, **backend_kwargs):
+    return await self.backend.close_lid(**backend_kwargs)
 
-  async def set_block_temperature(self, temperature: float):
+  async def set_block_temperature(self, temperature: float, **backend_kwargs):
     """Set the block temperature.
 
     Args:
       temperature: Target temperature in °C.
     """
-    return await self.backend.set_block_temperature(temperature)
+    return await self.backend.set_block_temperature(temperature, **backend_kwargs)
 
-  async def set_lid_temperature(self, temperature: float):
+  async def set_lid_temperature(self, temperature: float, **backend_kwargs):
     """Set the lid temperature.
 
     Args:
       temperature: Target temperature in °C.
     """
-    return await self.backend.set_lid_temperature(temperature)
+    return await self.backend.set_lid_temperature(temperature, **backend_kwargs)
 
-  async def deactivate_block(self):
+  async def deactivate_block(self, **backend_kwargs):
     """Turn off the block heater."""
-    return await self.backend.deactivate_block()
+    return await self.backend.deactivate_block(**backend_kwargs)
 
-  async def deactivate_lid(self):
+  async def deactivate_lid(self, **backend_kwargs):
     """Turn off the lid heater."""
-    return await self.backend.deactivate_lid()
+    return await self.backend.deactivate_lid(**backend_kwargs)
 
-  async def run_profile(self, profile: List[Step], block_max_volume: float):
+  async def run_profile(self, profile: List[Step], block_max_volume: float, **backend_kwargs):
     """Enqueue a multi-step temperature profile (fire-and-forget).
 
     Args:
       profile: List of {"temperature": float, "holdSeconds": float} steps.
       block_max_volume: Maximum block volume (µL) for safety.
     """
-    return await self.backend.run_profile(profile, block_max_volume)
+    return await self.backend.run_profile(profile, block_max_volume, **backend_kwargs)
 
   async def run_pcr_profile(
     self,
@@ -108,6 +105,7 @@ class Thermocycler(ResourceHolder, Machine):
     final_extension_time: Optional[float] = None,
     storage_temp: Optional[float] = None,
     storage_time: Optional[float] = None,
+    **backend_kwargs,
   ):
     """Run a PCR profile with specified parameters.
 
@@ -152,84 +150,86 @@ class Thermocycler(ResourceHolder, Machine):
     if storage_temp is not None and storage_time is not None:
       profile.append(Step(temperature=storage_temp, hold_seconds=storage_time))
 
-    return await self.run_profile(profile=profile, block_max_volume=block_max_volume)
+    return await self.run_profile(
+      profile=profile, block_max_volume=block_max_volume, **backend_kwargs
+    )
 
-  async def get_block_current_temperature(self) -> float:
+  async def get_block_current_temperature(self, **backend_kwargs) -> float:
     """Get the current block temperature (°C)."""
-    return await self.backend.get_block_current_temperature()
+    return await self.backend.get_block_current_temperature(**backend_kwargs)
 
-  async def get_block_target_temperature(self) -> float:
+  async def get_block_target_temperature(self, **backend_kwargs) -> float:
     """Get the block's target temperature (°C)."""
-    return await self.backend.get_block_target_temperature()
+    return await self.backend.get_block_target_temperature(**backend_kwargs)
 
-  async def get_lid_current_temperature(self) -> float:
+  async def get_lid_current_temperature(self, **backend_kwargs) -> float:
     """Get the current lid temperature (°C)."""
-    return await self.backend.get_lid_current_temperature()
+    return await self.backend.get_lid_current_temperature(**backend_kwargs)
 
-  async def get_lid_target_temperature(self) -> float:
+  async def get_lid_target_temperature(self, **backend_kwargs) -> float:
     """Get the lid's target temperature (°C), if supported."""
-    return await self.backend.get_lid_target_temperature()
+    return await self.backend.get_lid_target_temperature(**backend_kwargs)
 
-  async def get_lid_status(self) -> str:
+  async def get_lid_status(self, **backend_kwargs) -> str:
     """Get whether the lid is "open" or "closed"."""
-    return cast(str, await self.backend.get_lid_status())
+    return cast(str, await self.backend.get_lid_status(**backend_kwargs))
 
-  async def get_hold_time(self) -> float:
+  async def get_hold_time(self, **backend_kwargs) -> float:
     """Get remaining hold time (s) for the current step."""
-    return await self.backend.get_hold_time()
+    return await self.backend.get_hold_time(**backend_kwargs)
 
-  async def get_current_cycle_index(self) -> int:
+  async def get_current_cycle_index(self, **backend_kwargs) -> int:
     """Get the one-based index of the current cycle."""
-    return await self.backend.get_current_cycle_index()
+    return await self.backend.get_current_cycle_index(**backend_kwargs)
 
-  async def get_total_cycle_count(self) -> int:
+  async def get_total_cycle_count(self, **backend_kwargs) -> int:
     """Get the total number of cycles."""
-    return await self.backend.get_total_cycle_count()
+    return await self.backend.get_total_cycle_count(**backend_kwargs)
 
-  async def get_current_step_index(self) -> int:
+  async def get_current_step_index(self, **backend_kwargs) -> int:
     """Get the one-based index of the current step."""
-    return await self.backend.get_current_step_index()
+    return await self.backend.get_current_step_index(**backend_kwargs)
 
-  async def get_total_step_count(self) -> int:
+  async def get_total_step_count(self, **backend_kwargs) -> int:
     """Get the total number of steps in the current cycle."""
-    return await self.backend.get_total_step_count()
+    return await self.backend.get_total_step_count(**backend_kwargs)
 
-  async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5):
+  async def wait_for_block(self, timeout: float = 600, tolerance: float = 0.5, **backend_kwargs):
     """Wait until block temp reaches target ± tolerance."""
-    target = await self.get_block_target_temperature()
+    target = await self.get_block_target_temperature(**backend_kwargs)
     start = time.time()
     while time.time() - start < timeout:
-      if abs((await self.get_block_current_temperature()) - target) < tolerance:
+      if abs((await self.get_block_current_temperature(**backend_kwargs)) - target) < tolerance:
         return
       await asyncio.sleep(1)
     raise TimeoutError("Block temperature timeout.")
 
-  async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5):
+  async def wait_for_lid(self, timeout: float = 1200, tolerance: float = 0.5, **backend_kwargs):
     """Wait until lid temp reaches target ± tolerance, or status is idle/holding at target."""
     try:
-      target = await self.get_lid_target_temperature()
+      target = await self.get_lid_target_temperature(**backend_kwargs)
     except RuntimeError:
       target = None
     start = time.time()
     while time.time() - start < timeout:
       if target is not None:
-        if abs((await self.get_lid_current_temperature()) - target) < tolerance:
+        if abs((await self.get_lid_current_temperature(**backend_kwargs)) - target) < tolerance:
           return
       else:
         # If no target temperature, check status
-        status = await self.get_lid_status()
+        status = await self.get_lid_status(**backend_kwargs)
         if status in ["idle", "holding at target"]:
           return
       await asyncio.sleep(1)
     raise TimeoutError("Lid temperature timeout.")
 
-  async def is_profile_running(self) -> bool:
+  async def is_profile_running(self, **backend_kwargs) -> bool:
     """Return True if a profile is still in progress."""
-    hold = await self.get_hold_time()
-    cycle = await self.get_current_cycle_index()
-    total_cycles = await self.get_total_cycle_count()
-    step = await self.get_current_step_index()
-    total_steps = await self.get_total_step_count()
+    hold = await self.get_hold_time(**backend_kwargs)
+    cycle = await self.get_current_cycle_index(**backend_kwargs)
+    total_cycles = await self.get_total_cycle_count(**backend_kwargs)
+    step = await self.get_current_step_index(**backend_kwargs)
+    total_steps = await self.get_total_step_count(**backend_kwargs)
 
     # if still holding in a step, it's running
     if hold and hold > 0:
@@ -242,9 +242,9 @@ class Thermocycler(ResourceHolder, Machine):
       return True
     return False
 
-  async def wait_for_profile_completion(self, poll_interval: float = 60.0):
+  async def wait_for_profile_completion(self, poll_interval: float = 60.0, **backend_kwargs):
     """Block until the profile finishes, polling at `poll_interval` seconds."""
-    while await self.is_profile_running():
+    while await self.is_profile_running(**backend_kwargs):
       await asyncio.sleep(poll_interval)
 
   def serialize(self) -> dict:
