@@ -4,7 +4,7 @@ import sys
 from typing import cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 
 # Only supported on Python 3.10 with the OT-API HTTP client installed
 PYTHON_VERSION = sys.version_info[:2]
@@ -129,11 +129,21 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def get_lid_open(self) -> bool:
     return cast(str, self._find_module()["lidStatus"]) == "open"
 
-  async def get_lid_temperature_status(self) -> str:
-    return cast(str, self._find_module()["lidTemperatureStatus"])
+  async def get_lid_status(self) -> LidStatus:
+    status = cast(str, self._find_module()["lidTemperatureStatus"])
+    # Map Opentrons status strings to our enum
+    if status == "holding at target":
+      return LidStatus.HOLDING_AT_TARGET
+    else:
+      return LidStatus.IDLE
 
-  async def get_block_status(self) -> str:
-    return cast(str, self._find_module()["status"])
+  async def get_block_status(self) -> BlockStatus:
+    status = cast(str, self._find_module()["status"])
+    # Map Opentrons status strings to our enum
+    if status == "holding at target":
+      return BlockStatus.HOLDING_AT_TARGET
+    else:
+      return BlockStatus.IDLE
 
   async def get_hold_time(self) -> float:
     return cast(float, self._find_module().get("holdTime", 0.0))

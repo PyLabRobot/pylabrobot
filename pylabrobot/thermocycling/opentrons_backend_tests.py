@@ -104,7 +104,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     assert await self.thermocycler_backend.get_lid_current_temperature() == 37.1
     assert await self.thermocycler_backend.get_lid_target_temperature() == 105.0
     assert await self.thermocycler_backend.get_lid_open() is True
-    assert await self.thermocycler_backend.get_lid_temperature_status() == "holding at target"
+    assert await self.thermocycler_backend.get_lid_status() == "holding at target"
     assert await self.thermocycler_backend.get_block_status() == "holding at target"
     assert await self.thermocycler_backend.get_hold_time() == 12.0
     assert await self.thermocycler_backend.get_current_cycle_index() == 1  # 2 - 1 = 1 (zero-based)

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 
 
 @dataclass
@@ -180,12 +180,12 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
   async def get_lid_open(self) -> bool:
     return self._state.lid_open
 
-  async def get_lid_temperature_status(self) -> str:
+  async def get_lid_status(self) -> LidStatus:
     if self._state.lid_target is not None:
-      return "holding at target"
-    return "idle"
+      return LidStatus.HOLDING_AT_TARGET
+    return LidStatus.IDLE
 
-  async def get_block_status(self) -> str:
+  async def get_block_status(self) -> BlockStatus:
     if self._state.block_target is not None:
-      return "holding at target"
-    return "idle"
+      return BlockStatus.HOLDING_AT_TARGET
+    return BlockStatus.IDLE

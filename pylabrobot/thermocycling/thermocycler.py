@@ -7,7 +7,7 @@ from typing import List, Optional
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 
 
 class Thermocycler(ResourceHolder, Machine):
@@ -174,11 +174,11 @@ class Thermocycler(ResourceHolder, Machine):
     """Return ``True`` if the lid is open."""
     return await self.backend.get_lid_open()
 
-  async def get_lid_temperature_status(self) -> str:
+  async def get_lid_status(self) -> LidStatus:
     """Get the lid temperature status."""
-    return await self.backend.get_lid_temperature_status()
+    return await self.backend.get_lid_status()
 
-  async def get_block_status(self) -> str:
+  async def get_block_status(self) -> BlockStatus:
     """Get the block status."""
     return await self.backend.get_block_status()
 
@@ -225,7 +225,7 @@ class Thermocycler(ResourceHolder, Machine):
           return
       else:
         # If no target temperature, check status
-        status = await self.get_lid_temperature_status()
+        status = await self.get_lid_status()
         if status in ["idle", "holding at target"]:
           return
       await asyncio.sleep(1)
