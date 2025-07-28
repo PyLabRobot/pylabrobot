@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List
 
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 
 
 class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
@@ -55,6 +55,14 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def get_lid_open(self) -> bool:
     """Return ``True`` if the lid is open."""
+
+  @abstractmethod
+  async def get_lid_status(self) -> LidStatus:
+    """Get the lid temperature status."""
+
+  @abstractmethod
+  async def get_block_status(self) -> BlockStatus:
+    """Get the block temperature status."""
 
   @abstractmethod
   async def get_hold_time(self) -> float:

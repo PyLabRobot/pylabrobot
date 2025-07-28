@@ -4,7 +4,7 @@ import sys
 from typing import cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
 
 # Only supported on Python 3.10 with the OT-API HTTP client installed
 PYTHON_VERSION = sys.version_info[:2]
@@ -129,21 +129,49 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def get_lid_open(self) -> bool:
     return cast(str, self._find_module()["lidStatus"]) == "open"
 
+  async def get_lid_status(self) -> LidStatus:
+    status = cast(str, self._find_module()["lidTemperatureStatus"])
+    # Map Opentrons status strings to our enum
+    if status == "holding at target":
+      return LidStatus.HOLDING_AT_TARGET
+    else:
+      return LidStatus.IDLE
+
+  async def get_block_status(self) -> BlockStatus:
+    status = cast(str, self._find_module()["status"])
+    # Map Opentrons status strings to our enum
+    if status == "holding at target":
+      return BlockStatus.HOLDING_AT_TARGET
+    else:
+      return BlockStatus.IDLE
+
   async def get_hold_time(self) -> float:
     return cast(float, self._find_module().get("holdTime", 0.0))
 
   async def get_current_cycle_index(self) -> int:
     """Get the zero-based index of the current cycle from the Opentrons API."""
     # Opentrons API returns one-based, convert to zero-based
-    return cast(int, self._find_module()["currentCycleIndex"]) - 1
+    cycle_index = self._find_module().get("currentCycleIndex")
+    if cycle_index is None:
+      raise RuntimeError("Current cycle index is not available. Is a profile running?")
+    return cast(int, cycle_index) - 1
 
   async def get_total_cycle_count(self) -> int:
-    return cast(int, self._find_module()["totalCycleCount"])
+    total_cycles = self._find_module().get("totalCycleCount")
+    if total_cycles is None:
+      raise RuntimeError("Total cycle count is not available. Is a profile running?")
+    return cast(int, total_cycles)
 
   async def get_current_step_index(self) -> int:
     """Get the zero-based index of the current step from the Opentrons API."""
     # Opentrons API returns one-based, convert to zero-based
-    return cast(int, self._find_module()["currentStepIndex"]) - 1
+    step_index = self._find_module().get("currentStepIndex")
+    if step_index is None:
+      raise RuntimeError("Current step index is not available. Is a profile running?")
+    return cast(int, step_index) - 1
 
   async def get_total_step_count(self) -> int:
-    return cast(int, self._find_module()["totalStepCount"])
+    total_steps = self._find_module().get("totalStepCount")
+    if total_steps is None:
+      raise RuntimeError("Total step count is not available. Is a profile running?")
+    return cast(int, total_steps)
