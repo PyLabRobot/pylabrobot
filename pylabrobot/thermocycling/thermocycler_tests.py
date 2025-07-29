@@ -86,15 +86,15 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     self.tc.backend.set_lid_temperature.assert_called_once_with([105.0])  # type: ignore
 
     expected_profile = [
-      Step(temperature=95.0, hold_seconds=180.0),
-      Step(temperature=98.0, hold_seconds=10.0),
-      Step(temperature=55.0, hold_seconds=30.0),
-      Step(temperature=72.0, hold_seconds=60.0),
-      Step(temperature=98.0, hold_seconds=10.0),
-      Step(temperature=55.0, hold_seconds=30.0),
-      Step(temperature=72.0, hold_seconds=60.0),
-      Step(temperature=72.0, hold_seconds=300.0),
-      Step(temperature=4.0, hold_seconds=600.0),
+      Step(temperature=[95.0], hold_seconds=180.0),
+      Step(temperature=[98.0], hold_seconds=10.0),
+      Step(temperature=[55.0], hold_seconds=30.0),
+      Step(temperature=[72.0], hold_seconds=60.0),
+      Step(temperature=[98.0], hold_seconds=10.0),
+      Step(temperature=[55.0], hold_seconds=30.0),
+      Step(temperature=[72.0], hold_seconds=60.0),
+      Step(temperature=[72.0], hold_seconds=300.0),
+      Step(temperature=[4.0], hold_seconds=600.0),
     ]
 
     self.tc.backend.run_profile.assert_called_once_with(expected_profile, 25.0)  # type: ignore

@@ -71,7 +71,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_run_profile_no_wait")
   async def test_run_profile(self, mock_run_profile):
-    profile = [Step(temperature=95, hold_seconds=10)]
+    profile = [Step(temperature=[95], hold_seconds=10)]
     await self.thermocycler_backend.run_profile(profile, 50.0)
     # print all calls
     mock_run_profile.assert_called_once_with(

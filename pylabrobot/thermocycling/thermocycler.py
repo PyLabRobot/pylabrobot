@@ -86,44 +86,54 @@ class Thermocycler(ResourceHolder, Machine):
       profile: List of {"temperature": float, "holdSeconds": float} steps.
       block_max_volume: Maximum block volume (µL) for safety.
     """
+
+    # Ensure all steps have the same number of temperatures
+    num_zones = len(profile[0].temperature)
+    for i, step in enumerate(profile):
+      if len(step.temperature) != num_zones:
+        raise ValueError(
+          f"All steps must have the same number of temperatures. "
+          f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
+        )
+
     return await self.backend.run_profile(profile, block_max_volume, **backend_kwargs)
 
   async def run_pcr_profile(
     self,
-    denaturation_temp: float,
+    denaturation_temp: List[float],
     denaturation_time: float,
-    annealing_temp: float,
+    annealing_temp: List[float],
     annealing_time: float,
-    extension_temp: float,
+    extension_temp: List[float],
     extension_time: float,
     num_cycles: int,
     block_max_volume: float,
     lid_temperature: List[float],
-    pre_denaturation_temp: Optional[float] = None,
+    pre_denaturation_temp: Optional[List[float]] = None,
     pre_denaturation_time: Optional[float] = None,
-    final_extension_temp: Optional[float] = None,
+    final_extension_temp: Optional[List[float]] = None,
     final_extension_time: Optional[float] = None,
-    storage_temp: Optional[float] = None,
+    storage_temp: Optional[List[float]] = None,
     storage_time: Optional[float] = None,
     **backend_kwargs,
   ):
     """Run a PCR profile with specified parameters.
 
     Args:
-      denaturation_temp: Denaturation temperature in °C.
+      denaturation_temp: List of denaturation temperatures in °C.
       denaturation_time: Denaturation time in seconds.
-      annealing_temp: Annealing temperature in °C.
+      annealing_temp: List of annealing temperatures in °C.
       annealing_time: Annealing time in seconds.
-      extension_temp: Extension temperature in °C.
+      extension_temp: List of extension temperatures in °C.
       extension_time: Extension time in seconds.
       num_cycles: Number of PCR cycles.
       block_max_volume: Maximum block volume (µL) for safety.
       lid_temperature: List of lid temperatures to set during the profile.
-      pre_denaturation_temp: Optional pre-denaturation temperature in °C.
+      pre_denaturation_temp: Optional list of pre-denaturation temperatures in °C.
       pre_denaturation_time: Optional pre-denaturation time in seconds.
-      final_extension_temp: Optional final extension temperature in °C.
+      final_extension_temp: Optional list of final extension temperatures in °C.
       final_extension_time: Optional final extension time in seconds.
-      storage_temp: Optional storage temperature in °C.
+      storage_temp: Optional list of storage temperatures in °C.
       storage_time: Optional storage time in seconds.
     """
 

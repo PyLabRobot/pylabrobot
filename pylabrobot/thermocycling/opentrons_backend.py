@@ -101,9 +101,14 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def run_profile(self, profile: list[Step], block_max_volume: float):
     """Enqueue and return immediately (no wait) the PCR profile command."""
     # in opentrons, the "celsius" key is used instead of "temperature"
-    ot_profile = [
-      {"celsius": step.temperature, "holdSeconds": step.hold_seconds} for step in profile
-    ]
+    # step.temperature is now a list, but Opentrons only supports single temperature
+    ot_profile = []
+    for step in profile:
+      if len(set(step.temperature)) != 1:
+        raise ValueError(f"Opentrons thermocycler only supports a single unique temperature per step, got {set(step.temperature)}")
+      celsius = step.temperature[0]
+      ot_profile.append({"celsius": celsius, "holdSeconds": step.hold_seconds})
+
     return thermocycler_run_profile_no_wait(
       profile=ot_profile,
       block_max_volume=block_max_volume,

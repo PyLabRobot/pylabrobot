@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
@@ -114,9 +114,13 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
 
     for i, step in enumerate(profile):
       temperature_val = step.temperature
-      temperature_str = (
-        f"{temperature_val:.1f}" if isinstance(temperature_val, (int, float)) else "N/A"
-      )
+      # Handle temperature as a list - display all temperatures
+      if isinstance(temperature_val, list) and len(temperature_val) > 0:
+        temperature_str = ", ".join(f"{t:.1f}" for t in temperature_val)
+      elif isinstance(temperature_val, (int, float)):
+        temperature_str = f"{temperature_val:.1f}"
+      else:
+        temperature_str = "N/A"
       hold_val = step.hold_seconds
       hold_str = f"{hold_val:.1f}" if isinstance(hold_val, (int, float)) else "N/A"
       row = (
@@ -134,10 +138,13 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     first_step = self._state.profile[0]
     first_temp = first_step.temperature
     if first_temp is not None:
-      print(f"  - Starting Step 1/{self._state.total_steps}: setting block to {first_temp:.1f}°C.")
-      # Set block target to same temperature for all zones when running profile
-      self._state.block_target = [first_temp] * len(self._state.block_temp)
-      self._state.block_temp = [first_temp] * len(self._state.block_temp)
+      # first_temp is now a list, display all temperatures
+      if isinstance(first_temp, list) and len(first_temp) > 0:
+        temp_str = ", ".join(f"{t:.1f}" for t in first_temp)
+        print(f"  - Starting Step 1/{self._state.total_steps}: setting block to {temp_str}°C.")
+        # Set block target to the temperatures for each zone
+        self._state.block_target = list(first_temp)
+        self._state.block_temp = list(first_temp)
 
   async def get_hold_time(self) -> float:
     if not self._state.is_profile_running:
@@ -156,18 +163,23 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
         next_step = self._state.profile[i + 1]
         next_temp = next_step.temperature
         if next_temp is not None:
-          print(
-            f"  - Starting Step {i + 2}/{self._state.total_steps}: "
-            f"setting block to {next_temp:.1f}°C."
-          )
+          # next_temp is now a list, display all temperatures
+          if isinstance(next_temp, list) and len(next_temp) > 0:
+            temp_str = ", ".join(f"{t:.1f}" for t in next_temp)
+            print(
+              f"  - Starting Step {i + 2}/{self._state.total_steps}: "
+              f"setting block to {temp_str}°C."
+            )
 
     print("  - Profile finished.")
     self._state.is_profile_running = False
     self._state.current_step_index = self._state.total_steps - 1
     final_temp = self._state.profile[-1].temperature
     if final_temp is not None:
-      self._state.block_target = [final_temp] * len(self._state.block_temp)
-      self._state.block_temp = [final_temp] * len(self._state.block_temp)
+      # final_temp is now a list, use all temperatures for each zone
+      if isinstance(final_temp, list) and len(final_temp) > 0:
+        self._state.block_target = list(final_temp)
+        self._state.block_temp = list(final_temp)
 
     return 0.0
 
