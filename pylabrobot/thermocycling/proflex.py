@@ -3,262 +3,219 @@ import hashlib
 import hmac
 import logging
 import re
-from typing import List, Optional
 import xml.etree.ElementTree as ET
+from typing import Any, Dict, List, Optional
 from xml.dom import minidom
 
 from pylabrobot.io import Socket
+from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 from .backend import ThermocyclerBackend
 
 
 class ProflexPCRProtocol:
-  def __init__(
-    self,
-    volume=50,
-    run_mode="Fast",
-    block_id=1,
-    protocol_name="PCR_Protocol",
-    cover_temp=105,
-    cover_enabled="On",
-  ):
-    self.data = {
-      "status": "OK",
-      "cmd": f"TBC{block_id}:Protocol",
-      "params": {"Volume": str(volume), "RunMode": run_mode},
-      "args": [protocol_name],
-      "tag": "multiline.outer",
-      "multiline": [],
-      "_coverTemp": cover_temp,
-      "_coverEnabled": cover_enabled,
-      "_block_id": block_id,
-      "_infinite_holds": [],
-    }
-    self.current_stage = None
-    self.stage_count = 0
-    self.step_count = 0
-    self.protocol_name = protocol_name
-    self.block_id = block_id
-    self.cover_temp = cover_temp
-    self.cover_enabled = cover_enabled
-    self.infinite_holds = []
+  # @classmethod
+  # def from_dict(cls, data: dict):
+  #   instance = cls()
+  #   instance.data = data
+  #   instance.stage_count = len(data["multiline"])
+  #   instance.current_stage = data["multiline"][-1] if data["multiline"] else None
+  #   instance.step_count = len(instance.current_stage["multiline"]) if instance.current_stage else 0
+  #   instance.protocol_name = data["args"][0]
+  #   instance.block_id = data["_block_id"]
+  #   instance.cover_temp = data["_coverTemp"]
+  #   instance.cover_enabled = data["_coverEnabled"]
+  #   instance.infinite_holds = data["_infinite_holds"]
+  #   return instance
+  pass
 
-  @classmethod
-  def from_dict(cls, data: dict):
-    instance = cls()
-    instance.data = data
-    instance.stage_count = len(data["multiline"])
-    instance.current_stage = data["multiline"][-1] if data["multiline"] else None
-    instance.step_count = len(instance.current_stage["multiline"]) if instance.current_stage else 0
-    instance.protocol_name = data["args"][0]
-    instance.block_id = data["_block_id"]
-    instance.cover_temp = data["_coverTemp"]
-    instance.cover_enabled = data["_coverEnabled"]
-    instance.infinite_holds = data["_infinite_holds"]
-    return instance
 
-  def add_stage(self, cycles, stage_name_base="_PCR"):
-    self.stage_count += 1
-    stage = {
-      "cmd": "STAGe",
-      "params": {"repeat": str(cycles)},
-      "args": [self.stage_count, f"{stage_name_base}_{self.stage_count}"],
-      "tag": "multiline.stage",
-      "multiline": [],
-    }
-    self.data["multiline"].append(stage)
-    self.current_stage = stage
-    self.step_count = 0
+def generate_run_info_files(
+  protocol: Protocol,
+  block_id: int,
+  sample_volume: float = 50,
+  run_mode: str = "Fast",
+  protocol_name: str = "PCR_Protocol",
+  cover_enabled: bool = True,
+  cover_temp: float = 105.0,
+  user_name="LifeTechnologies",
+  file_version="1.0.1",
+  remote_run="true",
+  hub="testhub",
+  user="Guest",
+  notes="",
+  default_ramp_rate=100,
+  ramp_rate_unit="DEGREES_PER_SECOND",
+):
+  root = ET.Element("TCProtocol")
+  file_version_el = ET.SubElement(root, "FileVersion")
+  file_version_el.text = file_version
 
-  def add_step(
-    self,
-    temp_list: list[float],
-    time: int = 0,
-    ramp_rate: int = 100,
-    hold: bool = True,
-    infinite_hold: bool = False,
-  ):
-    self.step_count += 1
-    step = {
+  protocol_name_el = ET.SubElement(root, "ProtocolName")
+  protocol_name_el.text = protocol_name
+
+  user_name_el = ET.SubElement(root, "UserName")
+  user_name_el.text = user_name
+
+  block_id_el = ET.SubElement(root, "block_id")
+  block_id_el.text = str(block_id + 1)
+
+  sample_volume_el = ET.SubElement(root, "SampleVolume")
+  sample_volume_el.text = str(sample_volume)
+
+  run_mode_el = ET.SubElement(root, "RunMode")
+  run_mode_el.text = str(run_mode)
+
+  cover_temp_el = ET.SubElement(root, "CoverTemperature")
+  cover_temp_el.text = str(cover_temp)
+
+  cover_setting_el = ET.SubElement(root, "CoverSetting")
+  cover_setting_el.text = "On" if cover_enabled else "Off"
+
+  for stage_obj in protocol.stages:
+    if isinstance(stage_obj, Step):
+      stage = Stage(steps=[stage_obj], repeats=1)
+    else:
+      stage = stage_obj
+
+    stage_el = ET.SubElement(root, "TCStage")
+    stage_flag_el = ET.SubElement(stage_el, "StageFlag")
+    stage_flag_el.text = "CYCLING"
+
+    num_repetitions_el = ET.SubElement(stage_el, "NumOfRepetitions")
+    num_repetitions_el.text = str(stage.repeats)
+
+    for step in stage.steps:
+      step_el = ET.SubElement(stage_el, "TCStep")
+
+      ramp_rate_el = ET.SubElement(step_el, "RampRate")
+      ramp_rate_el.text = str(
+        int(step.rate if step.rate is not None else default_ramp_rate) / 100 * 6
+      )
+
+      ramp_rate_unit_el = ET.SubElement(step_el, "RampRateUnit")
+      ramp_rate_unit_el.text = ramp_rate_unit
+
+      for t_val in step.temperature:
+        temp_el = ET.SubElement(step_el, "Temperature")
+        temp_el.text = str(t_val)
+
+      hold_time_el = ET.SubElement(step_el, "HoldTime")
+      if step.hold_seconds == float("inf"):
+        hold_time_el.text = str(step.hold_seconds)
+      elif step.hold_seconds == 0:
+        hold_time_el.text = "-1"
+      else:
+        hold_time_el.text = str(step.hold_seconds)
+
+      ext_temp_el = ET.SubElement(step_el, "ExtTemperature")
+      ext_temp_el.text = "0"
+
+      ext_hold_el = ET.SubElement(step_el, "ExtHoldTime")
+      ext_hold_el.text = "0"
+
+      ext_start_cycle_el = ET.SubElement(step_el, "ExtStartingCycle")
+      ext_start_cycle_el.text = "1"
+
+  rough_string = ET.tostring(root, encoding="utf-8")
+  reparsed = minidom.parseString(rough_string)
+
+  xml_declaration = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+  pretty_xml_as_string = (
+    xml_declaration + reparsed.toprettyxml(indent="   ")[len('<?xml version="1.0" ?>') :]
+  )
+
+  output2_lines = [
+    f"-remoterun= {remote_run}",
+    f"-hub= {hub}",
+    f"-user= {user}",
+    f"-method= {protocol_name}",
+    f"-volume= {sample_volume}",
+    f"-cover= {cover_temp}",
+    f"-mode= {run_mode}",
+    f"-coverEnabled= {cover_enabled}",
+    f"-notes= {notes}",
+  ]
+  output2_string = "\n".join(output2_lines)
+
+  return pretty_xml_as_string, output2_string
+
+
+def gen_protocol_data(
+  protocol: Protocol,
+  block_id: int,
+  sample_volume: float,
+  run_mode: str,
+  cover_temp: float,
+  cover_enabled: bool,
+  protocol_name: str,
+):
+  def step_to_scpi(step: Step, step_index: int):
+    data = {
       "cmd": "STEP",
       "params": {},
-      "args": [str(self.step_count)],
+      "args": [str(step_index)],
       "tag": "multiline.step",
       "multiline": [],
     }
 
-    if infinite_hold and min(temp_list) < 20:
-      step["multiline"].append({"cmd": "CoverRAMP", "params": {}, "args": ["30"]})
+    infinite_hold = step.hold_seconds == float("inf")
 
-    step["multiline"].append(
-      {"cmd": "RAMP", "params": {"rate": str(ramp_rate)}, "args": [str(t) for t in temp_list]}
+    if infinite_hold and min(step.temperature) < 20:
+      data["multiline"].append({"cmd": "CoverRAMP", "params": {}, "args": ["30"]})
+
+    data["multiline"].append(
+      {
+        "cmd": "RAMP",
+        "params": {"rate": str(step.rate)},
+        "args": [str(t) for t in step.temperature],
+      }
     )
 
     if infinite_hold:
-      step["multiline"].append({"cmd": "HOLD", "params": {}, "args": []})
-      self.infinite_holds.append([self.stage_count, self.step_count])
-    elif hold and time > 0:
-      step["multiline"].append({"cmd": "HOLD", "params": {}, "args": [str(time)]})
+      data["multiline"].append({"cmd": "HOLD", "params": {}, "args": []})
+    elif step.hold_seconds > 0:
+      data["multiline"].append({"cmd": "HOLD", "params": {}, "args": [str(step.hold_seconds)]})
 
-    self.current_stage["multiline"].append(step)
+    return data
 
-  def get_target_temp(self, stage_num: int, step_num: int):
-    step_data = self.data["multiline"][stage_num - 1]["multiline"][step_num - 1]["multiline"]
-    while step_data and step_data[0]["cmd"] != "RAMP":
-      step_data = step_data[1:]
-    temp_str_list = step_data[0]["args"]
-    return [float(i) for i in temp_str_list]
+  def stage_to_scpi(stage: Stage, stage_index: int):
+    stage_name_base = "_PCR"
+    return {
+      "cmd": "STAGe",
+      "params": {"repeat": str(stage.repeats)},
+      "args": [stage_index, f"{stage_name_base}_{stage_index}"],
+      "tag": "multiline.stage",
+      "multiline": [step_to_scpi(step, i + 1) for i, step in enumerate(stage.steps)],
+    }
 
-  def adjust_ramp_args(self, num_temp_zones, data=None):
-    if data is None:
-      data = self.data
-    if isinstance(data, dict):
-      if data.get("cmd") == "RAMP" and "args" in data:
-        ramp_args = data["args"]
-        if len(ramp_args) != num_temp_zones:
-          data["args"] = [ramp_args[0]] * num_temp_zones
-      for val in data.values():
-        self.adjust_ramp_args(num_temp_zones, val)
-    elif isinstance(data, list):
-      for item in data:
-        self.adjust_ramp_args(num_temp_zones, item)
+  stages = protocol.stages
+  assert all(isinstance(stage, Stage) for stage in stages), "Steps must be wrapped in Stage objects"
 
-  def set_block_id(self, block_id):
-    self.block_id = block_id
-    self.data["_block_id"] = block_id
-    self.data["cmd"] = f"TBC{block_id}:Protocol"
+  data = {
+    "status": "OK",
+    "cmd": f"TBC{block_id + 1}:Protocol",
+    "params": {"Volume": str(sample_volume), "RunMode": run_mode},
+    "args": [protocol_name],
+    "tag": "multiline.outer",
+    "multiline": [
+      stage_to_scpi(stage, i + 1)
+      if isinstance(stage, Stage)
+      else stage_to_scpi(Stage(steps=[stage], repeats=1), stage_index=i + 1)
+      for i, stage in enumerate(stages)
+    ],
+    "_blockId": block_id + 1,
+    "_coverTemp": cover_temp,
+    "_coverEnabled": "On" if cover_enabled else "Off",
+    "_infinite_holds": [
+      [stage_index, step_index]
+      for stage_index, stage in enumerate(stages)
+      for step_index, step in enumerate(stage.steps)
+      if step.hold_seconds == float("inf")
+    ],
+  }
 
-  def gen_protocol_data(self):
-    if self.data["multiline"]:
-      self.data["_infinite_holds"] = self.infinite_holds
-      return self.data
-    raise ValueError("No stages added to the protocol")
-
-  def generate_run_info_files(
-    self,
-    user_name="LifeTechnologies",
-    file_version="1.0.1",
-    remote_run="true",
-    hub="testhub",
-    user="Guest",
-    notes="",
-    default_ramp_rate=6,
-    ramp_rate_unit="DEGREES_PER_SECOND",
-  ):
-    input_data = self.data
-    protocol_name = self.protocol_name
-    block_id = str(self.block_id)
-    params = input_data.get("params", {})
-    sample_volume = params.get("Volume", "50")
-    run_mode = params.get("RunMode", "Fast")
-
-    root = ET.Element("TCProtocol")
-    file_version_el = ET.SubElement(root, "FileVersion")
-    file_version_el.text = file_version
-
-    protocol_name_el = ET.SubElement(root, "ProtocolName")
-    protocol_name_el.text = protocol_name
-
-    user_name_el = ET.SubElement(root, "UserName")
-    user_name_el.text = user_name
-
-    block_id_el = ET.SubElement(root, "block_id")
-    block_id_el.text = block_id
-
-    sample_volume_el = ET.SubElement(root, "SampleVolume")
-    sample_volume_el.text = str(sample_volume)
-
-    run_mode_el = ET.SubElement(root, "RunMode")
-    run_mode_el.text = str(run_mode)
-
-    cover_temp_el = ET.SubElement(root, "CoverTemperature")
-    cover_temp_el.text = str(self.cover_temp)
-
-    cover_setting_el = ET.SubElement(root, "CoverSetting")
-    cover_setting_el.text = self.cover_enabled
-
-    multiline_data = input_data.get("multiline", [])
-    for stage_obj in multiline_data:
-      if stage_obj.get("cmd", "").lower() == "stage":
-        stage_el = ET.SubElement(root, "TCStage")
-        stage_flag_el = ET.SubElement(stage_el, "StageFlag")
-        stage_flag_el.text = "CYCLING"
-
-        repeat_str = stage_obj.get("params", {}).get("repeat", "1")
-        num_repetitions_el = ET.SubElement(stage_el, "NumOfRepetitions")
-        num_repetitions_el.text = repeat_str
-
-        steps = stage_obj.get("multiline", [])
-        for step_obj in steps:
-          if step_obj.get("cmd", "").lower() == "step":
-            step_el = ET.SubElement(stage_el, "TCStep")
-            ramp_rate_value = default_ramp_rate
-            step_commands = step_obj.get("multiline", [])
-
-            temperature_list = []
-            hold_time_value = -1
-
-            for cmd_obj in step_commands:
-              cmd_name = cmd_obj.get("cmd", "").lower()
-              if cmd_name == "ramp":
-                temperature_list = cmd_obj.get("args", [])
-                ramp_param = cmd_obj.get("params", {}).get("rate")
-                if ramp_param is not None:
-                  ramp_rate_value = int(ramp_param) / 100 * 6
-              elif cmd_name == "hold":
-                hold_args = cmd_obj.get("args", [])
-                if hold_args:
-                  try:
-                    hold_time_value = int(hold_args[0])
-                  except ValueError:
-                    hold_time_value = 0
-              elif cmd_name == "coverramp":
-                pass
-
-            ramp_rate_el = ET.SubElement(step_el, "RampRate")
-            ramp_rate_el.text = str(ramp_rate_value)
-
-            ramp_rate_unit_el = ET.SubElement(step_el, "RampRateUnit")
-            ramp_rate_unit_el.text = ramp_rate_unit
-
-            for t_val in temperature_list:
-              temp_el = ET.SubElement(step_el, "Temperature")
-              temp_el.text = str(t_val)
-
-            hold_time_el = ET.SubElement(step_el, "HoldTime")
-            hold_time_el.text = str(hold_time_value)
-
-            ext_temp_el = ET.SubElement(step_el, "ExtTemperature")
-            ext_temp_el.text = "0"
-
-            ext_hold_el = ET.SubElement(step_el, "ExtHoldTime")
-            ext_hold_el.text = "0"
-
-            ext_start_cycle_el = ET.SubElement(step_el, "ExtStartingCycle")
-            ext_start_cycle_el.text = "1"
-
-    rough_string = ET.tostring(root, encoding="utf-8")
-    reparsed = minidom.parseString(rough_string)
-
-    xml_declaration = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-    pretty_xml_as_string = (
-      xml_declaration + reparsed.toprettyxml(indent="   ")[len('<?xml version="1.0" ?>') :]
-    )
-
-    output2_lines = [
-      f"-remoterun= {remote_run}",
-      f"-hub= {hub}",
-      f"-user= {user}",
-      f"-method= {protocol_name}",
-      f"-volume= {sample_volume}",
-      f"-cover= {self.cover_temp}",
-      f"-mode= {run_mode}",
-      f"-coverEnabled= {self.cover_enabled}",
-      f"-notes= {notes}",
-    ]
-    output2_string = "\n".join(output2_lines)
-
-    return pretty_xml_as_string, output2_string
+  return data
 
 
 class ProflexBackend(ThermocyclerBackend):
@@ -271,10 +228,10 @@ class ProflexBackend(ThermocyclerBackend):
     self.io = Socket(host=ip, port=port)
     self._num_blocks: Optional[int] = None
     self.num_temp_zones = 0
-    self.available_blocks = []
+    self.available_blocks: List[int] = []
     self.logger = logging.getLogger("pylabrobot.thermocycling.proflex")
     self.current_run = None
-    self.running_blocks = []
+    self.running_blocks: List[int] = []
     self.prot_time_elapsed = 0
     self.prot_time_remaining = 0
 
@@ -357,7 +314,7 @@ class ProflexBackend(ThermocyclerBackend):
       return command, args, tag_name
 
     def process_args(args_list):
-      params = {}
+      params: Dict[str, Any] = {}
       positional_args = []
       for arg in args_list:
         match = PARAM_REGEX.match(arg)
@@ -469,14 +426,15 @@ class ProflexBackend(ThermocyclerBackend):
   async def _get_available_blocks(self):
     await self._scpi_authenticate()
     await self._load_num_blocks_and_type()
-    for i in range(1, self._num_blocks + 1):
-      block_error = await self.get_error(block_id=i)
+    assert self._num_blocks is not None, "Number of blocks not set"
+    for block_id in range(self._num_blocks):
+      block_error = await self.get_error(block_id=block_id)
       if block_error != "0":
-        raise ValueError(f"Block{i} has error: {block_error}")
-      run_title = await self.get_run_title(block_id=i)
+        raise ValueError(f"Block {block_id} has error: {block_error}")
+      run_title = await self.get_run_title(block_id=block_id)
       if run_title == "-":
-        if i not in self.available_blocks:
-          self.available_blocks.append(i)
+        if block_id not in self.available_blocks:
+          self.available_blocks.append(block_id)
     return self.available_blocks
 
   async def get_block_temps(self, block_id=1):
@@ -499,9 +457,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
-    res = await self.send_command(
-      {"cmd": f"TBC{block_id}:BLOCK", "args": [control_enabled, temp]}
-    )
+    res = await self.send_command({"cmd": f"TBC{block_id}:BLOCK", "args": [control_enabled, temp]})
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set block idle temperature")
     follow_up = await self._read_response()
@@ -511,9 +467,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def set_cover_idle_temp(self, temp: float = 105, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
-    res = await self.send_command(
-      {"cmd": f"TBC{block_id}:COVER", "args": [control_enabled, temp]}
-    )
+    res = await self.send_command({"cmd": f"TBC{block_id}:COVER", "args": [control_enabled, temp]})
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set cover idle temperature")
     follow_up = await self._read_response()
@@ -593,56 +547,56 @@ class ProflexBackend(ThermocyclerBackend):
       raise ValueError("Failed to get block presence")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def check_run_exists(self, run_name="testrun"):
+  async def check_run_exists(self, run_name) -> bool:
     res = await self.send_command(
       {"cmd": "RUNS:EXISTS?", "args": [run_name], "params": {"type": "folders"}}
     )
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to check if run exists")
-    return self._parse_scpi_response(res)["args"][1]
+    return self._parse_scpi_response(res)["args"][1] == "True"
 
-  async def create_run(self, run_name="testrun"):
+  async def create_run(self, run_name):
     res = await self.send_command({"cmd": "RUNS:NEW", "args": [run_name]}, response_timeout=10)
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to create run")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def get_run_title(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:RUNTitle?"})
+  async def get_run_title(self, block_id):
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:RUNTitle?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get run title")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def get_run_progress(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:RUNProgress?"})
+  async def get_run_progress(self, block_id):
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:RUNProgress?"})
     parsed_res = self._parse_scpi_response(res)
     if parsed_res["status"] != "OK":
       raise ValueError("Failed to get run status")
-    if parsed_res["cmd"] == f"TBC{block_id}:RunProtocol":
+    if parsed_res["cmd"] == f"TBC{block_id + 1}:RunProtocol":
       await self._read_response()
       return False
     return self._parse_scpi_response(res)["params"]
 
-  async def get_estimated_run_time(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:ESTimatedTime?"})
+  async def get_estimated_run_time(self, block_id):
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:ESTimatedTime?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get estimated run time")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def get_elapsed_run_time(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:ELAPsedTime?"})
+  async def get_elapsed_run_time(self, block_id):
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:ELAPsedTime?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get elapsed run time")
     return int(self._parse_scpi_response(res)["args"][0])
 
-  async def get_remaining_run_time(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:REMainingTime?"})
+  async def get_remaining_run_time(self, block_id):
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:REMainingTime?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get remaining run time")
     return int(self._parse_scpi_response(res)["args"][0])
 
-  async def get_error(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:ERROR?"})
+  async def get_error(self, block_id):
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:ERROR?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get error")
     return self._parse_scpi_response(res)["args"][0]
@@ -657,16 +611,53 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to power off")
 
-  async def _scpi_write_run_info(self, protocol: ProflexPCRProtocol, run_name="testrun"):
-    xmlfile, tmpfile = protocol.generate_run_info_files()
-    await self._write_file(f"runs:{run_name}/{protocol.protocol_name}.method", xmlfile)
+  async def _scpi_write_run_info(
+    self,
+    protocol: Protocol,
+    run_name: str,
+    block_id: int,
+    sample_volume: float,
+    run_mode: str,
+    protocol_name: str,
+    cover_temp: float,
+    cover_enabled: bool,
+  ):
+    xmlfile, tmpfile = generate_run_info_files(
+      protocol=protocol,
+      block_id=block_id,
+      sample_volume=sample_volume,
+      run_mode=run_mode,
+      protocol_name=protocol_name,
+      cover_temp=cover_temp,
+      cover_enabled=cover_enabled,
+      # user_name=user_name,  # default here is "LifeTechnologies"
+    )
+    await self._write_file(f"runs:{run_name}/{protocol_name}.method", xmlfile)
     await self._write_file(f"runs:{run_name}/{run_name}.tmp", tmpfile)
 
   async def _scpi_run_protocol(
-    self, protocol: ProflexPCRProtocol, run_name="testrun", user="Guest"
+    self,
+    protocol: Protocol,
+    run_name: str,
+    block_id: int,
+    sample_volume: float,
+    run_mode: str,
+    protocol_name: str,
+    cover_temp: float,
+    cover_enabled: bool,
   ):
     load_res = await self.send_command(
-      protocol.gen_protocol_data(), response_timeout=5, read_once=False
+      data=gen_protocol_data(
+        protocol=protocol,
+        block_id=block_id,
+        sample_volume=sample_volume,
+        run_mode=run_mode,
+        cover_temp=cover_temp,
+        cover_enabled=cover_enabled,
+        protocol_name=protocol_name,
+      ),
+      response_timeout=5,
+      read_once=False,
     )
     if self._parse_scpi_response(load_res)["status"] != "OK":
       self.logger.error(load_res)
@@ -675,13 +666,13 @@ class ProflexBackend(ThermocyclerBackend):
 
     start_res = await self.send_command(
       {
-        "cmd": f"TBC{protocol.block_id}:RunProtocol",
+        "cmd": f"TBC{block_id + 1}:RunProtocol",
         "params": {
           "User": user,
-          "CoverTemperature": protocol.cover_temp,
-          "CoverEnabled": protocol.cover_enabled,
+          "CoverTemperature": cover_temp,
+          "CoverEnabled": cover_enabled,
         },
-        "args": [protocol.protocol_name, run_name],
+        "args": [protocol_name, run_name],
       },
       response_timeout=2,
       read_once=False,
@@ -694,22 +685,22 @@ class ProflexBackend(ThermocyclerBackend):
       self.logger.error("Protocol failed to start")
       raise ValueError("Protocol failed to start")
 
-    total_time = await self.get_estimated_run_time(block_id=protocol.block_id)
+    total_time = await self.get_estimated_run_time(block_id=block_id)
     total_time = float(total_time)
     self.logger.info(f"Estimated run time: {total_time}")
     self.current_run = run_name
-    self.running_blocks.append(protocol.block_id)
+    self.running_blocks.append(block_id)
 
   async def _scpi_abort_run(self, block_id, run_name):
-    abort_res = await self.send_command({"cmd": f"TBC{block_id}:AbortRun", "args": [run_name]})
+    abort_res = await self.send_command({"cmd": f"TBC{block_id + 1}:AbortRun", "args": [run_name]})
     if self._parse_scpi_response(abort_res)["status"] != "OK":
       self.logger.error(abort_res)
       self.logger.error("Failed to abort protocol")
       raise ValueError("Failed to abort protocol")
     self.logger.info("Protocol aborted")
 
-  async def check_if_running(self, protocol: ProflexPCRProtocol):
-    block_id = protocol.block_id
+  # TODO: nice object for returning
+  async def check_if_running(self, protocol: Protocol, block_id: int):
     progress = await self.get_run_progress(block_id=block_id)
     if not progress:
       self.logger.info("Protocol completed")
@@ -724,11 +715,13 @@ class ProflexBackend(ThermocyclerBackend):
       self.logger.info("Protocol in POSTRun")
       return True, "POSTRun", self.prot_time_elapsed, 0
 
+    # TODO: move to separate wait method
     if progress["Stage"] != "-" and progress["Step"] != "-":
-      if [int(progress["Stage"]), int(progress["Step"])] in protocol.infinite_holds:
+      current_step = protocol.stages[int(progress["Stage"]) - 1].steps[int(progress["Step"]) - 1]
+      if current_step.hold_seconds == float("inf"):
         while True:
           block_temps = await self.get_block_temps(block_id=block_id)
-          target_temps = protocol.get_target_temp(int(progress["Stage"]), int(progress["Step"]))
+          target_temps = current_step.temperature
           if all(
             abs(float(block_temps[i]) - target_temps[i]) < 0.5 for i in range(len(block_temps))
           ):
@@ -748,7 +741,9 @@ class ProflexBackend(ThermocyclerBackend):
 
   # *************Three core methods for running a protocol***********************
 
-  async def setup(self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None):
+  async def setup(
+    self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None
+  ):
     await self._scpi_authenticate()
     await self.power_on()
     await self._load_num_blocks_and_type()
@@ -772,19 +767,53 @@ class ProflexBackend(ThermocyclerBackend):
   async def deactivate_block(self, block_id: int):
     return await self.set_block_idle_temp(control_enabled=0, block_id=block_id)
 
-  async def get_lid_current_temperature(self, block_id=1) -> float:
+  async def get_lid_current_temperature(self, block_id=1) -> List[float]:
     res = await self.send_command({"cmd": f"TBC{block_id}:TBC:CoverTemperatures?"})
-    # TODO: this is a list of floats.
     return self._parse_scpi_response(res)["args"]
 
-  async def run_protocol(self, protocol: ProflexPCRProtocol, run_name="testrun", user="Admin"):
-    run_exists = await self.check_run_exists(run_name)
-    if run_exists == "False":
-      await self.create_run(run_name)
-    else:
+  async def run_protocol(
+    self,
+    protocol: Protocol,
+    block_id: int,
+    run_name="testrun",  # TODO: if not passed, make a random one
+    user="Admin",
+    sample_volume: float = 50,
+    run_mode: str = "Fast",
+    cover_temp: float = 105,
+    cover_enabled=True,
+    protocol_name: str = "PCR_Protocol",
+  ):
+    if await self.check_run_exists(run_name):
       self.logger.warning(f"Run {run_name} already exists")
-    await self._scpi_write_run_info(protocol, run_name)
-    await self._scpi_run_protocol(protocol, run_name, user)
+    else:
+      await self.create_run(run_name)
+
+    # wrap all Steps in Stage objects where necessary
+    for i, stage in enumerate(protocol.stages):
+      if isinstance(stage, Step):
+        protocol.stages[i] = Stage(steps=[stage], repeats=1)
+
+    await self._scpi_write_run_info(
+      protocol=protocol,
+      block_id=block_id,
+      run_name=run_name,
+      user_name=user,
+      sample_volume=sample_volume,
+      run_mode=run_mode,
+      cover_temp=cover_temp,
+      cover_enabled=cover_enabled,
+      protocol_name=protocol_name,
+    )
+    await self._scpi_run_protocol(
+      protocol=protocol,
+      run_name=run_name,
+      block_id=block_id,
+      sample_volume=sample_volume,
+      run_mode=run_mode,
+      cover_temp=cover_temp,
+      cover_enabled=cover_enabled,
+      protocol_name=protocol_name,
+    )
 
   async def stop(self):
     for block_id in self.running_blocks:
