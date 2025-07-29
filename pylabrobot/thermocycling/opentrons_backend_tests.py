@@ -51,12 +51,12 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_set_block_temperature")
   async def test_set_block_temperature(self, mock_set_block_temp):
-    await self.thermocycler_backend.set_block_temperature(95.0)
+    await self.thermocycler_backend.set_block_temperature([95.0])
     mock_set_block_temp.assert_called_once_with(celsius=95.0, module_id="test_id")
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_set_lid_temperature")
   async def test_set_lid_temperature(self, mock_set_lid_temp):
-    await self.thermocycler_backend.set_lid_temperature(105.0)
+    await self.thermocycler_backend.set_lid_temperature([105.0])
     mock_set_lid_temp.assert_called_once_with(celsius=105.0, module_id="test_id")
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_deactivate_block")
@@ -71,7 +71,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_run_profile_no_wait")
   async def test_run_profile(self, mock_run_profile):
-    profile = [Step(temperature=95, hold_seconds=10)]
+    profile = [Step(temperature=[95], hold_seconds=10)]
     await self.thermocycler_backend.run_profile(profile, 50.0)
     # print all calls
     mock_run_profile.assert_called_once_with(
@@ -99,10 +99,10 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     }
     mock_list_connected_modules.return_value = [mock_data]
 
-    assert await self.thermocycler_backend.get_block_current_temperature() == 25.5
-    assert await self.thermocycler_backend.get_block_target_temperature() == 95.0
-    assert await self.thermocycler_backend.get_lid_current_temperature() == 37.1
-    assert await self.thermocycler_backend.get_lid_target_temperature() == 105.0
+    assert await self.thermocycler_backend.get_block_current_temperature() == [25.5]
+    assert await self.thermocycler_backend.get_block_target_temperature() == [95.0]
+    assert await self.thermocycler_backend.get_lid_current_temperature() == [37.1]
+    assert await self.thermocycler_backend.get_lid_target_temperature() == [105.0]
     assert await self.thermocycler_backend.get_lid_open() is True
     assert await self.thermocycler_backend.get_lid_status() == LidStatus.HOLDING_AT_TARGET
     assert await self.thermocycler_backend.get_block_status() == BlockStatus.HOLDING_AT_TARGET

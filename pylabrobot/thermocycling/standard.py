@@ -1,12 +1,13 @@
 import enum
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
 class Step:
   """Represents a single step in a thermocycler profile."""
 
-  temperature: float
+  temperature: List[float]
   hold_seconds: float
 
 

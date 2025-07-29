@@ -23,9 +23,9 @@ def mock_backend() -> MagicMock:
   mock.deactivate_block = AsyncMock()
   mock.deactivate_lid = AsyncMock()
   mock.run_profile = AsyncMock()
-  mock.get_block_current_temperature = AsyncMock(return_value=25.0)
+  mock.get_block_current_temperature = AsyncMock(return_value=[25.0])
   mock.get_block_target_temperature = AsyncMock(return_value=None)
-  mock.get_lid_current_temperature = AsyncMock(return_value=25.0)
+  mock.get_lid_current_temperature = AsyncMock(return_value=[25.0])
   mock.get_lid_target_temperature = AsyncMock(return_value=None)
   mock.get_lid_open = AsyncMock(return_value=False)
   mock.get_lid_temperature_status = AsyncMock(return_value="idle")
@@ -66,35 +66,35 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
     self.tc.wait_for_lid = mock_wait_for_lid  # type: ignore
 
     await self.tc.run_pcr_profile(
-      denaturation_temp=98.0,
+      denaturation_temp=[98.0],
       denaturation_time=10.0,
-      annealing_temp=55.0,
+      annealing_temp=[55.0],
       annealing_time=30.0,
-      extension_temp=72.0,
+      extension_temp=[72.0],
       extension_time=60.0,
       num_cycles=2,
       block_max_volume=25.0,
-      lid_temperature=105.0,
-      pre_denaturation_temp=95.0,
+      lid_temperature=[105.0],
+      pre_denaturation_temp=[95.0],
       pre_denaturation_time=180.0,
-      final_extension_temp=72.0,
+      final_extension_temp=[72.0],
       final_extension_time=300.0,
-      storage_temp=4.0,
+      storage_temp=[4.0],
       storage_time=600.0,
     )
 
-    self.tc.backend.set_lid_temperature.assert_called_once_with(105.0)  # type: ignore
+    self.tc.backend.set_lid_temperature.assert_called_once_with([105.0])  # type: ignore
 
     expected_profile = [
-      Step(temperature=95.0, hold_seconds=180.0),
-      Step(temperature=98.0, hold_seconds=10.0),
-      Step(temperature=55.0, hold_seconds=30.0),
-      Step(temperature=72.0, hold_seconds=60.0),
-      Step(temperature=98.0, hold_seconds=10.0),
-      Step(temperature=55.0, hold_seconds=30.0),
-      Step(temperature=72.0, hold_seconds=60.0),
-      Step(temperature=72.0, hold_seconds=300.0),
-      Step(temperature=4.0, hold_seconds=600.0),
+      Step(temperature=[95.0], hold_seconds=180.0),
+      Step(temperature=[98.0], hold_seconds=10.0),
+      Step(temperature=[55.0], hold_seconds=30.0),
+      Step(temperature=[72.0], hold_seconds=60.0),
+      Step(temperature=[98.0], hold_seconds=10.0),
+      Step(temperature=[55.0], hold_seconds=30.0),
+      Step(temperature=[72.0], hold_seconds=60.0),
+      Step(temperature=[72.0], hold_seconds=300.0),
+      Step(temperature=[4.0], hold_seconds=600.0),
     ]
 
     self.tc.backend.run_profile.assert_called_once_with(expected_profile, 25.0)  # type: ignore

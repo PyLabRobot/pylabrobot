@@ -1,7 +1,7 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
 import sys
-from typing import cast
+from typing import List, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
@@ -72,13 +72,23 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     """Close the thermocycler lid."""
     return thermocycler_close_lid(module_id=self.opentrons_id)
 
-  async def set_block_temperature(self, temperature: float):
-    """Set block temperature in °C."""
-    return thermocycler_set_block_temperature(celsius=temperature, module_id=self.opentrons_id)
+  async def set_block_temperature(self, temperature: List[float]):
+    """Set block temperature in °C. Only single unique temperature supported."""
+    if len(set(temperature)) != 1:
+      raise ValueError(
+        f"Opentrons thermocycler only supports a single unique block temperature, got {set(temperature)}"
+      )
+    temp_value = temperature[0]
+    return thermocycler_set_block_temperature(celsius=temp_value, module_id=self.opentrons_id)
 
-  async def set_lid_temperature(self, temperature: float):
-    """Set lid temperature in °C."""
-    return thermocycler_set_lid_temperature(celsius=temperature, module_id=self.opentrons_id)
+  async def set_lid_temperature(self, temperature: List[float]):
+    """Set lid temperature in °C. Only single unique temperature supported."""
+    if len(set(temperature)) != 1:
+      raise ValueError(
+        f"Opentrons thermocycler only supports a single unique lid temperature, got {set(temperature)}"
+      )
+    temp_value = temperature[0]
+    return thermocycler_set_lid_temperature(celsius=temp_value, module_id=self.opentrons_id)
 
   async def deactivate_block(self):
     """Deactivate the block heater."""
@@ -91,9 +101,16 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
   async def run_profile(self, profile: list[Step], block_max_volume: float):
     """Enqueue and return immediately (no wait) the PCR profile command."""
     # in opentrons, the "celsius" key is used instead of "temperature"
-    ot_profile = [
-      {"celsius": step.temperature, "holdSeconds": step.hold_seconds} for step in profile
-    ]
+    # step.temperature is now a list, but Opentrons only supports single temperature
+    ot_profile = []
+    for step in profile:
+      if len(set(step.temperature)) != 1:
+        raise ValueError(
+          f"Opentrons thermocycler only supports a single unique temperature per step, got {set(step.temperature)}"
+        )
+      celsius = step.temperature[0]
+      ot_profile.append({"celsius": celsius, "holdSeconds": step.hold_seconds})
+
     return thermocycler_run_profile_no_wait(
       profile=ot_profile,
       block_max_volume=block_max_volume,
@@ -107,24 +124,24 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
         return cast(dict, m["data"])
     raise RuntimeError(f"Module '{self.opentrons_id}' not found")
 
-  async def get_block_current_temperature(self) -> float:
-    return cast(float, self._find_module()["currentTemperature"])
+  async def get_block_current_temperature(self) -> List[float]:
+    return [cast(float, self._find_module()["currentTemperature"])]
 
-  async def get_block_target_temperature(self) -> float:
+  async def get_block_target_temperature(self) -> List[float]:
     target_temp = self._find_module().get("targetTemperature")
     if target_temp is None:
       raise RuntimeError("Block target temperature is not set. is a cycle running?")
-    return cast(float, target_temp)
+    return [cast(float, target_temp)]
 
-  async def get_lid_current_temperature(self) -> float:
-    return cast(float, self._find_module()["lidTemperature"])
+  async def get_lid_current_temperature(self) -> List[float]:
+    return [cast(float, self._find_module()["lidTemperature"])]
 
-  async def get_lid_target_temperature(self) -> float:
+  async def get_lid_target_temperature(self) -> List[float]:
     """Get the lid target temperature in °C. Raises RuntimeError if no target is active."""
     target_temp = self._find_module().get("lidTargetTemperature")
     if target_temp is None:
       raise RuntimeError("Lid target temperature is not set. is a cycle running?")
-    return cast(float, target_temp)
+    return [cast(float, target_temp)]
 
   async def get_lid_open(self) -> bool:
     return cast(str, self._find_module()["lidStatus"]) == "open"
