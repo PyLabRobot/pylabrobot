@@ -52,6 +52,7 @@ from pylabrobot.liquid_handling.utils import (
 from pylabrobot.resources import (
   Carrier,
   Coordinate,
+  Plate,
   Resource,
   Tip,
   TipRack,
@@ -2188,7 +2189,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     z_deposit_position += round(pickup.offset.z * 10)
 
-    x_direction = 0 if position.x > 0 else 1
+    x_direction = 0 if position.x >= 0 else 1
     return await self.pick_up_tips_core96(
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
@@ -2219,7 +2220,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
-    x_direction = 0 if position.x > 0 else 1
+    x_direction = 0 if position.x >= 0 else 1
     return await self.discard_tips_core96(
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
@@ -2239,7 +2240,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     jet: bool = False,
     blow_out: bool = False,
     use_lld: bool = False,
-    liquid_height: float = 0,
     air_transport_retract_dist: float = 10,
     hlc: Optional[HamiltonLiquidClass] = None,
     aspiration_type: int = 0,
@@ -2277,7 +2277,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         automatically.
 
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
-      liquid_height: The height of the liquid above the bottom of the well, in millimeters.
       air_transport_retract_dist: The distance to retract after aspirating, in millimeters.
 
       aspiration_type: The type of aspiration to perform. (0 = simple; 1 = sequence; 2 = cup emptied
@@ -2312,11 +2311,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # get the first well and tip as representatives
     if isinstance(aspiration, MultiHeadAspirationPlate):
-      top_left_well = aspiration.wells[0]
+      plate = aspiration.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 == 0:
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
+
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
-        + Coordinate(z=top_left_well.material_z_thickness)
+        ref_well.get_absolute_location()
+        + ref_well.center()
+        + Coordinate(z=ref_well.material_z_thickness)
         + aspiration.offset
       )
     else:
@@ -2332,7 +2342,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip = aspiration.tips[0]
 
-    liquid_height = position.z + liquid_height
+    liquid_height = position.z + (aspiration.liquid_height or 0)
 
     liquid_to_be_aspirated = Liquid.WATER
     if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
@@ -2381,9 +2391,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     #     aspiration_volumes=int(blow_out_air_volume * 10)
     #   )
 
+    x_direction = 0 if position.x >= 0 else 1
     return await self.aspirate_core_96(
-      x_position=round(position.x * 10),
-      x_direction=0,
+      x_position=abs(round(position.x * 10)),
+      x_direction=x_direction,
       y_positions=round(position.y * 10),
       aspiration_type=aspiration_type,
       minimum_traverse_height_at_beginning_of_a_command=round(
@@ -2430,7 +2441,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     empty: bool = False,
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
-    liquid_height: float = 0,
     dispense_mode: Optional[int] = None,
     air_transport_retract_dist=10,
     use_lld: bool = False,
@@ -2462,7 +2472,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dispense: The Dispense command to execute.
       jet: Whether to use jet dispense mode.
       blow_out: Whether to blow out after dispensing.
-      liquid_height: The height of the liquid in the well, in mm. Used if LLD is not used.
       dispense_mode: The dispense mode to use. 0 = Partial volume in jet mode 1 = Blow out in jet
         mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix position.
         If `None`, the mode will be determined based on the `jet`, `empty`, and `blow_out`
@@ -2497,11 +2506,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # get the first well and tip as representatives
     if isinstance(dispense, MultiHeadDispensePlate):
-      top_left_well = dispense.wells[0]
+      plate = dispense.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 == 0:
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
+
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
-        + Coordinate(z=top_left_well.material_z_thickness)
+        ref_well.get_absolute_location()
+        + ref_well.center()
+        + Coordinate(z=ref_well.material_z_thickness)
         + dispense.offset
       )
     else:
@@ -2518,7 +2538,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     tip = dispense.tips[0]
 
-    liquid_height = position.z + liquid_height
+    liquid_height = position.z + (dispense.liquid_height or 0)
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 
@@ -2555,10 +2575,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     channel_pattern = [True] * 12 * 8
 
+    x_direction = 0 if position.x >= 0 else 1
     ret = await self.dispense_core_96(
       dispensing_mode=dispense_mode,
-      x_position=round(position.x * 10),
-      x_direction=0,
+      x_position=abs(round(position.x * 10)),
+      x_direction=x_direction,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
@@ -3226,7 +3247,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def pre_initialize_instrument(self):
     """Pre-initialize instrument"""
-    return await self.send_command(module="C0", command="VI")
+    return await self.send_command(module="C0", command="VI", read_timeout=300)
 
   async def define_tip_needle(
     self,
@@ -5761,15 +5782,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def move_core_96_head_to_defined_position(
     self,
-    x: float = 0,
-    y: float = 0,
-    z: float = 0,
+    x: float,
+    y: float,
+    z: float = 342.5,
     minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
     """Move CoRe 96 Head to defined position
 
     Args:
-      x: X-Position [1mm] of well A1. Must be between 0 and 3000.0. Default 0.
+      x: X-Position [1mm] of well A1. Must be between -300.0 and 300.0. Default 0.
       y: Y-Position [1mm]. Must be between 108.0 and 560.0. Default 0.
       z: Z-Position [1mm]. Must be between 0 and 560.0. Default 0.
       minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
@@ -5777,17 +5798,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
-    assert 0 <= x <= 3000.0, "x_position must be between 0 and 30000"
-    assert 108.0 <= y <= 560.0, "y_position must be between 1080 and 5600"
-    assert 0 <= y <= 560.0, "z_position must be between 0 and 5600"
+    # TODO: these are values for a STAR. Find them for a STARlet.
+    assert -271.0 <= x <= 974.0, "x_position must be between -271 and 974"
+    assert 108.0 <= y <= 560.0, "y_position must be between 108 and 560"
+    assert 180.5 <= z <= 342.5, "z_position must be between 180.5 and 342.5"
     assert (
       0 <= minimum_height_at_beginning_of_a_command <= 342.5
-    ), "minimum_height_at_beginning_of_a_command must be between 0 and 3425"
+    ), "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
 
     return await self.send_command(
       module="C0",
       command="EM",
-      xs=f"{round(x*10):05}",
+      xs=f"{abs(round(x*10)):05}",
       xd=0 if x >= 0 else 1,
       yh=f"{round(y*10):04}",
       za=f"{round(z*10):04}",
@@ -6688,7 +6710,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_rotate(
     self,
-    position: int = 33,
+    rotation_drive: "RotationDriveOrientation",
+    grip_direction: GripDirection,
     gripper_velocity: int = 55_000,
     gripper_acceleration: int = 170,
     gripper_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
@@ -6707,6 +6730,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 20 <= wrist_velocity <= 65_000
     assert 20 <= wrist_acceleration <= 200
 
+    position = 0
+
+    if rotation_drive == STARBackend.RotationDriveOrientation.LEFT:
+      position += 10
+    elif rotation_drive == STARBackend.RotationDriveOrientation.FRONT:
+      position += 20
+    elif rotation_drive == STARBackend.RotationDriveOrientation.RIGHT:
+      position += 30
+    else:
+      raise ValueError("Invalid rotation drive orientation")
+
+    if grip_direction == GripDirection.FRONT:
+      position += 1
+    elif grip_direction == GripDirection.RIGHT:
+      position += 2
+    elif grip_direction == GripDirection.BACK:
+      position += 3
+    elif grip_direction == GripDirection.LEFT:
+      position += 4
+    else:
+      raise ValueError("Invalid grip direction")
+
     return await self.send_command(
       module="R0",
       command="PD",
@@ -6718,6 +6763,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tr=f"{wrist_acceleration:03}",
       tw=wrist_protection,
     )
+
+  async def iswap_dangerous_release_break(self):
+    return await self.send_command(module="R0", command="BA")
+
+  async def iswap_reengage_break(self):
+    return await self.send_command(module="R0", command="BO")
+
+  async def iswap_initialize_z_axis(self):
+    return await self.send_command(module="R0", command="ZI")
 
   async def move_plate_to_position(
     self,

@@ -19,3 +19,4 @@ This includes machines for temperature and motion control (as neither machines p
    sealers/sealers
    tilting
    incubators/cytomat
+   thermocycling/thermocycling

@@ -10,7 +10,9 @@ This package contains APIs for working with plate readers.
   :nosignatures:
   :recursive:
 
-    plate_reader.PlateReader
+   plate_reader.PlateReader
+   imager.Imager
+   standard.ImagingResult
 
 
 Backends

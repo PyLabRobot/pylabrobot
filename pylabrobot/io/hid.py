@@ -12,8 +12,9 @@ try:
   import hid  # type: ignore
 
   USE_HID = True
-except ImportError:
+except ImportError as e:
   USE_HID = False
+  _HID_IMPORT_ERROR = e
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,9 @@ class HID(IOBase):
 
   async def setup(self):
     if not USE_HID:
-      raise RuntimeError("This backend requires the `hid` package to be installed")
+      raise RuntimeError(
+        f"This backend requires the `hid` package to be installed. Import error: {_HID_IMPORT_ERROR}"
+      )
     self.device = hid.Device(vid=self.vid, pid=self.pid, serial=self.serial_number)
     self._executor = ThreadPoolExecutor(max_workers=1)
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
@@ -60,26 +63,27 @@ class HID(IOBase):
 
     def _write():
       assert self.device is not None, "forgot to call setup?"
-      self.device.write(data)
+      return self.device.write(data)
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    await loop.run_in_executor(self._executor, _write)
+    r = await loop.run_in_executor(self._executor, _write)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.decode()))
+    capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.hex()))
+    return r
 
   async def read(self, size: int, timeout: int) -> bytes:
     loop = asyncio.get_running_loop()
 
     def _read():
       assert self.device is not None, "forgot to call setup?"
-      self.device.read(size, timeout=timeout)
+      return self.device.read(size, timeout=timeout)
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _read)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.decode()))
+    capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
     return cast(bytes, r)
 
   def serialize(self):

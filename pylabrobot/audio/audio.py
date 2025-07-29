@@ -9,15 +9,18 @@ try:
   from IPython.display import Audio, display
 
   USE_AUDIO = True
-except ImportError:
+except ImportError as e:
   USE_AUDIO = False
+  _AUDIO_IMPORT_ERROR = e
 
 
 def _audio_check(func):
   @functools.wraps(func)
   def wrapper(*args, **kwargs):
     if not USE_AUDIO:
-      return
+      raise RuntimeError(
+        f"Audio functionality requires IPython.display. Import error: {_AUDIO_IMPORT_ERROR}"
+      )
     return func(*args, **kwargs)
 
   return wrapper

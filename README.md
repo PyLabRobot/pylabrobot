@@ -149,6 +149,30 @@ await fan.setup()
 await fan.turn_on(intensity=100, duration=60)
 ```
 
+### Thermocyclers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/thermocycling/thermocycling.html))
+
+Running a thermocycler with a simple protocol:
+
+```python
+await tc.run_pcr_profile(
+  denaturation_temp=98.0,
+  denaturation_time=10.0,
+  annealing_temp=55.0,
+  annealing_time=30.0,
+  extension_temp=72.0,
+  extension_time=60.0,
+  num_cycles=2,
+  block_max_volume=25.0,
+  lid_temperature=105.0,
+  pre_denaturation_temp=95.0,
+  pre_denaturation_time=180.0,
+  final_extension_temp=72.0,
+  final_extension_time=300.0,
+  storage_temp=4.0,
+  storage_time=600.0,
+)
+```
+
 ## Resources
 
 ### Documentation
