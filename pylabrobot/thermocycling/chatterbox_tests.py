@@ -56,7 +56,7 @@ class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
         extension_time=20.0,
         num_cycles=2,
         block_max_volume=25.0,
-        lid_temperature=105.0,
+        lid_temperature=[105.0],
         storage_temp=4.0,
         storage_time=1.0,
       )

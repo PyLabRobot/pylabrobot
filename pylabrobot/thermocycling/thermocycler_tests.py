@@ -74,7 +74,7 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
       extension_time=60.0,
       num_cycles=2,
       block_max_volume=25.0,
-      lid_temperature=105.0,
+      lid_temperature=[105.0],
       pre_denaturation_temp=95.0,
       pre_denaturation_time=180.0,
       final_extension_temp=72.0,
@@ -83,7 +83,7 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
       storage_time=600.0,
     )
 
-    self.tc.backend.set_lid_temperature.assert_called_once_with(105.0)  # type: ignore
+    self.tc.backend.set_lid_temperature.assert_called_once_with([105.0])  # type: ignore
 
     expected_profile = [
       Step(temperature=95.0, hold_seconds=180.0),

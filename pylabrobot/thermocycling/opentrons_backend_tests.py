@@ -51,13 +51,13 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_set_block_temperature")
   async def test_set_block_temperature(self, mock_set_block_temp):
-    await self.thermocycler_backend.set_block_temperature(95.0)
-    mock_set_block_temp.assert_called_once_with(celsius=95.0, module_id="test_id")
+    await self.thermocycler_backend.set_block_temperature([95.0])
+    mock_set_block_temp.assert_called_once_with(celsius=[95.0], module_id="test_id")
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_set_lid_temperature")
   async def test_set_lid_temperature(self, mock_set_lid_temp):
-    await self.thermocycler_backend.set_lid_temperature(105.0)
-    mock_set_lid_temp.assert_called_once_with(celsius=105.0, module_id="test_id")
+    await self.thermocycler_backend.set_lid_temperature([105.0])
+    mock_set_lid_temp.assert_called_once_with(celsius=[105.0], module_id="test_id")
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_deactivate_block")
   async def test_deactivate_block(self, mock_deactivate_block):
