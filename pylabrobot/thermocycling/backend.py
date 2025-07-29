@@ -17,12 +17,20 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Close thermocycler lid."""
 
   @abstractmethod
-  async def set_block_temperature(self, temperature: float):
-    """Set the temperature of a thermocycler block."""
+  async def set_block_temperature(self, temperature: List[float]):
+    """Set the temperature of a thermocycler block.
+
+    Args:
+      temperature: Temperature for each zone.
+    """
 
   @abstractmethod
-  async def set_lid_temperature(self, temperature: float):
-    """Set the temperature of a thermocycler lid."""
+  async def set_lid_temperature(self, temperature: List[float]):
+    """Set the temperature of a thermocycler lid.
+
+    Args:
+      temperature: Temperature for each zone.
+    """
 
   @abstractmethod
   async def deactivate_block(self):
@@ -37,20 +45,20 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Execute thermocycler profile run."""
 
   @abstractmethod
-  async def get_block_current_temperature(self) -> float:
-    """Get the current block temperature in °C."""
+  async def get_block_current_temperature(self) -> List[float]:
+    """Get the current block temperature zones in °C."""
 
   @abstractmethod
-  async def get_block_target_temperature(self) -> float:
-    """Get the block target temperature in °C. May raise RuntimeError if no target is set."""
+  async def get_block_target_temperature(self) -> List[float]:
+    """Get the block target temperature zones in °C. May raise RuntimeError if no target is set."""
 
   @abstractmethod
-  async def get_lid_current_temperature(self) -> float:
-    """Get the current lid temperature in °C."""
+  async def get_lid_current_temperature(self) -> List[float]:
+    """Get the current lid temperature zones in °C."""
 
   @abstractmethod
-  async def get_lid_target_temperature(self) -> float:
-    """Get the lid target temperature in °C. May raise RuntimeError if no target is set."""
+  async def get_lid_target_temperature(self) -> List[float]:
+    """Get the lid target temperature zones in °C. May raise RuntimeError if no target is set."""
 
   @abstractmethod
   async def get_lid_open(self) -> bool:

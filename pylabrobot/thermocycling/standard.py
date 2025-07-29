@@ -7,7 +7,7 @@ from typing import List, Optional, Union
 class Step:
   """Represents a single step in a thermocycler profile."""
 
-  temperature: float
+  temperature: List[float]
   hold_seconds: float
   rate: Optional[float] = None  # degrees Celsius per second
 
