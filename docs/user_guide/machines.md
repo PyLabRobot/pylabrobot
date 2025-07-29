@@ -79,36 +79,36 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Inheco | Thermoshake RM | <span class="badge badge-heating">active heating</span><span class="badge badge-shaking">shaking</span> | Full | PLR / OEM |
-| Inheco | Thermoshake | <span class="badge badge-heating">active heating</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
-| Inheco | Thermoshake AC | <span class="badge badge-heating">active heating</span><span class="badge badge-cooling">active cooling</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
-| Opentrons | Thermoshake | <span class="badge badge-heating">active heating</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
-| Hamilton | Heater Shaker | <span class="badge badge-heating">active heating</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
+| Inheco | Thermoshake RM | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Full | PLR / OEM |
+| Inheco | Thermoshake | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
+| Inheco | Thermoshake AC | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
+| Opentrons | Thermoshake | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
+| Hamilton | Heater Shaker | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
 
 ### Incubators
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Thermo Fisher Scientific | Cytomat C6000 | <span class="badge badge-heating">active heating</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C6002 | <span class="badge badge-heating">active heating</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_50 | <span class="badge badge-heating">active heating</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_425 | <span class="badge badge-heating">active heating</span><span class="badge badge-cooling">active cooling</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_450_SHAKE | <span class="badge badge-heating">active heating</span><span class="badge badge-shaking">shaking</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">active heating</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">active heating</span><span class="badge badge-storage">smart storage</span> | WIP | PLR / OEM |
-| Inheco | Incubator Shaker MTP & DWP | <span class="badge badge-heating">active heating</span> | WIP | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C6000 | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C6002 | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_50 | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_425 | <span class="badge badge-heating">heating space</span><span class="badge badge-cooling">cooling</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_450_SHAKE | <span class="badge badge-heating">heating space</span><span class="badge badge-shaking">shaking</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">heating spaceting</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
+| Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | WIP | PLR / OEM |
+| Inheco | Incubator Shaker MTP & DWP | <span class="badge badge-heating">heating space</span><span class="badge badge-shaking">shaking</span> | WIP | PLR / OEM |
 
 ### Peelers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Azenta Life Sciences | XPeel | <span class="badge badge-sealing">plate sealing removal</span> | WIP | PLR / OEM |
+| Azenta Life Sciences | XPeel | <span class="badge badge-sealing">plate seal removal</span> | WIP | PLR / OEM |
 
 ### Sealers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Azenta Life Sciences | a4S Sealer | <span class="badge badge-sealing">sealing</span> | Full | PLR / OEM |
+| Azenta Life Sciences | a4S Sealer | <span class="badge badge-sealing">plate sealing</span> | Full | PLR / OEM |
 
 ### Thermocyclers
 
@@ -123,8 +123,8 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Opentrons | Temperature Module | <span class="badge badge-heating">active heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | PLR / OEM |
-| Inheco | CPAC | <span class="badge badge-heating">active heating</span><span class="badge badge-cooling">active cooling</span> | WIP | PLR / OEM |
+| Opentrons | Temperature Module | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | Mostly | PLR / OEM |
+| Inheco | CPAC | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | WIP | PLR / OEM |
 
 ### Tilting
 
