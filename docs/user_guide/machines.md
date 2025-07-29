@@ -140,7 +140,7 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| BMG Labtech | ClarioSTAR | <span class="badge badge-reading">plate reading</span> | Full | PLR / OEM |
+| BMG Labtech | CLARIOstar | <span class="badge badge-reading">plate reading</span> | Full | PLR / OEM |
 | Agilent (BioTek) | Cytation 1 | <span class="badge badge-reading">plate reading</span><span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
 | Agilent (BioTek) | Cytation 5 | <span class="badge badge-reading">plate reading</span><span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
 
@@ -148,7 +148,7 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Beckman Coulter | Cytoflex S | <span class="badge badge-cyto">flow cytometry</span> | WIP | PLR / OEM |
+| Beckman Coulter | CytoFLEX S | <span class="badge badge-cyto">flow cytometry</span> | WIP | PLR / OEM |
 
 ### qPCR Machines
 
