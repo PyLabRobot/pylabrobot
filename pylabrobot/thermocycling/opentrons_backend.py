@@ -105,7 +105,9 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     ot_profile = []
     for step in profile:
       if len(set(step.temperature)) != 1:
-        raise ValueError(f"Opentrons thermocycler only supports a single unique temperature per step, got {set(step.temperature)}")
+        raise ValueError(
+          f"Opentrons thermocycler only supports a single unique temperature per step, got {set(step.temperature)}"
+        )
       celsius = step.temperature[0]
       ot_profile.append({"celsius": celsius, "holdSeconds": step.hold_seconds})
 

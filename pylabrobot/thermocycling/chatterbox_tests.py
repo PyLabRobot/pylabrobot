@@ -48,16 +48,16 @@ class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
     log_buffer = StringIO()
     with redirect_stdout(log_buffer):
       await self.tc.run_pcr_profile(
-        denaturation_temp=98.0,
+        denaturation_temp=[98.0],
         denaturation_time=15.0,
-        annealing_temp=60.0,
+        annealing_temp=[60.0],
         annealing_time=15.0,
-        extension_temp=72.0,
+        extension_temp=[72.0],
         extension_time=20.0,
         num_cycles=2,
         block_max_volume=25.0,
         lid_temperature=[105.0],
-        storage_temp=4.0,
+        storage_temp=[4.0],
         storage_time=1.0,
       )
       await self.tc.wait_for_profile_completion(0.01)
