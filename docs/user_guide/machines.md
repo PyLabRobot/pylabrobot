@@ -42,14 +42,14 @@ tr > td:nth-child(5) { width: 15%; }
 | Hamilton | STAR(let) | <span class="badge badge-transfer">arm</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-star/_hamilton-star.html) / [OEM](https://www.hamiltoncompany.com/microlab-star) |
 | Hamilton | Vantage | <span class="badge badge-transfer">arm</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-vantage/_hamilton-vantage.html) / [OEM](https://www.hamiltoncompany.com/microlab-vantage) |
 | Hamilton | Prep | <span class="badge badge-transfer">arm</span> | WIP | PLR / [OEM](https://www.hamiltoncompany.com/microlab-prep) |
-| Tecan | EVO |  | Basic | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/tecan-evo/_tecan-evo.html) / OEM |
-| Opentrons | OT-2 |  | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/opentrons-ot2/_opentrons-ot2.html) / OEM |
+| Tecan | EVO |  | Basic | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/tecan-evo/_tecan-evo.html) / [OEM](https://lifesciences.tecan.com/freedom-evo-platform) |
+| Opentrons | OT-2 |  | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/opentrons-ot2/_opentrons-ot2.html) / [OEM](https://opentrons.com/products/ot-2-robot) |
 
 ### Pumps
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Cole Parmer | Masterflex | | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html) / OEM |
+| Cole Parmer | Masterflex L/S 07522-20 07522-30 07551-20 07551-30 07575-30 07575-40 | | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html) / [OEM](https://www.masterflex.nl/assets/uploads/2017/09/07551-xx.pdf) |
 | Agrowtek | Pump Array | | Full | PLR / OEM |
 
 ---
@@ -66,37 +66,37 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Agilent | VSpin | | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html) / OEM |
-| Agilent | VSpin Access2 Loader | | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html#loader) / OEM |
+| Agilent | VSpin | | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
+| Agilent | VSpin Access2 Loader | | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html#loader) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
 
 ### Fans
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Hamilton | HEPA Fan | <span class="badge badge-air">air filtration</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/fans/fans.html) / OEM |
+| Hamilton | HEPA Fan | <span class="badge badge-air">air filtration</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/fans/fans.html) |
 
 ### Heater Shakers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Inheco | Thermoshake RM | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Full | PLR / OEM |
-| Inheco | Thermoshake | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Full | PLR / OEM |
-| Inheco | Thermoshake AC | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
-| Opentrons | Thermoshake | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Full | PLR / OEM |
-| Hamilton | Heater Shaker | <span class="badge badge-heating">heating material</span><span class="badge badge-shaking">shaking</span> | Full | PLR / OEM |
+| Inheco | Thermoshake RM | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-classic.html) |
+| Inheco | Thermoshake | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">Active cooling</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake.html) |
+| Inheco | Thermoshake AC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">Active cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-ac.html) |
+| Opentrons | Thermoshake | <span class="badge badge-heating">heating</span> | Full | [OEM](https://opentrons.com/products/heater-shaker-module) |
+| Hamilton | Heater Shaker | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/hamilton.html) / [OEM](https://www.hamiltoncompany.com/temperature-control/hamilton-heater-shaker) |
 
 ### Incubators
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Thermo Fisher Scientific | Cytomat C6000 | <span class="badge badge-heating">heating space</span> | Full | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C6002 | <span class="badge badge-heating">heating space</span> | Full | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_50 | <span class="badge badge-heating">heating space</span> | Full | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_425 | <span class="badge badge-heating">heating space</span><span class="badge badge-cooling">cooling</span> | Full | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_450_SHAKE | <span class="badge badge-heating">heating space</span><span class="badge badge-shaking">shaking</span> | Full | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">heating spaceting</span> | Full | PLR / OEM |
-| Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating space</span> | WIP | PLR / OEM |
-| Inheco | Incubator Shaker MTP & DWP | <span class="badge badge-heating">heating space</span><span class="badge badge-shaking">shaking</span> | WIP | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C6000 | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM |
+| Thermo Fisher Scientific | Cytomat C6002 | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_50 | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_425 | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">cooling</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_450_SHAKE | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM |
+| Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM |
+| Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM |
+| Inheco | Incubator Shaker MTP & DWP | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | WIP | PLR / OEM |
 
 ### Peelers
 
@@ -108,29 +108,29 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Azenta Life Sciences | a4S Sealer |  | Full | PLR / OEM |
+| Azenta Life Sciences | a4S Sealer |  | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/sealers/a4s.html) / [OEM](https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s) |
 
 ### Thermocyclers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Opentrons | Thermocycler | | Full | PLR / OEM |
-| Thermo Fisher Scientific | ATC | | WIP | PLR / OEM |
-| Thermo Fisher Scientific | Proflex | | WIP | PLR / OEM |
-| Inheco | ODTC | | WIP | PLR / OEM |
+| Opentrons | Thermocycler | | Full | PLR / [OEM](https://opentrons.com/products/thermocycler-module-1) |
+| Thermo Fisher Scientific | ATC | | WIP | PLR / [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html) |
+| Thermo Fisher Scientific | Proflex | | WIP | PLR / [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html) |
+| Inheco | ODTC | | WIP | PLR / [OEM](https://www.inheco.com/odtc.html) |
 
 ### Temperature Controllers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Opentrons | Temperature Module | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | Mostly | PLR / OEM |
-| Inheco | CPAC | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | WIP | PLR / OEM |
+| Opentrons | Temperature Module | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/temperature.html) / [OEM](https://opentrons.com/products/temperature-module-gen2) |
+| Inheco | CPAC | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | WIP | PLR / [OEM](https://www.inheco.com/cpac.html) |
 
 ### Tilting
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Hamilton | Tilt Module | | Full | PLR / OEM |
+| Hamilton | Tilt Module | | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/tilting.html) / [OEM](https://www.hamiltoncompany.com/other-robotics/188061) |
 
 ---
 
@@ -140,29 +140,29 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| BMG Labtech | CLARIOstar | <span class="badge">Absorbance</span><span class="badge">Fluorescence</span><span class="badge">Luminescence</span> | Full | PLR / OEM |
-| Agilent (BioTek) | Cytation 1 | <span class="badge">Absorbance</span><span class="badge">Fluorescence</span><span class="badge">Luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
-| Agilent (BioTek) | Cytation 5 | <span class="badge">Absorbance</span><span class="badge">Fluorescence</span><span class="badge">Luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
-| Byonoy | Absorbance 96 Automate | <span class="badge">Absorbance</span> | WIP | PLR / OEM |
-| Byonoy | Luminescence 96 Automate | <span class="badge">Fluorescence</span> | WIP | PLR / OEM |
+| BMG Labtech | CLARIOstar | <span class="badge">Absorbance</span><span class="badge">Fluorescence</span><span class="badge">Luminescence</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/bmg-clariostar.html) / [OEM](https://www.bmglabtech.com/en/clariostar-plus/) |
+| Agilent (BioTek) | Cytation 1 | <span class="badge">Absorbance</span><span class="badge">Fluorescence</span><span class="badge">Luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/cytation5.html) / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-1-cell-imaging-multimode-reader-1623200) |
+| Agilent (BioTek) | Cytation 5 | <span class="badge">Absorbance</span><span class="badge">Fluorescence</span><span class="badge">Luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/cytation5.html) / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-5-cell-imaging-multimode-reader-1623202) |
+| Byonoy | Absorbance 96 Automate | <span class="badge">Absorbance</span> | WIP | PLR / [OEM](https://byonoy.com/absorbance-96-automate/) |
+| Byonoy | Luminescence 96 Automate | <span class="badge">Luminescence</span> | WIP | PLR / [OEM](https://byonoy.com/luminescence-96-automate/) |
 
 ### Flow Cytometers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Beckman Coulter | CytoFLEX S | | WIP | PLR / OEM |
+| Beckman Coulter | CytoFLEX S | | WIP | PLR / [OEM](https://www.beckman.com/flow-cytometry/research-flow-cytometers/cytoflex-s) |
 
 ### qPCR Machines
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Thermo Fisher Scientific | QuantStudio 5 | | WIP | PLR / OEM |
+| Thermo Fisher Scientific | QuantStudio 5 | | WIP | PLR / [OEM](https://www.thermofisher.com/order/catalog/product/A34322) |
 
 ### Scales
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Mettler Toledo | WXS205SDU | | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/scales.html#mettler-toledo-wxs205sdu) / OEM |
+| Mettler Toledo | WXS205SDU | | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/scales.html#mettler-toledo-wxs205sdu) / [OEM](https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html) |
 
 ---
 
