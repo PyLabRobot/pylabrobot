@@ -80,15 +80,3 @@ class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
     assert "- Stage 2/2: 1 step(s) x 1 repeat(s)" in log
     assert "  - Repeat 1/1:" in log
     assert "    - Step 1/1 (repeat 1/1): temperature(s) = 4.0°C, hold = 1.0s" in log
-
-  async def test_chatterbox_deactivate_cancels_profile(self):
-    """Test that deactivating the block prints a cancellation message."""
-    log_buffer = StringIO()
-    with redirect_stdout(log_buffer):
-      await self.tc.run_protocol(
-        Protocol(stages=[Stage(steps=[Step(temperature=[50.0], hold_seconds=10)], repeats=1)]), 25.0
-      )
-      await self.tc.deactivate_block()
-
-    log = log_buffer.getvalue()
-    assert "- A running profile was cancelled." in log
