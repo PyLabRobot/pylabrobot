@@ -149,6 +149,7 @@ def gen_protocol_data(
   cover_temp: float,
   cover_enabled: bool,
   protocol_name: str,
+  stage_name_prefixes: List[str],
 ):
   def step_to_scpi(step: Step, step_index: int):
     data = {
@@ -167,7 +168,7 @@ def gen_protocol_data(
     data["multiline"].append(
       {
         "cmd": "RAMP",
-        "params": {"rate": str(step.rate)},
+        "params": {"rate": str(step.rate if step.rate is not None else 100)},
         "args": [str(t) for t in step.temperature],
       }
     )
@@ -179,30 +180,28 @@ def gen_protocol_data(
 
     return data
 
-  def stage_to_scpi(stage: Stage, stage_index: int):
-    stage_name_base = "_PCR"
+  def stage_to_scpi(stage: Stage, stage_index: int, stage_name_prefix: str):
+    print(stage)
     return {
       "cmd": "STAGe",
       "params": {"repeat": str(stage.repeats)},
-      "args": [stage_index, f"{stage_name_base}_{stage_index}"],
+      "args": [stage_index, f"{stage_name_prefix}_{stage_index}"],
       "tag": "multiline.stage",
       "multiline": [step_to_scpi(step, i + 1) for i, step in enumerate(stage.steps)],
     }
 
   stages = protocol.stages
-  assert all(isinstance(stage, Stage) for stage in stages), "Steps must be wrapped in Stage objects"
+  assert len(stages) == len(stage_name_prefixes), "Number of stages must match number of stage names"
 
   data = {
-    "status": "OK",
+    # "status": "OK",
     "cmd": f"TBC{block_id + 1}:Protocol",
     "params": {"Volume": str(sample_volume), "RunMode": run_mode},
     "args": [protocol_name],
     "tag": "multiline.outer",
     "multiline": [
-      stage_to_scpi(stage, i + 1)
-      if isinstance(stage, Stage)
-      else stage_to_scpi(Stage(steps=[stage], repeats=1), stage_index=i + 1)
-      for i, stage in enumerate(stages)
+      stage_to_scpi(stage, stage_index=i + 1, stage_name_prefix=stage_name_prefix)
+      for i, (stage, stage_name_prefix) in enumerate(zip(stages, stage_name_prefixes))
     ],
     "_blockId": block_id + 1,
     "_coverTemp": cover_temp,
@@ -621,6 +620,7 @@ class ProflexBackend(ThermocyclerBackend):
     protocol_name: str,
     cover_temp: float,
     cover_enabled: bool,
+    user_name: str,
   ):
     xmlfile, tmpfile = generate_run_info_files(
       protocol=protocol,
@@ -645,6 +645,8 @@ class ProflexBackend(ThermocyclerBackend):
     protocol_name: str,
     cover_temp: float,
     cover_enabled: bool,
+    user_name: str,
+    stage_name_prefixes: List[str],
   ):
     load_res = await self.send_command(
       data=gen_protocol_data(
@@ -655,6 +657,7 @@ class ProflexBackend(ThermocyclerBackend):
         cover_temp=cover_temp,
         cover_enabled=cover_enabled,
         protocol_name=protocol_name,
+        stage_name_prefixes=stage_name_prefixes,
       ),
       response_timeout=5,
       read_once=False,
@@ -668,7 +671,7 @@ class ProflexBackend(ThermocyclerBackend):
       {
         "cmd": f"TBC{block_id + 1}:RunProtocol",
         "params": {
-          "User": user,
+          "User": user_name,
           "CoverTemperature": cover_temp,
           "CoverEnabled": cover_enabled,
         },
@@ -782,6 +785,7 @@ class ProflexBackend(ThermocyclerBackend):
     cover_temp: float = 105,
     cover_enabled=True,
     protocol_name: str = "PCR_Protocol",
+    stage_name_prefixes: Optional[List[str]] = None,
   ):
     if await self.check_run_exists(run_name):
       self.logger.warning(f"Run {run_name} already exists")
@@ -792,6 +796,8 @@ class ProflexBackend(ThermocyclerBackend):
     for i, stage in enumerate(protocol.stages):
       if isinstance(stage, Step):
         protocol.stages[i] = Stage(steps=[stage], repeats=1)
+
+    stage_name_prefixes = stage_name_prefixes or [f"Stage_" for i in range(len(protocol.stages))]
 
     await self._scpi_write_run_info(
       protocol=protocol,
@@ -813,6 +819,8 @@ class ProflexBackend(ThermocyclerBackend):
       cover_temp=cover_temp,
       cover_enabled=cover_enabled,
       protocol_name=protocol_name,
+      user_name=user,
+      stage_name_prefixes=stage_name_prefixes,
     )
 
   async def stop(self):
@@ -826,3 +834,45 @@ class ProflexBackend(ThermocyclerBackend):
       await self.deactivate_block(block_id=block_id)
 
     await self.io.stop()
+
+  async def get_block_current_temperature(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_block_status(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_block_target_temperature(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_current_cycle_index(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_current_step_index(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_hold_time(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_lid_open(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_lid_status(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_lid_target_temperature(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_total_cycle_count(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def get_total_step_count(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def run_profile(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def set_block_temperature(self, *args, **kwargs):
+    raise NotImplementedError
+
+  async def set_lid_temperature(self, *args, **kwargs):
+    raise NotImplementedError

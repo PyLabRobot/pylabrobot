@@ -45,7 +45,7 @@ class Protocol:
     }
 
   @classmethod
-  def deserialize(cls, data: dict) -> 'Protocol':
+  def deserialize(cls, data: dict) -> "Protocol":
     stages = []
     for stage_data in data.get("stages", []):
       if "steps" in stage_data:
