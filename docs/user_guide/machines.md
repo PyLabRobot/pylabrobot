@@ -47,9 +47,9 @@ tr > td:nth-child(5) { width: 15%; }
 
 ### Pumps
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Cole Parmer | Masterflex L/S 07522-20 07522-30 07551-20 07551-30 07575-30 07575-40 | | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html) / [OEM](https://www.masterflex.nl/assets/uploads/2017/09/07551-xx.pdf) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Cole Parmer | Masterflex L/S 07522-20 07522-30 07551-20 07551-30 07575-30 07575-40 | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html) / [OEM](https://www.masterflex.nl/assets/uploads/2017/09/07551-xx.pdf) |
 | Agrowtek | Pump Array | | Full | PLR / OEM |
 
 ---
@@ -58,16 +58,16 @@ tr > td:nth-child(5) { width: 15%; }
 
 ### Arms
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Brooks Automation | PreciseFlex 400 | | WIP | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Brooks Automation | PreciseFlex 400 | WIP | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
 
 ### Centrifuges
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Agilent | VSpin | | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
-| Agilent | VSpin Access2 Loader | | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html#loader) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Agilent | VSpin | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
+| Agilent | VSpin Access2 Loader | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/agilent_vspin.html#loader) / [OEM](https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/microplate-centrifuge) |
 
 ### Fans
 
@@ -100,37 +100,37 @@ tr > td:nth-child(5) { width: 15%; }
 
 ### Peelers
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Azenta Life Sciences | XPeel | | WIP | PLR / OEM |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Azenta Life Sciences | XPeel | WIP | PLR / OEM |
 
 ### Sealers
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Azenta Life Sciences | a4S Sealer |  | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/sealers/a4s.html) / [OEM](https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Azenta Life Sciences | a4S Sealer | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/sealers/a4s.html) / [OEM](https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s) |
 
 ### Thermocyclers
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Opentrons | Thermocycler | | Full | PLR / [OEM](https://opentrons.com/products/thermocycler-module-1) |
-| Thermo Fisher Scientific | ATC | | WIP | PLR / [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html) |
-| Thermo Fisher Scientific | Proflex | | WIP | PLR / [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html) |
-| Inheco | ODTC | | WIP | PLR / [OEM](https://www.inheco.com/odtc.html) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Opentrons | Thermocycler | Full | PLR / [OEM](https://opentrons.com/products/thermocycler-module-1) |
+| Thermo Fisher Scientific | ATC | WIP | PLR / [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html) |
+| Thermo Fisher Scientific | Proflex | WIP | PLR / [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html) |
+| Inheco | ODTC | WIP | PLR / [OEM](https://www.inheco.com/odtc.html) |
 
 ### Temperature Controllers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Opentrons | Temperature Module | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/temperature.html) / [OEM](https://opentrons.com/products/temperature-module-gen2) |
-| Inheco | CPAC | <span class="badge badge-heating">heating material</span><span class="badge badge-cooling">cooling</span> | WIP | PLR / [OEM](https://www.inheco.com/cpac.html) |
+| Opentrons | Temperature Module | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/temperature.html) / [OEM](https://opentrons.com/products/temperature-module-gen2) |
+| Inheco | CPAC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | WIP | PLR / [OEM](https://www.inheco.com/cpac.html) |
 
 ### Tilting
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Hamilton | Tilt Module | | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/tilting.html) / [OEM](https://www.hamiltoncompany.com/other-robotics/188061) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Hamilton | Tilt Module | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/tilting.html) / [OEM](https://www.hamiltoncompany.com/other-robotics/188061) |
 
 ---
 
@@ -148,21 +148,21 @@ tr > td:nth-child(5) { width: 15%; }
 
 ### Flow Cytometers
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Beckman Coulter | CytoFLEX S | | WIP | PLR / [OEM](https://www.beckman.com/flow-cytometry/research-flow-cytometers/cytoflex-s) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Beckman Coulter | CytoFLEX S | WIP | PLR / [OEM](https://www.beckman.com/flow-cytometry/research-flow-cytometers/cytoflex-s) |
 
 ### qPCR Machines
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Thermo Fisher Scientific | QuantStudio 5 | | WIP | PLR / [OEM](https://www.thermofisher.com/order/catalog/product/A34322) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Thermo Fisher Scientific | QuantStudio 5 | WIP | PLR / [OEM](https://www.thermofisher.com/order/catalog/product/A34322) |
 
 ### Scales
 
-| Manufacturer | Machine | Features | PLR-Support | Links |
-|--------------|---------|----------|-------------|--------|
-| Mettler Toledo | WXS205SDU | | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/scales.html#mettler-toledo-wxs205sdu) / [OEM](https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html) |
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Mettler Toledo | WXS205SDU | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/scales.html#mettler-toledo-wxs205sdu) / [OEM](https://www.mt.com/us/en/home/products/Industrial_Weighing_Solutions/high-precision-weigh-sensors/weigh-module-wxs205sdu-15-11121008.html) |
 
 ---
 
