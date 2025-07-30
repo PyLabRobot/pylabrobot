@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List
 
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 
 class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
@@ -41,8 +41,13 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """Deactivate thermocycler lid."""
 
   @abstractmethod
-  async def run_profile(self, profile: List[Step], block_max_volume: float):
-    """Execute thermocycler profile run."""
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float):
+    """Execute thermocycler protocol run.
+
+    Args:
+      protocol: Protocol object containing stages with steps and repeats.
+      block_max_volume: Maximum block volume (µL) for safety.
+    """
 
   @abstractmethod
   async def get_block_current_temperature(self) -> List[float]:
