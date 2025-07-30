@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Optional
 
 
 @dataclass
@@ -37,7 +37,7 @@ class Stage:
 class Protocol:
   """Represents a thermocycler protocol ("cycle") with multiple stages."""
 
-  stages: List[Union[Stage, Step]]
+  stages: List[Stage]
 
   def serialize(self) -> dict:
     return {
@@ -48,11 +48,8 @@ class Protocol:
   def deserialize(cls, data: dict) -> "Protocol":
     stages = []
     for stage_data in data.get("stages", []):
-      if "steps" in stage_data:
-        steps = [Step(**step) for step in stage_data["steps"]]
-        stages.append(Stage(steps=steps, repeats=stage_data.get("repeats", 1)))
-      else:
-        stages.append(Step(**stage_data))
+      steps = [Step(**step) for step in stage_data["steps"]]
+      stages.append(Stage(steps=steps, repeats=stage_data.get("repeats", 1)))
     return cls(stages=stages)
 
 

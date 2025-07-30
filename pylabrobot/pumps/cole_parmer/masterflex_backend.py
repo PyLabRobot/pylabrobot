@@ -5,7 +5,17 @@ from pylabrobot.pumps.backend import PumpBackend
 
 
 class MasterflexBackend(PumpBackend):
-  """Backend for the Cole Parmer Masterflex L/S 07551-20 pump
+  """Backend for the Cole Parmer Masterflex L/S pump
+
+  tested on:
+  07551-20
+
+  should be same as:
+  07522-20
+  07522-30
+  07551-30
+  07575-30
+  07575-40
 
   Documentation available at:
     - https://pim-resources.coleparmer.com/instruction-manual/a-1299-1127b-en.pdf
