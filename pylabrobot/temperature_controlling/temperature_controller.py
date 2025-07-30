@@ -51,7 +51,7 @@ class TemperatureController(ResourceHolder, Machine):
     self.target_temperature = temperature
 
     if temperature < current:
-      if passive: # if passive, we do nothing and return early.
+      if passive:  # if passive, we do nothing and return early.
         return
 
       # If we have to cool but the backend does not support active cooling,
