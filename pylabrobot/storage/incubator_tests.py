@@ -1,6 +1,6 @@
 import unittest
 
-from pylabrobot.incubators import Incubator, IncubatorChatterboxBackend
+from pylabrobot.storage import Incubator, IncubatorChatterboxBackend
 from pylabrobot.resources.coordinate import Coordinate
 
 

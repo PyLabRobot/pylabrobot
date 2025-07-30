@@ -1,4 +1,4 @@
-from pylabrobot.incubators.backend import IncubatorBackend
+from pylabrobot.storage.backend import IncubatorBackend
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.plate import Plate
 

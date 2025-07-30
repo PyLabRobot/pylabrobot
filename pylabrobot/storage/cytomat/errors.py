@@ -1,6 +1,6 @@
 from typing import Dict
 
-from pylabrobot.incubators.cytomat.constants import ErrorRegister
+from pylabrobot.storage.cytomat.constants import ErrorRegister
 
 
 class CytomatBusyError(Exception):

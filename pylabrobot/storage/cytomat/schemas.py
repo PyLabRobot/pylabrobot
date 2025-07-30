@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from pylabrobot.incubators.cytomat.constants import (
+from pylabrobot.storage.cytomat.constants import (
   ActionRegister,
   ActionType,
   LoadStatusAtProcessor,
@@ -8,7 +8,7 @@ from pylabrobot.incubators.cytomat.constants import (
   OverviewRegister,
   SwapStationPosition,
 )
-from pylabrobot.incubators.cytomat.utils import hex_to_binary
+from pylabrobot.storage.cytomat.utils import hex_to_binary
 
 
 @dataclass(frozen=True)
