@@ -51,21 +51,16 @@ class TemperatureController(ResourceHolder, Machine):
     self.target_temperature = temperature
 
     if temperature < current:
-      # Cooling scenario.
+      if passive: # if passive, we do nothing and return early.
+        return
+
+      # If we have to cool but the backend does not support active cooling,
+      # and we are not passive cooling, raise an error.
       if not self.backend.supports_active_cooling:
-        if passive:
-          # Device does not support active cooling and user opted for passive
-          # cooling. Nothing to do on the backend.
-          return
         raise ValueError(
           "Backend does not support active cooling. Use passive=True to allow "
           "passive cooling or set a higher temperature."
         )
-
-      # Backend supports active cooling.
-      if passive:
-        # Actively do nothing and let the device cool naturally.
-        return
 
     return await self.backend.set_temperature(temperature)
 
