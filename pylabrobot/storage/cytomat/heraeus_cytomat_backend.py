@@ -6,10 +6,10 @@ from typing import List, Tuple
 
 import serial
 
-from pylabrobot.storage.backend import IncubatorBackend
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
+from pylabrobot.storage.backend import IncubatorBackend
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
-from pylabrobot.storage.backend import IncubatorBackend
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.plate import Plate
+from pylabrobot.storage.backend import IncubatorBackend
 
 
 class IncubatorChatterboxBackend(IncubatorBackend):

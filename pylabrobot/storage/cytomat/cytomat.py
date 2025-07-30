@@ -6,6 +6,8 @@ from typing import List, Literal, Optional, Union, cast
 
 import serial
 
+from pylabrobot.io.serial import Serial
+from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 from pylabrobot.storage.backend import IncubatorBackend
 from pylabrobot.storage.cytomat.constants import (
   ActionRegister,
@@ -38,8 +40,6 @@ from pylabrobot.storage.cytomat.utils import (
   hex_to_binary,
   validate_storage_location_number,
 )
-from pylabrobot.io.serial import Serial
-from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 logger = logging.getLogger(__name__)
 
