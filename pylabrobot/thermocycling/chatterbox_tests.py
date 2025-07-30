@@ -4,7 +4,7 @@ from io import StringIO
 
 from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling import Thermocycler, ThermocyclerChatterboxBackend
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 
 class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
@@ -21,14 +21,16 @@ class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
 
   async def test_chatterbox_run_profile(self):
     """Test that the chatterbox produces the correct log for a generic profile."""
-    profile = [
+    profile = Protocol(stages=[
+      Stage(steps=[
       Step(temperature=[95.0], hold_seconds=10),
       Step(temperature=[55.0], hold_seconds=20),
-    ]
+      ], repeats=1)
+    ])
 
     log_buffer = StringIO()
     with redirect_stdout(log_buffer):
-      await self.tc.run_profile(profile, block_max_volume=25.0)
+      await self.tc.run_protocol(profile, block_max_volume=25.0)
       await self.tc.wait_for_profile_completion(0.01)
     log = log_buffer.getvalue()
 
@@ -76,7 +78,9 @@ class TestThermocyclerChatterbox(unittest.IsolatedAsyncioTestCase):
     """Test that deactivating the block prints a cancellation message."""
     log_buffer = StringIO()
     with redirect_stdout(log_buffer):
-      await self.tc.run_profile([Step(temperature=[50.0], hold_seconds=10)], 25.0)
+      await self.tc.run_protocol(
+        Protocol(stages=[Stage(steps=[Step(temperature=[50.0], hold_seconds=10)], repeats=1)]), 25.0
+      )
       await self.tc.deactivate_block()
 
     log = log_buffer.getvalue()

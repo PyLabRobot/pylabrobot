@@ -7,7 +7,7 @@ from typing import List, Optional
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, ResourceHolder
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 
 
 class Thermocycler(ResourceHolder, Machine):
@@ -79,24 +79,24 @@ class Thermocycler(ResourceHolder, Machine):
     """Turn off the lid heater."""
     return await self.backend.deactivate_lid(**backend_kwargs)
 
-  async def run_profile(self, profile: List[Step], block_max_volume: float, **backend_kwargs):
-    """Enqueue a multi-step temperature profile (fire-and-forget).
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, **backend_kwargs):
+    """Enqueue a multi-stage temperature protocol (fire-and-forget).
 
     Args:
-      profile: List of {"temperature": float, "holdSeconds": float} steps.
+      protocol: Protocol object containing stages with steps and repeats.
       block_max_volume: Maximum block volume (µL) for safety.
     """
 
-    # Ensure all steps have the same number of temperatures
-    num_zones = len(profile[0].temperature)
-    for i, step in enumerate(profile):
-      if len(step.temperature) != num_zones:
-        raise ValueError(
-          f"All steps must have the same number of temperatures. "
-          f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
-        )
+    num_zones = len(protocol.stages[0].steps[0].temperature)
+    for stage in protocol.stages:
+      for i, step in enumerate(stage.steps):
+        if len(step.temperature) != num_zones:
+          raise ValueError(
+            f"All steps must have the same number of temperatures. "
+            f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
+          )
 
-    return await self.backend.run_profile(profile, block_max_volume, **backend_kwargs)
+    return await self.backend.run_protocol(protocol, block_max_volume, **backend_kwargs)
 
   async def run_pcr_profile(
     self,
@@ -140,28 +140,38 @@ class Thermocycler(ResourceHolder, Machine):
     await self.set_lid_temperature(lid_temperature)
     await self.wait_for_lid()
 
-    profile: List[Step] = []
+    stages: List[Stage] = []
 
+    # Pre-denaturation stage (if specified)
     if pre_denaturation_temp is not None and pre_denaturation_time is not None:
-      profile.append(Step(temperature=pre_denaturation_temp, hold_seconds=pre_denaturation_time))
+      pre_denaturation_step = Step(
+        temperature=pre_denaturation_temp, hold_seconds=pre_denaturation_time
+      )
+      stages.append(Stage(steps=[pre_denaturation_step], repeats=1))
 
-    # Main PCR cycles
-    pcr_step = [
+    # Main PCR cycles stage
+    pcr_steps = [
       Step(temperature=denaturation_temp, hold_seconds=denaturation_time),
       Step(temperature=annealing_temp, hold_seconds=annealing_time),
       Step(temperature=extension_temp, hold_seconds=extension_time),
     ]
-    for _ in range(num_cycles):
-      profile.extend(pcr_step)
+    stages.append(Stage(steps=pcr_steps, repeats=num_cycles))
 
+    # Final extension stage (if specified)
     if final_extension_temp is not None and final_extension_time is not None:
-      profile.append(Step(temperature=final_extension_temp, hold_seconds=final_extension_time))
+      final_extension_step = Step(
+        temperature=final_extension_temp, hold_seconds=final_extension_time
+      )
+      stages.append(Stage(steps=[final_extension_step], repeats=1))
 
+    # Storage stage (if specified)
     if storage_temp is not None and storage_time is not None:
-      profile.append(Step(temperature=storage_temp, hold_seconds=storage_time))
+      storage_step = Step(temperature=storage_temp, hold_seconds=storage_time)
+      stages.append(Stage(steps=[storage_step], repeats=1))
 
-    return await self.run_profile(
-      profile=profile, block_max_volume=block_max_volume, **backend_kwargs
+    protocol = Protocol(stages=stages)
+    return await self.run_protocol(
+      protocol=protocol, block_max_volume=block_max_volume, **backend_kwargs
     )
 
   async def get_block_current_temperature(self, **backend_kwargs) -> List[float]:

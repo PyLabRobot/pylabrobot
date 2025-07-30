@@ -39,18 +39,18 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Hamilton | STAR(let) | <span class="badge badge-liquid">liquid handling</span><span class="badge badge-transfer">material transfer</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-star/_hamilton-star.html) / [OEM](https://www.hamiltoncompany.com/microlab-star) |
-| Hamilton | Vantage | <span class="badge badge-liquid">liquid handling</span><span class="badge badge-transfer">material transfer</span> | Mostly | PLR / [OEM](https://www.hamiltoncompany.com/microlab-vantage) |
-| Hamilton | Prep | <span class="badge badge-liquid">liquid handling</span><span class="badge badge-transfer">material transfer</span> | WIP | PLR / [OEM](https://www.hamiltoncompany.com/microlab-prep) |
-| Tecan | EVO | <span class="badge badge-liquid">liquid handling</span> | Mostly | PLR / OEM |
-| Opentrons | OT-2 | <span class="badge badge-liquid">liquid handling</span> | Mostly | PLR / OEM |
+| Hamilton | STAR(let) | <span class="badge badge-transfer">arm</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-star/_hamilton-star.html) / [OEM](https://www.hamiltoncompany.com/microlab-star) |
+| Hamilton | Vantage | <span class="badge badge-transfer">arm</span> | Mostly | PLR / [OEM](https://www.hamiltoncompany.com/microlab-vantage) |
+| Hamilton | Prep | <span class="badge badge-transfer">arm</span> | WIP | PLR / [OEM](https://www.hamiltoncompany.com/microlab-prep) |
+| Tecan | EVO |  | Mostly | PLR / OEM |
+| Opentrons | OT-2 |  | Mostly | PLR / OEM |
 
 ### Pumps
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Cole Parmer | Masterflex | <span class="badge badge-liquid">liquid transfer</span> | Mostly | PLR / OEM |
-| Agrowtek | Pump Array | <span class="badge badge-liquid">liquid transfer</span> | Basics | PLR / OEM |
+| Cole Parmer | Masterflex | | Mostly | PLR / OEM |
+| Agrowtek | Pump Array | | Basics | PLR / OEM |
 
 ---
 
@@ -60,14 +60,14 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Brooks Automation | PreciseFlex 400 | <span class="badge badge-transfer">material transfer</span> | WIP | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
+| Brooks Automation | PreciseFlex 400 | | WIP | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
 
 ### Centrifuges
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Agilent | VSpin | <span class="badge badge-centrifuge">plate centrifugation</span> | Mostly | PLR / OEM |
-| Agilent | VSpin Access2 Loader | <span class="badge badge-centrifuge">plate centrifugation</span><span class="badge badge-transfer">material transfer</span> | Mostly | PLR / OEM |
+| Agilent | VSpin | | Mostly | PLR / OEM |
+| Agilent | VSpin Access2 Loader | | Mostly | PLR / OEM |
 
 ### Fans
 
@@ -89,35 +89,35 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Thermo Fisher Scientific | Cytomat C6000 | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C6002 | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_50 | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_425 | <span class="badge badge-heating">heating space</span><span class="badge badge-cooling">cooling</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat C2C_450_SHAKE | <span class="badge badge-heating">heating space</span><span class="badge badge-shaking">shaking</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">heating spaceting</span><span class="badge badge-storage">smart storage</span> | Mostly | PLR / OEM |
-| Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating space</span><span class="badge badge-storage">smart storage</span> | WIP | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C6000 | <span class="badge badge-heating">heating space</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C6002 | <span class="badge badge-heating">heating space</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_50 | <span class="badge badge-heating">heating space</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_425 | <span class="badge badge-heating">heating space</span><span class="badge badge-cooling">cooling</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat C2C_450_SHAKE | <span class="badge badge-heating">heating space</span><span class="badge badge-shaking">shaking</span> | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">heating spaceting</span> | Mostly | PLR / OEM |
+| Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating space</span> | WIP | PLR / OEM |
 | Inheco | Incubator Shaker MTP & DWP | <span class="badge badge-heating">heating space</span><span class="badge badge-shaking">shaking</span> | WIP | PLR / OEM |
 
 ### Peelers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Azenta Life Sciences | XPeel | <span class="badge badge-sealing">plate seal removal</span> | WIP | PLR / OEM |
+| Azenta Life Sciences | XPeel | | WIP | PLR / OEM |
 
 ### Sealers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Azenta Life Sciences | a4S Sealer | <span class="badge badge-sealing">plate sealing</span> | Full | PLR / OEM |
+| Azenta Life Sciences | a4S Sealer |  | Full | PLR / OEM |
 
 ### Thermocyclers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Opentrons | Thermocycler | <span class="badge badge-thermo">thermocycling</span> | Mostly | PLR / OEM |
-| Thermo Fisher Scientific | ATC | <span class="badge badge-thermo">thermocycling</span> | WIP | PLR / OEM |
-| Thermo Fisher Scientific | Proflex | <span class="badge badge-thermo">thermocycling</span> | WIP | PLR / OEM |
-| Inheco | ODTC | <span class="badge badge-thermo">thermocycling</span> | WIP | PLR / OEM |
+| Opentrons | Thermocycler | | Mostly | PLR / OEM |
+| Thermo Fisher Scientific | ATC | | WIP | PLR / OEM |
+| Thermo Fisher Scientific | Proflex | | WIP | PLR / OEM |
+| Inheco | ODTC | | WIP | PLR / OEM |
 
 ### Temperature Controllers
 
@@ -130,7 +130,7 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Hamilton | Tilt Module | <span class="badge badge-tilt">plate tilting</span> | Mostly | PLR / OEM |
+| Hamilton | Tilt Module | | Mostly | PLR / OEM |
 
 ---
 
@@ -140,31 +140,31 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| BMG Labtech | CLARIOstar | <span class="badge badge-reading">plate reading</span> | Full | PLR / OEM |
-| Agilent (BioTek) | Cytation 1 | <span class="badge badge-reading">plate reading</span><span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
-| Agilent (BioTek) | Cytation 5 | <span class="badge badge-reading">plate reading</span><span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
+| BMG Labtech | CLARIOstar |  | Full | PLR / OEM |
+| Agilent (BioTek) | Cytation 1 | <span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
+| Agilent (BioTek) | Cytation 5 | <span class="badge badge-microscopy">microscopy</span> | Full | PLR / OEM |
 
 ### Flow Cytometers
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Beckman Coulter | CytoFLEX S | <span class="badge badge-cyto">flow cytometry</span> | WIP | PLR / OEM |
+| Beckman Coulter | CytoFLEX S | | WIP | PLR / OEM |
 
 ### qPCR Machines
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Thermo Fisher Scientific | QuantStudio 5 | <span class="badge badge-thermo">thermocycling</span><span class="badge badge-reading">plate reading</span> | WIP | PLR / OEM |
+| Thermo Fisher Scientific | QuantStudio 5 | | WIP | PLR / OEM |
 
 ### Scales
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
-| Mettler Toledo | WXS205SDU | <span class="badge badge-weight">weight measuring</span> | Full | PLR / OEM |
+| Mettler Toledo | WXS205SDU | | Full | PLR / OEM |
 
 ---
 
-## Understanding the Table
+## Understanding the Tables
 
 Classifying lab automation equipment can be challenging, as many machines have overlapping capabilities and different user groups require varying levels of software integration.  
 PyLabRobot aims to provide access to all hardware-firmware capabilities available on integrated equipment, even beyond OEM software. This allows users to selectively utilize the functionalities they require.

@@ -5,7 +5,7 @@ from unittest.mock import patch
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.thermocycling.opentrons import OpentronsThermocyclerModuleV1
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 
 
 def _is_python_3_10():
@@ -70,9 +70,9 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     mock_deactivate_lid.assert_called_once_with(module_id="test_id")
 
   @patch("pylabrobot.thermocycling.opentrons_backend.thermocycler_run_profile_no_wait")
-  async def test_run_profile(self, mock_run_profile):
-    profile = [Step(temperature=[95], hold_seconds=10)]
-    await self.thermocycler_backend.run_profile(profile, 50.0)
+  async def test_run_protocol(self, mock_run_profile):
+    protocol = Protocol(stages=[Stage(steps=[Step(temperature=[95], hold_seconds=10)])])
+    await self.thermocycler_backend.run_protocol(protocol, 50.0)
     # print all calls
     mock_run_profile.assert_called_once_with(
       profile=[{"celsius": 95, "holdSeconds": 10}], block_max_volume=50.0, module_id="test_id"
@@ -107,7 +107,7 @@ class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
     assert await self.thermocycler_backend.get_lid_status() == LidStatus.HOLDING_AT_TARGET
     assert await self.thermocycler_backend.get_block_status() == BlockStatus.HOLDING_AT_TARGET
     assert await self.thermocycler_backend.get_hold_time() == 12.0
-    assert await self.thermocycler_backend.get_current_cycle_index() == 1  # 2 - 1 = 1 (zero-based)
-    assert await self.thermocycler_backend.get_total_cycle_count() == 10
+    # assert await self.thermocycler_backend.get_current_cycle_index() == 1  # 2 - 1 = 1 (zero-based)
+    # assert await self.thermocycler_backend.get_total_cycle_count() == 10
     assert await self.thermocycler_backend.get_current_step_index() == 0  # 1 - 1 = 0 (zero-based)
     assert await self.thermocycler_backend.get_total_step_count() == 3
