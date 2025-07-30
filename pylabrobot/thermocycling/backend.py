@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List
 
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 
 class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):

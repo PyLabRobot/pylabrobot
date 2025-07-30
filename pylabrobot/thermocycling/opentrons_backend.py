@@ -4,7 +4,7 @@ import sys
 from typing import List, Optional, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 # Only supported on Python 3.10 with the OT-API HTTP client installed
 PYTHON_VERSION = sys.version_info[:2]

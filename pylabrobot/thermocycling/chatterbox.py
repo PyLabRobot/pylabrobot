@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 
 @dataclass
