@@ -1,7 +1,7 @@
 """Backend that drives an Opentrons Thermocycler via the HTTP API."""
 
 import sys
-from typing import List, cast
+from typing import List, Optional, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
@@ -51,7 +51,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
         " Only supported on Python 3.10 and below."
       )
     self.opentrons_id = opentrons_id
-    self._current_protocol = None
+    self._current_protocol: Optional[Protocol] = None
 
   async def setup(self):
     """No extra setup needed for HTTP-API thermocycler."""

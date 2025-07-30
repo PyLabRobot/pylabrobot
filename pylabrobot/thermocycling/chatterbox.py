@@ -14,7 +14,7 @@ class ThermocyclerState:
   block_target: Optional[List[float]]
   lid_target: Optional[List[float]]
   lid_open: bool
-  protocol: Optional[List[Step]]
+  protocol: Optional[Protocol]
   is_profile_running: bool
   current_step_index: int
   total_steps: int
@@ -126,7 +126,7 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
             f"    - Step {step_idx + 1}/{len(stage.steps)} (repeat {repeat_idx + 1}/{stage.repeats}): "
             f"temperature(s) = {temperature_str}°C, hold = {hold_str}s"
           )
-    
+
     self._state.is_profile_running = False
 
   async def get_hold_time(self) -> float:
