@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 
 
 @dataclass
@@ -14,7 +14,7 @@ class ThermocyclerState:
   block_target: Optional[List[float]]
   lid_target: Optional[List[float]]
   lid_open: bool
-  profile: Optional[List[Step]]
+  protocol: Optional[List[Step]]
   is_profile_running: bool
   current_step_index: int
   total_steps: int
@@ -26,7 +26,7 @@ class ThermocyclerState:
     self.block_target = None
     self.lid_target = None
     self.lid_open = True
-    self.profile = None
+    self.protocol = None
     self.is_profile_running = False
     self.current_step_index = 0
     self.total_steps = 0
@@ -97,84 +97,49 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print("Deactivating lid.")
     self._state.lid_target = None
 
-  async def run_profile(self, profile: list[Step], block_max_volume: float):
-    print("Running profile:")
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float):
+    """Run a protocol with stages and repeats."""
+    print("Running protocol:")
 
-    if not profile:
-      print("  (Profile is empty, no action taken)")
-      self._state.is_profile_running = False
-      return
-
-    header = (
-      f"{'step#':<{self._step_length}} "
-      f"{'temp (C)':<{self._temp_length}} "
-      f"{'hold (s)':<{self._hold_length}}"
-    )
-    print(f"  {header}")
-
-    for i, step in enumerate(profile):
-      temperature_val = step.temperature
-      # Handle temperature as a list - display all temperatures
-      if isinstance(temperature_val, list) and len(temperature_val) > 0:
-        temperature_str = ", ".join(f"{t:.1f}" for t in temperature_val)
-      elif isinstance(temperature_val, (int, float)):
-        temperature_str = f"{temperature_val:.1f}"
-      else:
-        temperature_str = "N/A"
-      hold_val = step.hold_seconds
-      hold_str = f"{hold_val:.1f}" if isinstance(hold_val, (int, float)) else "N/A"
-      row = (
-        f"  {i + 1:<{self._step_length}} "
-        f"{temperature_str:<{self._temp_length}} "
-        f"{hold_str:<{self._hold_length}}"
-      )
-      print(row)
-
-    self._state.profile = profile
-    self._state.total_steps = len(profile)
-    self._state.current_step_index = 0
     self._state.is_profile_running = True
+    self._state.protocol = protocol
+    self._state.total_steps = sum(stage.repeats * len(stage.steps) for stage in protocol.stages)
+    self._state.current_step_index = 0
 
-    first_step = self._state.profile[0]
-    first_temp = first_step.temperature
-    if first_temp is not None:
-      # first_temp is now a list, display all temperatures
-      if isinstance(first_temp, list) and len(first_temp) > 0:
-        temp_str = ", ".join(f"{t:.1f}" for t in first_temp)
-        print(f"  - Starting Step 1/{self._state.total_steps}: setting block to {temp_str}°C.")
-        # Set block target to the temperatures for each zone
-        self._state.block_target = list(first_temp)
-        self._state.block_temp = list(first_temp)
+    for stage_idx, stage in enumerate(protocol.stages):
+      # stage_info.append(f"Stage {stage_idx + 1}: {len(stage.steps)} step(s) x {stage.repeats} repeat(s)")
+      print(
+        f"- Stage {stage_idx + 1}/{len(protocol.stages)}: {len(stage.steps)} step(s) x {stage.repeats} repeat(s)"
+      )
+      for repeat_idx in range(stage.repeats):
+        print(f"  - Repeat {repeat_idx + 1}/{stage.repeats}:")
+        for step_idx, step in enumerate(stage.steps):
+          self._state.current_step_index += 1
+          self._state.block_target = step.temperature
+
+          temperature_str = ", ".join(f"{t:.1f}" for t in step.temperature)
+          hold_str = (
+            f"{step.hold_seconds:.1f}" if isinstance(step.hold_seconds, (int, float)) else "N/A"
+          )
+          # Simulate running the step
+          print(
+            f"    - Step {step_idx + 1}/{len(stage.steps)} (repeat {repeat_idx + 1}/{stage.repeats}): "
+            f"temperature(s) = {temperature_str}°C, hold = {hold_str}s"
+          )
+    
+    self._state.is_profile_running = False
 
   async def get_hold_time(self) -> float:
     if not self._state.is_profile_running:
       return 0.0
 
     # Loop through all steps and print the full log instantly.
-    if self._state.profile is None:
+    if self._state.protocol is None:
       return 0.0
 
-    for i in range(self._state.total_steps):
-      completed_step = self._state.profile[i]
-      hold_duration = completed_step.hold_seconds
-      print(f"  - Step {i + 1}/{self._state.total_steps}: hold for {hold_duration:.1f}s complete.")
-
-      if i < self._state.total_steps - 1:
-        next_step = self._state.profile[i + 1]
-        next_temp = next_step.temperature
-        if next_temp is not None:
-          # next_temp is now a list, display all temperatures
-          if isinstance(next_temp, list) and len(next_temp) > 0:
-            temp_str = ", ".join(f"{t:.1f}" for t in next_temp)
-            print(
-              f"  - Starting Step {i + 2}/{self._state.total_steps}: "
-              f"setting block to {temp_str}°C."
-            )
-
-    print("  - Profile finished.")
     self._state.is_profile_running = False
     self._state.current_step_index = self._state.total_steps - 1
-    final_temp = self._state.profile[-1].temperature
+    final_temp = self._state.protocol.stages[-1].steps[-1].temperature
     if final_temp is not None:
       # final_temp is now a list, use all temperatures for each zone
       if isinstance(final_temp, list) and len(final_temp) > 0:

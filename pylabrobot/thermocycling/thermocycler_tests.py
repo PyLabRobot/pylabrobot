@@ -8,7 +8,7 @@ from pylabrobot.thermocycling import (
   ThermocyclerBackend,
   ThermocyclerChatterboxBackend,
 )
-from pylabrobot.thermocycling.standard import Step
+from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 
 def mock_backend() -> MagicMock:
@@ -22,7 +22,7 @@ def mock_backend() -> MagicMock:
   mock.set_lid_temperature = AsyncMock()
   mock.deactivate_block = AsyncMock()
   mock.deactivate_lid = AsyncMock()
-  mock.run_profile = AsyncMock()
+  mock.run_protocol = AsyncMock()
   mock.get_block_current_temperature = AsyncMock(return_value=[25.0])
   mock.get_block_target_temperature = AsyncMock(return_value=None)
   mock.get_lid_current_temperature = AsyncMock(return_value=[25.0])
@@ -85,19 +85,23 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
 
     self.tc.backend.set_lid_temperature.assert_called_once_with([105.0])  # type: ignore
 
-    expected_profile = [
-      Step(temperature=[95.0], hold_seconds=180.0),
-      Step(temperature=[98.0], hold_seconds=10.0),
-      Step(temperature=[55.0], hold_seconds=30.0),
-      Step(temperature=[72.0], hold_seconds=60.0),
-      Step(temperature=[98.0], hold_seconds=10.0),
-      Step(temperature=[55.0], hold_seconds=30.0),
-      Step(temperature=[72.0], hold_seconds=60.0),
-      Step(temperature=[72.0], hold_seconds=300.0),
-      Step(temperature=[4.0], hold_seconds=600.0),
-    ]
+    expected_protocol = Protocol(
+      stages=[
+        Stage(steps=[Step(temperature=[95.0], hold_seconds=180.0, rate=None)], repeats=1),
+        Stage(
+          steps=[
+            Step(temperature=[98.0], hold_seconds=10.0, rate=None),
+            Step(temperature=[55.0], hold_seconds=30.0, rate=None),
+            Step(temperature=[72.0], hold_seconds=60.0, rate=None),
+          ],
+          repeats=2,
+        ),
+        Stage(steps=[Step(temperature=[72.0], hold_seconds=300.0, rate=None)], repeats=1),
+        Stage(steps=[Step(temperature=[4.0], hold_seconds=600.0, rate=None)], repeats=1),
+      ]
+    )
 
-    self.tc.backend.run_profile.assert_called_once_with(expected_profile, 25.0)  # type: ignore
+    self.tc.backend.run_protocol.assert_called_once_with(expected_protocol, 25.0)  # type: ignore
 
   async def test_wait_for_profile_completion(self):
     """Test that wait_for_profile_completion correctly polls is_profile_running."""

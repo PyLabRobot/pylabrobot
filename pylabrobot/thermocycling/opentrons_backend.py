@@ -4,7 +4,7 @@ import sys
 from typing import List, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
-from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Step
+from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 
 # Only supported on Python 3.10 with the OT-API HTTP client installed
 PYTHON_VERSION = sys.version_info[:2]
@@ -51,6 +51,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
         " Only supported on Python 3.10 and below."
       )
     self.opentrons_id = opentrons_id
+    self._current_protocol = None
 
   async def setup(self):
     """No extra setup needed for HTTP-API thermocycler."""
@@ -98,18 +99,24 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     """Deactivate the lid heater."""
     return thermocycler_deactivate_lid(module_id=self.opentrons_id)
 
-  async def run_profile(self, profile: list[Step], block_max_volume: float):
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float):
     """Enqueue and return immediately (no wait) the PCR profile command."""
+
+    # flatten the protocol to a list of Steps
     # in opentrons, the "celsius" key is used instead of "temperature"
     # step.temperature is now a list, but Opentrons only supports single temperature
     ot_profile = []
-    for step in profile:
-      if len(set(step.temperature)) != 1:
-        raise ValueError(
-          f"Opentrons thermocycler only supports a single unique temperature per step, got {set(step.temperature)}"
-        )
-      celsius = step.temperature[0]
-      ot_profile.append({"celsius": celsius, "holdSeconds": step.hold_seconds})
+    for stage in protocol.stages:
+      for step in stage.steps:
+        for _ in range(stage.repeats):
+          if len(set(step.temperature)) != 1:
+            raise ValueError(
+              f"Opentrons thermocycler only supports a single unique temperature per step, got {set(step.temperature)}"
+            )
+          celsius = step.temperature[0]
+          ot_profile.append({"celsius": celsius, "holdSeconds": step.hold_seconds})
+
+    self._current_protocol = protocol
 
     return thermocycler_run_profile_no_wait(
       profile=ot_profile,
@@ -167,17 +174,25 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
 
   async def get_current_cycle_index(self) -> int:
     """Get the zero-based index of the current cycle from the Opentrons API."""
-    # Opentrons API returns one-based, convert to zero-based
-    cycle_index = self._find_module().get("currentCycleIndex")
-    if cycle_index is None:
-      raise RuntimeError("Current cycle index is not available. Is a profile running?")
-    return cast(int, cycle_index) - 1
+
+    # https://github.com/PyLabRobot/pylabrobot/issues/632
+    raise NotImplementedError('Opentrons "cycle" concept is not understood currently.')
+
+    # Since we send a flattened list of steps, we have to recover the cycle index based
+    # on the current step index and total step count.
+    seen_steps = 0
+    current_step = self.get_current_step_index()
+    for stage in self._current_protocol.stages:
+      for _ in stage.steps:
+        if seen_steps == current_step:
+          return  # TODO: what is a cycle in OT?
+        seen_steps += 1
+
+    raise RuntimeError("Current cycle index is not available. Is a profile running?")
 
   async def get_total_cycle_count(self) -> int:
-    total_cycles = self._find_module().get("totalCycleCount")
-    if total_cycles is None:
-      raise RuntimeError("Total cycle count is not available. Is a profile running?")
-    return cast(int, total_cycles)
+    # https://github.com/PyLabRobot/pylabrobot/issues/632
+    raise NotImplementedError('Opentrons "cycle" concept is not understood currently.')
 
   async def get_current_step_index(self) -> int:
     """Get the zero-based index of the current step from the Opentrons API."""
