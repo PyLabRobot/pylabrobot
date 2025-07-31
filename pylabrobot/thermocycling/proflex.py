@@ -4,6 +4,7 @@ import hmac
 import logging
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from xml.dom import minidom
 
@@ -191,7 +192,9 @@ def _gen_protocol_data(
     }
 
   stages = protocol.stages
-  assert len(stages) == len(stage_name_prefixes), "Number of stages must match number of stage names"
+  assert len(stages) == len(
+    stage_name_prefixes
+  ), "Number of stages must match number of stage names"
 
   data = {
     # "status": "OK",
@@ -710,20 +713,34 @@ class ProflexBackend(ThermocyclerBackend):
     self.logger.info("Protocol aborted")
 
   # TODO: nice object for returning
+
+  @dataclass
+  class RunProgress:
+    stage: str
+    elapsed_time: int
+    remaining_time: int
+    running: bool
+
   async def check_if_running(self, protocol: Protocol, block_id: int):
     progress = await self.get_run_progress(block_id=block_id)
     if not progress:
       self.logger.info("Protocol completed")
-      return False, "completed", self.prot_time_elapsed, 0
+      return RunProgress(
+        running=False, stage="completed", elapsed_time=self.prot_time_elapsed, remaining_time=0
+      )
 
     if progress["RunTitle"] == "-":
       await self._read_response(timeout=5)
       self.logger.info("Protocol completed")
-      return False, "completed", self.prot_time_elapsed, 0
+      return RunProgress(
+        running=False, stage="completed", elapsed_time=self.prot_time_elapsed, remaining_time=0
+      )
 
     if progress["Stage"] == "POSTRun":
       self.logger.info("Protocol in POSTRun")
-      return True, "POSTRun", self.prot_time_elapsed, 0
+      return RunProgress(
+        running=True, stage="POSTRun", elapsed_time=self.prot_time_elapsed, remaining_time=0
+      )
 
     # TODO: move to separate wait method
     if progress["Stage"] != "-" and progress["Step"] != "-":
@@ -738,7 +755,12 @@ class ProflexBackend(ThermocyclerBackend):
             break
           await asyncio.sleep(5)
         self.logger.info("Infinite hold")
-        return False, "infinite_hold", self.prot_time_elapsed, self.prot_time_remaining
+        return RunProgress(
+          running=False,
+          stage="infinite_hold",
+          elapsed_time=self.prot_time_elapsed,
+          remaining_time=self.prot_time_remaining,
+        )
 
     time_elapsed = await self.get_elapsed_run_time(block_id=block_id)
     self.prot_time_elapsed = time_elapsed
@@ -747,7 +769,12 @@ class ProflexBackend(ThermocyclerBackend):
 
     self.logger.info(f"Elapsed time: {time_elapsed}")
     self.logger.info(f"Remaining time: {remaining_time}")
-    return True, progress["Stage"], time_elapsed, remaining_time
+    return RunProgress(
+      running=True,
+      stage=progress["Stage"],
+      elapsed_time=time_elapsed,
+      remaining_time=remaining_time,
+    )
 
   # *************Three core methods for running a protocol***********************
 
@@ -785,7 +812,7 @@ class ProflexBackend(ThermocyclerBackend):
     self,
     protocol: Protocol,
     block_id: int,
-    run_name="testrun",  # TODO: if not passed, make a random one
+    run_name="testrun",
     user="Admin",
     sample_volume: float = 50,
     run_mode: str = "Fast",
@@ -859,7 +886,7 @@ class ProflexBackend(ThermocyclerBackend):
 
     if progress["Stage"] != "-" and progress["Step"] != "-":
       return int(progress["Stage"]) - 1
-    
+
     raise RuntimeError("Current cycle index is not available, protocol may not be running")
 
   async def get_current_step_index(self, block_id: int) -> int:
@@ -876,7 +903,7 @@ class ProflexBackend(ThermocyclerBackend):
 
     if progress["Stage"] != "-" and progress["Step"] != "-":
       return int(progress["Step"]) - 1
-    
+
     raise RuntimeError("Current step index is not available, protocol may not be running")
 
   async def get_hold_time(self, *args, **kwargs):
@@ -900,7 +927,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def get_total_step_count(self, *args, **kwargs):
     # deprecated
     raise NotImplementedError
-  
+
   async def get_block_target_temperature(self, *args, **kwargs):
     # deprecated
     raise NotImplementedError

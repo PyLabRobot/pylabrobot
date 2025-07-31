@@ -2,7 +2,6 @@ import textwrap
 import unittest
 import unittest.mock
 
-from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.thermocycling.proflex import ProflexBackend
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
@@ -15,7 +14,9 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     self.proflex.io.read = unittest.mock.AsyncMock()
 
   async def test_run_protocol(self):
-    scpi_command = textwrap.dedent("""
+    scpi_command = (
+      textwrap.dedent(
+        """
     TBC2:Protocol -Volume=25 -RunMode=Fast cloning_protocol <multiline.outer>
         STAGe -repeat=1 1 InitHold_1 <multiline.stage>
                 STEP 1 <multiline.step>
@@ -51,9 +52,14 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
                 </multiline.step>
         </multiline.stage>
 </multiline.outer>
-    """).strip() + "\r\n"
+    """
+      ).strip()
+      + "\r\n"
+    )
 
-    pretty_xml_scpi = textwrap.dedent("""
+    pretty_xml_scpi = (
+      textwrap.dedent(
+        """
     FILe:WRITe -encoding=plain runs:runname/cloning_protocol.method <multiline.write>
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
@@ -145,9 +151,14 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     </TCProtocol>
 
     </multiline.write>
-    """).strip() + "\r\n"
+    """
+      ).strip()
+      + "\r\n"
+    )
 
-    tmp_scpi = textwrap.dedent("""
+    tmp_scpi = (
+      textwrap.dedent(
+        """
     FILe:WRITe -encoding=plain runs:runname/runname.tmp <multiline.write>
             -remoterun= true
     -hub= testhub
@@ -159,37 +170,40 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     -coverEnabled= On
     -notes= 
     </multiline.write>
-    """).strip() + "\r\n"
+    """
+      ).strip()
+      + "\r\n"
+    )
 
     protocol = Protocol(
       stages=[
         # initial hold
         Stage(
           steps=[
-            Step(temperature=[37]*2, hold_seconds=float("inf")),
+            Step(temperature=[37] * 2, hold_seconds=float("inf")),
           ],
           repeats=1,
         ),
         # one pot stage
         Stage(
           steps=[
-            Step(temperature=[37]*2, hold_seconds=300, rate=100),
-            Step(temperature=[16]*2, hold_seconds=300, rate=100),
+            Step(temperature=[37] * 2, hold_seconds=300, rate=100),
+            Step(temperature=[16] * 2, hold_seconds=300, rate=100),
           ],
           repeats=30,
         ),
         # digest denature stage
         Stage(
           steps=[
-            Step(temperature=[37]*2, hold_seconds=300, rate=100),
-            Step(temperature=[60]*2, hold_seconds=300, rate=100),
+            Step(temperature=[37] * 2, hold_seconds=300, rate=100),
+            Step(temperature=[60] * 2, hold_seconds=300, rate=100),
           ],
           repeats=1,
         ),
         # final hold
         Stage(
           steps=[
-            Step(temperature=[4]*2, hold_seconds=float("inf"), rate=100),
+            Step(temperature=[4] * 2, hold_seconds=float("inf"), rate=100),
           ],
           repeats=1,
         ),
@@ -197,8 +211,8 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     )
 
     self.proflex.io.read.side_effect = [
-      "OK RUNS:EXISts? -type=folders \"runname\" False\n",
-      "OK RUNS:NEW \"runname\"\n",
+      'OK RUNS:EXISts? -type=folders "runname" False\n',
+      'OK RUNS:NEW "runname"\n',
       "OK " + pretty_xml_scpi,
       "OK " + tmp_scpi,
       "OK " + pretty_xml_scpi,
@@ -215,12 +229,18 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
       stage_name_prefixes=["InitHold", "OnePot", "digestDenature", "FinalHold"],
     )
 
-    self.proflex.io.write.assert_has_calls([
-      unittest.mock.call('RUNS:EXISTS? -type=folders runname\r\n', timeout=1),
-      unittest.mock.call('RUNS:NEW runname\r\n', timeout=10),
-      unittest.mock.call(pretty_xml_scpi, timeout=1),
-      unittest.mock.call(tmp_scpi, timeout=1),
-      unittest.mock.call(scpi_command, timeout=5),
-      unittest.mock.call('TBC2:RunProtocol -User=Admin -CoverTemperature=105 -CoverEnabled=On cloning_protocol runname\r\n', timeout=2),
-      unittest.mock.call('TBC2:ESTimatedTime?\r\n', timeout=1)
-    ], any_order=False)
+    self.proflex.io.write.assert_has_calls(
+      [
+        unittest.mock.call("RUNS:EXISTS? -type=folders runname\r\n", timeout=1),
+        unittest.mock.call("RUNS:NEW runname\r\n", timeout=10),
+        unittest.mock.call(pretty_xml_scpi, timeout=1),
+        unittest.mock.call(tmp_scpi, timeout=1),
+        unittest.mock.call(scpi_command, timeout=5),
+        unittest.mock.call(
+          "TBC2:RunProtocol -User=Admin -CoverTemperature=105 -CoverEnabled=On cloning_protocol runname\r\n",
+          timeout=2,
+        ),
+        unittest.mock.call("TBC2:ESTimatedTime?\r\n", timeout=1),
+      ],
+      any_order=False,
+    )
