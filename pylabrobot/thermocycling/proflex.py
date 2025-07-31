@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from xml.dom import minidom
 
 from pylabrobot.io import Socket
-from pylabrobot.thermocycling.standard import Protocol, Stage, Step
+from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
 
 from .backend import ThermocyclerBackend
 
@@ -30,7 +30,7 @@ class ProflexPCRProtocol:
   pass
 
 
-def generate_run_info_files(
+def _generate_run_info_files(
   protocol: Protocol,
   block_id: int,
   sample_volume: float = 50,
@@ -57,7 +57,7 @@ def generate_run_info_files(
   user_name_el = ET.SubElement(root, "UserName")
   user_name_el.text = user_name
 
-  block_id_el = ET.SubElement(root, "block_id")
+  block_id_el = ET.SubElement(root, "BlockID")
   block_id_el.text = str(block_id + 1)
 
   sample_volume_el = ET.SubElement(root, "SampleVolume")
@@ -102,9 +102,9 @@ def generate_run_info_files(
 
       hold_time_el = ET.SubElement(step_el, "HoldTime")
       if step.hold_seconds == float("inf"):
-        hold_time_el.text = str(step.hold_seconds)
-      elif step.hold_seconds == 0:
         hold_time_el.text = "-1"
+      elif step.hold_seconds == 0:
+        hold_time_el.text = "0"
       else:
         hold_time_el.text = str(step.hold_seconds)
 
@@ -122,7 +122,7 @@ def generate_run_info_files(
 
   xml_declaration = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
   pretty_xml_as_string = (
-    xml_declaration + reparsed.toprettyxml(indent="   ")[len('<?xml version="1.0" ?>') :]
+    xml_declaration + reparsed.toprettyxml(indent="  ")[len('<?xml version="1.0" ?>') :]
   )
 
   output2_lines = [
@@ -133,7 +133,7 @@ def generate_run_info_files(
     f"-volume= {sample_volume}",
     f"-cover= {cover_temp}",
     f"-mode= {run_mode}",
-    f"-coverEnabled= {cover_enabled}",
+    f"-coverEnabled= {'On' if cover_enabled else 'Off'}",
     f"-notes= {notes}",
   ]
   output2_string = "\n".join(output2_lines)
@@ -141,7 +141,7 @@ def generate_run_info_files(
   return pretty_xml_as_string, output2_string
 
 
-def gen_protocol_data(
+def _gen_protocol_data(
   protocol: Protocol,
   block_id: int,
   sample_volume: float,
@@ -388,6 +388,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def send_command(self, data, response_timeout=1, read_once=True):
     msg = self._build_scpi_msg(data)
     msg += "\r\n"
+    print(f"Sending command: {msg.strip()}", response_timeout)
     self.logger.debug("Command sent: %s", msg.strip())
 
     await self.io.write(msg, timeout=response_timeout)
@@ -430,13 +431,13 @@ class ProflexBackend(ThermocyclerBackend):
       block_error = await self.get_error(block_id=block_id)
       if block_error != "0":
         raise ValueError(f"Block {block_id} has error: {block_error}")
-      run_title = await self.get_run_title(block_id=block_id)
-      if run_title == "-":
+      run_name = await self.get_run_name(block_id=block_id)
+      if run_name == "-":
         if block_id not in self.available_blocks:
           self.available_blocks.append(block_id)
     return self.available_blocks
 
-  async def get_block_temps(self, block_id=1):
+  async def get_block_current_temperature(self, block_id=1):
     res = await self.send_command({"cmd": f"TBC{block_id}:TBC:BlockTemperatures?"})
     return self._parse_scpi_response(res)["args"]
 
@@ -473,11 +474,11 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set cover idle temperature")
 
-  async def ramp_block(self, target_temps: list[float], rate: float = 100, block_id=1):
+  async def set_block_temperature(self, temperature: List[float], block_id: int, rate: float = 100):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id}:RAMP", "params": {"rate": rate}, "args": target_temps},
+      {"cmd": f"TBC{block_id}:RAMP", "params": {"rate": rate}, "args": temperature},
       response_timeout=60,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
@@ -493,7 +494,9 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp block temperature")
 
-  async def cover_ramp(self, target_temp: float, block_id=1):
+  async def set_lid_temperature(self, temperature: List[float], block_id: int):
+    assert len(set(temperature)) == 1, "Lid temperature must be the same for all zones"
+    target_temp = temperature[0]
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
@@ -512,7 +515,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to turn off buzzer")
 
-  async def continue_(self, block_id=1):
+  async def continue_run(self, block_id: int):
     for _ in range(3):
       await asyncio.sleep(1)
       res = await self.send_command({"cmd": f"TBC{block_id}:CONTinue"})
@@ -560,7 +563,7 @@ class ProflexBackend(ThermocyclerBackend):
       raise ValueError("Failed to create run")
     return self._parse_scpi_response(res)["args"][0]
 
-  async def get_run_title(self, block_id):
+  async def get_run_name(self, block_id: int):
     res = await self.send_command({"cmd": f"TBC{block_id + 1}:RUNTitle?"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get run title")
@@ -622,7 +625,7 @@ class ProflexBackend(ThermocyclerBackend):
     cover_enabled: bool,
     user_name: str,
   ):
-    xmlfile, tmpfile = generate_run_info_files(
+    xmlfile, tmpfile = _generate_run_info_files(
       protocol=protocol,
       block_id=block_id,
       sample_volume=sample_volume,
@@ -649,7 +652,7 @@ class ProflexBackend(ThermocyclerBackend):
     stage_name_prefixes: List[str],
   ):
     load_res = await self.send_command(
-      data=gen_protocol_data(
+      data=_gen_protocol_data(
         protocol=protocol,
         block_id=block_id,
         sample_volume=sample_volume,
@@ -673,7 +676,7 @@ class ProflexBackend(ThermocyclerBackend):
         "params": {
           "User": user_name,
           "CoverTemperature": cover_temp,
-          "CoverEnabled": cover_enabled,
+          "CoverEnabled": "On" if cover_enabled else "Off",
         },
         "args": [protocol_name, run_name],
       },
@@ -694,7 +697,11 @@ class ProflexBackend(ThermocyclerBackend):
     self.current_run = run_name
     self.running_blocks.append(block_id)
 
-  async def _scpi_abort_run(self, block_id, run_name):
+  async def abort_run(self, block_id: int):
+    run_name = await self.get_run_name(block_id=block_id)
+    if run_name == "-":
+      self.logger.error("Failed to abort protocol: no run is currently running on this block")
+      raise RuntimeError("No run is currently running on this block")
     abort_res = await self.send_command({"cmd": f"TBC{block_id + 1}:AbortRun", "args": [run_name]})
     if self._parse_scpi_response(abort_res)["status"] != "OK":
       self.logger.error(abort_res)
@@ -770,7 +777,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def deactivate_block(self, block_id: int):
     return await self.set_block_idle_temp(control_enabled=0, block_id=block_id)
 
-  async def get_lid_current_temperature(self, block_id=1) -> List[float]:
+  async def get_lid_current_temperature(self, block_id: int) -> List[float]:
     res = await self.send_command({"cmd": f"TBC{block_id}:TBC:CoverTemperatures?"})
     return self._parse_scpi_response(res)["args"]
 
@@ -825,7 +832,7 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def stop(self):
     for block_id in self.running_blocks:
-      is_running = (await self.get_run_title(block_id=block_id)) != "-"
+      is_running = (await self.get_run_name(block_id=block_id)) != "-"
       if is_running:
         await self._scpi_abort_run(block_id, self.current_run)
         await asyncio.sleep(10)
@@ -835,44 +842,65 @@ class ProflexBackend(ThermocyclerBackend):
 
     await self.io.stop()
 
-  async def get_block_current_temperature(self, *args, **kwargs):
-    raise NotImplementedError
-
   async def get_block_status(self, *args, **kwargs):
     raise NotImplementedError
 
-  async def get_block_target_temperature(self, *args, **kwargs):
-    raise NotImplementedError
+  async def get_current_cycle_index(self, block_id: int) -> int:
+    progress = await self.get_run_progress(block_id=block_id)
+    if progress is None:
+      raise RuntimeError("No progress information available")
 
-  async def get_current_cycle_index(self, *args, **kwargs):
-    raise NotImplementedError
+    if progress["RunTitle"] == "-":
+      await self._read_response(timeout=5)
+      raise RuntimeError("Protocol completed or not started")
 
-  async def get_current_step_index(self, *args, **kwargs):
-    raise NotImplementedError
+    if progress["Stage"] == "POSTRun":
+      raise RuntimeError("Protocol in POSTRun stage, no current cycle index")
+
+    if progress["Stage"] != "-" and progress["Step"] != "-":
+      return int(progress["Stage"]) - 1
+    
+    raise RuntimeError("Current cycle index is not available, protocol may not be running")
+
+  async def get_current_step_index(self, block_id: int) -> int:
+    progress = await self.get_run_progress(block_id=block_id)
+    if progress is None:
+      raise RuntimeError("No progress information available")
+
+    if progress["RunTitle"] == "-":
+      await self._read_response(timeout=5)
+      raise RuntimeError("Protocol completed or not started")
+
+    if progress["Stage"] == "POSTRun":
+      raise RuntimeError("Protocol in POSTRun stage, no current cycle index")
+
+    if progress["Stage"] != "-" and progress["Step"] != "-":
+      return int(progress["Step"]) - 1
+    
+    raise RuntimeError("Current step index is not available, protocol may not be running")
 
   async def get_hold_time(self, *args, **kwargs):
+    # deprecated
     raise NotImplementedError
 
   async def get_lid_open(self, *args, **kwargs):
     raise NotImplementedError
 
-  async def get_lid_status(self, *args, **kwargs):
+  async def get_lid_status(self, *args, **kwargs) -> LidStatus:
     raise NotImplementedError
 
   async def get_lid_target_temperature(self, *args, **kwargs):
+    # deprecated
     raise NotImplementedError
 
   async def get_total_cycle_count(self, *args, **kwargs):
+    # deprecated
     raise NotImplementedError
 
   async def get_total_step_count(self, *args, **kwargs):
+    # deprecated
     raise NotImplementedError
-
-  async def run_profile(self, *args, **kwargs):
-    raise NotImplementedError
-
-  async def set_block_temperature(self, *args, **kwargs):
-    raise NotImplementedError
-
-  async def set_lid_temperature(self, *args, **kwargs):
+  
+  async def get_block_target_temperature(self, *args, **kwargs):
+    # deprecated
     raise NotImplementedError
