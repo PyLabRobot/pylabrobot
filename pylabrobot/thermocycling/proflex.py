@@ -441,11 +441,11 @@ class ProflexBackend(ThermocyclerBackend):
     return self.available_blocks
 
   async def get_block_current_temperature(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:TBC:BlockTemperatures?"})
+    res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:BlockTemperatures?"})
     return self._parse_scpi_response(res)["args"]
 
   async def get_sample_temps(self, block_id=1):
-    res = await self.send_command({"cmd": f"TBC{block_id}:TBC:SampleTemperatures?"})
+    res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:SampleTemperatures?"})
     return self._parse_scpi_response(res)["args"]
 
   async def get_nickname(self):
@@ -460,7 +460,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
-    res = await self.send_command({"cmd": f"TBC{block_id}:BLOCK", "args": [control_enabled, temp]})
+    res = await self.send_command({"cmd": f"TBC{block_id+1}:BLOCK", "args": [control_enabled, temp]})
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set block idle temperature")
     follow_up = await self._read_response()
@@ -470,7 +470,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def set_cover_idle_temp(self, temp: float = 105, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
-    res = await self.send_command({"cmd": f"TBC{block_id}:COVER", "args": [control_enabled, temp]})
+    res = await self.send_command({"cmd": f"TBC{block_id+1}:COVER", "args": [control_enabled, temp]})
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set cover idle temperature")
     follow_up = await self._read_response()
@@ -481,17 +481,21 @@ class ProflexBackend(ThermocyclerBackend):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id}:RAMP", "params": {"rate": rate}, "args": temperature},
+      {"cmd": f"TBC{block_id+1}:RAMP", "params": {"rate": rate}, "args": temperature},
       response_timeout=60,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp block temperature")
 
-  async def block_ramp_single_temp(self, target_temp: float, rate: float = 100, block_id=1):
+  async def block_ramp_single_temp(self, target_temp: float, block_id: int, rate: float = 100):
+    """Set a single temperature for the block with a ramp rate.
+
+    It might be better to use `set_block_temperature` to set individual temperatures for each zone.
+    """
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id}:BlockRAMP", "params": {"rate": rate}, "args": [target_temp]},
+      {"cmd": f"TBC{block_id+1}:BlockRAMP", "params": {"rate": rate}, "args": [target_temp]},
       response_timeout=60,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
@@ -503,7 +507,7 @@ class ProflexBackend(ThermocyclerBackend):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id}:CoverRAMP", "params": {}, "args": [target_temp]}, response_timeout=60
+      {"cmd": f"TBC{block_id+1}:CoverRAMP", "params": {}, "args": [target_temp]}, response_timeout=60
     )
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp cover temperature")
@@ -521,7 +525,7 @@ class ProflexBackend(ThermocyclerBackend):
   async def continue_run(self, block_id: int):
     for _ in range(3):
       await asyncio.sleep(1)
-      res = await self.send_command({"cmd": f"TBC{block_id}:CONTinue"})
+      res = await self.send_command({"cmd": f"TBC{block_id+1}:CONTinue"})
       if self._parse_scpi_response(res)["status"] != "OK":
         raise ValueError("Failed to continue from indefinite hold")
 
@@ -805,7 +809,7 @@ class ProflexBackend(ThermocyclerBackend):
     return await self.set_block_idle_temp(control_enabled=0, block_id=block_id)
 
   async def get_lid_current_temperature(self, block_id: int) -> List[float]:
-    res = await self.send_command({"cmd": f"TBC{block_id}:TBC:CoverTemperatures?"})
+    res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:CoverTemperatures?"})
     return self._parse_scpi_response(res)["args"]
 
   async def run_protocol(
@@ -911,7 +915,9 @@ class ProflexBackend(ThermocyclerBackend):
     raise NotImplementedError
 
   async def get_lid_open(self, *args, **kwargs):
-    raise NotImplementedError
+    raise NotImplementedError(
+      "Proflex thermocycler does not support lid open status check"
+    )
 
   async def get_lid_status(self, *args, **kwargs) -> LidStatus:
     raise NotImplementedError
