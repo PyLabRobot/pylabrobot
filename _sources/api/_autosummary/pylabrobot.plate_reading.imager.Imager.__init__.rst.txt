@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.imager.Imager.\_\_init\_\_
+====================================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. automethod:: Imager.__init__

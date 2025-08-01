@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.vantage\_backend.Vantage.x\_arm\_set\_x\_drive\_angle\_of\_alignment
+==================================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.vantage_backend
+
+.. automethod:: Vantage.x_arm_set_x_drive_angle_of_alignment

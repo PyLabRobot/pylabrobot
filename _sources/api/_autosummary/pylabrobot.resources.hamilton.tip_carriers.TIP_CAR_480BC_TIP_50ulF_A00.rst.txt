@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_carriers.TIP\_CAR\_480BC\_TIP\_50ulF\_A00
+============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_carriers
+
+.. autofunction:: TIP_CAR_480BC_TIP_50ulF_A00
