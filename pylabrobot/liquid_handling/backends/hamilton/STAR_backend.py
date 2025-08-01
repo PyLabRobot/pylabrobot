@@ -2187,7 +2187,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
-    self._check_96_position_legal(position)
+    self._check_96_position_legal(position, skip_z=True)
     z_deposit_position += round(pickup.offset.z * 10)
 
     x_direction = 0 if position.x >= 0 else 1
@@ -2220,7 +2220,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
-    self._check_96_position_legal(position)
+    self._check_96_position_legal(position, skip_z=True)
 
     x_direction = 0 if position.x >= 0 else 1
     return await self.discard_tips_core96(
@@ -2341,7 +2341,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + Coordinate(x=x_position, y=y_position)
         + aspiration.offset
       )
-    self._check_96_position_legal(position)
+    self._check_96_position_legal(position, skip_z=True)
 
     tip = aspiration.tips[0]
 
@@ -2539,7 +2539,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + Coordinate(x=x_position, y=y_position)
         + dispense.offset
       )
-    self._check_96_position_legal(position)
+    self._check_96_position_legal(position, skip_z=True)
     tip = dispense.tips[0]
 
     liquid_height = position.z + (dispense.liquid_height or 0)
@@ -3245,7 +3245,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     loc.y += (resource.get_size_y() - head_size_y) / 2 + channel_size / 2
     return loc
 
-  def _check_96_position_legal(self, c: Coordinate) -> None:
+  def _check_96_position_legal(self, c: Coordinate, skip_z=False) -> None:
     """Validate that a coordinate is within the allowed range for the 96 head.
 
     Parameters
@@ -3265,13 +3265,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       errors.append(f"x={c.x}")
     if not (108.0 <= c.y <= 560.0):
       errors.append(f"y={c.y}")
-    if not (180.5 <= c.z <= 342.5):
+    if not (180.5 <= c.z <= 342.5) and not skip_z:
       errors.append(f"z={c.z}")
 
-    if errors:
+    if len(errors) > 0:
       raise ValueError(
-        "Illegal 96 head position: " + ", ".join(errors) +
-        " (allowed ranges: x [-271, 974], y [108, 560], z [180.5, 342.5])"
+        "Illegal 96 head position: "
+        + ", ".join(errors)
+        + " (allowed ranges: x [-271, 974], y [108, 560], z [180.5, 342.5])"
       )
 
   # ============== Firmware Commands ==============
@@ -5302,7 +5303,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # The firmware command expects location of tip A1 of the head.
     loc = self._position_96_head_in_resource(trash96)
-    self._check_96_position_legal(loc)
+    self._check_96_position_legal(loc, skip_z=True)
 
     return await self.send_command(
       module="C0",
