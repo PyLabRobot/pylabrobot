@@ -3253,7 +3253,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       skip_z: If True, the z coordinate is not checked. This is useful for commands that handle
         the z coordinate separately, such as the big four.
 
-    Raises: 
+    Raises:
       ValueError: If one or more components are out of range. The error message contains all offending components.
     """
 
