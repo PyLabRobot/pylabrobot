@@ -3248,16 +3248,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _check_96_position_legal(self, c: Coordinate, skip_z=False) -> None:
     """Validate that a coordinate is within the allowed range for the 96 head.
 
-    Parameters
-    ----------
-    c:
-      The coordinate of the A1 position of the head.
+    Args:
+      c: The coordinate of the A1 position of the head.
+      skip_z: If True, the z coordinate is not checked. This is useful for commands that handle
+        the z coordinate separately, such as the big four.
 
-    Raises
-    ------
-    ValueError
-      If one or more components are out of range. The error message contains
-      all offending components.
+    Raises: 
+      ValueError: If one or more components are out of range. The error message contains all offending components.
     """
 
     errors = []
