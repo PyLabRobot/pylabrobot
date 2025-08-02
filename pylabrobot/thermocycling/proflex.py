@@ -379,7 +379,7 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def _read_response(self, timeout=1, read_once=True):
     try:
-      response = await self.io.read(timeout=timeout)
+      response = await self.io.read(timeout=timeout, read_once=read_once)
       self.logger.debug("Response received: %s", response)
       return response
     except TimeoutError:
