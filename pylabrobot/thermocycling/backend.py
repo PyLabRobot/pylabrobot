@@ -6,7 +6,7 @@ from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 
 class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
-  """Interface for an Opentrons Thermocycler."""
+  """Abstract backend for a Thermocycler."""
 
   @abstractmethod
   async def open_lid(self):
