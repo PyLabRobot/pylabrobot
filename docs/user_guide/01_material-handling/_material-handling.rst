@@ -17,7 +17,7 @@ This includes machines for temperature and motion control (as neither machines p
    fans/fans
    temperature
    sealers/sealers
-   storage/_storage
+   storage/storage
    tilting
    thermocycling/thermocycling
 

@@ -89,7 +89,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Opentrons | Thermoshake | <span class="badge badge-heating">heating</span> | Full | [OEM](https://opentrons.com/products/heater-shaker-module) |
 | Hamilton | Heater Shaker | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/hamilton.html) / [OEM](https://www.hamiltoncompany.com/temperature-control/hamilton-heater-shaker) |
 
-### Incubators
+### Storage
 
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|

@@ -11,7 +11,7 @@ Examples of this simplest form of a storage machine include:
 - `Lab Services PlateCarousel <https://www.lab-services.nl/en/products/platebutler/platecarousel>`_ – open storage of labware with rotation feature
 
 
-However, this purposefully broad definition means most storage machines are "composite machines" that also include other features such as:
+However, this purposefully broad definition means most storage machines also include other features such as:
 
 - `automated material retrieval` (e.g. `Cytomat™ 2 Hotel Automated Storage <https://www.thermofisher.com/order/catalog/product/50078485>`_)
 - `heating` (e.g. "incubators")
@@ -28,28 +28,30 @@ However, this purposefully broad definition means most storage machines are "com
      </summary>
      <hr>
      <p>
-         Across biowetlab automation there are many terms that do not have a standardised definition,
-         leading to confusion and misunderstandings when automators communicate.
+        Across biowetlab automation there are many terms that do not have a standardised definition,
+        leading to confusion and misunderstandings when automators communicate.
      </p>
      <p>
-         The term <code>plate hotel</code> is one of them.
-         Is a <code>plate hotel</code> simply a shelve for plates?
-         Does it have to be automatable to be a <code>plate hotel</code>, making it a <code>machine</code>?
-         What if one stores tipracks in this structure instead of plates?
+        The term <code>plate hotel</code> is one of them.
+        We can differentiate between passive storage systems (e.g. shelves) and active
+        storage systems (e.g. automated retrieval system or an opening tray.)
      </p>
      <p>
-         As a result of this legacy-loaded ambiguous terminology,
-         PyLabRobot actively tries to avoid the term <code>plate hotel</code>.
-         Instead, we use the term <code>storage machine</code> to refer to machines that store materials
-         and have some form of automatable feature.
-         This is a more precise definition that avoids the ambiguity of the term <code>plate hotel</code>.
+        In PLR, passive systems are not considered machines, they are just labware/Resources.
+        For example, a PlateCarrier can be considered a passive storage system (whether it is
+        vertical or horizontal).
      </p>
      <p>
-         The only time the term <code>plate hotel</code> or <code>hotel</code> is used in PyLabRobot is when
-         referring to the name of a specific machine, such as the 
-         <a href="https://www.thermofisher.com/order/catalog/product/50078485" target="_blank" rel="noopener">
-           TFS Cytomat™ 2 Hotel Automated Storage</a>.
-         In this case, it is used as a noun to refer to a specific product.
+        We use the term <code>storage machine</code> to refer to machines that store materials
+        and have some form of automatable feature.
+        This is a more precise definition that avoids the ambiguity of the term <code>plate hotel</code>.
+     </p>
+     <p>
+        The only time the term <code>plate hotel</code> or <code>hotel</code> is used in PyLabRobot is when
+        referring to the name of a specific machine, such as the 
+        <a href="https://www.thermofisher.com/order/catalog/product/50078485" target="_blank" rel="noopener">
+          TFS Cytomat™ 2 Hotel Automated Storage</a>.
+        In this case, it is used as a noun to refer to a specific product.
      </p>
    </details>
 
