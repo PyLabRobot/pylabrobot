@@ -16,7 +16,7 @@ This includes machines for temperature and motion control (as neither machines p
    heating_shaking/heating_shaking
    fans/fans
    sealers/sealers
-   temperature-controllers/_temperature-controllers
+   temperature-controllers/temperature-controllers
    tilting
    storage/cytomat
    thermocycling/thermocycling

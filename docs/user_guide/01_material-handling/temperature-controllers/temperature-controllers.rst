@@ -8,7 +8,8 @@ Temperature controllers are defined as **machines with one or both** of these **
 
 a **material** or **enclosed volume** from a room-temperature baseline (≈20-25°C).
 
-Based on this definition machines that include temperature control but are not primarily temperature controllers, build on top of the temperature controller definition.
+Based on this definition machines that include temperature control, but are not primarily temperature controllers, should build on top of the `TemperatureController` definition.
+
 These multi-functional machines can be described as "composite machines".
 Examples of such machines include:
 
