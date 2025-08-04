@@ -15,8 +15,8 @@ This includes machines for temperature and motion control (as neither machines p
    centrifuge/_centrifuge
    heating_shaking/heating_shaking
    fans/fans
-   temperature
    sealers/sealers
+   temperature-controllers/temperature-controllers
    storage/storage
    tilting
    thermocycling/thermocycling
