@@ -2050,6 +2050,8 @@ class LiquidHandler(Resource, Machine):
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
+    self._resource_pickup = None
+
     # we rotate the resource on top of its original rotation. So in order to set the new rotation,
     # we have to subtract its current rotation.
     resource.rotate(z=resource_rotation_wrt_destination - resource.rotation.z)
@@ -2081,8 +2083,6 @@ class LiquidHandler(Resource, Machine):
       pass  # don't assign to trash, resource will simply be unassigned
     else:
       destination.assign_child_resource(resource, location=to_location)
-
-    self._resource_pickup = None
 
     return result
 
