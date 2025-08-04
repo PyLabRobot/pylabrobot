@@ -2826,7 +2826,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plate_width: Optional[float] = None,
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     if use_arm == "iswap":
       assert (
@@ -6572,7 +6572,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """Get plate using iswap.
 
@@ -6598,7 +6598,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                                Default 1.
       acceleration_index_high_acc: acceleration index high acc. Must be between 0 and 4. Default 4.
       acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4. Default 1.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
+      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
     """
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
@@ -6666,7 +6666,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """put plate
 
@@ -6691,7 +6691,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             Default 4.
       acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4.
             Default 1.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
+      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
     """
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
@@ -6875,7 +6875,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def collapse_gripper_arm(
     self,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """Collapse gripper arm
 
@@ -6883,7 +6883,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
                                                          command 0.1mm]. Must be between 0 and 3600.
                                                          Default 3600.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
+      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
     """
 
     assert (
