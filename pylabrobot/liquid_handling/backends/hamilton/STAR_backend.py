@@ -6484,45 +6484,59 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def open_not_initialized_gripper(self):
     return await self.send_command(module="C0", command="GI")
 
-  async def iswap_open_gripper(self, open_position: Optional[int] = None):
-    """Open gripper
+  async def iswap_set_position(self, position: float):
+    """Set iSWAP gripper opening.
 
     Args:
-      open_position: Open position [0.1mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
-                     Must be between 0 and 9999. Default 1320 for iSWAP 4.0 (landscape). Default to
-                     910 for iSWAP 3 (portrait).
+      position: Desired gripper opening in mm. The gripper moves to this
+        position plus 2 mm.
+    """
+
+    open_pos = int(position * 10)
+    assert 0 <= open_pos <= 9999, "position must be between 0 and 999.9 mm"
+
+    return await self.send_command(module="C0", command="GF", go=f"{open_pos:04}")
+
+  async def iswap_open_gripper(self, open_position: Optional[float] = None):
+    """Open gripper.
+
+    Args:
+      open_position: Open position in mm. The gripper moves to position plus
+        2 mm. Default 132 mm for iSWAP 4.0 (landscape) and 91 mm for
+        iSWAP 3 (portrait).
     """
 
     if open_position is None:
-      open_position = 910 if (await self.get_iswap_version()).startswith("3") else 1320
+      open_position = 91.0 if (await self.get_iswap_version()).startswith("3") else 132.0
 
-    assert 0 <= open_position <= 9999, "open_position must be between 0 and 9999"
-
-    return await self.send_command(module="C0", command="GF", go=f"{open_position:04}")
+    return await self.iswap_set_position(open_position)
 
   async def iswap_close_gripper(
     self,
     grip_strength: int = 5,
-    plate_width: int = 0,
-    plate_width_tolerance: int = 0,
+    plate_width: float = 0,
+    plate_width_tolerance: float = 0,
   ):
-    """Close gripper
+    """Close gripper.
 
-    The gripper should be at the position gb+gt+20 before sending this command.
+    The gripper will move to ``plate_width + plate_width_tolerance + 2`` mm
+    before closing.
 
     Args:
       grip_strength: Grip strength. 0 = low . 9 = high. Default 5.
-      plate_width: Plate width [0.1mm]
-                   (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
-      plate_width_tolerance: Plate width tolerance [0.1mm]. Must be between 0 and 99. Default 20.
+      plate_width: Plate width in mm.
+      plate_width_tolerance: Plate width tolerance in mm. Must be between 0
+        and 9.9 mm. Default 2 mm.
     """
+
+    await self.iswap_set_position(plate_width + plate_width_tolerance + 2)
 
     return await self.send_command(
       module="C0",
       command="GC",
       gw=grip_strength,
-      gb=plate_width,
-      gt=plate_width_tolerance,
+      gb=int(plate_width * 10),
+      gt=int(plate_width_tolerance * 10),
     )
 
   # -------------- 3.17.2 Stack handling commands CP --------------
