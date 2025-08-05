@@ -214,8 +214,7 @@ class ProflexBackend(ThermocyclerBackend):
     self.num_temp_zones = 0
     self.available_blocks: List[int] = []
     self.logger = logging.getLogger("pylabrobot.thermocycling.proflex")
-    self.current_run = None
-    self.running_blocks: List[int] = []
+    self.current_runs: Dict[int, str] = {}
     self.prot_time_elapsed = 0
     self.prot_time_remaining = 0
 
@@ -553,7 +552,7 @@ class ProflexBackend(ThermocyclerBackend):
     )
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to check if run exists")
-    return self._parse_scpi_response(res)["args"][1] == "True"
+    return cast(str, self._parse_scpi_response(res)["args"][1]) == "True"
 
   async def create_run(self, run_name: str):
     res = await self.send_command({"cmd": "RUNS:NEW", "args": [run_name]}, response_timeout=10)
@@ -692,8 +691,7 @@ class ProflexBackend(ThermocyclerBackend):
     total_time = await self.get_estimated_run_time(block_id=block_id)
     total_time = float(total_time)
     self.logger.info(f"Estimated run time: {total_time}")
-    self.current_run = run_name
-    self.running_blocks.append(block_id)
+    self.current_runs[block_id] = run_name
 
   async def abort_run(self, block_id: int):
     if not await self.is_block_running(block_id=block_id):
@@ -857,7 +855,7 @@ class ProflexBackend(ThermocyclerBackend):
     )
 
   async def stop(self):
-    for block_id in self.running_blocks:
+    for block_id in self.current_runs.keys():
       await self.abort_run(block_id=block_id)
 
       await self.deactivate_lid(block_id=block_id)
