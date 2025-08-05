@@ -424,24 +424,24 @@ class ProflexBackend(ThermocyclerBackend):
           self.available_blocks.append(block_id)
     return self.available_blocks
 
-  async def get_block_current_temperature(self, block_id=1):
+  async def get_block_current_temperature(self, block_id=1) -> List[float]:
     res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:BlockTemperatures?"})
-    return self._parse_scpi_response(res)["args"]
+    return cast(List[float], self._parse_scpi_response(res)["args"])
 
-  async def get_sample_temps(self, block_id=1):
+  async def get_sample_temps(self, block_id=1) -> List[float]:
     res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:SampleTemperatures?"})
-    return self._parse_scpi_response(res)["args"]
+    return cast(List[float], self._parse_scpi_response(res)["args"])
 
-  async def get_nickname(self):
+  async def get_nickname(self) -> str:
     res = await self.send_command({"cmd": "SYST:SETT:NICK?"})
-    return self._parse_scpi_response(res)["args"][0]
+    return cast(str, self._parse_scpi_response(res)["args"][0])
 
-  async def set_nickname(self, nickname: str):
+  async def set_nickname(self, nickname: str) -> None:
     res = await self.send_command({"cmd": "SYST:SETT:NICK", "args": [nickname]})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to set nickname")
 
-  async def set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1):
+  async def set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
     res = await self.send_command(
@@ -465,7 +465,9 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set cover idle temperature")
 
-  async def set_block_temperature(self, temperature: List[float], block_id: Optional[int] = None, rate: float = 100):
+  async def set_block_temperature(
+    self, temperature: List[float], block_id: Optional[int] = None, rate: float = 100
+  ):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
@@ -475,7 +477,9 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp block temperature")
 
-  async def block_ramp_single_temp(self, target_temp: float, block_id: Optional[int] = None, rate: float = 100):
+  async def block_ramp_single_temp(
+    self, target_temp: float, block_id: Optional[int] = None, rate: float = 100
+  ):
     """Set a single temperature for the block with a ramp rate.
 
     It might be better to use `set_block_temperature` to set individual temperatures for each zone.
@@ -739,7 +743,7 @@ class ProflexBackend(ThermocyclerBackend):
       current_step = protocol.stages[int(progress["Stage"]) - 1].steps[int(progress["Step"]) - 1]
       if current_step.hold_seconds == float("inf"):
         while True:
-          block_temps = await self.get_block_temps(block_id=block_id)
+          block_temps = await self.get_block_current_temperature(block_id=block_id)
           target_temps = current_step.temperature
           if all(
             abs(float(block_temps[i]) - target_temps[i]) < 0.5 for i in range(len(block_temps))
@@ -801,15 +805,15 @@ class ProflexBackend(ThermocyclerBackend):
   async def get_lid_current_temperature(self, block_id: Optional[int] = None) -> List[float]:
     assert block_id is not None, "block_id must be specified"
     res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:CoverTemperatures?"})
-    return self._parse_scpi_response(res)["args"]
+    return cast(List[float], self._parse_scpi_response(res)["args"])
 
   async def run_protocol(
     self,
     protocol: Protocol,
+    block_max_volume: float,
     block_id: Optional[int] = None,
     run_name="testrun",
     user="Admin",
-    sample_volume: float = 50,
     run_mode: str = "Fast",
     cover_temp: float = 105,
     cover_enabled=True,
@@ -835,7 +839,7 @@ class ProflexBackend(ThermocyclerBackend):
       block_id=block_id,
       run_name=run_name,
       user_name=user,
-      sample_volume=sample_volume,
+      sample_volume=block_max_volume,
       run_mode=run_mode,
       cover_temp=cover_temp,
       cover_enabled=cover_enabled,
@@ -845,7 +849,7 @@ class ProflexBackend(ThermocyclerBackend):
       protocol=protocol,
       run_name=run_name,
       block_id=block_id,
-      sample_volume=sample_volume,
+      sample_volume=block_max_volume,
       run_mode=run_mode,
       cover_temp=cover_temp,
       cover_enabled=cover_enabled,

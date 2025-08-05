@@ -10,8 +10,8 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     await super().asyncSetUp()
     self.proflex = ProflexBackend(ip="1.2.3.4")
-    self.proflex.io.write = unittest.mock.AsyncMock()
-    self.proflex.io.read = unittest.mock.AsyncMock()
+    self.proflex.io.write = unittest.mock.AsyncMock()  # type: ignore
+    self.proflex.io.read = unittest.mock.AsyncMock()  # type: ignore
 
   async def test_run_protocol(self):
     scpi_command = (
@@ -210,7 +210,7 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-    self.proflex.io.read.side_effect = [
+    self.proflex.io.read.side_effect = [  # type: ignore
       'OK RUNS:EXISts? -type=folders "runname" False\n',
       'OK RUNS:NEW "runname"\n',
       "OK " + pretty_xml_scpi,
@@ -223,13 +223,13 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     await self.proflex.run_protocol(
       protocol=protocol,
       block_id=1,
-      sample_volume=25,
+      block_max_volume=25,
       run_name="runname",
       protocol_name="cloning_protocol",
       stage_name_prefixes=["InitHold", "OnePot", "digestDenature", "FinalHold"],
     )
 
-    self.proflex.io.write.assert_has_calls(
+    self.proflex.io.write.assert_has_calls(  # type: ignore
       [
         unittest.mock.call("RUNS:EXISTS? -type=folders runname\r\n", timeout=1),
         unittest.mock.call("RUNS:NEW runname\r\n", timeout=10),
