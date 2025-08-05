@@ -460,7 +460,9 @@ class ProflexBackend(ThermocyclerBackend):
   async def set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
-    res = await self.send_command({"cmd": f"TBC{block_id+1}:BLOCK", "args": [control_enabled, temp]})
+    res = await self.send_command(
+      {"cmd": f"TBC{block_id+1}:BLOCK", "args": [control_enabled, temp]}
+    )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set block idle temperature")
     follow_up = await self._read_response()
@@ -470,7 +472,9 @@ class ProflexBackend(ThermocyclerBackend):
   async def set_cover_idle_temp(self, temp: float = 105, control_enabled=1, block_id=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
-    res = await self.send_command({"cmd": f"TBC{block_id+1}:COVER", "args": [control_enabled, temp]})
+    res = await self.send_command(
+      {"cmd": f"TBC{block_id+1}:COVER", "args": [control_enabled, temp]}
+    )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set cover idle temperature")
     follow_up = await self._read_response()
@@ -507,7 +511,8 @@ class ProflexBackend(ThermocyclerBackend):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:CoverRAMP", "params": {}, "args": [target_temp]}, response_timeout=60
+      {"cmd": f"TBC{block_id+1}:CoverRAMP", "params": {}, "args": [target_temp]},
+      response_timeout=60,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp cover temperature")
@@ -915,9 +920,7 @@ class ProflexBackend(ThermocyclerBackend):
     raise NotImplementedError
 
   async def get_lid_open(self, *args, **kwargs):
-    raise NotImplementedError(
-      "Proflex thermocycler does not support lid open status check"
-    )
+    raise NotImplementedError("Proflex thermocycler does not support lid open status check")
 
   async def get_lid_status(self, *args, **kwargs) -> LidStatus:
     raise NotImplementedError
