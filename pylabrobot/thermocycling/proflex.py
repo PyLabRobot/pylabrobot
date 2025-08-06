@@ -438,7 +438,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to set nickname")
 
-  async def set_block_idle_temp(self, temp: float = 25, control_enabled=1, block_id=1) -> None:
+  async def set_block_idle_temp(self, temp: float, block_id: int, control_enabled=1) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
     res = await self.send_command(
@@ -450,7 +450,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set block idle temperature")
 
-  async def set_cover_idle_temp(self, temp: float = 105, control_enabled=1, block_id=1):
+  async def set_cover_idle_temp(self, temp: float, block_id: int, control_enabled=1):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
@@ -475,7 +475,7 @@ class ProflexBackend(ThermocyclerBackend):
       raise ValueError("Failed to ramp block temperature")
 
   async def block_ramp_single_temp(
-    self, target_temp: float, block_id: Optional[int] = None, rate: float = 100
+    self, target_temp: float, block_id: int, rate: float = 100
   ):
     """Set a single temperature for the block with a ramp rate.
 
@@ -512,6 +512,24 @@ class ProflexBackend(ThermocyclerBackend):
     res = await self.send_command({"cmd": "BUZZer-"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to turn off buzzer")
+
+  async def send_morse_code(self, morse_code: str):
+    short_beep_duration = 0.1
+    long_beep_duration = short_beep_duration * 3
+    space_duration = short_beep_duration * 3
+    assert all(char in ".- " for char in morse_code), "Invalid characters in morse code"
+    for char in morse_code:
+      if char == ".":
+        await self.buzzer_on()
+        await asyncio.sleep(short_beep_duration)
+        await self.buzzer_off()
+      elif char == "-":
+        await self.buzzer_on()
+        await asyncio.sleep(long_beep_duration)
+        await self.buzzer_off()
+      elif char == " ":
+        await asyncio.sleep(space_duration)
+      await asyncio.sleep(short_beep_duration)  # between letters is a short unit
 
   async def continue_run(self, block_id: int):
     for _ in range(3):
