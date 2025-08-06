@@ -17,12 +17,12 @@ from .backend import ThermocyclerBackend
 def _generate_run_info_files(
   protocol: Protocol,
   block_id: int,
-  sample_volume: float = 50,
-  run_mode: str = "Fast",
-  protocol_name: str = "PCR_Protocol",
-  cover_enabled: bool = True,
-  cover_temp: float = 105.0,
-  user_name="LifeTechnologies",
+  sample_volume: float,
+  run_mode: str,
+  protocol_name: str,
+  cover_enabled: bool,
+  cover_temp: float,
+  user_name: str,
   file_version="1.0.1",
   remote_run="true",
   hub="testhub",
@@ -228,8 +228,8 @@ class ProflexBackend(ThermocyclerBackend):
     challenge_bytes = challenge.encode("utf-8")
     return hmac.new(self.device_shared_secret, challenge_bytes, hashlib.md5).hexdigest()
 
-  def _build_scpi_msg(self, data):
-    def generate_output(data_dict, indent_level=0):
+  def _build_scpi_msg(self, data: dict) -> str:
+    def generate_output(data_dict: dict, indent_level=0) -> str:
       lines = []
       if indent_level == 0:
         line = data_dict["cmd"]
@@ -251,7 +251,7 @@ class ProflexBackend(ThermocyclerBackend):
           lines.append(f"</{data_dict['tag']}>")
       return "\n".join(lines)
 
-    def generate_multiline(multi_dict, indent_level=0):
+    def generate_multiline(multi_dict, indent_level=0) -> List[str]:
       def indent():
         return " " * 8 * indent_level
 
@@ -272,7 +272,7 @@ class ProflexBackend(ThermocyclerBackend):
           lines.append(line)
       return lines
 
-    return generate_output(data)
+    return generate_output(data) + "\r\n"
 
   def _parse_scpi_response(self, response: str):
     START_TAG_REGEX = re.compile(r"(.*?)<(multiline\.[a-zA-Z0-9_]+)>")
@@ -371,8 +371,6 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def send_command(self, data, response_timeout=1, read_once=True):
     msg = self._build_scpi_msg(data)
-    msg += "\r\n"
-    print(f"Sending command: {msg.strip()}", response_timeout)
     self.logger.debug("Command sent: %s", msg.strip())
 
     await self.io.write(msg, timeout=response_timeout)
@@ -411,8 +409,8 @@ class ProflexBackend(ThermocyclerBackend):
     run_name = await self.get_run_name(block_id=block_id)
     return run_name != "-"
 
-  async def _get_available_blocks(self):
-    await self._scpi_authenticate()
+  async def _load_available_blocks(self) -> None:
+    await self._scpi_authenticate() # TODO: again?
     await self._load_num_blocks_and_type()
     assert self._num_blocks is not None, "Number of blocks not set"
     for block_id in range(self._num_blocks):
@@ -422,7 +420,6 @@ class ProflexBackend(ThermocyclerBackend):
       if await self.is_block_running(block_id=block_id):
         if block_id not in self.available_blocks:
           self.available_blocks.append(block_id)
-    return self.available_blocks
 
   async def get_block_current_temperature(self, block_id=1) -> List[float]:
     res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:BlockTemperatures?"})
@@ -634,7 +631,7 @@ class ProflexBackend(ThermocyclerBackend):
       protocol_name=protocol_name,
       cover_temp=cover_temp,
       cover_enabled=cover_enabled,
-      # user_name=user_name,  # default here is "LifeTechnologies"
+      user_name="LifeTechnologies",  # for some reason LifeTechnologies is used here
     )
     await self._write_file(f"runs:{run_name}/{protocol_name}.method", xmlfile)
     await self._write_file(f"runs:{run_name}/{run_name}.tmp", tmpfile)
@@ -772,7 +769,7 @@ class ProflexBackend(ThermocyclerBackend):
       remaining_time=remaining_time,
     )
 
-  # *************Three core methods for running a protocol***********************
+  # *************Methods implementing ThermocyclerBackend***********************
 
   async def setup(
     self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None
@@ -781,7 +778,7 @@ class ProflexBackend(ThermocyclerBackend):
     await self.power_on()
     await self._load_num_blocks_and_type()
     if blocks_to_setup is None:
-      await self._get_available_blocks()
+      await self._load_available_blocks()
     else:
       self.available_blocks = blocks_to_setup
     for block_index in self.available_blocks:
