@@ -1,5 +1,4 @@
-# When is mechanical adjustment of iSWAP gripper parallelity required?
-
+# Adjust iSWAP gripper parallelity
 
 The steel pointy bits at the end of the iSWAP grippers are intended to be the primary points of contact with a plate.
 
