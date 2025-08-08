@@ -11,7 +11,7 @@ In iSWAPs with this calibration issue, a plate can accidentally be picked up usi
 
 In our testing, improper grips can be reliable for hundreds of pick/place operations, but fail after thousands. To achieve robust operation, physical adjustment is required.
 
-![](./img/adjust-iswap-gripper/before-after.png)
+![](./img/adjust-iswap-gripper/before-after.jpg)
 
 ## Tools
 - 1.5mm hex key
@@ -29,7 +29,7 @@ A bit of force may be required initially to unstick/free the bearing to rotate, 
 
 Remove 2 screws (2.5mm hex) holding the data wire in place on the left gripper finger. This exposes the other 4 adjustment screws. Repeat the process for these 4.
 
-![](./img/adjust-iswap-gripper/rotate-slider-bearing.png)
+![](./img/adjust-iswap-gripper/rotate-slider-bearing.jpg)
 
 
 You may need to run the Hamilton [iSWAP calibration macro](adjusting-iswap.md) to recalibrate grip width after making these changes, however in our testing hotel coordinate locations are altered <1mm by the physical adjustment of gripper parallelity.
