@@ -204,7 +204,6 @@ class Cytation5Backend(ImageReaderBackend):
           self.cam = None
       cam_list.Clear()
 
-      # here
       if self.cam is None:
         raise RuntimeError(
           "No camera found. Make sure the camera is connected and the serial " "number is correct."
