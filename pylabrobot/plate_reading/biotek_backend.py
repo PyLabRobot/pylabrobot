@@ -199,15 +199,29 @@ class Cytation5Backend(ImageReaderBackend):
           logger.info(
             "[cytation5] using first camera with serial number %s", info["DeviceSerialNumber"]
           )
+        else:
+          logger.error("[cytation5] no cameras found")
+          self.cam = None
       cam_list.Clear()
 
+      # here
       if self.cam is None:
         raise RuntimeError(
           "No camera found. Make sure the camera is connected and the serial " "number is correct."
         )
 
       # -- Initialize camera --
-      self.cam.Init()
+      for _ in range(10):
+        try:
+          self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
+          break
+        except:
+          pass
+      else:
+        raise RuntimeError(
+          "Failed to initialize camera. Make sure the camera is connected and the "
+          "Spinnaker SDK is installed correctly."
+        )
       nodemap = self.cam.GetNodeMap()
 
       # -- Configure trigger to be software --
@@ -240,6 +254,9 @@ class Cytation5Backend(ImageReaderBackend):
       if not PySpin.IsReadable(ptr_trigger_on):
         raise RuntimeError("unable to query TriggerMode On")
       ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
+
+      # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
+      await asyncio.sleep(1)
 
       # -- Load filter information --
       if self._filters is None:
