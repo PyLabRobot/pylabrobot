@@ -214,7 +214,7 @@ class Cytation5Backend(ImageReaderBackend):
         try:
           self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
           break
-        except:
+        except:  # noqa
           pass
       else:
         raise RuntimeError(
