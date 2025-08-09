@@ -223,6 +223,20 @@ class InhecoThermoShakeBackend(HeaterShakerBackend):
 
     return await self.send_command("1ATE0")
 
+  @property
+  def supports_locking(self) -> bool:
+    return False
+
+  async def lock_plate(self):
+    raise NotImplementedError(
+      "Locking the plate is not implemented yet for Inheco ThermoShake devices. "
+    )
+
+  async def unlock_plate(self):
+    raise NotImplementedError(
+      "Unlocking the plate is not implemented yet for Inheco ThermoShake devices. "
+    )
+
   # --- firmware misc
 
   async def get_device_info(self, info_type: int):
