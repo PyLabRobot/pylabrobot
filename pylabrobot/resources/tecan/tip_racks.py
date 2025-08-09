@@ -1193,7 +1193,7 @@ def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
-      dy=8.7,
+      dy=7.7,
       dz=32.6,
       item_dx=9.0,
       item_dy=9.0,
