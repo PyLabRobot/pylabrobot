@@ -131,7 +131,7 @@ class InhecoThermoShakeBackend(HeaterShakerBackend):
     """Send a command to the device and return the response"""
     packets = self._generate_packets(command)
     for packet in packets:
-      await self.io.write(bytes(packet))
+      await self.io.write(bytes(packet[1:]), report_id=bytes(packet[0]))
 
     response = await self._read_response(command, timeout=timeout)
 
