@@ -111,36 +111,38 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
 
   async def send_command(self, command: bytes, wait_for_response: bool = True) -> Optional[bytes]:
     await self.io.write(command)
-    if wait_for_response:
-      response = b""
+    if not wait_for_response:
+      return None
 
-      if command.startswith(bytes.fromhex("004000")):
-        should_start = bytes.fromhex("0005")
-      elif command.startswith(bytes.fromhex("002003")):
-        should_start = bytes.fromhex("3000")
-      else:
-        should_start = command[1:3]  # ignore the Report ID byte. FIXME
+    response = b""
 
-      # responses that start with 0x20 are just status, we ignore those
-      while len(response) == 0 or response.startswith(b"\x20"):
-        response = await self.io.read(64, timeout=30)
-        if len(response) == 0:
-          continue
+    if command.startswith(bytes.fromhex("004000")):
+      should_start = bytes.fromhex("0005")
+    elif command.startswith(bytes.fromhex("002003")):
+      should_start = bytes.fromhex("3000")
+    else:
+      should_start = command[1:3]  # ignore the Report ID byte. FIXME
 
-        if self._device_type == _ByonoyDevice.FLUORESCENCE_96:
-          if response.startswith(b"\x70"):
-            await self.io.write(
-              bytes.fromhex(
-                "20007000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-              )
+    # responses that start with 0x20 are just status, we ignore those
+    while len(response) == 0 or response.startswith(b"\x20"):
+      response = await self.io.read(64, timeout=30)
+      if len(response) == 0:
+        continue
+
+      if self._device_type == _ByonoyDevice.FLUORESCENCE_96:
+        if response.startswith(b"\x70"):
+          await self.io.write(
+            bytes.fromhex(
+              "20007000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
             )
+          )
 
-        # if the first 2 bytes do not match, we continue reading
-        if not response.startswith(should_start):
-          response = b""
-          continue
-      return response
-
+      # if the first 2 bytes do not match, we continue reading
+      if not response.startswith(should_start):
+        response = b""
+        continue
+    return response
+  
 
 class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:

@@ -217,7 +217,7 @@ class Resource:
     """
 
     if self.location is None:
-      raise NoLocationError(f"Resource {self.name} has no location.")
+      raise NoLocationError(f"Resource '{self.name}' has no location.")
 
     rotated_anchor = Coordinate(
       *matrix_vector_multiply_3x3(
@@ -790,9 +790,17 @@ class Resource:
     this method might not return the correct value.
     ```
     """
-    heighest_point = self.get_absolute_location(z="t").z
+    highest_point = self.get_absolute_location(z="t").z
     if self.name == "deck":
-      heighest_point = 0
+      highest_point = 0
     for resource in self.children:
-      heighest_point = max(heighest_point, resource.get_highest_known_point())
-    return heighest_point
+      highest_point = max(highest_point, resource.get_highest_known_point())
+    return highest_point
+  
+  def check_can_drop_resource_here(self, resource: Resource) -> None:
+    """Check if a resource can be dropped onto this resource.
+    Will raise an error if the resource is not compatible with this resource.
+    """
+    raise RuntimeError(
+      f"Resource {resource.name} cannot be dropped onto resource {self.name}."
+    )

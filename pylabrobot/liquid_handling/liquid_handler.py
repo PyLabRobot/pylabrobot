@@ -1943,6 +1943,9 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("No resource picked up")
     resource = self._resource_pickup.resource
 
+    if isinstance(destination, Resource):
+      destination.check_can_drop_resource_here(resource)
+
     # compute rotation based on the pickup_direction and drop_direction
     if self._resource_pickup.direction == direction:
       rotation_applied_by_move = 0
@@ -2292,7 +2295,7 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
-  def serialize(self):
+  def serialize(self) -> dict:
     return {**Resource.serialize(self), **Machine.serialize(self)}
 
   @classmethod
