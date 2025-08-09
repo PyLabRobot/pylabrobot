@@ -1,0 +1,6 @@
+pylabrobot.resources.TipRack.row
+================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TipRack.row

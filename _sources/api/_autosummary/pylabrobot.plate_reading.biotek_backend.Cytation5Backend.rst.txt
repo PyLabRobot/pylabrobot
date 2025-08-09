@@ -1,0 +1,63 @@
+﻿pylabrobot.plate\_reading.biotek\_backend.Cytation5Backend
+==========================================================
+
+.. currentmodule:: pylabrobot.plate_reading.biotek_backend
+
+.. autoclass:: Cytation5Backend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Cytation5Backend.filters
+      ~Cytation5Backend.objectives
+      ~Cytation5Backend.version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Cytation5Backend.__init__
+      ~Cytation5Backend.auto_focus
+      ~Cytation5Backend.capture
+      ~Cytation5Backend.close
+      ~Cytation5Backend.deserialize
+      ~Cytation5Backend.get_all_instances
+      ~Cytation5Backend.get_current_temperature
+      ~Cytation5Backend.get_firmware_version
+      ~Cytation5Backend.get_serial_number
+      ~Cytation5Backend.home
+      ~Cytation5Backend.led_off
+      ~Cytation5Backend.led_on
+      ~Cytation5Backend.open
+      ~Cytation5Backend.read_absorbance
+      ~Cytation5Backend.read_fluorescence
+      ~Cytation5Backend.read_luminescence
+      ~Cytation5Backend.select
+      ~Cytation5Backend.send_command
+      ~Cytation5Backend.serialize
+      ~Cytation5Backend.set_auto_exposure
+      ~Cytation5Backend.set_auto_focus_search_range
+      ~Cytation5Backend.set_exposure
+      ~Cytation5Backend.set_focus
+      ~Cytation5Backend.set_gain
+      ~Cytation5Backend.set_imaging_mode
+      ~Cytation5Backend.set_objective
+      ~Cytation5Backend.set_plate
+      ~Cytation5Backend.set_position
+      ~Cytation5Backend.set_temperature
+      ~Cytation5Backend.setup
+      ~Cytation5Backend.shake
+      ~Cytation5Backend.stop
+      ~Cytation5Backend.stop_heating_or_cooling
+      ~Cytation5Backend.stop_shaking
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.is\_in\_subtree\_of
+=======================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.is_in_subtree_of

@@ -1,0 +1,6 @@
+pylabrobot.scales.scale.Scale.is\_in\_subtree\_of
+=================================================
+
+.. currentmodule:: pylabrobot.scales.scale
+
+.. automethod:: Scale.is_in_subtree_of

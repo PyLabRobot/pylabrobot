@@ -1,0 +1,194 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Manually moving channels around\n",
+        "\n",
+        "![star supported](https://img.shields.io/badge/STAR-supported-blue)\n",
+        "![Vantage supported](https://img.shields.io/badge/Vantage-supported-blue)\n",
+        "![OT supported](https://img.shields.io/badge/OT-supported-blue)\n",
+        "![EVO not tested](https://img.shields.io/badge/EVO-not%20tested-orange)\n",
+        "\n",
+        "With PLR, you can easily move individual channels around. This is useful for calibrating labware locations, calibrating labware sizes, and other things.\n",
+        "\n",
+        "```{warning}\n",
+        "Be very careful about collisions! Move channels to a safe z height before traversing.\n",
+        "```\n",
+        "\n",
+        "```{note}\n",
+        "With Hamilton robots, when a tip is mounted, the z location will refer to the point of the pipetting tip. With no tip mounted, it will refer to the bottom of the channel.\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Example: Hamilton STAR\n",
+        "\n",
+        "Here, we'll use a Hamilton STAR as an example. For other robots, simply change the deck layout, making sure that you have at least a tip rack to use."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 1,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "from pylabrobot.liquid_handling import LiquidHandler, STAR\n",
+        "from pylabrobot.resources import STARDeck, TIP_CAR_480_A00, HTF\n",
+        "\n",
+        "lh = LiquidHandler(backend=STAR(), deck=STARDeck())\n",
+        "await lh.setup()\n",
+        "\n",
+        "# assign a tip rack\n",
+        "tip_carrier = TIP_CAR_480_A00(name=\"tip_carrier\")\n",
+        "tip_carrier[0] = tip_rack = HTF(name=\"tip_rack\")\n",
+        "lh.deck.assign_child_resource(tip_carrier, rails=0)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Moving channels\n",
+        "\n",
+        "All positions are in mm. The movements are to absolute positions. The origin will be near the left front bottom of the deck, but it differs between robots.\n",
+        "\n",
+        "* x: left (low) to right (high)\n",
+        "* y: front (low) to back (high)\n",
+        "* z: bottom (low) to top (high)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 2,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "channel = 1  # the channel to use\n",
+        "\n",
+        "# start by picking up a single tip\n",
+        "await lh.pick_up_tips(tip_rack[\"A1\"], use_channels=[channel])\n",
+        "\n",
+        "# prepare for manual operation\n",
+        "# this will space the other channels to safe positions\n",
+        "await lh.prepare_for_manual_channel_operation(channel)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Since the channnel will be above the tip rack, it should be safe to move up. We perform a quick check to make sure the z_safe is at least above the resources we know about."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 3,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "z_safe = 240  # WARNING: this might NOT be safe for your setup\n",
+        "\n",
+        "if z_safe <= lh.deck.get_highest_known_point():\n",
+        "  raise ValueError(f\"z_safe position is not safe, it is lower than the highest known point: {lh.deck.get_highest_known_point()}\")\n",
+        "\n",
+        "await lh.move_channel_z(channel, z_safe)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "```{warning}\n",
+        "The z position in the code above should be safe for most setups, but we can't guarantee that it will be safe for all setups. Move to a z position that is above all your labware before moving in the xy plane.\n",
+        "```\n",
+        "\n",
+        "When the z position of the bottom of the tip is above the labware, you can move the channel around in the xy plane."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 4,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "# move the channel around\n",
+        "await lh.move_channel_x(channel, 100)\n",
+        "await lh.move_channel_y(channel, 100)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "After reaching a spot where the channel can move down, you can use `move_channel_z` again."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "await lh.move_channel_z(channel, 100)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Before returning the tip to the tip rack, make sure to move the channel to a safe z position again."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "await lh.move_channel_z(channel, z_safe)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "You can run the code above as often as you like. When you're done, you can return the channel to the tip rack."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 5,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "await lh.return_tips()"
+      ]
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "env",
+      "language": "python",
+      "name": "python3"
+    },
+    "language_info": {
+      "codemirror_mode": {
+        "name": "ipython",
+        "version": 3
+      },
+      "file_extension": ".py",
+      "mimetype": "text/x-python",
+      "name": "python",
+      "nbconvert_exporter": "python",
+      "pygments_lexer": "ipython3",
+      "version": "3.11.2"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 2
+}

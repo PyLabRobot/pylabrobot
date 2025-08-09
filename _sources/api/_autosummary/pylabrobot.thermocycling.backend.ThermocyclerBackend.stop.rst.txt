@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.backend.ThermocyclerBackend.stop
+=========================================================
+
+.. currentmodule:: pylabrobot.thermocycling.backend
+
+.. automethod:: ThermocyclerBackend.stop

@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV2.setup\_finished
+================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons
+
+.. autoproperty:: OpentronsThermocyclerModuleV2.setup_finished

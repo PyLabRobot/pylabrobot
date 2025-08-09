@@ -1,0 +1,274 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# MFXCarrier\n",
+    "\n",
+    "MFX Carriers are a user-configurable carrier system, created by Hamilton. The user can configure the carrier system by placing plate sites, tip racks, tilt modules and other items at specific locations by screwing them into pre-threaded holes in the carrier. Different carrier bases are available.\n",
+    "\n",
+    "In this tutorial, we will show how to create a custom carrier system using the MFX Carriers in PyLabRobot. We will use the `MFX_CAR_L5_base` as the base, and a deep well plate module (`MFX_DWP_rackbased_module`) and a tip module (`MFX_TIP_module`) as the modules."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload\n",
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import (\n",
+    "  MFX_CAR_L5_base,\n",
+    "  MFX_DWP_rackbased_module,\n",
+    "  MFX_TIP_module,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Start by creating variables for your mfx modules. Depending on the type of module, the class might be a {class}`pylabrobot.resources.resource_holder.ResourceHolder` (for tip rack holders), a {class}`pylabrobot.resources.carrier.PlateHolder` (for plate modules), or a `Machine` class.\n",
+    "\n",
+    "Let's create plate and a tip rack modules:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "PlateHolder(name=my_plate_module, location=None, size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "my_plate_module = MFX_DWP_rackbased_module(name=\"my_plate_module\")\n",
+    "my_plate_module"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "ResourceHolder(name=my_tip_rack_module, location=None, size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "my_tip_rack_module = MFX_TIP_module(name=\"my_tip_rack_module\")\n",
+    "my_tip_rack_module"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Using a dictionary, you can place your mfx modules in arbitrary locations:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "{0: PlateHolder(name=my_plate_module, location=(000.000, 005.000, 018.195), size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder), 3: ResourceHolder(name=my_tip_rack_module, location=(000.000, 293.000, 018.195), size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)}\n"
+     ]
+    }
+   ],
+   "source": [
+    "carrier = MFX_CAR_L5_base(\n",
+    "  name=\"my_carrier\",\n",
+    "  modules={\n",
+    "    0: my_plate_module,\n",
+    "    3: my_tip_rack_module,\n",
+    "  }\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The children of an MFXCarrier are the sites you specified when creating the carrier."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "PlateHolder(name=carrier-my_carrier-spot-0, location=(000.000, 005.000, 018.195), size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)"
+      ]
+     },
+     "execution_count": 6,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "carrier[0]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "ResourceHolder(name=carrier-my_carrier-spot-3, location=(000.000, 293.000, 018.195), size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)"
+      ]
+     },
+     "execution_count": 7,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "carrier[3]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "When a site is not defined, indexing into it will raise a `KeyError`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "KeyError, as expected.\n"
+     ]
+    }
+   ],
+   "source": [
+    "try:\n",
+    "  carrier[1]\n",
+    "except KeyError as e:\n",
+    "  print(f\"KeyError, as expected.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "To define in PLR that there is a plate on some module in the carrier, you can assign a plate to that module using the usual `assign_child_resource` method."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "PlateHolder(name=carrier-my_carrier-spot-0, location=(000.000, 005.000, 018.195), size_x=135.0, size_y=94.0, size_z=59.80500000000001, category=plate_holder)"
+      ]
+     },
+     "execution_count": 9,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from pylabrobot.resources import Cos_96_wellplate_2mL_Vb\n",
+    "my_plate = Cos_96_wellplate_2mL_Vb(name=\"my_plate\")\n",
+    "carrier[0].assign_child_resource(my_plate)\n",
+    "my_plate.parent"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "As with other carriers, you can also assign it directly to the site using the following syntax:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "ResourceHolder(name=carrier-my_carrier-spot-3, location=(000.000, 293.000, 018.195), size_x=135.0, size_y=94.0, size_z=96.60500000000002, category=resource_holder)"
+      ]
+     },
+     "execution_count": 10,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from pylabrobot.resources import HTF\n",
+    "my_tip_rack = HTF(name=\"my_tip_rack\")\n",
+    "carrier[3] = my_tip_rack\n",
+    "my_tip_rack.parent"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.19"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
