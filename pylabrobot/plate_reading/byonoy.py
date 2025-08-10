@@ -3,7 +3,7 @@ from pylabrobot.plate_reading import PlateReader, ByonoyAbsorbance96AutomateBack
 from pylabrobot.resources import Resource, ResourceHolder, PlateHolder, Coordinate
 
 
-def byonoy_absorbance_adapter(name: str) -> ResourceHolder:
+def byonoy_luminescence_adapter(name: str) -> ResourceHolder:
   return ResourceHolder(
     name=name,
     size_x=127.76,  # measured
@@ -17,7 +17,7 @@ def byonoy_absorbance_adapter(name: str) -> ResourceHolder:
   )
 
 
-class _ByonoyPlateHolder(PlateHolder):
+class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
   """Custom plate holder that checks if the reader sits on the parent base.
   This check is used to prevent crashes (moving plate onto holder while reader is on the base)."""
 
@@ -69,7 +69,7 @@ class ByonoyBase(Resource):
       size_z=27.7,
     )
 
-    self.plate_holder = _ByonoyPlateHolder(
+    self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
       name=self.name + "_plate_holder",
       size_x=127.76,
       size_y=85.59,
@@ -97,7 +97,7 @@ class ByonoyBase(Resource):
     self.assign_child_resource(self.reader_holder, location=Coordinate.zero())
 
   def assign_child_resource(self, resource: Resource, location: Coordinate, reassign = True):
-    if isinstance(resource, _ByonoyPlateHolder):
+    if isinstance(resource, _ByonoyAbsorbanceReaderPlateHolder):
       if self.plate_holder._byonoy_base is not None:
         raise ValueError("ByonoyBase can only have one plate holder assigned.")
       self.plate_holder._byonoy_base = self
@@ -110,7 +110,7 @@ class ByonoyBase(Resource):
     )
 
 
-def byonoy_absorbance96_base_and_reader(name: str, assign = True) -> Tuple[ByonoyBase, PlateReader]:
+def byonoy_luminescence96_base_and_reader(name: str, assign = True) -> Tuple[ByonoyBase, PlateReader]:
   """Creates a ByonoyBase and a PlateReader instance."""
   byonoy_base = ByonoyBase(name=name + "_base")
   reader = PlateReader(
