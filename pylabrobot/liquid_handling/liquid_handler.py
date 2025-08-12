@@ -1889,6 +1889,9 @@ class LiquidHandler(Resource, Machine):
       self._resource_pickup = None
       raise e
 
+    # unassign from parent
+    resource.unassign()
+
   async def move_picked_up_resource(
     self,
     to: Coordinate,
