@@ -602,6 +602,8 @@ class Cytation5Backend(ImageReaderBackend):
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
+    await self.set_plate(plate)
+
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
     checksum = str(sum(cmd.encode()) % 100).zfill(2)
@@ -619,6 +621,8 @@ class Cytation5Backend(ImageReaderBackend):
   async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
+
+    await self.set_plate(plate)
 
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
@@ -646,6 +650,8 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Excitation wavelength must be between 250 and 700")
     if not 250 <= emission_wavelength <= 700:
       raise ValueError("Emission wavelength must be between 250 and 700")
+
+    await self.set_plate(plate)
 
     cmd = f"{614220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
