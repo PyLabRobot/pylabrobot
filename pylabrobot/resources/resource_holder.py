@@ -65,5 +65,14 @@ class ResourceHolder(Resource):
       return None
     return self.children[0]
 
+  @resource.setter
+  def resource(self, resource: Optional[Resource]):
+    if resource is None:
+      if len(self.children) == 0:
+        return
+      self.unassign_child_resource(self.children[0])
+      return
+    self.assign_child_resource(resource, reassign=False)
+
   def serialize(self):
     return {**super().serialize(), "child_location": serialize(self.child_location)}

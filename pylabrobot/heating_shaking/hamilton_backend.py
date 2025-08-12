@@ -132,6 +132,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def _move_plate_lock(self, position: PlateLockPosition):
     return await self.interface.send_hhs_command(index=self.index, command="LP", lp=position.value)
 
+  @property
+  def supports_locking(self) -> bool:
+    return True
+
   async def lock_plate(self):
     await self._move_plate_lock(PlateLockPosition.LOCKED)
 

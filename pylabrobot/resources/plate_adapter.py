@@ -37,7 +37,6 @@ class PlateAdapter(Resource):
     dz: The z-coordinate offset for well positioning, i.e. the outside-bottom of a well.
     adapter_item_dx: The x-dimension spacing of wells. Defaults to 9.0.
     adapter_item_dy: The y-dimension spacing of wells. Defaults to 9.0.
-    site_pedestal_z: The z-coordinate of the site pedestal.  Defaults to None.
     category: The category of the PlateAdapter.  Defaults to "plate_adapter".
     model: The model of the PlateAdapter. Defaults to None.
 
@@ -70,7 +69,6 @@ class PlateAdapter(Resource):
     adapter_hole_size_x: float,
     adapter_hole_size_y: float,
     adapter_hole_size_z: float,
-    site_pedestal_z: float,
     adapter_hole_dx: float = 9.0,
     adapter_hole_dy: float = 9.0,
     plate_z_offset: float = 0.0,
@@ -97,7 +95,6 @@ class PlateAdapter(Resource):
     self.adapter_hole_dx = adapter_hole_dx
     self.adapter_hole_dy = adapter_hole_dy
     self.plate_z_offset = plate_z_offset
-    self.site_pedestal_z = site_pedestal_z
 
   def compute_plate_location(self, resource: Plate) -> Coordinate:
     """Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to

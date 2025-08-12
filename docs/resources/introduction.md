@@ -12,7 +12,11 @@ The relation between resources is modelled by a tree, specifically an [_arboresc
 
 ## Defining a simple resource
 
-The simplest way to define a resource is to subclass {class}`pylabrobot.resources.resource.Resource` and define the `name` and `size_x`, `size_y` and `size_z` attributes. Here's an example of a simple resource:
+The simplest way to define a resource is to subclass {class}`pylabrobot.resources.resource.Resource` and define the `name` and `size_x`, `size_y` and `size_z` attributes.
+
+The size attributes are in millimeters and define the dimensions of the resource as a cuboid. This the complete outer bounding box of the resource. The `name` attribute is a unique identifier for the resource, and it can be used to reference the resource in protocols and programs.
+
+Here's an example of a simple resource:
 
 ```python
 from pylabrobot.resources import Resource

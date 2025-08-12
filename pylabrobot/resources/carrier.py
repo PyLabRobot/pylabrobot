@@ -52,6 +52,10 @@ class Carrier(Resource, Generic[S]):
     """The number of sites on this carrier."""
     return len(self.sites)
 
+  def __len__(self) -> int:
+    """Return the number of sites on this carrier."""
+    return len(self.sites)
+
   def assign_child_resource(
     self,
     resource: Resource,
@@ -164,7 +168,7 @@ class PlateHolder(ResourceHolder):
     if pedestal_size_z is None:
       raise ValueError(
         "pedestal_size_z must be provided. See "
-        "https://docs.pylabrobot.org/resources/plate_carriers.html#pedestal_size_z for more "
+        "https://docs.pylabrobot.org/resources/resource-holder/plate-holder.html#pedestal-z-height for more "
         "information."
       )
 

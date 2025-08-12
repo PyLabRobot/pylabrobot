@@ -420,11 +420,9 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resources must be `TipSpot`s, got {not_tip_spots}")
 
     # fix arguments
-    if use_channels is None:
-      if self._default_use_channels is None:
-        use_channels = list(range(len(tip_spots)))
-      else:
-        use_channels = self._default_use_channels
+    use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
+
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
 
     if not all(
@@ -556,11 +554,9 @@ class LiquidHandler(Resource, Machine):
       raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
 
     # fix arguments
-    if use_channels is None:
-      if self._default_use_channels is None:
-        use_channels = list(range(len(tip_spots)))
-      else:
-        use_channels = self._default_use_channels
+    use_channels = use_channels or self._default_use_channels or list(range(len(tip_spots)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
+
     tips = []
     for channel in use_channels:
       tip = self.head[channel].get_tip()
@@ -830,6 +826,7 @@ class LiquidHandler(Resource, Machine):
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
 
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(use_channels)
@@ -1043,6 +1040,7 @@ class LiquidHandler(Resource, Machine):
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
+    assert len(set(use_channels)) == len(use_channels), "Channels must be unique."
 
     # expand default arguments
     offsets = offsets or [Coordinate.zero()] * len(use_channels)
@@ -1519,6 +1517,7 @@ class LiquidHandler(Resource, Machine):
     volume: float,
     offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
+    liquid_height: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs,
   ):
@@ -1537,6 +1536,8 @@ class LiquidHandler(Resource, Machine):
         the plate or container is defined to be. Defaults to Coordinate.zero().
       flow_rate ([Optional[float]]): The flow rate to use when aspirating, in ul/s. If `None`, the
         backend default will be used.
+      liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
+        mm. If `None`, the backend default will be used.
       blow_out_air_volume ([Optional[float]]): The volume of air to aspirate after the liquid, in
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -1548,6 +1549,7 @@ class LiquidHandler(Resource, Machine):
       volume=volume,
       offset=offset,
       flow_rate=flow_rate,
+      liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
     )
 
@@ -1599,7 +1601,7 @@ class LiquidHandler(Resource, Machine):
         offset=offset,
         flow_rate=flow_rate,
         tips=tips,
-        liquid_height=None,
+        liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
@@ -1642,7 +1644,7 @@ class LiquidHandler(Resource, Machine):
         offset=offset,
         flow_rate=flow_rate,
         tips=tips,
-        liquid_height=None,
+        liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
@@ -1667,6 +1669,7 @@ class LiquidHandler(Resource, Machine):
     volume: float,
     offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
+    liquid_height: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs,
   ):
@@ -1684,6 +1687,8 @@ class LiquidHandler(Resource, Machine):
         the plate or container is defined to be. Defaults to Coordinate.zero().
       flow_rate ([Optional[float]]): The flow rate to use when dispensing, in ul/s. If `None`, the
         backend default will be used.
+      liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
+        mm. If `None`, the backend default will be used.
       blow_out_air_volume ([Optional[float]]): The volume of air to dispense after the liquid, in
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -1695,6 +1700,7 @@ class LiquidHandler(Resource, Machine):
       volume=volume,
       offset=offset,
       flow_rate=flow_rate,
+      liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
     )
 
@@ -1746,7 +1752,7 @@ class LiquidHandler(Resource, Machine):
         offset=offset,
         flow_rate=flow_rate,
         tips=tips,
-        liquid_height=None,
+        liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
@@ -1786,7 +1792,7 @@ class LiquidHandler(Resource, Machine):
         offset=offset,
         flow_rate=flow_rate,
         tips=tips,
-        liquid_height=None,
+        liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=all_liquids,
       )
@@ -1887,8 +1893,19 @@ class LiquidHandler(Resource, Machine):
     self,
     to: Coordinate,
     offset: Coordinate = Coordinate.zero(),
+    direction: Optional[GripDirection] = None,
     **backend_kwargs,
   ):
+    """Move a resource that has been picked up to a new location.
+
+    Args:
+      to: The new location to move the resource to. (LFB of plate)
+      offset: The offset to apply to the new location.
+      direction: The direction in which the resource is gripped. If `None`, the current direction
+        will be used.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
+    """
+
     self._log_command(
       "move_picked_up_resource",
       to=to,
@@ -1901,7 +1918,7 @@ class LiquidHandler(Resource, Machine):
       ResourceMove(
         location=to,
         resource=self._resource_pickup.resource,
-        gripped_direction=self._resource_pickup.direction,
+        gripped_direction=direction or self._resource_pickup.direction,
         pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
         offset=offset,
       ),
@@ -2033,6 +2050,8 @@ class LiquidHandler(Resource, Machine):
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
+    self._resource_pickup = None
+
     # we rotate the resource on top of its original rotation. So in order to set the new rotation,
     # we have to subtract its current rotation.
     resource.rotate(z=resource_rotation_wrt_destination - resource.rotation.z)
@@ -2064,8 +2083,6 @@ class LiquidHandler(Resource, Machine):
       pass  # don't assign to trash, resource will simply be unassigned
     else:
       destination.assign_child_resource(resource, location=to_location)
-
-    self._resource_pickup = None
 
     return result
 

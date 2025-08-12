@@ -49,7 +49,7 @@ class TubeRack(ItemizedResource[Tube]):
 
   def __repr__(self) -> str:
     return (
-      f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
       f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
     )
 

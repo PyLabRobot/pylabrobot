@@ -33,11 +33,29 @@ def MFX_DWP_rackbased_module(name: str) -> PlateHolder:
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=178.0 - 18.195 - 100,
+    size_z=178.0 - 18.195 - 100,  # 59.81mm
     # probe height - carrier_height - deck_height
     child_location=Coordinate(4.0, 3.5, 178.0 - 18.195 - 100),
     model=MFX_DWP_rackbased_module.__name__,
     pedestal_size_z=0,
+  )
+
+
+def Hamilton_MFX_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:
+  """Hamilton MFX DWP Module (cat.-no. 188042 / 188042-00).
+  It also contains metal clamps at the corners.
+  https://www.hamiltoncompany.com/other-robotics/188042
+  """
+
+  return PlateHolder(
+    name=name,
+    size_x=135.0,  # measured
+    size_y=94.0,  # measured
+    size_z=76.4,  # measured
+    # probe height - carrier_height - deck_height
+    child_location=Coordinate(4.0, 4.0, 183.95 - 18.195 - 100),  # measured
+    pedestal_size_z=-4.74,
+    model=Hamilton_MFX_plateholder_DWP_metal_tapped.__name__,
   )
 
 

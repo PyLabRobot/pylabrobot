@@ -62,6 +62,12 @@ class linear_tip_spot_generator:
   def set_index(self, index: int):
     self._tip_spot_idx = index
 
+  def get_num_tips_left(self) -> int:
+    """Returns the number of tips left to be sampled. Raises an error if repeat is True."""
+    if self.repeat:
+      raise RuntimeError("Cannot get number of tips left when repeat is True.")
+    return len(self.tip_spots) - self._tip_spot_idx
+
 
 async def randomized_tip_spot_generator(
   tip_spots: List[TipSpot],

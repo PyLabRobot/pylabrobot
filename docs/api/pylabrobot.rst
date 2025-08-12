@@ -21,5 +21,6 @@ Subpackages
     pylabrobot.scales
     pylabrobot.shaking
     pylabrobot.temperature_controlling
+    pylabrobot.thermocycling
     pylabrobot.tilting
     pylabrobot.utils
