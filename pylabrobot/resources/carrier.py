@@ -281,6 +281,40 @@ class PlateCarrier(Carrier):
     )
     self.sites: Dict[int, PlateHolder] = sites or {}  # fix type
 
+  def summary(self) -> str:
+    """Return a summary of the carrier's sites and their contents."""
+
+    def create_pretty_table(header, *columns) -> str:
+      col_widths = [
+        max(len(str(item)) for item in [header[i]] + list(columns[i])) for i in range(len(header))
+      ]
+
+      def format_row(row, border="|") -> str:
+        return (
+          f"{border} "
+          + " | ".join(f"{str(row[i]).ljust(col_widths[i])}" for i in range(len(row)))
+          + f" {border}"
+        )
+
+      def separator_line(cross: str = "+", line: str = "-") -> str:
+        return cross + cross.join(line * (width + 2) for width in col_widths) + cross
+
+      table = []
+      table.append(separator_line())  # Top border
+      table.append(format_row(header))
+      table.append(separator_line())  # Header separator
+      for row in zip(*columns):
+        table.append(format_row(row))
+      table.append(separator_line())  # Bottom border
+      return "\n".join(table)
+
+    indices = sorted(self.sites.keys())
+    header = ["Site", "Content"]
+    site_numbers = list(reversed([str(i) for i in indices]))
+    site_resources = list(reversed([self.sites[i].resource for i in indices]))
+    site_contents = [r.name if r is not None else "<empty>" for r in site_resources]
+    return create_pretty_table(header, site_numbers, site_contents)
+
 
 class MFXCarrier(Carrier[ResourceHolder]):
   def __init__(
