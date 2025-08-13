@@ -312,9 +312,7 @@ class PlateCarrier(Carrier):
     header = ["Site", "Content"]
     site_numbers = list(reversed([str(i) for i in indices]))
     site_resources = list(reversed([self.sites[i].resource for i in indices]))
-    site_contents = [
-      r.name if r is not None else "<empty>" for r in site_resources
-    ]
+    site_contents = [r.name if r is not None else "<empty>" for r in site_resources]
     return create_pretty_table(header, site_numbers, site_contents)
 
 
