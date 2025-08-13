@@ -70,6 +70,8 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_read_absorbance(self):
     self.backend.io.read.side_effect = _byte_iter(
       "\x06"
+      + "\x03"
+      + "\x06"
       + "0350000000000000010000000000490300000\x03"
       + "\x06"
       + "0000\x03"
@@ -94,10 +96,9 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       )
     )
 
-    self.backend._plate = CellVis_96_wellplate_350uL_Fb(
-      name="plate"
-    )  # lint: disable=protected-access
-    resp = await self.backend.read_absorbance(plate=self.plate, wavelength=580)
+    resp = await self.backend.read_absorbance(
+      plate=CellVis_96_wellplate_350uL_Fb(name="plate"), wavelength=580
+    )
 
     self.backend.io.write.assert_any_call(b"D")
     self.backend.io.write.assert_any_call(
@@ -184,6 +185,8 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
       "\x06"
+      + "\x03"
+      + "\x06"
       + "0000\x03"
       + "\x06"
       + "0350000000000000010000000000490300000\x03"
@@ -209,11 +212,8 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       )
     )
 
-    self.backend._plate = CellVis_96_wellplate_350uL_Fb(
-      name="plate"
-    )  # lint: disable=protected-access
     resp = await self.backend.read_fluorescence(
-      plate=self.plate,
+      plate=CellVis_96_wellplate_350uL_Fb(name="plate"),
       excitation_wavelength=485,
       emission_wavelength=528,
       focal_height=7.5,
