@@ -311,8 +311,9 @@ class PlateCarrier(Carrier):
     indices = sorted(self.sites.keys())
     header = ["Site", "Content"]
     site_numbers = [str(i) for i in indices]
+    site_resources = [self.sites[i].resource for i in indices]
     site_contents = [
-      self.sites[i].resource.name if self.sites[i].resource else "<empty>" for i in indices
+      r.name if r is not None else "<empty>" for r in site_resources
     ]
     return create_pretty_table(header, site_numbers, site_contents)
 
