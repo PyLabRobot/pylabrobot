@@ -1742,18 +1742,13 @@ class LiquidHandler(Resource, Machine):
         raise ValueError("Container too small to accommodate 96 head")
 
       for channel in self.head96.values():
-        # superfluous to have append in two places but the type checker is very angry and does not
-        # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-        reversed_liquids: List[Tuple[Optional[Liquid], float]]
-        if container.tracker.is_disabled or not does_volume_tracking():
-          reversed_liquids = [(None, volume)]
-          all_liquids.append(reversed_liquids)
-        else:
-          reversed_liquids = container.tracker.remove_liquid(volume=volume)  # type: ignore
-          all_liquids.append(reversed_liquids)
+        liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
+        reversed_liquids = list(reversed(liquids))
+        all_liquids.append(reversed_liquids)
 
-        for liquid, vol in reversed(reversed_liquids):
-          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
+        if not container.tracker.is_disabled and does_volume_tracking():
+          for liquid, vol in reversed(reversed_liquids):
+            container.tracker.add_liquid(liquid=liquid, volume=vol)
 
       dispense = MultiHeadDispenseContainer(
         container=container,
@@ -1765,8 +1760,6 @@ class LiquidHandler(Resource, Machine):
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
-
-      containers = [resource]
     else:
       # ensure that wells are all in the same plate
       plate = containers[0].parent
@@ -1803,13 +1796,13 @@ class LiquidHandler(Resource, Machine):
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
     except Exception as error:
       for channel, container in zip(self.head96.values(), containers):
-        if does_volume_tracking() and not well.tracker.is_disabled:
+        if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
         channel.get_tip().tracker.rollback()
       raise error
     else:
       for channel, container in zip(self.head96.values(), containers):
-        if does_volume_tracking() and not well.tracker.is_disabled:
+        if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.commit()
         channel.get_tip().tracker.commit()
 
