@@ -1,0 +1,33 @@
+﻿pylabrobot.resources.Coordinate
+===============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoclass:: Coordinate
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Coordinate.x
+      ~Coordinate.y
+      ~Coordinate.z
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Coordinate.__init__
+      ~Coordinate.rotated
+      ~Coordinate.vector
+      ~Coordinate.zero
+   
+   

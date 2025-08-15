@@ -1,0 +1,67 @@
+﻿pylabrobot.liquid\_handling.backends.tecan.EVO\_backend.EVOBackend
+==================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.tecan.EVO_backend
+
+.. autoclass:: EVOBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EVOBackend.LIHA
+      ~EVOBackend.MCA
+      ~EVOBackend.PNP
+      ~EVOBackend.ROMA
+      ~EVOBackend.deck
+      ~EVOBackend.head
+      ~EVOBackend.head96
+      ~EVOBackend.liha_connected
+      ~EVOBackend.mca_connected
+      ~EVOBackend.num_channels
+      ~EVOBackend.pnp_connected
+      ~EVOBackend.roma_connected
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~EVOBackend.__init__
+      ~EVOBackend.aspirate
+      ~EVOBackend.aspirate96
+      ~EVOBackend.assigned_resource_callback
+      ~EVOBackend.can_pick_up_tip
+      ~EVOBackend.deserialize
+      ~EVOBackend.dispense
+      ~EVOBackend.dispense96
+      ~EVOBackend.drop_resource
+      ~EVOBackend.drop_tips
+      ~EVOBackend.drop_tips96
+      ~EVOBackend.get_all_instances
+      ~EVOBackend.move_channel_x
+      ~EVOBackend.move_channel_y
+      ~EVOBackend.move_channel_z
+      ~EVOBackend.move_picked_up_resource
+      ~EVOBackend.parse_response
+      ~EVOBackend.pick_up_resource
+      ~EVOBackend.pick_up_tips
+      ~EVOBackend.pick_up_tips96
+      ~EVOBackend.prepare_for_manual_channel_operation
+      ~EVOBackend.send_command
+      ~EVOBackend.serialize
+      ~EVOBackend.set_deck
+      ~EVOBackend.set_heads
+      ~EVOBackend.setup
+      ~EVOBackend.setup_arm
+      ~EVOBackend.stop
+      ~EVOBackend.unassigned_resource_callback
+   
+   

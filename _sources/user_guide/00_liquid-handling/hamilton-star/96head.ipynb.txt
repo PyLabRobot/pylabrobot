@@ -1,0 +1,254 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Using the 96 head\n",
+    "\n",
+    "![star supported](https://img.shields.io/badge/STAR-supported-blue)\n",
+    "![Vantage supported](https://img.shields.io/badge/Vantage-supported-blue)\n",
+    "![OT2 not supported](https://img.shields.io/badge/OT-not%20supported-red)\n",
+    "![EVO not implemented](https://img.shields.io/badge/EVO-not%20implemented-orange)\n",
+    "\n",
+    "Some liquid handling robots have a 96 head, which can be used to pipette 96 samples at once. This notebook shows how to use the 96 head in PyLabRobot."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Example: Hamilton STARLet\n",
+    "\n",
+    "Here, we'll use a Hamilton STARLet as an example. For other robots, simply change the deck layout, makign sure that you have at least a tip rack and a plate to use."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.liquid_handling import LiquidHandler, STAR\n",
+    "from pylabrobot.resources import STARLetDeck\n",
+    "from pylabrobot.resources import (\n",
+    "  TIP_CAR_480_A00,\n",
+    "  PLT_CAR_L5AC_A00,\n",
+    "  TIP_50ul,\n",
+    "  Cor_96_wellplate_360ul_Fb\n",
+    ")\n",
+    "\n",
+    "lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())\n",
+    "await lh.setup()\n",
+    "\n",
+    "# assign a tip rack\n",
+    "tip_carrier = TIP_CAR_480_A00(name=\"tip_carrier\")\n",
+    "tip_carrier[1] = tip_rack = TIP_50ul(name=\"tip_rack\")\n",
+    "lh.deck.assign_child_resource(tip_carrier, rails=1)\n",
+    "\n",
+    "# assign a plate\n",
+    "plt_carrier = PLT_CAR_L5AC_A00(name=\"plt_carrier\")\n",
+    "plt_carrier[0] = plate = Cor_96_wellplate_360ul_Fb(name=\"plt\")\n",
+    "lh.deck.assign_child_resource(plt_carrier, rails=7)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Liquid handling with the 96 head\n",
+    "\n",
+    "Liquid handling with the 96 head is very similar to what you would do with individual channels. The methods have `96` in their names, and they take `TipRack`s and `Plate`s as arguments, as opposed to `TipSpot`s and `Well`s in case of heads with individual pipetting channels."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.pick_up_tips96(tip_rack)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For aspirations and dispenses, a single volume is passed.\n",
+    "\n",
+    "```{note}\n",
+    "Only single-volume aspirations and dispenses are supported because all robots that are currently implemented only support single-volume operations. When we add support for robots that can do variable-volume, this will be updated.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.aspirate96(plate, volume=50)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.dispense96(plate, volume=50)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips96()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Quadrants\n",
+    "\n",
+    "96 heads can also be used to pipette quadrants of a 384 well plate. Here, we'll show how to do that.\n",
+    "\n",
+    "![quadrants](img/96head/quadrants.png)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import BioRad_384_DWP_50uL_Vb\n",
+    "plt_carrier[1] = plate384 = BioRad_384_DWP_50uL_Vb(name=\"plt384\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.pick_up_tips96(tip_rack)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.aspirate96(plate384.get_quadrant(1), volume=10)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.dispense96(plate384.get_quadrant(2), volume=10)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.aspirate96(plate384.get_quadrant(3), volume=10)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.dispense96(plate384.get_quadrant(4), volume=10)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips96()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Manually moving the 96 head around\n",
+    "\n",
+    "![star supported](https://img.shields.io/badge/STAR-supported-blue)\n",
+    "![Vantage supported](https://img.shields.io/badge/Vantage-not%20supported-red)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await wc.lh.backend.request_position_of_core_96_head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await wc.lh.backend.move_core_96_head_x(100)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await wc.lh.backend.move_core_96_head_y(120)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await wc.lh.backend.move_core_96_head_z(300)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.2"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
