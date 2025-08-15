@@ -41,7 +41,7 @@ class Container(Resource):
     )
     self._material_z_thickness = material_z_thickness
     self.max_volume = max_volume or (size_x * size_y * size_z)
-    self.tracker = VolumeTracker(max_volume=self.max_volume)
+    self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
 
