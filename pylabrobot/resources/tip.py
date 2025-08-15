@@ -25,7 +25,7 @@ class Tip:
   def __post_init__(self):
     # TODO: use the name
     # https://github.com/PyLabRobot/pylabrobot/issues/653
-    self.tracker = VolumeTracker(thing=f"tip_tracker", max_volume=self.maximal_volume)
+    self.tracker = VolumeTracker(thing="tip_tracker", max_volume=self.maximal_volume)
 
   def serialize(self) -> dict:
     return {
