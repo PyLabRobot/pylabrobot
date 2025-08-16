@@ -1729,7 +1729,7 @@ class LiquidHandler(Resource, Machine):
     containers: Sequence[Container]
     if isinstance(resource, Plate):
       if resource.has_lid():
-        raise ValueError("Aspirating from plate with lid")
+        raise ValueError("Dispensing to plate with lid")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
