@@ -658,7 +658,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs03479xd0yj3062yd0zj1874zd0th2800te2800gr1go1308ga0gc0",
@@ -688,7 +688,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1924zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs03479xd0yj1142yd0zj1924zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs10427xd0yj3286yd0zj2063zd0th2800te2800gr4go1308ga0gc0",
@@ -711,7 +711,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0003xs10427xd0yj3286yd0zj2063zd0gr4th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0003xs10427xd0yj3286yd0zj2063zd0gr4th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0004xs03479xd0yj1142yd0zj1924zd0th2800te2800gr1go1308ga0gc0",
@@ -727,7 +727,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs03479xd0yj2102yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
@@ -747,7 +747,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs00699xd0yj4567yd0zj2305zd0th2800te2800gr1go1308ga0gc0"
@@ -761,7 +761,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0003xs00699xd0yj4567yd0zj2305zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0003xs00699xd0yj4567yd0zj2305zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call(
           "C0PRid0004xs03479xd0yj1142yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
@@ -781,7 +781,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs00699xd0yj4567yd0zj2305zd0th2800te2800gr1go1308ga0gc0"
@@ -794,7 +794,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0003xs03479xd0yj2102yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0003xs03479xd0yj2102yd0zj1950zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call(
           "C0PRid0004xs00699xd0yj4567yd0zj2405zd0th2800te2800gr1go1308ga0gc0"
@@ -810,7 +810,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0005xs00699xd0yj4567yd0zj2405zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0005xs00699xd0yj4567yd0zj2405zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call(
           "C0PRid0006xs03479xd0yj1142yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
@@ -825,7 +825,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0007xs00699xd0yj4567yd0zj2305zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0007xs00699xd0yj4567yd0zj2305zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call(
           "C0PRid0008xs03479xd0yj2102yd0zj1950zd0th2800te2800gr1go1308ga0gc0"
@@ -848,7 +848,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1"
+          "C0PPid0001xs03479xd0yj1142yd0zj1874zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0"
         ),
         _any_write_and_read_command_call("C0PMid0002xs03979xd0yj3062yd0zj2405zd0gr1th2800ga1xe4 1"),
         _any_write_and_read_command_call("C0PMid0003xs02979xd0yj4022yd0zj2405zd0gr1th2800ga1xe4 1"),
@@ -966,13 +966,13 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs04829xd0yj2101yd0zj2143zd0th2800te2800gr1go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs04829xd0yj2101yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0003xs04829xd0yj2101yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2800te2800gr1go1308ga0gc0"
@@ -987,13 +987,13 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs02317xd0yj1644yd0zj1884zd0th2800te2800gr4go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2800te2800gw4go0881gb0818gt20ga0gc1",
+          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2800te2800gw4go0881gb0818gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2800te2800gr4go0881ga0gc0",
@@ -1008,13 +1008,13 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1141yd0zj2143zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs02317xd0yj1644yd0zj1884zd0th2800te2800gr2go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2800te2800gw4go0881gb0818gt20ga0gc1",
+          "C0PPid0003xs02317xd0yj1644yd0zj1884zd0gr1th2800te2800gw4go0881gb0818gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0004xs04829xd0yj1141yd0zj2143zd0th2800te2800gr2go0881ga0gc0",
@@ -1043,19 +1043,19 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0PPid0001xs04829xd0yj1142yd0zj2242zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc1",
+          "C0PPid0001xs04829xd0yj1142yd0zj2242zd0gr1th2800te2800gw4go1308gb1245gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0002xs02318xd0yj1644yd0zj1983zd0th2800te2800gr4go1308ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0003xs02318xd0yj1644yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc1",
+          "C0PPid0003xs02318xd0yj1644yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0004xs02315xd0yj3104yd0zj1983zd0th2800te2800gr3go0885ga0gc0",
         ),
         _any_write_and_read_command_call(
-          "C0PPid0005xs02315xd0yj3104yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc1",
+          "C0PPid0005xs02315xd0yj3104yd0zj1983zd0gr1th2800te2800gw4go0885gb0822gt20ga0gc0",
         ),
         _any_write_and_read_command_call(
           "C0PRid0006xs04829xd0yj1142yd0zj2242zd0th2800te2800gr4go0885ga0gc0",

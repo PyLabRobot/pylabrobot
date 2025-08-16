@@ -183,6 +183,22 @@ class TestItemizedResource(unittest.TestCase):
       ],
     )
 
+  def test_get_row_str(self):
+    self.assertEqual(
+      [w.name for w in self.plate.row("A")],
+      [w.name for w in self.plate.row(0)],
+    )
+    self.assertEqual(
+      [w.name for w in self.plate.row("d")],
+      [w.name for w in self.plate.row(3)],
+    )
+
+  def test_get_row_str_invalid(self):
+    with self.assertRaises(ValueError):
+      self.plate.row("Q")
+    with self.assertRaises(ValueError):
+      self.plate.row("AA")
+
   def test_get_column(self):
     self.assertEqual(
       [w.name for w in self.plate.column(0)],

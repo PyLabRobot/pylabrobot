@@ -366,7 +366,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   def __repr__(self) -> str:
     return (
-      f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+      f"{self.__class__.__name__}(name={self.name!r}, size_x={self._size_x}, "
       f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
     )
 
@@ -473,6 +473,21 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """Get all items in the given column."""
     return self[column * self.num_items_y : (column + 1) * self.num_items_y]
 
-  def row(self, row: int) -> List[T]:
-    """Get all items in the given row."""
+  def row(self, row: Union[int, str]) -> List[T]:
+    """Get all items in the given row.
+
+    Args:
+      row: The row index. Either an integer starting at ``0`` or a letter
+        ``"A"``-``"P"`` (case insensitive) corresponding to ``0``-``15``.
+
+    Raises:
+      ValueError: If ``row`` is a string outside ``"A"``-``"P"``.
+    """
+
+    if isinstance(row, str):
+      letter = row.upper()
+      if letter not in LETTERS[:16]:
+        raise ValueError("Row must be between 'A' and 'P'.")
+      row = LETTERS.index(letter)
+
     return self[row :: self.num_items_y]

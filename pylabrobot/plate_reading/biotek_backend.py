@@ -199,6 +199,9 @@ class Cytation5Backend(ImageReaderBackend):
           logger.info(
             "[cytation5] using first camera with serial number %s", info["DeviceSerialNumber"]
           )
+        else:
+          logger.error("[cytation5] no cameras found")
+          self.cam = None
       cam_list.Clear()
 
       if self.cam is None:
@@ -207,7 +210,17 @@ class Cytation5Backend(ImageReaderBackend):
         )
 
       # -- Initialize camera --
-      self.cam.Init()
+      for _ in range(10):
+        try:
+          self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
+          break
+        except:  # noqa
+          pass
+      else:
+        raise RuntimeError(
+          "Failed to initialize camera. Make sure the camera is connected and the "
+          "Spinnaker SDK is installed correctly."
+        )
       nodemap = self.cam.GetNodeMap()
 
       # -- Configure trigger to be software --
@@ -240,6 +253,9 @@ class Cytation5Backend(ImageReaderBackend):
       if not PySpin.IsReadable(ptr_trigger_on):
         raise RuntimeError("unable to query TriggerMode On")
       ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
+
+      # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
+      await asyncio.sleep(1)
 
       # -- Load filter information --
       if self._filters is None:
@@ -602,6 +618,8 @@ class Cytation5Backend(ImageReaderBackend):
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
+    await self.set_plate(plate)
+
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
     checksum = str(sum(cmd.encode()) % 100).zfill(2)
@@ -619,6 +637,8 @@ class Cytation5Backend(ImageReaderBackend):
   async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
+
+    await self.set_plate(plate)
 
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
@@ -646,6 +666,8 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Excitation wavelength must be between 250 and 700")
     if not 250 <= emission_wavelength <= 700:
       raise ValueError("Emission wavelength must be between 250 and 700")
+
+    await self.set_plate(plate)
 
     cmd = f"{614220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
@@ -1121,31 +1143,33 @@ class Cytation5Backend(ImageReaderBackend):
 
     assert self.imaging_config is not None, "Need to set imaging_config first"
 
-    self.cam.BeginAcquisition()
-    try:
-      num_tries = 0
-      while num_tries < self.imaging_config.max_image_read_attempts:
-        node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
-        if not PySpin.IsWritable(node_softwaretrigger_cmd):
-          raise RuntimeError("unable to execute software trigger")
-        node_softwaretrigger_cmd.Execute()
+    num_tries = 0
+    while num_tries < self.imaging_config.max_image_read_attempts:
+      node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
+      if not PySpin.IsWritable(node_softwaretrigger_cmd):
+        raise RuntimeError("unable to execute software trigger")
+      node_softwaretrigger_cmd.Execute()
 
-        try:
-          image_result = self.cam.GetNextImage(1000)
-          if not image_result.IsIncomplete():
-            processor = PySpin.ImageProcessor()
-            processor.SetColorProcessing(color_processing_algorithm)
-            image_converted = processor.Convert(image_result, pixel_format)
-            image_result.Release()
-            return image_converted.GetNDArray().tolist()  # type: ignore
-        except SpinnakerException as e:
-          # the image is not ready yet, try again
-          logger.debug("Failed to get image: %s", e)
-        num_tries += 1
-        await asyncio.sleep(0.3)
-      raise TimeoutError("max_image_read_attempts reached")
-    finally:
-      self.cam.EndAcquisition()
+      try:
+        t0 = time.time()
+        image_result = self.cam.GetNextImage(1000)
+        t1 = time.time()
+        logger.debug("[cytation5] GetNextImage took %.2f seconds", t1 - t0)
+        if not image_result.IsIncomplete():
+          t0 = time.time()
+          processor = PySpin.ImageProcessor()
+          processor.SetColorProcessing(color_processing_algorithm)
+          image_converted = processor.Convert(image_result, pixel_format)
+          image_result.Release()
+          logger.debug("[cytation5] acquired image in %d tries", num_tries + 1)
+          logger.debug("[cytation5] Convert took %.2f seconds for BS", time.time() - t0)
+          return image_converted.GetNDArray().tolist()  # type: ignore
+      except SpinnakerException as e:
+        # the image is not ready yet, try again
+        logger.debug("Failed to get image: %s", e)
+      num_tries += 1
+      await asyncio.sleep(0.3)
+    raise TimeoutError("max_image_read_attempts reached")
 
   async def capture(
     self,
@@ -1186,58 +1210,81 @@ class Cytation5Backend(ImageReaderBackend):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
-    await self.set_objective(objective)
-    await self.set_imaging_mode(mode, led_intensity=led_intensity)
-    await self.select(row, column)
-    await self.set_exposure(exposure_time)
-    await self.set_gain(gain)
-    await self.set_focus(focal_height)
+    self.cam.BeginAcquisition()
+    try:
+      t0 = time.time()
+      await self.set_objective(objective)
+      t_objective = time.time()
+      logger.debug("[cytation5] set objective in %.2f seconds", t_objective - t0)
+      await self.set_imaging_mode(mode, led_intensity=led_intensity)
+      t_imaging_mode = time.time()
+      logger.debug("[cytation5] set imaging mode in %.2f seconds", t_imaging_mode - t_objective)
+      await self.select(row, column)
+      t_select = time.time()
+      logger.debug("[cytation5] selected well in %.2f seconds", t_select - t_imaging_mode)
+      await self.set_exposure(exposure_time)
+      t_exposure = time.time()
+      logger.debug("[cytation5] set exposure in %.2f seconds", t_exposure - t_select)
+      await self.set_gain(gain)
+      t_gain = time.time()
+      logger.debug("[cytation5] set gain in %.2f seconds", t_gain - t_exposure)
+      await self.set_focus(focal_height)
+      t_focus = time.time()
+      logger.debug("[cytation5] set focus in %.2f seconds", t_focus - t_gain)
 
-    def image_size(magnification: float) -> Tuple[float, float]:
-      # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
-      # simply take the wide fov option.
-      # um to mm (plr unit)
-      if magnification == 4:
-        return (3474 / 1000, 3474 / 1000)
-      if magnification == 20:
-        return (694 / 1000, 694 / 1000)
-      if magnification == 40:
-        return (347 / 1000, 347 / 1000)
-      raise ValueError(f"Don't know image size for magnification {magnification}")
+      def image_size(magnification: float) -> Tuple[float, float]:
+        # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
+        # simply take the wide fov option.
+        # um to mm (plr unit)
+        if magnification == 4:
+          return (3474 / 1000, 3474 / 1000)
+        if magnification == 20:
+          return (694 / 1000, 694 / 1000)
+        if magnification == 40:
+          return (347 / 1000, 347 / 1000)
+        raise ValueError(f"Don't know image size for magnification {magnification}")
 
-    if self._objective is None:
-      raise RuntimeError("Objective not set. Run set_objective() first.")
-    magnification = self._objective.magnification
-    img_width, img_height = image_size(magnification)
+      if self._objective is None:
+        raise RuntimeError("Objective not set. Run set_objective() first.")
+      magnification = self._objective.magnification
+      img_width, img_height = image_size(magnification)
 
-    first_well = plate.get_item(0)
-    well_size_x, well_size_y = (first_well.get_size_x(), first_well.get_size_y())
-    if coverage == "full":
-      coverage = (
-        math.ceil(well_size_x / image_size(magnification)[0]),
-        math.ceil(well_size_y / image_size(magnification)[1]),
-      )
-    rows, cols = coverage
-
-    # Get positions, centered around enter_position
-    if center_position is None:
-      center_position = (0, 0)
-    # Going in a snake pattern is not faster (strangely)
-    positions = [
-      (x * img_width + center_position[0], -y * img_height + center_position[1])
-      for y in [i - (rows - 1) / 2 for i in range(rows)]
-      for x in [i - (cols - 1) / 2 for i in range(cols)]
-    ]
-
-    images: List[Image] = []
-    for x_pos, y_pos in positions:
-      await self.set_position(x=x_pos, y=y_pos)
-      await asyncio.sleep(0.1)
-      images.append(
-        await self._acquire_image(
-          color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
+      first_well = plate.get_item(0)
+      well_size_x, well_size_y = (first_well.get_size_x(), first_well.get_size_y())
+      if coverage == "full":
+        coverage = (
+          math.ceil(well_size_x / image_size(magnification)[0]),
+          math.ceil(well_size_y / image_size(magnification)[1]),
         )
-      )
+      rows, cols = coverage
+
+      # Get positions, centered around enter_position
+      if center_position is None:
+        center_position = (0, 0)
+      # Going in a snake pattern is not faster (strangely)
+      positions = [
+        (x * img_width + center_position[0], -y * img_height + center_position[1])
+        for y in [i - (rows - 1) / 2 for i in range(rows)]
+        for x in [i - (cols - 1) / 2 for i in range(cols)]
+      ]
+
+      images: List[Image] = []
+      for x_pos, y_pos in positions:
+        await self.set_position(x=x_pos, y=y_pos)
+        await asyncio.sleep(0.1)
+        t0 = time.time()
+        images.append(
+          await self._acquire_image(
+            color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
+          )
+        )
+        t1 = time.time()
+        logger.debug(
+          "[cytation5] acquired image in %.2f seconds at position",
+          t1 - t0,
+        )
+    finally:
+      self.cam.EndAcquisition()
 
     exposure_ms = float(self.cam.ExposureTime.GetValue()) / 1000
     assert self._focal_height is not None, "Focal height not set. Run set_focus() first."

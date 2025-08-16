@@ -19,6 +19,7 @@ _getting-started/rpi
 :hidden:
 
 machines
+definitions
 00_liquid-handling/_liquid-handling
 01_material-handling/_material-handling
 02_analytical/_analytical

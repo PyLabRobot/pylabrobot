@@ -18,6 +18,10 @@ class ShakerChatterboxBackend(ShakerBackend):
   async def stop_shaking(self):
     print("Stopping shaking")
 
+  @property
+  def supports_locking(self) -> bool:
+    return True
+
   async def lock_plate(self):
     print("Locking plate")
 

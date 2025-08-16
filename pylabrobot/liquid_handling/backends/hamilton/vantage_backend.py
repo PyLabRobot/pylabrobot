@@ -30,6 +30,7 @@ from pylabrobot.liquid_handling.standard import (
 from pylabrobot.resources import (
   Coordinate,
   Liquid,
+  Plate,
   Resource,
   Tip,
   TipRack,
@@ -1046,16 +1047,26 @@ class VantageBackend(HamiltonLiquidHandler):
     # assert self.core96_head_installed, "96 head must be installed"
 
     if isinstance(aspiration, MultiHeadAspirationPlate):
-      top_left_well = aspiration.wells[0]
+      plate = aspiration.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 == 0:
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
+        ref_well.get_absolute_location()
+        + ref_well.center()
         + aspiration.offset
-        + Coordinate(z=top_left_well.material_z_thickness)
+        + Coordinate(z=ref_well.material_z_thickness)
       )
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
+      lld_search_height = well_bottoms + ref_well.get_absolute_size_z() + 2.7 - 1
     else:
       x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
       y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
@@ -1195,16 +1206,26 @@ class VantageBackend(HamiltonLiquidHandler):
     """
 
     if isinstance(dispense, MultiHeadDispensePlate):
-      top_left_well = dispense.wells[0]
+      plate = dispense.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 == 0:
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
+        ref_well.get_absolute_location()
+        + ref_well.center()
         + dispense.offset
-        + Coordinate(z=top_left_well.material_z_thickness)
+        + Coordinate(z=ref_well.material_z_thickness)
       )
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
+      lld_search_height = well_bottoms + ref_well.get_absolute_size_z() + 2.7 - 1
     else:
       x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
       y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them

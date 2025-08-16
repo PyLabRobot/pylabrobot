@@ -1574,10 +1574,19 @@ class LiquidHandler(Resource, Machine):
     flow_rate = float(flow_rate) if flow_rate is not None else None
     blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
+    # Convert Plate to either one Container (single well) or a list of Wells
     containers: Sequence[Container]
-    if isinstance(resource, Container):
+    if isinstance(resource, Plate):
+      if resource.has_lid():
+        raise ValueError("Aspirating from plate with lid")
+      containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
+    elif isinstance(resource, Container):
+      containers = [resource]
+
+    if len(containers) == 1:  # single container
+      container = containers[0]
       if (
-        resource.get_absolute_size_x() < 108.0 or resource.get_absolute_size_y() < 70.0
+        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
       ):  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
 
@@ -1585,18 +1594,18 @@ class LiquidHandler(Resource, Machine):
         # superfluous to have append in two places but the type checker is very angry and does not
         # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
         liquids: List[Tuple[Optional[Liquid], float]]
-        if resource.tracker.is_disabled or not does_volume_tracking():
+        if container.tracker.is_disabled or not does_volume_tracking():
           liquids = [(None, volume)]
           all_liquids.append(liquids)
         else:
-          liquids = resource.tracker.remove_liquid(volume=volume)  # type: ignore
+          liquids = container.tracker.remove_liquid(volume=volume)  # type: ignore
           all_liquids.append(liquids)
 
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
       aspiration = MultiHeadAspirationContainer(
-        container=resource,
+        container=container,
         volume=volume,
         offset=offset,
         flow_rate=flow_rate,
@@ -1605,24 +1614,15 @@ class LiquidHandler(Resource, Machine):
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
-
-      containers = [resource]
-    else:
-      if isinstance(resource, Plate):
-        if resource.has_lid():
-          raise ValueError("Aspirating from plate with lid")
-        containers = resource.get_all_items()
-      else:
-        containers = resource
-
-        # ensure that wells are all in the same plate
-        plate = containers[0].parent
-        for well in containers:
-          if well.parent != plate:
-            raise ValueError("All wells must be in the same plate")
+    else:  # multiple containers
+      # ensure that wells are all in the same plate
+      plate = containers[0].parent
+      for well in containers:
+        if well.parent != plate:
+          raise ValueError("All wells must be in the same plate")
 
       if not len(containers) == 96:
-        raise ValueError(f"aspirate96 expects 96 wells, got {len(containers)}")
+        raise ValueError(f"aspirate96 expects 96 containers when a list, got {len(containers)}")
 
       for well, channel in zip(containers, self.head96.values()):
         # superfluous to have append in two places but the type checker is very angry and does not
@@ -1725,29 +1725,33 @@ class LiquidHandler(Resource, Machine):
     flow_rate = float(flow_rate) if flow_rate is not None else None
     blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
+    # Convert Plate to either one Container (single well) or a list of Wells
     containers: Sequence[Container]
-    if isinstance(resource, Container):
+    if isinstance(resource, Plate):
+      if resource.has_lid():
+        raise ValueError("Dispensing to plate with lid")
+      containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
+    elif isinstance(resource, Container):
+      containers = [resource]
+
+    if len(containers) == 1:  # single container
+      container = containers[0]
       if (
-        resource.get_absolute_size_x() < 108.0 or resource.get_absolute_size_y() < 70.0
+        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
       ):  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
 
       for channel in self.head96.values():
-        # superfluous to have append in two places but the type checker is very angry and does not
-        # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-        reversed_liquids: List[Tuple[Optional[Liquid], float]]
-        if resource.tracker.is_disabled or not does_volume_tracking():
-          reversed_liquids = [(None, volume)]
-          all_liquids.append(reversed_liquids)
-        else:
-          reversed_liquids = resource.tracker.remove_liquid(volume=volume)  # type: ignore
-          all_liquids.append(reversed_liquids)
+        liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
+        reversed_liquids = list(reversed(liquids))
+        all_liquids.append(reversed_liquids)
 
-        for liquid, vol in reversed(reversed_liquids):
-          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
+        if not container.tracker.is_disabled and does_volume_tracking():
+          for liquid, vol in reversed(reversed_liquids):
+            container.tracker.add_liquid(liquid=liquid, volume=vol)
 
       dispense = MultiHeadDispenseContainer(
-        container=resource,
+        container=container,
         volume=volume,
         offset=offset,
         flow_rate=flow_rate,
@@ -1756,21 +1760,12 @@ class LiquidHandler(Resource, Machine):
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
-
-      containers = [resource]
     else:
-      if isinstance(resource, Plate):
-        if resource.has_lid():
-          raise ValueError("Dispensing to plate with lid")
-        containers = resource.get_all_items()
-      else:  # List[Well]
-        containers = resource
-
-        # ensure that wells are all in the same plate
-        plate = containers[0].parent
-        for well in containers:
-          if well.parent != plate:
-            raise ValueError("All wells must be in the same plate")
+      # ensure that wells are all in the same plate
+      plate = containers[0].parent
+      for well in containers:
+        if well.parent != plate:
+          raise ValueError("All wells must be in the same plate")
 
       if not len(containers) == 96:
         raise ValueError(f"dispense96 expects 96 wells, got {len(containers)}")
@@ -1801,13 +1796,13 @@ class LiquidHandler(Resource, Machine):
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
     except Exception as error:
       for channel, container in zip(self.head96.values(), containers):
-        if does_volume_tracking() and not well.tracker.is_disabled:
+        if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
         channel.get_tip().tracker.rollback()
       raise error
     else:
       for channel, container in zip(self.head96.values(), containers):
-        if does_volume_tracking() and not well.tracker.is_disabled:
+        if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.commit()
         channel.get_tip().tracker.commit()
 
@@ -2050,6 +2045,8 @@ class LiquidHandler(Resource, Machine):
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
+    self._resource_pickup = None
+
     # we rotate the resource on top of its original rotation. So in order to set the new rotation,
     # we have to subtract its current rotation.
     resource.rotate(z=resource_rotation_wrt_destination - resource.rotation.z)
@@ -2081,8 +2078,6 @@ class LiquidHandler(Resource, Machine):
       pass  # don't assign to trash, resource will simply be unassigned
     else:
       destination.assign_child_resource(resource, location=to_location)
-
-    self._resource_pickup = None
 
     return result
 
