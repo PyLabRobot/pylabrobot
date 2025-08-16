@@ -898,9 +898,15 @@ class Cytation5Backend(ImageReaderBackend):
           f"cv2 needs to be installed for auto focus. Import error: {_CV2_IMPORT_ERROR}"
         )
 
+      # cut out 25% on each side
+      np_image = np.array(image, dtype=np.float64)
+      height, width = np_image.shape[:2]
+      crop_height = height // 4
+      crop_width = width // 4
+      np_image = np_image[crop_height : height - crop_height, crop_width : width - crop_width]
+
       # NVMG: Normalized Variance of the Gradient Magnitude
       # Chat invented this i think
-      np_image = np.array(image, dtype=np.float64)
       sobel_x = cv2.Sobel(np_image, cv2.CV_64F, 1, 0, ksize=3)
       sobel_y = cv2.Sobel(np_image, cv2.CV_64F, 0, 1, ksize=3)
       gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
