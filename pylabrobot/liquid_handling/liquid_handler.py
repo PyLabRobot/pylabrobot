@@ -1761,7 +1761,7 @@ class LiquidHandler(Resource, Machine):
     else:
       if isinstance(resource, Plate):
         if resource.has_lid():
-          raise ValueError("Aspirating from plate with lid")
+          raise ValueError("Dispensing to plate with lid")
         containers = resource.get_all_items()
       else:  # List[Well]
         containers = resource
