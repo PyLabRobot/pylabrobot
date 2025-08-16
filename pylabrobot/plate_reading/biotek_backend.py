@@ -912,17 +912,8 @@ class Cytation5Backend(ImageReaderBackend):
 
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
-      result = await self.capture(  # TODO: _acquire_image
-        plate=plate,
-        row=row,
-        column=column,
-        mode=imaging_mode,
-        objective=objective,
-        focal_height=focus_value,
-        exposure_time=exposure,
-        gain=gain,
-      )
-      image = result.images[0]
+      await self.set_focus(focus_value)
+      image = await self._acquire_image()
 
       if not CV2_AVAILABLE:
         raise RuntimeError(
