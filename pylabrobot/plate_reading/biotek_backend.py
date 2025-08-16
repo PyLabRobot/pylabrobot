@@ -769,7 +769,14 @@ class Cytation5Backend(ImageReaderBackend):
     for feature in features:
       node_feature = PySpin.CValuePtr(feature)
       node_feature_name = node_feature.GetName()
-      node_feature_value = node_feature.ToString() if PySpin.IsReadable(node_feature) else None
+      try:
+        node_feature_value = node_feature.ToString() if PySpin.IsReadable(node_feature) else None
+      except Exception as e:
+        raise RuntimeError(
+          f"Got an error while reading feature {node_feature_name}. "
+          "Is the cytation in use by another notebook? "
+          f"Error: {str(e)}"
+        ) from e
       device_info[node_feature_name] = node_feature_value
 
     return device_info
