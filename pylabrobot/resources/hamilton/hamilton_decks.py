@@ -149,8 +149,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
 
-    if rails is not None and not 0 <= rails <= self.num_rails:
-      raise ValueError(f"Rails must be between 0 and {self.num_rails}.")
+    if rails is not None and not -4 <= rails <= self.num_rails:
+      raise ValueError(f"Rails must be between -4 and {self.num_rails}.")
 
     # Check if resource exists.
     if self.has_resource(resource.name):
