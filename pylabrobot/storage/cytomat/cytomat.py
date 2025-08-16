@@ -271,7 +271,7 @@ class CytomatBackend(IncubatorBackend):
     self, site: PlateHolder
   ) -> OverviewRegisterState:
     """Open lift door, retrieve from transfer, close door, place at storage"""
-    return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
+    return await self.send_action("mv", "ts", self._site_to_firmware_string(site), timeout=120)
 
   async def action_storage_to_transfer(  # used by retrieve_plate
     self, site: PlateHolder
