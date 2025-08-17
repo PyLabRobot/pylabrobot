@@ -471,7 +471,7 @@ class ElementStillHoldingError(STARModuleError):
   """Element still holding
 
   Possible cause(s):
-    "Get command" is sent twice or element is not droped expected element is missing (lost)
+    "Get command" is sent twice or element is not dropped expected element is missing (lost)
 
   Code: 22
   """
@@ -895,14 +895,14 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       62: "Z-drive movement error",
       63: "Z-drive limit stop not found",
       70: "No liquid level found (possibly because no liquid was present)",
-      71: "Not enough liquid present (Immersion depth or surface following position possiby"
+      71: "Not enough liquid present (Immersion depth or surface following position possibly"
       "below minimal access range)",
       72: "Auto calibration at pressure (Sensor not possible)",
       73: "No liquid level found with dual LLD",
       74: "Liquid at a not allowed position detected",
       75: "No tip picked up, possibly because no was present at specified position",
       76: "Tip already picked up",
-      77: "Tip not droped",
+      77: "Tip not dropped",
       78: "Wrong tip picked up",
       80: "Liquid not correctly aspirated",
       81: "Clot detected",
@@ -912,9 +912,9 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       85: "No communication to digital potentiometer",
       86: "ADC algorithm error",
       87: "2nd phase of liquid nt found",
-      88: "Not enough liquid present (Immersion depth or surface following position possiby"
+      88: "Not enough liquid present (Immersion depth or surface following position possibly"
       "below minimal access range)",
-      90: "Limit curve not resetable",
+      90: "Limit curve not resettable",
       91: "Limit curve not programmable",
       92: "Limit curve not found",
       93: "Limit curve data incorrect",
@@ -1176,7 +1176,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   def set_minimum_traversal_height(self, traversal_height: float):
     raise NotImplementedError(
-      "set_minimum_traversal_height is depricated. use set_minimum_channel_traversal_height or "
+      "set_minimum_traversal_height is deprecated. use set_minimum_channel_traversal_height or "
       "set_minimum_iswap_traversal_height instead."
     )
 
@@ -2737,7 +2737,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_index: int = 4,
     z_speed: float = 50.0,
   ):
-    """After a ressource is picked up, move it to a new location but don't release it yet.
+    """After a resource is picked up, move it to a new location but don't release it yet.
     Low level component of :meth:`move_resource`
 
     Args:
@@ -6750,7 +6750,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     wrist_protection: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 5,
   ):
     """
-    Rotate the iswap to a predifined position.
+    Rotate the iswap to a predefined position.
     Velocity units are "incr/sec"
     Acceleration units are "1_000 incr/sec**2"
     For a list of the possible positions see the pylabrobot documentation on the R0 module.
@@ -6868,7 +6868,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ga=collision_control_level,
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
     )
-    # Once the command has completed successfuly, set _iswap_parked to false
+    # Once the command has completed successfully, set _iswap_parked to false
     self._iswap_parked = False
     return command_output
 
@@ -7520,7 +7520,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       make_space: If True, the channels will be moved to ensure they are at least 9mm apart and in
         descending order, after the channels in `ys` have been put at the desired locations. Note
         that an error may still be raised, if there is insufficient space to move the channels or
-        if the requested locations are not valid. Set this to False if you wan to aviod inadvertently
+        if the requested locations are not valid. Set this to False if you wan to avoid inadvertently
         moving other channels.
     """
 
@@ -7797,7 +7797,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
 class UnSafe:
   """
-  Namespace for actions that are unsafe to perfom.
+  Namespace for actions that are unsafe to perform.
   For example, actions that send the iSWAP outside of the Hamilton Deck
   """
 

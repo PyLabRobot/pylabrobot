@@ -22,7 +22,7 @@ await star.iswap_open_gripper()
 
 ## Rotations
 
-You can rotate the iSWAP to 12 predifined positions using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.iswap_rotate`.
+You can rotate the iSWAP to 12 predefined positions using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.iswap_rotate`.
 
 the positions and their corresponding integer specifications are shown visually here.
 

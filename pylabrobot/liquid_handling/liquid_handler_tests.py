@@ -1091,7 +1091,7 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
     with self.assertRaises(ChannelizedError):
       await self.lh.dispense([well], vols=[60])
-    # test volume doens't change on failed dispense
+    # test volume doesn't change on failed dispense
     assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
 
   async def test_96_head_volume_tracking_multi_container(self):
