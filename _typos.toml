@@ -22,4 +22,5 @@ COMMAN = "COMMAN"
 
 [files]
 extend-exclude = [
-    "*.ipynb"]
+    "*.ipynb"
+]
