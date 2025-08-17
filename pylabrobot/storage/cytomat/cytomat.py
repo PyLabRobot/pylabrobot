@@ -368,7 +368,7 @@ class CytomatBackend(IncubatorBackend):
   ) -> List[str]:
     shakers = shakers or [1, 2]
     assert all(shaker in [1, 2] for shaker in shakers), "Shaker index must be 1 or 2"
-    return [await self.send_command("se", f"pb 2{idx-1}", f"{frequency:04}") for idx in shakers]
+    return [await self.send_command("se", f"pb 2{idx - 1}", f"{frequency:04}") for idx in shakers]
 
   async def get_incubation_query(
     self, query: Literal["ic", "ih", "io", "it"]

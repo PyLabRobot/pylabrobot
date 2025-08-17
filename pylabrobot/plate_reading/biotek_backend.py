@@ -206,7 +206,7 @@ class Cytation5Backend(ImageReaderBackend):
 
       if self.cam is None:
         raise RuntimeError(
-          "No camera found. Make sure the camera is connected and the serial " "number is correct."
+          "No camera found. Make sure the camera is connected and the serial number is correct."
         )
 
       # -- Initialize camera --
@@ -229,7 +229,7 @@ class Cytation5Backend(ImageReaderBackend):
       ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
       if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
         raise RuntimeError(
-          "unable to configure TriggerSelector " "(can't read or write TriggerSelector)"
+          "unable to configure TriggerSelector (can't read or write TriggerSelector)"
         )
       ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
       if not PySpin.IsReadable(ptr_frame_start):
@@ -600,13 +600,13 @@ class Cytation5Backend(ImageReaderBackend):
     cmd = (
       f"{rows:02}"
       f"{columns:02}"
-      f"{int(top_left_well_center_y*100):05}"
-      f"{int(bottom_right_well_center_y*100):05}"
-      f"{int(top_left_well_center.x*100):05}"
-      f"{int(bottom_right_well_center.x*100):05}"
-      f"{int(plate_size_y*100):05}"
-      f"{int(plate_size_x*100):05}"
-      f"{int(plate_size_z*100):04}"
+      f"{int(top_left_well_center_y * 100):05}"
+      f"{int(bottom_right_well_center_y * 100):05}"
+      f"{int(top_left_well_center.x * 100):05}"
+      f"{int(bottom_right_well_center.x * 100):05}"
+      f"{int(plate_size_y * 100):05}"
+      f"{int(plate_size_x * 100):05}"
+      f"{int(plate_size_z * 100):04}"
       "\x03"
     )
 
@@ -640,7 +640,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     await self.set_plate(plate)
 
-    cmd = f"3{14220 + int(1000*focal_height)}\x03"
+    cmd = f"3{14220 + int(1000 * focal_height)}\x03"
     await self.send_command("t", cmd)
 
     cmd = "008401010108120001200100001100100000123000500200200-001000-00300000000000000000001351092"
@@ -669,7 +669,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     await self.set_plate(plate)
 
-    cmd = f"{614220 + int(1000*focal_height)}\x03"
+    cmd = f"{614220 + int(1000 * focal_height)}\x03"
     await self.send_command("t", cmd)
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)

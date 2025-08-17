@@ -1,4 +1,4 @@
-""" Corning-Falcon Tubes"""
+"""Corning-Falcon Tubes"""
 
 from pylabrobot.resources.tube import Tube
 
@@ -84,17 +84,17 @@ def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:
 
 def falcon_tube_50mL(name: str) -> Tube:
   raise NotImplementedError(
-    "falcon_tube_50mL definition is deprecated. Use " "Cor_Falcon_tube_50mL instead."
+    "falcon_tube_50mL definition is deprecated. Use Cor_Falcon_tube_50mL instead."
   )
 
 
 def falcon_tube_15mL(name: str) -> Tube:
   raise NotImplementedError(
-    "falcon_tube_15mL definition is deprecated. Use " "Cor_Falcon_tube_15mL_Vb instead."
+    "falcon_tube_15mL definition is deprecated. Use Cor_Falcon_tube_15mL_Vb instead."
   )
 
 
 def Falcon_tube_14mL_Rb(name: str) -> Tube:
   raise NotImplementedError(
-    "Falcon_tube_14mL_Rb definition is deprecated. Use " "Cor_Falcon_tube_14mL_Rb instead."
+    "Falcon_tube_14mL_Rb definition is deprecated. Use Cor_Falcon_tube_14mL_Rb instead."
   )

@@ -110,7 +110,7 @@ class CLARIOStarBackend(PlateReaderBackend):
 
       if len(command_status) != 24:
         logger.warning(
-          "unexpected response %s. I think a command status response is always 24 " "bytes",
+          "unexpected response %s. I think a command status response is always 24 bytes",
           command_status,
         )
         continue
@@ -123,7 +123,7 @@ class CLARIOStarBackend(PlateReaderBackend):
 
       if command_status[2] != 0x18 or command_status[3] != 0x0C or command_status[4] != 0x01:
         logger.warning(
-          "unexpected response %s. I think 18 0c 01 indicates a command status " "response",
+          "unexpected response %s. I think 18 0c 01 indicates a command status response",
           command_status,
         )
 
