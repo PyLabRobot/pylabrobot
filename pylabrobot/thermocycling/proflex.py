@@ -777,7 +777,7 @@ class ProflexBackend(ThermocyclerBackend):
       return ProflexBackend.RunProgress(
         running=False,
         stage="completed",
-        elapsed_time=self.get_elapsed_run_time_from_log(),
+        elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
         remaining_time=0,
       )
 
@@ -787,7 +787,7 @@ class ProflexBackend(ThermocyclerBackend):
       return ProflexBackend.RunProgress(
         running=False,
         stage="completed",
-        elapsed_time=self.get_elapsed_run_time_from_log(),
+        elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
         remaining_time=0,
       )
 
@@ -796,7 +796,7 @@ class ProflexBackend(ThermocyclerBackend):
       return ProflexBackend.RunProgress(
         running=True,
         stage="POSTRun",
-        elapsed_time=self.get_elapsed_run_time_from_log(),
+        elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
         remaining_time=0,
       )
 
@@ -856,11 +856,11 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def deactivate_lid(self, block_id: Optional[int] = None):
     assert block_id is not None, "block_id must be specified"
-    return await self.set_cover_idle_temp(control_enabled=False, block_id=block_id)
+    return await self.set_cover_idle_temp(temp=105, control_enabled=False, block_id=block_id)
 
   async def deactivate_block(self, block_id: Optional[int] = None):
     assert block_id is not None, "block_id must be specified"
-    return await self.set_block_idle_temp(control_enabled=False, block_id=block_id)
+    return await self.set_block_idle_temp(temp=25, control_enabled=False, block_id=block_id)
 
   async def get_lid_current_temperature(self, block_id: Optional[int] = None) -> List[float]:
     assert block_id is not None, "block_id must be specified"
