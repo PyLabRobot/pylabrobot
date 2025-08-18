@@ -4,10 +4,10 @@ import hmac
 import logging
 import re
 import xml.etree.ElementTree as ET
+from base64 import b64decode
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
-from base64 import b64decode
 
 from pylabrobot.io import Socket
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
@@ -216,8 +216,6 @@ class ProflexBackend(ThermocyclerBackend):
     self.available_blocks: List[int] = []
     self.logger = logging.getLogger("pylabrobot.thermocycling.proflex")
     self.current_runs: Dict[int, str] = {}
-    self.prot_time_elapsed = 0
-    self.prot_time_remaining = 0
 
   @property
   def num_blocks(self) -> int:
@@ -411,7 +409,7 @@ class ProflexBackend(ThermocyclerBackend):
     return run_name != "-"
 
   async def _load_available_blocks(self) -> None:
-    await self._scpi_authenticate() # TODO: again?
+    await self._scpi_authenticate()  # TODO: again?
     await self._load_num_blocks_and_type()
     assert self._num_blocks is not None, "Number of blocks not set"
     for block_id in range(self._num_blocks):
@@ -441,19 +439,19 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def get_log_by_runname(self, run_name: str) -> str:
     res = await self.send_command(
-      {"cmd": "FILe:READ?",  "args": [f"RUNS:{run_name}/{run_name}.log"]},
+      {"cmd": "FILe:READ?", "args": [f"RUNS:{run_name}/{run_name}.log"]},
       response_timeout=5,
       read_once=False,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to get log")
-    res.replace('\n', '')
+    res.replace("\n", "")
     # Extract the base64 encoded log content between <quote> tags
-    encoded_log_match= re.search(r"<quote>(.*?)</quote>", res, re.DOTALL)
+    encoded_log_match = re.search(r"<quote>(.*?)</quote>", res, re.DOTALL)
     if not encoded_log_match:
       raise ValueError("Failed to parse log content")
     encoded_log = encoded_log_match.group(1).strip()
-    log=b64decode(encoded_log).decode('utf-8')
+    log = b64decode(encoded_log).decode("utf-8")
     return log
 
   async def get_elapsed_run_time_from_log(self, run_name: str) -> int:
@@ -515,9 +513,7 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to ramp block temperature")
 
-  async def block_ramp_single_temp(
-    self, target_temp: float, block_id: int, rate: float = 100
-  ):
+  async def block_ramp_single_temp(self, target_temp: float, block_id: int, rate: float = 100):
     """Set a single temperature for the block with a ramp rate.
 
     It might be better to use `set_block_temperature` to set individual temperatures for each zone.
@@ -626,7 +622,7 @@ class ProflexBackend(ThermocyclerBackend):
       raise ValueError("Failed to get run title")
     return cast(str, self._parse_scpi_response(res)["args"][0])
 
-  async def get_run_progress(self, block_id: int):
+  async def _get_run_progress(self, block_id: int):
     res = await self.send_command({"cmd": f"TBC{block_id + 1}:RUNProgress?"})
     parsed_res = self._parse_scpi_response(res)
     if parsed_res["status"] != "OK":
@@ -773,28 +769,41 @@ class ProflexBackend(ThermocyclerBackend):
     remaining_time: int
     running: bool
 
-  async def check_if_running(self, protocol: Protocol, block_id: int) -> "RunProgress":
-    progress = await self.get_run_progress(block_id=block_id)
+  async def get_run_info(self, protocol: Protocol, block_id: int) -> "RunProgress":
+    progress = await self._get_run_progress(block_id=block_id)
+    run_name = await self.get_run_name(block_id=block_id)
     if not progress:
       self.logger.info("Protocol completed")
       return ProflexBackend.RunProgress(
-        running=False, stage="completed", elapsed_time=self.prot_time_elapsed, remaining_time=0
+        running=False,
+        stage="completed",
+        elapsed_time=self.get_elapsed_run_time_from_log(),
+        remaining_time=0,
       )
 
     if progress["RunTitle"] == "-":
       await self._read_response(timeout=5)
       self.logger.info("Protocol completed")
       return ProflexBackend.RunProgress(
-        running=False, stage="completed", elapsed_time=self.prot_time_elapsed, remaining_time=0
+        running=False,
+        stage="completed",
+        elapsed_time=self.get_elapsed_run_time_from_log(),
+        remaining_time=0,
       )
 
     if progress["Stage"] == "POSTRun":
       self.logger.info("Protocol in POSTRun")
       return ProflexBackend.RunProgress(
-        running=True, stage="POSTRun", elapsed_time=self.prot_time_elapsed, remaining_time=0
+        running=True,
+        stage="POSTRun",
+        elapsed_time=self.get_elapsed_run_time_from_log(),
+        remaining_time=0,
       )
 
     # TODO: move to separate wait method
+    time_elapsed = await self.get_elapsed_run_time(block_id=block_id)
+    remaining_time = await self.get_remaining_run_time(block_id=block_id)
+
     if progress["Stage"] != "-" and progress["Step"] != "-":
       current_step = protocol.stages[int(progress["Stage"]) - 1].steps[int(progress["Step"]) - 1]
       if current_step.hold_seconds == float("inf"):
@@ -810,14 +819,9 @@ class ProflexBackend(ThermocyclerBackend):
         return ProflexBackend.RunProgress(
           running=False,
           stage="infinite_hold",
-          elapsed_time=self.prot_time_elapsed,
-          remaining_time=self.prot_time_remaining,
+          elapsed_time=time_elapsed,
+          remaining_time=remaining_time,
         )
-
-    time_elapsed = await self.get_elapsed_run_time(block_id=block_id)
-    self.prot_time_elapsed = time_elapsed
-    remaining_time = await self.get_remaining_run_time(block_id=block_id)
-    self.prot_time_remaining = remaining_time
 
     self.logger.info(f"Elapsed time: {time_elapsed}")
     self.logger.info(f"Remaining time: {remaining_time}")
@@ -928,7 +932,7 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def get_current_cycle_index(self, block_id: Optional[int] = None) -> int:
     assert block_id is not None, "block_id must be specified"
-    progress = await self.get_run_progress(block_id=block_id)
+    progress = await self._get_run_progress(block_id=block_id)
     if progress is None:
       raise RuntimeError("No progress information available")
 
@@ -946,7 +950,7 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def get_current_step_index(self, block_id: Optional[int] = None) -> int:
     assert block_id is not None, "block_id must be specified"
-    progress = await self.get_run_progress(block_id=block_id)
+    progress = await self._get_run_progress(block_id=block_id)
     if progress is None:
       raise RuntimeError("No progress information available")
 
