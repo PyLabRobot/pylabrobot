@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
+from base64 import b64decode
 
 from pylabrobot.io import Socket
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
@@ -437,6 +438,46 @@ class ProflexBackend(ThermocyclerBackend):
     res = await self.send_command({"cmd": "SYST:SETT:NICK", "args": [nickname]})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to set nickname")
+
+  async def get_log_by_runname(self, run_name: str) -> str:
+    res = await self.send_command(
+      {"cmd": "FILe:READ?",  "args": [f"RUNS:{run_name}/{run_name}.log"]},
+      response_timeout=5,
+      read_once=False,
+    )
+    if self._parse_scpi_response(res)["status"] != "OK":
+      raise ValueError("Failed to get log")
+    res.replace('\n', '')
+    # Extract the base64 encoded log content between <quote> tags
+    encoded_log_match= re.search(r"<quote>(.*?)</quote>", res, re.DOTALL)
+    if not encoded_log_match:
+      raise ValueError("Failed to parse log content")
+    encoded_log = encoded_log_match.group(1).strip()
+    log=b64decode(encoded_log).decode('utf-8')
+    return log
+
+  async def get_elapsed_run_time_from_log(self, run_name: str) -> int:
+    """
+    Parses a log to find the elapsed run time in hh:mm:ss format
+    and converts it to total seconds.
+    """
+    log = await self.get_log_by_runname(run_name)
+
+    # Updated regex to capture hours, minutes, and seconds
+    elapsed_time_match = re.search(r"Run Time:\s*(\d+):(\d+):(\d+)", log)
+
+    if not elapsed_time_match:
+      raise ValueError("Failed to parse elapsed time from log. Expected hh:mm:ss format.")
+
+    # Extract h, m, s, and convert them to integers
+    hours = int(elapsed_time_match.group(1))
+    minutes = int(elapsed_time_match.group(2))
+    seconds = int(elapsed_time_match.group(3))
+
+    # Calculate the total seconds
+    total_seconds = (hours * 3600) + (minutes * 60) + seconds
+
+    return total_seconds
 
   async def set_block_idle_temp(self, temp: float, block_id: int, control_enabled=1) -> None:
     if block_id not in self.available_blocks:
