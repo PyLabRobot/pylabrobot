@@ -1195,7 +1195,9 @@ class LiHa(EVOArm):
       discard_height: binary. 0 above tip rack, 1 in tip rack
     """
 
-    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_height])
+    await self.backend.send_command(
+      module=self.module, command="AST", params=[tips, discard_height]
+    )
 
 
 class Mca(EVOArm):
