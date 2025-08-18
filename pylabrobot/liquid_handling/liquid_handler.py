@@ -1938,6 +1938,9 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("No resource picked up")
     resource = self._resource_pickup.resource
 
+    if resource is destination:
+      raise ValueError("Cannot drop resource onto itself.")
+
     # compute rotation based on the pickup_direction and drop_direction
     if self._resource_pickup.direction == direction:
       rotation_applied_by_move = 0
