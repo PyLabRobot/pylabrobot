@@ -896,7 +896,7 @@ class ProflexBackend(ThermocyclerBackend):
       if isinstance(stage, Step):
         protocol.stages[i] = Stage(steps=[stage], repeats=1)
 
-    stage_name_prefixes = stage_name_prefixes or [f"Stage_" for i in range(len(protocol.stages))]
+    stage_name_prefixes = stage_name_prefixes or ["Stage_" for i in range(len(protocol.stages))]
 
     await self._scpi_write_run_info(
       protocol=protocol,
