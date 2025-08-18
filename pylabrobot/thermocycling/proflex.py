@@ -477,11 +477,11 @@ class ProflexBackend(ThermocyclerBackend):
 
     return total_seconds
 
-  async def set_block_idle_temp(self, temp: float, block_id: int, control_enabled=1) -> None:
+  async def set_block_idle_temp(self, temp: float, block_id: int, control_enabled: bool = True) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:BLOCK", "args": [control_enabled, temp]}
+      {"cmd": f"TBC{block_id+1}:BLOCK", "args": [1 if control_enabled else 0, temp]}
     )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set block idle temperature")
@@ -489,11 +489,11 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set block idle temperature")
 
-  async def set_cover_idle_temp(self, temp: float, block_id: int, control_enabled=1):
+  async def set_cover_idle_temp(self, temp: float, block_id: int, control_enabled: bool = True) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:COVER", "args": [control_enabled, temp]}
+      {"cmd": f"TBC{block_id+1}:COVER", "args": [1 if control_enabled else 0, temp]}
     )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set cover idle temperature")
@@ -856,11 +856,11 @@ class ProflexBackend(ThermocyclerBackend):
 
   async def deactivate_lid(self, block_id: Optional[int] = None):
     assert block_id is not None, "block_id must be specified"
-    return await self.set_cover_idle_temp(control_enabled=0, block_id=block_id)
+    return await self.set_cover_idle_temp(control_enabled=False, block_id=block_id)
 
   async def deactivate_block(self, block_id: Optional[int] = None):
     assert block_id is not None, "block_id must be specified"
-    return await self.set_block_idle_temp(control_enabled=0, block_id=block_id)
+    return await self.set_block_idle_temp(control_enabled=False, block_id=block_id)
 
   async def get_lid_current_temperature(self, block_id: Optional[int] = None) -> List[float]:
     assert block_id is not None, "block_id must be specified"
