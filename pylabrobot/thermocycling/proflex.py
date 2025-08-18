@@ -477,7 +477,9 @@ class ProflexBackend(ThermocyclerBackend):
 
     return total_seconds
 
-  async def set_block_idle_temp(self, temp: float, block_id: int, control_enabled: bool = True) -> None:
+  async def set_block_idle_temp(
+    self, temp: float, block_id: int, control_enabled: bool = True
+  ) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
     res = await self.send_command(
@@ -489,7 +491,9 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set block idle temperature")
 
-  async def set_cover_idle_temp(self, temp: float, block_id: int, control_enabled: bool = True) -> None:
+  async def set_cover_idle_temp(
+    self, temp: float, block_id: int, control_enabled: bool = True
+  ) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
