@@ -356,6 +356,17 @@ class LiquidHandler(Resource, Machine):
     params = ", ".join(f"{k}={self._format_param(v)}" for k, v in kwargs.items())
     logger.debug("%s(%s)", name, params)
 
+  def get_picked_up_resource(self) -> Optional[Resource]:
+    """Get the resource that is currently picked up.
+
+    Returns:
+      The resource that is currently picked up, or `None` if no resource is being picked up.
+    """
+
+    if self._resource_pickup is None:
+      return None
+    return self._resource_pickup.resource
+
   @need_setup_finished
   async def pick_up_tips(
     self,
