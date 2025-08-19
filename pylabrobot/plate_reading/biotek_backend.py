@@ -1148,7 +1148,15 @@ class Cytation5Backend(ImageReaderBackend):
       node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
       if not PySpin.IsWritable(node_softwaretrigger_cmd):
         raise RuntimeError("unable to execute software trigger")
-      node_softwaretrigger_cmd.Execute()
+      num_trigger_tries = 5
+      for _ in range(num_trigger_tries):
+        try:
+          node_softwaretrigger_cmd.Execute()
+          break
+        except SpinnakerException:
+          continue
+      else:
+        raise RuntimeError(f"Failed to execute software trigger after {num_trigger_tries} attempts")
 
       try:
         t0 = time.time()
