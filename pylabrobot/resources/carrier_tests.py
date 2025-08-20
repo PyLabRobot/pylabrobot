@@ -160,6 +160,9 @@ class CarrierTests(unittest.TestCase):
   def test_capacity(self):
     self.assertEqual(self.tip_car.capacity, 5)
 
+  def test_len(self):
+    self.assertEqual(len(self.tip_car), 5)
+
   def test_assignment(self):
     self.tip_car[0] = self.A
     self.tip_car[1] = self.B

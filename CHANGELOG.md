@@ -60,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `location` parameter of `assign_child_resource` is not optional (https://github.com/PyLabRobot/pylabrobot/pull/336)
 - `Resource.get_absolute_location` raises `NoLocationError` instead of `AssertionError` when absolute location is not defined (https://github.com/PyLabRobot/pylabrobot/pull/338)
 - `no_trash` and `no_teaching_rack` were renamed to `with_trash` and `with_teaching_rack` to avoid double negatives (https://github.com/PyLabRobot/pylabrobot/pull/347)
+- `ItemizedResource.row` accepts a string ("A"-"P") in addition to an integer index.
 
 ### Added
 
@@ -134,7 +135,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - `plate_width: Optional[float] = None`
     - `use_unsafe_hotel: bool = False`
     - `iswap_collision_control_level: int = 0`
-    - `iswap_fold_up_sequence_at_the_end_of_process: bool = True`
+    - `iswap_fold_up_sequence_at_the_end_of_process: bool = False`
   - STAR.drop_resource
     - `minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None`
     - `z_position_at_the_command_end: Optional[float] = None`

@@ -173,8 +173,7 @@ library/biorad
 library/boekel
 library/celltreat
 library/cellvis
-library/corning_axygen
-library/corning_costar
+library/corning
 library/eppendorf
 library/falcon
 library/hamilton
@@ -182,6 +181,7 @@ library/nest
 library/opentrons
 library/porvair
 library/revvity
+library/sergi
 library/thermo_fisher
 library/vwr
 ```

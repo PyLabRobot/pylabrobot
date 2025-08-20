@@ -131,7 +131,7 @@ class InhecoThermoShakeBackend(HeaterShakerBackend):
     """Send a command to the device and return the response"""
     packets = self._generate_packets(command)
     for packet in packets:
-      await self.io.write(bytes(packet))
+      await self.io.write(bytes(packet[1:]), report_id=bytes(packet[0]))
 
     response = await self._read_response(command, timeout=timeout)
 
@@ -222,6 +222,20 @@ class InhecoThermoShakeBackend(HeaterShakerBackend):
     """Stop the temperature control"""
 
     return await self.send_command("1ATE0")
+
+  @property
+  def supports_locking(self) -> bool:
+    return False
+
+  async def lock_plate(self):
+    raise NotImplementedError(
+      "Locking the plate is not implemented yet for Inheco ThermoShake devices. "
+    )
+
+  async def unlock_plate(self):
+    raise NotImplementedError(
+      "Unlocking the plate is not implemented yet for Inheco ThermoShake devices. "
+    )
 
   # --- firmware misc
 

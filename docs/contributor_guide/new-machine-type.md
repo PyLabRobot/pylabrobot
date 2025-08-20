@@ -1,12 +1,6 @@
 # Contributing a new type of machine to PLR
 
-PyLabRobot supports a number of different types of machines. Currently, these are:
-
-- [Liquid handlers](/user_guide/00_liquid-handling/hamilton-star/basic)
-- [Plate readers](/user_guide/02_analytical/plate-reading/plate-reading)
-- [Pumps](/user_guide/00_liquid-handling/pumps/_pumps)
-- [Temperature controllers](/user_guide/01_material-handling/temperature)
-- [Heater shakers](/user_guide/01_material-handling/heating_shaking/heating_shaking)
+PyLabRobot supports a number of different types of machines. They can be found [here](/user_guide/machines).
 
 If you want to add support for a new type of machine, this guide will explain the process. If you want to add a new machine for a type that already exists, you should read {doc}`this guide <new-concrete-backend>` instead.
 

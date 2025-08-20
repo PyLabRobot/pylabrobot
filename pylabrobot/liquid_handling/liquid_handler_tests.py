@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
+  nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
 )
@@ -318,7 +319,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stack.get_absolute_size_z(), 30)
 
   async def test_move_plate_rotation(self):
-    rotations = [0, 90, 270, 360]
+    rotations = [0, 180, 360]  # rotation wrt site before AND after move
     grip_directions = [
       (GripDirection.LEFT, GripDirection.RIGHT),
       (GripDirection.FRONT, GripDirection.BACK),
@@ -343,7 +344,6 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         pickup_direction=pickup_direction,
         drop_direction=drop_direction,
       ):
-        print()
         self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
 
         plate = Plate(
@@ -1016,6 +1016,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(reagent_reservoir.get_item("A1"), volume=100)
 
+  async def test_pick_up_tips96_incomplete_rack(self):
+    set_tip_tracking(enabled=True)
+
+    # Test that picking up tips from an incomplete rack works
+    self.tip_rack.fill()
+    self.tip_rack.get_item("A1").tracker.remove_tip()
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+
+    # Check that the tips were picked up correctly
+    self.assertFalse(self.lh.head96[0].has_tip)
+    for i in range(1, 96):
+      self.assertTrue(self.lh.head96[i].has_tip)
+
+    set_tip_tracking(enabled=False)
+
 
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
@@ -1023,9 +1039,11 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.tip_rack = STF(name="tip_rack")
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    self.single_well_plate = nest_1_troughplate_195000uL_Vb(name="single_well_plate")
+    self.deck.assign_child_resource(self.single_well_plate, location=Coordinate(300, 100, 0))
     await self.lh.setup()
     set_volume_tracking(enabled=True)
 
@@ -1075,6 +1093,35 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
       await self.lh.dispense([well], vols=[60])
     # test volume doens't change on failed dispense
     assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
+
+  async def test_96_head_volume_tracking_multi_container(self):
+    for item in self.plate.get_all_items():
+      item.tracker.set_liquids([(Liquid.WATER, 10)])
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate96(self.plate, volume=10)
+    for i in range(96):
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
+      self.plate.get_item(i).tracker.get_used_volume() == 0
+    await self.lh.dispense96(self.plate, volume=10)
+    for i in range(96):
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
+      self.plate.get_item(i).tracker.get_used_volume() == 10
+    await self.lh.return_tips96()
+
+  async def test_96_head_volume_tracking_single_container(self):
+    well = self.single_well_plate.get_item(0)
+    well.tracker.set_liquids([(Liquid.WATER, 10 * 96)])
+    await self.lh.pick_up_tips96(self.tip_rack)
+
+    await self.lh.aspirate96(self.single_well_plate, volume=10)
+    assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 10 for i in range(96))
+    assert well.tracker.get_used_volume() == 0
+
+    await self.lh.dispense96(self.single_well_plate, volume=10)
+    assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 0 for i in range(96))
+    assert well.tracker.get_used_volume() == 10 * 96
+
+    await self.lh.return_tips96()
 
 
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):

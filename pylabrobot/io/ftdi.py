@@ -9,8 +9,9 @@ try:
   from pylibftdi import Device
 
   HAS_PYLIBFTDI = True
-except ImportError:
+except ImportError as e:
   HAS_PYLIBFTDI = False
+  _FTDI_IMPORT_ERROR = e
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -38,7 +39,7 @@ class FTDI(IOBase):
 
   async def setup(self):
     if not HAS_PYLIBFTDI:
-      raise RuntimeError("pyserial not installed.")
+      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_IMPORT_ERROR}")
     self._dev.open()
     self._executor = ThreadPoolExecutor(max_workers=1)
 

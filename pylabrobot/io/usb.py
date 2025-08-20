@@ -16,8 +16,9 @@ try:
   import usb.util
 
   USE_USB = True
-except ImportError:
+except ImportError as e:
   USE_USB = False
+  _USB_IMPORT_ERROR = e
 
 
 if TYPE_CHECKING:
@@ -296,15 +297,18 @@ class USB(IOBase):
   async def setup(self):
     """Initialize the USB connection to the machine."""
 
+    if self.dev is not None:
+      # previous setup did not properly finish,
+      # or we are re-initializing the device.
+      logger.warning("USB device already connected. Closing previous connection.")
+      await self.stop()
+
     if not USE_USB:
       raise RuntimeError(
-        "USB is not enabled. Please install pyusb and libusb. "
+        f"USB dependencies could not be imported due to the following error: {_USB_IMPORT_ERROR}. "
+        "Please install pyusb and libusb. "
         "https://docs.pylabrobot.org/installation.html"
       )
-
-    if self.dev is not None:
-      logging.warning("Already initialized. Please call stop() first.")
-      return
 
     logger.info("Finding USB device...")
 

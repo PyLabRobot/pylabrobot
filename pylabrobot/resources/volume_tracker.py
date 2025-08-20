@@ -67,6 +67,7 @@ class VolumeTracker:
 
   def __init__(
     self,
+    thing: str,
     max_volume: float,
     liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
     pending_liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
@@ -74,8 +75,9 @@ class VolumeTracker:
   ) -> None:
     self._is_disabled = False
     self._is_cross_contamination_tracking_disabled = False
-    self.max_volume = max_volume
 
+    self.thing = thing
+    self.max_volume = max_volume
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
     self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
 
@@ -123,7 +125,7 @@ class VolumeTracker:
 
     if volume > self.get_used_volume():
       raise TooLittleLiquidError(
-        f"Container has too little liquid: {volume}uL > {self.get_used_volume()}uL."
+        f"Container {self.thing} has too little liquid: {volume}uL > {self.get_used_volume()}uL."
       )
 
     removed_liquids = []
@@ -149,7 +151,7 @@ class VolumeTracker:
 
     if volume > self.get_free_volume():
       raise TooLittleVolumeError(
-        f"Container has too little volume: {volume}uL > {self.get_free_volume()}uL."
+        f"Container {self.thing} has too little volume: {volume}uL > {self.get_free_volume()}uL."
       )
 
     # Update the liquid history tracker if needed
@@ -203,7 +205,7 @@ class VolumeTracker:
 
   def commit(self) -> None:
     """Commit the pending operations."""
-    assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
+    assert not self.is_disabled, f"Volume tracker {self.thing} is disabled. Call `enable()`."
 
     self.liquids = copy.deepcopy(self.pending_liquids)
 
