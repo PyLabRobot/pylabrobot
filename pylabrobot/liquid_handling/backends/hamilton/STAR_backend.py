@@ -1382,19 +1382,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.pre_initialize_instrument()
 
     if not initialized or any(tip_presences):
-      dy = (4050 - 2175) // (self.num_channels - 1)
-      y_positions = [4050 - i * dy for i in range(self.num_channels)]
-
-      await self.initialize_pipetting_channels(
-        x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
-        y_positions=y_positions,
-        begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
-        end_of_tip_deposit_process=1220,
-        z_position_at_end_of_a_command=3600,
-        tip_pattern=[True] * self.num_channels,
-        tip_type=4,  # TODO: get from tip types
-        discarding_method=0,
-      )
+      await self.initialize_pip()
 
     if self.autoload_installed and not skip_autoload:
       autoload_initialized = await self.request_autoload_initialization_status()
@@ -4030,6 +4018,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.5 Pipetting channel commands --------------
 
   # -------------- 3.5.1 Initialization --------------
+
+  async def initialize_pip(self):
+    """Wrapper around initialize_pipetting_channels firmware command."""
+    dy = (4050 - 2175) // (self.num_channels - 1)
+    y_positions = [4050 - i * dy for i in range(self.num_channels)]
+
+    await self.initialize_pipetting_channels(
+      x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
+      y_positions=y_positions,
+      begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
+      end_of_tip_deposit_process=1220,
+      z_position_at_end_of_a_command=3600,
+      tip_pattern=[True] * self.num_channels,
+      tip_type=4,  # TODO: get from tip types
+      discarding_method=0,
+    )
 
   async def initialize_pipetting_channels(
     self,
