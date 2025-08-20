@@ -20,6 +20,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | 'PLT_CAR_L5AC_A00'<br>Part no.: 182090<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182090) <br>Carrier for 5x 96 Deep Well Plates or for 5x 384 tip racks (e.g.384HEAD_384TIPS_50μl) (6T) | ![](img/hamilton/PLT_CAR_L5AC_A00_182090.jpg) | `PLT_CAR_L5AC_A00` |
 | 'PLT_CAR_L5MD_A00'<br>Part no.: 182365/02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Carries five ANSI/SLAS footprint MTPs in landscape orientation. Occupies six tracks.    | ![](img/hamilton/182365-Plate-Carrier.webp)   | `PLT_CAR_L5MD_A00` |
 | 'PLT_CAR_P3AC'<br>Part no.: 182365/03<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Hamilton Deepwell Plate Carrier for 3 Plates (Portrait, 6 tracks wide)                      | ![](img/hamilton/PLT_CAR_P3AC.jpg)            | `PLT_CAR_P3AC`     |
+| 'PLT_CAR_L5_DWP'<br>Part no.:  93522-01/03<br>manufacturer website? <br>Hamilton Plate Carrier for 5 Plates (Landscape, 6 tracks wide). Plastic taps.                      | ![](img/hamilton/PLT_CAR_L5_DWP.jpg)            | `PLT_CAR_L5_DWP`     |
 
 ### MFX carriers
 
