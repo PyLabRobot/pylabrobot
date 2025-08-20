@@ -1382,19 +1382,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.pre_initialize_instrument()
 
     if not initialized or any(tip_presences):
-      dy = (4050 - 2175) // (self.num_channels - 1)
-      y_positions = [4050 - i * dy for i in range(self.num_channels)]
-
-      await self.initialize_pipetting_channels(
-        x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
-        y_positions=y_positions,
-        begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
-        end_of_tip_deposit_process=1220,
-        z_position_at_end_of_a_command=3600,
-        tip_pattern=[True] * self.num_channels,
-        tip_type=4,  # TODO: get from tip types
-        discarding_method=0,
-      )
+      await self.initialize_pip()
 
     if self.autoload_installed and not skip_autoload:
       autoload_initialized = await self.request_autoload_initialization_status()
@@ -2826,7 +2814,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plate_width: Optional[float] = None,
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     if use_arm == "iswap":
       assert (
@@ -4030,6 +4018,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.5 Pipetting channel commands --------------
 
   # -------------- 3.5.1 Initialization --------------
+
+  async def initialize_pip(self):
+    """Wrapper around initialize_pipetting_channels firmware command."""
+    dy = (4050 - 2175) // (self.num_channels - 1)
+    y_positions = [4050 - i * dy for i in range(self.num_channels)]
+
+    await self.initialize_pipetting_channels(
+      x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
+      y_positions=y_positions,
+      begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
+      end_of_tip_deposit_process=1220,
+      z_position_at_end_of_a_command=3600,
+      tip_pattern=[True] * self.num_channels,
+      tip_type=4,  # TODO: get from tip types
+      discarding_method=0,
+    )
 
   async def initialize_pipetting_channels(
     self,
@@ -6461,7 +6465,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move iSWAP X to absolute position"""
     loc = await self.request_iswap_position()
     await self.move_iswap_x_relative(
-      step_size=x_position - loc["xs"],
+      step_size=x_position - loc.x,
       allow_splitting=True,
     )
 
@@ -6469,7 +6473,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move iSWAP Y to absolute position"""
     loc = await self.request_iswap_position()
     await self.move_iswap_y_relative(
-      step_size=y_position - loc["yj"],
+      step_size=y_position - loc.y,
       allow_splitting=True,
     )
 
@@ -6477,7 +6481,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move iSWAP Z to absolute position"""
     loc = await self.request_iswap_position()
     await self.move_iswap_z_relative(
-      step_size=z_position - loc["zj"],
+      step_size=z_position - loc.z,
       allow_splitting=True,
     )
 
@@ -6572,7 +6576,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """Get plate using iswap.
 
@@ -6598,7 +6602,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                                Default 1.
       acceleration_index_high_acc: acceleration index high acc. Must be between 0 and 4. Default 4.
       acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4. Default 1.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
+      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
     """
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
@@ -6666,7 +6670,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """put plate
 
@@ -6691,7 +6695,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             Default 4.
       acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4.
             Default 1.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
+      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
     """
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
@@ -6875,7 +6879,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def collapse_gripper_arm(
     self,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = False,
   ):
     """Collapse gripper arm
 
@@ -6883,7 +6887,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
                                                          command 0.1mm]. Must be between 0 and 3600.
                                                          Default 3600.
-      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
+      iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
     """
 
     assert (
@@ -7058,7 +7062,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="QP", fmt="ph#")
     return resp is not None and resp["ph"] == 1
 
-  async def request_iswap_position(self):
+  async def request_iswap_position(self) -> Coordinate:
     """Request iSWAP position ( grip center )
 
     Returns:
@@ -7071,10 +7075,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     resp = await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
-    resp["xs"] = resp["xs"] / 10
-    resp["yj"] = resp["yj"] / 10
-    resp["zj"] = resp["zj"] / 10
-    return resp
+    return Coordinate(
+      x=(resp["xs"] / 10) * (1 if resp["xd"] == 0 else -1),
+      y=(resp["yj"] / 10) * (1 if resp["yd"] == 0 else -1),
+      z=(resp["zj"] / 10) * (1 if resp["zd"] == 0 else -1),
+    )
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status

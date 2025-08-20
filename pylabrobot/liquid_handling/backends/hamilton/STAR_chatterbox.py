@@ -9,11 +9,12 @@ from pylabrobot.resources.well import Well
 class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
 
-  def __init__(self, num_channels: int = 8):
+  def __init__(self, num_channels: int = 8, core96_head_installed: bool = True):
     """Initialize a chatter box backend."""
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
+    self.core96_head_installed = core96_head_installed
 
   async def setup(self, skip_autoload=False, skip_iswap=False, skip_core96_head=False) -> None:
     await LiquidHandlerBackend.setup(self)
