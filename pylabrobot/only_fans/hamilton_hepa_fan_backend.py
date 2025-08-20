@@ -135,7 +135,7 @@ class HamiltonHepaFanBackend(FanBackend):
       "55c10111f78c",
       "55c10111f982",
       "55c10111fc87",
-      "5c10111fe85",
+      "55c10111fe85",
     ]
 
     await self.send(bytes.fromhex(speed_array[intensity]))  # set speed
