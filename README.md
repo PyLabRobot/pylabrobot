@@ -179,10 +179,10 @@ await tc.run_pcr_profile(
 
 [docs.pylabrobot.org](https://docs.pylabrobot.org)
 
-- [Installation](https://docs.pylabrobot.org/installation.html)
-- [Getting Started](https://docs.pylabrobot.org/basic.html)
-- [Contributing](CONTRIBUTING.md)
-- [API Reference](https://docs.pylabrobot.org/pylabrobot.html)
+- [Installation](https://docs.pylabrobot.org/user_guide/_getting-started/installation.html)
+- [Getting Started](https://docs.pylabrobot.org/user_guide/index.html)
+- [Contributing](https://docs.pylabrobot.org/contributor_guide/index.html)
+- [API Reference](https://docs.pylabrobot.org/api/pylabrobot.html)
 
 ### Support
 
