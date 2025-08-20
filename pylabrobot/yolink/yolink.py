@@ -1,8 +1,10 @@
 """YoLink backend implementation for PyLabRobot devices."""
 
 import asyncio
+import json
 import logging
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
 
@@ -15,19 +17,118 @@ from .outlet_request_builder import OutletRequestBuilder
 logger = logging.getLogger(__name__)
 
 
+class YoLinkTokenManager:
+  """Manages YoLink API token lifecycle."""
+
+  def __init__(self, api_host: str = "https://api.yosmart.com"):
+    self.api_host = api_host
+    self._access_token: Optional[str] = None
+    self._refresh_token: Optional[str] = None
+    self._token_expires_at: Optional[datetime] = None
+
+  async def get_access_token_from_credentials(
+    self, session: aiohttp.ClientSession, client_id: str, client_secret: str
+  ) -> Dict[str, Any]:
+    """Get access token using UAC credentials."""
+    token_url = f"{self.api_host}/open/yolink/token"
+
+    payload = {
+      "grant_type": "client_credentials",
+      "client_id": client_id,
+      "client_secret": client_secret,
+    }
+
+    try:
+      async with session.post(token_url, data=payload) as response:
+        response.raise_for_status()
+        token_data = await response.json()
+
+        self._access_token = token_data.get("access_token")
+        self._refresh_token = token_data.get("refresh_token")
+
+        # Calculate expiration time
+        expires_in = token_data.get("expires_in", 3600)  # Default 1 hour
+        self._token_expires_at = datetime.now() + timedelta(
+          seconds=expires_in - 300
+        )  # 5 min buffer
+
+        logger.info("Successfully obtained access token from credentials")
+        return token_data
+
+    except aiohttp.ClientError as e:
+      logger.error(f"Failed to get access token from credentials: {e}")
+      raise
+
+  async def refresh_access_token(
+    self, session: aiohttp.ClientSession, client_id: str
+  ) -> Dict[str, Any]:
+    """Refresh access token using refresh token."""
+    if not self._refresh_token:
+      raise ValueError("No refresh token available")
+
+    token_url = f"{self.api_host}/open/yolink/token"
+
+    payload = {
+      "grant_type": "refresh_token",
+      "client_id": client_id,
+      "refresh_token": self._refresh_token,
+    }
+
+    try:
+      async with session.post(token_url, data=payload) as response:
+        response.raise_for_status()
+        token_data = await response.json()
+
+        self._access_token = token_data.get("access_token")
+        # Refresh token might be updated
+        if "refresh_token" in token_data:
+          self._refresh_token = token_data["refresh_token"]
+
+        # Calculate expiration time
+        expires_in = token_data.get("expires_in", 3600)
+        self._token_expires_at = datetime.now() + timedelta(seconds=expires_in - 300)
+
+        logger.info("Successfully refreshed access token")
+        return token_data
+
+    except aiohttp.ClientError as e:
+      logger.error(f"Failed to refresh access token: {e}")
+      raise
+
+  def is_token_expired(self) -> bool:
+    """Check if the current token is expired or about to expire."""
+    if not self._token_expires_at:
+      return True
+    return datetime.now() >= self._token_expires_at
+
+  @property
+  def access_token(self) -> Optional[str]:
+    """Get the current access token."""
+    return self._access_token
+
+  @property
+  def refresh_token(self) -> Optional[str]:
+    """Get the current refresh token."""
+    return self._refresh_token
+
+
 class YoLinkAuthMgr(YoLinkAuthMgr):
   """Authentication manager for YoLink API."""
 
-  def __init__(self, session: aiohttp.ClientSession, access_token: str):
+  def __init__(self, session: aiohttp.ClientSession, token_manager: YoLinkTokenManager):
     super().__init__(session)
-    self._access_token = access_token
+    self._token_manager = token_manager
 
   def access_token(self) -> str:
-    return self._access_token
+    return self._token_manager.access_token or ""
 
   async def check_and_refresh_token(self) -> str:
-    # TODO: Implement token refresh logic here
-    return self._access_token
+    """Check token validity and refresh if needed."""
+    if self._token_manager.is_token_expired():
+      logger.info("Token expired, attempting refresh")
+      # This would need additional client_id parameter - handle in YoLink class
+      pass
+    return self._token_manager.access_token or ""
 
 
 class YoLinkMessageListener(MessageListener):
@@ -49,18 +150,77 @@ class YoLinkMessageListener(MessageListener):
 class YoLink:
   """YoLink backend for PyLabRobot devices."""
 
-  def __init__(self, api_key: str):
+  def __init__(
+    self,
+    api_key: Optional[str] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
+    refresh_token: Optional[str] = None,
+    api_host: str = "https://api.yosmart.com",
+  ):
     """Initialize YoLink backend.
 
     Args:
-        api_key: YoLink API access token
+        api_key: Direct API access token (if already obtained)
+        client_id: Your UAID (required if using credentials or refresh token)
+        client_secret: Your UAC Secret Key (for getting initial token)
+        refresh_token: Your refresh token (for token refresh)
+        api_host: API host URL (default: https://api.yosmart.com)
+
+    Note:
+        You must provide either:
+        - api_key (for direct token usage)
+        - client_id + client_secret (for credential-based auth)
     """
-    self.api_key = api_key
+    self.client_id = client_id
+    self.client_secret = client_secret
+    self.api_host = api_host
+
+    # Initialize token manager
+    self._token_manager = YoLinkTokenManager(api_host)
+
+    # If direct API key provided, use it
+    if api_key:
+      self._token_manager._access_token = api_key
+
+    # If refresh token provided, store it
+    if refresh_token:
+      self._token_manager._refresh_token = refresh_token
+
     self._session: Optional[aiohttp.ClientSession] = None
     self._auth_mgr: Optional[YoLinkAuthMgr] = None
     self._home: Optional[YoLinkHome] = None
     self._listener: Optional[YoLinkMessageListener] = None
     self._is_setup = False
+
+  @classmethod
+  def from_credentials(
+    cls, client_id: str, client_secret: str, api_host: str = "https://api.yosmart.com"
+  ):
+    """Create YoLink instance using UAC credentials.
+
+    Args:
+        client_id: Your UAID
+        client_secret: Your UAC Secret Key
+        api_host: API host URL
+
+    Returns:
+        YoLink instance configured for credential-based authentication
+    """
+    return cls(client_id=client_id, client_secret=client_secret, api_host=api_host)
+
+  @classmethod
+  def from_access_token(cls, access_token: str, api_host: str = "https://api.yosmart.com"):
+    """Create YoLink instance using direct access token.
+
+    Args:
+        access_token: Direct API access token
+        api_host: API host URL
+
+    Returns:
+        YoLink instance configured for direct token usage
+    """
+    return cls(api_key=access_token, api_host=api_host)
 
   async def setup(self) -> None:
     """Set up the YoLink backend connection."""
@@ -72,8 +232,11 @@ class YoLink:
       # Create HTTP session
       self._session = aiohttp.ClientSession()
 
+      # Ensure we have a valid access token
+      await self._ensure_access_token()
+
       # Initialize authentication manager
-      self._auth_mgr = YoLinkAuthMgr(self._session, self.api_key)
+      self._auth_mgr = YoLinkAuthMgr(self._session, self._token_manager)
 
       # Initialize message listener
       self._listener = YoLinkMessageListener()
@@ -83,12 +246,37 @@ class YoLink:
       await self._home.async_setup(self._auth_mgr, self._listener)
 
       self._is_setup = True
-      logger.info(f"YoLink backend set up")
+      logger.info("YoLink backend set up successfully")
 
     except Exception as e:
       logger.error(f"Failed to set up YoLink backend: {e}")
       await self.stop()
       raise
+
+  async def _ensure_access_token(self) -> None:
+    """Ensure we have a valid access token."""
+    if not self.client_id:
+      if not self._token_manager.access_token:
+        raise ValueError("No access token or client credentials provided")
+      return
+
+    # If token is expired or missing, get/refresh it
+    if self._token_manager.is_token_expired() or not self._token_manager.access_token:
+      if self.client_secret:
+        # Get token using credentials
+        await self._token_manager.get_access_token_from_credentials(
+          self._session, self.client_id, self.client_secret
+        )
+      elif self._token_manager.refresh_token:
+        # Refresh using refresh token
+        await self._token_manager.refresh_access_token(self._session, self.client_id)
+      else:
+        raise ValueError("No valid authentication method available")
+
+  async def refresh_token_if_needed(self) -> None:
+    """Check and refresh token if needed (can be called externally)."""
+    if self._token_manager.is_token_expired() and self._session:
+      await self._ensure_access_token()
 
   async def stop(self) -> None:
     """Stop the YoLink backend and clean up resources."""
@@ -115,18 +303,30 @@ class YoLink:
 
   def _get_all_devices(self) -> List[YoLinkDevice]:
     """Get all devices in the home to call later."""
+    if not self._home:
+      return []
     devices = list(self._home.get_devices())
     return devices
 
   def _ensure_setup(self) -> None:
     """Ensure the backend is set up before operations."""
-    if not self._is_setup or self._device is None:
+    if not self._is_setup:
       raise RuntimeError("YoLink backend not set up. Call setup() first.")
 
   @property
   def is_setup(self) -> bool:
     """Check if the backend is set up."""
     return self._is_setup
+
+  @property
+  def current_access_token(self) -> Optional[str]:
+    """Get the current access token."""
+    return self._token_manager.access_token
+
+  @property
+  def current_refresh_token(self) -> Optional[str]:
+    """Get the current refresh token."""
+    return self._token_manager.refresh_token
 
 
 class Sensor:
@@ -174,7 +374,8 @@ class Sensor:
 
     try:
       state = await self._device.get_state()
-      temperature = state.data["state"]["temperature"]
+
+      temperature = getattr(state, "data", {}).get("state", {}).get("temperature")
 
       if temperature is None:
         raise ValueError("Temperature data not available from device")
@@ -196,7 +397,7 @@ class Sensor:
 
     try:
       state = await self._device.get_state()
-      humidity = state.data["state"]["humidity"]
+      humidity = getattr(state, "data", {}).get("state", {}).get("humidity")
 
       if humidity is None:
         raise ValueError("Humidity data not available from device")
@@ -208,45 +409,44 @@ class Sensor:
       logger.error(f"Failed to get humidity: {e}")
       raise
 
-  # async def get_battery_level(self) -> Optional[int]:
-  #     """Get battery level if available.
+  async def get_battery_level(self) -> Optional[int]:
+    """Get battery level if available.
 
-  #     Returns:
-  #         Battery level percentage (0-100) or None if not available
-  #     """
-  #     self._ensure_device_ready()
+    Returns:
+        Battery level percentage (0-100) or None if not available
+    """
+    self._ensure_device_ready()
 
-  #     try:
-  #         state = await self._device.get_state()
-  #         battery_data = state.get('data', {}).get('state', {})
-  #         battery = battery_data.get('battery')
+    try:
+      state = await self._device.get_state()
+      battery = getattr(state, "data", {}).get("state", {}).get("battery")
 
-  #         if battery is not None:
-  #             logger.debug(f"Battery level: {battery}%")
-  #             return int(battery)
-  #         return None
+      if battery is not None:
+        logger.debug(f"Battery level: {battery}%")
+        return int(battery)
+      return None
 
-  #     except Exception as e:
-  #         logger.error(f"Failed to get battery level: {e}")
-  #         return None
+    except Exception as e:
+      logger.error(f"Failed to get battery level: {e}")
+      return None
 
-  # async def get_all_readings(self) -> Dict[str, Any]:
-  #     """Get all available sensor readings.
+  async def get_all_readings(self) -> Dict[str, Any]:
+    """Get all available sensor readings.
 
-  #     Returns:
-  #         Dictionary with all available sensor data
-  #     """
-  #     self._ensure_device_ready()
+    Returns:
+        Dictionary with all available sensor data
+    """
+    self._ensure_device_ready()
 
-  #     try:
-  #         state = await self._device.get_state()
-  #         sensor_data = state.get('data', {}).get('state', {})
-  #         logger.debug(f"All sensor readings: {sensor_data}")
-  #         return sensor_data
+    try:
+      state = await self._device.get_state()
+      sensor_data = getattr(state, "data", {})
+      logger.debug(f"All sensor readings: {sensor_data}")
+      return sensor_data
 
-  #     except Exception as e:
-  #         logger.error(f"Failed to get sensor readings: {e}")
-  #         raise
+    except Exception as e:
+      logger.error(f"Failed to get sensor readings: {e}")
+      raise
 
   async def stop(self) -> None:
     """Stop the sensor and clean up resources."""

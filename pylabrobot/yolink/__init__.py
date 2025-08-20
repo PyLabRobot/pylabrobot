@@ -1,5 +1,3 @@
-import aiohttp  # this needs to be added to pylabrobot dependencies if yolink is to be used
-
 from .yolink import (
   Sensor,
   YoLink,
