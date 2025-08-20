@@ -14,3 +14,4 @@ Tools for working with Hamilton-STAR specific functions.
    96head
    debug
    hardware/index
+   hamilton-liquid-classes

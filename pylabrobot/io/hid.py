@@ -58,18 +58,43 @@ class HID(IOBase):
       self._executor.shutdown(wait=True)
       self._executor = None
 
-  async def write(self, data: bytes):
+  async def write(self, data: bytes, report_id: bytes = b"\x00"):
+    """Writes data to the HID device.
+
+    There is a non-obvious part in the HID API:
+
+    "The first byte of \@p data[] must contain the Report ID. For
+    devices which only support a single report, this must be set
+    to 0x0. The remaining bytes contain the report data. Since
+    the Report ID is mandatory, calls to hid_write() will always
+    contain one more byte than the report contains. For example,
+    if a hid report is 16 bytes long, 17 bytes must be passed to
+    hid_write(), the Report ID (or 0x0, for devices with a
+    single report), followed by the report data (16 bytes). In
+    this example, the length passed in would be 17.
+    "
+    https://github.com/libusb/hidapi/blob/9904cbe/hidapi/hidapi.h#L305
+
+    We make this explicit in our API by requiring the `report_id` parameter.
+
+    Args:
+      data: The data to write.
+      report_id: The report ID to use for the write operation. Defaults to b'\x00'.
+    """
     loop = asyncio.get_running_loop()
+    write_data = report_id + data
 
     def _write():
       assert self.device is not None, "forgot to call setup?"
-      return self.device.write(data)
+      return self.device.write(write_data)
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _write)
-    logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.hex()))
+    logger.log(
+      LOG_LEVEL_IO, "[%s] write %s (report_id: %s)", self._unique_id, data, report_id.hex()
+    )
+    capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=write_data.hex()))
     return r
 
   async def read(self, size: int, timeout: int) -> bytes:
@@ -77,7 +102,7 @@ class HID(IOBase):
 
     def _read():
       assert self.device is not None, "forgot to call setup?"
-      return self.device.read(size, timeout=timeout)
+      return self.device.read(size, timeout=int(timeout))
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
@@ -123,7 +148,7 @@ class HIDValidator(HID):
     ):
       raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
 
-  async def write(self, data: bytes):
+  async def write(self, data: bytes, report_id: bytes = b"\x00"):
     next_command = HIDCommand(**self.cr.next_command())
     if (
       not next_command.module == "hid"
@@ -131,8 +156,9 @@ class HIDValidator(HID):
       and next_command.action == "write"
     ):
       raise ValidationError(f"Next line is {next_command}, expected HID write {self._unique_id}")
-    if not next_command.data == data.decode():
-      align_sequences(expected=next_command.data, actual=data.decode())
+    write_data = report_id + data
+    if not next_command.data == write_data.hex():
+      align_sequences(expected=next_command.data, actual=write_data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, size: int, timeout: int) -> bytes:
