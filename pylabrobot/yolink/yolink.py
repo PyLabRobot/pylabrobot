@@ -374,7 +374,6 @@ class Sensor:
 
     try:
       state = await self._device.get_state()
-
       temperature = getattr(state, "data", {}).get("state", {}).get("temperature")
 
       if temperature is None:
@@ -480,142 +479,122 @@ class Sensor:
     return getattr(self._device, "is_online", True)
 
 
-# class Outlet:
-#     """YoLink outlet device wrapper for PyLabRobot."""
+class Outlet:
+  """YoLink outlet device wrapper for PyLabRobot."""
 
-#     def __init__(self, backend: YoLink, outlet_name: str):
-#         """Initialize YoLink outlet.
+  def __init__(self, backend: YoLink, outlet_name: str):
+    """Initialize YoLink outlet.
 
-#         Args:
-#             backend: YoLink backend instance
-#             outlet_name: Name of the specific outlet device
-#         """
-#         self.backend = backend
-#         self.outlet_name = outlet_name
-#         self._device: Optional[YoLinkDevice] = None
+    Args:
+        backend: YoLink backend instance
+        outlet_name: Name of the specific outlet device
+    """
+    self.backend = backend
+    self.outlet_name = outlet_name
+    self._device: Optional[YoLinkDevice] = None
 
-#     async def setup(self) -> None:
-#         """Set up the outlet device."""
-#         # Ensure backend is set up
-#         if not self.backend.is_setup:
-#             await self.backend.setup()
+  async def setup(self) -> None:
+    """Set up the outlet device."""
+    # Ensure backend is set up
+    if not self.backend.is_setup:
+      await self.backend.setup()
 
-#         # Find the specific outlet device
-#         devices = self.backend._get_all_devices()
-#         self._device = None
+    # Find the specific outlet device
+    devices = self.backend._get_all_devices()
+    self._device = None
 
-#         for device in devices:
-#             if device.device_name == self.outlet_name:
-#                 self._device = device
-#                 break
+    for device in devices:
+      if device.device_name == self.outlet_name:
+        self._device = device
+        break
 
-#         if self._device is None:
-#             available_devices = [d.device_name for d in devices]
-#             raise ValueError(
-#                 f"Outlet '{self.outlet_name}' not found. "
-#                 f"Available devices: {available_devices}"
-#             )
+    if self._device is None:
+      available_devices = [d.device_name for d in devices]
+      raise ValueError(
+        f"Outlet '{self.outlet_name}' not found. " f"Available devices: {available_devices}"
+      )
 
-#         # Set the device in backend for compatibility
-#         self.backend._device = self._device
-#         logger.info(f"Outlet '{self.outlet_name}' set up successfully")
+  async def turn_on(self, outlet_index: int = 0) -> None:
+    """Turn on a specific outlet.
 
-#     async def turn_on(self, outlet_index: int = 0) -> None:
-#         """Turn on a specific outlet.
+    Args:
+        outlet_index: Index of the outlet to turn on (0-based)
+    """
+    self._ensure_device_ready()
 
-#         Args:
-#             outlet_index: Index of the outlet to turn on (0-based)
-#         """
-#         self._ensure_device_ready()
+    try:
+      request = OutletRequestBuilder.set_state_request("open", outlet_index)
+      response = await self._device.call_device(request)
 
-#         try:
-#             if hasattr(self._device, 'turn_on'):
-#                 await self._device.turn_on(outlet_index)
-#             else:
-#                 # Use OutletRequestBuilder for custom commands
-#                 request_builder = OutletRequestBuilder()
-#                 command = request_builder.build_turn_on_request(outlet_index)
-#                 await self._device.send_command(command)
+      logger.info(f"Turned on outlet {outlet_index}")
 
-#             logger.info(f"Turned on outlet {outlet_index}")
+    except Exception as e:
+      logger.error(f"Failed to turn on outlet {outlet_index}: {e}")
+      raise
 
-#         except Exception as e:
-#             logger.error(f"Failed to turn on outlet {outlet_index}: {e}")
-#             raise
+  async def turn_off(self, outlet_index: int = 0) -> None:
+    """Turn off a specific outlet.
 
-#     async def turn_off(self, outlet_index: int = 0) -> None:
-#         """Turn off a specific outlet.
+    Args:
+        outlet_index: Index of the outlet to turn off (0-based)
+    """
+    self._ensure_device_ready()
 
-#         Args:
-#             outlet_index: Index of the outlet to turn off (0-based)
-#         """
-#         self._ensure_device_ready()
+    try:
+      request = OutletRequestBuilder.set_state_request("close", outlet_index)
+      response = await self._device.call_device(request)
 
-#         try:
-#             if hasattr(self._device, 'turn_off'):
-#                 await self._device.turn_off(outlet_index)
-#             else:
-#                 # Use OutletRequestBuilder for custom commands
-#                 request_builder = OutletRequestBuilder()
-#                 command = request_builder.build_turn_off_request(outlet_index)
-#                 await self._device.send_command(command)
+      logger.info(f"Turned off outlet {outlet_index}")
 
-#             logger.info(f"Turned off outlet {outlet_index}")
+    except Exception as e:
+      logger.error(f"Failed to turn off outlet {outlet_index}: {e}")
+      raise
 
-#         except Exception as e:
-#             logger.error(f"Failed to turn off outlet {outlet_index}: {e}")
-#             raise
+  async def get_status(self, outlet_index: int = -1) -> bool:
+    """Get the status of a specific outlet.
 
-#     async def get_status(self, outlet_index: int = 0) -> bool:
-#         """Get the status of a specific outlet.
+    Args:
+        outlet_index: Index of the outlet to check. -1 returns all outlet states
 
-#         Args:
-#             outlet_index: Index of the outlet to check
+    Returns:
+        True if outlet is on, False if off
+    """
+    self._ensure_device_ready()
 
-#         Returns:
-#             True if outlet is on, False if off
-#         """
-#         self._ensure_device_ready()
+    try:
+      state = await self._device.get_state()
+      outlet_data = getattr(state, "data", {}).get("state", {})
 
-#         try:
-#             state = await self._device.get_state()
-#             outlet_data = state.get('data', {}).get('state', {})
+      if outlet_index > 7 or outlet_index < -1:
+        raise ValueError("Invalid outlet index")
 
-#             # Handle different outlet state formats
-#             if 'outlets' in outlet_data:
-#                 outlets = outlet_data['outlets']
-#                 if outlet_index < len(outlets):
-#                     return outlets[outlet_index].get('on', False)
-#             elif f'outlet_{outlet_index}' in outlet_data:
-#                 return outlet_data[f'outlet_{outlet_index}'].get('on', False)
-#             elif 'power' in outlet_data and outlet_index == 0:
-#                 return outlet_data['power']
+      if outlet_index == -1:
+        return outlet_data
+      return outlet_data[outlet_index]
 
-#             return False
+    except Exception as e:
+      logger.error(f"Failed to get outlet {outlet_index} status: {e}")
+      raise
 
-#         except Exception as e:
-#             logger.error(f"Failed to get outlet {outlet_index} status: {e}")
-#             raise
+  async def stop(self) -> None:
+    """Stop the outlet and clean up resources."""
+    logger.info(f"Stopping outlet '{self.outlet_name}'")
+    await self.backend.stop()
+    self._device = None
 
-#     async def stop(self) -> None:
-#         """Stop the outlet and clean up resources."""
-#         logger.info(f"Stopping outlet '{self.outlet_name}'")
-#         await self.backend.stop()
-#         self._device = None
+  def _ensure_device_ready(self) -> None:
+    """Ensure the device is ready for operations."""
+    if self._device is None:
+      raise RuntimeError("Outlet not set up. Call setup() first.")
+    if not self.backend.is_setup:
+      raise RuntimeError("Backend not set up. Call setup() first.")
 
-#     def _ensure_device_ready(self) -> None:
-#         """Ensure the device is ready for operations."""
-#         if self._device is None:
-#             raise RuntimeError("Outlet not set up. Call setup() first.")
-#         if not self.backend.is_setup:
-#             raise RuntimeError("Backend not set up. Call setup() first.")
+  @property
+  def device_name(self) -> str:
+    """Get the device name."""
+    return self.outlet_name
 
-#     @property
-#     def device_name(self) -> str:
-#         """Get the device name."""
-#         return self.outlet_name
-
-#     @property
-#     def device_id(self) -> Optional[str]:
-#         """Get the device ID if available."""
-#         return self._device.device_id if self._device else None
+  @property
+  def device_id(self) -> Optional[str]:
+    """Get the device ID if available."""
+    return self._device.device_id if self._device else None
