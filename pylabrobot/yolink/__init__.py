@@ -9,4 +9,7 @@ from .yolink import (
 #   "aiomqtt>=2.0.0,<3.0.0",
 #   "pydantic>=2.0.0",
 #   "tenacity>=8.1.0",
+#   "yolink-api>=0.5.8"
 # ]
+
+# pip install yolink-api to get all dependencies

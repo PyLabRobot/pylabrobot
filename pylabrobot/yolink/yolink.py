@@ -1,18 +1,15 @@
 """YoLink backend implementation for PyLabRobot devices."""
 
-import asyncio
-import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import aiohttp
-
-from .auth_mgr import YoLinkAuthMgr
-from .device import YoLinkDevice
-from .home_manager import YoLinkHome
-from .message_listener import MessageListener
-from .outlet_request_builder import OutletRequestBuilder
+from yolink.auth_mgr import YoLinkAuthMgr
+from yolink.device import YoLinkDevice
+from yolink.home_manager import YoLinkHome
+from yolink.message_listener import MessageListener
+from yolink.outlet_request_builder import OutletRequestBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +109,7 @@ class YoLinkTokenManager:
     return self._refresh_token
 
 
-class YoLinkAuthMgr(YoLinkAuthMgr):
+class YoLinkAuthManager(YoLinkAuthMgr):
   """Authentication manager for YoLink API."""
 
   def __init__(self, session: aiohttp.ClientSession, token_manager: YoLinkTokenManager):
@@ -188,7 +185,7 @@ class YoLink:
       self._token_manager._refresh_token = refresh_token
 
     self._session: Optional[aiohttp.ClientSession] = None
-    self._auth_mgr: Optional[YoLinkAuthMgr] = None
+    self._auth_mgr: Optional[YoLinkAuthManager] = None
     self._home: Optional[YoLinkHome] = None
     self._listener: Optional[YoLinkMessageListener] = None
     self._is_setup = False
@@ -236,7 +233,7 @@ class YoLink:
       await self._ensure_access_token()
 
       # Initialize authentication manager
-      self._auth_mgr = YoLinkAuthMgr(self._session, self._token_manager)
+      self._auth_mgr = YoLinkAuthManager(self._session, self._token_manager)
 
       # Initialize message listener
       self._listener = YoLinkMessageListener()
@@ -524,7 +521,7 @@ class Outlet:
 
     try:
       request = OutletRequestBuilder.set_state_request("open", outlet_index)
-      response = await self._device.call_device(request)
+      await self._device.call_device(request)
 
       logger.info(f"Turned on outlet {outlet_index}")
 
@@ -542,7 +539,7 @@ class Outlet:
 
     try:
       request = OutletRequestBuilder.set_state_request("close", outlet_index)
-      response = await self._device.call_device(request)
+      await self._device.call_device(request)
 
       logger.info(f"Turned off outlet {outlet_index}")
 
