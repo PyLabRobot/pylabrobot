@@ -15,9 +15,8 @@ class Fan(Machine):
     self.backend: FanBackend = backend  # fix type
 
   async def stop(self):
-    await super().stop()
     await self.backend.turn_off()
-    await self.backend.stop()
+    await super().stop()
 
   async def turn_on(self, intensity: int, duration=None):
     """Run the fan
