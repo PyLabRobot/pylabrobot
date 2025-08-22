@@ -554,7 +554,7 @@ class EVOBackend(TecanLiquidHandler):
     )
 
     # TODO check channel positions match resource positions for z-axis
-    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_hight=0)
+    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("MCA not implemented yet")
@@ -718,7 +718,7 @@ class EVOBackend(TecanLiquidHandler):
       airgap: `lag` for leading airgap, `tag` for trailing airgap.
 
     Returns:
-      pvl: position_valve_logial
+      pvl: position_valve_logical
       sep: set_end_speed_plunger
       ppr: move_plunger_relative
     """
@@ -976,7 +976,7 @@ class LiHa(EVOArm):
     """Position absolute for all LiHa axes.
 
     Args:
-      x: aboslute x position in 1/10 mm, must be in allowed machine range
+      x: absolute x position in 1/10 mm, must be in allowed machine range
       y: absolute y position in 1/10 mm, must be in allowed machine range
       ys: absolute y spacing in 1/10 mm, must be between 90 and 380
       z: absolute z position in 1/10 mm for each channel, must be in
@@ -1179,23 +1179,25 @@ class LiHa(EVOArm):
 
   async def discard_disposable_tip_high(self, tips):
     """Drops tips
-    Discards at the Z-axes initialization hight
+    Discards at the Z-axes initialization height
     Args:
       tips: binary coded tip select
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
 
-  async def _drop_disposable_tip(self, tips, discard_hight):
+  async def _drop_disposable_tip(self, tips, discard_height):
     """Drops tips
     Discards at a variable Z-axis initialization height
 
     Args:
       tips: binary coded tip select
-      discard_hight: binary. 0 above tip rack, 1 in tip rack
+      discard_height: binary. 0 above tip rack, 1 in tip rack
     """
 
-    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
+    await self.backend.send_command(
+      module=self.module, command="AST", params=[tips, discard_height]
+    )
 
 
 class Mca(EVOArm):
@@ -1307,11 +1309,11 @@ class RoMa(EVOArm):
 
     Args:
       v: vector to be defined, must be between 1 and 100
-      x: aboslute x position in 1/10 mm
-      y: aboslute y position in 1/10 mm
-      z: aboslute z position in 1/10 mm
-      r: aboslute r position in 1/10 mm
-      g: aboslute g position in 1/10 mm
+      x: absolute x position in 1/10 mm
+      y: absolute y position in 1/10 mm
+      z: absolute z position in 1/10 mm
+      r: absolute r position in 1/10 mm
+      g: absolute g position in 1/10 mm
       speed: speed select, 0 - slow, 1 - fast
       tw: target window class, set with STW
 

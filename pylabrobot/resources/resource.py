@@ -800,9 +800,9 @@ class Resource:
     this method might not return the correct value.
     ```
     """
-    heighest_point = self.get_absolute_location(z="t").z
+    highest_point = self.get_absolute_location(z="t").z
     if self.name == "deck":
-      heighest_point = 0
+      highest_point = 0
     for resource in self.children:
-      heighest_point = max(heighest_point, resource.get_highest_known_point())
-    return heighest_point
+      highest_point = max(highest_point, resource.get_highest_known_point())
+    return highest_point

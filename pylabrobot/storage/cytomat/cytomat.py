@@ -122,7 +122,7 @@ class CytomatBackend(IncubatorBackend):
         await self.reset_error_register()
         raise Exception(f"Unknown cytomat error code in response: {resp}")
 
-      logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
+      logging.error("Command %s received an unknown response: '%s'", command_str, resp)
       await self.reset_error_register()
       raise Exception(f"Unknown response from cytomat: {resp}")
 

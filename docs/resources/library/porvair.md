@@ -2,7 +2,7 @@
 
 Company history: [Porvair Filtration Group](https://www.porvairfiltration.com/about/our-history/)
 
-> Porvair Filtration Group, a wholly owned subsidiary of Porvair plc, is a specialist filtration and environmental technology group involved in developing, designing and manufacturing filtration and separation solutions to industry sectors such as the aviation, molten metal, energy, water treatment and life sciences markets. Porvair plc is a publically owned company with four principal subsidiaries: Porvair Filtration Group Ltd., Porvair Sciences Ltd., Selee Corporation and Seal Analytical Ltd.
+> Porvair Filtration Group, a wholly owned subsidiary of Porvair plc, is a specialist filtration and environmental technology group involved in developing, designing and manufacturing filtration and separation solutions to industry sectors such as the aviation, molten metal, energy, water treatment and life sciences markets. Porvair plc is a publicly owned company with four principal subsidiaries: Porvair Filtration Group Ltd., Porvair Sciences Ltd., Selee Corporation and Seal Analytical Ltd.
 
 ## Plates
 

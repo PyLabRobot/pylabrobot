@@ -17,7 +17,7 @@ def Trough_CAR_4R200_A00(name: str) -> TroughCarrier:
   carrier_site_pedestal_bottom = 132.5
   pedestal_z_height = 1.5
   true_dz = 1.2
-  trought_z_thickness = 1.4
+  trough_z_thickness = 1.4
   """
   return TroughCarrier(
     name=name,
