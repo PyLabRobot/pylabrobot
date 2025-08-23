@@ -860,7 +860,18 @@ class LiquidHandler(Resource, Machine):
         raise ValueError("Aspirating from a well with a lid is not supported.")
 
     self._make_sure_channels_exist(use_channels)
-    assert len(resources) == len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
+    for n, p in [
+      ("resources", resources),
+      ("vols", vols),
+      ("offsets", offsets),
+      ("flow_rates", flow_rates),
+      ("liquid_height", liquid_height),
+      ("blow_out_air_volume", blow_out_air_volume),
+    ]:
+      if len(p) != len(use_channels):
+        raise ValueError(
+          f"Length of {n} must match length of use_channels: {len(p)} != {len(use_channels)}"
+        )
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
@@ -1102,7 +1113,18 @@ class LiquidHandler(Resource, Machine):
       if isinstance(resource.parent, Plate) and resource.parent.has_lid():
         raise ValueError("Dispensing to plate with lid")
 
-    assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
+    for n, p in [
+      ("resources", resources),
+      ("vols", vols),
+      ("offsets", offsets),
+      ("flow_rates", flow_rates),
+      ("liquid_height", liquid_height),
+      ("blow_out_air_volume", blow_out_air_volume),
+    ]:
+      if len(p) != len(use_channels):
+        raise ValueError(
+          f"Length of {n} must match length of use_channels: {len(p)} != {len(use_channels)}"
+        )
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     if does_volume_tracking():
