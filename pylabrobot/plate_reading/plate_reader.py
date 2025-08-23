@@ -1,4 +1,4 @@
-from typing import List, Optional, cast
+from typing import List, Literal, Optional, cast
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -111,15 +111,17 @@ class PlateReader(ResourceHolder, Machine):
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,
     )
-  
-  async def read_dye(self, dye_name: str, focal_height: float) -> List[List[float]]:
+
+  async def read_dye(
+    self, dye_name: Literal["rhodamine_b", "cresyl_violet"], focal_height: float
+  ) -> List[List[float]]:
     """Read the dye from the plate.
 
     Args:
       dye_name: The name of the dye to read.
       focal_height: The focal height to read the dye at, in micrometers.
     """
-    
+
     if dye_name == "rhodamine_b":
       return await self.read_fluorescence(
         excitation_wavelength=546,
@@ -134,4 +136,6 @@ class PlateReader(ResourceHolder, Machine):
         focal_height=focal_height,
       )
 
-    raise ValueError(f"Unknown dye: {dye_name}. Supported dyes are 'rhodamine_b' and 'cresyl_violet'.")
+    raise ValueError(
+      f"Unknown dye: {dye_name}. Supported dyes are 'rhodamine_b' and 'cresyl_violet'."
+    )
