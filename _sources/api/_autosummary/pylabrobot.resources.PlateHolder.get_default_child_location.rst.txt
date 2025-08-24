@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.get\_default\_child\_location
+==============================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.get_default_child_location

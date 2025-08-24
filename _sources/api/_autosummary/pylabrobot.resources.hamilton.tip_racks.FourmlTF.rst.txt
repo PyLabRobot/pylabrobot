@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_racks.FourmlTF
+=================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
+
+.. autofunction:: FourmlTF
