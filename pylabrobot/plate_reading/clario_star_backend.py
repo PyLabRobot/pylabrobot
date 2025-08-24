@@ -20,7 +20,7 @@ else:
 logger = logging.getLogger("pylabrobot")
 
 
-class CLARIOStarBackend(PlateReaderBackend):
+class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
