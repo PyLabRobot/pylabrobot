@@ -28,7 +28,7 @@ driver.USB_VID_LIST.append(0x0403)  # i.e. 1027
 driver.USB_PID_LIST.append(0xBB68)  # i.e. 47976
 
 
-class CLARIOStarBackend(PlateReaderBackend):
+class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
