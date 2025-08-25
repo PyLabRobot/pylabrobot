@@ -236,7 +236,7 @@ class PlateHolder(ResourceHolder):
     location of the ResourceStack itself to make sure we take into account sinking of the plate.
 
     Args:
-      resource: The Resource on the ResourceStack tht was assigned.
+      resource: The Resource on the ResourceStack that was assigned.
     """
     resource_stack = resource.parent
     assert isinstance(resource_stack, ResourceStack)

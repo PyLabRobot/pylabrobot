@@ -6,8 +6,8 @@ from pylabrobot.powder_dispensing.backend import (
 class CrystalPowderdose(PowderDispenserBackend):
   """A powder dispenser backend for Chemspeed Crystal Powderdose."""
 
-  def __init__(self, arksuite_adress: str) -> None:
-    self.arksuite_adress = arksuite_adress
+  def __init__(self, arksuite_address: str) -> None:
+    self.arksuite_address = arksuite_address
 
   async def setup(self) -> None:
     raise NotImplementedError("CrystalPowderdose not implemented yet")
@@ -18,5 +18,5 @@ class CrystalPowderdose(PowderDispenserBackend):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "arksuite_adress": self.arksuite_adress,
+      "arksuite_address": self.arksuite_address,
     }

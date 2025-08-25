@@ -127,7 +127,7 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
   if liquid_height > h_pyramid + h_cube:
     raise ValueError(
       """WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware."""
+    check your labware definition and/or that you are using the right labware."""
     )
 
   # Calculating the base area
@@ -210,7 +210,7 @@ def calculate_liquid_volume_container_2segments_square_ubottom(
   if liquid_height > h_cuboid + x / 2:
     raise ValueError(
       """WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware."""
+    check your labware definition and/or that you are using the right labware."""
     )
 
   r = x / 2  # Radius of the hemisphere
@@ -298,7 +298,7 @@ def calculate_liquid_volume_container_2segments_round_vbottom(
   if liquid_height > h_cone + h_cylinder:
     raise ValueError(
       """WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware."""
+    check your labware definition and/or that you are using the right labware."""
     )
 
   r = d / 2
@@ -386,7 +386,7 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
   if liquid_height > h_cylinder + r:
     raise ValueError(
       """WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware."""
+    check your labware definition and/or that you are using the right labware."""
     )
 
   # Calculating the full volume of the hemisphere
@@ -451,7 +451,7 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
   if liquid_height > h_cylinder:
     raise ValueError(
       """WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware."""
+    check your labware definition and/or that you are using the right labware."""
     )
 
   cylinder_liquid_volume = math.pi * r**2 * liquid_height
@@ -460,7 +460,7 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
 
 ### Example of usage using a lambda function:
 # def Rectangular_Reservoir(name: str) -> Plate:
-#   """ An 8 well resevoir with a 30mL volume. """
+#   """ An 8 well reservoir with a 30mL volume. """
 #   WELL_WIDTH = 8.08
 #   WELL_LENGTH = 107.4
 #   return Plate(
