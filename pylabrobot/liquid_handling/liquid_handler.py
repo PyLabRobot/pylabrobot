@@ -1685,16 +1685,18 @@ class LiquidHandler(Resource, Machine):
     try:
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
     except Exception as error:
-      for channel, container in zip(self.head96.values(), containers):
+      for channel in self.head96.values():
+        channel.get_tip().tracker.rollback()
+      for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
-        channel.get_tip().tracker.rollback()
-      raise error
+      raise
     else:
-      for channel, container in zip(self.head96.values(), containers):
+      for channel in self.head96.values():
+        channel.get_tip().tracker.commit()
+      for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.commit()
-      channel.get_tip().tracker.commit()
 
   async def dispense96(
     self,
@@ -1828,16 +1830,18 @@ class LiquidHandler(Resource, Machine):
     try:
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
     except Exception as error:
-      for channel, container in zip(self.head96.values(), containers):
+      for channel in self.head96.values():
+        channel.get_tip().tracker.rollback()
+      for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
-        channel.get_tip().tracker.rollback()
-      raise error
+      raise
     else:
-      for channel, container in zip(self.head96.values(), containers):
+      for channel in self.head96.values():
+        channel.get_tip().tracker.commit()
+      for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.commit()
-        channel.get_tip().tracker.commit()
 
   async def stamp(
     self,

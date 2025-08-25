@@ -1,7 +1,6 @@
 import itertools
 import tempfile
 import unittest
-import unittest.mock
 from typing import Any, Dict, List, Optional, Union, cast
 
 import pytest
@@ -1115,10 +1114,14 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.aspirate96(self.single_well_plate, volume=10)
     assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 10 for i in range(96))
+    assert all(
+      self.lh.head96[i].get_tip().tracker.liquids == [(Liquid.WATER, 10)] for i in range(96)
+    )
     assert well.tracker.get_used_volume() == 0
 
     await self.lh.dispense96(self.single_well_plate, volume=10)
     assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 0 for i in range(96))
+    assert all(self.lh.head96[i].get_tip().tracker.liquids == [] for i in range(96))
     assert well.tracker.get_used_volume() == 10 * 96
 
     await self.lh.return_tips96()
