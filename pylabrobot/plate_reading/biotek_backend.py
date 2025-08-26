@@ -244,7 +244,7 @@ class Cytation5Backend(ImageReaderBackend):
     nodemap = self.cam.GetNodeMap()
 
     # -- Configure trigger to be software --
-    # This is needed for longer exposure times (otherwise 23ms is the maximum)
+    # This is needed for longer exposure times (otherwise 27.8ms is the maximum)
     # 1. Set trigger selector to frame start
     ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
     if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
@@ -459,8 +459,8 @@ class Cytation5Backend(ImageReaderBackend):
       return
 
     # adopted from example
-    nodemap = self.cam.GetNodeMap()
     try:
+      nodemap = self.cam.GetNodeMap()
       node_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
       if not PySpin.IsReadable(node_trigger_mode) or not PySpin.IsWritable(node_trigger_mode):
         return
@@ -1172,16 +1172,6 @@ class Cytation5Backend(ImageReaderBackend):
     assert self.cam is not None
     nodemap = self.cam.GetNodeMap()
 
-    # Start acquisition mode (continuous)
-    # node_acquisition_mode = PySpin.CEnumerationPtr(nodemap.GetNode("AcquisitionMode"))
-    # if not PySpin.IsReadable(node_acquisition_mode) or not \
-    #   PySpin.IsWritable(node_acquisition_mode):
-    #   raise RuntimeError("unable to set acquisition mode to continuous (enum retrieval)")
-    # node_acquisition_mode_single_frame = node_acquisition_mode.GetEntryByName("Continuous")
-    # if not PySpin.IsReadable(node_acquisition_mode_single_frame):
-    #   raise RuntimeError("unable to set acquisition mode to single frame (entry retrieval)")
-    # node_acquisition_mode.SetIntValue(node_acquisition_mode_single_frame.GetValue())
-
     assert self.imaging_config is not None, "Need to set imaging_config first"
 
     num_tries = 0
@@ -1261,25 +1251,12 @@ class Cytation5Backend(ImageReaderBackend):
 
     self.cam.BeginAcquisition()
     try:
-      t0 = time.time()
       await self.set_objective(objective)
-      t_objective = time.time()
-      logger.debug("[cytation5] set objective in %.2f seconds", t_objective - t0)
       await self.set_imaging_mode(mode, led_intensity=led_intensity)
-      t_imaging_mode = time.time()
-      logger.debug("[cytation5] set imaging mode in %.2f seconds", t_imaging_mode - t_objective)
       await self.select(row, column)
-      t_select = time.time()
-      logger.debug("[cytation5] selected well in %.2f seconds", t_select - t_imaging_mode)
       await self.set_exposure(exposure_time)
-      t_exposure = time.time()
-      logger.debug("[cytation5] set exposure in %.2f seconds", t_exposure - t_select)
       await self.set_gain(gain)
-      t_gain = time.time()
-      logger.debug("[cytation5] set gain in %.2f seconds", t_gain - t_exposure)
       await self.set_focus(focal_height)
-      t_focus = time.time()
-      logger.debug("[cytation5] set focus in %.2f seconds", t_focus - t_gain)
 
       def image_size(magnification: float) -> Tuple[float, float]:
         # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
