@@ -1191,10 +1191,8 @@ class Cytation5Backend(ImageReaderBackend):
         raise RuntimeError(f"Failed to execute software trigger after {num_trigger_tries} attempts")
 
       try:
-        t0 = time.time()
-        image_result = self.cam.GetNextImage(1000)
-        t1 = time.time()
-        logger.debug("[cytation5] GetNextImage took %.2f seconds", t1 - t0)
+        timeout = int(self.cam.ExposureTime.GetValue() / 1000 + 1000)  # from example
+        image_result = self.cam.GetNextImage(timeout)
         if not image_result.IsIncomplete():
           t0 = time.time()
           processor = PySpin.ImageProcessor()
