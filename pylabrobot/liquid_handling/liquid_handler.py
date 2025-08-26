@@ -61,6 +61,7 @@ from pylabrobot.resources import (
 from pylabrobot.resources.errors import CrossContaminationError, HasTipError
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
+from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
@@ -118,12 +119,18 @@ class LiquidHandler(Resource, Machine):
   defined in `pyhamilton.liquid_handling.backends`) to communicate with the liquid handler.
   """
 
-  def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
+  def __init__(
+    self,
+    backend: LiquidHandlerBackend,
+    deck: Deck,
+    default_offset_head96: Optional[Coordinate] = None,
+  ):
     """Initialize a LiquidHandler.
 
     Args:
       backend: Backend to use.
       deck: Deck to use.
+      default_offset_head96: Base offset applied to all 96-head operations.
     """
 
     Resource.__init__(
@@ -148,6 +155,10 @@ class LiquidHandler(Resource, Machine):
     self._default_use_channels: Optional[List[int]] = None
 
     self._blow_out_air_volume: Optional[List[Optional[float]]] = None
+
+    # Default offset applied to all 96-head operations. Any offset passed to a 96-head method is
+    # added to this value.
+    self.default_offset_head96: Coordinate = default_offset_head96 or Coordinate.zero()
 
     # assign deck as only child resource, and set location of self to origin.
     self.location = Coordinate.zero()
@@ -1339,9 +1350,12 @@ class LiquidHandler(Resource, Machine):
 
     Args:
       tip_rack: The tip rack to pick up tips from.
-      offset: The offset to use when picking up tips, optional.
+      offset: Additional offset to use when picking up tips. This is added to
+        :attr:`default_offset_head96`.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    offset = self.default_offset_head96 + offset
 
     self._log_command(
       "pick_up_tips96",
@@ -1406,12 +1420,15 @@ class LiquidHandler(Resource, Machine):
 
     Args:
       resource: The tip rack to drop tips to.
-      offset: The offset to use when dropping tips.
+      offset: Additional offset to use when dropping tips. This is added to
+        :attr:`default_offset_head96`.
       allow_nonzero_volume: If `True`, the tip will be dropped even if its volume is not zero (there
         is liquid in the tip). If `False`, a RuntimeError will be raised if the tip has nonzero
         volume.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    offset = self.default_offset_head96 + offset
 
     self._log_command(
       "drop_tips96",
@@ -1566,7 +1583,8 @@ class LiquidHandler(Resource, Machine):
       resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
       volume (float): The volume to aspirate through each channel
       offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Defaults to Coordinate.zero().
+        the plate or container is defined to be. Added to :attr:`default_offset_head96`.
+        Defaults to :func:`Coordinate.zero`.
       flow_rate ([Optional[float]]): The flow rate to use when aspirating, in ul/s. If `None`, the
         backend default will be used.
       liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
@@ -1575,6 +1593,8 @@ class LiquidHandler(Resource, Machine):
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    offset = self.default_offset_head96 + offset
 
     self._log_command(
       "aspirate96",
@@ -1719,7 +1739,8 @@ class LiquidHandler(Resource, Machine):
       resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
       volume (float): The volume to dispense through each channel
       offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Defaults to Coordinate.zero().
+        the plate or container is defined to be. Added to :attr:`default_offset_head96`.
+        Defaults to :func:`Coordinate.zero`.
       flow_rate ([Optional[float]]): The flow rate to use when dispensing, in ul/s. If `None`, the
         backend default will be used.
       liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
@@ -1728,6 +1749,8 @@ class LiquidHandler(Resource, Machine):
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    offset = self.default_offset_head96 + offset
 
     self._log_command(
       "dispense96",
@@ -2325,7 +2348,11 @@ class LiquidHandler(Resource, Machine):
     )
 
   def serialize(self):
-    return {**Resource.serialize(self), **Machine.serialize(self)}
+    return {
+      **Resource.serialize(self),
+      **Machine.serialize(self),
+      "default_offset_head96": serialize(self.default_offset_head96),
+    }
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False) -> LiquidHandler:
@@ -2338,7 +2365,18 @@ class LiquidHandler(Resource, Machine):
     deck_data = data["children"][0]
     deck = Deck.deserialize(data=deck_data, allow_marshal=allow_marshal)
     backend = LiquidHandlerBackend.deserialize(data=data["backend"])
-    return cls(deck=deck, backend=backend)
+
+    if "default_offset_head96" in data:
+      default_offset = deserialize(data["default_offset_head96"], allow_marshal=allow_marshal)
+      assert isinstance(default_offset, Coordinate)
+    else:
+      default_offset = Coordinate.zero()
+
+    return cls(
+      deck=deck,
+      backend=backend,
+      default_offset_head96=default_offset,
+    )
 
   @classmethod
   def load(cls, path: str) -> LiquidHandler:

@@ -42,6 +42,7 @@ from pylabrobot.resources.volume_tracker import (
   set_volume_tracking,
 )
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import serialize
 
 from . import backends
 from .liquid_handler import LiquidHandler
@@ -490,6 +491,51 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         },
       },
     )
+
+  async def test_default_offset_head96(self):
+    self.lh.default_offset_head96 = Coordinate(1, 2, 3)
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+    cmd = self.get_first_command("pick_up_tips96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["pickup"].offset, Coordinate(1, 2, 3))
+    self.backend.clear()
+
+    # aspirate with extra offset; effective offset should be default + provided
+    await self.lh.aspirate96(self.plate, volume=10, offset=Coordinate(1, 0, 0))
+    cmd = self.get_first_command("aspirate96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["aspiration"].offset, Coordinate(2, 2, 3))
+    self.backend.clear()
+
+    # dispense without providing offset uses default
+    await self.lh.dispense96(self.plate, volume=10)
+    cmd = self.get_first_command("dispense96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["dispense"].offset, Coordinate(1, 2, 3))
+    self.backend.clear()
+
+    await self.lh.drop_tips96(self.tip_rack, offset=Coordinate(0, 1, 0))
+    cmd = self.get_first_command("drop_tips96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["drop"].offset, Coordinate(1, 3, 3))
+
+  async def test_default_offset_head96_initializer(self):
+    backend = backends.SaverBackend(num_channels=8)
+    deck = STARLetDeck()
+    lh = LiquidHandler(
+      backend=backend,
+      deck=deck,
+      default_offset_head96=Coordinate(1, 2, 3),
+    )
+    self.assertEqual(lh.default_offset_head96, Coordinate(1, 2, 3))
+
+  async def test_default_offset_head96_serialization(self):
+    self.lh.default_offset_head96 = Coordinate(1, 2, 3)
+    data = self.lh.serialize()
+    self.assertEqual(data["default_offset_head96"], serialize(Coordinate(1, 2, 3)))
+    new_lh = LiquidHandler.deserialize(data)
+    self.assertEqual(new_lh.default_offset_head96, Coordinate(1, 2, 3))
 
   async def test_with_use_channels(self):
     tip_spot = self.tip_rack.get_item("A1")
