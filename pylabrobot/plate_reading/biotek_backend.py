@@ -70,6 +70,7 @@ async def _golden_ratio_search(
   cache: Dict[float, float] = {}
 
   async def cached_func(x: float) -> float:
+    x = round(x / tol) * tol  # round x to units of tol
     if x not in cache:
       cache[x] = await func(x)
     return cache[x]
