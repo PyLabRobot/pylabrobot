@@ -234,6 +234,7 @@ class Cytation5Backend(ImageReaderBackend):
         self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
         break
       except:  # noqa
+        await asyncio.sleep(0.1)
         pass
     else:
       raise RuntimeError(
