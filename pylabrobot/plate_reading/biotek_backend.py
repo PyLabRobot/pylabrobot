@@ -918,7 +918,8 @@ class Cytation5Backend(ImageReaderBackend):
       relative_y_str = str(round(relative_y * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O01{relative_y_str}")
 
-    self._pos_x, self._pos_y = x, y
+    if relative_x != 0 or relative_y != 0:
+      await asyncio.sleep(0.1)
 
   def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
     self._auto_focus_search_range = (min_focal_height, max_focal_height)
@@ -1297,7 +1298,6 @@ class Cytation5Backend(ImageReaderBackend):
       images: List[Image] = []
       for x_pos, y_pos in positions:
         await self.set_position(x=x_pos, y=y_pos)
-        await asyncio.sleep(0.1)
         t0 = time.time()
         images.append(
           await self._acquire_image(
