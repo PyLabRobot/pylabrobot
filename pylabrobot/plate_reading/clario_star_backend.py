@@ -349,3 +349,10 @@ class CLARIOstarBackend(PlateReaderBackend):
 class CLARIOStar:
   def __init__(self, *args, **kwargs):
     raise RuntimeError("`CLARIOStar` is deprecated. Please use `CLARIOStarBackend` instead.")
+
+
+class CLARIOStarBackend:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`CLARIOStarBackend` (capital 'S') is deprecated. Please use `CLARIOstarBackend` instead."
+    )
