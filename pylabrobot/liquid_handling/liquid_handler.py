@@ -1704,7 +1704,7 @@ class LiquidHandler(Resource, Machine):
 
     try:
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
-    except Exception as error:
+    except Exception:
       for channel in self.head96.values():
         channel.get_tip().tracker.rollback()
       for container in containers:
@@ -1852,7 +1852,7 @@ class LiquidHandler(Resource, Machine):
 
     try:
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
-    except Exception as error:
+    except Exception:
       for channel in self.head96.values():
         channel.get_tip().tracker.rollback()
       for container in containers:

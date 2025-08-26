@@ -498,27 +498,27 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     cmd = self.get_first_command("pick_up_tips96")
     self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["pickup"].offset, Coordinate(1, 2, 3))
+    self.assertEqual(cmd["kwargs"]["pickup"].offset, Coordinate(1, 2, 3))  # type: ignore
     self.backend.clear()
 
     # aspirate with extra offset; effective offset should be default + provided
     await self.lh.aspirate96(self.plate, volume=10, offset=Coordinate(1, 0, 0))
     cmd = self.get_first_command("aspirate96")
     self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["aspiration"].offset, Coordinate(2, 2, 3))
+    self.assertEqual(cmd["kwargs"]["aspiration"].offset, Coordinate(2, 2, 3))  # type: ignore
     self.backend.clear()
 
     # dispense without providing offset uses default
     await self.lh.dispense96(self.plate, volume=10)
     cmd = self.get_first_command("dispense96")
     self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["dispense"].offset, Coordinate(1, 2, 3))
+    self.assertEqual(cmd["kwargs"]["dispense"].offset, Coordinate(1, 2, 3))  # type: ignore
     self.backend.clear()
 
     await self.lh.drop_tips96(self.tip_rack, offset=Coordinate(0, 1, 0))
     cmd = self.get_first_command("drop_tips96")
     self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["drop"].offset, Coordinate(1, 3, 3))
+    self.assertEqual(cmd["kwargs"]["drop"].offset, Coordinate(1, 3, 3))  # type: ignore
 
   async def test_default_offset_head96_initializer(self):
     backend = backends.SaverBackend(num_channels=8)
