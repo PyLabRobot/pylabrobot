@@ -155,115 +155,126 @@ class Cytation5Backend(ImageReaderBackend):
     self._shaking_task: Optional[asyncio.Task] = None
 
     if use_cam:
-      if not USE_PYSPIN:
-        raise RuntimeError(
-          "PySpin is not installed. Please follow the imaging setup instructions. "
-          f"Import error: {_PYSPIN_IMPORT_ERROR}"
+      try:
+        await self._set_up_camera()
+      except:
+        # if setting up the camera fails, we have to close the ftdi connection
+        # so that the user can try calling setup() again.
+        # if we don't close the ftdi connection here, it will be open until the
+        # python kernel is restarted.
+        await self.stop()
+        raise
+
+  async def _set_up_camera(self) -> None:
+    if not USE_PYSPIN:
+      raise RuntimeError(
+        "PySpin is not installed. Please follow the imaging setup instructions. "
+        f"Import error: {_PYSPIN_IMPORT_ERROR}"
+      )
+    if self.imaging_config is None:
+      raise RuntimeError("Imaging configuration is not set.")
+
+    logger.debug("[cytation5] setting up camera")
+
+    # -- Retrieve singleton reference to system object (Spinnaker) --
+    self.spinnaker_system = PySpin.System.GetInstance()
+    version = self.spinnaker_system.GetLibraryVersion()
+    logger.debug(
+      "[cytation5] Library version: %d.%d.%d.%d",
+      version.major,
+      version.minor,
+      version.type,
+      version.build,
+    )
+
+    # -- Get the camera by serial number, or the first. --
+    cam_list = self.spinnaker_system.GetCameras()
+    num_cameras = cam_list.GetSize()
+    logger.debug("[cytation5] number of cameras detected: %d", num_cameras)
+
+    for cam in cam_list:
+      info = self._get_device_info(cam)
+      serial_number = info["DeviceSerialNumber"]
+      logger.debug("[cytation5] camera detected: %s", serial_number)
+
+      if (
+        self.imaging_config.camera_serial_number is not None
+        and serial_number == self.imaging_config.camera_serial_number
+      ):
+        self.cam = cam
+        logger.info("[cytation5] using camera with serial number %s", serial_number)
+        break
+    else:  # if no specific camera was found by serial number so use the first one
+      if num_cameras > 0:
+        self.cam = cam_list.GetByIndex(0)
+        logger.info(
+          "[cytation5] using first camera with serial number %s", info["DeviceSerialNumber"]
         )
-      if self.imaging_config is None:
-        raise RuntimeError("Imaging configuration is not set.")
+      else:
+        logger.error("[cytation5] no cameras found")
+        self.cam = None
+    cam_list.Clear()
 
-      logger.debug("[cytation5] setting up camera")
-
-      # -- Retrieve singleton reference to system object (Spinnaker) --
-      self.spinnaker_system = PySpin.System.GetInstance()
-      version = self.spinnaker_system.GetLibraryVersion()
-      logger.debug(
-        "[cytation5] Library version: %d.%d.%d.%d",
-        version.major,
-        version.minor,
-        version.type,
-        version.build,
+    if self.cam is None:
+      raise RuntimeError(
+        "No camera found. Make sure the camera is connected and the serial " "number is correct."
       )
 
-      # -- Get the camera by serial number, or the first. --
-      cam_list = self.spinnaker_system.GetCameras()
-      num_cameras = cam_list.GetSize()
-      logger.debug("[cytation5] number of cameras detected: %d", num_cameras)
+    # -- Initialize camera --
+    for _ in range(10):
+      try:
+        self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
+        break
+      except:  # noqa
+        pass
+    else:
+      raise RuntimeError(
+        "Failed to initialize camera. Make sure the camera is connected and the "
+        "Spinnaker SDK is installed correctly."
+      )
+    nodemap = self.cam.GetNodeMap()
 
-      for cam in cam_list:
-        info = self._get_device_info(cam)
-        serial_number = info["DeviceSerialNumber"]
-        logger.debug("[cytation5] camera detected: %s", serial_number)
+    # -- Configure trigger to be software --
+    # This is needed for longer exposure times (otherwise 23ms is the maximum)
+    # 1. Set trigger selector to frame start
+    ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
+    if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
+      raise RuntimeError(
+        "unable to configure TriggerSelector " "(can't read or write TriggerSelector)"
+      )
+    ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
+    if not PySpin.IsReadable(ptr_frame_start):
+      raise RuntimeError("unable to configure TriggerSelector (can't read FrameStart)")
+    ptr_trigger_selector.SetIntValue(int(ptr_frame_start.GetNumericValue()))
 
-        if (
-          self.imaging_config.camera_serial_number is not None
-          and serial_number == self.imaging_config.camera_serial_number
-        ):
-          self.cam = cam
-          logger.info("[cytation5] using camera with serial number %s", serial_number)
-          break
-      else:  # if no specific camera was found by serial number so use the first one
-        if num_cameras > 0:
-          self.cam = cam_list.GetByIndex(0)
-          logger.info(
-            "[cytation5] using first camera with serial number %s", info["DeviceSerialNumber"]
-          )
-        else:
-          logger.error("[cytation5] no cameras found")
-          self.cam = None
-      cam_list.Clear()
+    # 2. Set trigger source to software
+    ptr_trigger_source = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSource"))
+    if not PySpin.IsReadable(ptr_trigger_source) or not PySpin.IsWritable(ptr_trigger_source):
+      raise RuntimeError("unable to configure TriggerSource (can't read or write TriggerSource)")
+    ptr_inference_ready = PySpin.CEnumEntryPtr(ptr_trigger_source.GetEntryByName("Software"))
+    if not PySpin.IsReadable(ptr_inference_ready):
+      raise RuntimeError("unable to configure TriggerSource (can't read Software)")
+    ptr_trigger_source.SetIntValue(int(ptr_inference_ready.GetNumericValue()))
 
-      if self.cam is None:
-        raise RuntimeError(
-          "No camera found. Make sure the camera is connected and the serial " "number is correct."
-        )
+    # 3. Set trigger mode to on
+    ptr_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
+    if not PySpin.IsReadable(ptr_trigger_mode) or not PySpin.IsWritable(ptr_trigger_mode):
+      raise RuntimeError("unable to configure TriggerMode (can't read or write TriggerMode)")
+    ptr_trigger_on = PySpin.CEnumEntryPtr(ptr_trigger_mode.GetEntryByName("On"))
+    if not PySpin.IsReadable(ptr_trigger_on):
+      raise RuntimeError("unable to query TriggerMode On")
+    ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
 
-      # -- Initialize camera --
-      for _ in range(10):
-        try:
-          self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
-          break
-        except:  # noqa
-          pass
-      else:
-        raise RuntimeError(
-          "Failed to initialize camera. Make sure the camera is connected and the "
-          "Spinnaker SDK is installed correctly."
-        )
-      nodemap = self.cam.GetNodeMap()
+    # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
+    await asyncio.sleep(1)
 
-      # -- Configure trigger to be software --
-      # This is needed for longer exposure times (otherwise 23ms is the maximum)
-      # 1. Set trigger selector to frame start
-      ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
-      if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
-        raise RuntimeError(
-          "unable to configure TriggerSelector " "(can't read or write TriggerSelector)"
-        )
-      ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
-      if not PySpin.IsReadable(ptr_frame_start):
-        raise RuntimeError("unable to configure TriggerSelector (can't read FrameStart)")
-      ptr_trigger_selector.SetIntValue(int(ptr_frame_start.GetNumericValue()))
+    # -- Load filter information --
+    if self._filters is None:
+      await self._load_filters()
 
-      # 2. Set trigger source to software
-      ptr_trigger_source = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSource"))
-      if not PySpin.IsReadable(ptr_trigger_source) or not PySpin.IsWritable(ptr_trigger_source):
-        raise RuntimeError("unable to configure TriggerSource (can't read or write TriggerSource)")
-      ptr_inference_ready = PySpin.CEnumEntryPtr(ptr_trigger_source.GetEntryByName("Software"))
-      if not PySpin.IsReadable(ptr_inference_ready):
-        raise RuntimeError("unable to configure TriggerSource (can't read Software)")
-      ptr_trigger_source.SetIntValue(int(ptr_inference_ready.GetNumericValue()))
-
-      # 3. Set trigger mode to on
-      ptr_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
-      if not PySpin.IsReadable(ptr_trigger_mode) or not PySpin.IsWritable(ptr_trigger_mode):
-        raise RuntimeError("unable to configure TriggerMode (can't read or write TriggerMode)")
-      ptr_trigger_on = PySpin.CEnumEntryPtr(ptr_trigger_mode.GetEntryByName("On"))
-      if not PySpin.IsReadable(ptr_trigger_on):
-        raise RuntimeError("unable to query TriggerMode On")
-      ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
-
-      # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
-      await asyncio.sleep(1)
-
-      # -- Load filter information --
-      if self._filters is None:
-        await self._load_filters()
-
-      # -- Load objective information --
-      if self._objectives is None:
-        await self._load_objectives()
+    # -- Load objective information --
+    if self._objectives is None:
+      await self._load_objectives()
 
   @property
   def version(self) -> str:
