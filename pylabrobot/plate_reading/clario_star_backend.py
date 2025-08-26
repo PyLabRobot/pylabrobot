@@ -35,7 +35,7 @@ if HAS_PYLIBFTDI:
   driver.USB_PID_LIST.append(0xBB68)  # i.e. 47976
 
 
-class CLARIOStarBackend(PlateReaderBackend):
+class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
@@ -364,3 +364,10 @@ class CLARIOStarBackend(PlateReaderBackend):
 class CLARIOStar:
   def __init__(self, *args, **kwargs):
     raise RuntimeError("`CLARIOStar` is deprecated. Please use `CLARIOStarBackend` instead.")
+
+
+class CLARIOStarBackend:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`CLARIOStarBackend` (capital 'S') is deprecated. Please use `CLARIOstarBackend` instead."
+    )
