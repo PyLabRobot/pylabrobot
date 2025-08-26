@@ -1194,14 +1194,11 @@ class Cytation5Backend(ImageReaderBackend):
         timeout = int(self.cam.ExposureTime.GetValue() / 1000 + 1000)  # from example
         image_result = self.cam.GetNextImage(timeout)
         if not image_result.IsIncomplete():
-          t0 = time.time()
           processor = PySpin.ImageProcessor()
           processor.SetColorProcessing(color_processing_algorithm)
           image_converted = processor.Convert(image_result, pixel_format)
           image_result.Release()
-          logger.debug("[cytation5] acquired image in %d tries", num_tries + 1)
-          logger.debug("[cytation5] Convert took %.2f seconds for BS", time.time() - t0)
-          return image_converted.GetNDArray().tolist()  # type: ignore
+          return image_converted.GetNDArray()  # type: ignore
       except SpinnakerException as e:
         # the image is not ready yet, try again
         logger.debug("Failed to get image: %s", e)

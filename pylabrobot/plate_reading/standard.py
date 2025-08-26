@@ -2,7 +2,12 @@ import enum
 from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Literal, Union
 
-Image = List[List[float]]
+try:
+  import numpy.typing as npt
+
+  Image = npt.NDArray
+except ImportError:
+  Image = object  # type: ignore
 
 
 class Objective(enum.Enum):
