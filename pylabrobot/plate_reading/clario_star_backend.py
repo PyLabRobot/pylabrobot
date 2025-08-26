@@ -6,7 +6,13 @@ import sys
 import time
 from typing import List, Optional, Union
 
-from pylibftdi import driver
+try:
+  from pylibftdi import driver
+
+  HAS_PYLIBFTDI = True
+except ImportError as e:
+  HAS_PYLIBFTDI = False
+  _FTDI_IMPORT_ERROR = e
 
 from pylabrobot import utils
 from pylabrobot.io.ftdi import FTDI
@@ -24,8 +30,9 @@ logger = logging.getLogger("pylabrobot")
 # Make pylibftdi scan the CLARIOstar VID:PID
 # appears as ID 0403:bb68 Future Technology Devices International Limited CLARIOstar
 
-driver.USB_VID_LIST.append(0x0403)  # i.e. 1027
-driver.USB_PID_LIST.append(0xBB68)  # i.e. 47976
+if HAS_PYLIBFTDI:
+  driver.USB_VID_LIST.append(0x0403)  # i.e. 1027
+  driver.USB_PID_LIST.append(0xBB68)  # i.e. 47976
 
 
 class CLARIOStarBackend(PlateReaderBackend):
