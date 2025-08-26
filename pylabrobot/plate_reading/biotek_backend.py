@@ -5,7 +5,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union, cast
+from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Tuple, Union, cast
 
 try:
   import cv2  # type: ignore
@@ -67,10 +67,17 @@ async def _golden_ratio_search(
   c = b - (b - a) / phi
   d = a + (b - a) / phi
 
+  cache: Dict[float, float] = {}
+
+  async def cached_func(x: float) -> float:
+    if x not in cache:
+      cache[x] = await func(x)
+    return cache[x]
+
   t0 = time.time()
   iteration = 0
   while abs(b - a) > tol:
-    if (await func(c)) > (await func(d)):
+    if (await cached_func(c)) > (await cached_func(d)):
       b = d
     else:
       a = c
