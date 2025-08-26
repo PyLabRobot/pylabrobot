@@ -434,6 +434,8 @@ class Cytation5Backend(ImageReaderBackend):
     await self.io.stop()
 
     if hasattr(self, "cam") and self.cam is not None:
+      await self._reset_trigger()
+
       self.cam.DeInit()
       del self.cam
     if hasattr(self, "spinnaker_system") and self.spinnaker_system is not None:
@@ -442,6 +444,25 @@ class Cytation5Backend(ImageReaderBackend):
     self._objectives = None
     self._filters = None
     self._slow_mode = None
+
+  async def _reset_trigger(self):
+    if self.cam is None:
+      return
+
+    # adopted from example
+    nodemap = self.cam.GetNodeMap()
+    try:
+      node_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
+      if not PySpin.IsReadable(node_trigger_mode) or not PySpin.IsWritable(node_trigger_mode):
+        return
+
+      node_trigger_mode_off = node_trigger_mode.GetEntryByName("Off")
+      if not PySpin.IsReadable(node_trigger_mode_off):
+        return
+
+      node_trigger_mode.SetIntValue(node_trigger_mode_off.GetValue())
+    except PySpin.SpinnakerException:
+      pass
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
