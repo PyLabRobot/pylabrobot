@@ -140,6 +140,8 @@ class Cytation5Backend(ImageReaderBackend):
     self._objective: Optional[Objective] = None
     self._slow_mode: Optional[bool] = None
 
+    self._acquiring = False
+
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
 
@@ -438,6 +440,9 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError(f"Unsupported version: {self.version}")
 
   async def stop(self) -> None:
+    if self._acquiring:
+      self.stop_acquisition()
+
     logger.info("[cytation5] stopping")
     await self.stop_shaking()
     await self.io.stop()
@@ -844,6 +849,18 @@ class Cytation5Backend(ImageReaderBackend):
 
     return device_info
 
+  def start_acquisition(self):
+    if self.cam is None:
+      raise RuntimeError("Camera is not initialized.")
+    self.cam.BeginAcquisition()
+    self._acquiring = True
+
+  def stop_acquisition(self):
+    if self.cam is None:
+      raise RuntimeError("Camera is not initialized.")
+    self.cam.EndAcquisition()
+    self._acquiring = False
+
   async def led_on(self, intensity: int = 10):
     if not 1 <= intensity <= 10:
       raise ValueError("intensity must be between 1 and 10")
@@ -1222,6 +1239,7 @@ class Cytation5Backend(ImageReaderBackend):
     overlap: Optional[float] = None,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
+    auto_stop_acquisition=True,
   ) -> ImagingResult:
     """Capture image using the microscope
 
@@ -1245,7 +1263,9 @@ class Cytation5Backend(ImageReaderBackend):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
-    self.cam.BeginAcquisition()
+    if not self._acquiring:
+      self.start_acquisition()
+
     try:
       await self.set_objective(objective)
       await self.set_imaging_mode(mode, led_intensity=led_intensity)
@@ -1305,7 +1325,8 @@ class Cytation5Backend(ImageReaderBackend):
           t1 - t0,
         )
     finally:
-      self.cam.EndAcquisition()
+      if auto_stop_acquisition:
+        self.stop_acquisition()
 
     exposure_ms = float(self.cam.ExposureTime.GetValue()) / 1000
     assert self._focal_height is not None, "Focal height not set. Run set_focus() first."
