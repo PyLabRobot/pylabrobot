@@ -6,8 +6,10 @@ from typing import List, Literal, Optional, Union, cast
 
 import serial
 
-from pylabrobot.incubators.backend import IncubatorBackend
-from pylabrobot.incubators.cytomat.constants import (
+from pylabrobot.io.serial import Serial
+from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
+from pylabrobot.storage.backend import IncubatorBackend
+from pylabrobot.storage.cytomat.constants import (
   ActionRegister,
   ActionType,
   CytomatActionResponse,
@@ -20,26 +22,24 @@ from pylabrobot.incubators.cytomat.constants import (
   SwapStationPosition,
   WarningRegister,
 )
-from pylabrobot.incubators.cytomat.errors import (
+from pylabrobot.storage.cytomat.errors import (
   CytomatBusyError,
   CytomatCommandUnknownError,
   CytomatTelegramStructureError,
   error_map,
   error_register_map,
 )
-from pylabrobot.incubators.cytomat.schemas import (
+from pylabrobot.storage.cytomat.schemas import (
   ActionRegisterState,
   OverviewRegisterState,
   SensorStates,
   SwapStationState,
 )
-from pylabrobot.incubators.cytomat.utils import (
+from pylabrobot.storage.cytomat.utils import (
   hex_to_base_twelve,
   hex_to_binary,
   validate_storage_location_number,
 )
-from pylabrobot.io.serial import Serial
-from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +271,7 @@ class CytomatBackend(IncubatorBackend):
     self, site: PlateHolder
   ) -> OverviewRegisterState:
     """Open lift door, retrieve from transfer, close door, place at storage"""
-    return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
+    return await self.send_action("mv", "ts", self._site_to_firmware_string(site), timeout=120)
 
   async def action_storage_to_transfer(  # used by retrieve_plate
     self, site: PlateHolder

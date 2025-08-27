@@ -134,6 +134,11 @@ class Imager(Resource, Machine):
     gain: Gain = "machine-auto",
     **backend_kwargs,
   ) -> ImagingResult:
+    if not isinstance(exposure_time, (int, float, AutoExposure)):
+      raise TypeError(f"Invalid exposure time: {exposure_time}")
+    if not isinstance(focal_height, (int, float)) and focal_height != "machine-auto":
+      raise TypeError(f"Invalid focal height: {focal_height}")
+
     if isinstance(well, tuple):
       row, column = well
     else:
