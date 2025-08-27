@@ -544,7 +544,7 @@ def MP_4Pos_flat(name: str) -> TecanPlateCarrier:
     size_y=380.0,
     size_z=6.9,
     off_x=11.0,
-    off_y=51.0,
+    off_y=23.0,
     roma_x=1835,
     roma_y=388,
     roma_z_safe=946,
