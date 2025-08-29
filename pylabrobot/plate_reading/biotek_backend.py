@@ -750,7 +750,7 @@ class Cytation5Backend(ImageReaderBackend):
     with kinetics.
 
     Args:
-      frequency: speed, in mm
+      frequency: speed, in mm. 360 CPM = 6mm; 410 CPM = 5mm; 493 CPM = 4mm; 567 CPM = 3mm; 731 CPM = 2mm; 1096 CPM = 1mm
     """
 
     max_duration = 16 * 60  # 16 minutes
