@@ -21,7 +21,7 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
 
   Same as 229590 (229590 is sold with lids)
 
-  229195, 229196 
+  229195, 229196
 
   - Material: Polystyrene
   - Tissue culture treated: No (229591 and 229590) / Yes (229195, 229196)
