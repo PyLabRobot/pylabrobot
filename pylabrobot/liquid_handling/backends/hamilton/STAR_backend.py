@@ -7245,18 +7245,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     detection_drop_str = f"{detection_drop:04}"
     post_detection_dist_str = f"{post_detection_dist_increments:04}"
 
-    await self.send_command(
-      module=STAR.channel_id(channel_idx),
-      command="ZL",
-      zh=lowest_immers_pos_str,  # Lowest immersion position [increment]
-      zc=start_pos_search_str,  # Start position of LLD search [increment]
-      zl=channel_speed_str,  # Speed of channel movement
-      zr=channel_acc_str,  # Acceleration [1000 increment/second^2]
-      gt=detection_edge_str,  # Edge steepness at capacitive LLD detection
-      gl=detection_drop_str,  # Offset after capacitive LLD edge detection
-      zj=post_detection_trajectory,  # Movement of the channel after contacting surface
-      zi=post_detection_dist_str,  # Distance to move up after detection [increment]
-    )
+    try:
+      await self.send_command(
+        module=STAR.channel_id(channel_idx),
+        command="ZL",
+        zh=lowest_immers_pos_str,  # Lowest immersion position [increment]
+        zc=start_pos_search_str,  # Start position of LLD search [increment]
+        zl=channel_speed_str,  # Speed of channel movement
+        zr=channel_acc_str,  # Acceleration [1000 increment/second^2]
+        gt=detection_edge_str,  # Edge steepness at capacitive LLD detection
+        gl=detection_drop_str,  # Offset after capacitive LLD edge detection
+        zj=post_detection_trajectory,  # Movement of the channel after contacting surface
+        zi=post_detection_dist_str,  # Distance to move up after detection [increment]
+      )
+    except STARFirmwareError:
+      await self.move_all_channels_in_z_safety()
+      raise
+
     if move_channels_to_save_pos_after:
       await self.move_all_channels_in_z_safety()
 
