@@ -1,0 +1,64 @@
+﻿pylabrobot.liquid\_handling.backends.websocket.WebSocketBackend
+===============================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.websocket
+
+.. autoclass:: WebSocketBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~WebSocketBackend.deck
+      ~WebSocketBackend.head
+      ~WebSocketBackend.head96
+      ~WebSocketBackend.loop
+      ~WebSocketBackend.num_channels
+      ~WebSocketBackend.stop_
+      ~WebSocketBackend.t
+      ~WebSocketBackend.websocket
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~WebSocketBackend.__init__
+      ~WebSocketBackend.aspirate
+      ~WebSocketBackend.aspirate96
+      ~WebSocketBackend.assigned_resource_callback
+      ~WebSocketBackend.can_pick_up_tip
+      ~WebSocketBackend.deserialize
+      ~WebSocketBackend.dispense
+      ~WebSocketBackend.dispense96
+      ~WebSocketBackend.drop_resource
+      ~WebSocketBackend.drop_tips
+      ~WebSocketBackend.drop_tips96
+      ~WebSocketBackend.get_all_instances
+      ~WebSocketBackend.handle_event
+      ~WebSocketBackend.has_connection
+      ~WebSocketBackend.move_channel_x
+      ~WebSocketBackend.move_channel_y
+      ~WebSocketBackend.move_channel_z
+      ~WebSocketBackend.move_picked_up_resource
+      ~WebSocketBackend.pick_up_resource
+      ~WebSocketBackend.pick_up_tips
+      ~WebSocketBackend.pick_up_tips96
+      ~WebSocketBackend.prepare_for_manual_channel_operation
+      ~WebSocketBackend.send_command
+      ~WebSocketBackend.serialize
+      ~WebSocketBackend.set_deck
+      ~WebSocketBackend.set_heads
+      ~WebSocketBackend.setup
+      ~WebSocketBackend.stop
+      ~WebSocketBackend.unassigned_resource_callback
+      ~WebSocketBackend.wait_for_connection
+   
+   

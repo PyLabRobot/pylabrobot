@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.biotek\_backend.Cytation5Backend.set\_gain
+====================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.biotek_backend
+
+.. automethod:: Cytation5Backend.set_gain

@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV2.run\_protocol
+==============================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons
+
+.. automethod:: OpentronsThermocyclerModuleV2.run_protocol

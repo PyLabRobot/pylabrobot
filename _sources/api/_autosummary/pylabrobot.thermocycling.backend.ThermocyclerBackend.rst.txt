@@ -1,0 +1,45 @@
+﻿pylabrobot.thermocycling.backend.ThermocyclerBackend
+====================================================
+
+.. currentmodule:: pylabrobot.thermocycling.backend
+
+.. autoclass:: ThermocyclerBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermocyclerBackend.__init__
+      ~ThermocyclerBackend.close_lid
+      ~ThermocyclerBackend.deactivate_block
+      ~ThermocyclerBackend.deactivate_lid
+      ~ThermocyclerBackend.deserialize
+      ~ThermocyclerBackend.get_all_instances
+      ~ThermocyclerBackend.get_block_current_temperature
+      ~ThermocyclerBackend.get_block_status
+      ~ThermocyclerBackend.get_block_target_temperature
+      ~ThermocyclerBackend.get_current_cycle_index
+      ~ThermocyclerBackend.get_current_step_index
+      ~ThermocyclerBackend.get_hold_time
+      ~ThermocyclerBackend.get_lid_current_temperature
+      ~ThermocyclerBackend.get_lid_open
+      ~ThermocyclerBackend.get_lid_status
+      ~ThermocyclerBackend.get_lid_target_temperature
+      ~ThermocyclerBackend.get_total_cycle_count
+      ~ThermocyclerBackend.get_total_step_count
+      ~ThermocyclerBackend.open_lid
+      ~ThermocyclerBackend.run_protocol
+      ~ThermocyclerBackend.serialize
+      ~ThermocyclerBackend.set_block_temperature
+      ~ThermocyclerBackend.set_lid_temperature
+      ~ThermocyclerBackend.setup
+      ~ThermocyclerBackend.stop
+   
+   
