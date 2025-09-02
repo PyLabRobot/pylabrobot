@@ -282,8 +282,8 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
         Tube,
         num_items_x=6,
         num_items_y=4,
-        dx=12.5, # measured
-        dy=15.8, # measured
+        dx=13.5, # measured
+        dy=13.5, # measured
         dz=12, # measured
         item_dx=19.89, # spec
         item_dy=19.28, # spec
