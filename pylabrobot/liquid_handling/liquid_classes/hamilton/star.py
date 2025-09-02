@@ -4212,7 +4212,7 @@ star_mapping[(1000, False, True, False, Liquid.BRAINHOMOGENATE, True, False)] = 
 #   because the channel is not enough saturated
 # - To protect, the distance from Asp. to Disp. should be as short as possible,
 #   because Chloroform could be drop out in a long way!
-# - a break time after dispense with about 10s time counter, makes shure the drop which  residue
+# - a break time after dispense with about 10s time counter, makes sure the drop which  residue
 #   after dispense drops back into the probetube
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
 # - sometimes it helpes using Filtertips
@@ -5474,7 +5474,7 @@ star_mapping[(1000, False, True, True, Liquid.WATER, True, False)] = (
 )
 
 
-# V1.1: Set mix flow rate to 120, Clot retract hight = 0
+# V1.1: Set mix flow rate to 120, Clot retract height = 0
 star_mapping[(1000, False, True, True, Liquid.WATER, False, False)] = (
   HighVolumeFilter_Water_DispenseSurface
 ) = HamiltonLiquidClass(

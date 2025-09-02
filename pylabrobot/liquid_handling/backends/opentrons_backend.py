@@ -625,7 +625,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     pipette_id: Optional[str] = None,
     force_direct: bool = False,
   ):
-    """Move the pipette head to the specified location. Whe a tip is mounted, the location refers
+    """Move the pipette head to the specified location. When a tip is mounted, the location refers
     to the bottom of the tip. If no tip is mounted, the location refers to the bottom of the
     pipette head.
 
