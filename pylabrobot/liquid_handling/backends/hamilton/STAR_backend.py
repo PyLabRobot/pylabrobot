@@ -6402,6 +6402,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Position all components so that there is maximum free Y range for iSWAP"""
 
     return await self.send_command(module="C0", command="FY")
+  
+  async def request_y_pos_iswap_channel(self):
+    """ Query the current Y-axis position of the iSWAP channel. """
+    
+    y_pos_query_increments = await self.send_command(
+        module="R0",
+        command="RY",
+        fmt="ry######",
+      )
+
+    y_pos_query_mm = self.y_drive_increment_to_mm(y_pos_query_increments["ry"])
+
+    return round(y_pos_query_mm, 1)
 
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """
