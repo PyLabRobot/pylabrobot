@@ -6765,32 +6765,44 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # Map motor increments to wrist orientations (constant lookup table).
   wrist_orientation_to_motor_increment_dict = {
-      -26_577: "RIGHT",
-      -8_754: "STRAIGHT",
-      9_101: "LEFT",
-      26_852: "REVERSE",
+    -26_577: "RIGHT",
+    -8_754: "STRAIGHT",
+    9_101: "LEFT",
+    26_852: "REVERSE",
   }
 
   async def request_iswap_relative_wrist_orientation(self):
-      """
-      Request the relative iSWAP wrist orientation.
+    """
+    Request the relative iSWAP wrist orientation.
+    This is the orientation of the iSWAP wrist in relation to the iSWAP arm/rotation drive.
 
-      Returns:
-          RelativeWristOrientation enum corresponding to the current orientation.
+    e.g.:
+    1) iSWAP RotationDrive.Front (i.e. pointing to the front of the machine) +
+       iSWAP RelativeWristOrientation.STRAIGHT (i.e. wrist is also pointing to the front)
 
-      Raises:
-          ValueError: If the returned motor increment is not recognized.
-      """
-      response = await self.send_command(module="R0", command="RT", fmt="rt######")
-      motor_position_increments = response["rt"]
+    2) iSWAP RotationDrive.LEFT (i.e. pointing to the left of the machine) +
+       iSWAP RelativeWristOrientation.STRAIGHT (i.e. wrist is also pointing to the left)
 
-      if key := STARBackend.wrist_orientation_to_motor_increment_dict.get(motor_position_increments):
-          return getattr(self.RelativeWristOrientation, key)
+    3) iSWAP RotationDrive.Front (i.e. pointing to the back of the machine) +
+       iSWAP RelativeWristOrientation.RIGHT (i.e. wrist is pointing to the left !)
 
-      raise ValueError(
-          f"Unknown wrist orientation: {motor_position_increments}. "
-          f"Expected one of {list(STARBackend.wrist_orientation_to_motor_increment_dict)}."
-      )
+    The relative wrist orientation is reported as a motor position increment by the STAR
+    firmware. This value is mapped to a `RelativeWristOrientation` enum member.
+
+    Returns:
+        RelativeWristOrientation: The interpreted wrist orientation
+        (e.g., RIGHT, STRAIGHT, LEFT, REVERSE).
+    """
+    response = await self.send_command(module="R0", command="RT", fmt="rt######")
+    motor_position_increments = response["rt"]
+
+    if key := STARBackend.wrist_orientation_to_motor_increment_dict.get(motor_position_increments):
+      return getattr(self.RelativeWristOrientation, key)
+
+    raise ValueError(
+      f"Unknown wrist orientation: {motor_position_increments}. "
+      f"Expected one of {list(STARBackend.wrist_orientation_to_motor_increment_dict)}."
+    )
 
   async def iswap_rotate(
     self,
