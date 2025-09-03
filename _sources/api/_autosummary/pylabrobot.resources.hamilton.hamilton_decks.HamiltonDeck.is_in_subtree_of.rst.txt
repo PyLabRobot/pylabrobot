@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.hamilton\_decks.HamiltonDeck.is\_in\_subtree\_of
+==============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.hamilton_decks
+
+.. automethod:: HamiltonDeck.is_in_subtree_of
