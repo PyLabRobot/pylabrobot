@@ -6763,7 +6763,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._iswap_parked = False
     return command_output
 
-  async def get_iswap_wrist_drive_position_increments(self) -> int:
+  async def request_iswap_wrist_drive_position_increments(self) -> int:
     """Query the iSWAP wrist drive position (units: increments) from the firmware."""
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
     return cast(int, response["rt"])
@@ -6801,7 +6801,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       26_852: STARBackend.WristDriveOrientation.REVERSE,
     }
 
-    motor_position_increments = await self.get_iswap_wrist_drive_position_increments()
+    motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
 
     if orientation := wrist_orientation_to_motor_increment_dict.get(motor_position_increments):
       return orientation
