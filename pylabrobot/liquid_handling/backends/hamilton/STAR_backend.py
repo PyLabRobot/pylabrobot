@@ -6763,6 +6763,42 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._iswap_parked = False
     return command_output
 
+  async def request_iswap_rotation_drive_position_increments(self) -> int:
+    """Query the iSWAP rotation drive position (units: increments) from the firmware."""
+    response = await self.send_command(module="R0", command="RS", fmt="rs######")
+    return cast(int, response["rs"])
+
+  async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
+    """
+    Request the iSWAP rotation drive orientation.
+    This is the orientation of the iSWAP rotation drive (relative to the machine).
+
+    Uses empirically determined increment values:
+      FRONT: -25 ± 50
+      RIGHT: +29068 ± 50
+      LEFT:  -29116 ± 50
+
+    Returns:
+      RotationDriveOrientation: The interpreted rotation orientation (LEFT, FRONT, RIGHT).
+    """
+    # Map motor increments to rotation orientations (constant lookup table).
+    rotation_orientation_to_motor_increment_dict = {
+      STARBackend.RotationDriveOrientation.FRONT: range(-75, 26),
+      STARBackend.RotationDriveOrientation.RIGHT: range(29018, 29119),
+      STARBackend.RotationDriveOrientation.LEFT: range(-29166, -29065),
+    }
+
+    motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
+
+    for orientation, increment_range in rotation_orientation_to_motor_increment_dict.items():
+      if motor_position_increments in increment_range:
+        return orientation
+
+    raise ValueError(
+      f"Unknown rotation orientation: {motor_position_increments}. "
+      f"Expected one of {list(rotation_orientation_to_motor_increment_dict)}."
+    )
+
   async def request_iswap_wrist_drive_position_increments(self) -> int:
     """Query the iSWAP wrist drive position (units: increments) from the firmware."""
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
