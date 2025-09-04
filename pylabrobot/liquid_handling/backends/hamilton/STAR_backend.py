@@ -6763,38 +6763,45 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._iswap_parked = False
     return command_output
 
-  async def request_iswap_relative_wrist_orientation(self):
+  async def get_iswap_wrist_drive_position_increments(self) -> int:
+    """Query the iSWAP wrist drive position (units: increments) from the firmware."""
+    response = await self.send_command(module="R0", command="RT", fmt="rt######")
+    return response["rt"]
+
+  async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """
-    Request the relative iSWAP wrist orientation.
-    This is the orientation of the iSWAP wrist in relation to the iSWAP arm/rotation drive.
+    Request the iSWAP wrist drive orientation.
+    This is the orientation of the iSWAP wrist drive (always in relation to the
+    iSWAP arm/rotation drive).
 
     e.g.:
-    1) iSWAP RotationDrive.Front (i.e. pointing to the front of the machine) +
-       iSWAP RelativeWristOrientation.STRAIGHT (i.e. wrist is also pointing to the front)
+    1) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) +
+       iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the front)
 
-    2) iSWAP RotationDrive.LEFT (i.e. pointing to the left of the machine) +
-       iSWAP RelativeWristOrientation.STRAIGHT (i.e. wrist is also pointing to the left)
+    2) iSWAP RotationDriveOrientation.LEFT (i.e. pointing to the left of the machine) +
+       iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the left)
 
-    3) iSWAP RotationDrive.Front (i.e. pointing to the back of the machine) +
-       iSWAP RelativeWristOrientation.RIGHT (i.e. wrist is pointing to the left !)
+    3) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) +
+       iSWAP WristDriveOrientation.RIGHT (i.e. wrist is pointing to the left !)
 
     The relative wrist orientation is reported as a motor position increment by the STAR
-    firmware. This value is mapped to a `RelativeWristOrientation` enum member.
+    firmware. This value is mapped to a `WristDriveOrientation` enum member.
 
     Returns:
-        RelativeWristOrientation: The interpreted wrist orientation
-        (e.g., RIGHT, STRAIGHT, LEFT, REVERSE).
+      WristDriveOrientation: The interpreted wrist orientation
+      (e.g., RIGHT, STRAIGHT, LEFT, REVERSE).
     """
+
     # Map motor increments to wrist orientations (constant lookup table).
+    # TODO: this might not be the same for all machines.
     wrist_orientation_to_motor_increment_dict = {
-      -26_577: STARBackend.RelativeWristOrientation.RIGHT,
-      -8_754: STARBackend.RelativeWristOrientation.STRAIGHT,
-      9_101: STARBackend.RelativeWristOrientation.LEFT,
-      26_852: STARBackend.RelativeWristOrientation.REVERSE,
+      -26_577: STARBackend.WristDriveOrientation.RIGHT,
+      -8_754: STARBackend.WristDriveOrientation.STRAIGHT,
+      9_101: STARBackend.WristDriveOrientation.LEFT,
+      26_852: STARBackend.WristDriveOrientation.REVERSE,
     }
 
-    response = await self.send_command(module="R0", command="RT", fmt="rt######")
-    motor_position_increments = response["rt"]
+    motor_position_increments = await self.get_iswap_wrist_drive_position_increments()
 
     if orientation := wrist_orientation_to_motor_increment_dict.get(motor_position_increments):
       return orientation
@@ -7532,13 +7539,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       wp=orientation.value,
     )
 
-  class RelativeWristOrientation(enum.Enum):
+  class WristDriveOrientation(enum.Enum):
     RIGHT = 1
     STRAIGHT = 2
     LEFT = 3
     REVERSE = 4
 
-  async def rotate_iswap_wrist(self, orientation: RelativeWristOrientation):
+  async def rotate_iswap_wrist(self, orientation: WristDriveOrientation):
     return await self.send_command(
       module="R0",
       command="TP",
