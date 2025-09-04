@@ -6793,18 +6793,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Map motor increments to wrist orientations (constant lookup table).
-    # TODO: this might not be the same for all machines.
     wrist_orientation_to_motor_increment_dict = {
-      -26_577: STARBackend.WristDriveOrientation.RIGHT,
-      -8_754: STARBackend.WristDriveOrientation.STRAIGHT,
-      9_101: STARBackend.WristDriveOrientation.LEFT,
-      26_852: STARBackend.WristDriveOrientation.REVERSE,
+      STARBackend.WristDriveOrientation.RIGHT: range(-26_627, -26_527),
+      STARBackend.WristDriveOrientation.STRAIGHT: range(-8_804, -8_704),
+      STARBackend.WristDriveOrientation.LEFT: range(9_051, 9_151),
+      STARBackend.WristDriveOrientation.REVERSE: range(26_802, 26_902),
     }
 
     motor_position_increments = await self.request_iswap_wrist_drive_position_increments()
 
-    if orientation := wrist_orientation_to_motor_increment_dict.get(motor_position_increments):
-      return orientation
+    for orientation, increment_range in wrist_orientation_to_motor_increment_dict.items():
+      if motor_position_increments in increment_range:
+        return orientation
 
     raise ValueError(
       f"Unknown wrist orientation: {motor_position_increments}. "
