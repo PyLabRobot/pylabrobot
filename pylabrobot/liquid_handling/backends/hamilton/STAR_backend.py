@@ -6766,7 +6766,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def get_iswap_wrist_drive_position_increments(self) -> int:
     """Query the iSWAP wrist drive position (units: increments) from the firmware."""
     response = await self.send_command(module="R0", command="RT", fmt="rt######")
-    return response["rt"]
+    return cast(int, response["rt"])
 
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """
