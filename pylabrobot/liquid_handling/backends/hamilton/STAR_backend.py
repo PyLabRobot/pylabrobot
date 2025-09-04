@@ -1242,7 +1242,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_pip_channel_version(self, channel: int) -> str:
     return cast(
-      str, (await self.send_command(STARBackend.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"]
+      str,
+      (await self.send_command(STARBackend.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"],
     )
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
@@ -7983,7 +7984,7 @@ class UnSafe:
     assert 0 <= z_position_at_end <= 3_600
     assert 0 <= open_gripper_position <= 9_999
 
-    return await self.STARBackend.send_command(
+    return await self.star.send_command(
       module="C0",
       command="PI",
       xs=f"{hotel_center_x_coord:05}",
@@ -8057,7 +8058,7 @@ class UnSafe:
     assert 0 <= plate_width <= 9_999
     assert 0 <= plate_width_tolerance <= 99
 
-    return await self.STARBackend.send_command(
+    return await self.star.send_command(
       module="C0",
       command="PO",
       xs=f"{hotel_center_x_coord:05}",
@@ -8096,7 +8097,7 @@ class UnSafe:
 
       Consider this method an easter egg. Not for serious use.
     """
-    await self.STARBackend.send_command(module=STARBackend.channel_id(channel_idx), command="SI")
+    await self.star.send_command(module=STARBackend.channel_id(channel_idx), command="SI")
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
