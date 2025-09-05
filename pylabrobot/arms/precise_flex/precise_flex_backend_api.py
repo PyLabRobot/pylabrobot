@@ -333,7 +333,8 @@ class PreciseFlexBackendApi:
       int: The current signal value.
     """
     response = await self.send_command(f"sig {signal_number}")
-    return int(response)
+    sig_id, sig_val = response.split()
+    return int(sig_val)
 
   async def set_signal(self, signal_number: int, value: int) -> None:
     """Set the specified digital input or output signal.
@@ -513,7 +514,7 @@ class PreciseFlexBackendApi:
     """
     await self.send_command(f"locXyz {location_index} {x} {y} {z} {yaw} {pitch} {roll}")
 
-  async def get_location_z_clearance(self, location_index: int) -> tuple[int, float, float]:
+  async def get_location_z_clearance(self, location_index: int) -> tuple[int, float, bool]:
       """Get the ZClearance and ZWorld properties for the specified location.
 
       Parameters:
@@ -530,11 +531,11 @@ class PreciseFlexBackendApi:
 
       station_index = int(parts[0])
       z_clearance = float(parts[1])
-      z_world = float(parts[2])
+      z_world = True if float(parts[2]) != 0 else False
 
       return (station_index, z_clearance, z_world)
 
-  async def set_location_z_clearance(self, location_index: int, z_clearance: float, z_world: float | None = None) -> None:
+  async def set_location_z_clearance(self, location_index: int, z_clearance: float, z_world: bool | None = None) -> None:
       """Set the ZClearance and ZWorld properties for the specified location.
 
       Parameters:
@@ -545,7 +546,8 @@ class PreciseFlexBackendApi:
       if z_world is None:
         await self.send_command(f"locZClearance {location_index} {z_clearance}")
       else:
-        await self.send_command(f"locZClearance {location_index} {z_clearance} {z_world}")
+        z_world_int = 1 if z_world else 0
+        await self.send_command(f"locZClearance {location_index} {z_clearance} {z_world_int}")
 
   async def get_location_config(self, location_index: int) -> tuple[int, int]:
       """Get the Config property for the specified location.
@@ -554,7 +556,17 @@ class PreciseFlexBackendApi:
         location_index (int): The station index, from 1 to N_LOC.
 
       Returns:
-        tuple: A tuple containing (station_index, config_value). config_value: 1 = Righty, 2 = Lefty.
+        tuple: A tuple containing (station_index, config_value)
+        config_value is a bit mask where:
+        - 0 = None (no configuration specified)
+        - 0x01 = GPL_Righty (right shouldered configuration)
+        - 0x02 = GPL_Lefty (left shouldered configuration)
+        - 0x04 = GPL_Above (elbow above the wrist)
+        - 0x08 = GPL_Below (elbow below the wrist)
+        - 0x10 = GPL_Flip (wrist pitched up)
+        - 0x20 = GPL_NoFlip (wrist pitched down)
+        - 0x1000 = GPL_Single (restrict wrist axis to +/- 180 degrees)
+        Values can be combined using bitwise OR.
       """
       data = await self.send_command(f"locConfig {location_index}")
       parts = data.split(" ")
@@ -572,8 +584,46 @@ class PreciseFlexBackendApi:
 
       Parameters:
         location_index (int): The station index, from 1 to N_LOC.
-        config_value (int): The new Config property value. 1 = Righty, 2 = Lefty.
+        config_value (int): The new Config property value as a bit mask where:
+        - 0 = None (no configuration specified)
+        - 0x01 = GPL_Righty (right shouldered configuration)
+        - 0x02 = GPL_Lefty (left shouldered configuration)
+        - 0x04 = GPL_Above (elbow above the wrist)
+        - 0x08 = GPL_Below (elbow below the wrist)
+        - 0x10 = GPL_Flip (wrist pitched up)
+        - 0x20 = GPL_NoFlip (wrist pitched down)
+        - 0x1000 = GPL_Single (restrict wrist axis to +/- 180 degrees)
+        Values can be combined using bitwise OR.
+
+      Raises:
+        ValueError: If config_value contains invalid bits or conflicting configurations.
       """
+      # Define valid bit masks
+      GPL_RIGHTY = 0x01
+      GPL_LEFTY = 0x02
+      GPL_ABOVE = 0x04
+      GPL_BELOW = 0x08
+      GPL_FLIP = 0x10
+      GPL_NOFLIP = 0x20
+      GPL_SINGLE = 0x1000
+
+      # All valid bits
+      ALL_VALID_BITS = GPL_RIGHTY | GPL_LEFTY | GPL_ABOVE | GPL_BELOW | GPL_FLIP | GPL_NOFLIP | GPL_SINGLE
+
+      # Check for invalid bits
+      if config_value & ~ALL_VALID_BITS:
+        raise ValueError(f"Invalid config bits specified: 0x{config_value:X}")
+
+      # Check for conflicting configurations
+      if (config_value & GPL_RIGHTY) and (config_value & GPL_LEFTY):
+        raise ValueError("Cannot specify both GPL_Righty and GPL_Lefty")
+
+      if (config_value & GPL_ABOVE) and (config_value & GPL_BELOW):
+        raise ValueError("Cannot specify both GPL_Above and GPL_Below")
+
+      if (config_value & GPL_FLIP) and (config_value & GPL_NOFLIP):
+        raise ValueError("Cannot specify both GPL_Flip and GPL_NoFlip")
+
       await self.send_command(f"locConfig {location_index} {config_value}")
 
 

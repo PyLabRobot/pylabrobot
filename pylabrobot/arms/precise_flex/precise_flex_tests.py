@@ -16,7 +16,9 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.robot = PreciseFlexBackendApi("192.168.0.1", 10100)
     # Configuration constants - modify these for your testing needs
     self.TEST_PROFILE_ID = 20
-    self.TEST_LOCATION_ID = 20
+    self.TEST_LOCATION_ID = 20 # Default upper limit of station indices offered by GPL program running the TCS server
+    self.TEST_PARAMETER_ID = 17018 # last parameter Id of "Custom Calibration Data and Test Results" parameters
+    self.TEST_SIGNAL_ID = 20064 # unused software I/O
     await self.robot.setup()
     await self.robot.attach()
     await self.robot.set_power(True, timeout=20)
@@ -168,23 +170,20 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_parameter_operations(self) -> None:
     """Test get_parameter() and set_parameter()"""
-    # Test with a safe parameter (example DataID)
-    test_data_id = 901  # Example parameter ID
-
     # Get original value
-    original_value = await self.robot.get_parameter(test_data_id)
+    original_value = await self.robot.get_parameter(self.TEST_PARAMETER_ID)
     print(f"Original parameter value: {original_value}")
 
     # Test setting and getting back
     test_value = "test_value"
-    await self.robot.set_parameter(test_data_id, test_value)
+    await self.robot.set_parameter(self.TEST_PARAMETER_ID, test_value)
 
     # Get the value back
-    retrieved_value = await self.robot.get_parameter(test_data_id)
+    retrieved_value = await self.robot.get_parameter(self.TEST_PARAMETER_ID)
     print(f"Retrieved parameter value: {retrieved_value}")
 
     # Restore original value
-    await self.robot.set_parameter(test_data_id, original_value)
+    await self.robot.set_parameter(self.TEST_PARAMETER_ID, original_value)
 
   async def test_get_selected_robot(self) -> None:
     """Test get_selected_robot()"""
@@ -204,25 +203,27 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_signal_operations(self) -> None:
     """Test get_signal() and set_signal()"""
-    test_signal = 1  # Example signal number
 
     # Get original signal value
-    original_value = await self.robot.get_signal(test_signal)
-    print(f"Original signal {test_signal} value: {original_value}")
+    original_value = await self.robot.get_signal(self.TEST_SIGNAL_ID)
+    print(f"Original signal {self.TEST_SIGNAL_ID} value: {original_value}")
 
     try:
       # Test setting signal
       test_value = 1 if original_value == 0 else 0
-      await self.robot.set_signal(test_signal, test_value)
+      await self.robot.set_signal(self.TEST_SIGNAL_ID, test_value)
 
       # Verify the change
-      new_value = await self.robot.get_signal(test_signal)
-      self.assertEqual(new_value, test_value)
-      print(f"Signal {test_signal} set to: {new_value}")
+      new_value = await self.robot.get_signal(self.TEST_SIGNAL_ID)
+      if test_value == 0:
+        self.assertEqual(new_value, 0)
+      else:
+        self.assertNotEqual(new_value, 0)
+      print(f"Signal {self.TEST_SIGNAL_ID} set to: {new_value}")
 
     finally:
       # Restore original value
-      await self.robot.set_signal(test_signal, original_value)
+      await self.robot.set_signal(self.TEST_SIGNAL_ID, original_value)
 
   async def test_get_system_state(self) -> None:
     """Test get_system_state()"""
@@ -300,7 +301,7 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     try:
       # Test setting angles
-      test_angles = (15.0, 25.0, 35.0, 45.0, 55.0, 65.0)
+      test_angles = (15.0, 25.0, 35.0, 45.0, 55.0, 0.0) # last is set to 0.0 as angle7 is typically unused on PF400, some other robots may use fewer angles
       await self.robot.set_location_angles(self.TEST_LOCATION_ID, *test_angles)
 
       # Verify the angles were set
@@ -391,13 +392,13 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
       print(f"Z clearance set to: {z_clearance}")
 
       # Test setting both z_clearance and z_world
-      test_z_world = 75.0
+      test_z_world = True
       await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, test_z_clearance, test_z_world)
 
       clearance_data = await self.robot.get_location_z_clearance(self.TEST_LOCATION_ID)
       _, z_clearance, z_world = clearance_data
       self.assertLess(abs(z_clearance - test_z_clearance), 0.001)
-      self.assertLess(abs(z_world - test_z_world), 0.001)
+      self.assertEqual(z_world, test_z_world)
       print(f"Z clearance and world set to: {z_clearance}, {z_world}")
 
     finally:
@@ -412,8 +413,30 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
     station_index, config_value = config_data
     self.assertEqual(station_index, self.TEST_LOCATION_ID)
     self.assertIsInstance(config_value, int)
-    self.assertIn(config_value, [1, 2])  # 1 = Righty, 2 = Lefty
-    print(f"Location {self.TEST_LOCATION_ID} config: {config_value} ({'Righty' if config_value == 1 else 'Lefty'})")
+    self.assertGreaterEqual(config_value, 0)
+
+    # Decode config bits for display
+    config_bits = []
+    if config_value == 0:
+      config_bits.append("None")
+    else:
+      if config_value & 0x01:
+        config_bits.append("Righty")
+      if config_value & 0x02:
+        config_bits.append("Lefty")
+      if config_value & 0x04:
+        config_bits.append("Above")
+      if config_value & 0x08:
+        config_bits.append("Below")
+      if config_value & 0x10:
+        config_bits.append("Flip")
+      if config_value & 0x20:
+        config_bits.append("NoFlip")
+      if config_value & 0x1000:
+        config_bits.append("Single")
+
+    config_str = " | ".join(config_bits)
+    print(f"Location {self.TEST_LOCATION_ID} config: 0x{config_value:X} ({config_str})")
 
   async def test_set_location_config(self) -> None:
     """Test set_location_config()"""
@@ -421,14 +444,46 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
     _, orig_config_value = original_config
 
     try:
-      # Test setting different config
-      test_config = 2 if orig_config_value == 1 else 1
+      # Test setting basic config (Righty)
+      test_config = 0x01  # GPL_Righty
       await self.robot.set_location_config(self.TEST_LOCATION_ID, test_config)
 
       config_data = await self.robot.get_location_config(self.TEST_LOCATION_ID)
       _, config_value = config_data
       self.assertEqual(config_value, test_config)
-      print(f"Location config set to: {config_value} ({'Righty' if config_value == 1 else 'Lefty'})")
+      print(f"Location config set to: 0x{config_value:X} (Righty)")
+
+      # Test setting combined config (Lefty + Above + NoFlip)
+      test_config = 0x02 | 0x04 | 0x20  # GPL_Lefty | GPL_Above | GPL_NoFlip
+      await self.robot.set_location_config(self.TEST_LOCATION_ID, test_config)
+
+      config_data = await self.robot.get_location_config(self.TEST_LOCATION_ID)
+      _, config_value = config_data
+      self.assertEqual(config_value, test_config)
+      print(f"Location config set to: 0x{config_value:X} (Lefty | Above | NoFlip)")
+
+      # Test setting None config
+      test_config = 0x00
+      await self.robot.set_location_config(self.TEST_LOCATION_ID, test_config)
+
+      config_data = await self.robot.get_location_config(self.TEST_LOCATION_ID)
+      _, config_value = config_data
+      self.assertEqual(config_value, test_config)
+      print(f"Location config set to: 0x{config_value:X} (None)")
+
+      # Test invalid config bits
+      with self.assertRaises(ValueError):
+        await self.robot.set_location_config(self.TEST_LOCATION_ID, 0x80)  # Invalid bit
+
+      # Test conflicting configurations
+      with self.assertRaises(ValueError):
+        await self.robot.set_location_config(self.TEST_LOCATION_ID, 0x01 | 0x02)  # Righty + Lefty
+
+      with self.assertRaises(ValueError):
+        await self.robot.set_location_config(self.TEST_LOCATION_ID, 0x04 | 0x08)  # Above + Below
+
+      with self.assertRaises(ValueError):
+        await self.robot.set_location_config(self.TEST_LOCATION_ID, 0x10 | 0x20)  # Flip + NoFlip
 
     finally:
       # Restore original config
