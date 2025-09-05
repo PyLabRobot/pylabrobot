@@ -7,13 +7,13 @@ from contextlib import asynccontextmanager
 
 
 
-class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
+class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
 
   async def asyncSetUp(self):
     """Connect to actual PreciseFlex robot"""
     # Update with your robot's IP and port
-    self.robot = PreciseFlexBackendApi("192.168.0.100", 10100)
+    self.robot = PreciseFlexBackendApi("192.168.0.1", 10100)
     # Configuration constants - modify these for your testing needs
     self.TEST_PROFILE_ID = 20
     self.TEST_LOCATION_ID = 20
@@ -54,7 +54,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_base(self) -> None:
     base = await self.robot.get_base()
-    self.assertIsInstance(base, str)
+    self.assertIsInstance(base, tuple)
     print(f"Robot base: {base}")
 
   async def test_set_base(self) -> None:
@@ -63,10 +63,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       # Test setting to a different base if possible
       test_base = (0, 0, 0, 0)
       print(f"Setting test base to: {test_base}")
-
-      result = await self.robot.set_base(*test_base)
-      self.assertEqual(result, "OK")
-
+      await self.robot.set_base(*test_base)
       new_base = await self.robot.get_base()
       print(f"Base set to: {new_base}")
       self.assertEqual(new_base, test_base)
@@ -98,9 +95,11 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       await self.robot.set_power(False)
       power_state = await self.robot.get_power_state()
       self.assertEqual(power_state, 0)
+      await asyncio.sleep(2) # Wait a bit before re-enabling
 
       # Test enabling power with timeout
       await self.robot.set_power(True, timeout=20)
+      await asyncio.sleep(2) # Wait a bit for power to stabilize
       power_state = await self.robot.get_power_state()
       self.assertEqual(power_state, 1)
       print("Power set operations completed successfully")
@@ -137,11 +136,6 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
   async def test_set_monitor_speed(self) -> None:
     """Test set_monitor_speed()"""
     async with self._preserve_setting('get_monitor_speed', 'set_monitor_speed'):
-      # Test setting
-
-  async def test_set_monitor_speed(self) -> None:
-    """Test set_monitor_speed()"""
-    async with self._preserve_setting('get_monitor_speed', 'set_monitor_speed'):
       # Test setting different speeds
       test_speed = 50
       await self.robot.set_monitor_speed(test_speed)
@@ -149,12 +143,12 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(speed, test_speed)
       print(f"Monitor speed set to: {speed}%")
 
-    async def test_nop(self) -> None:
+  async def test_nop(self) -> None:
     """Test nop() command"""
     await self.robot.nop()
     print("NOP command executed successfully")
 
-    async def test_get_payload(self) -> None:
+  async def test_get_payload(self) -> None:
     """Test get_payload()"""
     payload = await self.robot.get_payload()
     self.assertIsInstance(payload, int)
@@ -162,7 +156,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     self.assertLessEqual(payload, 100)
     print(f"Payload: {payload}%")
 
-    async def test_set_payload(self) -> None:
+  async def test_set_payload(self) -> None:
     """Test set_payload()"""
     async with self._preserve_setting('get_payload', 'set_payload'):
       # Test setting different payload values
@@ -172,7 +166,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(payload, test_payload)
       print(f"Payload set to: {payload}%")
 
-    async def test_parameter_operations(self) -> None:
+  async def test_parameter_operations(self) -> None:
     """Test get_parameter() and set_parameter()"""
     # Test with a safe parameter (example DataID)
     test_data_id = 901  # Example parameter ID
@@ -192,14 +186,14 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     # Restore original value
     await self.robot.set_parameter(test_data_id, original_value)
 
-    async def test_get_selected_robot(self) -> None:
+  async def test_get_selected_robot(self) -> None:
     """Test get_selected_robot()"""
     selected_robot = await self.robot.get_selected_robot()
     self.assertIsInstance(selected_robot, int)
     self.assertGreaterEqual(selected_robot, 0)
     print(f"Selected robot: {selected_robot}")
 
-    async def test_select_robot(self) -> None:
+  async def test_select_robot(self) -> None:
     """Test select_robot()"""
     async with self._preserve_setting('get_selected_robot', 'select_robot'):
       # Test selecting robot 1
@@ -208,7 +202,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(selected, 1)
       print(f"Selected robot set to: {selected}")
 
-    async def test_signal_operations(self) -> None:
+  async def test_signal_operations(self) -> None:
     """Test get_signal() and set_signal()"""
     test_signal = 1  # Example signal number
 
@@ -230,13 +224,13 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       # Restore original value
       await self.robot.set_signal(test_signal, original_value)
 
-    async def test_get_system_state(self) -> None:
+  async def test_get_system_state(self) -> None:
     """Test get_system_state()"""
     system_state = await self.robot.get_system_state()
     self.assertIsInstance(system_state, int)
     print(f"System state: {system_state}")
 
-    async def test_get_tool(self) -> None:
+  async def test_get_tool(self) -> None:
     """Test get_tool()"""
     tool = await self.robot.get_tool()
     self.assertIsInstance(tool, tuple)
@@ -245,7 +239,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(isinstance(val, (int, float)) for val in tool))
     print(f"Tool transformation: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}")
 
-    async def test_set_tool(self) -> None:
+  async def test_set_tool(self) -> None:
     """Test set_tool()"""
     async with self._preserve_setting('get_tool', 'set_tool'):
       # Test setting tool transformation
@@ -255,18 +249,18 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       current_tool = await self.robot.get_tool()
       # Allow for small floating point differences
       for i, (expected, actual) in enumerate(zip(test_tool, current_tool)):
-      self.assertLess(abs(expected - actual), 0.001, f"Tool value {i} mismatch: expected {expected}, got {actual}")
+        self.assertLess(abs(expected - actual), 0.001, f"Tool value {i} mismatch: expected {expected}, got {actual}")
 
       print(f"Tool transformation set to: {current_tool}")
 
-    async def test_get_version(self) -> None:
+  async def test_get_version(self) -> None:
     """Test get_version()"""
     version = await self.robot.get_version()
     self.assertIsInstance(version, str)
     self.assertGreater(len(version), 0)
     print(f"Robot version: {version}")
 
-    async def test_reset(self) -> None:
+  async def test_reset(self) -> None:
     """Test reset() command"""
     # Test resetting robot 1 (be careful with this in real hardware)
     # This test might need to be commented out for actual hardware testing
@@ -1276,7 +1270,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(config, int)
     print(f"Pallet origin for station {station_id}: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}, Config={config}")
 
-    async def test_set_pallet_origin(self) -> None:
+  async def test_set_pallet_origin(self) -> None:
     """Test set_pallet_origin()"""
     # Get original pallet origin for restoration
     original_origin = await self.robot.get_pallet_origin(self.TEST_LOCATION_ID)
@@ -1291,7 +1285,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       _, x, y, z, yaw, pitch, roll, config = new_origin
 
       for i, (expected, actual) in enumerate(zip(test_coords, (x, y, z, yaw, pitch, roll))):
-      self.assertLess(abs(expected - actual), 0.001, f"Origin coordinate {i} mismatch")
+        self.assertLess(abs(expected - actual), 0.001, f"Origin coordinate {i} mismatch")
 
       print(f"Pallet origin set successfully: {test_coords}")
 
@@ -1309,7 +1303,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       _, orig_x, orig_y, orig_z, orig_yaw, orig_pitch, orig_roll, orig_config = original_origin
       await self.robot.set_pallet_origin(self.TEST_LOCATION_ID, orig_x, orig_y, orig_z, orig_yaw, orig_pitch, orig_roll, orig_config)
 
-    async def test_get_pallet_x(self) -> None:
+  async def test_get_pallet_x(self) -> None:
     """Test get_pallet_x()"""
     pallet_x_data = await self.robot.get_pallet_x(self.TEST_LOCATION_ID)
     self.assertIsInstance(pallet_x_data, tuple)
@@ -1320,7 +1314,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(isinstance(val, float) for val in [world_x, world_y, world_z]))
     print(f"Pallet X for station {station_id}: count={x_count}, world=({world_x}, {world_y}, {world_z})")
 
-    async def test_set_pallet_x(self) -> None:
+  async def test_set_pallet_x(self) -> None:
     """Test set_pallet_x()"""
     # Get original pallet X for restoration
     original_pallet_x = await self.robot.get_pallet_x(self.TEST_LOCATION_ID)
@@ -1337,7 +1331,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(x_count, test_x_count)
       for i, (expected, actual) in enumerate(zip(test_coords, (world_x, world_y, world_z))):
-      self.assertLess(abs(expected - actual), 0.001, f"Pallet X coordinate {i} mismatch")
+        self.assertLess(abs(expected - actual), 0.001, f"Pallet X coordinate {i} mismatch")
 
       print(f"Pallet X set successfully: count={x_count}, coords={test_coords}")
 
@@ -1346,7 +1340,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       _, orig_count, orig_x, orig_y, orig_z = original_pallet_x
       await self.robot.set_pallet_x(self.TEST_LOCATION_ID, orig_count, orig_x, orig_y, orig_z)
 
-    async def test_get_pallet_y(self) -> None:
+  async def test_get_pallet_y(self) -> None:
     """Test get_pallet_y()"""
     pallet_y_data = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
     self.assertIsInstance(pallet_y_data, tuple)
@@ -1357,7 +1351,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(isinstance(val, float) for val in [world_x, world_y, world_z]))
     print(f"Pallet Y for station {station_id}: count={y_count}, world=({world_x}, {world_y}, {world_z})")
 
-    async def test_set_pallet_y(self) -> None:
+  async def test_set_pallet_y(self) -> None:
     """Test set_pallet_y()"""
     # Get original pallet Y for restoration
     original_pallet_y = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
@@ -1374,7 +1368,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(y_count, test_y_count)
       for i, (expected, actual) in enumerate(zip(test_coords, (world_x, world_y, world_z))):
-      self.assertLess(abs(expected - actual), 0.001, f"Pallet Y coordinate {i} mismatch")
+        self.assertLess(abs(expected - actual), 0.001, f"Pallet Y coordinate {i} mismatch")
 
       print(f"Pallet Y set successfully: count={y_count}, coords={test_coords}")
 
@@ -1383,7 +1377,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       _, orig_count, orig_x, orig_y, orig_z = original_pallet_y
       await self.robot.set_pallet_y(self.TEST_LOCATION_ID, orig_count, orig_x, orig_y, orig_z)
 
-    async def test_get_pallet_z(self) -> None:
+  async def test_get_pallet_z(self) -> None:
     """Test get_pallet_z()"""
     pallet_z_data = await self.robot.get_pallet_z(self.TEST_LOCATION_ID)
     self.assertIsInstance(pallet_z_data, tuple)
@@ -1394,7 +1388,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(isinstance(val, float) for val in [world_x, world_y, world_z]))
     print(f"Pallet Z for station {station_id}: count={z_count}, world=({world_x}, {world_y}, {world_z})")
 
-    async def test_set_pallet_z(self) -> None:
+  async def test_set_pallet_z(self) -> None:
     """Test set_pallet_z()"""
     # Get original pallet Z for restoration
     original_pallet_z = await self.robot.get_pallet_z(self.TEST_LOCATION_ID)
@@ -1411,7 +1405,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(z_count, test_z_count)
       for i, (expected, actual) in enumerate(zip(test_coords, (world_x, world_y, world_z))):
-      self.assertLess(abs(expected - actual), 0.001, f"Pallet Z coordinate {i} mismatch")
+        self.assertLess(abs(expected - actual), 0.001, f"Pallet Z coordinate {i} mismatch")
 
       print(f"Pallet Z set successfully: count={z_count}, coords={test_coords}")
 
@@ -1420,7 +1414,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       _, orig_count, orig_x, orig_y, orig_z = original_pallet_z
       await self.robot.set_pallet_z(self.TEST_LOCATION_ID, orig_count, orig_x, orig_y, orig_z)
 
-    async def test_pick_plate_station(self) -> None:
+  async def test_pick_plate_station(self) -> None:
     """Test pick_plate_station() command"""
     # Record current position for restoration
     original_position = await self.robot.where_c()
@@ -1442,7 +1436,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
       await self.robot.wait_for_eom()
 
-    async def test_place_plate_station(self) -> None:
+  async def test_place_plate_station(self) -> None:
     """Test place_plate_station() command"""
     # Record current position for restoration
     original_position = await self.robot.where_c()
@@ -1462,13 +1456,13 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
       await self.robot.wait_for_eom()
 
-    async def test_get_rail_position(self) -> None:
+  async def test_get_rail_position(self) -> None:
     """Test get_rail_position()"""
     rail_pos = await self.robot.get_rail_position(self.TEST_LOCATION_ID)
     self.assertIsInstance(rail_pos, float)
     print(f"Rail position for station {self.TEST_LOCATION_ID}: {rail_pos}")
 
-    async def test_set_rail_position(self) -> None:
+  async def test_set_rail_position(self) -> None:
     """Test set_rail_position()"""
     # Get original rail position for restoration
     original_rail_pos = await self.robot.get_rail_position(self.TEST_LOCATION_ID)
@@ -1487,7 +1481,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       # Restore original rail position
       await self.robot.set_rail_position(self.TEST_LOCATION_ID, original_rail_pos)
 
-    async def test_teach_plate_station(self) -> None:
+  async def test_teach_plate_station(self) -> None:
     """Test teach_plate_station() command"""
     # Get original location for restoration
     original_location = await self.robot.get_location(self.TEST_LOCATION_ID)
@@ -1512,14 +1506,14 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       # Restore original location and clearance
       type_code = original_location[0]
       if type_code == 0:  # Cartesian
-      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
+        await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
       else:  # Angles
-      await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
+        await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
 
       _, orig_z_clearance, orig_z_world = original_clearance
       await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, orig_z_clearance, orig_z_world)
 
-    async def test_get_station_type(self) -> None:
+  async def test_get_station_type(self) -> None:
     """Test get_station_type()"""
     station_data = await self.robot.get_station_type(self.TEST_LOCATION_ID)
     self.assertIsInstance(station_data, tuple)
@@ -1537,7 +1531,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     location_str = "normal single" if location_type == 0 else "pallet"
     print(f"Station {station_id}: access={access_str}, type={location_str}, clearance={z_clearance}, above={z_above}, grasp_offset={z_grasp_offset}")
 
-    async def test_set_station_type(self) -> None:
+  async def test_set_station_type(self) -> None:
     """Test set_station_type()"""
     # Get original station type for restoration
     original_station = await self.robot.get_station_type(self.TEST_LOCATION_ID)
@@ -1568,11 +1562,11 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
 
       # Test invalid access type
       with self.assertRaises(ValueError):
-      await self.robot.set_station_type(self.TEST_LOCATION_ID, 3, 0, 50.0, 10.0, 0.0)
+        await self.robot.set_station_type(self.TEST_LOCATION_ID, 3, 0, 50.0, 10.0, 0.0)
 
       # Test invalid location type
       with self.assertRaises(ValueError):
-      await self.robot.set_station_type(self.TEST_LOCATION_ID, 0, 3, 50.0, 10.0, 0.0)
+        await self.robot.set_station_type(self.TEST_LOCATION_ID, 0, 3, 50.0, 10.0, 0.0)
 
     finally:
       # Restore original station type
@@ -1589,7 +1583,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     result_str = "no plate detected and command succeeded" if result == -1 else "plate detected"
     print(f"Home all if no plate result: {result} ({result_str})")
 
-    async def test_grasp_plate(self) -> None:
+  async def test_grasp_plate(self) -> None:
     """Test grasp_plate()"""
     # Test with valid parameters for closing gripper
     result = await self.robot.grasp_plate(15.0, 50, 10.0)
@@ -1612,7 +1606,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.robot.grasp_plate(15.0, 101, 10.0)  # Speed too high
 
-    async def test_release_plate(self) -> None:
+  async def test_release_plate(self) -> None:
     """Test release_plate()"""
     # Test basic release
     await self.robot.release_plate(30.0, 50)
@@ -1629,7 +1623,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.robot.release_plate(30.0, 101)  # Speed too high
 
-    async def test_is_fully_closed(self) -> None:
+  async def test_is_fully_closed(self) -> None:
     """Test is_fully_closed()"""
     closed_state = await self.robot.is_fully_closed()
     self.assertIsInstance(closed_state, int)
@@ -1645,7 +1639,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       gripper2_closed = bool(closed_state & 2)
       print(f"Dual gripper state: Gripper 1 {'closed' if gripper1_closed else 'open'}, Gripper 2 {'closed' if gripper2_closed else 'open'}")
 
-    async def test_set_active_gripper(self) -> None:
+  async def test_set_active_gripper(self) -> None:
     """Test set_active_gripper() (Dual Gripper Only)"""
     # Note: This test assumes a dual gripper system
     # Get original active gripper for restoration
@@ -1677,17 +1671,17 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
 
       # Test invalid gripper ID
       with self.assertRaises(ValueError):
-      await self.robot.set_active_gripper(3, 0)
+        await self.robot.set_active_gripper(3, 0)
 
       # Test invalid spin mode
       with self.assertRaises(ValueError):
-      await self.robot.set_active_gripper(1, 2)
+        await self.robot.set_active_gripper(1, 2)
 
     finally:
       # Restore original active gripper
       await self.robot.set_active_gripper(original_gripper, 0)
 
-    async def test_get_active_gripper(self) -> None:
+  async def test_get_active_gripper(self) -> None:
     """Test get_active_gripper() (Dual Gripper Only)"""
     try:
       active_gripper = await self.robot.get_active_gripper()
@@ -1699,7 +1693,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     except:
       print("Dual gripper not available, skipping get_active_gripper test")
 
-    async def test_free_mode(self) -> None:
+  async def test_free_mode(self) -> None:
     """Test free_mode()"""
     try:
       # Test enabling free mode for all axes
@@ -1721,7 +1715,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       await self.robot.free_mode(False)
       print("Free mode disabled for all axes")
 
-    async def test_open_gripper(self) -> None:
+  async def test_open_gripper(self) -> None:
     """Test open_gripper()"""
     await self.robot.open_gripper()
     print("Gripper opened successfully")
@@ -1729,7 +1723,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     # Brief delay to allow gripper to move
     await asyncio.sleep(0.5)
 
-    async def test_close_gripper(self) -> None:
+  async def test_close_gripper(self) -> None:
     """Test close_gripper()"""
     await self.robot.close_gripper()
     print("Gripper closed successfully")
@@ -1737,7 +1731,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     # Brief delay to allow gripper to move
     await asyncio.sleep(0.5)
 
-    async def test_pick_plate(self) -> None:
+  async def test_pick_plate(self) -> None:
     """Test pick_plate()"""
     # Record current position for restoration
     original_position = await self.robot.where_c()
@@ -1754,16 +1748,16 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
     except Exception as e:
       # Handle case where no plate is detected (expected in some test scenarios)
       if "no plate present" in str(e):
-      print(f"Pick plate detected no plate (expected): {e}")
+        print(f"Pick plate detected no plate (expected): {e}")
       else:
-      raise
+        raise
     finally:
       # Return to original position
       x, y, z, yaw, pitch, roll, config = original_position
       await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
       await self.robot.wait_for_eom()
 
-    async def test_place_plate(self) -> None:
+  async def test_place_plate(self) -> None:
     """Test place_plate()"""
     # Record current position for restoration
     original_position = await self.robot.where_c()
@@ -1783,7 +1777,7 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
       await self.robot.wait_for_eom()
 
-    async def test_teach_position(self) -> None:
+  async def test_teach_position(self) -> None:
     """Test teach_position()"""
     # Get original location and clearance for restoration
     original_location = await self.robot.get_location(self.TEST_LOCATION_ID)
@@ -1813,263 +1807,263 @@ class TestPreciseFlexIntegration(unittest.IsolatedAsyncioTestCase):
       # Restore original location and clearance
       type_code = original_location[0]
       if type_code == 0:  # Was Cartesian type
-      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
+        await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
       else:  # Was angles type
-      await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
+        await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
 
       _, orig_z_clearance, orig_z_world = original_clearance
       await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, orig_z_clearance, orig_z_world)
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-  async def run_general_command_tests() -> None:
-    """Run all tests in the GENERAL COMMANDS region"""
-    test_instance = TestPreciseFlexIntegration()
+#   async def run_general_command_tests() -> None:
+#     """Run all tests in the GENERAL COMMANDS region"""
+#     test_instance = PreciseFlexHardwareTests()
 
-    try:
-      await test_instance.asyncSetUp()
-      print("Starting GENERAL COMMANDS tests...")
+#     try:
+#       await test_instance.asyncSetUp()
+#       print("Starting GENERAL COMMANDS tests...")
 
-      # Run all general command tests in order
-      await test_instance.test_robot_connection_and_version()
-      await test_instance.test_get_base()
-      await test_instance.test_set_base()
-      await test_instance.test_home()
-      await test_instance.test_home_all()
-      await test_instance.test_get_power_state()
-      await test_instance.test_set_power()
-      await test_instance.test_get_mode()
-      await test_instance.test_set_mode()
-      await test_instance.test_get_monitor_speed()
-      await test_instance.test_set_monitor_speed()
-      await test_instance.test_nop()
-      await test_instance.test_get_payload()
-      await test_instance.test_set_payload()
-      await test_instance.test_parameter_operations()
-      await test_instance.test_get_selected_robot()
-      await test_instance.test_select_robot()
-      await test_instance.test_signal_operations()
-      await test_instance.test_get_system_state()
-      await test_instance.test_get_tool()
-      await test_instance.test_set_tool()
-      await test_instance.test_get_version()
-      # Note: test_reset is commented out for safety
+#       # Run all general command tests in order
+#       await test_instance.test_robot_connection_and_version()
+#       await test_instance.test_get_base()
+#       await test_instance.test_set_base()
+#       await test_instance.test_home()
+#       await test_instance.test_home_all()
+#       await test_instance.test_get_power_state()
+#       await test_instance.test_set_power()
+#       await test_instance.test_get_mode()
+#       await test_instance.test_set_mode()
+#       await test_instance.test_get_monitor_speed()
+#       await test_instance.test_set_monitor_speed()
+#       await test_instance.test_nop()
+#       await test_instance.test_get_payload()
+#       await test_instance.test_set_payload()
+#       await test_instance.test_parameter_operations()
+#       await test_instance.test_get_selected_robot()
+#       await test_instance.test_select_robot()
+#       await test_instance.test_signal_operations()
+#       await test_instance.test_get_system_state()
+#       await test_instance.test_get_tool()
+#       await test_instance.test_set_tool()
+#       await test_instance.test_get_version()
+#       # Note: test_reset is commented out for safety
 
-      print("GENERAL COMMANDS tests completed successfully!")
+#       print("GENERAL COMMANDS tests completed successfully!")
 
-    except Exception as e:
-      print(f"General commands test failed with error: {e}")
-      raise
-    finally:
-      await test_instance.asyncTearDown()
-
-
-  async def run_location_command_tests() -> None:
-    """Run all tests in the LOCATION COMMANDS region"""
-    test_instance = TestPreciseFlexIntegration()
-
-    try:
-      await test_instance.asyncSetUp()
-      print("Starting LOCATION COMMANDS tests...")
-
-      await test_instance.test_get_location()
-      await test_instance.test_get_location_angles()
-      await test_instance.test_set_location_angles()
-      await test_instance.test_get_location_xyz()
-      await test_instance.test_set_location_xyz()
-      await test_instance.test_get_location_z_clearance()
-      await test_instance.test_set_location_z_clearance()
-      await test_instance.test_get_location_config()
-      await test_instance.test_set_location_config()
-      await test_instance.test_dest_c()
-      await test_instance.test_dest_j()
-      await test_instance.test_here_j()
-      await test_instance.test_here_c()
-      await test_instance.test_where()
-      await test_instance.test_where_c()
-      await test_instance.test_where_j()
-
-      print("LOCATION COMMANDS tests completed successfully!")
-
-    except Exception as e:
-      print(f"Location commands test failed with error: {e}")
-      raise
-    finally:
-      await test_instance.asyncTearDown()
-
-  async def run_profile_command_tests() -> None:
-    """Run all tests in the PROFILE COMMANDS region"""
-    test_instance = TestPreciseFlexIntegration()
-
-    try:
-      await test_instance.asyncSetUp()
-      print("Starting PROFILE COMMANDS tests...")
-
-      await test_instance.test_get_profile_speed()
-      await test_instance.test_set_profile_speed()
-      await test_instance.test_get_profile_speed2()
-      await test_instance.test_set_profile_speed2()
-      await test_instance.test_get_profile_accel()
-      await test_instance.test_set_profile_accel()
-      await test_instance.test_get_profile_accel_ramp()
-      await test_instance.test_set_profile_accel_ramp()
-      await test_instance.test_get_profile_decel()
-      await test_instance.test_set_profile_decel()
-      await test_instance.test_get_profile_decel_ramp()
-      await test_instance.test_set_profile_decel_ramp()
-      await test_instance.test_get_profile_in_range()
-      await test_instance.test_set_profile_in_range()
-      await test_instance.test_get_profile_straight()
-      await test_instance.test_set_profile_straight()
-      await test_instance.test_get_motion_profile_values()
-      await test_instance.test_set_motion_profile_values()
-
-      print("PROFILE COMMANDS tests completed successfully!")
-
-    except Exception as e:
-      print(f"Profile commands test failed with error: {e}")
-      raise
-    finally:
-      await test_instance.asyncTearDown()
-
-  async def run_motion_command_tests() -> None:
-    """Run all tests in the MOTION COMMANDS region"""
-    test_instance = TestPreciseFlexIntegration()
-
-    try:
-      await test_instance.asyncSetUp()
-      print("Starting MOTION COMMANDS tests...")
-
-      await test_instance.test_halt()
-      await test_instance.test_move()
-      await test_instance.test_move_appro()
-      await test_instance.test_move_extra_axis()
-      await test_instance.test_move_one_axis()
-      await test_instance.test_move_c()
-      await test_instance.test_move_j()
-      await test_instance.test_release_brake()
-      await test_instance.test_set_brake()
-      await test_instance.test_state()
-      await test_instance.test_wait_for_eom()
-      await test_instance.test_zero_torque()
-
-      print("MOTION COMMANDS tests completed successfully!")
-
-    except Exception as e:
-      print(f"Motion commands test failed with error: {e}")
-      raise
-    finally:
-      await test_instance.asyncTearDown()
-
-  async def run_parobot_command_tests() -> None:
-    """Run all tests in the PAROBOT COMMANDS region"""
-    test_instance = TestPreciseFlexIntegration()
-
-    try:
-      await test_instance.asyncSetUp()
-      print("Starting PAROBOT COMMANDS tests...")
-
-      await test_instance.test_change_config()
-      await test_instance.test_change_config2()
-      await test_instance.test_get_grasp_data()
-      await test_instance.test_set_grasp_data()
-      await test_instance.test_get_grip_close_pos()
-      await test_instance.test_set_grip_close_pos()
-      await test_instance.test_get_grip_open_pos()
-      await test_instance.test_set_grip_open_pos()
-      await test_instance.test_gripper()
-      await test_instance.test_move_rail()
-      await test_instance.test_move_to_safe()
-      await test_instance.test_get_pallet_index()
-      await test_instance.test_set_pallet_index()
-      await test_instance.test_get_pallet_origin()
-      await test_instance.test_set_pallet_origin()
-      await test_instance.test_get_pallet_x()
-      await test_instance.test_set_pallet_x()
-      await test_instance.test_get_pallet_y()
-      await test_instance.test_set_pallet_y()
-      await test_instance.test_get_pallet_z()
-      await test_instance.test_set_pallet_z()
-      await test_instance.test_pick_plate_station()
-      await test_instance.test_place_plate_station()
-      await test_instance.test_get_rail_position()
-      await test_instance.test_set_rail_position()
-      await test_instance.test_teach_plate_station()
-      await test_instance.test_get_station_type()
-      await test_instance.test_set_station_type()
-
-      print("PAROBOT COMMANDS tests completed successfully!")
-
-    except Exception as e:
-      print(f"Parobot commands test failed with error: {e}")
-      raise
-    finally:
-      await test_instance.asyncTearDown()
-
-  async def run_ssgrip_command_tests() -> None:
-    """Run all tests in the SSGRIP COMMANDS region"""
-    test_instance = TestPreciseFlexIntegration()
-
-    try:
-      await test_instance.asyncSetUp()
-      print("Starting SSGRIP COMMANDS tests...")
-
-      await test_instance.test_home_all_if_no_plate()
-      await test_instance.test_grasp_plate()
-      await test_instance.test_release_plate()
-      await test_instance.test_is_fully_closed()
-      await test_instance.test_set_active_gripper()
-      await test_instance.test_get_active_gripper()
-      await test_instance.test_free_mode()
-      await test_instance.test_open_gripper()
-      await test_instance.test_close_gripper()
-      await test_instance.test_pick_plate()
-      await test_instance.test_place_plate()
-      await test_instance.test_teach_position()
-
-      print("SSGRIP COMMANDS tests completed successfully!")
-
-    except Exception as e:
-      print(f"SSGrip commands test failed with error: {e}")
-      raise
-    finally:
-      await test_instance.asyncTearDown()
-
-  async def run_all_tests_by_region() -> None:
-    """Run tests organized by region for better control and debugging"""
-    try:
-      print("=== Running GENERAL COMMANDS ===")
-      await run_general_command_tests()
-
-      print("\n=== Running LOCATION COMMANDS ===")
-      await run_location_command_tests()
-
-      print("\n=== Running PROFILE COMMANDS ===")
-      await run_profile_command_tests()
-
-      print("\n=== Running MOTION COMMANDS ===")
-      await run_motion_command_tests()
-
-      print("\n=== Running PAROBOT COMMANDS ===")
-      await run_parobot_command_tests()
-
-      print("\n=== Running SSGRIP COMMANDS ===")
-      await run_ssgrip_command_tests()
-
-      print("\nAll test regions completed successfully!")
-
-    except Exception as e:
-      print(f"Test suite failed: {e}")
+#     except Exception as e:
+#       print(f"General commands test failed with error: {e}")
+#       raise
+#     finally:
+#       await test_instance.asyncTearDown()
 
 
-# Main execution
-if __name__ == "__main__":
-  # Option 1: Run just general commands
-  # asyncio.run(run_general_command_tests())
+#   async def run_location_command_tests() -> None:
+#     """Run all tests in the LOCATION COMMANDS region"""
+#     test_instance = PreciseFlexHardwareTests()
 
-  # Option 2: Run all tests by region (recommended)
-  asyncio.run(run_all_tests_by_region())
+#     try:
+#       await test_instance.asyncSetUp()
+#       print("Starting LOCATION COMMANDS tests...")
 
-  # Option 3: Run specific region
-  # asyncio.run(run_location_command_tests())
+#       await test_instance.test_get_location()
+#       await test_instance.test_get_location_angles()
+#       await test_instance.test_set_location_angles()
+#       await test_instance.test_get_location_xyz()
+#       await test_instance.test_set_location_xyz()
+#       await test_instance.test_get_location_z_clearance()
+#       await test_instance.test_set_location_z_clearance()
+#       await test_instance.test_get_location_config()
+#       await test_instance.test_set_location_config()
+#       await test_instance.test_dest_c()
+#       await test_instance.test_dest_j()
+#       await test_instance.test_here_j()
+#       await test_instance.test_here_c()
+#       await test_instance.test_where()
+#       await test_instance.test_where_c()
+#       await test_instance.test_where_j()
+
+#       print("LOCATION COMMANDS tests completed successfully!")
+
+#     except Exception as e:
+#       print(f"Location commands test failed with error: {e}")
+#       raise
+#     finally:
+#       await test_instance.asyncTearDown()
+
+#   async def run_profile_command_tests() -> None:
+#     """Run all tests in the PROFILE COMMANDS region"""
+#     test_instance = PreciseFlexHardwareTests()
+
+#     try:
+#       await test_instance.asyncSetUp()
+#       print("Starting PROFILE COMMANDS tests...")
+
+#       await test_instance.test_get_profile_speed()
+#       await test_instance.test_set_profile_speed()
+#       await test_instance.test_get_profile_speed2()
+#       await test_instance.test_set_profile_speed2()
+#       await test_instance.test_get_profile_accel()
+#       await test_instance.test_set_profile_accel()
+#       await test_instance.test_get_profile_accel_ramp()
+#       await test_instance.test_set_profile_accel_ramp()
+#       await test_instance.test_get_profile_decel()
+#       await test_instance.test_set_profile_decel()
+#       await test_instance.test_get_profile_decel_ramp()
+#       await test_instance.test_set_profile_decel_ramp()
+#       await test_instance.test_get_profile_in_range()
+#       await test_instance.test_set_profile_in_range()
+#       await test_instance.test_get_profile_straight()
+#       await test_instance.test_set_profile_straight()
+#       await test_instance.test_get_motion_profile_values()
+#       await test_instance.test_set_motion_profile_values()
+
+#       print("PROFILE COMMANDS tests completed successfully!")
+
+#     except Exception as e:
+#       print(f"Profile commands test failed with error: {e}")
+#       raise
+#     finally:
+#       await test_instance.asyncTearDown()
+
+#   async def run_motion_command_tests() -> None:
+#     """Run all tests in the MOTION COMMANDS region"""
+#     test_instance = PreciseFlexHardwareTests()
+
+#     try:
+#       await test_instance.asyncSetUp()
+#       print("Starting MOTION COMMANDS tests...")
+
+#       await test_instance.test_halt()
+#       await test_instance.test_move()
+#       await test_instance.test_move_appro()
+#       await test_instance.test_move_extra_axis()
+#       await test_instance.test_move_one_axis()
+#       await test_instance.test_move_c()
+#       await test_instance.test_move_j()
+#       await test_instance.test_release_brake()
+#       await test_instance.test_set_brake()
+#       await test_instance.test_state()
+#       await test_instance.test_wait_for_eom()
+#       await test_instance.test_zero_torque()
+
+#       print("MOTION COMMANDS tests completed successfully!")
+
+#     except Exception as e:
+#       print(f"Motion commands test failed with error: {e}")
+#       raise
+#     finally:
+#       await test_instance.asyncTearDown()
+
+#   async def run_parobot_command_tests() -> None:
+#     """Run all tests in the PAROBOT COMMANDS region"""
+#     test_instance = PreciseFlexHardwareTests()
+
+#     try:
+#       await test_instance.asyncSetUp()
+#       print("Starting PAROBOT COMMANDS tests...")
+
+#       await test_instance.test_change_config()
+#       await test_instance.test_change_config2()
+#       await test_instance.test_get_grasp_data()
+#       await test_instance.test_set_grasp_data()
+#       await test_instance.test_get_grip_close_pos()
+#       await test_instance.test_set_grip_close_pos()
+#       await test_instance.test_get_grip_open_pos()
+#       await test_instance.test_set_grip_open_pos()
+#       await test_instance.test_gripper()
+#       await test_instance.test_move_rail()
+#       await test_instance.test_move_to_safe()
+#       await test_instance.test_get_pallet_index()
+#       await test_instance.test_set_pallet_index()
+#       await test_instance.test_get_pallet_origin()
+#       await test_instance.test_set_pallet_origin()
+#       await test_instance.test_get_pallet_x()
+#       await test_instance.test_set_pallet_x()
+#       await test_instance.test_get_pallet_y()
+#       await test_instance.test_set_pallet_y()
+#       await test_instance.test_get_pallet_z()
+#       await test_instance.test_set_pallet_z()
+#       await test_instance.test_pick_plate_station()
+#       await test_instance.test_place_plate_station()
+#       await test_instance.test_get_rail_position()
+#       await test_instance.test_set_rail_position()
+#       await test_instance.test_teach_plate_station()
+#       await test_instance.test_get_station_type()
+#       await test_instance.test_set_station_type()
+
+#       print("PAROBOT COMMANDS tests completed successfully!")
+
+#     except Exception as e:
+#       print(f"Parobot commands test failed with error: {e}")
+#       raise
+#     finally:
+#       await test_instance.asyncTearDown()
+
+#   async def run_ssgrip_command_tests() -> None:
+#     """Run all tests in the SSGRIP COMMANDS region"""
+#     test_instance = PreciseFlexHardwareTests()
+
+#     try:
+#       await test_instance.asyncSetUp()
+#       print("Starting SSGRIP COMMANDS tests...")
+
+#       await test_instance.test_home_all_if_no_plate()
+#       await test_instance.test_grasp_plate()
+#       await test_instance.test_release_plate()
+#       await test_instance.test_is_fully_closed()
+#       await test_instance.test_set_active_gripper()
+#       await test_instance.test_get_active_gripper()
+#       await test_instance.test_free_mode()
+#       await test_instance.test_open_gripper()
+#       await test_instance.test_close_gripper()
+#       await test_instance.test_pick_plate()
+#       await test_instance.test_place_plate()
+#       await test_instance.test_teach_position()
+
+#       print("SSGRIP COMMANDS tests completed successfully!")
+
+#     except Exception as e:
+#       print(f"SSGrip commands test failed with error: {e}")
+#       raise
+#     finally:
+#       await test_instance.asyncTearDown()
+
+#   async def run_all_tests_by_region() -> None:
+#     """Run tests organized by region for better control and debugging"""
+#     try:
+#       print("=== Running GENERAL COMMANDS ===")
+#       await run_general_command_tests()
+
+#       print("\n=== Running LOCATION COMMANDS ===")
+#       await run_location_command_tests()
+
+#       print("\n=== Running PROFILE COMMANDS ===")
+#       await run_profile_command_tests()
+
+#       print("\n=== Running MOTION COMMANDS ===")
+#       await run_motion_command_tests()
+
+#       print("\n=== Running PAROBOT COMMANDS ===")
+#       await run_parobot_command_tests()
+
+#       print("\n=== Running SSGRIP COMMANDS ===")
+#       await run_ssgrip_command_tests()
+
+#       print("\nAll test regions completed successfully!")
+
+#     except Exception as e:
+#       print(f"Test suite failed: {e}")
+
+
+# # Main execution
+# if __name__ == "__main__":
+#   # Option 1: Run just general commands
+#   # asyncio.run(run_general_command_tests())
+
+#   # Option 2: Run all tests by region (recommended)
+#   asyncio.run(run_all_tests_by_region())
+
+#   # Option 3: Run specific region
+#   # asyncio.run(run_location_command_tests())
