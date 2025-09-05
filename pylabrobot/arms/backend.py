@@ -16,15 +16,15 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
         """Get the current position of the arm in 3D space."""
         ...
 
-    @abstractmethod
-    async def set_speed(self, speed: float):
-        """Set the speed of the arm's movement."""
-        ...
+    # @abstractmethod
+    # async def set_speed(self, speed: float):
+    #     """Set the speed of the arm's movement."""
+    #     ...
 
-    @abstractmethod
-    async def get_speed(self) -> float:
-        """Get the current speed of the arm's movement."""
-        ...
+    # @abstractmethod
+    # async def get_speed(self) -> float:
+    #     """Get the current speed of the arm's movement."""
+    #     ...
 
     @abstractmethod
     async def open_gripper(self):
