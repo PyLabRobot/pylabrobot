@@ -1,5 +1,5 @@
 from pylabrobot.arms.backend import ArmBackend
-from pylabrobot.arms.precise_flex.preciseflex_api import PreciseFlexBackendApi
+from pylabrobot.arms.precise_flex.precise_flex_backend_api import PreciseFlexBackendApi
 
 
 class PreciseFlexBackend(ArmBackend):
