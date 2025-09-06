@@ -21,8 +21,10 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
 
   Same as 229590 (229590 is sold with lids)
 
+  229195, 229196
+
   - Material: Polystyrene
-  - Tissue culture treated: No
+  - Tissue culture treated: No (229591 and 229590) / Yes (229195, 229196)
   """
   # WELL_UBOTTOM_HEIGHT = 2.81 # absolute height of cylindrical segment, measured
   # WELL_DIAMETER = 6.69 # measured

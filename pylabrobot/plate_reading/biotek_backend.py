@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import enum
 import logging
 import math
@@ -176,6 +177,8 @@ class Cytation5Backend(ImageReaderBackend):
         raise
 
   async def _set_up_camera(self) -> None:
+    atexit.register(self._stop_camera)
+
     if not USE_PYSPIN:
       raise RuntimeError(
         "PySpin is not installed. Please follow the imaging setup instructions. "
@@ -447,19 +450,25 @@ class Cytation5Backend(ImageReaderBackend):
     await self.stop_shaking()
     await self.io.stop()
 
-    if hasattr(self, "cam") and self.cam is not None:
-      await self._reset_trigger()
-
-      self.cam.DeInit()
-      del self.cam
-    if hasattr(self, "spinnaker_system") and self.spinnaker_system is not None:
-      self.spinnaker_system.ReleaseInstance()
+    self._stop_camera()
 
     self._objectives = None
     self._filters = None
     self._slow_mode = None
 
-  async def _reset_trigger(self):
+  def _stop_camera(self) -> None:
+    if self.cam is not None:
+      if self._acquiring:
+        self.stop_acquisition()
+
+      self._reset_trigger()
+
+      self.cam.DeInit()
+      self.cam = None
+    if self.spinnaker_system is not None:
+      self.spinnaker_system.ReleaseInstance()
+
+  def _reset_trigger(self):
     if self.cam is None:
       return
 
@@ -750,7 +759,7 @@ class Cytation5Backend(ImageReaderBackend):
     with kinetics.
 
     Args:
-      frequency: speed, in mm
+      frequency: speed, in mm. 360 CPM = 6mm; 410 CPM = 5mm; 493 CPM = 4mm; 567 CPM = 3mm; 731 CPM = 2mm; 1096 CPM = 1mm
     """
 
     max_duration = 16 * 60  # 16 minutes
