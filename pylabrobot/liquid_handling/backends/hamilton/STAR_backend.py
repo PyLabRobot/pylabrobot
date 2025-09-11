@@ -6769,7 +6769,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="R0", command="RW", fmt="rw######")
     return cast(int, response["rw"])
 
-  async def request_iswap_rotation_drive_orientation(self) -> Union["RotationDriveOrientation", str]:
+  async def request_iswap_rotation_drive_orientation(self) -> Union["RotationDriveOrientation", Literal["PARKED_RIGHT"]]:
     """
     Request the iSWAP rotation drive orientation.
     This is the orientation of the iSWAP rotation drive (relative to the machine).
