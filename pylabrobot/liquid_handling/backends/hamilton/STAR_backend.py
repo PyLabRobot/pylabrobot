@@ -6787,7 +6787,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       STARBackend.RotationDriveOrientation.FRONT: range(-75, 26),
       STARBackend.RotationDriveOrientation.RIGHT: range(29018, 29119),
       STARBackend.RotationDriveOrientation.LEFT: range(-29166, -29065),
-      "PARKED_RIGHT": range(29450, 29550),
+      STARBackend.RotationDriveOrientation.PARKED_RIGHT: range(29450, 29550),
       # TODO: add range for STAR(let)s with "PARKED_LEFT" setting
     }
 
