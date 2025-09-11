@@ -7575,7 +7575,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if orientation in {
       STARBackend.RotationDriveOrientation.RIGHT,
       STARBackend.RotationDriveOrientation.FRONT,
-      STARBackend.RotationDriveOrientation.LEFT
+      STARBackend.RotationDriveOrientation.LEFT,
     }:
       return await self.send_command(
         module="R0",
