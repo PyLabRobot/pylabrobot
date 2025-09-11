@@ -7572,7 +7572,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     PARKED_RIGHT = None
 
   async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
-    if orientation.value:
+    if orientation in {
+      STARBackend.RotationDriveOrientation.RIGHT,
+      STARBackend.RotationDriveOrientation.FRONT,
+      STARBackend.RotationDriveOrientation.LEFT
+    }:
       return await self.send_command(
         module="R0",
         command="WP",
