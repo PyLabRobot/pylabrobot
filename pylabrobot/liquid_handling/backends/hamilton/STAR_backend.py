@@ -3984,8 +3984,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_left_x_arm_position(self):
     """Request left X-Arm position"""
-
-    return await self.send_command(module="C0", command="RX", fmt="rx#####")
+    resp_dmm = await self.send_command(module="C0", command="RX", fmt="rx#####")
+    return resp_dmm / 10
 
   async def request_right_x_arm_position(self):
     """Request right X-Arm position"""
@@ -5093,6 +5093,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # TODO:(command:RY): Request Y-Positions of all pipetting channels
 
+  async def request_x_pos_channel_n(self, pipetting_channel_index: int = 0) -> float:
+    """ Request X-Position of Pipetting channel n (in mm)"""
+    
+    # TODO: check validity for 2 X-arm system 
+
+    return await self.request_left_x_arm_position()
+  
   async def request_y_pos_channel_n(self, pipetting_channel_index: int) -> float:
     """Request Y-Position of Pipetting channel n
 
