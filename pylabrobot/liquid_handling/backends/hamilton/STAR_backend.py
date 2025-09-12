@@ -6766,8 +6766,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_iswap_rotation_drive_position_increments(self) -> int:
     """Query the iSWAP rotation drive position (units: increments) from the firmware."""
-    response = await self.send_command(module="R0", command="RS", fmt="rs######")
-    return cast(int, response["rs"])
+    response = await self.send_command(module="R0", command="RW", fmt="rw######")
+    return cast(int, response["rw"])
 
   async def request_iswap_rotation_drive_orientation(self) -> "RotationDriveOrientation":
     """
@@ -6787,6 +6787,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       STARBackend.RotationDriveOrientation.FRONT: range(-75, 26),
       STARBackend.RotationDriveOrientation.RIGHT: range(29018, 29119),
       STARBackend.RotationDriveOrientation.LEFT: range(-29166, -29065),
+      STARBackend.RotationDriveOrientation.PARKED_RIGHT: range(29450, 29550),
+      # TODO: add range for STAR(let)s with "PARKED_LEFT" setting
     }
 
     motor_position_increments = await self.request_iswap_rotation_drive_position_increments()
@@ -6797,7 +6799,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     raise ValueError(
       f"Unknown rotation orientation: {motor_position_increments}. "
-      f"Expected one of {list(rotation_orientation_to_motor_increment_dict)}."
+      f"Expected one of {list(rotation_orientation_to_motor_increment_dict.values())}."
     )
 
   async def request_iswap_wrist_drive_position_increments(self) -> int:
@@ -6879,7 +6881,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     elif rotation_drive == STARBackend.RotationDriveOrientation.RIGHT:
       position += 30
     else:
-      raise ValueError("Invalid rotation drive orientation")
+      raise ValueError(f"Invalid rotation drive orientation: {rotation_drive}")
 
     if grip_direction == GripDirection.FRONT:
       position += 1
@@ -7567,14 +7569,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     LEFT = 1
     FRONT = 2
     RIGHT = 3
+    PARKED_RIGHT = None
 
   async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
-    return await self.send_command(
-      module="R0",
-      command="WP",
-      auto_id=False,
-      wp=orientation.value,
-    )
+    if orientation in {
+      STARBackend.RotationDriveOrientation.RIGHT,
+      STARBackend.RotationDriveOrientation.FRONT,
+      STARBackend.RotationDriveOrientation.LEFT,
+    }:
+      return await self.send_command(
+        module="R0",
+        command="WP",
+        auto_id=False,
+        wp=orientation.value,
+      )
+    else:
+      raise ValueError(f"Invalid rotation drive orientation: {orientation}")
 
   class WristDriveOrientation(enum.Enum):
     RIGHT = 1
