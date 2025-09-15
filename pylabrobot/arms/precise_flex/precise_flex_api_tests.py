@@ -1,13 +1,11 @@
 import unittest
 import asyncio
-import os
 from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
-from typing import AsyncGenerator, List, Any, Union
 from contextlib import asynccontextmanager
 
 
 
-class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
+class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
 
   async def asyncSetUp(self):
