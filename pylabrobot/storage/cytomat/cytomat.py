@@ -248,7 +248,7 @@ class CytomatBackend(IncubatorBackend):
       if int(action, base=2) == int(action_register_member.value, base=16):
         action_enum = action_register_member
         break
-    assert action_enum is not None, f"Unknown HIGH_LEVEL_COMMANDment value: {action}"
+    assert action_enum is not None, f"Unknown value: {action}"
 
     return ActionRegisterState(target=target_enum, action=action_enum)
 

@@ -18,14 +18,5 @@ ba = "ba"
 nd = "nd"
 PN = "PN"
 tro = "tro"
-COMMAN = "COMMAN"
 FO = "FO"
 UE = "UE"
-portait = "portait"
-indictor = "indictor"
-heigh = "heigh"
-
-[files]
-extend-exclude = [
-    "*.ipynb"
-]

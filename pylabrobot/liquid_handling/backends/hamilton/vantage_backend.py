@@ -186,7 +186,7 @@ pip_errors = {
   56: "Y drive not initialized",
   57: "Y drive movement error",
   58: "Y drive position out of permitted area",
-  59: "Divergance Y motion controller to linear encoder to heigh",
+  59: "Divergance Y motion controller to linear encoder to height",
   60: "Z drive initialization failed",
   61: "Z drive not initialized",
   62: "Z drive movement error",

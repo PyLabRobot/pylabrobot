@@ -28,5 +28,3 @@ jobs:
         run: make lint
       - name: Check formatting
         run: make format-check
-      - name: Run pre-commit (typos)
-        run: pre-commit run typos --all-files
