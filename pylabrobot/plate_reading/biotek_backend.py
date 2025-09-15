@@ -5,6 +5,7 @@ import logging
 import math
 import re
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Tuple, Union, cast
 
@@ -96,11 +97,24 @@ async def _golden_ratio_search(
 @dataclass
 class Cytation5ImagingConfig:
   camera_serial_number: Optional[str] = None
-  max_image_read_attempts: int = 8
+  max_image_read_attempts: int = 50
 
   # if not specified, these will be loaded from machine configuration (register with gen5.exe)
   objectives: Optional[List[Optional[Objective]]] = None
   filters: Optional[List[Optional[ImagingMode]]] = None
+
+
+@contextmanager
+def try_often(times: int = 50):
+  """needed because the pyspin api is extremely unreliable."""
+  for i in range(times):
+    try:
+      yield
+      break
+    except PySpin.SpinnakerException as e:
+      print(f"Attempt {i+1}/{times}: Unable to use spinnaker: {e}")
+  else:
+    raise RuntimeError("Unable to do it")
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -1024,13 +1038,15 @@ class Cytation5Backend(ImageReaderBackend):
 
     if self.cam.ExposureAuto.GetAccessMode() != PySpin.RW:
       raise RuntimeError("unable to write ExposureAuto")
-    self.cam.ExposureAuto.SetValue(
-      {
-        "off": PySpin.ExposureAuto_Off,
-        "once": PySpin.ExposureAuto_Once,
-        "continuous": PySpin.ExposureAuto_Continuous,
-      }[auto_exposure]
-    )
+
+    with try_often():
+      self.cam.ExposureAuto.SetValue(
+        {
+          "off": PySpin.ExposureAuto_Off,
+          "once": PySpin.ExposureAuto_Once,
+          "continuous": PySpin.ExposureAuto_Continuous,
+        }[auto_exposure]
+      )
 
   async def set_exposure(self, exposure: Exposure):
     """exposure (integration time) in ms, or "machine-auto" """
@@ -1049,19 +1065,23 @@ class Cytation5Backend(ImageReaderBackend):
         self._exposure = "machine-auto"
         return
       raise ValueError("exposure must be a number or 'auto'")
-    self.cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
+    with try_often():
+      self.cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
 
     # set exposure time (in microseconds)
     if self.cam.ExposureTime.GetAccessMode() != PySpin.RW:
       raise RuntimeError("unable to write ExposureTime")
     exposure_us = int(exposure * 1000)
-    min_et = self.cam.ExposureTime.GetMin()
+    with try_often():
+      min_et = self.cam.ExposureTime.GetMin()
     if exposure_us < min_et:
       raise ValueError(f"exposure must be >= {min_et}")
-    max_et = self.cam.ExposureTime.GetMax()
+    with try_often():
+      max_et = self.cam.ExposureTime.GetMax()
     if exposure_us > max_et:
       raise ValueError(f"exposure must be <= {max_et}")
-    self.cam.ExposureTime.SetValue(exposure_us)
+    with try_often():
+      self.cam.ExposureTime.SetValue(exposure_us)
     self._exposure = exposure
 
   async def select(self, row: int, column: int):
@@ -1206,17 +1226,9 @@ class Cytation5Backend(ImageReaderBackend):
       node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
       if not PySpin.IsWritable(node_softwaretrigger_cmd):
         raise RuntimeError("unable to execute software trigger")
-      num_trigger_tries = 5
-      for _ in range(num_trigger_tries):
-        try:
-          node_softwaretrigger_cmd.Execute()
-          break
-        except SpinnakerException:
-          continue
-      else:
-        raise RuntimeError(f"Failed to execute software trigger after {num_trigger_tries} attempts")
 
       try:
+        node_softwaretrigger_cmd.Execute()
         timeout = int(self.cam.ExposureTime.GetValue() / 1000 + 1000)  # from example
         image_result = self.cam.GetNextImage(timeout)
         if not image_result.IsIncomplete():
@@ -1228,6 +1240,9 @@ class Cytation5Backend(ImageReaderBackend):
       except SpinnakerException as e:
         # the image is not ready yet, try again
         logger.debug("Failed to get image: %s", e)
+        self.stop_acquisition()
+        self.start_acquisition()
+
       num_tries += 1
       await asyncio.sleep(0.3)
     raise TimeoutError("max_image_read_attempts reached")
