@@ -1,7 +1,7 @@
 import unittest
 import asyncio
 import os
-from pylabrobot.arms.precise_flex.precise_flex_backend_api import PreciseFlexBackendApi
+from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
 from typing import AsyncGenerator, List, Any, Union
 from contextlib import asynccontextmanager
 
