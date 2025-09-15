@@ -6819,25 +6819,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def request_iswap_wrist_drive_orientation(self) -> "WristDriveOrientation":
     """
     Request the iSWAP wrist drive orientation.
-    This is the orientation of the iSWAP wrist drive (always in relation to the
-    iSWAP arm/rotation drive).
+    This is the orientation of the iSWAP wrist drive (always in relation to the iSWAP arm/rotation drive).
 
     e.g.:
-    1) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) +
-       iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the front)
+    1) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) + iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the front)
 
-    2) iSWAP RotationDriveOrientation.LEFT (i.e. pointing to the left of the machine) +
-       iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the left)
+    2) iSWAP RotationDriveOrientation.LEFT (i.e. pointing to the left of the machine) + iSWAP WristDriveOrientation.STRAIGHT (i.e. wrist is also pointing to the left)
 
-    3) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) +
-       iSWAP WristDriveOrientation.RIGHT (i.e. wrist is pointing to the left !)
+    3) iSWAP RotationDriveOrientation.FRONT (i.e. pointing to the front of the machine) + iSWAP WristDriveOrientation.RIGHT (i.e. wrist is pointing to the left !)
 
-    The relative wrist orientation is reported as a motor position increment by the STAR
-    firmware. This value is mapped to a `WristDriveOrientation` enum member.
+    The relative wrist orientation is reported as a motor position increment by the STAR firmware. This value is mapped to a `WristDriveOrientation` enum member.
 
     Returns:
-      WristDriveOrientation: The interpreted wrist orientation
-      (e.g., RIGHT, STRAIGHT, LEFT, REVERSE).
+      WristDriveOrientation: The interpreted wrist orientation (e.g., RIGHT, STRAIGHT, LEFT, REVERSE).
     """
 
     # Map motor increments to wrist orientations (constant lookup table).
