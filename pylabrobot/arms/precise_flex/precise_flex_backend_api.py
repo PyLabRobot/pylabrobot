@@ -998,7 +998,7 @@ class PreciseFlexBackendApi:
       if not (-1 <= in_range <= 100):
         raise ValueError("InRange must be between -1 and 100.")
 
-      straight_int = 1 if straight else 0
+      straight_int = -1 if straight else 0
       await self.send_command(f"Profile {profile} {speed} {speed2} {acceleration} {deceleration} {acceleration_ramp} {deceleration_ramp} {in_range} {straight_int}")
 
   async def get_motion_profile_values(self, profile: int) -> tuple[int, float, float, float, float, float, float, float, bool]:
@@ -1034,7 +1034,7 @@ class PreciseFlexBackendApi:
             float(parts[5]),
             float(parts[6]),
             float(parts[7]),
-            parts[8] == "True"
+            False if parts[8] == 0 else True
           )
 
   #region MOTION COMMANDS

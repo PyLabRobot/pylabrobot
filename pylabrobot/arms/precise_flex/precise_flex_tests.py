@@ -905,18 +905,37 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
     # Record current position for restoration
     original_position = await self.robot.where_c()
 
+    # Get original location for restoration
+    original_location = await self.robot.get_location(self.TEST_LOCATION_ID)
+
     try:
+      # Create a test location with small movement from current position
+      x, y, z, yaw, pitch, roll, config = original_position
+      test_x, test_y, test_z = x + 5, y + 5, z + 3  # Small movements (5mm each direction)
+      test_yaw = yaw + 2.0  # Small rotation change
+
+      # Save test location
+      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, test_x, test_y, test_z, test_yaw, pitch, roll)
+
       # Move to test location
       await self.robot.move(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
       await self.robot.wait_for_eom()
 
-      # Verify we moved (position should be different)
+      # Verify we moved to the test location
       new_position = await self.robot.where_c()
-      position_changed = any(abs(orig - new) > 1.0 for orig, new in zip(original_position[:6], new_position[:6]))
-      self.assertTrue(position_changed or True)  # Allow for cases where location might be same as current
+      self.assertLess(abs(new_position[0] - test_x), 2.0)
+      self.assertLess(abs(new_position[1] - test_y), 2.0)
+      self.assertLess(abs(new_position[2] - test_z), 2.0)
       print(f"Move to location {self.TEST_LOCATION_ID} completed successfully")
 
     finally:
+      # Restore original location
+      type_code = original_location[0]
+      if type_code == 0:  # Was Cartesian type
+        await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
+      else:  # Was angles type
+        await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
+
       # Return to original position
       x, y, z, yaw, pitch, roll, config = original_position
       await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
@@ -927,14 +946,42 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
     # Record current position for restoration
     original_position = await self.robot.where_c()
 
+    # Get original location for restoration
+    original_location = await self.robot.get_location(self.TEST_LOCATION_ID)
+
+    # Get the Z clearance for the test location
+    z_clearance_data = await self.robot.get_location_z_clearance(self.TEST_LOCATION_ID)
+    _, z_clearance, _ = z_clearance_data
     try:
+      # Create a test location with small movement from current position
+      x, y, z, yaw, pitch, roll, config = original_position
+      test_x, test_y, test_z = x + 8, y + 8, z + 5  # Small movements (8mm each direction)
+      test_yaw = yaw + 3.0  # Small rotation change
+      test_z_clearance = 20
+
+      # Save test location
+      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, test_x, test_y, test_z, test_yaw, pitch, roll)
+
+      # Save the z clearance
+      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, test_z_clearance)
+
       # Move to test location with approach
       await self.robot.move_appro(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
       await self.robot.wait_for_eom()
 
-      print(f"Move approach to location {self.TEST_LOCATION_ID} completed successfully")
+      print(f"Move approach to location {self.TEST_LOCATION_ID} with z-clearance {test_z_clearance} completed successfully")
 
     finally:
+      # Restore original location
+      type_code = original_location[0]
+      if type_code == 0:  # Was Cartesian type
+        await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
+      else:  # Was angles type
+        await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
+
+      # Restore original z clearance
+      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, z_clearance)
+
       # Return to original position
       x, y, z, yaw, pitch, roll, config = original_position
       await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
@@ -1018,8 +1065,24 @@ class PreciseFlexHardwareTests(unittest.IsolatedAsyncioTestCase):
 
       # Verify joint positions
       new_joints = await self.robot.where_j()
+
+
+
+###########################################################################
+    ##### Check what's going on here!
+    #  The where_j is returning an empty array from the response parser.
+    #  Check at the very lowest level of read what's going wrong.
+    # The waitforeom is probably screwing things upa  bit.
+    #####
+###########################################################################
+
+
       for i, (expected, actual) in enumerate(zip(test_joints, new_joints)):
-        self.assertLess(abs(expected - actual), 1.0, f"Joint {i+1} position mismatch")
+        if i > 4 and original_joints[i] == 0.0: # not all robots have 6 axes
+          if abs(expected - actual) >= 1.0:
+            print(f"Warning: Joint {i+1} position mismatch: expected {expected}, got {actual}")
+        else:
+          self.assertLess(abs(expected - actual), 1.0, f"Joint {i+1} position mismatch")
 
       print(f"Move joints completed successfully")
 
