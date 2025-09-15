@@ -20,3 +20,8 @@ PN = "PN"
 tro = "tro"
 FO = "FO"
 UE = "UE"
+
+[files]
+extend-exclude = [
+    "*.ipynb"
+]
