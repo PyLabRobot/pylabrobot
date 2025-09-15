@@ -122,7 +122,7 @@ class CytomatBackend(IncubatorBackend):
         await self.reset_error_register()
         raise Exception(f"Unknown cytomat error code in response: {resp}")
 
-      logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
+      logging.error("Command %s received an unknown response: '%s'", command_str, resp)
       await self.reset_error_register()
       raise Exception(f"Unknown response from cytomat: {resp}")
 
@@ -248,7 +248,7 @@ class CytomatBackend(IncubatorBackend):
       if int(action, base=2) == int(action_register_member.value, base=16):
         action_enum = action_register_member
         break
-    assert action_enum is not None, f"Unknown HIGH_LEVEL_COMMANDment value: {action}"
+    assert action_enum is not None, f"Unknown value: {action}"
 
     return ActionRegisterState(target=target_enum, action=action_enum)
 

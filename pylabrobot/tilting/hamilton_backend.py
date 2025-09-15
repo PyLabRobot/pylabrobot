@@ -231,7 +231,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     """Tilt set the temperature 10.. 50 Grad C [1/10 Grad C]
 
     Args:
-      temperature: temperature in Celcius, between 10 and 50
+      temperature: temperature in Celsisu, between 10 and 50
     """
 
     assert 10 <= temperature <= 50, "Temperature must be between 10 and 50."

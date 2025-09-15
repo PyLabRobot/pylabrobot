@@ -270,7 +270,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncTearDown(self):
     await self.lh.stop()
 
-  async def test_indictor_light(self):
+  async def test_indicator_light(self):
     await self.STAR.set_loading_indicators(bit_pattern=[True] * 54, blink_pattern=[False] * 54)
     self.STAR._write_and_read_command.assert_has_calls(
       [
