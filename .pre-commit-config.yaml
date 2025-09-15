@@ -6,6 +6,7 @@ repos:
         entry: make format
         language: system
         files: ^pylabrobot/.*$
+
   - repo: https://github.com/crate-ci/typos
     rev: v1
     hooks:
