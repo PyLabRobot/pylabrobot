@@ -179,6 +179,7 @@ library/falcon
 library/hamilton
 library/nest
 library/opentrons
+library/perkin_elmer
 library/porvair
 library/revvity
 library/sergi

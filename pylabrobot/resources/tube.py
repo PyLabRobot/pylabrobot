@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.liquid import Liquid
@@ -21,6 +21,8 @@ class Tube(Container):
     material_z_thickness: Optional[float] = None,
     category: str = "tube",
     model: Optional[str] = None,
+    compute_volume_from_height: Optional[Callable[[float], float]] = None,
+    compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
     """Create a new tube.
 
@@ -43,6 +45,8 @@ class Tube(Container):
       category=category,
       max_volume=max_volume,
       model=model,
+      compute_volume_from_height=compute_volume_from_height,
+      compute_height_from_volume=compute_height_from_volume,
     )
     self.tracker.register_callback(self._state_updated)
 

@@ -1,11 +1,12 @@
 import asyncio
+import atexit
 import enum
 import logging
 import math
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union, cast
+from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Tuple, Union, cast
 
 try:
   import cv2  # type: ignore
@@ -67,10 +68,18 @@ async def _golden_ratio_search(
   c = b - (b - a) / phi
   d = a + (b - a) / phi
 
+  cache: Dict[float, float] = {}
+
+  async def cached_func(x: float) -> float:
+    x = round(x / tol) * tol  # round x to units of tol
+    if x not in cache:
+      cache[x] = await func(x)
+    return cache[x]
+
   t0 = time.time()
   iteration = 0
   while abs(b - a) > tol:
-    if (await func(c)) > (await func(d)):
+    if (await cached_func(c)) > (await cached_func(d)):
       b = d
     else:
       a = c
@@ -132,6 +141,8 @@ class Cytation5Backend(ImageReaderBackend):
     self._objective: Optional[Objective] = None
     self._slow_mode: Optional[bool] = None
 
+    self._acquiring = False
+
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
 
@@ -155,115 +166,129 @@ class Cytation5Backend(ImageReaderBackend):
     self._shaking_task: Optional[asyncio.Task] = None
 
     if use_cam:
-      if not USE_PYSPIN:
-        raise RuntimeError(
-          "PySpin is not installed. Please follow the imaging setup instructions. "
-          f"Import error: {_PYSPIN_IMPORT_ERROR}"
+      try:
+        await self._set_up_camera()
+      except:
+        # if setting up the camera fails, we have to close the ftdi connection
+        # so that the user can try calling setup() again.
+        # if we don't close the ftdi connection here, it will be open until the
+        # python kernel is restarted.
+        await self.stop()
+        raise
+
+  async def _set_up_camera(self) -> None:
+    atexit.register(self._stop_camera)
+
+    if not USE_PYSPIN:
+      raise RuntimeError(
+        "PySpin is not installed. Please follow the imaging setup instructions. "
+        f"Import error: {_PYSPIN_IMPORT_ERROR}"
+      )
+    if self.imaging_config is None:
+      raise RuntimeError("Imaging configuration is not set.")
+
+    logger.debug("[cytation5] setting up camera")
+
+    # -- Retrieve singleton reference to system object (Spinnaker) --
+    self.spinnaker_system = PySpin.System.GetInstance()
+    version = self.spinnaker_system.GetLibraryVersion()
+    logger.debug(
+      "[cytation5] Library version: %d.%d.%d.%d",
+      version.major,
+      version.minor,
+      version.type,
+      version.build,
+    )
+
+    # -- Get the camera by serial number, or the first. --
+    cam_list = self.spinnaker_system.GetCameras()
+    num_cameras = cam_list.GetSize()
+    logger.debug("[cytation5] number of cameras detected: %d", num_cameras)
+
+    for cam in cam_list:
+      info = self._get_device_info(cam)
+      serial_number = info["DeviceSerialNumber"]
+      logger.debug("[cytation5] camera detected: %s", serial_number)
+
+      if (
+        self.imaging_config.camera_serial_number is not None
+        and serial_number == self.imaging_config.camera_serial_number
+      ):
+        self.cam = cam
+        logger.info("[cytation5] using camera with serial number %s", serial_number)
+        break
+    else:  # if no specific camera was found by serial number so use the first one
+      if num_cameras > 0:
+        self.cam = cam_list.GetByIndex(0)
+        logger.info(
+          "[cytation5] using first camera with serial number %s", info["DeviceSerialNumber"]
         )
-      if self.imaging_config is None:
-        raise RuntimeError("Imaging configuration is not set.")
+      else:
+        logger.error("[cytation5] no cameras found")
+        self.cam = None
+    cam_list.Clear()
 
-      logger.debug("[cytation5] setting up camera")
-
-      # -- Retrieve singleton reference to system object (Spinnaker) --
-      self.spinnaker_system = PySpin.System.GetInstance()
-      version = self.spinnaker_system.GetLibraryVersion()
-      logger.debug(
-        "[cytation5] Library version: %d.%d.%d.%d",
-        version.major,
-        version.minor,
-        version.type,
-        version.build,
+    if self.cam is None:
+      raise RuntimeError(
+        "No camera found. Make sure the camera is connected and the serial " "number is correct."
       )
 
-      # -- Get the camera by serial number, or the first. --
-      cam_list = self.spinnaker_system.GetCameras()
-      num_cameras = cam_list.GetSize()
-      logger.debug("[cytation5] number of cameras detected: %d", num_cameras)
+    # -- Initialize camera --
+    for _ in range(10):
+      try:
+        self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
+        break
+      except:  # noqa
+        await asyncio.sleep(0.1)
+        pass
+    else:
+      raise RuntimeError(
+        "Failed to initialize camera. Make sure the camera is connected and the "
+        "Spinnaker SDK is installed correctly."
+      )
+    nodemap = self.cam.GetNodeMap()
 
-      for cam in cam_list:
-        info = self._get_device_info(cam)
-        serial_number = info["DeviceSerialNumber"]
-        logger.debug("[cytation5] camera detected: %s", serial_number)
+    # -- Configure trigger to be software --
+    # This is needed for longer exposure times (otherwise 27.8ms is the maximum)
+    # 1. Set trigger selector to frame start
+    ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
+    if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
+      raise RuntimeError(
+        "unable to configure TriggerSelector " "(can't read or write TriggerSelector)"
+      )
+    ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
+    if not PySpin.IsReadable(ptr_frame_start):
+      raise RuntimeError("unable to configure TriggerSelector (can't read FrameStart)")
+    ptr_trigger_selector.SetIntValue(int(ptr_frame_start.GetNumericValue()))
 
-        if (
-          self.imaging_config.camera_serial_number is not None
-          and serial_number == self.imaging_config.camera_serial_number
-        ):
-          self.cam = cam
-          logger.info("[cytation5] using camera with serial number %s", serial_number)
-          break
-      else:  # if no specific camera was found by serial number so use the first one
-        if num_cameras > 0:
-          self.cam = cam_list.GetByIndex(0)
-          logger.info(
-            "[cytation5] using first camera with serial number %s", info["DeviceSerialNumber"]
-          )
-        else:
-          logger.error("[cytation5] no cameras found")
-          self.cam = None
-      cam_list.Clear()
+    # 2. Set trigger source to software
+    ptr_trigger_source = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSource"))
+    if not PySpin.IsReadable(ptr_trigger_source) or not PySpin.IsWritable(ptr_trigger_source):
+      raise RuntimeError("unable to configure TriggerSource (can't read or write TriggerSource)")
+    ptr_inference_ready = PySpin.CEnumEntryPtr(ptr_trigger_source.GetEntryByName("Software"))
+    if not PySpin.IsReadable(ptr_inference_ready):
+      raise RuntimeError("unable to configure TriggerSource (can't read Software)")
+    ptr_trigger_source.SetIntValue(int(ptr_inference_ready.GetNumericValue()))
 
-      if self.cam is None:
-        raise RuntimeError(
-          "No camera found. Make sure the camera is connected and the serial " "number is correct."
-        )
+    # 3. Set trigger mode to on
+    ptr_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
+    if not PySpin.IsReadable(ptr_trigger_mode) or not PySpin.IsWritable(ptr_trigger_mode):
+      raise RuntimeError("unable to configure TriggerMode (can't read or write TriggerMode)")
+    ptr_trigger_on = PySpin.CEnumEntryPtr(ptr_trigger_mode.GetEntryByName("On"))
+    if not PySpin.IsReadable(ptr_trigger_on):
+      raise RuntimeError("unable to query TriggerMode On")
+    ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
 
-      # -- Initialize camera --
-      for _ in range(10):
-        try:
-          self.cam.Init()  # SpinnakerException: Spinnaker: Could not read the XML URL [-1010]
-          break
-        except:  # noqa
-          pass
-      else:
-        raise RuntimeError(
-          "Failed to initialize camera. Make sure the camera is connected and the "
-          "Spinnaker SDK is installed correctly."
-        )
-      nodemap = self.cam.GetNodeMap()
+    # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
+    await asyncio.sleep(1)
 
-      # -- Configure trigger to be software --
-      # This is needed for longer exposure times (otherwise 23ms is the maximum)
-      # 1. Set trigger selector to frame start
-      ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
-      if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
-        raise RuntimeError(
-          "unable to configure TriggerSelector " "(can't read or write TriggerSelector)"
-        )
-      ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
-      if not PySpin.IsReadable(ptr_frame_start):
-        raise RuntimeError("unable to configure TriggerSelector (can't read FrameStart)")
-      ptr_trigger_selector.SetIntValue(int(ptr_frame_start.GetNumericValue()))
+    # -- Load filter information --
+    if self._filters is None:
+      await self._load_filters()
 
-      # 2. Set trigger source to software
-      ptr_trigger_source = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSource"))
-      if not PySpin.IsReadable(ptr_trigger_source) or not PySpin.IsWritable(ptr_trigger_source):
-        raise RuntimeError("unable to configure TriggerSource (can't read or write TriggerSource)")
-      ptr_inference_ready = PySpin.CEnumEntryPtr(ptr_trigger_source.GetEntryByName("Software"))
-      if not PySpin.IsReadable(ptr_inference_ready):
-        raise RuntimeError("unable to configure TriggerSource (can't read Software)")
-      ptr_trigger_source.SetIntValue(int(ptr_inference_ready.GetNumericValue()))
-
-      # 3. Set trigger mode to on
-      ptr_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
-      if not PySpin.IsReadable(ptr_trigger_mode) or not PySpin.IsWritable(ptr_trigger_mode):
-        raise RuntimeError("unable to configure TriggerMode (can't read or write TriggerMode)")
-      ptr_trigger_on = PySpin.CEnumEntryPtr(ptr_trigger_mode.GetEntryByName("On"))
-      if not PySpin.IsReadable(ptr_trigger_on):
-        raise RuntimeError("unable to query TriggerMode On")
-      ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
-
-      # "NOTE: Blackfly and Flea3 GEV cameras need 1 second delay after trigger mode is turned on"
-      await asyncio.sleep(1)
-
-      # -- Load filter information --
-      if self._filters is None:
-        await self._load_filters()
-
-      # -- Load objective information --
-      if self._objectives is None:
-        await self._load_objectives()
+    # -- Load objective information --
+    if self._objectives is None:
+      await self._load_objectives()
 
   @property
   def version(self) -> str:
@@ -418,19 +443,49 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError(f"Unsupported version: {self.version}")
 
   async def stop(self) -> None:
+    if self._acquiring:
+      self.stop_acquisition()
+
     logger.info("[cytation5] stopping")
     await self.stop_shaking()
     await self.io.stop()
 
-    if hasattr(self, "cam") and self.cam is not None:
-      self.cam.DeInit()
-      del self.cam
-    if hasattr(self, "spinnaker_system") and self.spinnaker_system is not None:
-      self.spinnaker_system.ReleaseInstance()
+    self._stop_camera()
 
     self._objectives = None
     self._filters = None
     self._slow_mode = None
+
+  def _stop_camera(self) -> None:
+    if self.cam is not None:
+      if self._acquiring:
+        self.stop_acquisition()
+
+      self._reset_trigger()
+
+      self.cam.DeInit()
+      self.cam = None
+    if self.spinnaker_system is not None:
+      self.spinnaker_system.ReleaseInstance()
+
+  def _reset_trigger(self):
+    if self.cam is None:
+      return
+
+    # adopted from example
+    try:
+      nodemap = self.cam.GetNodeMap()
+      node_trigger_mode = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerMode"))
+      if not PySpin.IsReadable(node_trigger_mode) or not PySpin.IsWritable(node_trigger_mode):
+        return
+
+      node_trigger_mode_off = node_trigger_mode.GetEntryByName("Off")
+      if not PySpin.IsReadable(node_trigger_mode_off):
+        return
+
+      node_trigger_mode.SetIntValue(node_trigger_mode_off.GetValue())
+    except PySpin.SpinnakerException:
+      pass
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
@@ -704,7 +759,7 @@ class Cytation5Backend(ImageReaderBackend):
     with kinetics.
 
     Args:
-      frequency: speed, in mm
+      frequency: speed, in mm. 360 CPM = 6mm; 410 CPM = 5mm; 493 CPM = 4mm; 567 CPM = 3mm; 731 CPM = 2mm; 1096 CPM = 1mm
     """
 
     max_duration = 16 * 60  # 16 minutes
@@ -803,6 +858,18 @@ class Cytation5Backend(ImageReaderBackend):
 
     return device_info
 
+  def start_acquisition(self):
+    if self.cam is None:
+      raise RuntimeError("Camera is not initialized.")
+    self.cam.BeginAcquisition()
+    self._acquiring = True
+
+  def stop_acquisition(self):
+    if self.cam is None:
+      raise RuntimeError("Camera is not initialized.")
+    self.cam.EndAcquisition()
+    self._acquiring = False
+
   async def led_on(self, intensity: int = 10):
     if not 1 <= intensity <= 10:
       raise ValueError("intensity must be between 1 and 10")
@@ -877,7 +944,8 @@ class Cytation5Backend(ImageReaderBackend):
       relative_y_str = str(round(relative_y * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O01{relative_y_str}")
 
-    self._pos_x, self._pos_y = x, y
+    if relative_x != 0 or relative_y != 0:
+      await asyncio.sleep(0.1)
 
   def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
     self._auto_focus_search_range = (min_focal_height, max_focal_height)
@@ -1131,16 +1199,6 @@ class Cytation5Backend(ImageReaderBackend):
     assert self.cam is not None
     nodemap = self.cam.GetNodeMap()
 
-    # Start acquisition mode (continuous)
-    # node_acquisition_mode = PySpin.CEnumerationPtr(nodemap.GetNode("AcquisitionMode"))
-    # if not PySpin.IsReadable(node_acquisition_mode) or not \
-    #   PySpin.IsWritable(node_acquisition_mode):
-    #   raise RuntimeError("unable to set acquisition mode to continuous (enum retrieval)")
-    # node_acquisition_mode_single_frame = node_acquisition_mode.GetEntryByName("Continuous")
-    # if not PySpin.IsReadable(node_acquisition_mode_single_frame):
-    #   raise RuntimeError("unable to set acquisition mode to single frame (entry retrieval)")
-    # node_acquisition_mode.SetIntValue(node_acquisition_mode_single_frame.GetValue())
-
     assert self.imaging_config is not None, "Need to set imaging_config first"
 
     num_tries = 0
@@ -1148,22 +1206,25 @@ class Cytation5Backend(ImageReaderBackend):
       node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
       if not PySpin.IsWritable(node_softwaretrigger_cmd):
         raise RuntimeError("unable to execute software trigger")
-      node_softwaretrigger_cmd.Execute()
+      num_trigger_tries = 5
+      for _ in range(num_trigger_tries):
+        try:
+          node_softwaretrigger_cmd.Execute()
+          break
+        except SpinnakerException:
+          continue
+      else:
+        raise RuntimeError(f"Failed to execute software trigger after {num_trigger_tries} attempts")
 
       try:
-        t0 = time.time()
-        image_result = self.cam.GetNextImage(1000)
-        t1 = time.time()
-        logger.debug("[cytation5] GetNextImage took %.2f seconds", t1 - t0)
+        timeout = int(self.cam.ExposureTime.GetValue() / 1000 + 1000)  # from example
+        image_result = self.cam.GetNextImage(timeout)
         if not image_result.IsIncomplete():
-          t0 = time.time()
           processor = PySpin.ImageProcessor()
           processor.SetColorProcessing(color_processing_algorithm)
           image_converted = processor.Convert(image_result, pixel_format)
           image_result.Release()
-          logger.debug("[cytation5] acquired image in %d tries", num_tries + 1)
-          logger.debug("[cytation5] Convert took %.2f seconds for BS", time.time() - t0)
-          return image_converted.GetNDArray().tolist()  # type: ignore
+          return image_converted.GetNDArray()  # type: ignore
       except SpinnakerException as e:
         # the image is not ready yet, try again
         logger.debug("Failed to get image: %s", e)
@@ -1187,6 +1248,7 @@ class Cytation5Backend(ImageReaderBackend):
     overlap: Optional[float] = None,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
+    auto_stop_acquisition=True,
   ) -> ImagingResult:
     """Capture image using the microscope
 
@@ -1210,27 +1272,16 @@ class Cytation5Backend(ImageReaderBackend):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
-    self.cam.BeginAcquisition()
+    if not self._acquiring:
+      self.start_acquisition()
+
     try:
-      t0 = time.time()
       await self.set_objective(objective)
-      t_objective = time.time()
-      logger.debug("[cytation5] set objective in %.2f seconds", t_objective - t0)
       await self.set_imaging_mode(mode, led_intensity=led_intensity)
-      t_imaging_mode = time.time()
-      logger.debug("[cytation5] set imaging mode in %.2f seconds", t_imaging_mode - t_objective)
       await self.select(row, column)
-      t_select = time.time()
-      logger.debug("[cytation5] selected well in %.2f seconds", t_select - t_imaging_mode)
       await self.set_exposure(exposure_time)
-      t_exposure = time.time()
-      logger.debug("[cytation5] set exposure in %.2f seconds", t_exposure - t_select)
       await self.set_gain(gain)
-      t_gain = time.time()
-      logger.debug("[cytation5] set gain in %.2f seconds", t_gain - t_exposure)
       await self.set_focus(focal_height)
-      t_focus = time.time()
-      logger.debug("[cytation5] set focus in %.2f seconds", t_focus - t_gain)
 
       def image_size(magnification: float) -> Tuple[float, float]:
         # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
@@ -1271,7 +1322,6 @@ class Cytation5Backend(ImageReaderBackend):
       images: List[Image] = []
       for x_pos, y_pos in positions:
         await self.set_position(x=x_pos, y=y_pos)
-        await asyncio.sleep(0.1)
         t0 = time.time()
         images.append(
           await self._acquire_image(
@@ -1284,7 +1334,8 @@ class Cytation5Backend(ImageReaderBackend):
           t1 - t0,
         )
     finally:
-      self.cam.EndAcquisition()
+      if auto_stop_acquisition:
+        self.stop_acquisition()
 
     exposure_ms = float(self.cam.ExposureTime.GetValue()) / 1000
     assert self._focal_height is not None, "Focal height not set. Run set_focus() first."

@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional, cast
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
@@ -5,6 +6,8 @@ from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.standard import NoPlateError
 from pylabrobot.resources import Coordinate, Plate, Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
+
+logger = logging.getLogger(__name__)
 
 
 class PlateReader(ResourceHolder, Machine):
@@ -104,6 +107,11 @@ class PlateReader(ResourceHolder, Machine):
       emission_wavelength: The emission wavelength to read the fluorescence at, in nanometers.
       focal_height: The focal height to read the fluorescence at, in micrometers.
     """
+
+    if excitation_wavelength > emission_wavelength:
+      logger.warning(
+        "Excitation wavelength is greater than emission wavelength. This is unusual and may indicate an error."
+      )
 
     return await self.backend.read_fluorescence(
       plate=self.get_plate(),
