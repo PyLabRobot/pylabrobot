@@ -3982,15 +3982,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.4.3 X-query --------------
 
-  async def request_left_x_arm_position(self):
+  async def request_left_x_arm_position(self) -> float:
     """Request left X-Arm position"""
     resp_dmm = await self.send_command(module="C0", command="RX", fmt="rx#####")
-    return resp_dmm / 10
+    return cast(float, resp_dmm["rx"]) / 10
 
-  async def request_right_x_arm_position(self):
+  async def request_right_x_arm_position(self) -> float:
     """Request right X-Arm position"""
 
-    return await self.send_command(module="C0", command="QX", fmt="rx#####")
+    resp_dmm = await self.send_command(module="C0", command="QX", fmt="rx#####")
+    return cast(float, resp_dmm["rx"]) / 10
 
   async def request_maximal_ranges_of_x_drives(self):
     """Request maximal ranges of X drives"""
