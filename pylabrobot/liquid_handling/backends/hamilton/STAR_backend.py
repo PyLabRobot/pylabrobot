@@ -1383,11 +1383,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       await self.pre_initialize_instrument()
 
-    async def pip():
+    async def set_up_pip():
       if not initialized or any(tip_presences):
         await self.initialize_pip()
 
-    async def autoload():
+    async def set_up_autoload():
       if self.autoload_installed and not skip_autoload:
         autoload_initialized = await self.request_autoload_initialization_status()
         if not autoload_initialized:
@@ -1395,7 +1395,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
         await self.park_autoload()
 
-    async def iswap():
+    async def set_up_iswap():
       if self.iswap_installed and not skip_iswap:
         iswap_initialized = await self.request_iswap_initialization_status()
         if not iswap_initialized:
@@ -1405,7 +1405,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
         )
 
-    async def core96_head():
+    async def set_up_core96_head():
       if self.core96_head_installed and not skip_core96_head:
         core96_head_initialized = await self.request_core_96_head_initialization_status()
         if not core96_head_initialized:
@@ -1414,8 +1414,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             z_position_at_the_command_end=self._channel_traversal_height,
           )
 
-    await pip()
-    await asyncio.gather(autoload(), iswap(), core96_head())
+    async def set_up_arm_modules():
+      await set_up_pip()
+      await set_up_iswap()
+      await set_up_core96_head()
+
+    await asyncio.gather(set_up_autoload(), set_up_arm_modules())
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
     # the core grippers.
