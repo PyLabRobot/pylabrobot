@@ -73,7 +73,7 @@ class HamiltonDeckTests(unittest.TestCase):
   def test_assign_gigantic_resource(self):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
     deck = STARLetDeck()
-    with self.assertLogs() as log:
+    with self.assertLogs("pylabrobot") as log:
       deck.assign_child_resource(stanley_cup, rails=1)
     self.assertEqual(
       log.output,

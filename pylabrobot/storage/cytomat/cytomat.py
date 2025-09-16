@@ -99,7 +99,7 @@ class CytomatBackend(IncubatorBackend):
 
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
-      logging.debug(command_str.encode(self.serial_message_encoding))
+      logger.debug(command_str.encode(self.serial_message_encoding))
       await self.io.write(command_str.encode(self.serial_message_encoding))
       resp = (await self.io.read(128)).decode(self.serial_message_encoding)
       if len(resp) == 0:
@@ -122,7 +122,7 @@ class CytomatBackend(IncubatorBackend):
         await self.reset_error_register()
         raise Exception(f"Unknown cytomat error code in response: {resp}")
 
-      logging.error("Command %s received an unknown response: '%s'", command_str, resp)
+      logger.error("Command %s received an unknown response: '%s'", command_str, resp)
       await self.reset_error_register()
       raise Exception(f"Unknown response from cytomat: {resp}")
 
