@@ -16,6 +16,7 @@ from pylabrobot.thermocycling.standard import (
 try:
   import serial.tools.list_ports
   from opentrons.drivers.thermocycler import ThermocyclerDriverFactory
+  from opentrons.drivers.thermocycler.abstract import AbstractThermocyclerDriver
   from opentrons.drivers.types import PlateTemperature, Temperature, ThermocyclerLidStatus
 
   USE_OPENTRONS_DRIVER = True
@@ -129,9 +130,9 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     else:
       self.port = port
 
-    self.driver = None
+    self.driver: Optional[AbstractThermocyclerDriver] = None
     self._current_protocol: Optional[ThermocyclingProtocol] = None
-    self._loop = None
+    self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     # Cycle tracking variables (similar to thermocycler.py)
     self._total_cycle_count: Optional[int] = None
@@ -148,14 +149,17 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
   async def _read_lid_temperature(self) -> Temperature:
     """Read the current lid temperature."""
+    assert self.driver is not None
     return await self.driver.get_lid_temperature()
 
   async def _read_block_temperature(self) -> PlateTemperature:
     """Read the current block temperature."""
+    assert self.driver is not None
     return await self.driver.get_plate_temperature()
 
   async def _read_lid_status(self) -> ThermocyclerLidStatus:
     """Read the current lid status."""
+    assert self.driver is not None
     return await self.driver.get_lid_status()
 
   async def _set_temperature_no_pause(
@@ -167,6 +171,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     volume: Optional[float],
   ) -> None:
     """Set temperature without waiting for completion (uses shared utility)."""
+    assert self.driver is not None
     await set_temperature_no_pause(
       driver=self.driver,
       temperature=temperature,
@@ -179,6 +184,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
   async def _wait_for_block_target(self) -> None:
     """Wait for block temperature to reach target (uses shared utility)."""
+    assert self.driver is not None
     await wait_for_block_target_simple(self.driver)
 
   async def _execute_cycle_step(
@@ -189,6 +195,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     volume: Optional[float] = None,
   ) -> None:
     """Execute a single thermocycler step (uses shared utility)."""
+    assert self.driver is not None
     await execute_cycle_step(
       driver=self.driver,
       temperature=temperature,
@@ -204,6 +211,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     volume: Optional[float],
   ) -> None:
     """Execute cycles of temperature steps (uses shared utility with cycle tracking)."""
+    assert self.driver is not None
     for rep in range(repetitions):
       self._current_cycle_index = rep + 1  # science starts at 1
       for step_idx, (temperature, hold_time, ramp_rate) in enumerate(steps):
@@ -285,18 +293,22 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
   async def open_lid(self):
     """Open the thermocycler lid."""
+    assert self.driver is not None
     await self.driver.open_lid()
 
   async def close_lid(self):
     """Close the thermocycler lid."""
+    assert self.driver is not None
     await self.driver.close_lid()
 
   async def lift_plate(self):
     """Lift the thermocycler plate for labware access."""
+    assert self.driver is not None
     await self.driver.lift_plate()
 
   async def jog_lid(self, angle: float):
     """Jog the lid to a specific angle position."""
+    assert self.driver is not None
     await self.driver.jog_lid(angle)
 
   async def set_block_temperature(self, temperature: List[float]):
@@ -306,6 +318,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
         f"Opentrons thermocycler only supports a single unique block temperature, got {set(temperature)}"
       )
     temp_value = temperature[0]
+    assert self.driver is not None
     await self.driver.set_plate_temperature(temp_value)
 
   async def set_lid_temperature(self, temperature: List[float]):
@@ -315,31 +328,38 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
         f"Opentrons thermocycler only supports a single unique lid temperature, got {set(temperature)}"
       )
     temp_value = temperature[0]
+    assert self.driver is not None
     await self.driver.set_lid_temperature(temp_value)
 
   async def set_ramp_rate(self, ramp_rate: float):
     """Set the temperature ramp rate in °C/minute."""
+    assert self.driver is not None
     await self.driver.set_ramp_rate(ramp_rate)
 
   async def deactivate_block(self):
     """Deactivate the block heater."""
+    assert self.driver is not None
     await self.driver.deactivate_block()
 
   async def deactivate_lid(self):
     """Deactivate the lid heater."""
+    assert self.driver is not None
     await self.driver.deactivate_lid()
 
   async def get_device_info(self) -> dict:
     """Get thermocycler device information."""
+    assert self.driver is not None
     return await self.driver.get_device_info()
 
   async def get_block_current_temperature(self) -> List[float]:
     """Get the current block temperature."""
+    assert self.driver is not None
     plate_temp = await self.driver.get_plate_temperature()
     return [plate_temp.current]
 
   async def get_block_target_temperature(self) -> List[float]:
     """Get the block target temperature."""
+    assert self.driver is not None
     plate_temp = await self.driver.get_plate_temperature()
     if plate_temp.target is not None:
       return [plate_temp.target]
@@ -347,11 +367,13 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
   async def get_lid_current_temperature(self) -> List[float]:
     """Get the current lid temperature."""
+    assert self.driver is not None
     lid_temp = await self.driver.get_lid_temperature()
     return [lid_temp.current]
 
   async def get_lid_target_temperature(self) -> List[float]:
     """Get the lid target temperature."""
+    assert self.driver is not None
     lid_temp = await self.driver.get_lid_temperature()
     if lid_temp.target is not None:
       return [lid_temp.target]
@@ -359,11 +381,13 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
   async def get_lid_open(self) -> bool:
     """Return True if the lid is open."""
+    assert self.driver is not None
     lid_status = await self.driver.get_lid_status()
     return lid_status == ThermocyclerLidStatus.OPEN
 
   async def get_lid_status(self) -> LidStatus:
     """Get the lid temperature status."""
+    assert self.driver is not None
     lid_temp = await self.driver.get_lid_temperature()
     if lid_temp.target is not None and abs(lid_temp.current - lid_temp.target) < 1.0:
       return LidStatus.HOLDING_AT_TARGET
@@ -371,6 +395,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
   async def get_block_status(self) -> BlockStatus:
     """Get the block temperature status."""
+    assert self.driver is not None
     plate_temp = await self.driver.get_plate_temperature()
     if plate_temp.target is not None and abs(plate_temp.current - plate_temp.target) < 1.0:
       return BlockStatus.HOLDING_AT_TARGET
@@ -385,21 +410,25 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     """Get the zero-based index of the current cycle."""
     if self._current_cycle_index is not None:
       return self._current_cycle_index
+    raise RuntimeError("No cycle is currently running")
 
   async def get_total_cycle_count(self) -> int:
     """Get the total cycle count."""
     if self._total_cycle_count is not None:
       return self._total_cycle_count
+    raise RuntimeError("No protocol has been run")
 
   async def get_current_step_index(self) -> int:
     """Get the zero-based index of the current step within the cycle."""
     if self._current_step_index is not None:
       return self._current_step_index
+    raise RuntimeError("No step is currently running")
 
   async def get_total_step_count(self) -> int:
     """Get the total number of steps in the current cycle."""
     if self._total_step_count is not None:
       return self._total_step_count
+    raise RuntimeError("No protocol has been run")
 
   @property
   def total_cycle_count(self) -> Optional[int]:
