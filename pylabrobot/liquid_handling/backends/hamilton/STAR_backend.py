@@ -1341,6 +1341,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def setup(
     self,
+    skip_instrument_initialization=False,
+    skip_pip=False,
     skip_autoload=False,
     skip_iswap=False,
     skip_core96_head=False,
@@ -1356,9 +1358,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await super().setup()
 
     self.id_ = 0
-
-    tip_presences = await self.request_tip_presence()
-    self._num_channels = len(tip_presences)
 
     # Request machine information
     conf = await self.request_machine_configuration()
@@ -1378,13 +1377,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     initialized = await self.request_instrument_initialization_status()
 
-    if not initialized:
+    if not initialized and not skip_instrument_initialization:
       logger.info("Running backend initialization procedure.")
 
       await self.pre_initialize_instrument()
 
+    tip_presences = await self.request_tip_presence()
+    self._num_channels = len(tip_presences)
+
     async def set_up_pip():
-      if not initialized or any(tip_presences):
+      if (not initialized or any(tip_presences)) and not skip_pip:
         await self.initialize_pip()
 
     async def set_up_autoload():
