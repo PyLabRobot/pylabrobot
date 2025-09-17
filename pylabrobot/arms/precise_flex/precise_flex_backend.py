@@ -3,7 +3,7 @@ from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
 
 
 class PreciseFlexBackend(ArmBackend):
-  """UNTESTED - Backend for the PreciseFlex robotic arm"""
+  """UNTESTED - Backend for the PreciseFlex robotic arm  - Default to using Cartesian coordinates, some methods in Brook's TCS don't work with Joint coordinates."""
   def __init__(self, host: str, port: int = 10100, timeout=20) -> None:
     super().__init__()
     self.api = PreciseFlexBackendApi(host=host, port=port, timeout=timeout)
