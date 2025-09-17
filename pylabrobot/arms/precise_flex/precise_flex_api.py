@@ -1180,7 +1180,7 @@ class PreciseFlexBackendApi:
 
 
 
-  async def zero_torque(self, enable: bool, axis_mask: int = 0) -> None:
+  async def zero_torque(self, enable: bool, axis_mask: int = 1) -> None:
     """Sets or clears zero torque mode for the selected robot.
 
     Individual axes may be placed into zero torque mode while the remaining axes are servoing.
@@ -1193,8 +1193,12 @@ class PreciseFlexBackendApi:
               1 = axis 1, 2 = axis 2, 4 = axis 3, 8 = axis 4, etc.
               Ignored when enable is False.
     """
-    enable_value = 1 if enable else 0
-    await self.send_command(f"zeroTorque {enable_value} {axis_mask}")
+
+    if enable:
+      assert axis_mask > 0, "axis_mask must be greater than 0"
+      await self.send_command(f"zeroTorque 1 {axis_mask}")
+    else:
+      await self.send_command(f"zeroTorque 0")
 
 
 
@@ -1361,8 +1365,8 @@ class PreciseFlexBackendApi:
 
     return (station_id, pallet_index_x, pallet_index_y, pallet_index_z)
 
-  async def set_pallet_index(self, station_id: int, pallet_index_x: int | None = None,
-                pallet_index_y: int | None = None, pallet_index_z: int | None = None) -> None:
+  async def set_pallet_index(self, station_id: int, pallet_index_x: int = 0,
+                pallet_index_y: int = 0, pallet_index_z: int = 0) -> None:
     """Set the pallet index value from 1 to n of the station used by subsequent pick or place.
 
     If an index argument is 0 or omitted, the corresponding index is not changed.
@@ -1377,31 +1381,14 @@ class PreciseFlexBackendApi:
     Raises:
       ValueError: If any index value is negative.
     """
-    if pallet_index_x is not None and pallet_index_x < 0:
+    if pallet_index_x < 0:
       raise ValueError("Pallet index X cannot be negative")
-    if pallet_index_y is not None and pallet_index_y < 0:
+    if pallet_index_y < 0:
       raise ValueError("Pallet index Y cannot be negative")
-    if pallet_index_z is not None and pallet_index_z < 0:
+    if pallet_index_z < 0:
       raise ValueError("Pallet index Z cannot be negative")
 
-    command_parts = [f"PalletIndex {station_id}"]
-
-    if pallet_index_x is not None:
-      command_parts.append(str(pallet_index_x))
-    else:
-      command_parts.append("0")
-
-    if pallet_index_y is not None:
-      command_parts.append(str(pallet_index_y))
-    else:
-      command_parts.append("0")
-
-    if pallet_index_z is not None:
-      command_parts.append(str(pallet_index_z))
-    else:
-      command_parts.append("0")
-
-    await self.send_command(" ".join(command_parts))
+    await self.send_command(f"PalletIndex {station_id} {pallet_index_x} {pallet_index_y} {pallet_index_z}")
 
   async def get_pallet_origin(self, station_id: int) -> tuple[int, float, float, float, float, float, float, int]:
     """Get the current pallet origin data for the specified station.

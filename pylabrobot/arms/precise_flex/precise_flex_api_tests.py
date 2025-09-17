@@ -1064,17 +1064,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       # Verify joint positions
       new_joints = await self.robot.where_j()
 
-
-
-###########################################################################
-    ##### Check what's going on here!
-    #  The where_j is returning an empty array from the response parser.
-    #  Check at the very lowest level of read what's going wrong.
-    # The waitforeom is probably screwing things upa  bit.
-    #####
-###########################################################################
-
-
       for i, (expected, actual) in enumerate(zip(test_joints, new_joints)):
         if i > 4 and original_joints[i] == 0.0: # not all robots have 6 axes
           if abs(expected - actual) >= 1.0:
@@ -1333,27 +1322,39 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     print(f"Move to safe position completed successfully")
     print(f"Position changed: {position_changed}")
 
-  async def test_get_pallet_index(self) -> None:
-    """Test get_pallet_index()"""
-    pallet_data = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
-    self.assertIsInstance(pallet_data, tuple)
-    self.assertEqual(len(pallet_data), 4)
-    station_id, pallet_x, pallet_y, pallet_z = pallet_data
-    self.assertEqual(station_id, self.TEST_LOCATION_ID)
-    self.assertIsInstance(pallet_x, int)
-    self.assertIsInstance(pallet_y, int)
-    self.assertIsInstance(pallet_z, int)
-    print(f"Pallet index for station {station_id}: X={pallet_x}, Y={pallet_y}, Z={pallet_z}")
-
   async def test_set_pallet_index(self) -> None:
-    """Test set_pallet_index()"""
-    # Get original pallet index for restoration
-    original_pallet = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
-    _, orig_x, orig_y, orig_z = original_pallet
+    """Test set_pallet_index() and get_pallet_index()"""
+    # Get original station type to check if it's a pallet
+    original_station = await self.robot.get_station_type(self.TEST_LOCATION_ID)
+    _, orig_access_type, orig_location_type, orig_z_clearance, orig_z_above, orig_z_grasp_offset = original_station
+
+    was_pallet = orig_location_type == 1
+    original_pallet = None
 
     try:
+      # If it's already a pallet, get the original pallet index
+      if was_pallet:
+        original_pallet = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
+        _, orig_x, orig_y, orig_z = original_pallet
+        print(f"Station {self.TEST_LOCATION_ID} is already pallet type with index X={orig_x}, Y={orig_y}, Z={orig_z}")
+      else:
+        # Convert to pallet type first
+        await self.robot.set_station_type(self.TEST_LOCATION_ID, orig_access_type, 1, orig_z_clearance, orig_z_above, orig_z_grasp_offset)
+        print(f"Station {self.TEST_LOCATION_ID} converted to pallet type for testing")
+
+      # Test get_pallet_index()
+      pallet_data = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
+      self.assertIsInstance(pallet_data, tuple)
+      self.assertEqual(len(pallet_data), 4)
+      station_id, pallet_x, pallet_y, pallet_z = pallet_data
+      self.assertEqual(station_id, self.TEST_LOCATION_ID)
+      self.assertIsInstance(pallet_x, int)
+      self.assertIsInstance(pallet_y, int)
+      self.assertIsInstance(pallet_z, int)
+      print(f"Current pallet index for station {station_id}: X={pallet_x}, Y={pallet_y}, Z={pallet_z}")
+
       # Test setting all indices
-      test_x, test_y, test_z = 2, 3, 4
+      test_x, test_y, test_z = 1, 1, 1
       await self.robot.set_pallet_index(self.TEST_LOCATION_ID, test_x, test_y, test_z)
 
       # Verify the indices were set
@@ -1365,15 +1366,23 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       print(f"Pallet index set successfully: X={pallet_x}, Y={pallet_y}, Z={pallet_z}")
 
       # Test setting only X index
-      await self.robot.set_pallet_index(self.TEST_LOCATION_ID, pallet_index_x=5)
+      await self.robot.set_pallet_index(self.TEST_LOCATION_ID, pallet_index_x=1)
       new_pallet = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
       _, pallet_x, _, _ = new_pallet
-      self.assertEqual(pallet_x, 5)
+      self.assertEqual(pallet_x, 1)
       print(f"Pallet X index set to: {pallet_x}")
 
     finally:
-      # Restore original indices
-      await self.robot.set_pallet_index(self.TEST_LOCATION_ID, orig_x, orig_y, orig_z)
+      # Restore everything to original state
+      if was_pallet and original_pallet:
+        # Restore original pallet indices
+        _, orig_x, orig_y, orig_z = original_pallet
+        await self.robot.set_pallet_index(self.TEST_LOCATION_ID, orig_x, orig_y, orig_z)
+        print(f"Restored original pallet indices: X={orig_x}, Y={orig_y}, Z={orig_z}")
+      else:
+        # Convert back to original station type (not pallet)
+        await self.robot.set_station_type(self.TEST_LOCATION_ID, orig_access_type, orig_location_type, orig_z_clearance, orig_z_above, orig_z_grasp_offset)
+        print(f"Station {self.TEST_LOCATION_ID} restored to original non-pallet type")
 
   async def test_get_pallet_origin(self) -> None:
     """Test get_pallet_origin()"""
@@ -1386,156 +1395,149 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(config, int)
     print(f"Pallet origin for station {station_id}: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}, Config={config}")
 
-  async def test_set_pallet_origin(self) -> None:
-    """Test set_pallet_origin()"""
-    # Get original pallet origin for restoration
+  async def test_set_pallet_origin_and_setup(self) -> None:
+    """Test set_pallet_origin() and comprehensive pallet configuration"""
+    # Get original pallet data for restoration
     original_origin = await self.robot.get_pallet_origin(self.TEST_LOCATION_ID)
-
-    try:
-      # Test setting pallet origin without config
-      test_coords = (100.0, 200.0, 300.0, 10.0, 20.0, 30.0)
-      await self.robot.set_pallet_origin(self.TEST_LOCATION_ID, *test_coords)
-
-      # Verify the origin was set
-      new_origin = await self.robot.get_pallet_origin(self.TEST_LOCATION_ID)
-      _, x, y, z, yaw, pitch, roll, config = new_origin
-
-      for i, (expected, actual) in enumerate(zip(test_coords, (x, y, z, yaw, pitch, roll))):
-        self.assertLess(abs(expected - actual), 0.001, f"Origin coordinate {i} mismatch")
-
-      print(f"Pallet origin set successfully: {test_coords}")
-
-      # Test setting pallet origin with config
-      test_config = 2
-      await self.robot.set_pallet_origin(self.TEST_LOCATION_ID, *test_coords, test_config)
-
-      new_origin = await self.robot.get_pallet_origin(self.TEST_LOCATION_ID)
-      _, _, _, _, _, _, _, config = new_origin
-      self.assertEqual(config, test_config)
-      print(f"Pallet origin with config set successfully")
-
-    finally:
-      # Restore original origin
-      _, orig_x, orig_y, orig_z, orig_yaw, orig_pitch, orig_roll, orig_config = original_origin
-      await self.robot.set_pallet_origin(self.TEST_LOCATION_ID, orig_x, orig_y, orig_z, orig_yaw, orig_pitch, orig_roll, orig_config)
-
-  async def test_get_pallet_x(self) -> None:
-    """Test get_pallet_x()"""
-    pallet_x_data = await self.robot.get_pallet_x(self.TEST_LOCATION_ID)
-    self.assertIsInstance(pallet_x_data, tuple)
-    self.assertEqual(len(pallet_x_data), 5)
-    station_id, x_count, world_x, world_y, world_z = pallet_x_data
-    self.assertEqual(station_id, self.TEST_LOCATION_ID)
-    self.assertIsInstance(x_count, int)
-    self.assertTrue(all(isinstance(val, float) for val in [world_x, world_y, world_z]))
-    print(f"Pallet X for station {station_id}: count={x_count}, world=({world_x}, {world_y}, {world_z})")
-
-  async def test_set_pallet_x(self) -> None:
-    """Test set_pallet_x()"""
-    # Get original pallet X for restoration
     original_pallet_x = await self.robot.get_pallet_x(self.TEST_LOCATION_ID)
-
-    try:
-      # Test setting pallet X
-      test_x_count = 5
-      test_coords = (150.0, 250.0, 350.0)
-      await self.robot.set_pallet_x(self.TEST_LOCATION_ID, test_x_count, *test_coords)
-
-      # Verify the pallet X was set
-      new_pallet_x = await self.robot.get_pallet_x(self.TEST_LOCATION_ID)
-      _, x_count, world_x, world_y, world_z = new_pallet_x
-
-      self.assertEqual(x_count, test_x_count)
-      for i, (expected, actual) in enumerate(zip(test_coords, (world_x, world_y, world_z))):
-        self.assertLess(abs(expected - actual), 0.001, f"Pallet X coordinate {i} mismatch")
-
-      print(f"Pallet X set successfully: count={x_count}, coords={test_coords}")
-
-    finally:
-      # Restore original pallet X
-      _, orig_count, orig_x, orig_y, orig_z = original_pallet_x
-      await self.robot.set_pallet_x(self.TEST_LOCATION_ID, orig_count, orig_x, orig_y, orig_z)
-
-  async def test_get_pallet_y(self) -> None:
-    """Test get_pallet_y()"""
-    pallet_y_data = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
-    self.assertIsInstance(pallet_y_data, tuple)
-    self.assertEqual(len(pallet_y_data), 5)
-    station_id, y_count, world_x, world_y, world_z = pallet_y_data
-    self.assertEqual(station_id, self.TEST_LOCATION_ID)
-    self.assertIsInstance(y_count, int)
-    self.assertTrue(all(isinstance(val, float) for val in [world_x, world_y, world_z]))
-    print(f"Pallet Y for station {station_id}: count={y_count}, world=({world_x}, {world_y}, {world_z})")
-
-  async def test_set_pallet_y(self) -> None:
-    """Test set_pallet_y()"""
-    # Get original pallet Y for restoration
     original_pallet_y = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
-
-    try:
-      # Test setting pallet Y
-      test_y_count = 4
-      test_coords = (175.0, 275.0, 375.0)
-      await self.robot.set_pallet_y(self.TEST_LOCATION_ID, test_y_count, *test_coords)
-
-      # Verify the pallet Y was set
-      new_pallet_y = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
-      _, y_count, world_x, world_y, world_z = new_pallet_y
-
-      self.assertEqual(y_count, test_y_count)
-      for i, (expected, actual) in enumerate(zip(test_coords, (world_x, world_y, world_z))):
-        self.assertLess(abs(expected - actual), 0.001, f"Pallet Y coordinate {i} mismatch")
-
-      print(f"Pallet Y set successfully: count={y_count}, coords={test_coords}")
-
-    finally:
-      # Restore original pallet Y
-      _, orig_count, orig_x, orig_y, orig_z = original_pallet_y
-      await self.robot.set_pallet_y(self.TEST_LOCATION_ID, orig_count, orig_x, orig_y, orig_z)
-
-  async def test_get_pallet_z(self) -> None:
-    """Test get_pallet_z()"""
-    pallet_z_data = await self.robot.get_pallet_z(self.TEST_LOCATION_ID)
-    self.assertIsInstance(pallet_z_data, tuple)
-    self.assertEqual(len(pallet_z_data), 5)
-    station_id, z_count, world_x, world_y, world_z = pallet_z_data
-    self.assertEqual(station_id, self.TEST_LOCATION_ID)
-    self.assertIsInstance(z_count, int)
-    self.assertTrue(all(isinstance(val, float) for val in [world_x, world_y, world_z]))
-    print(f"Pallet Z for station {station_id}: count={z_count}, world=({world_x}, {world_y}, {world_z})")
-
-  async def test_set_pallet_z(self) -> None:
-    """Test set_pallet_z()"""
-    # Get original pallet Z for restoration
     original_pallet_z = await self.robot.get_pallet_z(self.TEST_LOCATION_ID)
 
     try:
-      # Test setting pallet Z
-      test_z_count = 3
-      test_coords = (125.0, 225.0, 325.0)
-      await self.robot.set_pallet_z(self.TEST_LOCATION_ID, test_z_count, *test_coords)
+      # Test setting complete pallet configuration
+      test_origin = (100.0, 200.0, 300.0, 10.0, 20.0, 30.0, 1)  # Include config
+      test_x_count, test_x_offset = 3, (test_origin[0] + 10.0, test_origin[1], test_origin[2])  # X direction offset
+      test_y_count, test_y_offset = 4, (test_origin[0], test_origin[1] + 15.0, test_origin[2])  # Y direction offset
+      test_z_count, test_z_offset = 2, (test_origin[0], test_origin[1], test_origin[2] + 8.0)   # Z direction offset
 
-      # Verify the pallet Z was set
+      # Set pallet origin first
+      await self.robot.set_pallet_origin(self.TEST_LOCATION_ID, *test_origin)
+      print(f"Pallet origin set to: {test_origin}")
+
+      # Set pallet X configuration
+      await self.robot.set_pallet_x(self.TEST_LOCATION_ID, test_x_count, *test_x_offset)
+      print(f"Pallet X set: count={test_x_count}, offset={test_x_offset}")
+
+      # Set pallet Y configuration
+      await self.robot.set_pallet_y(self.TEST_LOCATION_ID, test_y_count, *test_y_offset)
+      print(f"Pallet Y set: count={test_y_count}, offset={test_y_offset}")
+
+      # Set pallet Z configuration
+      await self.robot.set_pallet_z(self.TEST_LOCATION_ID, test_z_count, *test_z_offset)
+      print(f"Pallet Z set: count={test_z_count}, offset={test_z_offset}")
+
+      # Verify all configurations were set correctly
+      new_origin = await self.robot.get_pallet_origin(self.TEST_LOCATION_ID)
+      new_pallet_x = await self.robot.get_pallet_x(self.TEST_LOCATION_ID)
+      new_pallet_y = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
       new_pallet_z = await self.robot.get_pallet_z(self.TEST_LOCATION_ID)
+
+      # Verify origin
+      _, x, y, z, yaw, pitch, roll, config = new_origin
+      for i, (expected, actual) in enumerate(zip(test_origin[:-1], (x, y, z, yaw, pitch, roll))):
+        self.assertLess(abs(expected - actual), 0.001, f"Origin coordinate {i} mismatch")
+      self.assertEqual(config, test_origin[-1])
+
+      # Verify X configuration
+      _, x_count, world_x, world_y, world_z = new_pallet_x
+      self.assertEqual(x_count, test_x_count)
+      for i, (expected, actual) in enumerate(zip(test_x_offset, (world_x, world_y, world_z))):
+        self.assertLess(abs(expected - actual), 0.001, f"Pallet X offset {i} mismatch")
+
+      # Verify Y configuration
+      _, y_count, world_x, world_y, world_z = new_pallet_y
+      self.assertEqual(y_count, test_y_count)
+      for i, (expected, actual) in enumerate(zip(test_y_offset, (world_x, world_y, world_z))):
+        self.assertLess(abs(expected - actual), 0.001, f"Pallet Y offset {i} mismatch")
+
+      # Verify Z configuration
       _, z_count, world_x, world_y, world_z = new_pallet_z
-
       self.assertEqual(z_count, test_z_count)
-      for i, (expected, actual) in enumerate(zip(test_coords, (world_x, world_y, world_z))):
-        self.assertLess(abs(expected - actual), 0.001, f"Pallet Z coordinate {i} mismatch")
+      for i, (expected, actual) in enumerate(zip(test_z_offset, (world_x, world_y, world_z))):
+        self.assertLess(abs(expected - actual), 0.001, f"Pallet Z offset {i} mismatch")
 
-      print(f"Pallet Z set successfully: count={z_count}, coords={test_coords}")
+      # Test that pallet indexing works correctly by setting different indices
+      # and verifying the calculated positions change appropriately
+      test_indices = [(1, 1, 1), (2, 1, 1), (1, 2, 1), (1, 1, 2)]
+      expected_offsets = [
+        (0, 0, 0),  # Base position (index 1,1,1)
+        (test_x_offset[0], test_x_offset[1], test_x_offset[2]),  # X+1
+        (test_y_offset[0], test_y_offset[1], test_y_offset[2]),  # Y+1
+        (test_z_offset[0], test_z_offset[1], test_z_offset[2])   # Z+1
+      ]
+
+      for (x_idx, y_idx, z_idx), (exp_x_off, exp_y_off, exp_z_off) in zip(test_indices, expected_offsets):
+        # Set the pallet index
+        await self.robot.set_pallet_index(self.TEST_LOCATION_ID, x_idx, y_idx, z_idx)
+
+        # Verify the index was set
+        pallet_index = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
+        _, curr_x_idx, curr_y_idx, curr_z_idx = pallet_index
+        self.assertEqual((curr_x_idx, curr_y_idx, curr_z_idx), (x_idx, y_idx, z_idx))
+
+        # Calculate expected position based on origin + index offsets
+        expected_x = test_origin[0] + (x_idx - 1) * test_x_offset[0] + (y_idx - 1) * test_y_offset[0] + (z_idx - 1) * test_z_offset[0]
+        expected_y = test_origin[1] + (x_idx - 1) * test_x_offset[1] + (y_idx - 1) * test_y_offset[1] + (z_idx - 1) * test_z_offset[1]
+        expected_z = test_origin[2] + (x_idx - 1) * test_x_offset[2] + (y_idx - 1) * test_y_offset[2] + (z_idx - 1) * test_z_offset[2]
+
+        print(f"Index ({x_idx},{y_idx},{z_idx}) -> Expected position: ({expected_x:.1f}, {expected_y:.1f}, {expected_z:.1f})")
+
+      print("Complete pallet configuration test passed successfully")
 
     finally:
-      # Restore original pallet Z
-      _, orig_count, orig_x, orig_y, orig_z = original_pallet_z
-      await self.robot.set_pallet_z(self.TEST_LOCATION_ID, orig_count, orig_x, orig_y, orig_z)
+      # Restore all original configurations in reverse order
+      # Restore pallet indices first
+      # Get the current pallet index to restore properly
+      try:
+        current_pallet_index = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
+        _, orig_x_idx, orig_y_idx, orig_z_idx = current_pallet_index
+      except:
+        # Fallback to default values if getting pallet index fails
+        orig_x_idx, orig_y_idx, orig_z_idx = 1, 1, 1
+      await self.robot.set_pallet_index(self.TEST_LOCATION_ID, orig_x_idx, orig_y_idx, orig_z_idx)
+
+      # Restore pallet Z
+      _, orig_z_count, orig_z_x, orig_z_y, orig_z_z = original_pallet_z
+      await self.robot.set_pallet_z(self.TEST_LOCATION_ID, orig_z_count, orig_z_x, orig_z_y, orig_z_z)
+
+      # Restore pallet Y
+      _, orig_y_count, orig_y_x, orig_y_y, orig_y_z = original_pallet_y
+      await self.robot.set_pallet_y(self.TEST_LOCATION_ID, orig_y_count, orig_y_x, orig_y_y, orig_y_z)
+
+      # Restore pallet X
+      _, orig_x_count, orig_x_x, orig_x_y, orig_x_z = original_pallet_x
+      await self.robot.set_pallet_x(self.TEST_LOCATION_ID, orig_x_count, orig_x_x, orig_x_y, orig_x_z)
+
+      # Restore pallet origin last
+      _, orig_x, orig_y, orig_z, orig_yaw, orig_pitch, orig_roll, orig_config = original_origin
+      await self.robot.set_pallet_origin(self.TEST_LOCATION_ID, orig_x, orig_y, orig_z, orig_yaw, orig_pitch, orig_roll, orig_config)
+
+      print("All pallet configurations restored to original values")
+
+#####################################
+##### TESTING HERE TESTING HERE #####
+#####################################
 
   async def test_pick_plate_station(self) -> None:
     """Test pick_plate_station() command"""
     # Record current position for restoration
     original_position = await self.robot.where_c()
+    # Get original location for restoration
+    original_location = await self.robot.get_location(self.TEST_LOCATION_ID)
+    # Get the Z clearance for the test location
+    original_z_clearance = await self.robot.get_location_z_clearance(self.TEST_LOCATION_ID)
 
     try:
+      # Create a test location with small movement from current position
+      x, y, z, yaw, pitch, roll, _ = original_position
+      test_x, test_y, test_z = x + 10, y + 10, z + 5  # Small movements for pick test
+      test_yaw = yaw + 1.0  # Small rotation change
+
+      # Save test location - force it to Cartesian type for this test
+      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, test_x, test_y, test_z, test_yaw, pitch, roll)
+      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, 20.0)
+
+
       # Test basic pick without compliance
       result = await self.robot.pick_plate_station(self.TEST_LOCATION_ID)
       self.assertIsInstance(result, bool)
@@ -1547,8 +1549,17 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       print(f"Pick plate station (with compliance) result: {result}")
 
     finally:
+      # Restore original location
+      type_code = original_location[0]
+      if type_code == 0:  # Was Cartesian type
+        await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
+      else:  # Was angles type
+        await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
+      _, z_clearance, z_world = original_z_clearance
+      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, z_clearance, z_world)
+
       # Return to original position
-      x, y, z, yaw, pitch, roll, config = original_position
+      x, y, z, yaw, pitch, roll, _ = original_position
       await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
       await self.robot.wait_for_eom()
 
