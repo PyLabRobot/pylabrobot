@@ -895,7 +895,7 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       61: "Z-drive not initialized",
       62: "Z-drive movement error",
       63: "Z-drive limit stop not found",
-      65: "Squeezer drive blocked",
+      65: "Squeezer drive blocked. Can you manually unblock the squeezer drive by turning its screw?",
       66: "Squeezer drive not initialized",
       67: "Squeezer drive movement error: Step loss",
       68: "Init position adjustment error",
