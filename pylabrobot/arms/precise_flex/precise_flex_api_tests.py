@@ -17,13 +17,49 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.TEST_LOCATION_ID = 20 # Default upper limit of station indices offered by GPL program running the TCS server
     self.TEST_PARAMETER_ID = 17018 # last parameter Id of "Custom Calibration Data and Test Results" parameters
     self.TEST_SIGNAL_ID = 20064 # unused software I/O
+    self.SAFE_LOCATION_C = (175, 0.003, 169.995, -0.001, 90, 180, 1)
+    self.SAFE_LOCATION_J = (170.003, 0, 180, -180, 75.486)
+    self.TEST_LOCATION_C_RIGHT = (271.692, 115.89, 169.969, 2.473, 90, 180, 1)
+    self.TEST_LOCATION_J_RIGHT = (169.969, -25.467, 149.758, -121.816, 75.498)
+    self.TEST_LOCATION_C_LEFT = (246.024, -147.689, 169.955, 6.879, 90, 180, 2)
+    self.TEST_LOCATION_J_LEFT = (169.955, 4.783, 216.923, -214.827, 75.498)
     await self.robot.setup()
     await self.robot.attach()
     await self.robot.set_power(True, timeout=20)
+    await self.robot.move_to_safe()
+    self._original_station_type = await self.robot.get_station_type(self.TEST_LOCATION_ID)
+    self._original_station_location = await self.robot.get_location(self.TEST_LOCATION_ID)
+    # if the station location_type was pallet, then also store the pallet configuration
+    if self._original_station_location[2] == 1:
+      self._original_pallet_index = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
+      self._original_pallet_origin = await self.robot.get_pallet_origin(self.TEST_LOCATION_ID)
+      self._original_pallet_final_x_pos = await self.robot.get_pallet_x(self.TEST_LOCATION_ID)
+      self._original_pallet_final_y_pos = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
+      self._original_pallet_final_z_pos = await self.robot.get_pallet_z(self.TEST_LOCATION_ID)
 
   async def asyncTearDown(self):
     """Cleanup robot connection"""
     if hasattr(self, 'robot'):
+      # restore the station_type
+      await self.robot.set_station_type(*self._original_station_type)
+      # if the station location_type was pallet, then also restore the pallet configuration
+      if self._original_station_location[2] == 1:
+        await self.robot.set_pallet_origin(*self._original_pallet_origin)
+        await self.robot.set_pallet_x(*self._original_pallet_final_x_pos)
+        await self.robot.set_pallet_y(*self._original_pallet_final_y_pos)
+        await self.robot.set_pallet_z(*self._original_pallet_final_z_pos)
+        await self.robot.set_pallet_index(*self._original_pallet_index)
+
+      # restore the station location
+      type_code = self._original_station_location[0]
+      if type_code == 0:  # Cartesian
+        await self.robot.set_location_xyz(*self._original_station_location[1:8])
+      else:  # Angles
+        await self.robot.set_location_angles(*self._original_station_location[1:8])
+
+
+
+      await self.robot.move_to_safe()
       await self.robot.stop()
 
   @asynccontextmanager
@@ -900,90 +936,38 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move(self) -> None:
     """Test move() command"""
-    # Record current position for restoration
-    original_position = await self.robot.where_c()
 
-    # Get original location for restoration
-    original_location = await self.robot.get_location(self.TEST_LOCATION_ID)
+    # Save test location
+    await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *self.TEST_LOCATION_C_LEFT[:-1])
 
-    try:
-      # Create a test location with small movement from current position
-      x, y, z, yaw, pitch, roll, config = original_position
-      test_x, test_y, test_z = x + 5, y + 5, z + 3  # Small movements (5mm each direction)
-      test_yaw = yaw + 2.0  # Small rotation change
+    # Move to test location
+    await self.robot.move(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
+    await self.robot.wait_for_eom()
 
-      # Save test location
-      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, test_x, test_y, test_z, test_yaw, pitch, roll)
+    # Verify we moved to the test location
+    new_position = await self.robot.where_c()
+    self.assertLess(abs(new_position[0] - self.TEST_LOCATION_C_LEFT[0]), 2.0)
+    self.assertLess(abs(new_position[1] - self.TEST_LOCATION_C_LEFT[1]), 2.0)
+    self.assertLess(abs(new_position[2] - self.TEST_LOCATION_C_LEFT[2]), 2.0)
+    print(f"Move to location {self.TEST_LOCATION_ID} completed successfully")
 
-      # Move to test location
-      await self.robot.move(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
-      await self.robot.wait_for_eom()
 
-      # Verify we moved to the test location
-      new_position = await self.robot.where_c()
-      self.assertLess(abs(new_position[0] - test_x), 2.0)
-      self.assertLess(abs(new_position[1] - test_y), 2.0)
-      self.assertLess(abs(new_position[2] - test_z), 2.0)
-      print(f"Move to location {self.TEST_LOCATION_ID} completed successfully")
-
-    finally:
-      # Restore original location
-      type_code = original_location[0]
-      if type_code == 0:  # Was Cartesian type
-        await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
-      else:  # Was angles type
-        await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
-
-      # Return to original position
-      x, y, z, yaw, pitch, roll, config = original_position
-      await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
-      await self.robot.wait_for_eom()
 
   async def test_move_appro(self) -> None:
     """Test move_appro() command"""
-    # Record current position for restoration
-    original_position = await self.robot.where_c()
 
-    # Get original location for restoration
-    original_location = await self.robot.get_location(self.TEST_LOCATION_ID)
+    test_z_clearance = 20
 
-    # Get the Z clearance for the test location
-    z_clearance_data = await self.robot.get_location_z_clearance(self.TEST_LOCATION_ID)
-    _, z_clearance, _ = z_clearance_data
-    try:
-      # Create a test location with small movement from current position
-      x, y, z, yaw, pitch, roll, config = original_position
-      test_x, test_y, test_z = x + 8, y + 8, z + 5  # Small movements (8mm each direction)
-      test_yaw = yaw + 3.0  # Small rotation change
-      test_z_clearance = 20
+    # Save test location & z clearance
+    await self.robot.set_location_angles(self.TEST_LOCATION_ID, *self.TEST_LOCATION_J_LEFT)
+    await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, test_z_clearance)
 
-      # Save test location
-      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, test_x, test_y, test_z, test_yaw, pitch, roll)
+    # Move to test location with approach
+    await self.robot.move_appro(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
+    await self.robot.wait_for_eom()
 
-      # Save the z clearance
-      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, test_z_clearance)
+    print(f"Move approach to location {self.TEST_LOCATION_ID} with z-clearance {test_z_clearance} completed successfully")
 
-      # Move to test location with approach
-      await self.robot.move_appro(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
-      await self.robot.wait_for_eom()
-
-      print(f"Move approach to location {self.TEST_LOCATION_ID} with z-clearance {test_z_clearance} completed successfully")
-
-    finally:
-      # Restore original location
-      type_code = original_location[0]
-      if type_code == 0:  # Was Cartesian type
-        await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *original_location[2:8])
-      else:  # Was angles type
-        await self.robot.set_location_angles(self.TEST_LOCATION_ID, *original_location[2:8])
-
-      # Restore original z clearance
-      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, z_clearance)
-
-      # Return to original position
-      x, y, z, yaw, pitch, roll, config = original_position
-      await self.robot.move_c(self.TEST_PROFILE_ID, x, y, z, yaw, pitch, roll)
-      await self.robot.wait_for_eom()
 
   async def test_move_extra_axis(self) -> None:
     """Test move_extra_axis() command"""
@@ -1528,13 +1512,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     original_z_clearance = await self.robot.get_location_z_clearance(self.TEST_LOCATION_ID)
 
     try:
-      # Create a test location with small movement from current position
-      x, y, z, yaw, pitch, roll, _ = original_position
-      test_x, test_y, test_z = x + 10, y + 10, z + 5  # Small movements for pick test
-      test_yaw = yaw + 1.0  # Small rotation change
 
       # Save test location - force it to Cartesian type for this test
-      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, test_x, test_y, test_z, test_yaw, pitch, roll)
+      await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *self.TEST_LOCATION_C_LEFT[:-1])
       await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, 20.0)
 
 
