@@ -31,8 +31,8 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     await self.__class__.lock.acquire()
     self.robot = PreciseFlexBackendApi(self.ROBOT_HOST, self.ROBOT_PORT)
     await self.robot.setup()
-    await self.robot.attach(1)
     await self.robot.set_power(True, timeout=20)
+    await self.robot.attach(1)
     print("Robot connected successfully")
 
     # Move to a safe joint pose if needed
