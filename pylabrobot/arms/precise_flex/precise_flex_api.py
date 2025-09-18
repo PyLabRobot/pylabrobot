@@ -101,7 +101,7 @@ class PreciseFlexBackendApi:
     Note:
       Does not affect any robots that may be active.
     """
-    await self.send_command("exit")
+    await self.io.write('exit'.encode('utf-8') + b'\n')
 
   async def home(self) -> None:
     """Home the robot associated with this thread.
