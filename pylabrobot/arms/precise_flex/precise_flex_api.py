@@ -712,7 +712,12 @@ class PreciseFlexBackendApi:
     parts = data.split()
 
     if len(parts) < 6:
-      raise PreciseFlexError(-1, "Unexpected response format from where command.")
+      # In case of incomplete response, wait for EOM and try to read again
+      await self.wait_for_eom()
+      data = await self.send_command("where")
+      parts = data.split()
+      if len(parts) < 6:
+        raise PreciseFlexError(-1, "Unexpected response format from where command.")
 
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
     axes = self._parse_angles_response(parts[6:])
@@ -729,7 +734,12 @@ class PreciseFlexBackendApi:
     parts = data.split()
 
     if len(parts) != 7:
-      raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
+      # In case of incomplete response, wait for EOM and try to read again
+      await self.wait_for_eom()
+      data = await self.send_command("wherec")
+      parts = data.split()
+      if len(parts) != 7:
+        raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
 
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
     config = int(parts[6])
@@ -746,7 +756,12 @@ class PreciseFlexBackendApi:
     parts = data.split()
 
     if not parts:
-      raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
+      # In case of incomplete response, wait for EOM and try to read again
+      await self.wait_for_eom()
+      data = await self.send_command("wherej")
+      parts = data.split()
+      if not parts:
+        raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
 
     axes = self._parse_angles_response(parts)
     return axes
@@ -1176,8 +1191,7 @@ class PreciseFlexBackendApi:
     some other means. Does not reply until the robot has stopped.
     """
     await self.send_command("waitForEom")
-
-
+    await asyncio.sleep(0.2)  # Small delay to ensure command is fully processed
 
 
   async def zero_torque(self, enable: bool, axis_mask: int = 1) -> None:
@@ -1870,6 +1884,9 @@ class PreciseFlexBackendApi:
     await self.io.write(command.encode('utf-8') + b'\n')
     await asyncio.sleep(0.2)  # wait a bit for the robot to process the command
     reply = await self.io.readline()
+
+    print(f"Sent command: {command}, Received reply: {reply}")
+
     return self._parse_reply_ensure_successful(reply)
 
   def _parse_xyz_response(self, parts: list[str]) -> tuple[float, float, float, float, float, float]:
@@ -1907,6 +1924,7 @@ class PreciseFlexBackendApi:
     - replycode is an integer at the beginning
     - data is rest of the line (excluding CRLF)
     """
+    print("REPLY: ", reply)
     text = reply.decode().strip()  # removes \r\n
     if not text:
       raise PreciseFlexError(-1, "Empty reply from device.")
