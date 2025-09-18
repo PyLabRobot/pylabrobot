@@ -115,8 +115,8 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
   def __init__(self, port: Optional[str] = None):
     """Create a new USB backend bound to a specific port.
 
-    If port is None, auto-detects the thermocycler using supported VID:PID pairs.
-    If multiple devices are found, raises an error with available ports.
+    If port is None, the port will be auto-detected during setup().
+    If multiple devices are found during setup, an error will be raised.
 
     If port is specified, use it directly.
     """
@@ -126,22 +126,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
         "Opentrons drivers are not installed. Please install the opentrons package."
       )
 
-    if port is None:
-      ports = serial.tools.list_ports.comports()
-      opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
-      if len(opentrons_ports) == 0:
-        raise RuntimeError(
-          f"No Opentrons Thermocycler found with supported VID:PID pairs: {self.SUPPORTED_USB_IDS}"
-        )
-      elif len(opentrons_ports) > 1:
-        available_ports = [p.device for p in opentrons_ports]
-        raise RuntimeError(
-          f"Multiple Opentrons Thermocyclers found: {available_ports}. Please specify the port explicitly."
-        )
-      else:
-        self.port = opentrons_ports[0].device
-    else:
-      self.port = port
+    self.port = port
 
     self.driver: Optional[AbstractThermocyclerDriver] = None
     self._current_protocol: Optional[ThermocyclingProtocol] = None
@@ -290,6 +275,22 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     """Setup the USB connection to the thermocycler."""
     if self._loop is None:
       self._loop = asyncio.get_event_loop()
+
+    if self.port is None:
+      ports = serial.tools.list_ports.comports()
+      opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
+      if len(opentrons_ports) == 0:
+        raise RuntimeError(
+          f"No Opentrons Thermocycler found with supported VID:PID pairs: {self.SUPPORTED_USB_IDS}"
+        )
+      elif len(opentrons_ports) > 1:
+        available_ports = [p.device for p in opentrons_ports]
+        raise RuntimeError(
+          f"Multiple Opentrons Thermocyclers found: {available_ports}. Please specify the port explicitly."
+        )
+      else:
+        self.port = opentrons_ports[0].device
+
     self.driver = await ThermocyclerDriverFactory.create(self.port, self._loop)
     assert self.driver is not None
 
