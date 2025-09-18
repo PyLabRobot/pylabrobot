@@ -107,8 +107,10 @@ async def execute_cycles(
 class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
   """USB backend for the Opentrons GEN-1/GEN-2 Thermocycler."""
 
-  TARGET_VID = 0x04D8
-  TARGET_PID = 0xED8C
+  SUPPORTED_USB_IDS = {
+    (0x04D8, 0xED8C),  # legacy Microchip bridge
+    (0x0483, 0xED8D),  # STMicroelectronics bridge seen in newer units
+  }
 
   def __init__(self, port: Optional[str] = None):
     """Create a new USB backend bound to a specific port."""
@@ -120,12 +122,12 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
     if port is None:
       ports = serial.tools.list_ports.comports()
-      opentrons_ports = [p for p in ports if p.vid == self.TARGET_VID and p.pid == self.TARGET_PID]
+      opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
       if opentrons_ports:
         self.port = opentrons_ports[0].device
       else:
         raise RuntimeError(
-          f"No Opentrons Thermocycler found with VID:PID {self.TARGET_VID:04x}:{self.TARGET_PID:04x}"
+          f"No Opentrons Thermocycler found with supported VID:PID pairs: {self.SUPPORTED_USB_IDS}"
         )
     else:
       self.port = port
