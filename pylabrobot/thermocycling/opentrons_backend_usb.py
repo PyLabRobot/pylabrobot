@@ -462,7 +462,3 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
   def current_step_index(self) -> Optional[int]:
     """Get the current step index."""
     return self._current_step_index
-
-  def current_step_index(self) -> Optional[int]:
-    """Get the current step index."""
-    return self._current_step_index
