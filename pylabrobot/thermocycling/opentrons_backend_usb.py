@@ -113,7 +113,13 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
   }
 
   def __init__(self, port: Optional[str] = None):
-    """Create a new USB backend bound to a specific port."""
+    """Create a new USB backend bound to a specific port.
+
+    If port is None, auto-detects the thermocycler using supported VID:PID pairs.
+    If multiple devices are found, raises an error with available ports.
+
+    If port is specified, use it directly.
+    """
     super().__init__()
     if not USE_OPENTRONS_DRIVER:
       raise RuntimeError(
@@ -123,12 +129,17 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     if port is None:
       ports = serial.tools.list_ports.comports()
       opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
-      if opentrons_ports:
-        self.port = opentrons_ports[0].device
-      else:
+      if len(opentrons_ports) == 0:
         raise RuntimeError(
           f"No Opentrons Thermocycler found with supported VID:PID pairs: {self.SUPPORTED_USB_IDS}"
         )
+      elif len(opentrons_ports) > 1:
+        available_ports = [p.device for p in opentrons_ports]
+        raise RuntimeError(
+          f"Multiple Opentrons Thermocyclers found: {available_ports}. Please specify the port explicitly."
+        )
+      else:
+        self.port = opentrons_ports[0].device
     else:
       self.port = port
 
@@ -448,6 +459,10 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     return self._total_step_count
 
   @property
+  def current_step_index(self) -> Optional[int]:
+    """Get the current step index."""
+    return self._current_step_index
+
   def current_step_index(self) -> Optional[int]:
     """Get the current step index."""
     return self._current_step_index
