@@ -397,7 +397,7 @@ class PreciseFlexBackendApi:
     return await self.send_command("version")
 
   #region LOCATION COMMANDS
-  async def get_location(self, location_index: int) -> tuple[int, int, float, float, float, float, float, float, float]:
+  async def get_location(self, location_index: int) -> tuple[int, int, float, float, float, float, float, float]:
     """Get the location values for the specified station index.
 
     Parameters:
@@ -406,7 +406,7 @@ class PreciseFlexBackendApi:
     Returns:
       tuple: A tuple containing (type_code, station_index, val1, val2, val3, val4, val5, val6)
          - For Cartesian type (type_code=0): (0, station_index, X, Y, Z, yaw, pitch, roll, unused = 0.0)
-         - For angles type (type_code=1): (1, station_index, angle1, angle2, angle3, angle4, angle5, angle6, angle7) - any unused angles are set to 0.0
+         - For angles type (type_code=1): (1, station_index, angle1, angle2, angle3, angle4, angle5, angle6) - any unused angles are set to 0.0
     """
     data = await self.send_command(f"loc {location_index}")
     parts = data.split(" ")
@@ -417,16 +417,16 @@ class PreciseFlexBackendApi:
     # location stored as cartesian
     if type_code == 0:
       x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[2:8])
-      return (type_code, station_index, x, y, z, yaw, pitch, roll, 0.0)
+      return (type_code, station_index, x, y, z, yaw, pitch, roll)
 
     # location stored as angles
     if type_code == 1:
-      angle1, angle2, angle3, angle4, angle5, angle6, angle7 = self._parse_angles_response(parts[2:])
-      return (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6, angle7)
+      angle1, angle2, angle3, angle4, angle5, angle6 = self._parse_angles_response(parts[2:])
+      return (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6)
 
     raise PreciseFlexError(-1, "Unexpected response format from loc command.")
 
-  async def get_location_angles(self, location_index: int) -> tuple[int, int, float, float, float, float, float, float, float]:
+  async def get_location_angles(self, location_index: int) -> tuple[int, int, float, float, float, float, float, float]:
     """Get the angle values for the specified station index.
 
     Parameters:
@@ -446,9 +446,9 @@ class PreciseFlexBackendApi:
       raise PreciseFlexError(-1, "Location is not of angles type.")
 
     station_index = int(parts[1])
-    angle1, angle2, angle3, angle4, angle5, angle6, angle7 = self._parse_angles_response(parts[2:])
+    angle1, angle2, angle3, angle4, angle5, angle6 = self._parse_angles_response(parts[2:])
 
-    return (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6, angle7)
+    return (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6)
 
 
 
@@ -654,7 +654,7 @@ class PreciseFlexBackendApi:
 
     return (x, y, z, yaw, pitch, roll, config)
 
-  async def dest_j(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, float]:
+  async def dest_j(self, arg1: int = 0) -> tuple[float, float, float, float, float, float]:
     """Get the destination or current joint location of the robot.
 
     Parameters:
@@ -676,10 +676,10 @@ class PreciseFlexBackendApi:
     if not parts:
       raise PreciseFlexError(-1, "Unexpected response format from destJ command.")
 
-    # Ensure we have exactly 7 elements, padding with 0.0 if necessary
-    angle1, angle2, angle3, angle4, angle5, angle6, angle7 = self._parse_angles_response(parts)
+    # Ensure we have exactly 6 elements, padding with 0.0 if necessary
+    angle1, angle2, angle3, angle4, angle5, angle6 = self._parse_angles_response(parts)
 
-    return (angle1, angle2, angle3, angle4, angle5, angle6, angle7)
+    return (angle1, angle2, angle3, angle4, angle5, angle6)
 
   async def here_j(self, location_index: int) -> None:
     """Record the current position of the selected robot into the specified Location as angles.
@@ -706,7 +706,7 @@ class PreciseFlexBackendApi:
     """Return the current position of the selected robot in both Cartesian and joints format.
 
     Returns:
-      tuple: A tuple containing (X, Y, Z, yaw, pitch, roll, (axis1, axis2, axis3, axis4, axis5, axis6, axis7))
+      tuple: A tuple containing (X, Y, Z, yaw, pitch, roll, (axis1, axis2, axis3, axis4, axis5, axis6))
     """
     data = await self.send_command("where")
     parts = data.split()
@@ -733,12 +733,12 @@ class PreciseFlexBackendApi:
     data = await self.send_command("wherec")
     parts = data.split()
 
-    if len(parts) != 7:
+    if len(parts) != 6:
       # In case of incomplete response, wait for EOM and try to read again
       await self.wait_for_eom()
       data = await self.send_command("wherec")
       parts = data.split()
-      if len(parts) != 7:
+      if len(parts) != 6:
         raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
 
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
@@ -746,11 +746,11 @@ class PreciseFlexBackendApi:
 
     return (x, y, z, yaw, pitch, roll, config)
 
-  async def where_j(self) -> tuple[float, float, float, float, float, float, float]:
+  async def where_j(self) -> tuple[float, float, float, float, float, float]:
     """Return the current joint position for the selected robot.
 
     Returns:
-      tuple: A tuple containing (axis1, axis2, axis3, axis4, axis5, axis6, axis7)
+      tuple: A tuple containing (axis1, axis2, axis3, axis4, axis5, axis6)
     """
     data = await self.send_command("wherej")
     parts = data.split()
@@ -1902,20 +1902,19 @@ class PreciseFlexBackendApi:
 
     return (x, y, z, yaw, pitch, roll)
 
-  def _parse_angles_response(self, parts: list[str]) -> tuple[float, float, float, float, float, float, float]:
+  def _parse_angles_response(self, parts: list[str]) -> tuple[float, float, float, float, float, float]:
     if len(parts) < 3:
       raise PreciseFlexError(-1, "Unexpected response format for angles.")
 
-    # Ensure we have exactly 7 elements, padding with 0.0 if necessary
+    # Ensure we have exactly 6 elements, padding with 0.0 if necessary
     angle1 = float(parts[0])
     angle2 = float(parts[1])
     angle3 = float(parts[2])
     angle4 = float(parts[3]) if len(parts) > 3 else 0.0
     angle5 = float(parts[4]) if len(parts) > 4 else 0.0
     angle6 = float(parts[5]) if len(parts) > 5 else 0.0
-    angle7 = float(parts[6]) if len(parts) > 6 else 0.0
 
-    return (angle1, angle2, angle3, angle4, angle5, angle6, angle7)
+    return (angle1, angle2, angle3, angle4, angle5, angle6)
 
   def _parse_reply_ensure_successful(self, reply: bytes) -> str:
     """Parse reply from Precise Flex.

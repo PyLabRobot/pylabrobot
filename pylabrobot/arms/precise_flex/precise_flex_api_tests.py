@@ -298,12 +298,12 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     """Test get_location()"""
     location_data = await self.robot.get_location(self.TEST_LOCATION_ID)
     self.assertIsInstance(location_data, tuple)
-    self.assertEqual(len(location_data), 9)
-    type_code, station_index, val1, val2, val3, val4, val5, val6, val7 = location_data
+    self.assertEqual(len(location_data), 8)
+    type_code, station_index, val1, val2, val3, val4, val5, val6 = location_data
     self.assertIsInstance(type_code, int)
     self.assertIn(type_code, [0, 1])  # 0 = Cartesian, 1 = angles
     self.assertEqual(station_index, self.TEST_LOCATION_ID)
-    print(f"Location {self.TEST_LOCATION_ID}: type={type_code}, values=({val1}, {val2}, {val3}, {val4}, {val5}, {val6}, {val7})")
+    print(f"Location {self.TEST_LOCATION_ID}: type={type_code}, values=({val1}, {val2}, {val3}, {val4}, {val5}, {val6})")
 
   async def test_get_location_angles(self) -> None:
     """Test get_location_angles()"""
@@ -311,11 +311,11 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     try:
       location_data = await self.robot.get_location_angles(self.TEST_LOCATION_ID)
       self.assertIsInstance(location_data, tuple)
-      self.assertEqual(len(location_data), 9)
-      type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6, angle7 = location_data
+      self.assertEqual(len(location_data), 8)
+      type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6 = location_data
       self.assertEqual(type_code, 1)  # Should be angles type
       self.assertEqual(station_index, self.TEST_LOCATION_ID)
-      print(f"Location angles {self.TEST_LOCATION_ID}: ({angle1}, {angle2}, {angle3}, {angle4}, {angle5}, {angle6}, {angle7})")
+      print(f"Location angles {self.TEST_LOCATION_ID}: ({angle1}, {angle2}, {angle3}, {angle4}, {angle5}, {angle6})")
     except Exception as e:
       print(f"Location {self.TEST_LOCATION_ID} is not angles type or error occurred: {e}")
 
@@ -331,7 +331,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
       # Verify the angles were set
       location_data = await self.robot.get_location_angles(self.TEST_LOCATION_ID)
-      _, _, angle1, angle2, angle3, angle4, angle5, angle6, angle7 = location_data
+      _, _, angle1, angle2, angle3, angle4, angle5, angle6 = location_data
 
       # Check first 6 angles (angle7 is typically 0)
       retrieved_angles = (angle1, angle2, angle3, angle4, angle5, angle6)
@@ -535,14 +535,14 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     # Test with default argument (current joint positions)
     dest_data = await self.robot.dest_j()
     self.assertIsInstance(dest_data, tuple)
-    self.assertEqual(len(dest_data), 7)
+    self.assertEqual(len(dest_data), 6)
     self.assertTrue(all(isinstance(val, (int, float)) for val in dest_data))
     print(f"Current joint destination: {dest_data}")
 
     # Test with arg1=1 (target joint positions)
     dest_data_target = await self.robot.dest_j(1)
     self.assertIsInstance(dest_data_target, tuple)
-    self.assertEqual(len(dest_data_target), 7)
+    self.assertEqual(len(dest_data_target), 6)
     print(f"Target joint destination: {dest_data_target}")
 
   async def test_here_j(self) -> None:
