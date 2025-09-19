@@ -97,7 +97,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     if not USE_OPENTRONS_DRIVER:
       raise RuntimeError("Opentrons thermocycler driver not available") from _import_error
 
-    self.driver: Optional[AbstractThermocyclerDriver] = None
+    self._driver: Optional[AbstractThermocyclerDriver] = None
     self._current_protocol: Optional[Protocol] = None
     self._loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -120,9 +120,9 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     volume: Optional[float] = None,
   ) -> None:
     """Execute a single thermocycler step (uses shared utility)."""
-    assert self.driver is not None
+    assert self._driver is not None
     await execute_cycle_step(
-      driver=self.driver,
+      driver=self._driver,
       temperature=temperature,
       hold_time_seconds=hold_time_seconds,
       ramp_rate=ramp_rate,
@@ -136,7 +136,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     volume: Optional[float],
   ) -> None:
     """Execute cycles of temperature steps directly from protocol (with cycle tracking)."""
-    assert self.driver is not None
+    assert self._driver is not None
     self._total_cycle_count = repetitions
     total_steps = 0
     for stage in protocol.stages:
@@ -161,7 +161,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
             step_index += 1
             self._current_step_index = step_index
             await execute_cycle_step(
-              driver=self.driver,
+              driver=self._driver,
               temperature=temperature,
               hold_time_seconds=hold_time,
               ramp_rate=ramp_rate,
@@ -210,32 +210,32 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
       else:
         port = opentrons_ports[0].device
 
-    self.driver = await ThermocyclerDriverFactory.create(port, self._loop)
-    assert self.driver is not None
+    self._driver = await ThermocyclerDriverFactory.create(port, self._loop)
+    assert self._driver is not None
 
   async def stop(self):
-    if self.driver is not None:
+    if self._driver is not None:
       await self.deactivate_block()
       await self.deactivate_lid()
-      await self.driver.disconnect()
+      await self._driver.disconnect()
 
   async def open_lid(self):
-    assert self.driver is not None
-    await self.driver.open_lid()
+    assert self._driver is not None
+    await self._driver.open_lid()
 
   async def close_lid(self):
-    assert self.driver is not None
-    await self.driver.close_lid()
+    assert self._driver is not None
+    await self._driver.close_lid()
 
   async def lift_plate(self):
     """Lift the thermocycler plate to un-stick and robustly pick up with robot arm."""
-    assert self.driver is not None
-    await self.driver.lift_plate()
+    assert self._driver is not None
+    await self._driver.lift_plate()
 
   async def jog_lid(self, angle: float):
     """Jog the lid to a specific angle position."""
-    assert self.driver is not None
-    await self.driver.jog_lid(angle)
+    assert self._driver is not None
+    await self._driver.jog_lid(angle)
 
   async def set_block_temperature(self, temperature: List[float]):
     """Set block temperature in °C. Only single unique temperature supported.
@@ -246,8 +246,8 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
         f"Opentrons thermocycler only supports a single unique block temperature, got {set(temperature)}"
       )
     temp_value = temperature[0]
-    assert self.driver is not None
-    await self.driver.set_plate_temperature(temp_value)
+    assert self._driver is not None
+    await self._driver.set_plate_temperature(temp_value)
 
   async def set_lid_temperature(self, temperature: List[float]):
     """Set lid temperature in °C. Only single unique temperature supported."""
@@ -256,68 +256,68 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
         f"Opentrons thermocycler only supports a single unique lid temperature, got {set(temperature)}"
       )
     temp_value = temperature[0]
-    assert self.driver is not None
-    await self.driver.set_lid_temperature(temp_value)
+    assert self._driver is not None
+    await self._driver.set_lid_temperature(temp_value)
 
   async def set_ramp_rate(self, ramp_rate: float):
     """Set the temperature ramp rate in °C/minute."""
-    assert self.driver is not None
-    await self.driver.set_ramp_rate(ramp_rate)
+    assert self._driver is not None
+    await self._driver.set_ramp_rate(ramp_rate)
 
   async def deactivate_block(self):
     """Deactivate the block heater."""
-    assert self.driver is not None
-    await self.driver.deactivate_block()
+    assert self._driver is not None
+    await self._driver.deactivate_block()
 
   async def deactivate_lid(self):
     """Deactivate the lid heater."""
-    assert self.driver is not None
-    await self.driver.deactivate_lid()
+    assert self._driver is not None
+    await self._driver.deactivate_lid()
 
   async def get_device_info(self) -> dict:
-    assert self.driver is not None
-    return await self.driver.get_device_info()
+    assert self._driver is not None
+    return await self._driver.get_device_info()
 
   async def get_block_current_temperature(self) -> List[float]:
-    assert self.driver is not None
-    plate_temp = await self.driver.get_plate_temperature()
+    assert self._driver is not None
+    plate_temp = await self._driver.get_plate_temperature()
     return [plate_temp.current]
 
   async def get_block_target_temperature(self) -> List[float]:
-    assert self.driver is not None
-    plate_temp = await self.driver.get_plate_temperature()
+    assert self._driver is not None
+    plate_temp = await self._driver.get_plate_temperature()
     if plate_temp.target is not None:
       return [plate_temp.target]
     raise RuntimeError("Block target temperature is not set.")
 
   async def get_lid_current_temperature(self) -> List[float]:
-    assert self.driver is not None
-    lid_temp = await self.driver.get_lid_temperature()
+    assert self._driver is not None
+    lid_temp = await self._driver.get_lid_temperature()
     return [lid_temp.current]
 
   async def get_lid_target_temperature(self) -> List[float]:
-    assert self.driver is not None
-    lid_temp = await self.driver.get_lid_temperature()
+    assert self._driver is not None
+    lid_temp = await self._driver.get_lid_temperature()
     if lid_temp.target is not None:
       return [lid_temp.target]
     raise RuntimeError("Lid target temperature is not set.")
 
   async def get_lid_open(self) -> bool:
     """Return True if the lid is open."""
-    assert self.driver is not None
-    lid_status = await self.driver.get_lid_status()
+    assert self._driver is not None
+    lid_status = await self._driver.get_lid_status()
     return lid_status == ThermocyclerLidStatus.OPEN
 
   async def get_lid_status(self) -> LidStatus:
-    assert self.driver is not None
-    lid_temp = await self.driver.get_lid_temperature()
+    assert self._driver is not None
+    lid_temp = await self._driver.get_lid_temperature()
     if lid_temp.target is not None and abs(lid_temp.current - lid_temp.target) < 1.0:
       return LidStatus.HOLDING_AT_TARGET
     return LidStatus.IDLE
 
   async def get_block_status(self) -> BlockStatus:
-    assert self.driver is not None
-    plate_temp = await self.driver.get_plate_temperature()
+    assert self._driver is not None
+    plate_temp = await self._driver.get_plate_temperature()
     if plate_temp.target is not None and abs(plate_temp.current - plate_temp.target) < 1.0:
       return BlockStatus.HOLDING_AT_TARGET
     return BlockStatus.IDLE
