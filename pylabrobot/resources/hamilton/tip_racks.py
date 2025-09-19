@@ -309,17 +309,27 @@ def hamilton_96_tiprack_1000ul(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-# TODO: identify cat number and update naming accordingly
-def HTF_WIDE(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: ?
+def hamilton_96_tiprack_1000ul_filter_wide(name: str, with_tips: bool = True) -> TipRack:
+  """Hamilton cat. no.:
+
+  core-ii:
+  - non-sterile, filter: 235678
+  - sterile, filter: 235677
+  core-i:
+  - ?
+
   Hamilton name: 'HTF_WIDE'
-  Tip Rack with 96x 1000ul High Volume Tip with filter"""
+  Tip Rack with 96x 1000ul High Volume Tip with filter
+
+  Orifice Size: 1.2mm
+  """
+
   return TipRack(
     name=name,
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=HTF_WIDE.__name__,
+    model=hamilton_96_tiprack_1000ul_filter_wide.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -337,17 +347,27 @@ def HTF_WIDE(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-# TODO: identify cat number and update naming accordingly
-def HTF_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: ?
+def hamilton_96_tiprack_1000ul_filter_ultrawide(name: str, with_tips: bool = True) -> TipRack:
+  """Hamilton cat. no.:
+
+  core-ii:
+  - non-sterile, filter: 235541
+  - sterile, filter: 235842
+  core-i:
+  - ?
+
   Hamilton name: 'HTF_ULTRAWIDE'
-  Tip Rack with 96x 1000ul High Volume Tip with filter"""
+  Tip Rack with 96x 1000ul High Volume Tip with filter
+
+  Orifice Size: 3.2mm
+  """
+
   return TipRack(
     name=name,
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=HTF_ULTRAWIDE.__name__,
+    model=hamilton_96_tiprack_1000ul_filter_ultrawide.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
