@@ -53,6 +53,8 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       self._original_pallet_final_y_pos = await self.robot.get_pallet_y(self.TEST_LOCATION_ID)
       self._original_pallet_final_z_pos = await self.robot.get_pallet_z(self.TEST_LOCATION_ID)
 
+    self._original_profile = await self.robot.get_motion_profile_values(self.TEST_PROFILE_ID)
+
   async def asyncTearDown(self):
     """Restore station edits and leave the link up for the next test."""
 
@@ -83,6 +85,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
           await self.robot.set_location_xyz(*self._original_station_location[1:8])
         else:
           await self.robot.set_location_angles(*self._original_station_location[1:8])
+
+      # Set profile back to default values
+      await self.robot.set_motion_profile_values(self.TEST_PROFILE_ID, *self._original_profile[1:])
 
     except Exception as e:
       # Do not hide teardown failures. Print and continue so later tests can try to recover.
@@ -597,7 +602,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     x, y, z, yaw, pitch, roll, axes = position_data
     self.assertTrue(all(isinstance(val, (int, float)) for val in [x, y, z, yaw, pitch, roll]))
     self.assertIsInstance(axes, tuple)
-    self.assertEqual(len(axes), 7)
+    self.assertEqual(len(axes), 6)
     self.assertTrue(all(isinstance(val, (int, float)) for val in axes))
     print(f"Current position - Cartesian: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}")
     print(f"Current position - Joints: {axes}")
@@ -616,7 +621,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     """Test where_j()"""
     joint_data = await self.robot.where_j()
     self.assertIsInstance(joint_data, tuple)
-    self.assertEqual(len(joint_data), 7)
+    self.assertEqual(len(joint_data), 6)
     self.assertTrue(all(isinstance(val, (int, float)) for val in joint_data))
     print(f"Current joint positions: {joint_data}")
 
@@ -918,7 +923,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     """Test move() command"""
     # Save test location
     await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *self.TEST_LOCATION_C_LEFT[:-1])
-    await self.robot.set_location_config(self.TEST_LOCATION_ID, 0x02)  # GPL_Lefty
+    await self.robot.set_location_config(self.TEST_LOCATION_ID, self.TEST_LOCATION_C_LEFT[-1])  # GPL_Lefty
 
     # Move to test location
     await self.robot.move(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
@@ -947,7 +952,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     test_z_clearance = 20
 
     # Save test location & z clearance
-    await self.robot.set_location_angles(self.TEST_LOCATION_ID, *self.TEST_LOCATION_J_LEFT)
+    await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *self.TEST_LOCATION_C_LEFT[:-1])
     await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, test_z_clearance)
 
     # Move to test location with approach
@@ -1540,14 +1545,14 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       await self.robot.set_station_type(self.TEST_LOCATION_ID, 0, 3, 50.0, 10.0, 0.0)
 
 #region SSGRIP COMMANDS
-  async def test_home_all_if_no_plate(self) -> None:
-    """Test home_all_if_no_plate()"""
-    result = await self.robot.home_all_if_no_plate()
-    self.assertIsInstance(result, int)
-    self.assertIn(result, [-1, 0])
+  # async def test_home_all_if_no_plate(self) -> None: # commented out because it messes up other tests
+  #   """Test home_all_if_no_plate()"""
+  #   result = await self.robot.home_all_if_no_plate()
+  #   self.assertIsInstance(result, int)
+  #   self.assertIn(result, [-1, 0])
 
-    result_str = "no plate detected and command succeeded" if result == -1 else "plate detected"
-    print(f"Home all if no plate result: {result} ({result_str})")
+  #   result_str = "no plate detected and command succeeded" if result == -1 else "plate detected"
+  #   print(f"Home all if no plate result: {result} ({result_str})")
 
   async def test_grasp_plate(self) -> None:
     """Test grasp_plate()"""

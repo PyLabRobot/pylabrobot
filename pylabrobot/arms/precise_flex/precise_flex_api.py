@@ -1049,7 +1049,7 @@ class PreciseFlexBackendApi:
             float(parts[5]),
             float(parts[6]),
             float(parts[7]),
-            False if parts[8] == 0 else True
+            False if int(parts[8]) == 0 else True
           )
 
   #region MOTION COMMANDS
