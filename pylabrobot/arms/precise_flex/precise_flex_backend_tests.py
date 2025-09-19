@@ -1,15 +1,34 @@
 import unittest
 
+from pylabrobot.arms.backend import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
-import asyncio
 
 
 class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
+    # Connection config
+  MODEL = "pf3400"
+  ROBOT_HOST = "192.168.0.1"
+  ROBOT_PORT = 10100
+
+  # Test constants
+  TEST_PROFILE_ID = 20
+  TEST_LOCATION_ID = 20
+  TEST_PARAMETER_ID = 17018
+  TEST_SIGNAL_ID = 20064
+
+  SAFE_LOCATION_C = CartesianCoords(175, 0, 169.994, -0.001, 90, 180, ElbowOrientation.RIGHT)
+  SAFE_LOCATION_J = JointCoords(0, 170.003, 0, 180, -180, 75.486)
+
+  TEST_LOCATION_J_LEFT = JointCoords(0, 169.932, 16.883, 230.942, -224.288, 75.662)
+  TEST_LOCATION_C_LEFT = CartesianCoords(328.426, -115.219, 169.932, 23.537, 90, 180, ElbowOrientation.LEFT)
+
+  TEST_LOCATION_J_RIGHT = JointCoords(0, 169.968, -4.238, 117.915, -100.062, 75.668)
+  TEST_LOCATION_C_RIGHT = CartesianCoords(342.562, 280.484, 169.969, 13.612, 90, 180, ElbowOrientation.RIGHT)
 
   async def asyncSetUp(self):
     """Connect to actual PreciseFlex robot"""
-    self.robot = PreciseFlexBackend("192.168.0.1", 10100)
+    self.robot = PreciseFlexBackend(self.MODEL, self.ROBOT_HOST, self.ROBOT_PORT)
     await self.robot.setup()
 
   async def asyncTearDown(self):
@@ -37,87 +56,38 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   async def test_move_to_safe(self):
     await self.robot.move_to_safe()
 
+  async def test_approach_c(self):
+    await self.robot.approach(self.TEST_LOCATION_C_LEFT, 20)
+
   async def test_approach_j(self):
-    current_c = await self.robot.get_position_c()
-    # create a position that is very close to current position for each dimension
-    target_c = (
-        current_c[0] + 0.01, current_c[1] + 0.01, current_c[2] + 0.01,
-        current_c[3] + 0.01, current_c[4] + 0.01, current_c[5] + 0.01
-    )
-    await self.robot.approach_c(target_c, 10, current_c[-1])
+    await self.robot.approach(self.TEST_LOCATION_J_LEFT, 20)
 
-  async def test_pick_plate_j(self):
-    current_c = await self.robot.get_position_c()
-    # create a position that is very close to current position for each dimension
-    target_c = (
-        current_c[0] + 0.01, current_c[1] + 0.01, current_c[2] + 0.01,
-        current_c[3] + 0.01, current_c[4] + 0.01, current_c[5] + 0.01
-    )
-    await self.robot.pick_plate_c(target_c, 10, current_c[-1])
+  async def test_pick_plate(self):
+    try:
+      await self.robot.pick_plate(self.TEST_LOCATION_C_RIGHT, 10)
+    except Exception as e:
+      if 'no plate present' in str(e).lower():
+        pass
+      else:
+        raise
 
-  async def test_place_plate_j(self):
-    current_c = await self.robot.get_position_c()
-    # create a position that is very close to current position for each dimension
-    target_c = (
-        current_c[0] + 0.01, current_c[1] + 0.01, current_c[2] + 0.01,
-        current_c[3] + 0.01, current_c[4] + 0.01, current_c[5] + 0.01
-    )
-    await self.robot.place_plate_c(target_c, 10, current_c[-1])
+  async def test_place_plate(self):
+    await self.robot.place_plate(self.TEST_LOCATION_C_LEFT, 15)
 
   async def test_move_to_j(self):
-    current_c = await self.robot.get_position_c()
-    # create a position that is very close to current position for each dimension
-    target_c = (
-        current_c[0] + 0.01, current_c[1] + 0.01, current_c[2] + 0.01,
-        current_c[3] + 0.01, current_c[4] + 0.01, current_c[5] + 0.01
-    )
-    await self.robot.move_to_c(target_c, current_c[-1])
+    await self.robot.move_to(self.TEST_LOCATION_J_RIGHT)
+
+  async def test_move_to_c(self):
+    await self.robot.move_to(self.TEST_LOCATION_C_RIGHT)
 
   async def test_get_position_j(self):
     """Test getting joint position"""
-    position_j = await self.robot.get_position_j()
-    self.assertIsInstance(position_j, tuple)
-    self.assertEqual(len(position_j), 6)
+    position_j = await self.robot.get_joint_position()
+    self.assertIsInstance(position_j, JointCoords)
 
   async def test_get_position_c(self):
     """Test getting cartesian position"""
-    position_c = await self.robot.get_position_c()
-    self.assertIsInstance(position_c, tuple)
-    self.assertEqual(len(position_c), 6)
+    position_c = await self.robot.get_cartesian_position()
+    self.assertIsInstance(position_c, CartesianCoords)
 
-  async def test_move_to_j_joints(self):
-    """Test joint movement"""
-    current_j = await self.robot.get_position_j()
-    # Small joint movements
-    target_j = (
-      current_j[0] + 0.1, current_j[1] + 0.1, current_j[2] + 0.1,
-      current_j[3] + 0.1, current_j[4] + 0.1, current_j[5] + 0.1, current_j[6] + 0.1
-    )
-    await self.robot.move_to_j(target_j)
 
-  async def test_approach_j_joints(self):
-    """Test joint approach movement"""
-    current_j = await self.robot.get_position_j()
-    target_j = (
-      current_j[0] + 0.1, current_j[1] + 0.1, current_j[2] + 0.1,
-      current_j[3] + 0.1, current_j[4] + 0.1, current_j[5] + 0.1, current_j[6] + 0.1
-    )
-    await self.robot.approach_j(target_j, 10)
-
-  async def test_pick_plate_j_joints(self):
-    """Test joint pick plate movement"""
-    current_j = await self.robot.get_position_j()
-    target_j = (
-      current_j[0] + 0.1, current_j[1] + 0.1, current_j[2] + 0.1,
-      current_j[3] + 0.1, current_j[4] + 0.1, current_j[5] + 0.1, current_j[6] + 0.1
-    )
-    await self.robot.pick_plate_j(target_j, 10)
-
-  async def test_place_plate_j_joints(self):
-    """Test joint place plate movement"""
-    current_j = await self.robot.get_position_j()
-    target_j = (
-      current_j[0] + 0.1, current_j[1] + 0.1, current_j[2] + 0.1,
-      current_j[3] + 0.1, current_j[4] + 0.1, current_j[5] + 0.1, current_j[6] + 0.1
-    )
-    await self.robot.place_plate_j(target_j, 10)

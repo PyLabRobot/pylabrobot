@@ -733,12 +733,12 @@ class PreciseFlexBackendApi:
     data = await self.send_command("wherec")
     parts = data.split()
 
-    if len(parts) != 6:
+    if len(parts) != 7:
       # In case of incomplete response, wait for EOM and try to read again
       await self.wait_for_eom()
       data = await self.send_command("wherec")
       parts = data.split()
-      if len(parts) != 6:
+      if len(parts) != 7:
         raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
 
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])

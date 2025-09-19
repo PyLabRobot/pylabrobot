@@ -1,12 +1,128 @@
-from pylabrobot.arms.backend import ArmBackend, ElbowOrientation
+from abc import ABC, abstractmethod
+
+from pylabrobot.arms.backend import ArmBackend, CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
 
 
-class PreciseFlexBackend(ArmBackend):
-  """UNTESTED - Backend for the PreciseFlex robotic arm  - Default to using Cartesian coordinates, some methods in Brook's TCS don't work with Joint coordinates."""
-  def __init__(self, host: str, port: int = 10100, timeout=20) -> None:
+
+class CoordsConverter(ABC):
+
+  @abstractmethod
+  def convert_to_joint_space(self, position: tuple[float, float, float, float, float, float]) -> JointCoords:
+      """Convert a tuple of joint angles to a JointSpace object."""
+      ...
+
+  @abstractmethod
+  def convert_to_cartesian_space(self, position: tuple[float, float, float, float, float, float, ElbowOrientation | None]) -> CartesianCoords:
+      ...
+
+  @abstractmethod
+  def convert_to_joints_array(self, position: JointCoords) -> tuple[float, float, float, float, float, float]:
+      ...
+
+  @abstractmethod
+  def convert_to_cartesian_array(self, position: CartesianCoords) -> tuple[float, float, float, float, float, float, int]:
+      """Convert a CartesianSpace object to a list of cartesian coordinates."""
+      ...
+
+  @abstractmethod
+  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
+    """Convert an ElbowOrientation enum to an integer."""
+    ...
+
+
+class PreciseFlex400SpaceConverter(CoordsConverter):
+
+  def convert_to_joint_space(self, position: tuple[float, float, float, float, float, float]) -> JointCoords:
+      """Convert a tuple of joint angles to a JointCoords object."""
+      if len(position) != 6:
+          raise ValueError("Position must be a tuple of 6 joint angles.")
+      return JointCoords(0, position[0], position[1], position[2], position[3], 0)
+
+  def convert_to_cartesian_space(self, position: tuple[float, float, float, float, float, float, int]) -> CartesianCoords:
+      """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
+      if len(position) != 7:
+          raise ValueError("Position must be a tuple of 7 values (x, y, z, yaw, pitch, roll, orientation).")
+      orientation = ElbowOrientation(position[6])
+      return CartesianCoords(position[0], position[1], position[2], position[3], position[4], position[5], orientation)
+
+  def convert_to_joints_array(self, position: JointCoords) -> tuple[float, float, float, float, float, float]:
+      """Convert a JointSpace object to a list of joint angles."""
+      joints = (position.base, position.shoulder, position.elbow, position.wrist, 0, 0)  # PF400 has 4 joints, last two are fixed
+      return joints
+
+  def convert_to_cartesian_array(self, position: CartesianCoords) -> tuple[float, float, float, float, float, float, int]:
+      """Convert a CartesianSpace object to a list of cartesian coordinates."""
+      orientation_int = self._convert_orientation_enum_to_int(position.orientation)
+      arr = (position.x, position.y, position.z, position.yaw, position.pitch, position.roll, orientation_int)
+      return arr
+
+  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
+    """Convert an ElbowOrientation enum to an integer."""
+    if orientation is None:
+        return 0
+    elif orientation == ElbowOrientation.LEFT:
+        return 1
+    elif orientation == ElbowOrientation.RIGHT:
+        return 2
+    else:
+        raise ValueError("Invalid ElbowOrientation value.")
+
+class PreciseFlex3400SpaceConverter(CoordsConverter):
+
+  def convert_to_joint_space(self, position: tuple[float, float, float, float, float, float]) -> JointCoords:
+      """Convert a tuple of joint angles to a JointCoords object."""
+      if len(position) != 6:
+          raise ValueError("Position must be a tuple of 6 joint angles.")
+      return JointCoords(0, position[0], position[1], position[2], position[3], position[4])
+
+  def convert_to_cartesian_space(self, position: tuple[float, float, float, float, float, float, int]) -> CartesianCoords:
+      """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
+      if len(position) != 7:
+          raise ValueError("Position must be a tuple of 7 values (x, y, z, yaw, pitch, roll, orientation).")
+      orientation = ElbowOrientation(position[6])
+      return CartesianCoords(position[0], position[1], position[2], position[3], position[4], position[5], orientation)
+
+  def convert_to_joints_array(self, position: JointCoords) -> tuple[float, float, float, float, float, float]:
+      """Convert a JointSpace object to a list of joint angles."""
+      joints = (position.base, position.shoulder, position.elbow, position.wrist, position.gripper, 0)  # PF400 has 5 joints, last is fixed
+      return joints
+
+  def convert_to_cartesian_array(self, position: CartesianCoords) -> tuple[float, float, float, float, float, float, int]:
+      """Convert a CartesianSpace object to a list of cartesian coordinates."""
+      orientation_int = self._convert_orientation_enum_to_int(position.orientation)
+      arr = (position.x, position.y, position.z, position.yaw, position.pitch, position.roll, orientation_int)
+      return arr
+
+  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
+    """Convert an ElbowOrientation enum to an integer."""
+    if orientation is None:
+        return 0
+    elif orientation == ElbowOrientation.RIGHT:
+        return 1
+    elif orientation == ElbowOrientation.LEFT:
+        return 2
+    else:
+        raise ValueError("Invalid ElbowOrientation value.")
+
+class CoordsConverterFactory:
+  @staticmethod
+  def create_coords_converter(model: str) -> CoordsConverter:
+    """Factory method to create a CoordsConverter based on the robot model."""
+    if model == 'pf400':
+      return PreciseFlex400SpaceConverter()
+    elif model == 'pf3400':
+      return PreciseFlex3400SpaceConverter()
+    else:
+      raise ValueError(f"Unsupported robot model: {model}")
+
+
+class PreciseFlexBackend(ArmBackend, ABC):
+  """Backend for the PreciseFlex robotic arm  - Default to using Cartesian coordinates, some methods in Brook's TCS don't work with Joint coordinates."""
+  def __init__(self, model: str, host: str, port: int = 10100, timeout=20) -> None:
     super().__init__()
     self.api = PreciseFlexBackendApi(host=host, port=port, timeout=timeout)
+    self.space_converter = CoordsConverterFactory.create_coords_converter(model)
     self.profile_index: int = 1
     self.location_index: int = 1
     self.horizontal_compliance: bool = False
@@ -23,7 +139,7 @@ class PreciseFlexBackend(ArmBackend):
     """Stop the PreciseFlex backend."""
     await self.detach()
     await self.power_off_robot()
-    await self.exit()
+    await self.api.exit()
     await self.api.stop()
 
   async def set_speed(self, speed_percent: float):
@@ -62,64 +178,6 @@ class PreciseFlexBackend(ArmBackend):
     """Move the arm to a predefined safe position."""
     await self.api.move_to_safe()
 
-  async def approach_j(self, joint_position: tuple[float, float, float, float, float, float, float], approach_height: float):
-    """Move the arm to a position above the specified coordinates by a certain distance."""
-    await self.api.set_location_angles(self.location_index, *list(joint_position))
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
-    await self.api.move_appro(self.location_index, self.profile_index)
-
-  async def pick_plate_j(self, joint_position: tuple[float, float, float, float, float, float, float], approach_height: float):
-    """Pick a plate from the specified position."""
-    await self.api.set_location_angles(self.location_index, *list(joint_position))
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
-    await self.api.pick_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
-
-  async def place_plate_j(self, joint_position: tuple[float, float, float, float, float, float, float], approach_height: float):
-    """Place a plate at the specified position."""
-    await self.api.set_location_angles(self.location_index, *list(joint_position))
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
-    await self.api.place_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
-
-  async def move_to_j(self, joint_position: tuple[float, float, float, float, float, float, float]):
-    """Move the arm to a specified position in 3D space."""
-    await self.api.move_j(self.location_index, *list(joint_position))
-
-  async def get_position_j(self) -> tuple[float, float, float, float, float, float, float]:
-    """Get the current position of the arm in 3D space."""
-    return await self.api.where_j()
-
-  async def approach_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: ElbowOrientation | None = None):
-    """Move the arm to a position above the specified coordinates by a certain distance."""
-    await self.api.set_location_xyz(self.location_index, *list(cartesian_position))
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
-    orientation_int = self._convert_orientation_enum_to_int(orientation)
-    await self.api.set_location_config(self.location_index, orientation_int)
-    await self.api.move_appro(self.location_index, self.profile_index)
-
-  async def pick_plate_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: ElbowOrientation | None = None):
-    """Pick a plate from the specified position."""
-    await self.api.set_location_xyz(self.location_index, *list(cartesian_position))
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
-    orientation_int = self._convert_orientation_enum_to_int(orientation)
-    await self.api.set_location_config(self.location_index, orientation_int)
-    await self.api.pick_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
-
-  async def place_plate_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: ElbowOrientation | None = None):
-      """Place a plate at the specified position."""
-      await self.api.set_location_xyz(self.location_index, *list(cartesian_position))
-      await self.api.set_location_z_clearance(self.location_index, approach_height)
-      orientation_int = self._convert_orientation_enum_to_int(orientation)
-      await self.api.set_location_config(self.location_index, orientation_int)
-      await self.api.place_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
-
-  async def move_to_c(self, cartesian_position: tuple[float, float, float, float, float, float], orientation: ElbowOrientation | None = None):
-      """Move the arm to a specified position in 3D space."""
-      await self.api.move_c(self.profile_index, *list(cartesian_position), config=self._convert_orientation_enum_to_int(orientation))
-
-  async def get_position_c(self) -> tuple[float, float, float, float, float, float, ElbowOrientation | None]:
-    """Get the current position of the arm in 3D space."""
-    position = await self.api.where_c()
-    return (*position[:6], self._convert_orientation_int_to_enum(position[6]))
 
 
   def _convert_orientation_int_to_enum(self, orientation_int: int) -> ElbowOrientation | None:
@@ -172,6 +230,111 @@ class PreciseFlexBackend(ArmBackend):
     """Get the robot's version."""
     return await self.api.get_version()
 
-  async def exit(self):
-    """Exit the PreciseFlex backend."""
-    await self.api.exit()
+
+  async def approach(self, position: CartesianCoords | JointCoords, approach_height: float):
+    """Move the arm to a position above the specified coordinates by a certain distance."""
+    if type(position) == JointCoords:
+        joints = self.space_converter.convert_to_joints_array(position)
+        await self._approach_j(joints, approach_height)
+    elif type(position) == CartesianCoords:
+        xyz = self.space_converter.convert_to_cartesian_array(position)
+        await self._approach_c(xyz[:-1], approach_height, xyz[-1])
+    else:
+        raise ValueError("Position must be of type JointSpace or CartesianSpace.")
+
+  async def pick_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
+      """Pick a plate from the specified position."""
+      if type(position) == JointCoords:
+          raise ValueError("pick_plate only supports CartesianCoords for PreciseFlex.")
+      elif type(position) == CartesianCoords:
+          xyz = self.space_converter.convert_to_cartesian_array(position)
+          await self._pick_plate_c(xyz[:-1], approach_height, xyz[-1])
+      else:
+          raise ValueError("Position must be of type JointSpace or CartesianSpace.")
+
+  async def place_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
+      """Place a plate at the specified position."""
+      if type(position) == JointCoords:
+          raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
+      elif type(position) == CartesianCoords:
+          xyz = self.space_converter.convert_to_cartesian_array(position)
+          await self._place_plate_c(xyz[:-1], approach_height, xyz[-1])
+      else:
+          raise ValueError("Position must be of type JointSpace or CartesianSpace.")
+
+  async def move_to(self, position: CartesianCoords | JointCoords):
+      """Move the arm to a specified position in 3D space."""
+      if type(position) == JointCoords:
+          joints = self.space_converter.convert_to_joints_array(position)
+          await self._move_to_j(joints)
+      elif type(position) == CartesianCoords:
+          xyz = self.space_converter.convert_to_cartesian_array(position)
+          await self._move_to_c(xyz[:-1], xyz[-1])
+      else:
+          raise ValueError("Position must be of type JointSpace or CartesianSpace.")
+
+  async def get_joint_position(self) -> JointCoords:
+      """Get the current position of the arm in 3D space."""
+      position_j = await self._get_position_j()
+      return self.space_converter.convert_to_joint_space(position_j)
+
+  async def get_cartesian_position(self) -> CartesianCoords:
+      """Get the current position of the arm in 3D space."""
+      position_c = await self._get_position_c()
+      return self.space_converter.convert_to_cartesian_space(position_c)
+
+  async def _approach_j(self, joint_position: tuple[float, float, float, float, float, float], approach_height: float):
+    """Move the arm to a position above the specified coordinates by a certain distance."""
+    await self.api.set_location_angles(self.location_index, *joint_position)
+    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self.api.move_appro(self.location_index, self.profile_index)
+
+  async def _pick_plate_j(self, joint_position: tuple[float, float, float, float, float, float], approach_height: float):
+    """Pick a plate from the specified position."""
+    await self.api.set_location_angles(self.location_index, *joint_position)
+    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self.api.pick_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
+
+  async def _place_plate_j(self, joint_position: tuple[float, float, float, float, float, float], approach_height: float):
+    """Place a plate at the specified position."""
+    await self.api.set_location_angles(self.location_index, *joint_position)
+    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self.api.place_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
+
+  async def _move_to_j(self, joint_position: tuple[float, float, float, float, float, float]):
+    """Move the arm to a specified position in 3D space."""
+    await self.api.move_j(self.location_index, *joint_position)
+
+  async def _get_position_j(self) -> tuple[float, float, float, float, float, float]:
+    """Get the current position of the arm in 3D space."""
+    return await self.api.where_j()
+
+  async def _approach_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: int = 0):
+    """Move the arm to a position above the specified coordinates by a certain distance."""
+    await self.api.set_location_xyz(self.location_index, *cartesian_position)
+    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self.api.set_location_config(self.location_index, orientation)
+    await self.api.move_appro(self.location_index, self.profile_index)
+
+  async def _pick_plate_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: int = 0):
+    """Pick a plate from the specified position."""
+    await self.api.set_location_xyz(self.location_index, *cartesian_position)
+    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self.api.set_location_config(self.location_index, orientation)
+    await self.api.pick_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
+
+  async def _place_plate_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: int = 0):
+      """Place a plate at the specified position."""
+      await self.api.set_location_xyz(self.location_index, *cartesian_position)
+      await self.api.set_location_z_clearance(self.location_index, approach_height)
+      await self.api.set_location_config(self.location_index, orientation)
+      await self.api.place_plate(self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque)
+
+  async def _move_to_c(self, cartesian_position: tuple[float, float, float, float, float, float], orientation: int = 0):
+      """Move the arm to a specified position in 3D space."""
+      await self.api.move_c(self.profile_index, *cartesian_position, config=orientation)
+
+  async def _get_position_c(self) -> tuple[float, float, float, float, float, float, ElbowOrientation | None]:
+    """Get the current position of the arm in 3D space."""
+    position = await self.api.where_c()
+    return (*position[:6], self._convert_orientation_int_to_enum(position[6]))

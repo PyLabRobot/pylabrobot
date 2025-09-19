@@ -1,11 +1,31 @@
 from abc import ABCMeta, abstractmethod
 from enum import Enum
+from dataclasses import dataclass
 
 from pylabrobot.machines.backend import MachineBackend
 
 class ElbowOrientation(Enum):
-    LEFT = "left"
     RIGHT = "right"
+    LEFT = "left"
+
+@dataclass
+class JointCoords:
+  rail: float
+  base: float
+  shoulder: float
+  elbow: float
+  wrist: float
+  gripper: float
+
+@dataclass
+class CartesianCoords:
+  x: float
+  y: float
+  z: float
+  yaw: float
+  pitch: float
+  roll: float
+  orientation: ElbowOrientation | None = None
 
 class ArmBackend(MachineBackend, metaclass=ABCMeta):
     """Backend for a robotic arm"""
@@ -51,51 +71,31 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    async def approach_j(self, joint_position: tuple[float, float, float, float, float, float, float], approach_height: float):
+    async def approach(self, position: CartesianCoords | JointCoords, approach_height: float):
         """Move the arm to a position above the specified coordinates by a certain distance."""
         ...
 
     @abstractmethod
-    async def pick_plate_j(self, joint_position: tuple[float, float, float, float, float, float, float], approach_height: float):
+    async def pick_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
         """Pick a plate from the specified position."""
         ...
 
     @abstractmethod
-    async def place_plate_j(self, joint_position: tuple[float, float, float, float, float, float, float], approach_height: float):
+    async def place_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
         """Place a plate at the specified position."""
         ...
 
     @abstractmethod
-    async def move_to_j(self, joint_position: tuple[float, float, float, float, float, float, float]):
+    async def move_to(self, position: CartesianCoords | JointCoords):
         """Move the arm to a specified position in 3D space."""
         ...
 
     @abstractmethod
-    async def get_position_j(self) -> tuple[float, float, float, float, float, float, float]:
+    async def get_joint_position(self) -> JointCoords:
         """Get the current position of the arm in 3D space."""
         ...
 
     @abstractmethod
-    async def approach_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: ElbowOrientation | None = None):
-        """Move the arm to a position above the specified coordinates by a certain distance."""
-        ...
-
-    @abstractmethod
-    async def pick_plate_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: ElbowOrientation | None = None):
-        """Pick a plate from the specified position."""
-        ...
-
-    @abstractmethod
-    async def place_plate_c(self, cartesian_position: tuple[float, float, float, float, float, float], approach_height: float, orientation: ElbowOrientation | None = None):
-        """Place a plate at the specified position."""
-        ...
-
-    @abstractmethod
-    async def move_to_c(self, cartesian_position: tuple[float, float, float, float, float, float], orientation: ElbowOrientation | None = None):
-        """Move the arm to a specified position in 3D space."""
-        ...
-
-    @abstractmethod
-    async def get_position_c(self) -> tuple[float, float, float, float, float, float, ElbowOrientation | None]:
+    async def get_cartesian_position(self) -> CartesianCoords:
         """Get the current position of the arm in 3D space."""
         ...
