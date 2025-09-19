@@ -83,24 +83,6 @@ async def execute_cycle_step(
   await wait_for_block_target(driver)
 
 
-async def execute_cycles(
-  driver,
-  steps: List[tuple],  # (temperature, hold_time, ramp_rate)
-  repetitions: int,
-  volume: Optional[float],
-) -> None:
-  """Execute cycles of temperature steps."""
-  for rep in range(repetitions):
-    for temperature, hold_time, ramp_rate in steps:
-      await execute_cycle_step(
-        driver=driver,
-        temperature=temperature,
-        hold_time_seconds=hold_time,
-        ramp_rate=ramp_rate,
-        volume=volume,
-      )
-
-
 class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
   """USB backend for the Opentrons GEN-1/GEN-2 Thermocycler."""
 
