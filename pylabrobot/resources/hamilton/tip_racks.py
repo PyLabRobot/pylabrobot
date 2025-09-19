@@ -264,7 +264,7 @@ def Hamilton_96_tiprack_1000ul_filter(name: str, with_tips: bool = True) -> TipR
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="HTF",
+    model="Hamilton_96_tiprack_1000ul_filter",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -291,7 +291,7 @@ def Hamilton_96_tiprack_1000ul(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="HT",
+    model="Hamilton_96_tiprack_1000ul",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
