@@ -138,14 +138,13 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     """Execute cycles of temperature steps directly from protocol (with cycle tracking)."""
     assert self._driver is not None
     self._total_cycle_count = repetitions
-    total_steps = 0
+    self._total_step_count = 0
     for stage in protocol.stages:
       for _ in range(stage.repeats):
         for step in stage.steps:
-          total_steps += 1
-    self._total_step_count = total_steps
+          self._total_step_count += 1
 
-    step_index = 0
+    self._current_step_index = 0
     for rep in range(repetitions):
       self._current_cycle_index = rep + 1
       for stage in protocol.stages:
@@ -158,8 +157,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
             temperature = step.temperature[0]
             hold_time = step.hold_seconds
             ramp_rate = step.rate if step.rate is not None else None
-            step_index += 1
-            self._current_step_index = step_index
+            self._current_step_index += 1
             await execute_cycle_step(
               driver=self._driver,
               temperature=temperature,
@@ -211,13 +209,13 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
         port = opentrons_ports[0].device
 
     self._driver = await ThermocyclerDriverFactory.create(port, self._loop)
-    assert self._driver is not None
 
   async def stop(self):
     if self._driver is not None:
       await self.deactivate_block()
       await self.deactivate_lid()
       await self._driver.disconnect()
+      self._driver = None
 
   async def open_lid(self):
     assert self._driver is not None
