@@ -15,7 +15,7 @@ try:
   import serial.tools.list_ports
   from opentrons.drivers.thermocycler import ThermocyclerDriverFactory
   from opentrons.drivers.thermocycler.abstract import AbstractThermocyclerDriver
-  from opentrons.drivers.types import PlateTemperature, Temperature, ThermocyclerLidStatus
+  from opentrons.drivers.types import ThermocyclerLidStatus
 
   USE_OPENTRONS_DRIVER = True
   _import_error = None
@@ -113,7 +113,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     """Create a new USB backend."""
     super().__init__()
     if not USE_OPENTRONS_DRIVER:
-      raise _import_error
+      raise RuntimeError("Opentrons thermocycler driver not available") from _import_error
 
     self.driver: Optional[AbstractThermocyclerDriver] = None
     self._current_protocol: Optional[Protocol] = None
