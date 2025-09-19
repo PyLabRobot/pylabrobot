@@ -15,7 +15,7 @@ from pylabrobot.resources import (
   Cor_96_wellplate_360ul_Fb,
   Plate,
   TipRack,
-  hamilton_96_tiprack_1000ul_filter,
+  hamilton_96_tiprack_1000uL_filter,
   no_tip_tracking,
 )
 from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
@@ -26,7 +26,7 @@ from pylabrobot.server.liquid_handling_server import create_app
 def build_layout() -> HamiltonDeck:
   # copied from liquid_handler_tests.py, can we make this shared?
   tip_car = TIP_CAR_480_A00(name="tip_carrier")
-  tip_car[0] = hamilton_96_tiprack_1000ul_filter(name="tip_rack_01")
+  tip_car[0] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_01")
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="aspiration plate")

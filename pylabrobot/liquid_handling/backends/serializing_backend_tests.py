@@ -10,7 +10,7 @@ from pylabrobot.resources import (
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
   STARLetDeck,
-  hamilton_96_tiprack_300ul_filter,
+  hamilton_96_tiprack_300uL_filter,
   no_tip_tracking,
   no_volume_tracking,
 )
@@ -27,7 +27,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[0] = self.tip_rack = hamilton_96_tiprack_300ul_filter(name="tip_rack_01")
+    self.tip_car[0] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")

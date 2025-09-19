@@ -7,7 +7,7 @@ from pylabrobot.liquid_handling.backends.chatterbox import (
 from pylabrobot.resources import (
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
-  hamilton_96_tiprack_1000ul_filter,
+  hamilton_96_tiprack_1000uL_filter,
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 
@@ -19,7 +19,7 @@ class ChatterboxBackendTests(unittest.IsolatedAsyncioTestCase):
     self.deck = STARLetDeck()
     self.backend = LiquidHandlerChatterboxBackend(num_channels=8)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
-    self.tip_rack = hamilton_96_tiprack_1000ul_filter(name="tip_rack")
+    self.tip_rack = hamilton_96_tiprack_1000uL_filter(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=3)
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, rails=9)

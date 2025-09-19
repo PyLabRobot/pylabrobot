@@ -24,7 +24,7 @@ from .tip_creators import (
 # # # # # # # # # # 10 ul Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_10ul_filter(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_10uL_filter(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235936 (CORE-II: conductive)
   Hamilton name: 'LTF'
   Tip Rack with 96x 10ul Low Volume Tip with filter
@@ -34,7 +34,7 @@ def hamilton_96_tiprack_10ul_filter(name: str, with_tips: bool = True) -> TipRac
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="Hamilton_96_tiprack_10ul_filter",
+    model=hamilton_96_tiprack_10uL_filter.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -53,7 +53,7 @@ def hamilton_96_tiprack_10ul_filter(name: str, with_tips: bool = True) -> TipRac
 
 
 # TODO: identify cat number
-def hamilton_96_tiprack_10ul(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: ?
   Hamilton name: 'LT'
   Tip Rack with 96x 10ul Low Volume Tip"""
@@ -62,7 +62,7 @@ def hamilton_96_tiprack_10ul(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="Hamilton_96_tiprack_10ul",
+    model=hamilton_96_tiprack_10uL.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -83,7 +83,7 @@ def hamilton_96_tiprack_10ul(name: str, with_tips: bool = True) -> TipRack:
 # # # # # # # # # # 50 ul Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_50ul_filter(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_50uL_filter(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235979 (CORE-II: conductive)
   Hamilton name: 'TIP_50ul'
   Tip Rack with 96x 50ul Tip"""
@@ -92,7 +92,7 @@ def hamilton_96_tiprack_50ul_filter(name: str, with_tips: bool = True) -> TipRac
     size_x=122.4,
     size_y=82.6,
     size_z=18.0,
-    model="Hamilton_96_tiprack_50ul_filter",
+    model=hamilton_96_tiprack_50uL_filter.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -110,7 +110,7 @@ def hamilton_96_tiprack_50ul_filter(name: str, with_tips: bool = True) -> TipRac
   )
 
 
-def hamilton_96_tiprack_50ul(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235978 (CORE-II: conductive)
   Hamilton name: 'TIP_50ul'
   Tip Rack with 96x 50ul Tip no filter"""
@@ -119,7 +119,7 @@ def hamilton_96_tiprack_50ul(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=18.0,
-    model="Hamilton_96_tiprack_50ul",
+    model=hamilton_96_tiprack_50uL.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -137,7 +137,7 @@ def hamilton_96_tiprack_50ul(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-def hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> NestedTipRack:
+def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> NestedTipRack:
   """Hamilton cat. no.: 235983 (CORE-II:conductive), 235964 (CORE-II: clear)
   Nested Tip Rack with 96x 50ul Tips
   No filter
@@ -147,7 +147,7 @@ def hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> NestedTip
     size_x=127.76,
     size_y=85.48,
     size_z=56.0,  # Hamilton_96_tiprack_50ul_NTR + TIP_50ul_L.fitting_depth
-    model="Hamilton_96_tiprack_50ul_NTR",
+    model=hamilton_96_tiprack_50uL_NTR.__name__,
     stacking_z_height=16.0,
     ordered_items=create_ordered_items_2d(
       TipSpot,
@@ -170,7 +170,7 @@ def hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> NestedTip
 # # # # # # # # # # 3000 ul Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_300ul_filter(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235938 (CORE-II: conductive), 235903 (CORE-I: conductive)
   Hamilton name: 'STF'
   Tip Rack with 96x 300ul Standard Volume Tip with filter"""
@@ -179,7 +179,7 @@ def hamilton_96_tiprack_300ul_filter(name: str, with_tips: bool = True) -> TipRa
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="Hamilton_96_tiprack_300ul_filter",
+    model=hamilton_96_tiprack_300uL_filter.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -197,7 +197,7 @@ def hamilton_96_tiprack_300ul_filter(name: str, with_tips: bool = True) -> TipRa
   )
 
 
-def hamilton_96_tiprack_300ul(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235937 (CORE-II: conductive)
   Hamilton name: 'ST'
   Tip Rack with 96x 300ul Standard Volume Tip"""
@@ -206,7 +206,7 @@ def hamilton_96_tiprack_300ul(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="Hamilton_96_tiprack_300ul",
+    model=hamilton_96_tiprack_300uL.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -224,7 +224,7 @@ def hamilton_96_tiprack_300ul(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-def hamilton_96_tiprack_300ul_filter_slim(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235646 (CORE-II: conductive)
   Hamilton name: 'STF_Slim'
   Tip Rack with 96x 300ul Slim Standard Volume Tip with filter"""
@@ -233,7 +233,7 @@ def hamilton_96_tiprack_300ul_filter_slim(name: str, with_tips: bool = True) -> 
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="Hamilton_96_tiprack_300ul_filter_slim",
+    model=hamilton_96_tiprack_300uL_filter_slim.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -251,10 +251,10 @@ def hamilton_96_tiprack_300ul_filter_slim(name: str, with_tips: bool = True) -> 
   )
 
 
-# # # # # # # # # # 1_000 ul Tips # # # # # # # # # #
+# # # # # # # # # # 1_000 uL Tips # # # # # # # # # #
 
 
-def hamilton_96_tiprack_1000ul_filter(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235940 (CORE-II: conductive), 235905 (CORE-I: conductive)
   Hamilton name: 'HTF'
   Tip Rack with 96x 1000ul High Volume Tip with filter
@@ -264,7 +264,7 @@ def hamilton_96_tiprack_1000ul_filter(name: str, with_tips: bool = True) -> TipR
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="Hamilton_96_tiprack_1000ul_filter",
+    model=hamilton_96_tiprack_1000uL_filter.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -282,7 +282,7 @@ def hamilton_96_tiprack_1000ul_filter(name: str, with_tips: bool = True) -> TipR
   )
 
 
-def hamilton_96_tiprack_1000ul(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_1000uL(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235822 (CORE-II: clear tips)
   Hamilton name: 'HT'
   Tip Rack with 96x 1000ul High Volume Tip"""
@@ -291,7 +291,7 @@ def hamilton_96_tiprack_1000ul(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="Hamilton_96_tiprack_1000ul",
+    model=hamilton_96_tiprack_1000uL.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -309,7 +309,7 @@ def hamilton_96_tiprack_1000ul(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-def hamilton_96_tiprack_1000ul_filter_wide(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_1000uL_filter_wide(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.:
 
   core-ii:
@@ -329,7 +329,7 @@ def hamilton_96_tiprack_1000ul_filter_wide(name: str, with_tips: bool = True) ->
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=hamilton_96_tiprack_1000ul_filter_wide.__name__,
+    model=hamilton_96_tiprack_1000uL_filter_wide.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -347,7 +347,7 @@ def hamilton_96_tiprack_1000ul_filter_wide(name: str, with_tips: bool = True) ->
   )
 
 
-def hamilton_96_tiprack_1000ul_filter_ultrawide(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_96_tiprack_1000uL_filter_ultrawide(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.:
 
   core-ii:
@@ -367,7 +367,7 @@ def hamilton_96_tiprack_1000ul_filter_ultrawide(name: str, with_tips: bool = Tru
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=hamilton_96_tiprack_1000ul_filter_ultrawide.__name__,
+    model=hamilton_96_tiprack_1000uL_filter_ultrawide.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -388,7 +388,7 @@ def hamilton_96_tiprack_1000ul_filter_ultrawide(name: str, with_tips: bool = Tru
 # # # # # # # # # # 4 ml Tips # # # # # # # # # #
 
 
-def hamilton_24_tiprack_4000ul_filter(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_24_tiprack_4000uL_filter(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 184021 (non-sterile), 184023 (sterile)
   Hamilton name: 'FourmlTF'
   Tip Rack 24x 4ml Tip with Filter landscape oriented"""
@@ -397,7 +397,7 @@ def hamilton_24_tiprack_4000ul_filter(name: str, with_tips: bool = True) -> TipR
     size_x=122.4,
     size_y=82.6,
     size_z=7.0,
-    model=hamilton_24_tiprack_4000ul_filter.__name__,
+    model=hamilton_24_tiprack_4000uL_filter.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,
@@ -418,7 +418,7 @@ def hamilton_24_tiprack_4000ul_filter(name: str, with_tips: bool = True) -> TipR
 # # # # # # # # # # 5 ml Tips # # # # # # # # # #
 
 
-def hamilton_24_tiprack_5000ul(name: str, with_tips: bool = True) -> TipRack:
+def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 184020 (non-sterile), 184022 (sterile)
   Hamilton name: 'FivemlT'
   Tip Rack 24x 5ml Tip landscape oriented"""
@@ -427,7 +427,7 @@ def hamilton_24_tiprack_5000ul(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=7.0,
-    model=hamilton_24_tiprack_5000ul.__name__,
+    model=hamilton_24_tiprack_5000uL.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,

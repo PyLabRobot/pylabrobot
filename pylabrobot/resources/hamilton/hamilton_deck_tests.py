@@ -8,8 +8,8 @@ from pylabrobot.resources.hamilton import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
   STARLetDeck,
-  hamilton_96_tiprack_300ul_filter,
-  hamilton_96_tiprack_1000ul_filter,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_1000uL_filter,
 )
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,
@@ -24,9 +24,9 @@ class HamiltonDeckTests(unittest.TestCase):
     deck = STARLetDeck()
 
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = hamilton_96_tiprack_300ul_filter(name="tip_rack_01")
-    tip_car[1] = hamilton_96_tiprack_300ul_filter(name="tip_rack_02")
-    tip_car[3] = hamilton_96_tiprack_1000ul_filter(name="tip_rack_04")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    tip_car[1] = hamilton_96_tiprack_300uL_filter(name="tip_rack_02")
+    tip_car[3] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
