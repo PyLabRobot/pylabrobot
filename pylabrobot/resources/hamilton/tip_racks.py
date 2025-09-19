@@ -368,9 +368,8 @@ def HTF_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
 # # # # # # # # # # 4 ml Tips # # # # # # # # # #
 
 
-# TODO: identify cat number and update naming accordingly
-def FourmlTF(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: ?
+def hamilton_24_tiprack_4000ul_filter(name: str, with_tips: bool = True) -> TipRack:
+  """Hamilton cat. no.: 184021 (non-sterile), 184023 (sterile)
   Hamilton name: 'FourmlTF'
   Tip Rack 24x 4ml Tip with Filter landscape oriented"""
   return TipRack(
@@ -378,7 +377,7 @@ def FourmlTF(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=7.0,
-    model="FourmlTF",
+    model=hamilton_24_tiprack_4000ul_filter.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,
@@ -399,9 +398,8 @@ def FourmlTF(name: str, with_tips: bool = True) -> TipRack:
 # # # # # # # # # # 5 ml Tips # # # # # # # # # #
 
 
-# TODO: identify cat number and update naming accordingly
-def FivemlT(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: ?
+def hamilton_24_tiprack_5000ul(name: str, with_tips: bool = True) -> TipRack:
+  """Hamilton cat. no.: 184020 (non-sterile), 184022 (sterile)
   Hamilton name: 'FivemlT'
   Tip Rack 24x 5ml Tip landscape oriented"""
   return TipRack(
@@ -409,7 +407,7 @@ def FivemlT(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=7.0,
-    model="FivemlT",
+    model=hamilton_24_tiprack_5000ul.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,
