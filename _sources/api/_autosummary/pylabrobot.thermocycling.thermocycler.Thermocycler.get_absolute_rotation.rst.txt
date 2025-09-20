@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.get\_absolute\_rotation
+==========================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.get_absolute_rotation

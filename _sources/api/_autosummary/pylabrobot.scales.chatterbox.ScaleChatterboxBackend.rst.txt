@@ -1,0 +1,29 @@
+﻿pylabrobot.scales.chatterbox.ScaleChatterboxBackend
+===================================================
+
+.. currentmodule:: pylabrobot.scales.chatterbox
+
+.. autoclass:: ScaleChatterboxBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ScaleChatterboxBackend.__init__
+      ~ScaleChatterboxBackend.deserialize
+      ~ScaleChatterboxBackend.get_all_instances
+      ~ScaleChatterboxBackend.get_weight
+      ~ScaleChatterboxBackend.serialize
+      ~ScaleChatterboxBackend.setup
+      ~ScaleChatterboxBackend.stop
+      ~ScaleChatterboxBackend.tare
+      ~ScaleChatterboxBackend.zero
+   
+   
