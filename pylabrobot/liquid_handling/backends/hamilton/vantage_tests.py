@@ -15,7 +15,7 @@ from pylabrobot.resources import (
 from pylabrobot.resources.hamilton import VantageDeck
 
 from .vantage_backend import (
-  Vantage,
+  VantageBackend,
   VantageFirmwareError,
   parse_vantage_fw_string,
   vantage_response_string_to_error,
@@ -203,7 +203,7 @@ class TestVantageResponseParsing(unittest.TestCase):
     )
 
 
-class VantageCommandCatcher(Vantage):
+class VantageCommandCatcher(VantageBackend):
   """Mock backend for Vantage that catches commands and saves them instead of sending them to the
   machine."""
 

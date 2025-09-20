@@ -29,10 +29,10 @@ from pylabrobot.resources import (
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
 
 from .STAR_backend import (
-  STAR,
   CommandSyntaxError,
   HamiltonNoTipError,
   HardwareError,
+  STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,
   parse_star_fw_string,
@@ -44,7 +44,7 @@ class TestSTARResponseParsing(unittest.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.star = STAR()
+    self.star = STARBackend()
 
   def test_parse_response_params(self):
     parsed = parse_star_fw_string("C0QMid1111", "")
@@ -144,7 +144,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   """Test that USB data is parsed correctly."""
 
   async def asyncSetUp(self):
-    self.star = STAR(read_timeout=2, packet_read_timeout=1)
+    self.star = STARBackend(read_timeout=2, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
     self.star.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
@@ -165,7 +165,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
       await self.star.send_command("C0", command="QM", fmt="id####")
 
 
-class STARCommandCatcher(STAR):
+class STARCommandCatcher(STARBackend):
   """Mock backend for star that catches commands and saves them instead of sending them to the
   machine."""
 
@@ -203,7 +203,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   """Test STAR backend for liquid handling."""
 
   async def asyncSetUp(self):
-    self.STAR = STAR(read_timeout=1)
+    self.STAR = STARBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
     self.STAR.io = unittest.mock.MagicMock()
     self.STAR.io.setup = unittest.mock.AsyncMock()
@@ -902,10 +902,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   def test_serialize(self):
-    serialized = LiquidHandler(backend=STAR(), deck=STARLetDeck()).serialize()
+    serialized = LiquidHandler(backend=STARBackend(), deck=STARLetDeck()).serialize()
     deserialized = LiquidHandler.deserialize(serialized)
     self.assertEqual(deserialized.__class__.__name__, "LiquidHandler")
-    self.assertEqual(deserialized.backend.__class__.__name__, "STAR")
+    self.assertEqual(deserialized.backend.__class__.__name__, "STARBackend")
 
   async def test_move_core(self):
     self.plt_car[1].resource.unassign()
@@ -939,7 +939,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
 class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.STAR = STAR()
+    self.STAR = STARBackend()
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
@@ -1066,7 +1066,7 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
 
 class STARFoilTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.star = STAR()
+    self.star = STARBackend()
     self.star._write_and_read_command = unittest.mock.AsyncMock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.star, deck=self.deck)
