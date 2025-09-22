@@ -104,17 +104,25 @@ class Cytation5ImagingConfig:
   filters: Optional[List[Optional[ImagingMode]]] = None
 
 
-@contextmanager
-def try_often(times: int = 50):
-  """needed because the pyspin api is extremely unreliable."""
-  for i in range(times):
+def retry(func, *args, **kwargs):
+  """Call func with retries and logging."""
+  max_tries = 10
+  delay = 0.1
+  tries = 0
+  while True:
     try:
-      yield
-      break
-    except PySpin.SpinnakerException as e:
-      print(f"Attempt {i+1}/{times}: Unable to use spinnaker: {e}")
-  else:
-    raise RuntimeError("Unable to do it")
+      return func(*args, **kwargs)
+    except SpinnakerException as ex:
+      tries += 1
+      if tries >= max_tries:
+        raise RuntimeError(f"Failed after {max_tries} tries") from ex
+      logger.warning(
+        "Retry %d/%d failed: %s",
+        tries,
+        max_tries,
+        str(ex),
+      )
+      time.sleep(delay)
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -875,13 +883,13 @@ class Cytation5Backend(ImageReaderBackend):
   def start_acquisition(self):
     if self.cam is None:
       raise RuntimeError("Camera is not initialized.")
-    self.cam.BeginAcquisition()
+    retry(self.cam.BeginAcquisition)
     self._acquiring = True
 
   def stop_acquisition(self):
     if self.cam is None:
       raise RuntimeError("Camera is not initialized.")
-    self.cam.EndAcquisition()
+    retry(self.cam.EndAcquisition)
     self._acquiring = False
 
   async def led_on(self, intensity: int = 10):
@@ -1039,14 +1047,14 @@ class Cytation5Backend(ImageReaderBackend):
     if self.cam.ExposureAuto.GetAccessMode() != PySpin.RW:
       raise RuntimeError("unable to write ExposureAuto")
 
-    with try_often():
-      self.cam.ExposureAuto.SetValue(
-        {
-          "off": PySpin.ExposureAuto_Off,
-          "once": PySpin.ExposureAuto_Once,
-          "continuous": PySpin.ExposureAuto_Continuous,
-        }[auto_exposure]
-      )
+    retry(
+      self.cam.ExposureAuto.SetValue,
+      {
+        "off": PySpin.ExposureAuto_Off,
+        "once": PySpin.ExposureAuto_Once,
+        "continuous": PySpin.ExposureAuto_Continuous,
+      }[auto_exposure],
+    )
 
   async def set_exposure(self, exposure: Exposure):
     """exposure (integration time) in ms, or "machine-auto" """
@@ -1065,23 +1073,19 @@ class Cytation5Backend(ImageReaderBackend):
         self._exposure = "machine-auto"
         return
       raise ValueError("exposure must be a number or 'auto'")
-    with try_often():
-      self.cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
+    retry(self.cam.ExposureAuto.SetValue, PySpin.ExposureAuto_Off)
 
     # set exposure time (in microseconds)
     if self.cam.ExposureTime.GetAccessMode() != PySpin.RW:
       raise RuntimeError("unable to write ExposureTime")
     exposure_us = int(exposure * 1000)
-    with try_often():
-      min_et = self.cam.ExposureTime.GetMin()
+    min_et = retry(self.cam.ExposureTime.GetMin)
     if exposure_us < min_et:
       raise ValueError(f"exposure must be >= {min_et}")
-    with try_often():
-      max_et = self.cam.ExposureTime.GetMax()
+    max_et = retry(self.cam.ExposureTime.GetMax)
     if exposure_us > max_et:
       raise ValueError(f"exposure must be <= {max_et}")
-    with try_often():
-      self.cam.ExposureTime.SetValue(exposure_us)
+    retry(self.cam.ExposureTime.SetValue, exposure_us)
     self._exposure = exposure
 
   async def select(self, row: int, column: int):
@@ -1239,9 +1243,13 @@ class Cytation5Backend(ImageReaderBackend):
           return image_converted.GetNDArray()  # type: ignore
       except SpinnakerException as e:
         # the image is not ready yet, try again
-        logger.debug("Failed to get image: %s", e)
+        logger.warning("Failed to get image: %s", e)
         self.stop_acquisition()
         self.start_acquisition()
+        if "[-1011]" in str(e):
+          logger.warning(
+            "[-1011] error might occur when the camera is plugged into a USB hub that does not have enough throughput."
+          )
 
       num_tries += 1
       await asyncio.sleep(0.3)
