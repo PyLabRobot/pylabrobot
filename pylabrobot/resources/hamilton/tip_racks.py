@@ -167,7 +167,7 @@ def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> NestedTip
   )
 
 
-# # # # # # # # # # 3000 ul Tips # # # # # # # # # #
+# # # # # # # # # # 300 ul Tips # # # # # # # # # #
 
 
 def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRack:
