@@ -5,7 +5,6 @@ import logging
 import math
 import re
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Tuple, Union, cast
 
@@ -883,12 +882,16 @@ class Cytation5Backend(ImageReaderBackend):
   def start_acquisition(self):
     if self.cam is None:
       raise RuntimeError("Camera is not initialized.")
+    if self._acquiring:
+      return
     retry(self.cam.BeginAcquisition)
     self._acquiring = True
 
   def stop_acquisition(self):
     if self.cam is None:
       raise RuntimeError("Camera is not initialized.")
+    if not self._acquiring:
+      return
     retry(self.cam.EndAcquisition)
     self._acquiring = False
 
