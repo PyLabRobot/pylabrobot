@@ -8,24 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Tuple, Union, cast
 
-try:
-  import cv2  # type: ignore
-
-  CV2_AVAILABLE = True
-except ImportError as e:
-  cv2 = None  # type: ignore
-  CV2_AVAILABLE = False
-  _CV2_IMPORT_ERROR = e
-
 from pylabrobot.resources.plate import Plate
-
-try:
-  import numpy as np  # type: ignore
-
-  USE_NUMPY = True
-except ImportError as e:
-  USE_NUMPY = False
-  _NUMPY_IMPORT_ERROR = e
 
 try:
   import PySpin  # type: ignore
@@ -56,41 +39,6 @@ SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = (
 )
 PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
 SpinnakerException = PySpin.SpinnakerException if USE_PYSPIN else Exception
-
-
-async def _golden_ratio_search(
-  func: Callable[..., Coroutine[Any, Any, float]], a: float, b: float, tol: float, timeout: float
-):
-  """Golden ratio search to maximize a unimodal function `func` over the interval [a, b]."""
-  # thanks chat
-  phi = (1 + np.sqrt(5)) / 2  # Golden ratio
-
-  c = b - (b - a) / phi
-  d = a + (b - a) / phi
-
-  cache: Dict[float, float] = {}
-
-  async def cached_func(x: float) -> float:
-    x = round(x / tol) * tol  # round x to units of tol
-    if x not in cache:
-      cache[x] = await func(x)
-    return cache[x]
-
-  t0 = time.time()
-  iteration = 0
-  while abs(b - a) > tol:
-    if (await cached_func(c)) > (await cached_func(d)):
-      b = d
-    else:
-      a = c
-    c = b - (b - a) / phi
-    d = a + (b - a) / phi
-    if time.time() - t0 > timeout:
-      raise TimeoutError("Timeout while searching for optimal focus position")
-    iteration += 1
-    logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
-
-  return (b + a) / 2
 
 
 @dataclass
@@ -156,7 +104,6 @@ class Cytation5Backend(ImageReaderBackend):
     self._imaging_mode: Optional["ImagingMode"] = None
     self._row: Optional[int] = None
     self._column: Optional[int] = None
-    self._auto_focus_search_range: Tuple[float, float] = (1.8, 2.5)
     self._shaking = False
     self._pos_x: Optional[float] = None
     self._pos_y: Optional[float] = None
@@ -912,8 +859,9 @@ class Cytation5Backend(ImageReaderBackend):
     """focus position in mm"""
 
     if focal_position == "machine-auto":
-      await self.auto_focus()
-      return
+      raise ValueError(
+        "focal_position cannot be 'machine-auto'. Use the PLR Imager universal autofocus instead."
+      )
 
     if focal_position == self._focal_height:
       logger.debug("Focus position is already set to %s", focal_position)
@@ -976,77 +924,6 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._pos_x, self._pos_y = x, y
     await asyncio.sleep(0.1)
-
-  def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
-    self._auto_focus_search_range = (min_focal_height, max_focal_height)
-
-  async def auto_focus(self, timeout: float = 30):
-    """Set auto focus search range with set_auto_focus_search_range()."""
-
-    plate = self._plate
-    if plate is None:
-      raise RuntimeError("Plate not set. Run set_plate() first.")
-    imaging_mode = self._imaging_mode
-    if imaging_mode is None:
-      raise RuntimeError("Imaging mode not set. Run set_imaging_mode() first.")
-    objective = self._objective
-    if objective is None:
-      raise RuntimeError("Objective not set. Run set_objective() first.")
-    exposure = self._exposure
-    if exposure is None:
-      raise RuntimeError("Exposure time not set. Run set_exposure() first.")
-    gain = self._gain
-    if gain is None:
-      raise RuntimeError("Gain not set. Run set_gain() first.")
-    row, column = self._row, self._column
-    if row is None or column is None:
-      raise RuntimeError("Row and column not set. Run select() first.")
-    if not USE_NUMPY:
-      # This is strange, because Spinnaker requires numpy
-      raise RuntimeError(
-        "numpy is not installed. See Cytation5 installation instructions. "
-        f"Import error: {_NUMPY_IMPORT_ERROR}"
-      )
-
-    # objective function: variance of laplacian
-    async def evaluate_focus(focus_value):
-      await self.set_focus(focus_value)
-      image = await self._acquire_image()
-
-      if not CV2_AVAILABLE:
-        raise RuntimeError(
-          f"cv2 needs to be installed for auto focus. Import error: {_CV2_IMPORT_ERROR}"
-        )
-
-      # cut out 25% on each side
-      np_image = np.array(image, dtype=np.float64)
-      height, width = np_image.shape[:2]
-      crop_height = height // 4
-      crop_width = width // 4
-      np_image = np_image[crop_height : height - crop_height, crop_width : width - crop_width]
-
-      # NVMG: Normalized Variance of the Gradient Magnitude
-      # Chat invented this i think
-      sobel_x = cv2.Sobel(np_image, cv2.CV_64F, 1, 0, ksize=3)
-      sobel_y = cv2.Sobel(np_image, cv2.CV_64F, 0, 1, ksize=3)
-      gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
-
-      mean_gm = np.mean(gradient_magnitude)
-      var_gm = np.var(gradient_magnitude)
-      sharpness = var_gm / (mean_gm + 1e-6)
-      return sharpness
-
-    # Use golden ratio search to find the best focus value
-    focus_min, focus_max = self._auto_focus_search_range
-    best_focal_height = await _golden_ratio_search(
-      func=evaluate_focus,
-      a=focus_min,
-      b=focus_max,
-      tol=0.001,  # 1 micron
-      timeout=timeout,
-    )
-    self._focal_height = best_focal_height
-    return best_focal_height
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self.cam is None:
