@@ -158,7 +158,8 @@ class Cytation5Backend(ImageReaderBackend):
     self._column: Optional[int] = None
     self._auto_focus_search_range: Tuple[float, float] = (1.8, 2.5)
     self._shaking = False
-    self._pos_x, self._pos_y = 0.0, 0.0
+    self._pos_x: Optional[float] = None
+    self._pos_y: Optional[float] = None
     self._objective: Optional[Objective] = None
     self._slow_mode: Optional[bool] = None
 
@@ -941,6 +942,10 @@ class Cytation5Backend(ImageReaderBackend):
     if self._imaging_mode is None:
       raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
 
+    if x == self._pos_x and y == self._pos_y:
+      logger.debug("Position is already set to (%s, %s)", x, y)
+      return
+
     # firmware is in (10/0.984 (10/0.984))um units. plr is mm. To convert
     x_str, y_str = (
       str(round(x * 100 * 0.984)).zfill(6),
@@ -961,7 +966,7 @@ class Cytation5Backend(ImageReaderBackend):
       "Y", f"Z{objective_code}{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
     )
 
-    relative_x, relative_y = x - self._pos_x, y - self._pos_y
+    relative_x, relative_y = x - (self._pos_x or 0), y - (self._pos_y or 0)
     if relative_x != 0:
       relative_x_str = str(round(relative_x * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O00{relative_x_str}")
@@ -969,8 +974,8 @@ class Cytation5Backend(ImageReaderBackend):
       relative_y_str = str(round(relative_y * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O01{relative_y_str}")
 
-    if relative_x != 0 or relative_y != 0:
-      await asyncio.sleep(0.1)
+    self._pos_x, self._pos_y = x, y
+    await asyncio.sleep(0.1)
 
   def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
     self._auto_focus_search_range = (min_focal_height, max_focal_height)
@@ -1098,7 +1103,7 @@ class Cytation5Backend(ImageReaderBackend):
     row_str, column_str = str(row).zfill(2), str(column).zfill(2)
     await self.send_command("Y", f"W6{row_str}{column_str}")
     self._row, self._column = row, column
-    self._pos_x, self._pos_y = 0, 0
+    self._pos_x, self._pos_y = None, None
     await self.set_position(0, 0)
 
   async def set_gain(self, gain: Gain):
