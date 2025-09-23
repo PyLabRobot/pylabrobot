@@ -6,7 +6,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Tuple, Union, cast
+from typing import List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.resources.plate import Plate
 
