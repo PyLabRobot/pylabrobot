@@ -2,7 +2,7 @@ import unittest
 
 import pytest
 
-from pylabrobot.arms.backend import CartesianCoords, ElbowOrientation, JointCoords
+from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
 
 @pytest.mark.hardware  # include/exclude via "pytest -m hardware"

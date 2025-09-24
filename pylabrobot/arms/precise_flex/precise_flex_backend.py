@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
-from pylabrobot.arms.backend import ArmBackend, CartesianCoords, ElbowOrientation, JointCoords
+from pylabrobot.arms.backend import ArmBackend
+from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
 
 

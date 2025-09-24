@@ -1,5 +1,6 @@
 
-from pylabrobot.arms.backend import ArmBackend, CartesianCoords, JointCoords
+from pylabrobot.arms.backend import ArmBackend
+from pylabrobot.arms.coords import CartesianCoords, JointCoords
 from pylabrobot.machines.machine import Machine
 
 
