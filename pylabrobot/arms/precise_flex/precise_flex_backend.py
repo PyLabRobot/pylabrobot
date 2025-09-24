@@ -310,7 +310,9 @@ class PreciseFlexBackend(ArmBackend, ABC):
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
-  async def place_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
+  async def place_plate(
+    self, position: Union[CartesianCoords, JointCoords], approach_height: float
+  ):
     """Place a plate at the specified position."""
     if type(position) == JointCoords:
       raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")

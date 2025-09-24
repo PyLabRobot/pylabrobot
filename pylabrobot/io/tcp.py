@@ -1,11 +1,11 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from pylabrobot.io.io import IOBase
 from typing import Optional
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 logger = logging.getLogger(__name__)
