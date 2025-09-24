@@ -1,3 +1,4 @@
+from typing import Union
 from pylabrobot.arms.backend import ArmBackend
 from pylabrobot.arms.coords import CartesianCoords, JointCoords
 from pylabrobot.machines.machine import Machine
@@ -10,7 +11,7 @@ class Arm(Machine):
     super().__init__(backend=backend)
     self.backend = backend
 
-  async def move_to(self, position: CartesianCoords | JointCoords):
+  async def move_to(self, position: Union[CartesianCoords, JointCoords]):
     """Move the arm to a specified position in 3D space."""
     return self.backend.move_to(position)
 
@@ -54,14 +55,14 @@ class Arm(Machine):
     """Move the arm to a predefined safe position."""
     return await self.backend.move_to_safe()
 
-  async def approach(self, position: CartesianCoords | JointCoords, approach_height: float):
+  async def approach(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Move the arm to a position above the specified coordinates by a certain distance."""
     return await self.backend.approach(position, approach_height)
 
-  async def pick_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
+  async def pick_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Pick a plate from the specified position."""
     return await self.backend.pick_plate(position, approach_height)
 
-  async def place_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
+  async def place_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Place a plate at the specified position."""
     return await self.backend.place_plate(position, approach_height)

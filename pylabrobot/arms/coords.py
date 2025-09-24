@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 
 class ElbowOrientation(Enum):
@@ -25,4 +26,4 @@ class CartesianCoords:
   yaw: float
   pitch: float
   roll: float
-  orientation: ElbowOrientation | None = None
+  orientation: Optional[ElbowOrientation] = None
