@@ -1989,7 +1989,7 @@ class PreciseFlexBackendApi:
     """
     await self.send_command(f"teachplate {position_id} {z_clearance}")
 
-  async def send_command(self, command: str):
+  async def send_command(self, command: str) -> str:
     await self.io.write(command.encode("utf-8") + b"\n")
     await asyncio.sleep(0.2)  # wait a bit for the robot to process the command
     reply = await self.io.readline()
