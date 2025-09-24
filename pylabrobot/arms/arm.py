@@ -1,4 +1,5 @@
 from typing import Union
+
 from pylabrobot.arms.backend import ArmBackend
 from pylabrobot.arms.coords import CartesianCoords, JointCoords
 from pylabrobot.machines.machine import Machine
@@ -63,6 +64,8 @@ class Arm(Machine):
     """Pick a plate from the specified position."""
     return await self.backend.pick_plate(position, approach_height)
 
-  async def place_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
+  async def place_plate(
+    self, position: Union[CartesianCoords, JointCoords], approach_height: float
+  ):
     """Place a plate at the specified position."""
     return await self.backend.place_plate(position, approach_height)

@@ -59,7 +59,9 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
     ...
 
   @abstractmethod
-  async def place_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
+  async def place_plate(
+    self, position: Union[CartesianCoords, JointCoords], approach_height: float
+  ):
     """Place a plate at the specified position."""
     ...
 
