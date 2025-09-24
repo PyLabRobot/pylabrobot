@@ -1,9 +1,11 @@
 import unittest
 
+import pytest
+
 from pylabrobot.arms.backend import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
 
-
+@pytest.mark.hardware  # include/exclude via "pytest -m hardware"
 class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
     # Connection config

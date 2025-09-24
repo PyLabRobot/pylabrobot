@@ -1,9 +1,11 @@
 import unittest
 import asyncio
+
+import pytest
 from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
 from contextlib import asynccontextmanager
 
-
+@pytest.mark.hardware  # include/exclude via "pytest -m hardware"
 class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
 
