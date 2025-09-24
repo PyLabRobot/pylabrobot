@@ -1267,7 +1267,7 @@ class PreciseFlexBackendApi:
       assert axis_mask > 0, "axis_mask must be greater than 0"
       await self.send_command(f"zeroTorque 1 {axis_mask}")
     else:
-      await self.send_command(f"zeroTorque 0")
+      await self.send_command("zeroTorque 0")
 
   # region PAROBOT COMMANDS
 

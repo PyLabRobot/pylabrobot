@@ -1103,7 +1103,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertLess(abs(new_position[0] - self.TEST_LOCATION_C_LEFT[0]), 2.0)
     self.assertLess(abs(new_position[1] - self.TEST_LOCATION_C_LEFT[1]), 2.0)
     self.assertLess(abs(new_position[2] - self.TEST_LOCATION_C_LEFT[2]), 2.0)
-    print(f"Move Cartesian completed successfully")
+    print("Move Cartesian completed successfully")
 
   async def test_move_j(self) -> None:
     """Test move_j() command"""
@@ -1127,7 +1127,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
         else:
           self.assertLess(abs(expected - actual), 1.0, f"Joint {i+1} position mismatch")
 
-      print(f"Move joints completed successfully")
+      print("Move joints completed successfully")
 
     finally:
       # Return to original position
@@ -1361,7 +1361,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       abs(orig - safe) > 1.0 for orig, safe in zip(original_position[:6], safe_position[:6])
     )
 
-    print(f"Move to safe position completed successfully")
+    print("Move to safe position completed successfully")
     print(f"Position changed: {position_changed}")
 
   async def test_set_pallet_index(self) -> None:
@@ -1748,8 +1748,8 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
       gripper_name = "A" if active_gripper == 1 else "B"
       print(f"Active gripper: {active_gripper} (Gripper {gripper_name})")
-    except:
-      print("Dual gripper not available, skipping get_active_gripper test")
+    except Exception as e:
+      print(f"Dual gripper not available, skipping get_active_gripper test: {e}")
 
   async def test_free_mode(self) -> None:
     """Test free_mode()"""
@@ -1907,9 +1907,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     # Get original active gripper for restoration
     try:
       original_gripper = await self.robot.get_active_gripper()
-    except:
+    except Exception as e:
       # Skip test if dual gripper not available
-      print("Dual gripper not available, skipping set_active_gripper test")
+      print(f"Dual gripper not available, skipping set_active_gripper test: {e}")
       return
 
     try:
