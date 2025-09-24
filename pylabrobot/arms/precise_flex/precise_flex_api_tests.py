@@ -1,9 +1,11 @@
-import unittest
 import asyncio
+import unittest
+from contextlib import asynccontextmanager
 
 import pytest
+
 from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
-from contextlib import asynccontextmanager
+
 
 @pytest.mark.hardware  # include/exclude via "pytest -m hardware"
 class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
@@ -43,7 +45,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       await self.robot.move_to_safe()
       await self.robot.wait_for_eom()
 
-
     # Snapshot station state that tests might alter
     self._original_station_type = await self.robot.get_station_type(self.TEST_LOCATION_ID)
     self._original_station_location = await self.robot.get_location(self.TEST_LOCATION_ID)
@@ -62,7 +63,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     # Best-effort restore, even if a test failed mid-operation
     try:
-
       # Restore station type
       if hasattr(self, "_original_station_type"):
         await self.robot.set_station_type(*self._original_station_type)
@@ -122,7 +122,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       except Exception as e:
         print(f"Error restoring setting: {e}")
 
-#region GENERAL COMMANDS
+  # region GENERAL COMMANDS
   # async def test_robot_connection_and_version(self) -> None:
   #   """Test basic connection and version info"""
   #   version = await self.robot.get_version()
@@ -136,7 +136,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_base(self) -> None:
     """Test set_base()"""
-    async with self._preserve_setting('get_base', 'set_base'):
+    async with self._preserve_setting("get_base", "set_base"):
       # Test setting to a different base if possible
       test_base = (0, 0, 0, 0)
       print(f"Setting test base to: {test_base}")
@@ -172,7 +172,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertIn(mode, [0, 1])
     print(f"Current mode: {mode}")
 
-
   async def test_get_monitor_speed(self) -> None:
     """Test get_monitor_speed()"""
     speed = await self.robot.get_monitor_speed()
@@ -183,7 +182,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_monitor_speed(self) -> None:
     """Test set_monitor_speed()"""
-    async with self._preserve_setting('get_monitor_speed', 'set_monitor_speed'):
+    async with self._preserve_setting("get_monitor_speed", "set_monitor_speed"):
       # Test setting different speeds
       test_speed = 50
       await self.robot.set_monitor_speed(test_speed)
@@ -206,7 +205,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_payload(self) -> None:
     """Test set_payload()"""
-    async with self._preserve_setting('get_payload', 'set_payload'):
+    async with self._preserve_setting("get_payload", "set_payload"):
       # Test setting different payload values
       test_payload = 25
       await self.robot.set_payload(test_payload)
@@ -240,7 +239,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_select_robot(self) -> None:
     """Test select_robot()"""
-    async with self._preserve_setting('get_selected_robot', 'select_robot'):
+    async with self._preserve_setting("get_selected_robot", "select_robot"):
       # Test selecting robot 1
       await self.robot.select_robot(1)
       selected = await self.robot.get_selected_robot()
@@ -288,7 +287,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_tool(self) -> None:
     """Test set_tool()"""
-    async with self._preserve_setting('get_tool', 'set_tool'):
+    async with self._preserve_setting("get_tool", "set_tool"):
       # Test setting tool transformation
       test_tool = (10.0, 20.0, 30.0, 0.0, 0.0, 0.0)
       await self.robot.set_tool(*test_tool)
@@ -296,11 +295,15 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       current_tool = await self.robot.get_tool()
       # Allow for small floating point differences
       for i, (expected, actual) in enumerate(zip(test_tool, current_tool)):
-        self.assertLess(abs(expected - actual), 0.001, f"Tool value {i} mismatch: expected {expected}, got {actual}")
+        self.assertLess(
+          abs(expected - actual),
+          0.001,
+          f"Tool value {i} mismatch: expected {expected}, got {actual}",
+        )
 
       print(f"Tool transformation set to: {current_tool}")
 
-#region LOCATION COMMANDS
+  # region LOCATION COMMANDS
   async def test_get_location(self) -> None:
     """Test get_location()"""
     location_data = await self.robot.get_location(self.TEST_LOCATION_ID)
@@ -310,7 +313,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(type_code, int)
     self.assertIn(type_code, [0, 1])  # 0 = Cartesian, 1 = angles
     self.assertEqual(station_index, self.TEST_LOCATION_ID)
-    print(f"Location {self.TEST_LOCATION_ID}: type={type_code}, values=({val1}, {val2}, {val3}, {val4}, {val5}, {val6})")
+    print(
+      f"Location {self.TEST_LOCATION_ID}: type={type_code}, values=({val1}, {val2}, {val3}, {val4}, {val5}, {val6})"
+    )
 
   async def test_get_location_angles(self) -> None:
     """Test get_location_angles()"""
@@ -322,7 +327,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6 = location_data
       self.assertEqual(type_code, 1)  # Should be angles type
       self.assertEqual(station_index, self.TEST_LOCATION_ID)
-      print(f"Location angles {self.TEST_LOCATION_ID}: ({angle1}, {angle2}, {angle3}, {angle4}, {angle5}, {angle6})")
+      print(
+        f"Location angles {self.TEST_LOCATION_ID}: ({angle1}, {angle2}, {angle3}, {angle4}, {angle5}, {angle6})"
+      )
     except Exception as e:
       print(f"Location {self.TEST_LOCATION_ID} is not angles type or error occurred: {e}")
 
@@ -333,7 +340,14 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     try:
       # Test setting angles
-      test_angles = (15.0, 25.0, 35.0, 45.0, 55.0, 0.0) # last is set to 0.0 as angle7 is typically unused on PF400, some other robots may use fewer angles
+      test_angles = (
+        15.0,
+        25.0,
+        35.0,
+        45.0,
+        55.0,
+        0.0,
+      )  # last is set to 0.0 as angle7 is typically unused on PF400, some other robots may use fewer angles
       await self.robot.set_location_angles(self.TEST_LOCATION_ID, *test_angles)
 
       # Verify the angles were set
@@ -343,7 +357,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       # Check first 6 angles (angle7 is typically 0)
       retrieved_angles = (angle1, angle2, angle3, angle4, angle5, angle6)
       for i, (expected, actual) in enumerate(zip(test_angles, retrieved_angles)):
-        self.assertLess(abs(expected - actual), 0.001, f"Angle {i+1} mismatch: expected {expected}, got {actual}")
+        self.assertLess(
+          abs(expected - actual), 0.001, f"Angle {i+1} mismatch: expected {expected}, got {actual}"
+        )
 
       print(f"Location angles set successfully: {retrieved_angles}")
 
@@ -365,7 +381,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       type_code, station_index, x, y, z, yaw, pitch, roll = location_data
       self.assertEqual(type_code, 0)  # Should be Cartesian type
       self.assertEqual(station_index, self.TEST_LOCATION_ID)
-      print(f"Location XYZ {self.TEST_LOCATION_ID}: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}")
+      print(
+        f"Location XYZ {self.TEST_LOCATION_ID}: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}"
+      )
     except Exception as e:
       print(f"Location {self.TEST_LOCATION_ID} is not Cartesian type or error occurred: {e}")
 
@@ -385,7 +403,11 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
       retrieved_coords = (x, y, z, yaw, pitch, roll)
       for i, (expected, actual) in enumerate(zip(test_coords, retrieved_coords)):
-        self.assertLess(abs(expected - actual), 0.001, f"Coordinate {i} mismatch: expected {expected}, got {actual}")
+        self.assertLess(
+          abs(expected - actual),
+          0.001,
+          f"Coordinate {i} mismatch: expected {expected}, got {actual}",
+        )
 
       print(f"Location XYZ set successfully: {retrieved_coords}")
 
@@ -425,7 +447,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
       # Test setting both z_clearance and z_world
       test_z_world = True
-      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, test_z_clearance, test_z_world)
+      await self.robot.set_location_z_clearance(
+        self.TEST_LOCATION_ID, test_z_clearance, test_z_world
+      )
 
       clearance_data = await self.robot.get_location_z_clearance(self.TEST_LOCATION_ID)
       _, z_clearance, z_world = clearance_data
@@ -435,7 +459,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     finally:
       # Restore original values
-      await self.robot.set_location_z_clearance(self.TEST_LOCATION_ID, orig_z_clearance, orig_z_world)
+      await self.robot.set_location_z_clearance(
+        self.TEST_LOCATION_ID, orig_z_clearance, orig_z_world
+      )
 
   async def test_get_location_config(self) -> None:
     """Test get_location_config()"""
@@ -529,7 +555,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(dest_data), 7)
     x, y, z, yaw, pitch, roll, config = dest_data
     self.assertTrue(all(isinstance(val, (int, float)) for val in dest_data))
-    print(f"Current Cartesian destination: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}, Config={config}")
+    print(
+      f"Current Cartesian destination: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}, Config={config}"
+    )
 
     # Test with arg1=1 (target location)
     dest_data_target = await self.robot.dest_c(1)
@@ -606,7 +634,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(axes, tuple)
     self.assertEqual(len(axes), 6)
     self.assertTrue(all(isinstance(val, (int, float)) for val in axes))
-    print(f"Current position - Cartesian: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}")
+    print(
+      f"Current position - Cartesian: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}"
+    )
     print(f"Current position - Joints: {axes}")
 
   async def test_where_c(self) -> None:
@@ -617,7 +647,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     x, y, z, yaw, pitch, roll, config = position_data
     self.assertTrue(all(isinstance(val, (int, float)) for val in position_data))
     self.assertIn(config, [1, 2])  # 1 = Righty, 2 = Lefty
-    print(f"Current Cartesian position: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}, Config={config}")
+    print(
+      f"Current Cartesian position: X={x}, Y={y}, Z={z}, Yaw={yaw}, Pitch={pitch}, Roll={roll}, Config={config}"
+    )
 
   async def test_where_j(self) -> None:
     """Test where_j()"""
@@ -627,7 +659,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(isinstance(val, (int, float)) for val in joint_data))
     print(f"Current joint positions: {joint_data}")
 
-#region PROFILE COMMANDS
+  # region PROFILE COMMANDS
   async def test_get_profile_speed(self) -> None:
     """Test get_profile_speed()"""
     speed = await self.robot.get_profile_speed(self.TEST_PROFILE_ID)
@@ -810,7 +842,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     """Test get_profile_straight()"""
     straight = await self.robot.get_profile_straight(self.TEST_PROFILE_ID)
     self.assertIsInstance(straight, bool)
-    print(f"Profile {self.TEST_PROFILE_ID} Straight: {straight} ({'straight-line' if straight else 'joint-based'} path)")
+    print(
+      f"Profile {self.TEST_PROFILE_ID} Straight: {straight} ({'straight-line' if straight else 'joint-based'} path)"
+    )
 
   async def test_set_profile_straight(self) -> None:
     """Test set_profile_straight()"""
@@ -823,7 +857,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
       straight = await self.robot.get_profile_straight(self.TEST_PROFILE_ID)
       self.assertEqual(straight, test_straight)
-      print(f"Profile Straight set to: {straight} ({'straight-line' if straight else 'joint-based'} path)")
+      print(
+        f"Profile Straight set to: {straight} ({'straight-line' if straight else 'joint-based'} path)"
+      )
 
     finally:
       # Restore original straight mode
@@ -835,7 +871,17 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(profile_data, tuple)
     self.assertEqual(len(profile_data), 9)
 
-    profile_id, speed, speed2, accel, decel, accel_ramp, decel_ramp, in_range, straight = profile_data
+    (
+      profile_id,
+      speed,
+      speed2,
+      accel,
+      decel,
+      accel_ramp,
+      decel_ramp,
+      in_range,
+      straight,
+    ) = profile_data
 
     self.assertEqual(profile_id, self.TEST_PROFILE_ID)
     self.assertIsInstance(speed, float)
@@ -855,8 +901,12 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertLessEqual(in_range, 100)
     self.assertIsInstance(straight, bool)
 
-    print(f"Motion profile {self.TEST_PROFILE_ID}: speed={speed}%, speed2={speed2}%, accel={accel}%, decel={decel}%")
-    print(f"  accel_ramp={accel_ramp}s, decel_ramp={decel_ramp}s, in_range={in_range}, straight={straight}")
+    print(
+      f"Motion profile {self.TEST_PROFILE_ID}: speed={speed}%, speed2={speed2}%, accel={accel}%, decel={decel}%"
+    )
+    print(
+      f"  accel_ramp={accel_ramp}s, decel_ramp={decel_ramp}s, in_range={in_range}, straight={straight}"
+    )
 
   async def test_set_motion_profile_values(self) -> None:
     """Test set_motion_profile_values()"""
@@ -866,46 +916,66 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     try:
       # Test setting complete motion profile
       test_values = {
-        'speed': 60.0,
-        'speed2': 15.0,
-        'acceleration': 70.0,
-        'deceleration': 75.0,
-        'acceleration_ramp': 0.4,
-        'deceleration_ramp': 0.2,
-        'in_range': 25.0,
-        'straight': True
+        "speed": 60.0,
+        "speed2": 15.0,
+        "acceleration": 70.0,
+        "deceleration": 75.0,
+        "acceleration_ramp": 0.4,
+        "deceleration_ramp": 0.2,
+        "in_range": 25.0,
+        "straight": True,
       }
 
       await self.robot.set_motion_profile_values(
         self.TEST_PROFILE_ID,
-        test_values['speed'],
-        test_values['speed2'],
-        test_values['acceleration'],
-        test_values['deceleration'],
-        test_values['acceleration_ramp'],
-        test_values['deceleration_ramp'],
-        test_values['in_range'],
-        test_values['straight']
+        test_values["speed"],
+        test_values["speed2"],
+        test_values["acceleration"],
+        test_values["deceleration"],
+        test_values["acceleration_ramp"],
+        test_values["deceleration_ramp"],
+        test_values["in_range"],
+        test_values["straight"],
       )
 
       # Verify the values were set
       profile_data = await self.robot.get_motion_profile_values(self.TEST_PROFILE_ID)
-      profile_id, speed, speed2, accel, decel, accel_ramp, decel_ramp, in_range, straight = profile_data
+      (
+        profile_id,
+        speed,
+        speed2,
+        accel,
+        decel,
+        accel_ramp,
+        decel_ramp,
+        in_range,
+        straight,
+      ) = profile_data
 
-      self.assertLess(abs(speed - test_values['speed']), 0.001)
-      self.assertLess(abs(speed2 - test_values['speed2']), 0.001)
-      self.assertLess(abs(accel - test_values['acceleration']), 0.001)
-      self.assertLess(abs(decel - test_values['deceleration']), 0.001)
-      self.assertLess(abs(accel_ramp - test_values['acceleration_ramp']), 0.001)
-      self.assertLess(abs(decel_ramp - test_values['deceleration_ramp']), 0.001)
-      self.assertLess(abs(in_range - test_values['in_range']), 0.001)
-      self.assertEqual(straight, test_values['straight'])
+      self.assertLess(abs(speed - test_values["speed"]), 0.001)
+      self.assertLess(abs(speed2 - test_values["speed2"]), 0.001)
+      self.assertLess(abs(accel - test_values["acceleration"]), 0.001)
+      self.assertLess(abs(decel - test_values["deceleration"]), 0.001)
+      self.assertLess(abs(accel_ramp - test_values["acceleration_ramp"]), 0.001)
+      self.assertLess(abs(decel_ramp - test_values["deceleration_ramp"]), 0.001)
+      self.assertLess(abs(in_range - test_values["in_range"]), 0.001)
+      self.assertEqual(straight, test_values["straight"])
 
       print(f"Motion profile values set successfully: {profile_data}")
 
     finally:
       # Restore original profile values
-      _, orig_speed, orig_speed2, orig_accel, orig_decel, orig_accel_ramp, orig_decel_ramp, orig_in_range, orig_straight = original_profile
+      (
+        _,
+        orig_speed,
+        orig_speed2,
+        orig_accel,
+        orig_decel,
+        orig_accel_ramp,
+        orig_decel_ramp,
+        orig_in_range,
+        orig_straight,
+      ) = original_profile
       await self.robot.set_motion_profile_values(
         self.TEST_PROFILE_ID,
         orig_speed,
@@ -915,17 +985,18 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
         orig_accel_ramp,
         orig_decel_ramp,
         orig_in_range,
-        orig_straight
+        orig_straight,
       )
 
-#region MOTION COMMANDS
-
+  # region MOTION COMMANDS
 
   async def test_move(self) -> None:
     """Test move() command"""
     # Save test location
     await self.robot.set_location_xyz(self.TEST_LOCATION_ID, *self.TEST_LOCATION_C_LEFT[:-1])
-    await self.robot.set_location_config(self.TEST_LOCATION_ID, self.TEST_LOCATION_C_LEFT[-1])  # GPL_Lefty
+    await self.robot.set_location_config(
+      self.TEST_LOCATION_ID, self.TEST_LOCATION_C_LEFT[-1]
+    )  # GPL_Lefty
 
     # Move to test location
     await self.robot.move(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
@@ -947,7 +1018,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     await self.robot.halt()
     print("Halt command executed successfully")
 
-
   async def test_move_appro(self) -> None:
     """Test move_appro() command"""
 
@@ -961,8 +1031,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     await self.robot.move_appro(self.TEST_LOCATION_ID, self.TEST_PROFILE_ID)
     await self.robot.wait_for_eom()
 
-    print(f"Move approach to location {self.TEST_LOCATION_ID} with z-clearance {test_z_clearance} completed successfully")
-
+    print(
+      f"Move approach to location {self.TEST_LOCATION_ID} with z-clearance {test_z_clearance} completed successfully"
+    )
 
   async def test_move_extra_axis(self) -> None:
     """Test move_extra_axis() command"""
@@ -1005,7 +1076,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
   #     new_position = await self.robot.where_c()
   #     print(f"POS_{i+1}: {new_position}")
 
-
   # async def test_move_c_loop(self) -> None:
   #   """Test move_c() command loop"""
 
@@ -1020,7 +1090,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
   #       await self.robot.wait_for_eom()
   #       new_position = await self.robot.where_c()
   #     print(f"POS_{i+1}: {new_position}")
-
 
   async def test_move_c(self) -> None:
     """Test move_c() command"""
@@ -1052,7 +1121,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       new_joints = await self.robot.where_j()
 
       for i, (expected, actual) in enumerate(zip(test_joints, new_joints)):
-        if i > 4 and original_joints[i] == 0.0: # not all robots have 6 axes
+        if i > 4 and original_joints[i] == 0.0:  # not all robots have 6 axes
           if abs(expected - actual) >= 1.0:
             print(f"Warning: Joint {i+1} position mismatch: expected {expected}, got {actual}")
         else:
@@ -1128,7 +1197,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       await self.robot.zero_torque(False)
       print("Zero torque mode disabled")
 
-#region PAROBOT COMMANDS
+  # region PAROBOT COMMANDS
   async def test_change_config(self) -> None:
     """Test change_config() command"""
     # Record current config for restoration
@@ -1180,7 +1249,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(plate_width, float)
     self.assertIsInstance(finger_speed, float)
     self.assertIsInstance(grasp_force, float)
-    print(f"Grasp data: plate_width={plate_width}mm, finger_speed={finger_speed}%, grasp_force={grasp_force}N")
+    print(
+      f"Grasp data: plate_width={plate_width}mm, finger_speed={finger_speed}%, grasp_force={grasp_force}N"
+    )
 
   async def test_set_grasp_data(self) -> None:
     """Test set_grasp_data()"""
@@ -1275,8 +1346,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.robot.gripper(3)
 
-
-
   async def test_move_to_safe(self) -> None:
     """Test move_to_safe() command"""
     # Record current position for comparison
@@ -1288,7 +1357,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     # Verify we moved to a different position
     safe_position = await self.robot.where_c()
-    position_changed = any(abs(orig - safe) > 1.0 for orig, safe in zip(original_position[:6], safe_position[:6]))
+    position_changed = any(
+      abs(orig - safe) > 1.0 for orig, safe in zip(original_position[:6], safe_position[:6])
+    )
 
     print(f"Move to safe position completed successfully")
     print(f"Position changed: {position_changed}")
@@ -1297,7 +1368,14 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     """Test set_pallet_index() and get_pallet_index()"""
     # Get original station type to check if it's a pallet
     original_station = await self.robot.get_station_type(self.TEST_LOCATION_ID)
-    _, orig_access_type, orig_location_type, orig_z_clearance, orig_z_above, orig_z_grasp_offset = original_station
+    (
+      _,
+      orig_access_type,
+      orig_location_type,
+      orig_z_clearance,
+      orig_z_above,
+      orig_z_grasp_offset,
+    ) = original_station
 
     was_pallet = orig_location_type == 1
     original_pallet = None
@@ -1307,10 +1385,19 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       if was_pallet:
         original_pallet = await self.robot.get_pallet_index(self.TEST_LOCATION_ID)
         _, orig_x, orig_y, orig_z = original_pallet
-        print(f"Station {self.TEST_LOCATION_ID} is already pallet type with index X={orig_x}, Y={orig_y}, Z={orig_z}")
+        print(
+          f"Station {self.TEST_LOCATION_ID} is already pallet type with index X={orig_x}, Y={orig_y}, Z={orig_z}"
+        )
       else:
         # Convert to pallet type first
-        await self.robot.set_station_type(self.TEST_LOCATION_ID, orig_access_type, 1, orig_z_clearance, orig_z_above, orig_z_grasp_offset)
+        await self.robot.set_station_type(
+          self.TEST_LOCATION_ID,
+          orig_access_type,
+          1,
+          orig_z_clearance,
+          orig_z_above,
+          orig_z_grasp_offset,
+        )
         print(f"Station {self.TEST_LOCATION_ID} converted to pallet type for testing")
 
       # Test get_pallet_index()
@@ -1322,7 +1409,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       self.assertIsInstance(pallet_x, int)
       self.assertIsInstance(pallet_y, int)
       self.assertIsInstance(pallet_z, int)
-      print(f"Current pallet index for station {station_id}: X={pallet_x}, Y={pallet_y}, Z={pallet_z}")
+      print(
+        f"Current pallet index for station {station_id}: X={pallet_x}, Y={pallet_y}, Z={pallet_z}"
+      )
 
       # Test setting all indices
       test_x, test_y, test_z = 1, 1, 1
@@ -1352,7 +1441,14 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
         print(f"Restored original pallet indices: X={orig_x}, Y={orig_y}, Z={orig_z}")
       else:
         # Convert back to original station type (not pallet)
-        await self.robot.set_station_type(self.TEST_LOCATION_ID, orig_access_type, orig_location_type, orig_z_clearance, orig_z_above, orig_z_grasp_offset)
+        await self.robot.set_station_type(
+          self.TEST_LOCATION_ID,
+          orig_access_type,
+          orig_location_type,
+          orig_z_clearance,
+          orig_z_above,
+          orig_z_grasp_offset,
+        )
         print(f"Station {self.TEST_LOCATION_ID} restored to original non-pallet type")
 
   async def test_get_and_set_pallet_origin_and_setup(self) -> None:
@@ -1360,9 +1456,18 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     # Test setting complete pallet configuration
     test_origin = (100.0, 200.0, 300.0, 10.0, 20.0, 30.0, 1)  # Include config
-    test_x_count, test_x_offset = 3, (test_origin[0] + 10.0, test_origin[1], test_origin[2])  # X direction offset
-    test_y_count, test_y_offset = 4, (test_origin[0], test_origin[1] + 15.0, test_origin[2])  # Y direction offset
-    test_z_count, test_z_offset = 2, (test_origin[0], test_origin[1], test_origin[2] + 8.0)   # Z direction offset
+    test_x_count, test_x_offset = (
+      3,
+      (test_origin[0] + 10.0, test_origin[1], test_origin[2]),
+    )  # X direction offset
+    test_y_count, test_y_offset = (
+      4,
+      (test_origin[0], test_origin[1] + 15.0, test_origin[2]),
+    )  # Y direction offset
+    test_z_count, test_z_offset = (
+      2,
+      (test_origin[0], test_origin[1], test_origin[2] + 8.0),
+    )  # Z direction offset
 
     # Set config as a pallet
     await self.robot.set_station_type(self.TEST_LOCATION_ID, 0, 1, 20, 1, 0)
@@ -1420,10 +1525,12 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       (0, 0, 0),  # Base position (index 1,1,1)
       (test_x_offset[0], test_x_offset[1], test_x_offset[2]),  # X+1
       (test_y_offset[0], test_y_offset[1], test_y_offset[2]),  # Y+1
-      (test_z_offset[0], test_z_offset[1], test_z_offset[2])   # Z+1
+      (test_z_offset[0], test_z_offset[1], test_z_offset[2]),  # Z+1
     ]
 
-    for (x_idx, y_idx, z_idx), (exp_x_off, exp_y_off, exp_z_off) in zip(test_indices, expected_offsets):
+    for (x_idx, y_idx, z_idx), (exp_x_off, exp_y_off, exp_z_off) in zip(
+      test_indices, expected_offsets
+    ):
       # Set the pallet index
       await self.robot.set_pallet_index(self.TEST_LOCATION_ID, x_idx, y_idx, z_idx)
 
@@ -1433,14 +1540,30 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual((curr_x_idx, curr_y_idx, curr_z_idx), (x_idx, y_idx, z_idx))
 
       # Calculate expected position based on origin + index offsets
-      expected_x = test_origin[0] + (x_idx - 1) * test_x_offset[0] + (y_idx - 1) * test_y_offset[0] + (z_idx - 1) * test_z_offset[0]
-      expected_y = test_origin[1] + (x_idx - 1) * test_x_offset[1] + (y_idx - 1) * test_y_offset[1] + (z_idx - 1) * test_z_offset[1]
-      expected_z = test_origin[2] + (x_idx - 1) * test_x_offset[2] + (y_idx - 1) * test_y_offset[2] + (z_idx - 1) * test_z_offset[2]
+      expected_x = (
+        test_origin[0]
+        + (x_idx - 1) * test_x_offset[0]
+        + (y_idx - 1) * test_y_offset[0]
+        + (z_idx - 1) * test_z_offset[0]
+      )
+      expected_y = (
+        test_origin[1]
+        + (x_idx - 1) * test_x_offset[1]
+        + (y_idx - 1) * test_y_offset[1]
+        + (z_idx - 1) * test_z_offset[1]
+      )
+      expected_z = (
+        test_origin[2]
+        + (x_idx - 1) * test_x_offset[2]
+        + (y_idx - 1) * test_y_offset[2]
+        + (z_idx - 1) * test_z_offset[2]
+      )
 
-      print(f"Index ({x_idx},{y_idx},{z_idx}) -> Expected position: ({expected_x:.1f}, {expected_y:.1f}, {expected_z:.1f})")
+      print(
+        f"Index ({x_idx},{y_idx},{z_idx}) -> Expected position: ({expected_x:.1f}, {expected_y:.1f}, {expected_z:.1f})"
+      )
 
     print("Complete pallet configuration test passed successfully")
-
 
   async def test_pick_plate_station(self) -> None:
     """Test pick_plate_station() command"""
@@ -1455,11 +1578,11 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     print(f"Pick plate station (basic) result: {result}")
 
     # Test pick with horizontal compliance
-    result = await self.robot.pick_plate_station(self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=50)
+    result = await self.robot.pick_plate_station(
+      self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=50
+    )
     self.assertIsInstance(result, bool)
     print(f"Pick plate station (with compliance) result: {result}")
-
-
 
   async def test_place_plate_station(self) -> None:
     """Test place_plate_station() command"""
@@ -1472,9 +1595,10 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     print("Place plate station (basic) executed successfully")
 
     # Test place with horizontal compliance
-    await self.robot.place_plate_station(self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=25)
+    await self.robot.place_plate_station(
+      self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=25
+    )
     print("Place plate station (with compliance) executed successfully")
-
 
   async def test_teach_plate_station(self) -> None:
     """Test teach_plate_station() command"""
@@ -1493,7 +1617,6 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertLess(abs(z_clearance - test_clearance), 0.001)
     print(f"Plate station taught with custom clearance: {z_clearance}")
 
-
   async def test_get_station_type(self) -> None:
     """Test get_station_type()"""
     station_data = await self.robot.get_station_type(self.TEST_LOCATION_ID)
@@ -1510,18 +1633,20 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     access_str = "horizontal" if access_type == 0 else "vertical"
     location_str = "normal single" if location_type == 0 else "pallet"
-    print(f"Station {station_id}: access={access_str}, type={location_str}, clearance={z_clearance}, above={z_above}, grasp_offset={z_grasp_offset}")
+    print(
+      f"Station {station_id}: access={access_str}, type={location_str}, clearance={z_clearance}, above={z_above}, grasp_offset={z_grasp_offset}"
+    )
 
   async def test_set_station_type(self) -> None:
     """Test set_station_type()"""
 
     # Test setting station type
     test_values = (
-    0,     # access_type: horizontal
-    1,     # location_type: pallet
-    60.0,  # z_clearance
-    15.0,  # z_above
-    5.0    # z_grasp_offset
+      0,  # access_type: horizontal
+      1,  # location_type: pallet
+      60.0,  # z_clearance
+      15.0,  # z_above
+      5.0,  # z_grasp_offset
     )
 
     await self.robot.set_station_type(self.TEST_LOCATION_ID, *test_values)
@@ -1546,7 +1671,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.robot.set_station_type(self.TEST_LOCATION_ID, 0, 3, 50.0, 10.0, 0.0)
 
-#region SSGRIP COMMANDS
+  # region SSGRIP COMMANDS
   # async def test_home_all_if_no_plate(self) -> None: # commented out because it messes up other tests
   #   """Test home_all_if_no_plate()"""
   #   result = await self.robot.home_all_if_no_plate()
@@ -1610,7 +1735,9 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     else:
       gripper1_closed = bool(closed_state & 1)
       gripper2_closed = bool(closed_state & 2)
-      print(f"Dual gripper state: Gripper 1 {'closed' if gripper1_closed else 'open'}, Gripper 2 {'closed' if gripper2_closed else 'open'}")
+      print(
+        f"Dual gripper state: Gripper 1 {'closed' if gripper1_closed else 'open'}, Gripper 2 {'closed' if gripper2_closed else 'open'}"
+      )
 
   async def test_get_active_gripper(self) -> None:
     """Test get_active_gripper() (Dual Gripper Only)"""
@@ -1674,7 +1801,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     try:
       await self.robot.pick_plate(self.TEST_LOCATION_ID)
     except Exception as e:
-      if 'no plate present' in str(e).lower():
+      if "no plate present" in str(e).lower():
         print("No plate present - this is fine for testing")
       else:
         raise
@@ -1682,14 +1809,15 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
 
     # Test pick with horizontal compliance
     try:
-      await self.robot.pick_plate(self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=50)
+      await self.robot.pick_plate(
+        self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=50
+      )
     except Exception as e:
-      if 'no plate present' in str(e).lower():
+      if "no plate present" in str(e).lower():
         print("No plate present - this is fine for testing")
       else:
         raise
     print(f"Pick plate (with compliance) at location {self.TEST_LOCATION_ID} executed successfully")
-
 
   async def test_place_plate(self) -> None:
     """Test place_plate()"""
@@ -1703,8 +1831,12 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     print(f"Place plate (basic) at location {self.TEST_LOCATION_ID} executed successfully")
 
     # Test place with horizontal compliance
-    await self.robot.place_plate(self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=25)
-    print(f"Place plate (with compliance) at location {self.TEST_LOCATION_ID} executed successfully")
+    await self.robot.place_plate(
+      self.TEST_LOCATION_ID, horizontal_compliance=True, horizontal_compliance_torque=25
+    )
+    print(
+      f"Place plate (with compliance) at location {self.TEST_LOCATION_ID} executed successfully"
+    )
 
   async def test_teach_position(self) -> None:
     """Test teach_position()"""
@@ -1728,12 +1860,11 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     self.assertLess(abs(z_clearance - test_clearance), 0.001)
     print(f"Position taught with custom clearance: {z_clearance}")
 
+  # region ROBOT SPECIFIC TESTS
 
-#region ROBOT SPECIFIC TESTS
-
-####
-#### THESE MAY FAIL IF YOUR ROBOT DOES NOT HAVE THE FEATURE ####
-####
+  ####
+  #### THESE MAY FAIL IF YOUR ROBOT DOES NOT HAVE THE FEATURE ####
+  ####
 
   async def test_move_rail(self) -> None:
     """Test move_rail() command"""
@@ -1752,6 +1883,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
     # Test setting rail to move during next pick/place
     await self.robot.move_rail(station_id=self.TEST_LOCATION_ID, mode=2)
     print("Move rail during next pick/place set successfully")
+
   async def test_get_rail_position(self) -> None:
     """Test get_rail_position()"""
     rail_pos = await self.robot.get_rail_position(self.TEST_LOCATION_ID)

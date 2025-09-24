@@ -5,10 +5,12 @@ import pytest
 from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
 
+
 @pytest.mark.hardware  # include/exclude via "pytest -m hardware"
 class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
-    # Connection config
+
+  # Connection config
   MODEL = "pf3400"
   ROBOT_HOST = "192.168.0.1"
   ROBOT_PORT = 10100
@@ -23,10 +25,14 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   SAFE_LOCATION_J = JointCoords(0, 170.003, 0, 180, -180, 75.486)
 
   TEST_LOCATION_J_LEFT = JointCoords(0, 169.932, 16.883, 230.942, -224.288, 75.662)
-  TEST_LOCATION_C_LEFT = CartesianCoords(328.426, -115.219, 169.932, 23.537, 90, 180, ElbowOrientation.LEFT)
+  TEST_LOCATION_C_LEFT = CartesianCoords(
+    328.426, -115.219, 169.932, 23.537, 90, 180, ElbowOrientation.LEFT
+  )
 
   TEST_LOCATION_J_RIGHT = JointCoords(0, 169.968, -4.238, 117.915, -100.062, 75.668)
-  TEST_LOCATION_C_RIGHT = CartesianCoords(342.562, 280.484, 169.969, 13.612, 90, 180, ElbowOrientation.RIGHT)
+  TEST_LOCATION_C_RIGHT = CartesianCoords(
+    342.562, 280.484, 169.969, 13.612, 90, 180, ElbowOrientation.RIGHT
+  )
 
   async def asyncSetUp(self):
     """Connect to actual PreciseFlex robot"""
@@ -35,7 +41,7 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
 
   async def asyncTearDown(self):
     """Cleanup robot connection"""
-    if hasattr(self, 'robot'):
+    if hasattr(self, "robot"):
       await self.robot.stop()
 
   async def test_set_speed(self):
@@ -68,7 +74,7 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
     try:
       await self.robot.pick_plate(self.TEST_LOCATION_C_RIGHT, 10)
     except Exception as e:
-      if 'no plate present' in str(e).lower():
+      if "no plate present" in str(e).lower():
         pass
       else:
         raise
@@ -91,5 +97,3 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
     """Test getting cartesian position"""
     position_c = await self.robot.get_cartesian_position()
     self.assertIsInstance(position_c, CartesianCoords)
-
-

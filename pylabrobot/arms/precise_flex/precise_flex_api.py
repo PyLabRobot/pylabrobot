@@ -1,6 +1,8 @@
+import asyncio
+
 from pylabrobot.arms.precise_flex.error_codes import ERROR_CODES
 from pylabrobot.io.tcp import TCP
-import asyncio
+
 
 class PreciseFlexError(Exception):
   def __init__(self, replycode: int, message: str):
@@ -17,13 +19,12 @@ class PreciseFlexError(Exception):
       super().__init__(f"PreciseFlexError {replycode}: {message}")
 
 
-
-
 class PreciseFlexBackendApi:
   """
   API for interacting with the PreciseFlex robot.
   Documentation and error codes available at https://www2.brooksautomation.com/#Root/Welcome.htm
   """
+
   def __init__(self, host: str = "192.168.0.1", port: int = 10100, timeout=20) -> None:
     super().__init__()
     self.host = host
@@ -39,7 +40,7 @@ class PreciseFlexBackendApi:
     """Disconnect from the PreciseFlex backend."""
     await self.io.stop()
 
-#region GENERAL COMMANDS
+  # region GENERAL COMMANDS
   async def attach(self, attach_state: int | None = None) -> int:
     """Attach or release the robot, or get attachment state.
 
@@ -80,7 +81,9 @@ class PreciseFlexBackendApi:
 
     return (x_offset, y_offset, z_offset, z_rotation)
 
-  async def set_base(self, x_offset: float, y_offset: float, z_offset: float, z_rotation: float) -> None:
+  async def set_base(
+    self, x_offset: float, y_offset: float, z_offset: float, z_rotation: float
+  ) -> None:
     """Set the robot base offset.
 
     Parameters:
@@ -101,7 +104,7 @@ class PreciseFlexBackendApi:
     Note:
       Does not affect any robots that may be active.
     """
-    await self.io.write('exit'.encode('utf-8') + b'\n')
+    await self.io.write("exit".encode("utf-8") + b"\n")
 
   async def home(self) -> None:
     """Home the robot associated with this thread.
@@ -149,8 +152,6 @@ class PreciseFlexBackendApi:
       await self.send_command(f"hp {power_state}")
     else:
       await self.send_command(f"hp {power_state} {timeout}")
-
-
 
   async def get_mode(self) -> int:
     """Get the current response mode.
@@ -233,8 +234,14 @@ class PreciseFlexBackendApi:
       raise ValueError("Payload percent must be between 0 and 100")
     await self.send_command(f"payload {payload_percent}")
 
-  async def set_parameter(self, data_id: int, value, unit_number: int | None = None,
-                sub_unit: int | None = None, array_index: int | None = None) -> None:
+  async def set_parameter(
+    self,
+    data_id: int,
+    value,
+    unit_number: int | None = None,
+    sub_unit: int | None = None,
+    array_index: int | None = None,
+  ) -> None:
     """Change a value in the controller's parameter database.
 
     Parameters:
@@ -261,8 +268,13 @@ class PreciseFlexBackendApi:
       else:
         await self.send_command(f"pc {data_id} {value}")
 
-  async def get_parameter(self, data_id: int, unit_number: int | None = None,
-                sub_unit: int | None = None, array_index: int | None = None) -> str:
+  async def get_parameter(
+    self,
+    data_id: int,
+    unit_number: int | None = None,
+    sub_unit: int | None = None,
+    array_index: int | None = None,
+  ) -> str:
     """Get the value of a numeric parameter database item.
 
     Parameters:
@@ -373,7 +385,9 @@ class PreciseFlexBackendApi:
 
     return (x, y, z, yaw, pitch, roll)
 
-  async def set_tool(self, x: float, y: float, z: float, yaw: float, pitch: float, roll: float) -> None:
+  async def set_tool(
+    self, x: float, y: float, z: float, yaw: float, pitch: float, roll: float
+  ) -> None:
     """Set the robot tool transformation.
 
     The robot must be attached to set the tool. Setting the tool pauses any robot motion in progress.
@@ -396,8 +410,10 @@ class PreciseFlexBackendApi:
     """
     return await self.send_command("version")
 
-  #region LOCATION COMMANDS
-  async def get_location(self, location_index: int) -> tuple[int, int, float, float, float, float, float, float]:
+  # region LOCATION COMMANDS
+  async def get_location(
+    self, location_index: int
+  ) -> tuple[int, int, float, float, float, float, float, float]:
     """Get the location values for the specified station index.
 
     Parameters:
@@ -426,7 +442,9 @@ class PreciseFlexBackendApi:
 
     raise PreciseFlexError(-1, "Unexpected response format from loc command.")
 
-  async def get_location_angles(self, location_index: int) -> tuple[int, int, float, float, float, float, float, float]:
+  async def get_location_angles(
+    self, location_index: int
+  ) -> tuple[int, int, float, float, float, float, float, float]:
     """Get the angle values for the specified station index.
 
     Parameters:
@@ -450,57 +468,74 @@ class PreciseFlexBackendApi:
 
     return (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6)
 
+  async def set_location_angles(
+    self,
+    location_index: int,
+    angle1: float,
+    angle2: float = 0.0,
+    angle3: float = 0.0,
+    angle4: float = 0.0,
+    angle5: float = 0.0,
+    angle6: float = 0.0,
+  ) -> None:
+    """Set the angle values for the specified station index.
 
+    Parameters:
+      location_index (int): The station index, from 1 to N_LOC.
+      angle1 (float): Axis 1 angle.
+      angle2 (float): Axis 2 angle. Defaults to 0.0.
+      angle3 (float): Axis 3 angle. Defaults to 0.0.
+      angle4 (float): Axis 4 angle. Defaults to 0.0.
+      angle5 (float): Axis 5 angle. Defaults to 0.0.
+      angle6 (float): Axis 6 angle. Defaults to 0.0.
 
-  async def set_location_angles(self, location_index: int, angle1: float, angle2: float = 0.0,
-                    angle3: float = 0.0, angle4: float = 0.0, angle5: float = 0.0,
-                    angle6: float = 0.0) -> None:
-      """Set the angle values for the specified station index.
+    Note:
+      If more arguments than the number of axes for this robot, extra values are ignored.
+      If less arguments than the number of axes for this robot, missing values are assumed to be zero.
+    """
+    await self.send_command(
+      f"locAngles {location_index} {angle1} {angle2} {angle3} {angle4} {angle5} {angle6}"
+    )
 
-      Parameters:
-        location_index (int): The station index, from 1 to N_LOC.
-        angle1 (float): Axis 1 angle.
-        angle2 (float): Axis 2 angle. Defaults to 0.0.
-        angle3 (float): Axis 3 angle. Defaults to 0.0.
-        angle4 (float): Axis 4 angle. Defaults to 0.0.
-        angle5 (float): Axis 5 angle. Defaults to 0.0.
-        angle6 (float): Axis 6 angle. Defaults to 0.0.
+  async def get_location_xyz(
+    self, location_index: int
+  ) -> tuple[int, int, float, float, float, float, float, float]:
+    """Get the Cartesian position values for the specified station index.
 
-      Note:
-        If more arguments than the number of axes for this robot, extra values are ignored.
-        If less arguments than the number of axes for this robot, missing values are assumed to be zero.
-      """
-      await self.send_command(f"locAngles {location_index} {angle1} {angle2} {angle3} {angle4} {angle5} {angle6}")
+    Parameters:
+      location_index (int): The station index, from 1 to N_LOC.
 
-  async def get_location_xyz(self, location_index: int) -> tuple[int, int, float, float, float, float, float, float]:
-      """Get the Cartesian position values for the specified station index.
+    Returns:
+      tuple: A tuple containing (type_code, station_index, X, Y, Z, yaw, pitch, roll)
 
-      Parameters:
-        location_index (int): The station index, from 1 to N_LOC.
+    Raises:
+      PreciseFlexError: If attempting to get Cartesian position from an angles type location.
+    """
+    data = await self.send_command(f"locXyz {location_index}")
+    parts = data.split(" ")
 
-      Returns:
-        tuple: A tuple containing (type_code, station_index, X, Y, Z, yaw, pitch, roll)
+    type_code = int(parts[0])
+    if type_code != 0:
+      raise PreciseFlexError(-1, "Location is not of Cartesian type.")
 
-      Raises:
-        PreciseFlexError: If attempting to get Cartesian position from an angles type location.
-      """
-      data = await self.send_command(f"locXyz {location_index}")
-      parts = data.split(" ")
+    if len(parts) != 8:
+      raise PreciseFlexError(-1, "Unexpected response format from locXyz command.")
 
-      type_code = int(parts[0])
-      if type_code != 0:
-        raise PreciseFlexError(-1, "Location is not of Cartesian type.")
+    station_index = int(parts[1])
+    x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[2:8])
 
-      if len(parts) != 8:
-        raise PreciseFlexError(-1, "Unexpected response format from locXyz command.")
+    return (type_code, station_index, x, y, z, yaw, pitch, roll)
 
-      station_index = int(parts[1])
-      x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[2:8])
-
-      return (type_code, station_index, x, y, z, yaw, pitch, roll)
-
-  async def set_location_xyz(self, location_index: int, x: float, y: float, z: float,
-                yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0) -> None:
+  async def set_location_xyz(
+    self,
+    location_index: int,
+    x: float,
+    y: float,
+    z: float,
+    yaw: float = 0.0,
+    pitch: float = 0.0,
+    roll: float = 0.0,
+  ) -> None:
     """Set the Cartesian position values for the specified station index.
 
     Parameters:
@@ -515,117 +550,120 @@ class PreciseFlexBackendApi:
     await self.send_command(f"locXyz {location_index} {x} {y} {z} {yaw} {pitch} {roll}")
 
   async def get_location_z_clearance(self, location_index: int) -> tuple[int, float, bool]:
-      """Get the ZClearance and ZWorld properties for the specified location.
+    """Get the ZClearance and ZWorld properties for the specified location.
 
-      Parameters:
-        location_index (int): The station index, from 1 to N_LOC.
+    Parameters:
+      location_index (int): The station index, from 1 to N_LOC.
 
-      Returns:
-        tuple: A tuple containing (station_index, z_clearance, z_world)
-      """
-      data = await self.send_command(f"locZClearance {location_index}")
-      parts = data.split(" ")
+    Returns:
+      tuple: A tuple containing (station_index, z_clearance, z_world)
+    """
+    data = await self.send_command(f"locZClearance {location_index}")
+    parts = data.split(" ")
 
-      if len(parts) != 3:
-        raise PreciseFlexError(-1, "Unexpected response format from locZClearance command.")
+    if len(parts) != 3:
+      raise PreciseFlexError(-1, "Unexpected response format from locZClearance command.")
 
-      station_index = int(parts[0])
-      z_clearance = float(parts[1])
-      z_world = True if float(parts[2]) != 0 else False
+    station_index = int(parts[0])
+    z_clearance = float(parts[1])
+    z_world = True if float(parts[2]) != 0 else False
 
-      return (station_index, z_clearance, z_world)
+    return (station_index, z_clearance, z_world)
 
-  async def set_location_z_clearance(self, location_index: int, z_clearance: float, z_world: bool | None = None) -> None:
-      """Set the ZClearance and ZWorld properties for the specified location.
+  async def set_location_z_clearance(
+    self, location_index: int, z_clearance: float, z_world: bool | None = None
+  ) -> None:
+    """Set the ZClearance and ZWorld properties for the specified location.
 
-      Parameters:
-        location_index (int): The station index, from 1 to N_LOC.
-        z_clearance (float): The new ZClearance property value.
-        z_world (float, optional): The new ZWorld property value. If omitted, only ZClearance is set.
-      """
-      if z_world is None:
-        await self.send_command(f"locZClearance {location_index} {z_clearance}")
-      else:
-        z_world_int = 1 if z_world else 0
-        await self.send_command(f"locZClearance {location_index} {z_clearance} {z_world_int}")
+    Parameters:
+      location_index (int): The station index, from 1 to N_LOC.
+      z_clearance (float): The new ZClearance property value.
+      z_world (float, optional): The new ZWorld property value. If omitted, only ZClearance is set.
+    """
+    if z_world is None:
+      await self.send_command(f"locZClearance {location_index} {z_clearance}")
+    else:
+      z_world_int = 1 if z_world else 0
+      await self.send_command(f"locZClearance {location_index} {z_clearance} {z_world_int}")
 
   async def get_location_config(self, location_index: int) -> tuple[int, int]:
-      """Get the Config property for the specified location.
+    """Get the Config property for the specified location.
 
-      Parameters:
-        location_index (int): The station index, from 1 to N_LOC.
+    Parameters:
+      location_index (int): The station index, from 1 to N_LOC.
 
-      Returns:
-        tuple: A tuple containing (station_index, config_value)
-        config_value is a bit mask where:
-        - 0 = None (no configuration specified)
-        - 0x01 = GPL_Righty (right shouldered configuration)
-        - 0x02 = GPL_Lefty (left shouldered configuration)
-        - 0x04 = GPL_Above (elbow above the wrist)
-        - 0x08 = GPL_Below (elbow below the wrist)
-        - 0x10 = GPL_Flip (wrist pitched up)
-        - 0x20 = GPL_NoFlip (wrist pitched down)
-        - 0x1000 = GPL_Single (restrict wrist axis to +/- 180 degrees)
-        Values can be combined using bitwise OR.
-      """
-      data = await self.send_command(f"locConfig {location_index}")
-      parts = data.split(" ")
+    Returns:
+      tuple: A tuple containing (station_index, config_value)
+      config_value is a bit mask where:
+      - 0 = None (no configuration specified)
+      - 0x01 = GPL_Righty (right shouldered configuration)
+      - 0x02 = GPL_Lefty (left shouldered configuration)
+      - 0x04 = GPL_Above (elbow above the wrist)
+      - 0x08 = GPL_Below (elbow below the wrist)
+      - 0x10 = GPL_Flip (wrist pitched up)
+      - 0x20 = GPL_NoFlip (wrist pitched down)
+      - 0x1000 = GPL_Single (restrict wrist axis to +/- 180 degrees)
+      Values can be combined using bitwise OR.
+    """
+    data = await self.send_command(f"locConfig {location_index}")
+    parts = data.split(" ")
 
-      if len(parts) != 2:
-        raise PreciseFlexError(-1, "Unexpected response format from locConfig command.")
+    if len(parts) != 2:
+      raise PreciseFlexError(-1, "Unexpected response format from locConfig command.")
 
-      station_index = int(parts[0])
-      config_value = int(parts[1])
+    station_index = int(parts[0])
+    config_value = int(parts[1])
 
-      return (station_index, config_value)
+    return (station_index, config_value)
 
   async def set_location_config(self, location_index: int, config_value: int) -> None:
-      """Set the Config property for the specified location.
+    """Set the Config property for the specified location.
 
-      Parameters:
-        location_index (int): The station index, from 1 to N_LOC.
-        config_value (int): The new Config property value as a bit mask where:
-        - 0 = None (no configuration specified)
-        - 0x01 = GPL_Righty (right shouldered configuration)
-        - 0x02 = GPL_Lefty (left shouldered configuration)
-        - 0x04 = GPL_Above (elbow above the wrist)
-        - 0x08 = GPL_Below (elbow below the wrist)
-        - 0x10 = GPL_Flip (wrist pitched up)
-        - 0x20 = GPL_NoFlip (wrist pitched down)
-        - 0x1000 = GPL_Single (restrict wrist axis to +/- 180 degrees)
-        Values can be combined using bitwise OR.
+    Parameters:
+      location_index (int): The station index, from 1 to N_LOC.
+      config_value (int): The new Config property value as a bit mask where:
+      - 0 = None (no configuration specified)
+      - 0x01 = GPL_Righty (right shouldered configuration)
+      - 0x02 = GPL_Lefty (left shouldered configuration)
+      - 0x04 = GPL_Above (elbow above the wrist)
+      - 0x08 = GPL_Below (elbow below the wrist)
+      - 0x10 = GPL_Flip (wrist pitched up)
+      - 0x20 = GPL_NoFlip (wrist pitched down)
+      - 0x1000 = GPL_Single (restrict wrist axis to +/- 180 degrees)
+      Values can be combined using bitwise OR.
 
-      Raises:
-        ValueError: If config_value contains invalid bits or conflicting configurations.
-      """
-      # Define valid bit masks
-      GPL_RIGHTY = 0x01
-      GPL_LEFTY = 0x02
-      GPL_ABOVE = 0x04
-      GPL_BELOW = 0x08
-      GPL_FLIP = 0x10
-      GPL_NOFLIP = 0x20
-      GPL_SINGLE = 0x1000
+    Raises:
+      ValueError: If config_value contains invalid bits or conflicting configurations.
+    """
+    # Define valid bit masks
+    GPL_RIGHTY = 0x01
+    GPL_LEFTY = 0x02
+    GPL_ABOVE = 0x04
+    GPL_BELOW = 0x08
+    GPL_FLIP = 0x10
+    GPL_NOFLIP = 0x20
+    GPL_SINGLE = 0x1000
 
-      # All valid bits
-      ALL_VALID_BITS = GPL_RIGHTY | GPL_LEFTY | GPL_ABOVE | GPL_BELOW | GPL_FLIP | GPL_NOFLIP | GPL_SINGLE
+    # All valid bits
+    ALL_VALID_BITS = (
+      GPL_RIGHTY | GPL_LEFTY | GPL_ABOVE | GPL_BELOW | GPL_FLIP | GPL_NOFLIP | GPL_SINGLE
+    )
 
-      # Check for invalid bits
-      if config_value & ~ALL_VALID_BITS:
-        raise ValueError(f"Invalid config bits specified: 0x{config_value:X}")
+    # Check for invalid bits
+    if config_value & ~ALL_VALID_BITS:
+      raise ValueError(f"Invalid config bits specified: 0x{config_value:X}")
 
-      # Check for conflicting configurations
-      if (config_value & GPL_RIGHTY) and (config_value & GPL_LEFTY):
-        raise ValueError("Cannot specify both GPL_Righty and GPL_Lefty")
+    # Check for conflicting configurations
+    if (config_value & GPL_RIGHTY) and (config_value & GPL_LEFTY):
+      raise ValueError("Cannot specify both GPL_Righty and GPL_Lefty")
 
-      if (config_value & GPL_ABOVE) and (config_value & GPL_BELOW):
-        raise ValueError("Cannot specify both GPL_Above and GPL_Below")
+    if (config_value & GPL_ABOVE) and (config_value & GPL_BELOW):
+      raise ValueError("Cannot specify both GPL_Above and GPL_Below")
 
-      if (config_value & GPL_FLIP) and (config_value & GPL_NOFLIP):
-        raise ValueError("Cannot specify both GPL_Flip and GPL_NoFlip")
+    if (config_value & GPL_FLIP) and (config_value & GPL_NOFLIP):
+      raise ValueError("Cannot specify both GPL_Flip and GPL_NoFlip")
 
-      await self.send_command(f"locConfig {location_index} {config_value}")
-
+    await self.send_command(f"locConfig {location_index} {config_value}")
 
   async def dest_c(self, arg1: int = 0) -> tuple[float, float, float, float, float, float, int]:
     """Get the destination or current Cartesian location of the robot.
@@ -766,7 +804,7 @@ class PreciseFlexBackendApi:
     axes = self._parse_angles_response(parts)
     return axes
 
- #region PROFILE COMMANDS
+  # region PROFILE COMMANDS
 
   async def get_profile_speed(self, profile_index: int) -> float:
     """Get the speed property of the specified profile.
@@ -968,94 +1006,100 @@ class PreciseFlexBackendApi:
     straight_int = 1 if straight_mode else 0
     await self.send_command(f"Straight {profile_index} {straight_int}")
 
-  async def set_motion_profile_values(self,
-                                        profile: int,
-                                        speed: float,
-                                        speed2: float,
-                                        acceleration: float,
-                                        deceleration: float,
-                                        acceleration_ramp: float,
-                                        deceleration_ramp: float,
-                                        in_range: float,
-                                        straight: bool):
-      """
-      Set motion profile values for the specified profile index on the PreciseFlex robot.
+  async def set_motion_profile_values(
+    self,
+    profile: int,
+    speed: float,
+    speed2: float,
+    acceleration: float,
+    deceleration: float,
+    acceleration_ramp: float,
+    deceleration_ramp: float,
+    in_range: float,
+    straight: bool,
+  ):
+    """
+    Set motion profile values for the specified profile index on the PreciseFlex robot.
 
-      Parameters:
-        profile (int): Profile index to set values for.
-        speed (float): Percentage of maximum speed. 100 = full speed. Values >100 may be accepted depending on system config.
-        speed2 (float): Secondary speed setting, typically for Cartesian moves. Normally 0. Interpreted as a percentage.
-        acceleration (float): Percentage of maximum acceleration. 100 = full accel.
-        deceleration (float): Percentage of maximum deceleration. 100 = full decel.
-        acceleration_ramp (float): Acceleration ramp time in seconds.
-        deceleration_ramp (float): Deceleration ramp time in seconds.
-        in_range (float): InRange value, from -1 to 100. -1 = allow blending, 0 = stop without checking, >0 = enforce position accuracy.
-        straight (bool): If True, follow a straight-line path (-1). If False, follow a joint-based path (0).
-      """
-      if not (0 <= speed):
-        raise ValueError("Speed must be >= 0 (percent).")
+    Parameters:
+      profile (int): Profile index to set values for.
+      speed (float): Percentage of maximum speed. 100 = full speed. Values >100 may be accepted depending on system config.
+      speed2 (float): Secondary speed setting, typically for Cartesian moves. Normally 0. Interpreted as a percentage.
+      acceleration (float): Percentage of maximum acceleration. 100 = full accel.
+      deceleration (float): Percentage of maximum deceleration. 100 = full decel.
+      acceleration_ramp (float): Acceleration ramp time in seconds.
+      deceleration_ramp (float): Deceleration ramp time in seconds.
+      in_range (float): InRange value, from -1 to 100. -1 = allow blending, 0 = stop without checking, >0 = enforce position accuracy.
+      straight (bool): If True, follow a straight-line path (-1). If False, follow a joint-based path (0).
+    """
+    if not (0 <= speed):
+      raise ValueError("Speed must be >= 0 (percent).")
 
-      if not (0 <= speed2):
-        raise ValueError("Speed2 must be >= 0 (percent).")
+    if not (0 <= speed2):
+      raise ValueError("Speed2 must be >= 0 (percent).")
 
-      if not (0 <= acceleration <= 100):
-        raise ValueError("Acceleration must be between 0 and 100 (percent).")
+    if not (0 <= acceleration <= 100):
+      raise ValueError("Acceleration must be between 0 and 100 (percent).")
 
-      if not (0 <= deceleration <= 100):
-        raise ValueError("Deceleration must be between 0 and 100 (percent).")
+    if not (0 <= deceleration <= 100):
+      raise ValueError("Deceleration must be between 0 and 100 (percent).")
 
-      if acceleration_ramp < 0:
-        raise ValueError("Acceleration ramp must be >= 0 (seconds).")
+    if acceleration_ramp < 0:
+      raise ValueError("Acceleration ramp must be >= 0 (seconds).")
 
-      if deceleration_ramp < 0:
-        raise ValueError("Deceleration ramp must be >= 0 (seconds).")
+    if deceleration_ramp < 0:
+      raise ValueError("Deceleration ramp must be >= 0 (seconds).")
 
-      if not (-1 <= in_range <= 100):
-        raise ValueError("InRange must be between -1 and 100.")
+    if not (-1 <= in_range <= 100):
+      raise ValueError("InRange must be between -1 and 100.")
 
-      straight_int = -1 if straight else 0
-      await self.send_command(f"Profile {profile} {speed} {speed2} {acceleration} {deceleration} {acceleration_ramp} {deceleration_ramp} {in_range} {straight_int}")
+    straight_int = -1 if straight else 0
+    await self.send_command(
+      f"Profile {profile} {speed} {speed2} {acceleration} {deceleration} {acceleration_ramp} {deceleration_ramp} {in_range} {straight_int}"
+    )
 
-  async def get_motion_profile_values(self, profile: int) -> tuple[int, float, float, float, float, float, float, float, bool]:
-          """
-          Get the current motion profile values for the specified profile index on the PreciseFlex robot.
+  async def get_motion_profile_values(
+    self, profile: int
+  ) -> tuple[int, float, float, float, float, float, float, float, bool]:
+    """
+    Get the current motion profile values for the specified profile index on the PreciseFlex robot.
 
-          Parameters:
-            profile (int): Profile index to get values for.
+    Parameters:
+      profile (int): Profile index to get values for.
 
-          Returns:
-            tuple: A tuple containing (profile, speed, speed2, acceleration, deceleration, acceleration_ramp, deceleration_ramp, in_range, straight)
-              - profile (int): Profile index
-              - speed (float): Percentage of maximum speed
-              - speed2 (float): Secondary speed setting
-              - acceleration (float): Percentage of maximum acceleration
-              - deceleration (float): Percentage of maximum deceleration
-              - acceleration_ramp (float): Acceleration ramp time in seconds
-              - deceleration_ramp (float): Deceleration ramp time in seconds
-              - in_range (float): InRange value (-1 to 100)
-              - straight (bool): True if straight-line path, False if joint-based path
-          """
-          data = await self.send_command(f"Profile {profile}")
-          parts = data.split(" ")
-          if len(parts) != 9:
-            raise PreciseFlexError(-1, "Unexpected response format from device.")
+    Returns:
+      tuple: A tuple containing (profile, speed, speed2, acceleration, deceleration, acceleration_ramp, deceleration_ramp, in_range, straight)
+        - profile (int): Profile index
+        - speed (float): Percentage of maximum speed
+        - speed2 (float): Secondary speed setting
+        - acceleration (float): Percentage of maximum acceleration
+        - deceleration (float): Percentage of maximum deceleration
+        - acceleration_ramp (float): Acceleration ramp time in seconds
+        - deceleration_ramp (float): Deceleration ramp time in seconds
+        - in_range (float): InRange value (-1 to 100)
+        - straight (bool): True if straight-line path, False if joint-based path
+    """
+    data = await self.send_command(f"Profile {profile}")
+    parts = data.split(" ")
+    if len(parts) != 9:
+      raise PreciseFlexError(-1, "Unexpected response format from device.")
 
-          return (
-            int(parts[0]),
-            float(parts[1]),
-            float(parts[2]),
-            float(parts[3]),
-            float(parts[4]),
-            float(parts[5]),
-            float(parts[6]),
-            float(parts[7]),
-            False if int(parts[8]) == 0 else True
-          )
+    return (
+      int(parts[0]),
+      float(parts[1]),
+      float(parts[2]),
+      float(parts[3]),
+      float(parts[4]),
+      float(parts[5]),
+      float(parts[6]),
+      float(parts[7]),
+      False if int(parts[8]) == 0 else True,
+    )
 
-  #region MOTION COMMANDS
+  # region MOTION COMMANDS
   async def halt(self):
-      """Stops the current robot immediately but leaves power on."""
-      await self.send_command("halt")
+    """Stops the current robot immediately but leaves power on."""
+    await self.send_command("halt")
 
   async def move(self, location_index: int, profile_index: int) -> None:
     """Move to the location specified by the station index using the specified profile.
@@ -1083,7 +1127,9 @@ class PreciseFlexBackendApi:
     """
     await self.send_command(f"moveAppro {location_index} {profile_index}")
 
-  async def move_extra_axis(self, axis1_position: float, axis2_position: float | None = None) -> None:
+  async def move_extra_axis(
+    self, axis1_position: float, axis2_position: float | None = None
+  ) -> None:
     """Post a move for one or two extra axes during the next Cartesian motion.
 
     Does not cause the robot to move at this time. Only some kinematic modules support extra axes.
@@ -1100,7 +1146,9 @@ class PreciseFlexBackendApi:
     else:
       await self.send_command(f"moveExtraAxis {axis1_position} {axis2_position}")
 
-  async def move_one_axis(self, axis_number: int, destination_position: float, profile_index: int) -> None:
+  async def move_one_axis(
+    self, axis_number: int, destination_position: float, profile_index: int
+  ) -> None:
     """Move a single axis to the specified position using the specified profile.
 
     Parameters:
@@ -1113,8 +1161,17 @@ class PreciseFlexBackendApi:
     """
     await self.send_command(f"moveOneAxis {axis_number} {destination_position} {profile_index}")
 
-  async def move_c(self, profile_index: int, x: float, y: float, z: float,
-              yaw: float, pitch: float, roll: float, config: int | None = None) -> None:
+  async def move_c(
+    self,
+    profile_index: int,
+    x: float,
+    y: float,
+    z: float,
+    yaw: float,
+    pitch: float,
+    roll: float,
+    config: int | None = None,
+  ) -> None:
     """Move the robot to the Cartesian location specified by the arguments.
 
     Parameters:
@@ -1148,7 +1205,6 @@ class PreciseFlexBackendApi:
     """
     angles_str = " ".join(str(angle) for angle in joint_angles)
     await self.send_command(f"moveJ {profile_index} {angles_str}")
-
 
   async def release_brake(self, axis: int) -> None:
     """Release the axis brake.
@@ -1193,7 +1249,6 @@ class PreciseFlexBackendApi:
     await self.send_command("waitForEom")
     await asyncio.sleep(0.2)  # Small delay to ensure command is fully processed
 
-
   async def zero_torque(self, enable: bool, axis_mask: int = 1) -> None:
     """Sets or clears zero torque mode for the selected robot.
 
@@ -1214,9 +1269,7 @@ class PreciseFlexBackendApi:
     else:
       await self.send_command(f"zeroTorque 0")
 
-
-
-#region PAROBOT COMMANDS
+  # region PAROBOT COMMANDS
 
   async def change_config(self, grip_mode: int = 0) -> None:
     """Change Robot configuration from Righty to Lefty or vice versa using customizable locations.
@@ -1266,7 +1319,9 @@ class PreciseFlexBackendApi:
 
     return (plate_width, finger_speed, grasp_force)
 
-  async def set_grasp_data(self, plate_width_mm: float, finger_speed_percent: float, grasp_force_newtons: float) -> None:
+  async def set_grasp_data(
+    self, plate_width_mm: float, finger_speed_percent: float, grasp_force_newtons: float
+  ) -> None:
     """Set the data to be used for the next force-controlled PickPlate command grip operation.
 
     This data remains in effect until the next GraspData command or the system is restarted.
@@ -1278,7 +1333,9 @@ class PreciseFlexBackendApi:
       A positive value indicates the fingers must close to grasp.
       A negative value indicates the fingers must open to grasp.
     """
-    await self.send_command(f"GraspData {plate_width_mm} {finger_speed_percent} {grasp_force_newtons}")
+    await self.send_command(
+      f"GraspData {plate_width_mm} {finger_speed_percent} {grasp_force_newtons}"
+    )
 
   async def get_grip_close_pos(self) -> float:
     """Get the gripper close position for the servoed gripper.
@@ -1328,7 +1385,9 @@ class PreciseFlexBackendApi:
       raise ValueError("Grip mode must be 1 (open) or 2 (close)")
     await self.send_command(f"Gripper {grip_mode}")
 
-  async def move_rail(self, station_id: int | None = None, mode: int = 0, rail_destination: float | None = None) -> None:
+  async def move_rail(
+    self, station_id: int | None = None, mode: int = 0, rail_destination: float | None = None
+  ) -> None:
     """Moves the optional linear rail.
 
     The rail may be moved immediately or simultaneously with the next pick or place motion.
@@ -1379,8 +1438,9 @@ class PreciseFlexBackendApi:
 
     return (station_id, pallet_index_x, pallet_index_y, pallet_index_z)
 
-  async def set_pallet_index(self, station_id: int, pallet_index_x: int = 0,
-                pallet_index_y: int = 0, pallet_index_z: int = 0) -> None:
+  async def set_pallet_index(
+    self, station_id: int, pallet_index_x: int = 0, pallet_index_y: int = 0, pallet_index_z: int = 0
+  ) -> None:
     """Set the pallet index value from 1 to n of the station used by subsequent pick or place.
 
     If an index argument is 0 or omitted, the corresponding index is not changed.
@@ -1402,9 +1462,13 @@ class PreciseFlexBackendApi:
     if pallet_index_z < 0:
       raise ValueError("Pallet index Z cannot be negative")
 
-    await self.send_command(f"PalletIndex {station_id} {pallet_index_x} {pallet_index_y} {pallet_index_z}")
+    await self.send_command(
+      f"PalletIndex {station_id} {pallet_index_x} {pallet_index_y} {pallet_index_z}"
+    )
 
-  async def get_pallet_origin(self, station_id: int) -> tuple[int, float, float, float, float, float, float, int]:
+  async def get_pallet_origin(
+    self, station_id: int
+  ) -> tuple[int, float, float, float, float, float, float, int]:
     """Get the current pallet origin data for the specified station.
 
     Parameters:
@@ -1430,8 +1494,17 @@ class PreciseFlexBackendApi:
 
     return (station_id, x, y, z, yaw, pitch, roll, config)
 
-  async def set_pallet_origin(self, station_id: int, x: float, y: float, z: float,
-              yaw: float, pitch: float, roll: float, config: int | None = None) -> None:
+  async def set_pallet_origin(
+    self,
+    station_id: int,
+    x: float,
+    y: float,
+    z: float,
+    yaw: float,
+    pitch: float,
+    roll: float,
+    config: int | None = None,
+  ) -> None:
     """Define the origin of a pallet reference frame.
 
     Specifies the world location and orientation of the (1,1,1) pallet position.
@@ -1453,8 +1526,9 @@ class PreciseFlexBackendApi:
     if config is None:
       await self.send_command(f"PalletOrigin {station_id} {x} {y} {z} {yaw} {pitch} {roll}")
     else:
-      await self.send_command(f"PalletOrigin {station_id} {x} {y} {z} {yaw} {pitch} {roll} {config}")
-
+      await self.send_command(
+        f"PalletOrigin {station_id} {x} {y} {z} {yaw} {pitch} {roll} {config}"
+      )
 
   async def get_pallet_x(self, station_id: int) -> tuple[int, int, float, float, float]:
     """Get the current pallet X data for the specified station.
@@ -1479,7 +1553,9 @@ class PreciseFlexBackendApi:
 
     return (station_id, x_position_count, world_x, world_y, world_z)
 
-  async def set_pallet_x(self, station_id: int, x_position_count: int, world_x: float, world_y: float, world_z: float) -> None:
+  async def set_pallet_x(
+    self, station_id: int, x_position_count: int, world_x: float, world_y: float, world_z: float
+  ) -> None:
     """Define the last point on the pallet X axis.
 
     Specifies the world location of the (n,1,1) pallet position, where n is the x_position_count value.
@@ -1492,7 +1568,9 @@ class PreciseFlexBackendApi:
       world_y (float): World location Y coordinate.
       world_z (float): World location Z coordinate.
     """
-    await self.send_command(f"PalletX {station_id} {x_position_count} {world_x} {world_y} {world_z}")
+    await self.send_command(
+      f"PalletX {station_id} {x_position_count} {world_x} {world_y} {world_z}"
+    )
 
   async def get_pallet_y(self, station_id: int) -> tuple[int, int, float, float, float]:
     """Get the current pallet Y data for the specified station.
@@ -1517,7 +1595,9 @@ class PreciseFlexBackendApi:
 
     return (station_id, y_position_count, world_x, world_y, world_z)
 
-  async def set_pallet_y(self, station_id: int, y_position_count: int, world_x: float, world_y: float, world_z: float) -> None:
+  async def set_pallet_y(
+    self, station_id: int, y_position_count: int, world_x: float, world_y: float, world_z: float
+  ) -> None:
     """Define the last point on the pallet Y axis.
 
     Specifies the world location of the (1,n,1) pallet position, where n is the y_position_count value.
@@ -1531,7 +1611,9 @@ class PreciseFlexBackendApi:
       world_y (float): World location Y coordinate.
       world_z (float): World location Z coordinate.
     """
-    await self.send_command(f"PalletY {station_id} {y_position_count} {world_x} {world_y} {world_z}")
+    await self.send_command(
+      f"PalletY {station_id} {y_position_count} {world_x} {world_y} {world_z}"
+    )
 
   async def get_pallet_z(self, station_id: int) -> tuple[int, int, float, float, float]:
     """Get the current pallet Z data for the specified station.
@@ -1556,7 +1638,9 @@ class PreciseFlexBackendApi:
 
     return (station_id, z_position_count, world_x, world_y, world_z)
 
-  async def set_pallet_z(self, station_id: int, z_position_count: int, world_x: float, world_y: float, world_z: float) -> None:
+  async def set_pallet_z(
+    self, station_id: int, z_position_count: int, world_x: float, world_y: float, world_z: float
+  ) -> None:
     """Define the last point on the pallet Z axis.
 
     Specifies the world location of the (1,1,n) pallet position, where n is the z_position_count value.
@@ -1570,12 +1654,16 @@ class PreciseFlexBackendApi:
       world_y (float): World location Y coordinate.
       world_z (float): World location Z coordinate.
     """
-    await self.send_command(f"PalletZ {station_id} {z_position_count} {world_x} {world_y} {world_z}")
+    await self.send_command(
+      f"PalletZ {station_id} {z_position_count} {world_x} {world_y} {world_z}"
+    )
 
-  async def pick_plate_station(self,
-                  station_id: int,
-                  horizontal_compliance: bool = False,
-                  horizontal_compliance_torque: int = 0) -> bool:
+  async def pick_plate_station(
+    self,
+    station_id: int,
+    horizontal_compliance: bool = False,
+    horizontal_compliance_torque: int = 0,
+  ) -> bool:
     """Moves to a predefined position or pallet location and picks up plate.
 
     If the arm must change configuration, it automatically goes through the Park position.
@@ -1592,67 +1680,68 @@ class PreciseFlexBackendApi:
         False if the force-controlled gripper detected no plate present.
     """
     horizontal_compliance_int = 1 if horizontal_compliance else 0
-    ret_code = await self.send_command(f"PickPlate {station_id} {horizontal_compliance_int} {horizontal_compliance_torque}")
+    ret_code = await self.send_command(
+      f"PickPlate {station_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
+    )
     return ret_code != "0"
 
+  async def place_plate_station(
+    self,
+    station_id: int,
+    horizontal_compliance: bool = False,
+    horizontal_compliance_torque: int = 0,
+  ) -> None:
+    """Moves to a predefined position or pallet location and places a plate.
 
+    If the arm must change configuration, it automatically goes through the Park position.
+    At the conclusion of this routine, the arm is left gripping the plate and stopped at the nest approach position.
+    Use Teach function to teach station place point.
 
-  async def place_plate_station(self,
-            station_id: int,
-            horizontal_compliance: bool = False,
-            horizontal_compliance_torque: int = 0) -> None:
-      """Moves to a predefined position or pallet location and places a plate.
-
-      If the arm must change configuration, it automatically goes through the Park position.
-      At the conclusion of this routine, the arm is left gripping the plate and stopped at the nest approach position.
-      Use Teach function to teach station place point.
-
-      Parameters:
-      station_id (int): Station ID, from 1 to Max.
-      horizontal_compliance (bool): If True, enable horizontal compliance during the move to place the plate, to allow centering in the fixture.
-      horizontal_compliance_torque (int): The % of the original horizontal holding torque to be retained during compliance. If omitted, 0 is used.
-      """
-      horizontal_compliance_int = 1 if horizontal_compliance else 0
-      await self.send_command(f"PlacePlate {station_id} {horizontal_compliance_int} {horizontal_compliance_torque}")
+    Parameters:
+    station_id (int): Station ID, from 1 to Max.
+    horizontal_compliance (bool): If True, enable horizontal compliance during the move to place the plate, to allow centering in the fixture.
+    horizontal_compliance_torque (int): The % of the original horizontal holding torque to be retained during compliance. If omitted, 0 is used.
+    """
+    horizontal_compliance_int = 1 if horizontal_compliance else 0
+    await self.send_command(
+      f"PlacePlate {station_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
+    )
 
   async def get_rail_position(self, station_id: int) -> float:
-      """Get the position of the optional rail axis that is associated with a station.
+    """Get the position of the optional rail axis that is associated with a station.
 
-      Parameters:
-      station_id (int): Station ID, from 1 to Max.
+    Parameters:
+    station_id (int): Station ID, from 1 to Max.
 
-      Returns:
-      float: The current rail position for the specified station.
-      """
-      data = await self.send_command(f"Rail {station_id}")
-      return float(data)
+    Returns:
+    float: The current rail position for the specified station.
+    """
+    data = await self.send_command(f"Rail {station_id}")
+    return float(data)
 
   async def set_rail_position(self, station_id: int, rail_position: float) -> None:
-      """Set the position of the optional rail axis that is associated with a station.
+    """Set the position of the optional rail axis that is associated with a station.
 
-      The station rail data is loaded and saved by the LoadFile and StoreFile commands.
+    The station rail data is loaded and saved by the LoadFile and StoreFile commands.
 
-      Parameters:
-      station_id (int): Station ID, from 1 to Max.
-      rail_position (float): The new rail position.
-      """
-      await self.send_command(f"Rail {station_id} {rail_position}")
+    Parameters:
+    station_id (int): Station ID, from 1 to Max.
+    rail_position (float): The new rail position.
+    """
+    await self.send_command(f"Rail {station_id} {rail_position}")
 
   async def teach_plate_station(self, station_id: int, z_clearance: float = 50.0) -> None:
-      """Sets the plate location to the current robot position and configuration.
+    """Sets the plate location to the current robot position and configuration.
 
-      The location is saved as Cartesian coordinates. Z clearance must be high enough to withdraw the gripper.
-      If this station is a pallet, the pallet indices must be set to 1, 1, 1. The pallet frame is not changed,
-      only the location relative to the pallet.
+    The location is saved as Cartesian coordinates. Z clearance must be high enough to withdraw the gripper.
+    If this station is a pallet, the pallet indices must be set to 1, 1, 1. The pallet frame is not changed,
+    only the location relative to the pallet.
 
-      Parameters:
-      station_id (int): Station ID, from 1 to Max.
-      z_clearance (float): The Z Clearance value. If omitted, a value of 50 is used. If specified and non-zero, this value is used.
-      """
-      await self.send_command(f"TeachPlate {station_id} {z_clearance}")
-
-
-
+    Parameters:
+    station_id (int): Station ID, from 1 to Max.
+    z_clearance (float): The Z Clearance value. If omitted, a value of 50 is used. If specified and non-zero, this value is used.
+    """
+    await self.send_command(f"TeachPlate {station_id} {z_clearance}")
 
   async def get_station_type(self, station_id: int) -> tuple[int, int, int, float, float, float]:
     """Get the station configuration for the specified station ID.
@@ -1684,13 +1773,15 @@ class PreciseFlexBackendApi:
 
     return (station_id, access_type, location_type, z_clearance, z_above, z_grasp_offset)
 
-  async def set_station_type(self,
-                 station_id: int,
-                 access_type: int,
-                 location_type: int,
-                 z_clearance: float,
-                 z_above: float,
-                 z_grasp_offset: float) -> None:
+  async def set_station_type(
+    self,
+    station_id: int,
+    access_type: int,
+    location_type: int,
+    z_clearance: float,
+    z_above: float,
+    z_grasp_offset: float,
+  ) -> None:
     """Set the station configuration for the specified station ID.
 
     Parameters:
@@ -1717,9 +1808,11 @@ class PreciseFlexBackendApi:
     if location_type not in [0, 1]:
       raise ValueError("Location type must be 0 (normal single) or 1 (pallet)")
 
-    await self.send_command(f"StationType {station_id} {access_type} {location_type} {z_clearance} {z_above} {z_grasp_offset}")
+    await self.send_command(
+      f"StationType {station_id} {access_type} {location_type} {z_clearance} {z_above} {z_grasp_offset}"
+    )
 
-#region SSGRIP COMMANDS
+  # region SSGRIP COMMANDS
 
   async def home_all_if_no_plate(self) -> int:
     """Tests if the gripper is holding a plate. If not, enable robot power and home all robots.
@@ -1730,7 +1823,9 @@ class PreciseFlexBackendApi:
     response = await self.send_command("HomeAll_IfNoPlate")
     return int(response)
 
-  async def grasp_plate(self, plate_width_mm: float, finger_speed_percent: int, grasp_force_newtons: float) -> int:
+  async def grasp_plate(
+    self, plate_width_mm: float, finger_speed_percent: int, grasp_force_newtons: float
+  ) -> int:
     """Grasps a plate with limited force.
 
     A plate can be grasped by opening or closing the gripper. The actual commanded gripper
@@ -1753,10 +1848,14 @@ class PreciseFlexBackendApi:
     if not (1 <= finger_speed_percent <= 100):
       raise ValueError("Finger speed percent must be between 1 and 100")
 
-    response = await self.send_command(f"GraspPlate {plate_width_mm} {finger_speed_percent} {grasp_force_newtons}")
+    response = await self.send_command(
+      f"GraspPlate {plate_width_mm} {finger_speed_percent} {grasp_force_newtons}"
+    )
     return int(response)
 
-  async def release_plate(self, open_width_mm: float, finger_speed_percent: int, in_range: float = 0.0) -> None:
+  async def release_plate(
+    self, open_width_mm: float, finger_speed_percent: int, in_range: float = 0.0
+  ) -> None:
     """Releases the plate after a GraspPlate command.
 
     Opens (or closes) the gripper to the specified width and cancels the force limit
@@ -1787,7 +1886,9 @@ class PreciseFlexBackendApi:
     response = await self.send_command("IsFullyClosed")
     return int(response)
 
-  async def set_active_gripper(self, gripper_id: int, spin_mode: int = 0, profile_index: int | None = None) -> None:
+  async def set_active_gripper(
+    self, gripper_id: int, spin_mode: int = 0, profile_index: int | None = None
+  ) -> None:
     """(Dual Gripper Only) Sets the currently active gripper and modifies the tool reference frame.
 
     Parameters:
@@ -1821,16 +1922,16 @@ class PreciseFlexBackendApi:
     return int(response)
 
   async def free_mode(self, on: bool, axis: int = 0):
-      """
-      Activates or deactivates free mode.  The robot must be attached to enter free mode.
+    """
+    Activates or deactivates free mode.  The robot must be attached to enter free mode.
 
-      Parameters:
-        on (bool): If True, enable free mode. If False, disable free mode for all axes.
-        axis (int): Axis to apply free mode to. 0 = all axes or > 0 = Free just this axis. Ignored if 'on' parameter is False.
-      """
-      if not on:
-        axis = -1 # means turn off free mode for all axes
-      await self.send_command(f"freemode {axis}")
+    Parameters:
+      on (bool): If True, enable free mode. If False, disable free mode for all axes.
+      axis (int): Axis to apply free mode to. 0 = all axes or > 0 = Free just this axis. Ignored if 'on' parameter is False.
+    """
+    if not on:
+      axis = -1  # means turn off free mode for all axes
+    await self.send_command(f"freemode {axis}")
 
   async def open_gripper(self):
     """Open the gripper."""
@@ -1840,10 +1941,12 @@ class PreciseFlexBackendApi:
     """Close the gripper."""
     await self.send_command("gripper 2")
 
-  async def pick_plate(self,
-                 position_id: int,
-                 horizontal_compliance: bool = False,
-                 horizontal_compliance_torque: int = 0):
+  async def pick_plate(
+    self,
+    position_id: int,
+    horizontal_compliance: bool = False,
+    horizontal_compliance_torque: int = 0,
+  ):
     """Pick an item at the specified position ID.
 
     Parameters:
@@ -1852,14 +1955,18 @@ class PreciseFlexBackendApi:
       horizontal_compliance_torque (int): The % of the original horizontal holding torque to be retained during compliance. If omitted, 0 is used.
     """
     horizontal_compliance_int = 1 if horizontal_compliance else 0
-    ret_code = await self.send_command(f"pickplate {position_id} {horizontal_compliance_int} {horizontal_compliance_torque}")
+    ret_code = await self.send_command(
+      f"pickplate {position_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
+    )
     if ret_code == "0":
       raise PreciseFlexError(-1, "the force-controlled gripper detected no plate present.")
 
-  async def place_plate(self,
-                        position_id: int,
-                        horizontal_compliance: bool = False,
-                        horizontal_compliance_torque: int = 0):
+  async def place_plate(
+    self,
+    position_id: int,
+    horizontal_compliance: bool = False,
+    horizontal_compliance_torque: int = 0,
+  ):
     """Place an item at the specified position ID.
 
     Parameters:
@@ -1868,10 +1975,12 @@ class PreciseFlexBackendApi:
       horizontal_compliance_torque (int): The % of the original horizontal holding torque to be retained during compliance.  If omitted, 0 is used.
     """
     horizontal_compliance_int = 1 if horizontal_compliance else 0
-    await self.send_command(f"placeplate {position_id} {horizontal_compliance_int} {horizontal_compliance_torque}")
+    await self.send_command(
+      f"placeplate {position_id} {horizontal_compliance_int} {horizontal_compliance_torque}"
+    )
 
   async def teach_position(self, position_id: int, z_clearance: float = 50.0):
-    """ Sets the plate location to the current robot position and configuration.  The location is saved as Cartesian coordinates.
+    """Sets the plate location to the current robot position and configuration.  The location is saved as Cartesian coordinates.
 
     Parameters:
       position_id (int): The ID of the position to be taught.
@@ -1879,9 +1988,8 @@ class PreciseFlexBackendApi:
     """
     await self.send_command(f"teachplate {position_id} {z_clearance}")
 
-
   async def send_command(self, command: str):
-    await self.io.write(command.encode('utf-8') + b'\n')
+    await self.io.write(command.encode("utf-8") + b"\n")
     await asyncio.sleep(0.2)  # wait a bit for the robot to process the command
     reply = await self.io.readline()
 
@@ -1889,7 +1997,9 @@ class PreciseFlexBackendApi:
 
     return self._parse_reply_ensure_successful(reply)
 
-  def _parse_xyz_response(self, parts: list[str]) -> tuple[float, float, float, float, float, float]:
+  def _parse_xyz_response(
+    self, parts: list[str]
+  ) -> tuple[float, float, float, float, float, float]:
     if len(parts) != 6:
       raise PreciseFlexError(-1, "Unexpected response format for Cartesian coordinates.")
 
@@ -1902,7 +2012,9 @@ class PreciseFlexBackendApi:
 
     return (x, y, z, yaw, pitch, roll)
 
-  def _parse_angles_response(self, parts: list[str]) -> tuple[float, float, float, float, float, float]:
+  def _parse_angles_response(
+    self, parts: list[str]
+  ) -> tuple[float, float, float, float, float, float]:
     if len(parts) < 3:
       raise PreciseFlexError(-1, "Unexpected response format for angles.")
 

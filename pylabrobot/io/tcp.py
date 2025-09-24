@@ -46,7 +46,9 @@ class TCP(IOBase):
     await self._writer.drain()
     logger.log(LOG_LEVEL_IO, "[%s:%d] write %s", self._host, self._port, data)
     capturer.record(
-      TCPCommand(device_id=f"{self._host}:{self._port}", action="write", data=data.decode("unicode_escape"))
+      TCPCommand(
+        device_id=f"{self._host}:{self._port}", action="write", data=data.decode("unicode_escape")
+      )
     )
 
   async def read(self, num_bytes: int = -1) -> bytes:
@@ -54,7 +56,9 @@ class TCP(IOBase):
     data = await self._reader.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data)
     capturer.record(
-      TCPCommand(device_id=f"{self._host}:{self._port}", action="read", data=data.decode("unicode_escape"))
+      TCPCommand(
+        device_id=f"{self._host}:{self._port}", action="read", data=data.decode("unicode_escape")
+      )
     )
     return data
 
@@ -62,13 +66,16 @@ class TCP(IOBase):
     assert self._reader is not None, "forgot to call setup?"
 
     data = await self._reader.read(128)
-    last_line = data.split(b"\r\n")[0] # fix for errors with multiplate lines returned
+    last_line = data.split(b"\r\n")[0]  # fix for errors with multiplate lines returned
     last_line += b"\r\n"
-
 
     logger.log(LOG_LEVEL_IO, "[%s:%d] readline %s", self._host, self._port, last_line)
     capturer.record(
-      TCPCommand(device_id=f"{self._host}:{self._port}", action="readline", data=last_line.decode("unicode_escape"))
+      TCPCommand(
+        device_id=f"{self._host}:{self._port}",
+        action="readline",
+        data=last_line.decode("unicode_escape"),
+      )
     )
     return last_line
 

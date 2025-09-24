@@ -3,8 +3,9 @@ from enum import Enum
 
 
 class ElbowOrientation(Enum):
-    RIGHT = "right"
-    LEFT = "left"
+  RIGHT = "right"
+  LEFT = "left"
+
 
 @dataclass
 class JointCoords:
@@ -14,6 +15,7 @@ class JointCoords:
   elbow: float
   wrist: float
   gripper: float
+
 
 @dataclass
 class CartesianCoords:
