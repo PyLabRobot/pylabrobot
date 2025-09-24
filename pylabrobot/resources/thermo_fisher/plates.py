@@ -216,7 +216,9 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
     ),
   )
 
+
 # # # # # # # # # # Thermo_Nunc_96_well_plate_1300uL_Rb # # # # # # # # # #
+
 
 def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
   """
@@ -252,13 +254,14 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
     ),
   )
 
+
 # # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_MicroAmp # # # # # # # # # #
 
 
 def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(
   h: float,
 ):
-  if h > 23.24-0.74:
+  if h > 23.24 - 0.74:
     raise ValueError(f"Height {h} is too large for" + "thermo_AB_96_wellplate_300ul_Vb_MicroAmp")
   return max(
     0.9617 + 10.2590 * h - 1.3069 * h**2 + 0.26799 * h**3 - 0.01003 * h**4,
@@ -328,7 +331,7 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
       item_dy=9,
       size_x=5.494,
       size_y=5.494,
-      size_z=23.24-0.74,
+      size_z=23.24 - 0.74,
       bottom_type=WellBottomType.V,
       material_z_thickness=0.74,
       cross_section_type=CrossSectionType.CIRCLE,
