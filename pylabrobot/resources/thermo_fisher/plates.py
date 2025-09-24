@@ -172,9 +172,9 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = False) -> Plate:
   """Thermo Fisher Scientific/Fisher Scientific cat. no.: 4483354/15273005 (= with barcode)
-  - Part no.: 16698853 (FS) (= **without** barcode).
+  - alternative cat. no.: 16698853 (FS) (= **without** barcode).
   - See `./engineering_diagrams/` directory for more part numbers (different colours).
-  - Material: Polycarbonate, Polypropylene.
+  - Material: Polycarbonate, Polypropylene
   - Sterilization compatibility: ?
   - Chemical resistance: ?
   - Thermal resistance: ?
@@ -216,6 +216,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
     ),
   )
 
+# # # # # # # # # # Thermo_Nunc_96_well_plate_1300uL_Rb # # # # # # # # # #
 
 def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
   """
@@ -248,5 +249,94 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       compute_height_from_volume=lambda liquid_volume: liquid_volume
       / (math.pi * ((well_diameter / 2) ** 2)),
+    ),
+  )
+
+# # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_MicroAmp # # # # # # # # # #
+
+
+def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(
+  h: float,
+):
+  if h > 23.24-0.74:
+    raise ValueError(f"Height {h} is too large for" + "thermo_AB_96_wellplate_300ul_Vb_MicroAmp")
+  return max(
+    0.9617 + 10.2590 * h - 1.3069 * h**2 + 0.26799 * h**3 - 0.01003 * h**4,
+    0,
+  )
+
+
+def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(
+  liquid_volume: float,
+):
+  if liquid_volume > 315:  # 5% tolerance
+    raise ValueError(
+      f"Volume {liquid_volume} is too large for" + "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
+    )
+  return max(
+    -0.1823
+    + 0.1327 * liquid_volume
+    - 0.000637 * liquid_volume**2
+    + 1.6577e-6 * liquid_volume**3
+    - 1.1487e-9 * liquid_volume**4,
+    0,
+  )
+
+
+# results_measurement_fitting_dict = {
+#     "Volume (ul)": [0, 4, 8, 20, 70, 120, 170, 220, 260],
+#     "Observed Height (mm)": [0, 0.17, 0.77, 2.27, 6.57, 9.17, 11.17, 13.17, 15.17],
+#     "Predicted Height (mm)": [0, 0.338, 0.839, 2.230, 6.526, 9.195, 11.152, 13.141, 15.145],
+#     "Relative Deviation (%)": [0, 99.07, 9.01, -1.76, -0.66, 0.27, -0.16, -0.22, -0.17]
+# }
+
+
+def thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+
+
+def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) -> Plate:
+  """Thermo Fisher Scientific cat. no.: N8010560/4316813 (w/o barcode)
+  - alternative cat. no.: 4306737/4326659 (with barcode).
+  - See `./engineering_diagrams/` directory for more part numbers.
+  - Material: Polypropylene.
+  - Sterilization compatibility: ?
+  - Chemical resistance: ?
+  - Thermal resistance: ?
+  - Cleanliness: 'Certified DNA/RNase Free'.
+  - Warning: NOT ANSI/SLAS-format!
+  - optimal pickup_distance_from_top = 6 mm.
+  - total_volume = 300 ul.
+  - working_volume = 200 ul (recommended by manufacturer).
+  """
+  return Plate(
+    name=name,
+    size_x=125.98,
+    size_y=85.85,
+    size_z=23.24,
+    lid=thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(name + "_lid") if with_lid else None,
+    model=thermo_AB_96_wellplate_300ul_Vb_MicroAmp.__name__,
+    plate_type="semi-skirted",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.6,
+      dy=8.59,
+      dz=0.0,  # check that plate is semi-skirted
+      item_dx=9,
+      item_dy=9,
+      size_x=5.494,
+      size_y=5.494,
+      size_z=23.24-0.74,
+      bottom_type=WellBottomType.V,
+      material_z_thickness=0.74,
+      cross_section_type=CrossSectionType.CIRCLE,
+      compute_volume_from_height=(
+        _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp
+      ),
+      compute_height_from_volume=(
+        _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp
+      ),
     ),
   )
