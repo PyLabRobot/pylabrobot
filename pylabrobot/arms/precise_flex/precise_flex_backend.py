@@ -241,22 +241,20 @@ class PreciseFlexBackend(ArmBackend, ABC):
     await self.api.move_to_safe()
 
   def _convert_orientation_int_to_enum(self, orientation_int: int) -> ElbowOrientation | None:
-    match orientation_int:
-      case 1:
-        return ElbowOrientation.LEFT
-      case 2:
-        return ElbowOrientation.RIGHT
-      case _:
-        return None
+    if orientation_int == 1:
+      return ElbowOrientation.LEFT
+    elif orientation_int == 2:
+      return ElbowOrientation.RIGHT
+    else:
+      return None
 
   def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
-    match orientation:
-      case ElbowOrientation.LEFT:
-        return 1
-      case ElbowOrientation.RIGHT:
-        return 2
-      case _:
-        return 0
+    if orientation == ElbowOrientation.LEFT:
+      return 1
+    elif orientation == ElbowOrientation.RIGHT:
+      return 2
+    else:
+      return 0
 
   async def home_all(self):
     """Homes all robots."""
