@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from io import IOBase
+from pylabrobot.io.io import IOBase
 from typing import Optional
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional, Union
 
 from pylabrobot.arms.backend import ArmBackend
 from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
@@ -15,7 +16,7 @@ class CoordsConverter(ABC):
 
   @abstractmethod
   def convert_to_cartesian_space(
-    self, position: tuple[float, float, float, float, float, float, ElbowOrientation | None]
+    self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
   ) -> CartesianCoords:
     ...
 
@@ -33,7 +34,7 @@ class CoordsConverter(ABC):
     ...
 
   @abstractmethod
-  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
+  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
     """Convert an ElbowOrientation enum to an integer."""
     ...
 
@@ -48,7 +49,7 @@ class PreciseFlex400SpaceConverter(CoordsConverter):
     return JointCoords(0, position[0], position[1], position[2], position[3], 0)
 
   def convert_to_cartesian_space(
-    self, position: tuple[float, float, float, float, float, float, int]
+    self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
   ) -> CartesianCoords:
     """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
     if len(position) != 7:
@@ -90,7 +91,7 @@ class PreciseFlex400SpaceConverter(CoordsConverter):
     )
     return arr
 
-  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
+  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
     """Convert an ElbowOrientation enum to an integer."""
     if orientation is None:
       return 0
@@ -112,7 +113,7 @@ class PreciseFlex3400SpaceConverter(CoordsConverter):
     return JointCoords(0, position[0], position[1], position[2], position[3], position[4])
 
   def convert_to_cartesian_space(
-    self, position: tuple[float, float, float, float, float, float, int]
+    self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
   ) -> CartesianCoords:
     """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
     if len(position) != 7:
@@ -154,7 +155,7 @@ class PreciseFlex3400SpaceConverter(CoordsConverter):
     )
     return arr
 
-  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
+  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
     """Convert an ElbowOrientation enum to an integer."""
     if orientation is None:
       return 0
@@ -240,7 +241,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Move the arm to a predefined safe position."""
     await self.api.move_to_safe()
 
-  def _convert_orientation_int_to_enum(self, orientation_int: int) -> ElbowOrientation | None:
+  def _convert_orientation_int_to_enum(self, orientation_int: int) -> Optional[ElbowOrientation]:
     if orientation_int == 1:
       return ElbowOrientation.LEFT
     elif orientation_int == 2:
@@ -248,7 +249,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     else:
       return None
 
-  def _convert_orientation_enum_to_int(self, orientation: ElbowOrientation | None) -> int:
+  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
     if orientation == ElbowOrientation.LEFT:
       return 1
     elif orientation == ElbowOrientation.RIGHT:
@@ -288,7 +289,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Get the robot's version."""
     return await self.api.get_version()
 
-  async def approach(self, position: CartesianCoords | JointCoords, approach_height: float):
+  async def approach(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Move the arm to a position above the specified coordinates by a certain distance."""
     if type(position) == JointCoords:
       joints = self.space_converter.convert_to_joints_array(position)
@@ -299,7 +300,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
-  async def pick_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
+  async def pick_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Pick a plate from the specified position."""
     if type(position) == JointCoords:
       raise ValueError("pick_plate only supports CartesianCoords for PreciseFlex.")
@@ -309,7 +310,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
-  async def place_plate(self, position: CartesianCoords | JointCoords, approach_height: float):
+  async def place_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Place a plate at the specified position."""
     if type(position) == JointCoords:
       raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
@@ -319,7 +320,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
-  async def move_to(self, position: CartesianCoords | JointCoords):
+  async def move_to(self, position: Union[CartesianCoords, JointCoords]):
     """Move the arm to a specified position in 3D space."""
     if type(position) == JointCoords:
       joints = self.space_converter.convert_to_joints_array(position)
@@ -424,7 +425,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
   async def _get_position_c(
     self,
-  ) -> tuple[float, float, float, float, float, float, ElbowOrientation | None]:
+  ) -> tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]:
     """Get the current position of the arm in 3D space."""
     position = await self.api.where_c()
     return (*position[:6], self._convert_orientation_int_to_enum(position[6]))

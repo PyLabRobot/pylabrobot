@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 
 from pylabrobot.arms.precise_flex.error_codes import ERROR_CODES
 from pylabrobot.io.tcp import TCP
@@ -41,7 +42,7 @@ class PreciseFlexBackendApi:
     await self.io.stop()
 
   # region GENERAL COMMANDS
-  async def attach(self, attach_state: int | None = None) -> int:
+  async def attach(self, attach_state: Optional[int] = None) -> int:
     """Attach or release the robot, or get attachment state.
 
     Parameters:
@@ -238,9 +239,9 @@ class PreciseFlexBackendApi:
     self,
     data_id: int,
     value,
-    unit_number: int | None = None,
-    sub_unit: int | None = None,
-    array_index: int | None = None,
+    unit_number: Optional[int] = None,
+    sub_unit: Optional[int] = None,
+    array_index: Optional[int] = None,
   ) -> None:
     """Change a value in the controller's parameter database.
 
@@ -271,9 +272,9 @@ class PreciseFlexBackendApi:
   async def get_parameter(
     self,
     data_id: int,
-    unit_number: int | None = None,
-    sub_unit: int | None = None,
-    array_index: int | None = None,
+    unit_number: Optional[int] = None,
+    sub_unit: Optional[int] = None,
+    array_index: Optional[int] = None,
   ) -> str:
     """Get the value of a numeric parameter database item.
 
@@ -571,7 +572,7 @@ class PreciseFlexBackendApi:
     return (station_index, z_clearance, z_world)
 
   async def set_location_z_clearance(
-    self, location_index: int, z_clearance: float, z_world: bool | None = None
+    self, location_index: int, z_clearance: float, z_world: Optional[bool] = None
   ) -> None:
     """Set the ZClearance and ZWorld properties for the specified location.
 
@@ -1128,7 +1129,7 @@ class PreciseFlexBackendApi:
     await self.send_command(f"moveAppro {location_index} {profile_index}")
 
   async def move_extra_axis(
-    self, axis1_position: float, axis2_position: float | None = None
+    self, axis1_position: float, axis2_position: Optional[float] = None
   ) -> None:
     """Post a move for one or two extra axes during the next Cartesian motion.
 
@@ -1170,7 +1171,7 @@ class PreciseFlexBackendApi:
     yaw: float,
     pitch: float,
     roll: float,
-    config: int | None = None,
+    config: Optional[int] = None,
   ) -> None:
     """Move the robot to the Cartesian location specified by the arguments.
 
@@ -1386,7 +1387,7 @@ class PreciseFlexBackendApi:
     await self.send_command(f"Gripper {grip_mode}")
 
   async def move_rail(
-    self, station_id: int | None = None, mode: int = 0, rail_destination: float | None = None
+    self, station_id: Optional[int] = None, mode: int = 0, rail_destination: Optional[float] = None
   ) -> None:
     """Moves the optional linear rail.
 
@@ -1503,7 +1504,7 @@ class PreciseFlexBackendApi:
     yaw: float,
     pitch: float,
     roll: float,
-    config: int | None = None,
+    config: Optional[int] = None,
   ) -> None:
     """Define the origin of a pallet reference frame.
 
@@ -1887,7 +1888,7 @@ class PreciseFlexBackendApi:
     return int(response)
 
   async def set_active_gripper(
-    self, gripper_id: int, spin_mode: int = 0, profile_index: int | None = None
+    self, gripper_id: int, spin_mode: int = 0, profile_index: Optional[int] = None
   ) -> None:
     """(Dual Gripper Only) Sets the currently active gripper and modifies the tool reference frame.
 
@@ -1993,7 +1994,7 @@ class PreciseFlexBackendApi:
     await asyncio.sleep(0.2)  # wait a bit for the robot to process the command
     reply = await self.io.readline()
 
-    print(f"Sent command: {command}, Received reply: {reply}")
+    print(f"Sent command: {command}, Received reply: {reply!r}")
 
     return self._parse_reply_ensure_successful(reply)
 

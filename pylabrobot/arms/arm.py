@@ -10,7 +10,7 @@ class Arm(Machine):
 
   def __init__(self, backend: ArmBackend):
     super().__init__(backend=backend)
-    self.backend = backend
+    self.backend: ArmBackend = backend
 
   async def move_to(self, position: Union[CartesianCoords, JointCoords]):
     """Move the arm to a specified position in 3D space."""
