@@ -935,7 +935,7 @@ class PreciseFlexApiHardwareTests(unittest.IsolatedAsyncioTestCase):
         test_values["acceleration_ramp"],
         test_values["deceleration_ramp"],
         test_values["in_range"],
-        test_values["straight"],
+        bool(test_values["straight"]),
       )
 
       # Verify the values were set
