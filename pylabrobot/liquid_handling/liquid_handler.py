@@ -1591,7 +1591,7 @@ class LiquidHandler(Resource, Machine):
     corresponding well, while channels without tips are skipped.
 
     Examples:
-      Aspirate an entire or a fraction of a 96 well plate or a container of 
+      Aspirate an entire or a fraction of a 96 well plate or a container of
       sufficient size:
 
       >>> await lh.aspirate96(plate, volume=50)
@@ -1612,10 +1612,10 @@ class LiquidHandler(Resource, Machine):
       blow_out_air_volume ([Optional[float]]): The volume of air to aspirate after the liquid, in
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
-    
+
     Raises:
       TypeError: If `resource` is not a Plate, Container, or list of Wells.
-      ValueError: If the plate has a lid, wells are from different plates, or 
+      ValueError: If the plate has a lid, wells are from different plates, or
         a container is too small for the 96-head.
     """
 
@@ -1783,7 +1783,7 @@ class LiquidHandler(Resource, Machine):
       blow_out_air_volume ([Optional[float]]): The volume of air to dispense after the liquid, in
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
-    
+
     Raises:
       TypeError: If `resource` is not a Plate, Container, or list of Wells.
       ValueError: If the plate has a lid, wells are from different plates, or
@@ -1842,14 +1842,14 @@ class LiquidHandler(Resource, Machine):
 
       for channel in self.head96.values():
         if not channel.has_tip:
-            continue
+          continue
         liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
         all_liquids.append(reversed_liquids)
 
         if not container.tracker.is_disabled and does_volume_tracking():
-            for liquid, vol in reversed(reversed_liquids):
-                container.tracker.add_liquid(liquid=liquid, volume=vol)
+          for liquid, vol in reversed(reversed_liquids):
+            container.tracker.add_liquid(liquid=liquid, volume=vol)
 
       dispense = MultiHeadDispenseContainer(
         container=container,
@@ -1870,19 +1870,19 @@ class LiquidHandler(Resource, Machine):
 
       if not len(containers) == 96:
         raise ValueError(f"dispense96 expects 96 wells, got {len(containers)}")
-        
+
       for well, channel in zip(containers, self.head96.values()):
         # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
         # during the aspiration command
         if not channel.has_tip:
-            continue
+          continue
         liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
         all_liquids.append(reversed_liquids)
 
         if not well.tracker.is_disabled and does_volume_tracking():
-            for liquid, vol in reversed_liquids:
-                well.tracker.add_liquid(liquid=liquid, volume=vol)
+          for liquid, vol in reversed_liquids:
+            well.tracker.add_liquid(liquid=liquid, volume=vol)
 
       dispense = MultiHeadDispensePlate(
         wells=cast(List[Well], containers),
