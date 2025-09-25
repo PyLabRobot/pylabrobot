@@ -2347,7 +2347,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     self._check_96_position_legal(position, skip_z=True)
 
-    tip = aspiration.tips[0]
+    tip = next(tip for tip in aspiration.tips if tip is not None)
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
@@ -2544,7 +2544,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + dispense.offset
       )
     self._check_96_position_legal(position, skip_z=True)
-    tip = dispense.tips[0]
+    tip = next(tip for tip in dispense.tips if tip is not None)
 
     liquid_height = position.z + (dispense.liquid_height or 0)
 
