@@ -1724,14 +1724,16 @@ class LiquidHandler(Resource, Machine):
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
     except Exception:
       for tip in tips:
-        tip.tracker.rollback()
+        if tip is not None:
+          tip.tracker.rollback()
       for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
       raise
     else:
       for tip in tips:
-        tip.tracker.commit()
+        if tip is not None:
+          tip.tracker.commit()
       for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.commit()
