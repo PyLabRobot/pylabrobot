@@ -512,6 +512,14 @@ class LiquidHandler(Resource, Machine):
     if error is not None:
       raise error
 
+  def get_mounted_tips(self) -> List[Optional[Tip]]:
+    """Get the tips currently mounted on the head.
+
+    Returns:
+      A list of tips currently mounted on the head, or `None` for channels without a tip.
+    """
+    return [tracker.get_tip() if tracker.has_tip else None for tracker in self.head.values()]
+
   @need_setup_finished
   async def drop_tips(
     self,

@@ -900,6 +900,19 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
     set_tip_tracking(enabled=False)
 
+  async def test_get_mounted_tips(self):
+    self.assertEqual(self.lh.get_mounted_tips(), [None] * 8)
+    await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1"])
+    mounted = self.lh.get_mounted_tips()
+    self.assertIsNotNone(self.tip_rack.get_item("A1").get_tip())
+    self.assertIsNotNone(self.tip_rack.get_item("B1").get_tip())
+    self.assertIsNotNone(self.tip_rack.get_item("C1").get_tip())
+    self.assertIsNone(mounted[3])
+    self.assertIsNone(mounted[4])
+    self.assertIsNone(mounted[5])
+    self.assertIsNone(mounted[6])
+    self.assertIsNone(mounted[7])
+
   async def test_tip_tracking_full_spot(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
     with self.assertRaises(HasTipError):
