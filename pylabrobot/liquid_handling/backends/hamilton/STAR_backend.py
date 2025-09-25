@@ -7416,7 +7416,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       5,
       6,
       7,
-    ], f"Currrent limit must be in [1, 2, 3, 4, 5, 6, 7], is {channel_speed} mm/sec"
+    ], f"Current limit must be in [1, 2, 3, 4, 5, 6, 7], is {channel_speed} mm/sec"
 
     # Move channel for cLLD (Note: does not return detected y-position!)
     await self.send_command(
