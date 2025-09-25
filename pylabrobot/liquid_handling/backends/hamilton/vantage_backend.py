@@ -1082,7 +1082,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
-    tip = aspiration.tips[0]
+    tip = next(tip for tip in aspiration.tips if tip is not None)
     liquid_to_be_aspirated = Liquid.WATER  # default to water
     if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][-1][0] is not None:
       # first part of tuple in last liquid of first well
@@ -1241,7 +1241,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
-    tip = dispense.tips[0]
+    tip = next(tip for tip in dispense.tips if tip is not None)
     liquid_to_be_dispensed = Liquid.WATER  # default to WATER
     if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
       # first part of tuple in last liquid of first well
