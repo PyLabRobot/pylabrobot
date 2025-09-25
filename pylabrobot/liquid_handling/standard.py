@@ -77,7 +77,7 @@ class SingleChannelDispense:
 class MultiHeadAspirationPlate:
   wells: List[Well]
   offset: Coordinate
-  tips: List[Tip]
+  tips: List[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
@@ -89,7 +89,7 @@ class MultiHeadAspirationPlate:
 class MultiHeadDispensePlate:
   wells: List[Well]
   offset: Coordinate
-  tips: List[Tip]
+  tips: List[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
@@ -101,7 +101,7 @@ class MultiHeadDispensePlate:
 class MultiHeadAspirationContainer:
   container: Container
   offset: Coordinate
-  tips: List[Tip]
+  tips: List[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
@@ -113,7 +113,7 @@ class MultiHeadAspirationContainer:
 class MultiHeadDispenseContainer:
   container: Container
   offset: Coordinate
-  tips: List[Tip]
+  tips: List[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
