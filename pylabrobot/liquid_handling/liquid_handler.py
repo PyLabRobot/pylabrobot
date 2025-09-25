@@ -1630,7 +1630,8 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    tips = [channel.get_tip() for channel in self.head96.values()]
+    channels_with_tips = [ch for ch in self.head96.values() if ch.has_tip]
+    tips = [ch.get_tip() for ch in channels_with_tips]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
 
@@ -1655,7 +1656,7 @@ class LiquidHandler(Resource, Machine):
       ):  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
 
-      for channel in self.head96.values():
+      for channel in channels_with_tips:
         # superfluous to have append in two places but the type checker is very angry and does not
         # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
         liquids: List[Tuple[Optional[Liquid], float]]
@@ -1689,7 +1690,7 @@ class LiquidHandler(Resource, Machine):
       if not len(containers) == 96:
         raise ValueError(f"aspirate96 expects 96 containers when a list, got {len(containers)}")
 
-      for well, channel in zip(containers, self.head96.values()):
+      for well, channel in zip(containers, channels_with_tips):
         # superfluous to have append in two places but the type checker is very angry and does not
         # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
         if well.tracker.is_disabled or not does_volume_tracking():
@@ -1717,14 +1718,14 @@ class LiquidHandler(Resource, Machine):
     try:
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
     except Exception:
-      for channel in self.head96.values():
+      for channel in channels_with_tips:
         channel.get_tip().tracker.rollback()
       for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
       raise
     else:
-      for channel in self.head96.values():
+      for channel in channels_with_tips:
         channel.get_tip().tracker.commit()
       for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
@@ -1786,7 +1787,8 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    tips = [channel.get_tip() for channel in self.head96.values()]
+    channels_with_tips = [ch for ch in self.head96.values() if ch.has_tip]
+    tips = [ch.get_tip() for ch in channels_with_tips]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]
 
@@ -1811,7 +1813,7 @@ class LiquidHandler(Resource, Machine):
       ):  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
 
-      for channel in self.head96.values():
+      for channel in channels_with_tips:
         liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
         all_liquids.append(reversed_liquids)
@@ -1865,14 +1867,14 @@ class LiquidHandler(Resource, Machine):
     try:
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
     except Exception:
-      for channel in self.head96.values():
+      for channel in channels_with_tips:
         channel.get_tip().tracker.rollback()
       for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
           container.tracker.rollback()
       raise
     else:
-      for channel in self.head96.values():
+      for channel in channels_with_tips:
         channel.get_tip().tracker.commit()
       for container in containers:
         if does_volume_tracking() and not container.tracker.is_disabled:
