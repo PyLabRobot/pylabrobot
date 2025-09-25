@@ -123,7 +123,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
       await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
       if await self.get_is_shaking():
         break
-      if time.time() - now > timeout:
+      if timeout is not None and time.time() - now > timeout:
         raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):
