@@ -149,3 +149,44 @@ def CellTreat_96_wellplate_U(name: str, lid: Optional[Lid] = None) -> Plate:
     "This plate is the same as CellTreat_96_wellplate_350ul_Ub. This "
     "function will be removed in the future."
   )
+
+
+def CellTreat_96_wellplate_350ul_Fb(name: str, with_lid: bool = False) -> Plate:
+  """
+  CellTreat cat. no.: 229195, 229196
+
+  - Material: Polystyrene
+  - Tissue culture treated: Yes (229195, 229196)
+
+  https://www.celltreat.com/wp-content/uploads/96-Well-Plate.pdf
+  """
+
+  well_kwargs = {
+    "size_x": 6.96,
+    "size_y": 6.96,
+    "size_z": 10.04,
+    "bottom_type": WellBottomType.FLAT,
+    "material_z_thickness": 1.75,
+    "cross_section_type": CrossSectionType.CIRCLE,
+    "max_volume": 300,
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.61,
+    size_y=85.24,
+    size_z=14.30,  # without lid
+    lid=None,
+    model=CellTreat_96_wellplate_350ul_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.83,  # measured
+      dy=7.67,  # measured
+      dz=4.05,  # calibrated manually
+      item_dx=9,
+      item_dy=9,
+      **well_kwargs,
+    ),
+  )
