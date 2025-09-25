@@ -7299,43 +7299,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip_bottom_diameter: float = 1.2,  # mm
   ) -> float:
     """
-    Probes the y-position at which a conductive material is detected using the channel's capacitive
-    Liquid Level Detection (cLLD) capability.
+    Probe the y-position of a conductive material using the channel's capacitive Liquid Level
+    Detection (cLLD).
 
-    This method aims to provide safe probing within defined boundaries to avoid collisions or damage
-    to the system. It is specifically designed for conductive materials.
-    
-    This method assumes you have mounted the teaching needles on the specified channel. If you have a different tip, you might need to change the `tip_bottom_diameter` parameter.
+    This method carefully moves a specified STAR channel along the y-axis to detect the presence
+    of a conductive surface. It uses STAR's built-in capacitive sensing to measure where the
+    needle tip first encounters the material, applying safety checks to prevent channel collisions
+    with adjacent channels. After detection, the channel is retracted by a configurable safe
+    distance (`post_detection_dist`) to avoid mechanical interference.
+
+    By default, the parameter `tip_bottom_diameter` assumes STAR's **integrated teaching needles**,
+    which feature an extended, straight bottom section. The correction accounts for the needle's
+    geometry by adjusting the final reported material y-position to represent the material center
+    rather than the conductive detection edge. If you are using different tips or needle designs
+    (e.g., conical tips or third-party teaching needles), you should adapt the
+    `tip_bottom_diameter` value to reflect their actual geometry.
 
     Args:
-      channel_idx: Index of the channel to use for probing (0-based).
-        The backmost channel is 0.
-      probing_direction: Direction to move
-        the channel during probing. "forward" increases y-position,
-        "backward" decreases y-position.
-      start_pos_search: Initial y-position for the search
-        (in mm). Defaults to the current y-position of the channel.
-      end_pos_search: Final y-position for the search (in mm).
-        Defaults to the maximum y-position the channel can move to safely.
-      channel_speed: Speed of the channel's movement (in mm/sec).
-        Defaults to 10.0 mm/sec (i.e. slow default for safety).
-      channel_acceleration_int: Acceleration level,
-        corresponding to 1-4 (* 5,000 steps/sec²). Defaults to 4.
-      detection_edge: Steepness of the edge for capacitive detection.
-        Must be between 0 and 1024. Defaults to 10.
-      current_limit_int: Current limit level,
-        from 1 to 7. Defaults to 7.
-      post_detection_dist: Distance to move away from the detected
-        material after detection (in mm). Defaults to 2.0 mm.
+      channel_idx: Index of the channel to probe (0-based). The backmost channel is 0.
+      probing_direction: Direction of probing:
+        - "forward" increases y-position,
+        - "backward" decreases y-position.
+      start_pos_search: Initial y-position for the search (in mm). If not set,
+        defaults to the current channel y-position.
+      end_pos_search: Final y-position for the search (in mm). If not set,
+        defaults to the maximum safe travel range.
+      channel_speed: Channel movement speed during probing (mm/sec). Defaults to 10.0 mm/sec.
+      channel_acceleration_int: Acceleration ramp setting [1–4], where the physical
+        acceleration is `value * 5,000 steps/sec²`. Defaults to 4.
+      detection_edge: Edge steepness for capacitive detection [0–1024]. Defaults to 10.
+      current_limit_int: Current limit setting [1–7]. Defaults to 7.
+      post_detection_dist: Retraction distance after detection (in mm). Defaults to 2.0 mm.
+      tip_bottom_diameter: Effective diameter of the needle/tip bottom (in mm).
+        Defaults to 1.2 mm, corresponding to STAR’s integrated teaching needles.
 
     Returns:
-      The detected y-position of the conductive material (in mm).
+      The corrected y-position (in mm) of the detected conductive material,
+      adjusted for the specified `tip_bottom_diameter`.
 
     Raises:
       ValueError:
-        - If the probing direction is invalid.
-        - If the specified start or end positions are outside the safe range.
-        - If no conductive material is detected during the probing process.
+        - If `probing_direction` is invalid.
+        - If `start_pos_search` or `end_pos_search` is outside the safe range.
+        - If the configured end position conflicts with the probing direction.
+        - If no conductive material is detected.
     """
 
     assert probing_direction in [
