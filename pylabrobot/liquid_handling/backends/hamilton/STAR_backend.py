@@ -7392,7 +7392,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     max_y_search_pos_increments = STAR.mm_to_y_drive_increment(max_y_search_pos)
     channel_speed_increments = STAR.mm_to_y_drive_increment(channel_speed)
 
-    # Machine-compatability check of calculated parameters
+    # Machine-compatibility check of calculated parameters
     assert 0 <= max_y_search_pos_increments <= 13_714, (
       "Maximum y search position must be between \n0 and"
       + f"{STAR.y_drive_increment_to_mm(13_714)+9} mm, is {max_y_search_pos_increments} mm"
