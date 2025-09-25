@@ -7826,7 +7826,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     .. code-block:: python
 
         well = plate.get_well("A3")
-        await wc.lh.aspirate(
+        await lh.aspirate(
           [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
           min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
           surface_following_distance=0,
