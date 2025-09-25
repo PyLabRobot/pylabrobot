@@ -40,6 +40,7 @@ class Drop:
 class PickupTipRack:
   resource: TipRack
   offset: Coordinate
+  tips: List[Optional[Tip]]
 
 
 @dataclass(frozen=True)

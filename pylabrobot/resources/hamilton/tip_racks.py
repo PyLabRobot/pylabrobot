@@ -483,7 +483,7 @@ def STF_Slim(name: str) -> TipRack:
 
 
 def HTF(name: str) -> TipRack:
-  raise NotImplementedError("HTF is deprecated. use hamilton_96_tiprack_1000ul_filter instead")
+  raise NotImplementedError("HTF is deprecated. use hamilton_96_tiprack_1000uL_filter instead")
 
 
 def HT(name: str) -> TipRack:
