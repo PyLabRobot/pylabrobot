@@ -16,4 +16,5 @@ def Eppendorf_DNA_LoBind_1_5ml_Vb(name: str) -> Tube:
     size_z=39,
     model="Eppendorf_DNA_LoBind_1_5ml_Vb",
     max_volume=1_400,  # units: ul
+    material_z_thickness=0.8,
   )
