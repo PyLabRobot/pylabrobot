@@ -1375,6 +1375,7 @@ class LiquidHandler(Resource, Machine):
       del backend_kwargs[extra]
 
     # queue operation on all tip trackers
+    tips: List[Optional[Tip]] = []
     for i, tip_spot in enumerate(tip_rack.get_all_items()):
       if not does_tip_tracking() and self.head96[i].has_tip:
         self.head96[i].remove_tip()
@@ -1382,10 +1383,13 @@ class LiquidHandler(Resource, Machine):
       # it's possible only some tips are present in the tip rack.
       if tip_spot.has_tip():
         self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
+        tips.append(tip_spot.get_tip())
+      else:
+        tips.append(None)
       if does_tip_tracking() and not tip_spot.tracker.is_disabled and tip_spot.has_tip():
         tip_spot.tracker.remove_tip()
 
-    pickup_operation = PickupTipRack(resource=tip_rack, offset=offset)
+    pickup_operation = PickupTipRack(resource=tip_rack, offset=offset, tips=tips)
     try:
       await self.backend.pick_up_tips96(pickup=pickup_operation, **backend_kwargs)
     except Exception as error:

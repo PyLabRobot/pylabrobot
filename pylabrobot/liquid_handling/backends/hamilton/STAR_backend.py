@@ -2184,12 +2184,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Pick up tips using the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
-    prototypical_tip = None
-    for tip_spot in pickup.resource.get_all_items():
-      if tip_spot.has_tip():
-        prototypical_tip = tip_spot.get_tip()
-        break
-    if prototypical_tip is None:
+    try:
+      prototypical_tip = next(tip for tip in pickup.tips if tip is not None)
+    except StopIteration:
       raise ValueError("No tips found in the tip rack.")
     assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
