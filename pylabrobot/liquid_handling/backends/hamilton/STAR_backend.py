@@ -7304,6 +7304,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     This method aims to provide safe probing within defined boundaries to avoid collisions or damage
     to the system. It is specifically designed for conductive materials.
+    
+    This method assumes you have mounted the teaching needles on the specified channel. If you have a different tip, you might need to change the `tip_bottom_diameter` parameter.
 
     Args:
       channel_idx: Index of the channel to use for probing (0-based).
