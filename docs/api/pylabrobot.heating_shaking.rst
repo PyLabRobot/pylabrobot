@@ -22,4 +22,4 @@ Backends
   :recursive:
 
     chatterbox.HeaterShakerChatterboxBackend
-    inheco_backend.InhecoThermoShakeBackend
+    inheco.thermoshake_backend.InhecoThermoshakeBackend

@@ -24,3 +24,6 @@ Backends
 
     chatterbox.TemperatureControllerChatterboxBackend
     opentrons_backend.OpentronsTemperatureModuleBackend
+    inheco.control_box.InhecoTECControlBox
+    inheco.cpac_backend.InhecoCPACBackend
+    inheco.cpac.inheco_cpac_ultraflat
