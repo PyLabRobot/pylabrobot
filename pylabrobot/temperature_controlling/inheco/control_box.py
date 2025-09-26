@@ -135,4 +135,4 @@ class InhecoTECControlBox:
     await self.reset_action_display()
 
   async def reset_action_display(self):
-    return await self.send_command(f"0ASD")
+    return await self.send_command("0ASD")
