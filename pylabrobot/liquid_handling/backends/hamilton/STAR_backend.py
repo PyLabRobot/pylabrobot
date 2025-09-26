@@ -2213,28 +2213,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def drop_tips96(
     self,
     drop: DropTipRack,
-    z_deposit_position: Optional[float] = None,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
+
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
+
     self._check_96_position_legal(position, skip_z=True)
 
-    if z_deposit_position is None:
-      z_deposit_position = position.z
-
     x_direction = 0 if position.x >= 0 else 1
+
     return await self.discard_tips_core96(
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
       y_position=round(position.y * 10),
-      z_deposit_position=round(z_deposit_position * 10),
+      z_deposit_position=round(position.z * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
