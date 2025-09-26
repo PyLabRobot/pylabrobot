@@ -1,5 +1,7 @@
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
-from pylabrobot.temperature_controlling.inheco.temperature_controller import InhecoTemperatureControllerBackend
+from pylabrobot.temperature_controlling.inheco.temperature_controller import (
+  InhecoTemperatureControllerBackend,
+)
 
 
 class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerBackend):
@@ -36,7 +38,7 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerB
     # assert speed in range(150, 3001), "Speed must be in the range 150 to 3000 RPM"
 
     return await self.interface.send_command(f"1SSR{speed}")
-  
+
   async def set_shaker_shape(self, shape: int):
     """Set the shape of the figure that should be shaked.
 

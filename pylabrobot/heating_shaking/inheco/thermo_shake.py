@@ -4,9 +4,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.temperature_controlling.inheco.control_box import InhecoTECControlBox
 
 
-def inheco_thermoshake_ac(
-  name: str, control_box: InhecoTECControlBox, index: int
-) -> HeaterShaker:
+def inheco_thermoshake_ac(name: str, control_box: InhecoTECControlBox, index: int) -> HeaterShaker:
   """Inheco Thermoshake AC
 
   7100160, 7100161
@@ -27,9 +25,7 @@ def inheco_thermoshake_ac(
   )
 
 
-def inheco_thermoshake(
-  name: str, control_box: InhecoTECControlBox, index: int
-) -> HeaterShaker:
+def inheco_thermoshake(name: str, control_box: InhecoTECControlBox, index: int) -> HeaterShaker:
   """Inheco Thermoshake (7100146)
 
   https://www.inheco.com/thermoshake-classic.html
@@ -44,12 +40,10 @@ def inheco_thermoshake(
     child_location=Coordinate(x=9.62, y=9.22, z=109.9),  # measured
     model=inheco_thermoshake.__name__,
     # pedestal_size_z=-4.2,  # measured
-)
+  )
 
 
-def inheco_thermoshake_rm(
-  name: str, control_box: InhecoTECControlBox, index: int
-) -> HeaterShaker:
+def inheco_thermoshake_rm(name: str, control_box: InhecoTECControlBox, index: int) -> HeaterShaker:
   """Inheco Thermoshake RM (7100144)
 
   https://www.inheco.com/thermoshake-classic.html
@@ -65,5 +59,4 @@ def inheco_thermoshake_rm(
     size_z=116,  # from spec
     child_location=Coordinate(x=0, y=0, z=0),  # TODO
     model=inheco_thermoshake.__name__,
-)
-
+  )
