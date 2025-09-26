@@ -45,6 +45,7 @@ Sometimes called "sample carriers" in Hamilton jargon.
 | Description                                                                                                                                                                                                                                        | Image                                 | PLR definition    |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ----------------- |
 | 'Tube_CAR_24_A00'<br>Part no.: 173400<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/173400) <br>Carries 24 "sample" tubes with 14.5–18 mm outer diameter, 60–120 mm high. Occupies one track. | ![](img/hamilton/Tube_CAR_24_A00.png) | `Tube_CAR_24_A00` |
+| 'Tube_CAR_32_A00'<br>Part no.: 173410<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/173410) <br>Carries 32 "sample" tubes with 11–14 mm outer diameter, 60–120 mm high. Occupies one track. | ![](img/hamilton/Tube_CAR_32_A00.png.avif) | `Tube_CAR_32_A00` |
 
 ### Trough carriers
 
