@@ -2213,7 +2213,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def drop_tips96(
     self,
     drop: DropTipRack,
-    z_deposit_position: float = 216.4,
+    z_deposit_position: Optional[float] = None,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
@@ -2225,6 +2225,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
     self._check_96_position_legal(position, skip_z=True)
+
+    if z_deposit_position == None:
+      z_deposit_position = position.z
 
     x_direction = 0 if position.x >= 0 else 1
     return await self.discard_tips_core96(
