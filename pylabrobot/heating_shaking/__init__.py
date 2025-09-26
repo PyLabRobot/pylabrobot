@@ -7,7 +7,7 @@ from pylabrobot.heating_shaking.hamilton_backend import (
   HamiltonHeaterShakerBox,
 )
 from pylabrobot.heating_shaking.heater_shaker import HeaterShaker
-from pylabrobot.heating_shaking.inheco.thermo_shake import (
+from pylabrobot.heating_shaking.inheco.thermoshake import (
   inheco_thermoshake,
   inheco_thermoshake_ac,
   inheco_thermoshake_rm,
