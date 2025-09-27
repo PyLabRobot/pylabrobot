@@ -1,0 +1,48 @@
+﻿pylabrobot.heating\_shaking.inheco.thermoshake\_backend.InhecoThermoshakeBackend
+================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.inheco.thermoshake_backend
+
+.. autoclass:: InhecoThermoshakeBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoThermoshakeBackend.supports_active_cooling
+      ~InhecoThermoshakeBackend.supports_locking
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoThermoshakeBackend.__init__
+      ~InhecoThermoshakeBackend.deactivate
+      ~InhecoThermoshakeBackend.deserialize
+      ~InhecoThermoshakeBackend.get_all_instances
+      ~InhecoThermoshakeBackend.get_current_temperature
+      ~InhecoThermoshakeBackend.get_device_info
+      ~InhecoThermoshakeBackend.lock_plate
+      ~InhecoThermoshakeBackend.serialize
+      ~InhecoThermoshakeBackend.set_shaker_shape
+      ~InhecoThermoshakeBackend.set_shaker_speed
+      ~InhecoThermoshakeBackend.set_target_temperature
+      ~InhecoThermoshakeBackend.set_temperature
+      ~InhecoThermoshakeBackend.setup
+      ~InhecoThermoshakeBackend.shake
+      ~InhecoThermoshakeBackend.start_shaking
+      ~InhecoThermoshakeBackend.start_temperature_control
+      ~InhecoThermoshakeBackend.stop
+      ~InhecoThermoshakeBackend.stop_shaking
+      ~InhecoThermoshakeBackend.stop_temperature_control
+      ~InhecoThermoshakeBackend.unlock_plate
+   
+   

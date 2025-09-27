@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.heater\_shaker.HeaterShaker.get\_default\_child\_location
+=====================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.heater_shaker
+
+.. automethod:: HeaterShaker.get_default_child_location

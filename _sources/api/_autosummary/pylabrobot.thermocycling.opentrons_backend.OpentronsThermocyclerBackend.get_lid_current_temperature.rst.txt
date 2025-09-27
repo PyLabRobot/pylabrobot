@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons\_backend.OpentronsThermocyclerBackend.get\_lid\_current\_temperature
+=======================================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons_backend
+
+.. automethod:: OpentronsThermocyclerBackend.get_lid_current_temperature

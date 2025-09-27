@@ -1,0 +1,6 @@
+pylabrobot.resources.azenta.plates.Azenta4titudeFrameStar\_96\_wellplate\_200ul\_Vb\_Lid
+========================================================================================
+
+.. currentmodule:: pylabrobot.resources.azenta.plates
+
+.. autofunction:: Azenta4titudeFrameStar_96_wellplate_200ul_Vb_Lid

@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.unassign
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.unassign
