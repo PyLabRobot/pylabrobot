@@ -7318,24 +7318,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       channel_idx: Index of the channel to probe (0-based). The backmost channel is 0.
       probing_direction: Direction of probing:
-        - "forward" increases y-position,
-        - "backward" decreases y-position.
-      start_pos_search: Initial y-position for the search (in mm). If not set,
-        defaults to the current channel y-position.
-      end_pos_search: Final y-position for the search (in mm). If not set,
-        defaults to the maximum safe travel range.
+        - "forward" decreases y-position,
+        - "backward" increases y-position.
+      start_pos_search: Initial y-position for the search (in mm). If not set, defaults to the current channel y-position.
+      end_pos_search: Final y-position for the search (in mm). If not set, defaults to the maximum safe travel range.
       channel_speed: Channel movement speed during probing (mm/sec). Defaults to 10.0 mm/sec.
-      channel_acceleration_int: Acceleration ramp setting [1–4], where the physical
-        acceleration is `value * 5,000 steps/sec²`. Defaults to 4.
-      detection_edge: Edge steepness for capacitive detection [0–1024]. Defaults to 10.
-      current_limit_int: Current limit setting [1–7]. Defaults to 7.
+      channel_acceleration_int: Acceleration ramp setting [1-4], where the physical acceleration is `value * 5,000 steps/sec²`. Defaults to 4.
+      detection_edge: Edge steepness for capacitive detection [0-1024]. Defaults to 10.
+      current_limit_int: Current limit setting [1-7]. Defaults to 7.
       post_detection_dist: Retraction distance after detection (in mm). Defaults to 2.0 mm.
-      tip_bottom_diameter: Effective diameter of the needle/tip bottom (in mm).
-        Defaults to 1.2 mm, corresponding to STAR’s integrated teaching needles.
+      tip_bottom_diameter: Effective diameter of the needle/tip bottom (in mm).  Defaults to 1.2 mm, corresponding to STAR's integrated teaching needles.
 
     Returns:
-      The corrected y-position (in mm) of the detected conductive material,
-      adjusted for the specified `tip_bottom_diameter`.
+      The corrected y-position (in mm) of the detected conductive material, adjusted for the specified `tip_bottom_diameter`.
 
     Raises:
       ValueError:
@@ -7380,21 +7375,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Set safe y-search end position based on the probing direction
     current_channel_y_pos = await self.request_y_pos_channel_n(channel_idx)
-    if probing_direction == "forward":
+    if probing_direction == "backward":
       max_y_search_pos = end_pos_search or max_safe_upper_y_pos
       if max_y_search_pos < current_channel_y_pos:
         raise ValueError(
-          f"Channel {channel_idx} cannot move forwards: "
+          f"Channel {channel_idx} cannot move forward: "
           f"End position = {max_y_search_pos} < current position = {current_channel_y_pos}"
-          f"\nDid you mean to move backwards?"
+          f"\nDid you mean to move forward?"
         )
-    else:  # probing_direction == "backwards"
+    else:  # probing_direction == "forward"
       max_y_search_pos = end_pos_search or max_safe_lower_y_pos
       if max_y_search_pos > current_channel_y_pos:
         raise ValueError(
-          f"Channel {channel_idx} cannot move backwards: "
+          f"Channel {channel_idx} cannot move forward: "
           f"End position = {max_y_search_pos} > current position = {current_channel_y_pos}"
-          f"\nDid you mean to move forwards?"
+          f"\nDid you mean to move backward?"
         )
 
     # Convert mm to increments
@@ -7442,7 +7437,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     detected_material_y_pos = await self.request_y_pos_channel_n(channel_idx)
 
     # Dynamically evaluate post-detection distance to avoid crashes
-    if probing_direction == "forward":
+    if probing_direction == "backward":
       if channel_idx == self.num_channels - 1:  # safe default
         adjacent_y_pos = 6.0
       else:  # next channel
@@ -7453,7 +7448,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         post_detection_dist, max_safe_y_mov_dist_post_detection
       )
 
-    else:  # probing_direction == "backwards"
+    else:  # probing_direction == "forward"
       if channel_idx == 0:  # safe default
         adjacent_y_pos = STAR.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
       else:  #  previous channel
@@ -7467,9 +7462,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.move_channel_y(y=move_target, channel=channel_idx)
 
     # Correct for tip_bottom_diameter
-    if probing_direction == "forward":
+    if probing_direction == "backward":
       material_y_pos = detected_material_y_pos + tip_bottom_diameter / 2
-    else:  # probing_direction == "backwards"
+    else:  # probing_direction == "forward"
       material_y_pos = detected_material_y_pos - tip_bottom_diameter / 2
 
     return material_y_pos
