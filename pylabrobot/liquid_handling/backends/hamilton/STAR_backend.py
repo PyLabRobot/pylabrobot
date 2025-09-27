@@ -7424,7 +7424,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Move channel for cLLD (Note: does not return detected y-position!)
     await self.send_command(
-      module=f"P{channel_idx+1}",
+      module=f"P{self.channel_id(channel_idx)+1}",
       command="YL",
       ya=f"{max_y_search_pos_increments:05}",  # Maximum search position [steps]
       gt=f"{detection_edge:04}",  # Edge steepness at capacitive LLD detection
