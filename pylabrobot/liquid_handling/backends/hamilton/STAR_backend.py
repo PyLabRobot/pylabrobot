@@ -7432,6 +7432,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       yv=f"{channel_speed_increments:04}",  # Max speed [steps/second]
       yr=f"{channel_acceleration_int}",  # Acceleration ramp [yr * 5_000 steps/second**2]
       yw=f"{current_limit_int}",  # Current limit
+      read_timeout=120,  # default 30 seconds is often not enough
     )
 
     detected_material_y_pos = await self.request_y_pos_channel_n(channel_idx)
