@@ -7,7 +7,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def BioER_96_wellplate_Vb_2200ul(name: str) -> Plate:
+def BioER_96_wellplate_Vb_2200uL(name: str) -> Plate:
   """BioER Cat. No. BSH06M1T-A (KingFisher-compatible)
   Spec: https://en.bioer.com/uploadfiles/2024/05/20240513165756879.pdf
   """
@@ -17,7 +17,7 @@ def BioER_96_wellplate_Vb_2200ul(name: str) -> Plate:
     size_y=85.0,  # from spec
     size_z=44.2,  # from spec
     lid=None,
-    model=BioER_96_wellplate_Vb_2200ul.__name__,
+    model=BioER_96_wellplate_Vb_2200uL.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       size_x=8.25,  # from spec (inner well width)

@@ -169,6 +169,7 @@ If you cannot find something, please contribute what you are looking for!
 library/agenbio
 library/alpaqua
 library/azenta
+library/bioer
 library/biorad
 library/boekel
 library/celltreat
