@@ -9,6 +9,7 @@ Tools for working with Hamilton-STAR specific functions.
    basic
    iswap-module
    star_lld
+   y-probing
    z-probing
    foil
    96head
