@@ -1,4 +1,6 @@
 from .chatterbox import TemperatureControllerChatterboxBackend
+from .inheco.control_box import InhecoTECControlBox
+from .inheco.cpac import inheco_cpac_ultraflat
 from .opentrons import OpentronsTemperatureModuleV2
 from .opentrons_backend import OpentronsTemperatureModuleBackend
 from .temperature_controller import TemperatureController

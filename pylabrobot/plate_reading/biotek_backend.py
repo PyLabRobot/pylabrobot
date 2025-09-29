@@ -658,7 +658,9 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp is not None
     return self._parse_body(body)
 
-  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(
+    self, plate: Plate, focal_height: float, integration_time: float = 1
+  ) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
 
@@ -667,7 +669,24 @@ class Cytation5Backend(ImageReaderBackend):
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
 
-    cmd = "008401010108120001200100001100100000123000500200200-001000-00300000000000000000001351092"
+    integration_time_seconds = int(integration_time)
+    assert 0 <= integration_time_seconds <= 60, "Integration time seconds must be between 0 and 60"
+    integration_time_milliseconds = integration_time - int(integration_time)
+    # TODO: I don't know if the multiple of 0.2 is a firmware requirement, but it's what gen5.exe requires.
+    # round because of floating point precision issues
+    assert (
+      round(integration_time_milliseconds * 10) % 2 == 0
+    ), "Integration time milliseconds must be a multiple of 0.2"
+    integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
+    integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
+
+    cmd = f"00840101010812000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
+    #                   ^^ end column
+    #                 ^^ end row
+    #               ^^ start column
+    #             ^^ start row
+    checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
+    cmd = cmd + checksum
     await self.send_command("D", cmd)
 
     resp = await self.send_command("O")

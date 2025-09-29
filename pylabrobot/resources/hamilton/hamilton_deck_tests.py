@@ -46,7 +46,7 @@ class HamiltonDeckTests(unittest.TestCase):
         """
     Rail  Resource                      Type           Coordinates (mm)
     =================================================================================
-    (-6)  ├── trash_core96              Trash          (-58.200, 106.000, 229.000)
+    (-6)  ├── trash_core96              Trash          (-58.200, 106.000, 216.400)
           │
     (1)   ├── tip_carrier               TipCarrier     (100.000, 063.000, 100.000)
           │   ├── tip_rack_01           TipRack        (106.200, 073.000, 214.950)

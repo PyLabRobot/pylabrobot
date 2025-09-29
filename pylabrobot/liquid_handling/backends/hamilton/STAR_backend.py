@@ -2213,25 +2213,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def drop_tips96(
     self,
     drop: DropTipRack,
-    z_deposit_position: float = 216.4,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
+
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+      position.z += 52.0
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
+
     self._check_96_position_legal(position, skip_z=True)
 
     x_direction = 0 if position.x >= 0 else 1
+
     return await self.discard_tips_core96(
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
       y_position=round(position.y * 10),
-      z_deposit_position=round(z_deposit_position * 10),
+      z_deposit_position=round(position.z * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
@@ -2347,7 +2350,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     self._check_96_position_legal(position, skip_z=True)
 
-    tip = aspiration.tips[0]
+    tip = next(tip for tip in aspiration.tips if tip is not None)
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
@@ -2544,7 +2547,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + dispense.offset
       )
     self._check_96_position_legal(position, skip_z=True)
-    tip = dispense.tips[0]
+    tip = next(tip for tip in dispense.tips if tip is not None)
 
     liquid_height = position.z + (dispense.liquid_height or 0)
 
@@ -7284,6 +7287,191 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @staticmethod
   def z_drive_increment_to_mm(value_increments: int) -> float:
     return round(value_increments * STARBackend.z_drive_mm_per_increment, 2)
+
+  async def clld_probe_y_position_using_channel(
+    self,
+    channel_idx: int,  # 0-based indexing of channels!
+    probing_direction: Literal["forward", "backward"],
+    start_pos_search: Optional[float] = None,  # mm
+    end_pos_search: Optional[float] = None,  # mm
+    channel_speed: float = 10.0,  # mm/sec
+    channel_acceleration_int: Literal[1, 2, 3, 4] = 4,  # * 5_000 steps/sec**2 == 926 mm/sec**2
+    detection_edge: int = 10,
+    current_limit_int: Literal[1, 2, 3, 4, 5, 6, 7] = 7,
+    post_detection_dist: float = 2.0,  # mm,
+    tip_bottom_diameter: float = 1.2,  # mm
+  ) -> float:
+    """
+    Probe the y-position of a conductive material using the channel's capacitive Liquid Level
+    Detection (cLLD).
+
+    This method carefully moves a specified STAR channel along the y-axis to detect the presence
+    of a conductive surface. It uses STAR's built-in capacitive sensing to measure where the
+    needle tip first encounters the material, applying safety checks to prevent channel collisions
+    with adjacent channels. After detection, the channel is retracted by a configurable safe
+    distance (`post_detection_dist`) to avoid mechanical interference.
+
+    By default, the parameter `tip_bottom_diameter` assumes STAR's **integrated teaching needles**,
+    which feature an extended, straight bottom section. The correction accounts for the needle's
+    geometry by adjusting the final reported material y-position to represent the material center
+    rather than the conductive detection edge. If you are using different tips or needle designs
+    (e.g., conical tips or third-party teaching needles), you should adapt the
+    `tip_bottom_diameter` value to reflect their actual geometry.
+
+    Args:
+      channel_idx: Index of the channel to probe (0-based). The backmost channel is 0.
+      probing_direction: Direction of probing:
+        - "forward" decreases y-position,
+        - "backward" increases y-position.
+      start_pos_search: Initial y-position for the search (in mm). If not set, defaults to the current channel y-position.
+      end_pos_search: Final y-position for the search (in mm). If not set, defaults to the maximum safe travel range.
+      channel_speed: Channel movement speed during probing (mm/sec). Defaults to 10.0 mm/sec.
+      channel_acceleration_int: Acceleration ramp setting [1-4], where the physical acceleration is `value * 5,000 steps/sec²`. Defaults to 4.
+      detection_edge: Edge steepness for capacitive detection [0-1024]. Defaults to 10.
+      current_limit_int: Current limit setting [1-7]. Defaults to 7.
+      post_detection_dist: Retraction distance after detection (in mm). Defaults to 2.0 mm.
+      tip_bottom_diameter: Effective diameter of the needle/tip bottom (in mm).  Defaults to 1.2 mm, corresponding to STAR's integrated teaching needles.
+
+    Returns:
+      The corrected y-position (in mm) of the detected conductive material, adjusted for the specified `tip_bottom_diameter`.
+
+    Raises:
+      ValueError:
+        - If `probing_direction` is invalid.
+        - If `start_pos_search` or `end_pos_search` is outside the safe range.
+        - If the configured end position conflicts with the probing direction.
+        - If no conductive material is detected.
+    """
+
+    assert probing_direction in [
+      "forward",
+      "backward",
+    ], f"Probing direction must be either 'forward' or 'backward', is {probing_direction}."
+
+    # Anti-channel-crash feature
+    if channel_idx > 0:
+      channel_idx_minus_one_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
+    else:
+      channel_idx_minus_one_y_pos = STAR.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
+    if channel_idx < (self.num_channels - 1):
+      channel_idx_plus_one_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
+    else:
+      channel_idx_plus_one_y_pos = 6
+      # Insight: STAR machines appear to lose connection to a channel below y-position=6 mm
+
+    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - 9
+    max_safe_lower_y_pos = channel_idx_plus_one_y_pos + 9 if channel_idx_plus_one_y_pos != 0 else 6
+
+    # Enable safe start and end positions
+    if start_pos_search:
+      assert max_safe_lower_y_pos <= start_pos_search <= max_safe_upper_y_pos, (
+        f"Start position for y search must be between \n{max_safe_lower_y_pos} and "
+        + f"{max_safe_upper_y_pos} mm, is {end_pos_search} mm. Otherwise channel will crash."
+      )
+      await self.move_channel_y(y=start_pos_search, channel=channel_idx)
+
+    if end_pos_search:
+      assert max_safe_lower_y_pos <= end_pos_search <= max_safe_upper_y_pos, (
+        f"End position for y search must be between \n{max_safe_lower_y_pos} and "
+        + f"{max_safe_upper_y_pos} mm, is {end_pos_search} mm. Otherwise channel will crash."
+      )
+
+    # Set safe y-search end position based on the probing direction
+    current_channel_y_pos = await self.request_y_pos_channel_n(channel_idx)
+    if probing_direction == "backward":
+      max_y_search_pos = end_pos_search or max_safe_upper_y_pos
+      if max_y_search_pos < current_channel_y_pos:
+        raise ValueError(
+          f"Channel {channel_idx} cannot move forward: "
+          f"End position = {max_y_search_pos} < current position = {current_channel_y_pos}"
+          f"\nDid you mean to move forward?"
+        )
+    else:  # probing_direction == "forward"
+      max_y_search_pos = end_pos_search or max_safe_lower_y_pos
+      if max_y_search_pos > current_channel_y_pos:
+        raise ValueError(
+          f"Channel {channel_idx} cannot move forward: "
+          f"End position = {max_y_search_pos} > current position = {current_channel_y_pos}"
+          f"\nDid you mean to move backward?"
+        )
+
+    # Convert mm to increments
+    max_y_search_pos_increments = STAR.mm_to_y_drive_increment(max_y_search_pos)
+    channel_speed_increments = STAR.mm_to_y_drive_increment(channel_speed)
+
+    # Machine-compatibility check of calculated parameters
+    assert 0 <= max_y_search_pos_increments <= 13_714, (
+      "Maximum y search position must be between \n0 and"
+      + f"{STAR.y_drive_increment_to_mm(13_714)+9} mm, is {max_y_search_pos_increments} mm"
+    )
+    assert 20 <= channel_speed_increments <= 8_000, (
+      f"LLD search speed must be between \n{STAR.y_drive_increment_to_mm(20)}"
+      + f"and {STAR.y_drive_increment_to_mm(8_000)} mm/sec, is {channel_speed} mm/sec"
+    )
+    assert channel_acceleration_int in [1, 2, 3, 4], (
+      "Channel speed must be in [1, 2, 3, 4] (* 5_000 steps/sec**2)"
+      + f", is {channel_speed} mm/sec"
+    )
+    assert (
+      0 <= detection_edge <= 1_0234
+    ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
+    assert current_limit_int in [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+    ], f"Current limit must be in [1, 2, 3, 4, 5, 6, 7], is {channel_speed} mm/sec"
+
+    # Move channel for cLLD (Note: does not return detected y-position!)
+    await self.send_command(
+      module=STARBackend.channel_id(channel_idx),
+      command="YL",
+      ya=f"{max_y_search_pos_increments:05}",  # Maximum search position [steps]
+      gt=f"{detection_edge:04}",  # Edge steepness at capacitive LLD detection
+      gl=f"{0:04}",  # Offset after edge detection -> always 0 to measure y-pos!
+      yv=f"{channel_speed_increments:04}",  # Max speed [steps/second]
+      yr=f"{channel_acceleration_int}",  # Acceleration ramp [yr * 5_000 steps/second**2]
+      yw=f"{current_limit_int}",  # Current limit
+      read_timeout=120,  # default 30 seconds is often not enough
+    )
+
+    detected_material_y_pos = await self.request_y_pos_channel_n(channel_idx)
+
+    # Dynamically evaluate post-detection distance to avoid crashes
+    if probing_direction == "backward":
+      if channel_idx == self.num_channels - 1:  # safe default
+        adjacent_y_pos = 6.0
+      else:  # next channel
+        adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
+
+      max_safe_y_mov_dist_post_detection = detected_material_y_pos - adjacent_y_pos - 9.0
+      move_target = detected_material_y_pos - min(
+        post_detection_dist, max_safe_y_mov_dist_post_detection
+      )
+
+    else:  # probing_direction == "forward"
+      if channel_idx == 0:  # safe default
+        adjacent_y_pos = STAR.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
+      else:  #  previous channel
+        adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
+
+      max_safe_y_mov_dist_post_detection = adjacent_y_pos - detected_material_y_pos - 9.0
+      move_target = detected_material_y_pos + min(
+        post_detection_dist, max_safe_y_mov_dist_post_detection
+      )
+
+    await self.move_channel_y(y=move_target, channel=channel_idx)
+
+    # Correct for tip_bottom_diameter
+    if probing_direction == "backward":
+      material_y_pos = detected_material_y_pos + tip_bottom_diameter / 2
+    else:  # probing_direction == "forward"
+      material_y_pos = detected_material_y_pos - tip_bottom_diameter / 2
+
+    return material_y_pos
 
   async def clld_probe_z_height_using_channel(
     self,
