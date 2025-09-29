@@ -257,39 +257,40 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
 
 # # # # # # # # # # thermo_AB_96_wellplate_300ul_Vb_MicroAmp # # # # # # # # # #
 
+
 def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_mm: float) -> float:
-    if height_mm > (23.24 - 0.74) * 1.05:
-        raise ValueError(
-            f"Height {height_mm} is too large for "
-            "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
-        )
-    # Reverse fit: height → volume, 5th-degree polynomial via numeric inversion
-    return max(
-        -6.7862
-        + 2.7847 * height_mm
-        - 0.17352 * height_mm**2
-        + 0.006029 * height_mm**3
-        - 9.971e-5 * height_mm**4
-        + 6.451e-7 * height_mm**5,
-        0,
+  if height_mm > (23.24 - 0.74) * 1.05:
+    raise ValueError(
+      f"Height {height_mm} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
+  # Reverse fit: height → volume, 5th-degree polynomial via numeric inversion
+  return max(
+    -6.7862
+    + 2.7847 * height_mm
+    - 0.17352 * height_mm**2
+    + 0.006029 * height_mm**3
+    - 9.971e-5 * height_mm**4
+    + 6.451e-7 * height_mm**5,
+    0,
+  )
+
 
 def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_ul: float) -> float:
-    if volume_ul > 305:  # 5% tolerance above 290 µL
-        raise ValueError(
-            f"Volume {volume_ul} is too large for "
-            "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
-        )
-    # Polynomial coefficients: degree 5 fit from volume → height
-    return max(
-        1.0796
-        + 0.1570 * volume_ul
-        - 0.00099828 * volume_ul**2
-        + 3.4541e-6 * volume_ul**3
-        - 3.5805e-9 * volume_ul**4
-        - 1.8018e-12 * volume_ul**5,
-        0,
+  if volume_ul > 305:  # 5% tolerance above 290 µL
+    raise ValueError(
+      f"Volume {volume_ul} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
+  # Polynomial coefficients: degree 5 fit from volume → height
+  return max(
+    1.0796
+    + 0.1570 * volume_ul
+    - 0.00099828 * volume_ul**2
+    + 3.4541e-6 * volume_ul**3
+    - 3.5805e-9 * volume_ul**4
+    - 1.8018e-12 * volume_ul**5,
+    0,
+  )
+
 
 # results_measurement_fitting_dict = {
 #  'Volume (ul)': [4, 8, 20, 40, 70, 120, 170, 220, 260, 290],
