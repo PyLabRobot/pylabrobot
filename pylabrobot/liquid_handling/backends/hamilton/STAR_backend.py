@@ -2228,7 +2228,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
-      position.z += 52.0
+      position.z = tip_spot_a1.parent.get_absolute_location().z + 1.45
+      # This should be the case for all normal hamilton tip carriers + racks
+      # In the future, we might want to make this more flexible
+      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 

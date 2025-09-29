@@ -1515,7 +1515,7 @@ class LiquidHandler(Resource, Machine):
         raise RuntimeError("All tips must be from the same tip rack")
     return tip_rack
 
-  async def return_tips96(self, allow_nonzero_volume: bool = False, **backend_kwargs):
+  async def return_tips96(self, allow_nonzero_volume: bool = False, offset: Coordinate = Coordinate.zero(), **backend_kwargs):
     """Return the tips on the 96 head to the tip rack where they were picked up.
 
     Examples:
@@ -1539,6 +1539,7 @@ class LiquidHandler(Resource, Machine):
     return await self.drop_tips96(
       tip_rack,
       allow_nonzero_volume=allow_nonzero_volume,
+      offset=offset,
       **backend_kwargs,
     )
 
