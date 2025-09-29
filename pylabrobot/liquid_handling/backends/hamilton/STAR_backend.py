@@ -1381,10 +1381,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     initialized = await self.request_instrument_initialization_status()
 
-    if not initialized and not skip_instrument_initialization:
-      logger.info("Running backend initialization procedure.")
+    if not initialized:
+      if not skip_instrument_initialization:
+        logger.info("Running backend initialization procedure.")
 
-      await self.pre_initialize_instrument()
+        await self.pre_initialize_instrument()
+    else:
+      # pre_initialize only runs when the robot is not initialized
+      # pre_initialize will move all channels to Z safety
+      # so if we skip pre_initialize, we need to raise the channels ourselves
+      await self.move_all_channels_in_z_safety()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
