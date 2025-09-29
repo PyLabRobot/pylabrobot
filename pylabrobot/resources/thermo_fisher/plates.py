@@ -315,6 +315,8 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
   - optimal pickup_distance_from_top = 6 mm.
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
+
+  https://documents.thermofisher.com/TFS-Assets/LSG/manuals/cms_042421.pdf
   """
   return Plate(
     name=name,
