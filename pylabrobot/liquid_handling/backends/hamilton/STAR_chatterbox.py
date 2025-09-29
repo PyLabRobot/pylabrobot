@@ -16,7 +16,14 @@ class STARChatterboxBackend(STARBackend):
     self._iswap_parked = True
     self.core96_head_installed = core96_head_installed
 
-  async def setup(self, skip_autoload=False, skip_iswap=False, skip_core96_head=False) -> None:
+  async def setup(
+    self,
+    skip_instrument_initialization=False,
+    skip_pip=False,
+    skip_autoload=False,
+    skip_iswap=False,
+    skip_core96_head=False,
+  ):
     await LiquidHandlerBackend.setup(self)
 
   async def request_tip_presence(self):

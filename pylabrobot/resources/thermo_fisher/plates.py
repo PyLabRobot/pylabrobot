@@ -172,9 +172,9 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = False) -> Plate:
   """Thermo Fisher Scientific/Fisher Scientific cat. no.: 4483354/15273005 (= with barcode)
-  - Part no.: 16698853 (FS) (= **without** barcode).
+  - alternative cat. no.: 16698853 (FS) (= **without** barcode).
   - See `./engineering_diagrams/` directory for more part numbers (different colours).
-  - Material: Polycarbonate, Polypropylene.
+  - Material: Polycarbonate, Polypropylene
   - Sterilization compatibility: ?
   - Chemical resistance: ?
   - Thermal resistance: ?
@@ -217,6 +217,9 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
   )
 
 
+# # # # # # # # # # Thermo_Nunc_96_well_plate_1300uL_Rb # # # # # # # # # #
+
+
 def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
   """
   - Part no.: 260252
@@ -248,5 +251,101 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       compute_height_from_volume=lambda liquid_volume: liquid_volume
       / (math.pi * ((well_diameter / 2) ** 2)),
+    ),
+  )
+
+
+# # # # # # # # # # thermo_AB_96_wellplate_300ul_Vb_MicroAmp # # # # # # # # # #
+
+
+def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_mm: float) -> float:
+  if height_mm > (23.24 - 0.74) * 1.05:
+    raise ValueError(
+      f"Height {height_mm} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
+    )
+  # Reverse fit: height → volume, 5th-degree polynomial via numeric inversion
+  return max(
+    -6.7862
+    + 2.7847 * height_mm
+    - 0.17352 * height_mm**2
+    + 0.006029 * height_mm**3
+    - 9.971e-5 * height_mm**4
+    + 6.451e-7 * height_mm**5,
+    0,
+  )
+
+
+def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_ul: float) -> float:
+  if volume_ul > 305:  # 5% tolerance above 290 µL
+    raise ValueError(
+      f"Volume {volume_ul} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
+    )
+  # Polynomial coefficients: degree 5 fit from volume → height
+  return max(
+    1.0796
+    + 0.1570 * volume_ul
+    - 0.00099828 * volume_ul**2
+    + 3.4541e-6 * volume_ul**3
+    - 3.5805e-9 * volume_ul**4
+    - 1.8018e-12 * volume_ul**5,
+    0,
+  )
+
+
+# results_measurement_fitting_dict = {
+#  'Volume (ul)': [4, 8, 20, 40, 70, 120, 170, 220, 260, 290],
+#  'Observed Height (mm)': [1.69, 2.29, 3.89, 5.79, 8.49, 10.59, 12.69, 14.79, 16.59, 17.89]
+# }
+
+
+def thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+
+
+def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) -> Plate:
+  """Thermo Fisher Scientific cat. no.: N8010560/4316813 (w/o barcode)
+  - alternative cat. no.: 4306737/4326659 (with barcode).
+  - See `./engineering_diagrams/` directory for more part numbers.
+  - Material: Polypropylene.
+  - Sterilization compatibility: ?
+  - Chemical resistance: ?
+  - Thermal resistance: ?
+  - Cleanliness: 'Certified DNA/RNase Free'.
+  - Warning: NOT ANSI/SLAS-format!
+  - optimal pickup_distance_from_top = 6 mm.
+  - total_volume = 300 ul.
+  - working_volume = 200 ul (recommended by manufacturer).
+
+  https://documents.thermofisher.com/TFS-Assets/LSG/manuals/cms_042421.pdf
+  """
+  return Plate(
+    name=name,
+    size_x=125.98,
+    size_y=85.85,
+    size_z=23.24,
+    lid=thermo_AB_96_wellplate_300ul_Vb_MicroAmp_Lid(name + "_lid") if with_lid else None,
+    model=thermo_AB_96_wellplate_300ul_Vb_MicroAmp.__name__,
+    plate_type="semi-skirted",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.6,
+      dy=8.59,
+      dz=0.0,  # check that plate is semi-skirted
+      item_dx=9,
+      item_dy=9,
+      size_x=5.494,
+      size_y=5.494,
+      size_z=23.24,
+      bottom_type=WellBottomType.V,
+      material_z_thickness=0.74,
+      cross_section_type=CrossSectionType.CIRCLE,
+      compute_volume_from_height=(
+        _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp
+      ),
+      compute_height_from_volume=(
+        _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp
+      ),
     ),
   )

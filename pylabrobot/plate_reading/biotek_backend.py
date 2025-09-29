@@ -6,26 +6,9 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional, Tuple, Union, cast
-
-try:
-  import cv2  # type: ignore
-
-  CV2_AVAILABLE = True
-except ImportError as e:
-  cv2 = None  # type: ignore
-  CV2_AVAILABLE = False
-  _CV2_IMPORT_ERROR = e
+from typing import List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.resources.plate import Plate
-
-try:
-  import numpy as np  # type: ignore
-
-  USE_NUMPY = True
-except ImportError as e:
-  USE_NUMPY = False
-  _NUMPY_IMPORT_ERROR = e
 
 try:
   import PySpin  # type: ignore
@@ -58,49 +41,35 @@ PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
 SpinnakerException = PySpin.SpinnakerException if USE_PYSPIN else Exception
 
 
-async def _golden_ratio_search(
-  func: Callable[..., Coroutine[Any, Any, float]], a: float, b: float, tol: float, timeout: float
-):
-  """Golden ratio search to maximize a unimodal function `func` over the interval [a, b]."""
-  # thanks chat
-  phi = (1 + np.sqrt(5)) / 2  # Golden ratio
-
-  c = b - (b - a) / phi
-  d = a + (b - a) / phi
-
-  cache: Dict[float, float] = {}
-
-  async def cached_func(x: float) -> float:
-    x = round(x / tol) * tol  # round x to units of tol
-    if x not in cache:
-      cache[x] = await func(x)
-    return cache[x]
-
-  t0 = time.time()
-  iteration = 0
-  while abs(b - a) > tol:
-    if (await cached_func(c)) > (await cached_func(d)):
-      b = d
-    else:
-      a = c
-    c = b - (b - a) / phi
-    d = a + (b - a) / phi
-    if time.time() - t0 > timeout:
-      raise TimeoutError("Timeout while searching for optimal focus position")
-    iteration += 1
-    logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
-
-  return (b + a) / 2
-
-
 @dataclass
 class Cytation5ImagingConfig:
   camera_serial_number: Optional[str] = None
-  max_image_read_attempts: int = 8
+  max_image_read_attempts: int = 50
 
   # if not specified, these will be loaded from machine configuration (register with gen5.exe)
   objectives: Optional[List[Optional[Objective]]] = None
   filters: Optional[List[Optional[ImagingMode]]] = None
+
+
+def retry(func, *args, **kwargs):
+  """Call func with retries and logging."""
+  max_tries = 10
+  delay = 0.1
+  tries = 0
+  while True:
+    try:
+      return func(*args, **kwargs)
+    except SpinnakerException as ex:
+      tries += 1
+      if tries >= max_tries:
+        raise RuntimeError(f"Failed after {max_tries} tries") from ex
+      logger.warning(
+        "Retry %d/%d failed: %s",
+        tries,
+        max_tries,
+        str(ex),
+      )
+      time.sleep(delay)
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -135,9 +104,9 @@ class Cytation5Backend(ImageReaderBackend):
     self._imaging_mode: Optional["ImagingMode"] = None
     self._row: Optional[int] = None
     self._column: Optional[int] = None
-    self._auto_focus_search_range: Tuple[float, float] = (1.8, 2.5)
     self._shaking = False
-    self._pos_x, self._pos_y = 0.0, 0.0
+    self._pos_x: Optional[float] = None
+    self._pos_y: Optional[float] = None
     self._objective: Optional[Objective] = None
     self._slow_mode: Optional[bool] = None
 
@@ -689,7 +658,9 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp is not None
     return self._parse_body(body)
 
-  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(
+    self, plate: Plate, focal_height: float, integration_time: float = 1
+  ) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
 
@@ -698,7 +669,24 @@ class Cytation5Backend(ImageReaderBackend):
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
 
-    cmd = "008401010108120001200100001100100000123000500200200-001000-00300000000000000000001351092"
+    integration_time_seconds = int(integration_time)
+    assert 0 <= integration_time_seconds <= 60, "Integration time seconds must be between 0 and 60"
+    integration_time_milliseconds = integration_time - int(integration_time)
+    # TODO: I don't know if the multiple of 0.2 is a firmware requirement, but it's what gen5.exe requires.
+    # round because of floating point precision issues
+    assert (
+      round(integration_time_milliseconds * 10) % 2 == 0
+    ), "Integration time milliseconds must be a multiple of 0.2"
+    integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
+    integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
+
+    cmd = f"00840101010812000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
+    #                   ^^ end column
+    #                 ^^ end row
+    #               ^^ start column
+    #             ^^ start row
+    checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
+    cmd = cmd + checksum
     await self.send_command("D", cmd)
 
     resp = await self.send_command("O")
@@ -861,13 +849,17 @@ class Cytation5Backend(ImageReaderBackend):
   def start_acquisition(self):
     if self.cam is None:
       raise RuntimeError("Camera is not initialized.")
-    self.cam.BeginAcquisition()
+    if self._acquiring:
+      return
+    retry(self.cam.BeginAcquisition)
     self._acquiring = True
 
   def stop_acquisition(self):
     if self.cam is None:
       raise RuntimeError("Camera is not initialized.")
-    self.cam.EndAcquisition()
+    if not self._acquiring:
+      return
+    retry(self.cam.EndAcquisition)
     self._acquiring = False
 
   async def led_on(self, intensity: int = 10):
@@ -886,8 +878,9 @@ class Cytation5Backend(ImageReaderBackend):
     """focus position in mm"""
 
     if focal_position == "machine-auto":
-      await self.auto_focus()
-      return
+      raise ValueError(
+        "focal_position cannot be 'machine-auto'. Use the PLR Imager universal autofocus instead."
+      )
 
     if focal_position == self._focal_height:
       logger.debug("Focus position is already set to %s", focal_position)
@@ -916,6 +909,10 @@ class Cytation5Backend(ImageReaderBackend):
     if self._imaging_mode is None:
       raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
 
+    if x == self._pos_x and y == self._pos_y:
+      logger.debug("Position is already set to (%s, %s)", x, y)
+      return
+
     # firmware is in (10/0.984 (10/0.984))um units. plr is mm. To convert
     x_str, y_str = (
       str(round(x * 100 * 0.984)).zfill(6),
@@ -936,7 +933,7 @@ class Cytation5Backend(ImageReaderBackend):
       "Y", f"Z{objective_code}{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
     )
 
-    relative_x, relative_y = x - self._pos_x, y - self._pos_y
+    relative_x, relative_y = x - (self._pos_x or 0), y - (self._pos_y or 0)
     if relative_x != 0:
       relative_x_str = str(round(relative_x * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O00{relative_x_str}")
@@ -944,79 +941,8 @@ class Cytation5Backend(ImageReaderBackend):
       relative_y_str = str(round(relative_y * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O01{relative_y_str}")
 
-    if relative_x != 0 or relative_y != 0:
-      await asyncio.sleep(0.1)
-
-  def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
-    self._auto_focus_search_range = (min_focal_height, max_focal_height)
-
-  async def auto_focus(self, timeout: float = 30):
-    """Set auto focus search range with set_auto_focus_search_range()."""
-
-    plate = self._plate
-    if plate is None:
-      raise RuntimeError("Plate not set. Run set_plate() first.")
-    imaging_mode = self._imaging_mode
-    if imaging_mode is None:
-      raise RuntimeError("Imaging mode not set. Run set_imaging_mode() first.")
-    objective = self._objective
-    if objective is None:
-      raise RuntimeError("Objective not set. Run set_objective() first.")
-    exposure = self._exposure
-    if exposure is None:
-      raise RuntimeError("Exposure time not set. Run set_exposure() first.")
-    gain = self._gain
-    if gain is None:
-      raise RuntimeError("Gain not set. Run set_gain() first.")
-    row, column = self._row, self._column
-    if row is None or column is None:
-      raise RuntimeError("Row and column not set. Run select() first.")
-    if not USE_NUMPY:
-      # This is strange, because Spinnaker requires numpy
-      raise RuntimeError(
-        "numpy is not installed. See Cytation5 installation instructions. "
-        f"Import error: {_NUMPY_IMPORT_ERROR}"
-      )
-
-    # objective function: variance of laplacian
-    async def evaluate_focus(focus_value):
-      await self.set_focus(focus_value)
-      image = await self._acquire_image()
-
-      if not CV2_AVAILABLE:
-        raise RuntimeError(
-          f"cv2 needs to be installed for auto focus. Import error: {_CV2_IMPORT_ERROR}"
-        )
-
-      # cut out 25% on each side
-      np_image = np.array(image, dtype=np.float64)
-      height, width = np_image.shape[:2]
-      crop_height = height // 4
-      crop_width = width // 4
-      np_image = np_image[crop_height : height - crop_height, crop_width : width - crop_width]
-
-      # NVMG: Normalized Variance of the Gradient Magnitude
-      # Chat invented this i think
-      sobel_x = cv2.Sobel(np_image, cv2.CV_64F, 1, 0, ksize=3)
-      sobel_y = cv2.Sobel(np_image, cv2.CV_64F, 0, 1, ksize=3)
-      gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
-
-      mean_gm = np.mean(gradient_magnitude)
-      var_gm = np.var(gradient_magnitude)
-      sharpness = var_gm / (mean_gm + 1e-6)
-      return sharpness
-
-    # Use golden ratio search to find the best focus value
-    focus_min, focus_max = self._auto_focus_search_range
-    best_focal_height = await _golden_ratio_search(
-      func=evaluate_focus,
-      a=focus_min,
-      b=focus_max,
-      tol=0.001,  # 1 micron
-      timeout=timeout,
-    )
-    self._focal_height = best_focal_height
-    return best_focal_height
+    self._pos_x, self._pos_y = x, y
+    await asyncio.sleep(0.1)
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self.cam is None:
@@ -1024,12 +950,14 @@ class Cytation5Backend(ImageReaderBackend):
 
     if self.cam.ExposureAuto.GetAccessMode() != PySpin.RW:
       raise RuntimeError("unable to write ExposureAuto")
-    self.cam.ExposureAuto.SetValue(
+
+    retry(
+      self.cam.ExposureAuto.SetValue,
       {
         "off": PySpin.ExposureAuto_Off,
         "once": PySpin.ExposureAuto_Once,
         "continuous": PySpin.ExposureAuto_Continuous,
-      }[auto_exposure]
+      }[auto_exposure],
     )
 
   async def set_exposure(self, exposure: Exposure):
@@ -1049,19 +977,19 @@ class Cytation5Backend(ImageReaderBackend):
         self._exposure = "machine-auto"
         return
       raise ValueError("exposure must be a number or 'auto'")
-    self.cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
+    retry(self.cam.ExposureAuto.SetValue, PySpin.ExposureAuto_Off)
 
     # set exposure time (in microseconds)
     if self.cam.ExposureTime.GetAccessMode() != PySpin.RW:
       raise RuntimeError("unable to write ExposureTime")
     exposure_us = int(exposure * 1000)
-    min_et = self.cam.ExposureTime.GetMin()
+    min_et = retry(self.cam.ExposureTime.GetMin)
     if exposure_us < min_et:
       raise ValueError(f"exposure must be >= {min_et}")
-    max_et = self.cam.ExposureTime.GetMax()
+    max_et = retry(self.cam.ExposureTime.GetMax)
     if exposure_us > max_et:
       raise ValueError(f"exposure must be <= {max_et}")
-    self.cam.ExposureTime.SetValue(exposure_us)
+    retry(self.cam.ExposureTime.SetValue, exposure_us)
     self._exposure = exposure
 
   async def select(self, row: int, column: int):
@@ -1071,7 +999,7 @@ class Cytation5Backend(ImageReaderBackend):
     row_str, column_str = str(row).zfill(2), str(column).zfill(2)
     await self.send_command("Y", f"W6{row_str}{column_str}")
     self._row, self._column = row, column
-    self._pos_x, self._pos_y = 0, 0
+    self._pos_x, self._pos_y = None, None
     await self.set_position(0, 0)
 
   async def set_gain(self, gain: Gain):
@@ -1206,17 +1134,9 @@ class Cytation5Backend(ImageReaderBackend):
       node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
       if not PySpin.IsWritable(node_softwaretrigger_cmd):
         raise RuntimeError("unable to execute software trigger")
-      num_trigger_tries = 5
-      for _ in range(num_trigger_tries):
-        try:
-          node_softwaretrigger_cmd.Execute()
-          break
-        except SpinnakerException:
-          continue
-      else:
-        raise RuntimeError(f"Failed to execute software trigger after {num_trigger_tries} attempts")
 
       try:
+        node_softwaretrigger_cmd.Execute()
         timeout = int(self.cam.ExposureTime.GetValue() / 1000 + 1000)  # from example
         image_result = self.cam.GetNextImage(timeout)
         if not image_result.IsIncomplete():
@@ -1227,7 +1147,14 @@ class Cytation5Backend(ImageReaderBackend):
           return image_converted.GetNDArray()  # type: ignore
       except SpinnakerException as e:
         # the image is not ready yet, try again
-        logger.debug("Failed to get image: %s", e)
+        logger.warning("Failed to get image: %s", e)
+        self.stop_acquisition()
+        self.start_acquisition()
+        if "[-1011]" in str(e):
+          logger.warning(
+            "[-1011] error might occur when the camera is plugged into a USB hub that does not have enough throughput."
+          )
+
       num_tries += 1
       await asyncio.sleep(0.3)
     raise TimeoutError("max_image_read_attempts reached")

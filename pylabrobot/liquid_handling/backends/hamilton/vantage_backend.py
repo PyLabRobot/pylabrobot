@@ -149,7 +149,7 @@ core96_errors = {
   82: "TADM measurement out of lower limit curve",
   83: "TADM measurement out of upper limit curve",
   84: "Not enough memory for TADM measurement",
-  90: "Limit curve not resetable",
+  90: "Limit curve not resettable",
   91: "Limit curve not programmable",
   92: "Limit curve name not found",
   93: "Limit curve data incorrect",
@@ -186,7 +186,7 @@ pip_errors = {
   56: "Y drive not initialized",
   57: "Y drive movement error",
   58: "Y drive position out of permitted area",
-  59: "Divergance Y motion controller to linear encoder to heigh",
+  59: "Divergance Y motion controller to linear encoder to height",
   60: "Z drive initialization failed",
   61: "Z drive not initialized",
   62: "Z drive movement error",
@@ -212,7 +212,7 @@ pip_errors = {
   84: "Not enough memory for TADM measurement",
   85: "Jet dispense pressure not reached",
   86: "ADC algorithm error",
-  90: "Limit curve not resetable",
+  90: "Limit curve not resettable",
   91: "Limit curve not programmable",
   92: "Limit curve name not found",
   93: "Limit curve data incorrect",
@@ -1082,7 +1082,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
-    tip = aspiration.tips[0]
+    tip = next(tip for tip in aspiration.tips if tip is not None)
     liquid_to_be_aspirated = Liquid.WATER  # default to water
     if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][-1][0] is not None:
       # first part of tuple in last liquid of first well
@@ -1241,7 +1241,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
-    tip = dispense.tips[0]
+    tip = next(tip for tip in dispense.tips if tip is not None)
     liquid_to_be_dispensed = Liquid.WATER  # default to WATER
     if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
       # first part of tuple in last liquid of first well

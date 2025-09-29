@@ -18,7 +18,7 @@ extras_websockets = ["websockets==15.0.1"]
 
 extras_visualizer = extras_websockets
 
-extras_opentrons = ["opentrons-http-api-client", "opentrons-shared-data"]
+extras_opentrons = ["opentrons-http-api-client", "opentrons-shared-data", "opentrons"]
 
 extras_server = [
   "flask[async]",

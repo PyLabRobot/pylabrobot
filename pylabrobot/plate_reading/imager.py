@@ -1,10 +1,13 @@
+import logging
 import math
-from typing import Awaitable, Callable, Literal, Optional, Tuple, Union, cast
+import time
+from typing import Any, Awaitable, Callable, Coroutine, Dict, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.machines import Machine
 from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.plate_reading.standard import (
   AutoExposure,
+  AutoFocus,
   Exposure,
   FocalPosition,
   Gain,
@@ -17,9 +20,56 @@ from pylabrobot.plate_reading.standard import (
 from pylabrobot.resources import Plate, Resource, Well
 
 try:
+  import cv2  # type: ignore
+
+  CV2_AVAILABLE = True
+except ImportError as e:
+  cv2 = None  # type: ignore
+  CV2_AVAILABLE = False
+  _CV2_IMPORT_ERROR = e
+
+try:
   import numpy as np
 except ImportError:
   np = None  # type: ignore[assignment]
+
+
+logger = logging.getLogger(__name__)
+
+
+async def _golden_ratio_search(
+  func: Callable[..., Coroutine[Any, Any, float]], a: float, b: float, tol: float, timeout: float
+):
+  """Golden ratio search to maximize a unimodal function `func` over the interval [a, b]."""
+  # thanks chat
+  phi = (1 + np.sqrt(5)) / 2  # Golden ratio
+
+  c = b - (b - a) / phi
+  d = a + (b - a) / phi
+
+  cache: Dict[float, float] = {}
+
+  async def cached_func(x: float) -> float:
+    x = round(x / tol) * tol  # round x to units of tol
+    if x not in cache:
+      cache[x] = await func(x)
+    return cache[x]
+
+  t0 = time.time()
+  iteration = 0
+  while abs(b - a) > tol:
+    if (await cached_func(c)) > (await cached_func(d)):
+      b = d
+    else:
+      a = c
+    c = b - (b - a) / phi
+    d = a + (b - a) / phi
+    if time.time() - t0 > timeout:
+      raise TimeoutError("Timeout while searching for optimal focus position")
+    iteration += 1
+    logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
+
+  return (b + a) / 2
 
 
 class Imager(Resource, Machine):
@@ -124,6 +174,41 @@ class Imager(Resource, Machine):
 
     raise RuntimeError("Failed to find a good exposure time.")
 
+  async def _capture_auto_focus(
+    self,
+    well: Union[Well, Tuple[int, int]],
+    mode: ImagingMode,
+    objective: Objective,
+    exposure_time: float,
+    auto_focus: AutoFocus,
+    gain: float,
+    **backend_kwargs,
+  ) -> ImagingResult:
+    async def local_capture(focal_height: float) -> ImagingResult:
+      return await self.capture(
+        well=well,
+        mode=mode,
+        objective=objective,
+        exposure_time=exposure_time,
+        focal_height=focal_height,
+        gain=gain,
+        **backend_kwargs,
+      )
+
+    async def capture_and_evaluate(focal_height: float) -> float:
+      res = await local_capture(focal_height)
+      return auto_focus.evaluate_focus(res.images[0])
+
+    # Use golden ratio search to find the best focus value
+    best_focal_height = await _golden_ratio_search(
+      func=capture_and_evaluate,
+      a=auto_focus.low,
+      b=auto_focus.high,
+      tol=auto_focus.tolerance,  # 1 micron
+      timeout=auto_focus.timeout,
+    )
+    return await local_capture(best_focal_height)
+
   async def capture(
     self,
     well: Union[Well, Tuple[int, int]],
@@ -136,7 +221,11 @@ class Imager(Resource, Machine):
   ) -> ImagingResult:
     if not isinstance(exposure_time, (int, float, AutoExposure)):
       raise TypeError(f"Invalid exposure time: {exposure_time}")
-    if not isinstance(focal_height, (int, float)) and focal_height != "machine-auto":
+    if (
+      not isinstance(focal_height, (int, float))
+      and focal_height != "machine-auto"
+      and not isinstance(focal_height, AutoFocus)
+    ):
       raise TypeError(f"Invalid focal height: {focal_height}")
 
     if isinstance(well, tuple):
@@ -156,6 +245,21 @@ class Imager(Resource, Machine):
         objective=objective,
         auto_exposure=exposure_time,
         focal_height=focal_height,
+        gain=gain,
+        **backend_kwargs,
+      )
+
+    if isinstance(focal_height, AutoFocus):
+      assert isinstance(
+        exposure_time, (int, float)
+      ), "Exposure time must be specified for auto focus"
+      assert gain != "machine-auto", "Gain must be specified for auto focus"
+      return await self._capture_auto_focus(
+        well=well,
+        mode=mode,
+        objective=objective,
+        exposure_time=exposure_time,
+        auto_focus=focal_height,
         gain=gain,
         **backend_kwargs,
       )
@@ -225,3 +329,34 @@ def fraction_overexposed(
     return "lower" if (actual_fraction - fraction) > 0 else "higher"
 
   return evaluate_exposure
+
+
+def evaluate_focus_nvmg_sobel(image: Image) -> float:
+  """Evaluate the focus of an image using the Normalized Variance of the Gradient Magnitude (NVMG) method with Sobel filters.
+
+  I think Chat invented this method.
+
+  Only uses the center 50% of the image to avoid edge effects.
+  """
+  if not CV2_AVAILABLE:
+    raise RuntimeError(
+      f"cv2 needs to be installed for auto focus. Import error: {_CV2_IMPORT_ERROR}"
+    )
+
+  # cut out 25% on each side
+  np_image = np.array(image, dtype=np.float64)
+  height, width = np_image.shape[:2]
+  crop_height = height // 4
+  crop_width = width // 4
+  np_image = np_image[crop_height : height - crop_height, crop_width : width - crop_width]
+
+  # NVMG: Normalized Variance of the Gradient Magnitude
+  # Chat invented this i think
+  sobel_x = cv2.Sobel(np_image, cv2.CV_64F, 1, 0, ksize=3)
+  sobel_y = cv2.Sobel(np_image, cv2.CV_64F, 0, 1, ksize=3)
+  gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+
+  mean_gm = np.mean(gradient_magnitude)
+  var_gm = np.var(gradient_magnitude)
+  sharpness = var_gm / (mean_gm + 1e-6)
+  return cast(float, sharpness)

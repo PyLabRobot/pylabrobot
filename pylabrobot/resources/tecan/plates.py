@@ -244,7 +244,7 @@ def HalfDeepWell_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
   )
 
 
-def DeepWell_portait_96_Well_Lid(name: str) -> Lid:
+def DeepWell_portrait_96_Well_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -253,18 +253,18 @@ def DeepWell_portait_96_Well_Lid(name: str) -> Lid:
   #   size_y=127.8,
   #   size_z=None,           # measure the total z height
   #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="DeepWell_portait_96_Well_Lid",
+  #   model="DeepWell_portrait_96_Well_Lid",
   # )
 
 
-def DeepWell_portait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+def DeepWell_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
   return TecanPlate(
     name=name,
     size_x=85.4,
     size_y=127.8,
     size_z=38.0,
-    lid=DeepWell_portait_96_Well_Lid(name=name + "_lid") if with_lid else None,
-    model="DeepWell_portait_96_Well",
+    lid=DeepWell_portrait_96_Well_Lid(name=name + "_lid") if with_lid else None,
+    model="DeepWell_portrait_96_Well",
     z_start=1670.0,
     z_dispense=1690.0,
     z_max=2050.0,

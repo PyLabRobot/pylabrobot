@@ -5148,7 +5148,7 @@ vantage_mapping[(1000, False, True, True, Liquid.WATER, True, False)] = (
 )
 
 
-# V1.1: Set mix flow rate to 120, Clot retract hight = 0
+# V1.1: Set mix flow rate to 120, Clot retract height = 0
 vantage_mapping[(1000, False, True, True, Liquid.WATER, False, False)] = (
   HighVolumeFilter_Water_DispenseSurface
 ) = HamiltonLiquidClass(

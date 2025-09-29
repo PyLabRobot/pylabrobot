@@ -9,7 +9,7 @@ This document describes best practices for writing methods that are agnostic to 
 It is recommended to keep the layout of the deck separate from the protocol. This allows you to easily change the layout of the deck without having to change the protocol.
 
 ```py
-from pylabrobot.liquid_handling import LiquidHandler, STAR
+from pylabrobot.liquid_handling import LiquidHandler, STARBackend
 from pylabrobot.resources import Deck, TipRack, Plate
 
 # Write a method that creates a deck and defines its layout.
@@ -23,7 +23,7 @@ def make_deck() -> Deck:
 
 # Instantiate the liquid handler using a deck and backend.
 deck = make_deck()
-backend = STAR()
+backend = STARBackend()
 lh = LiquidHandler(backend=backend, deck=deck)
 
 # Get references to the resources you need. Use type hinting for autocompletion.

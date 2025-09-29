@@ -5,11 +5,11 @@ from pylabrobot.resources.corning import (
   Cor_96_wellplate_360ul_Fb,
 )
 from pylabrobot.resources.hamilton import (
-  HTF,
   PLT_CAR_L5AC_A00,
-  STF,
   TIP_CAR_480_A00,
   STARLetDeck,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_1000uL_filter,
 )
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,
@@ -24,9 +24,9 @@ class HamiltonDeckTests(unittest.TestCase):
     deck = STARLetDeck()
 
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF(name="tip_rack_01")
-    tip_car[1] = STF(name="tip_rack_02")
-    tip_car[3] = HTF(name="tip_rack_04")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    tip_car[1] = hamilton_96_tiprack_300uL_filter(name="tip_rack_02")
+    tip_car[3] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
@@ -46,7 +46,7 @@ class HamiltonDeckTests(unittest.TestCase):
         """
     Rail  Resource                      Type           Coordinates (mm)
     =================================================================================
-    (-6)  ├── trash_core96              Trash          (-58.200, 106.000, 229.000)
+    (-6)  ├── trash_core96              Trash          (-58.200, 106.000, 216.400)
           │
     (1)   ├── tip_carrier               TipCarrier     (100.000, 063.000, 100.000)
           │   ├── tip_rack_01           TipRack        (106.200, 073.000, 214.950)
@@ -73,7 +73,7 @@ class HamiltonDeckTests(unittest.TestCase):
   def test_assign_gigantic_resource(self):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
     deck = STARLetDeck()
-    with self.assertLogs() as log:
+    with self.assertLogs("pylabrobot") as log:
       deck.assign_child_resource(stanley_cup, rails=1)
     self.assertEqual(
       log.output,

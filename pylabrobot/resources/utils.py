@@ -65,7 +65,7 @@ def create_equally_spaced_x(
   item_dx: float,
   **kwargs,
 ) -> List[T]:
-  """Make equally spaced resources over the x-axis. See :meth:`create_equaly_spaced_2d` for more
+  """Make equally spaced resources over the x-axis. See :meth:`create_equally_spaced_2d` for more
   details.
 
   Args:
@@ -104,7 +104,7 @@ def create_equally_spaced_y(
   item_dy: float,
   **kwargs,
 ) -> List[T]:
-  """Make equally spaced resources over the y-axis. See :meth:`create_equaly_spaced_2d` for more
+  """Make equally spaced resources over the y-axis. See :meth:`create_equally_spaced_2d` for more
   details.
 
   Args:

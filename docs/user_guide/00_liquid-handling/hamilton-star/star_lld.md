@@ -19,7 +19,7 @@ The `lld_mode` parameter can be one of the following:
 The `lld_mode` parameter is a list, so you can specify a different LLD mode for each channel.
 
 ```{note}
-The `lld_mode` parameter is only avilable when using the `STAR` backend.
+The `lld_mode` parameter is only available when using the `STAR` backend.
 ```
 
 ## Catching errors

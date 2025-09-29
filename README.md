@@ -31,11 +31,11 @@ Here's a quick example showing how to move 100uL of liquid from well A1 to A2 us
 
 ```python
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import STAR
+from pylabrobot.liquid_handling.backends import STARBackend
 from pylabrobot.resources import Deck
 
 deck = Deck.load_from_json_file("hamilton-layout.json")
-lh = LiquidHandler(backend=STAR(), deck=deck)
+lh = LiquidHandler(backend=STARBackend(), deck=deck)
 await lh.setup()
 
 await lh.pick_up_tips(lh.deck.get_resource("tip_rack")["A1"])
@@ -69,9 +69,9 @@ We also provide a browser-based Visualizer which can visualize the state of the 
 Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
 
 ```python
-from pylabrobot.plate_reading import PlateReader, ClarioStar
+from pylabrobot.plate_reading import PlateReader, CLARIOstarBackend
 
-pr = PlateReader(name="plate reader", backend=ClarioStar(), size_x=1, size_y=1, size_z=1)
+pr = PlateReader(name="plate reader", backend=CLARIOstarBackend(), size_x=1, size_y=1, size_z=1)
 await pr.setup()
 
 # Use in combination with a liquid handler

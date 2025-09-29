@@ -103,6 +103,15 @@ class AutoExposure:
   high: float
 
 
+@dataclass
+class AutoFocus:
+  evaluate_focus: Callable[[Image], float]
+  timeout: float
+  low: float
+  high: float
+  tolerance: float = 0.001  # 1 micron
+
+
 Exposure = Union[float, Literal["machine-auto"]]
 FocalPosition = Union[float, Literal["machine-auto"]]
 Gain = Union[float, Literal["machine-auto"]]

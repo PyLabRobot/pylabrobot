@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.liquid import Liquid
@@ -40,6 +40,7 @@ class Drop:
 class PickupTipRack:
   resource: TipRack
   offset: Coordinate
+  tips: Sequence[Optional[Tip]]
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,7 @@ class SingleChannelDispense:
 class MultiHeadAspirationPlate:
   wells: List[Well]
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
@@ -88,7 +89,7 @@ class MultiHeadAspirationPlate:
 class MultiHeadDispensePlate:
   wells: List[Well]
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
@@ -100,7 +101,7 @@ class MultiHeadDispensePlate:
 class MultiHeadAspirationContainer:
   container: Container
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
@@ -112,7 +113,7 @@ class MultiHeadAspirationContainer:
 class MultiHeadDispenseContainer:
   container: Container
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
