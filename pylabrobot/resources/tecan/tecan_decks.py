@@ -135,15 +135,15 @@ class TecanDeck(Deck):
       raise ValueError(f"Resource {resource} is not a Tecan resource.")
 
     return Coordinate(
-      (rails - 1) * _RAILS_WIDTH - resource.off_x + 100,
-      resource.off_y + 345 - resource.get_absolute_size_y(),
+      130 + (rails - 1) * _RAILS_WIDTH - resource.off_x,
+      resource.off_y,
       0,
     )  # TODO: verify
 
   def _rails_for_x_coordinate(self, x: float):
     """Convert an x coordinate to a rail identifier."""
 
-    return round((x + _RAILS_WIDTH - 101) / _RAILS_WIDTH) + 1
+    return round((x + _RAILS_WIDTH - 130) / _RAILS_WIDTH) + 1
 
   def summary(self) -> str:
     """Return a summary of the deck."""
