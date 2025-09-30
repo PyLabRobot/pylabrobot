@@ -140,3 +140,4 @@ Combined Retrieval & Access Summary
    :hidden:
 
    cytomat
+   inheco_incubator_shaker

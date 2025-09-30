@@ -3,6 +3,6 @@ from pylabrobot.shaking.backend import ShakerBackend
 
 
 class IncubatorShakerBackend(IncubatorBackend, ShakerBackend):
-    """Abstract base class for incubators with shaking capabilities."""
+  """Abstract base class for incubators with shaking capabilities."""
 
-    pass
+  pass
