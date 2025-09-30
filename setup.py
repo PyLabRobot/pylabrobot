@@ -29,6 +29,8 @@ extras_inheco = ["hid"]
 
 extras_agrow = ["pymodbus==3.6.8"]
 
+extras_yolink = ["yolink-api>=0.5.8"]
+
 extras_dev = (
   extras_fw
   + extras_http
@@ -39,6 +41,7 @@ extras_dev = (
   + extras_server
   + extras_inheco
   + extras_agrow
+  + extras_yolink
   + [
     "pydata-sphinx-theme",
     "myst_nb",
@@ -77,6 +80,7 @@ setup(
     "opentrons": extras_opentrons,
     "server": extras_server,
     "agrow": extras_agrow,
+    "yolink": extras_yolink,
     "dev": extras_dev,
     "all": extras_all,
   },
