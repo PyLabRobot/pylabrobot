@@ -769,6 +769,36 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
+  async def move_tips(
+    self,
+    source_tip_spots: List[TipSpot],
+    dest_tip_spots: List[TipSpot],
+  ):
+    """Move tips from one tip rack to another.
+
+    This is a convenience method that picks up tips from `source_tip_spots` and drops them to
+    `dest_tip_spots`.
+
+    Examples:
+      Move tips from one tip rack to another:
+
+      >>> await lh.move_tips(source_tip_rack["A1":"A8"], dest_tip_rack["B1":"B8"])
+    """
+
+    if len(source_tip_spots) != len(dest_tip_spots):
+      raise ValueError("Number of source and destination tip spots must match.")
+
+    use_channels = list(range(len(source_tip_spots)))
+
+    await self.pick_up_tips(
+      tip_spots=source_tip_spots,
+      use_channels=use_channels,
+    )
+    await self.drop_tips(
+      tip_spots=dest_tip_spots,
+      use_channels=use_channels,
+    )
+
   def _check_containers(self, resources: Sequence[Resource]):
     """Checks that all resources are containers."""
     not_containers = [r for r in resources if not isinstance(r, Container)]
