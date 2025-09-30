@@ -238,8 +238,25 @@ class PlateHolder(ResourceHolder):
     Args:
       resource: The Resource on the ResourceStack that was assigned.
     """
-    resource_stack = resource.parent
-    assert isinstance(resource_stack, ResourceStack)
+
+    if isinstance(resource, Lid):
+      lid_parent = resource.parent
+      if lid_parent is None:
+        raise ValueError("Lid has no parent. ResourceStack not found for Lid")
+      if isinstance(lid_parent, ResourceStack):
+        resource_stack = lid_parent
+      elif isinstance(lid_parent.parent, ResourceStack):
+        resource_stack = lid_parent.parent
+      else:
+        raise ValueError("ResourceStack not found for Lid")
+    else:
+      if resource.parent is None:
+        raise ValueError("ResourceStack not found for resource")
+      if not isinstance(resource.parent, ResourceStack):
+        raise TypeError(
+          f"Resource {resource} is not a child of a ResourceStack, but of {type(resource.parent)}"
+        )
+      resource_stack = resource.parent
     if resource_stack.children[0] == resource:
       resource_stack.location = self.get_default_child_location(resource)
 
