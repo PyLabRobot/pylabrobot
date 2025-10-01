@@ -6439,19 +6439,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="FY")
 
-  async def request_y_pos_iswap_channel(self):
-    """Query the current Y-axis position of the iSWAP channel."""
-
-    y_pos_query_increments = await self.send_command(
-      module="R0",
-      command="RY",
-      fmt="ry######",
-    )
-
-    y_pos_query_mm = self.y_drive_increment_to_mm(y_pos_query_increments["ry"])
-
-    return round(y_pos_query_mm, 1)
-
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
@@ -7229,16 +7216,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=(resp["zj"] / 10) * (1 if resp["zd"] == 0 else -1),
     )
 
-  @staticmethod
-  def _iswap_y_inc_to_mm(y_inc: int) -> float:
-    mm_per_increment = 0.046302083
-    return round(y_inc * mm_per_increment, 2)
-
   async def iswap_request_module_y(self) -> float:
     """Request iSWAP module (not gripper) Y position in mm"""
     resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
-    return STARBackend._iswap_y_inc_to_mm(iswap_y_pos)
+    return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status
@@ -7390,7 +7372,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if channel_idx > 0:
       channel_idx_minus_one_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
     else:
-      channel_idx_minus_one_y_pos = STAR.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
+      channel_idx_minus_one_y_pos = (
+        STARBackend.y_drive_increment_to_mm(13_714) + 9
+      )  # y-position=635 mm
     if channel_idx < (self.num_channels - 1):
       channel_idx_plus_one_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
     else:
@@ -7440,11 +7424,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Machine-compatibility check of calculated parameters
     assert 0 <= max_y_search_pos_increments <= 13_714, (
       "Maximum y search position must be between \n0 and"
-      + f"{STAR.y_drive_increment_to_mm(13_714)+9} mm, is {max_y_search_pos_increments} mm"
+      + f"{STARBackend.y_drive_increment_to_mm(13_714)+9} mm, is {max_y_search_pos_increments} mm"
     )
     assert 20 <= channel_speed_increments <= 8_000, (
-      f"LLD search speed must be between \n{STAR.y_drive_increment_to_mm(20)}"
-      + f"and {STAR.y_drive_increment_to_mm(8_000)} mm/sec, is {channel_speed} mm/sec"
+      f"LLD search speed must be between \n{STARBackend.y_drive_increment_to_mm(20)}"
+      + f"and {STARBackend.y_drive_increment_to_mm(8_000)} mm/sec, is {channel_speed} mm/sec"
     )
     assert channel_acceleration_int in [1, 2, 3, 4], (
       "Channel speed must be in [1, 2, 3, 4] (* 5_000 steps/sec**2)"
@@ -7492,7 +7476,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     else:  # probing_direction == "forward"
       if channel_idx == 0:  # safe default
-        adjacent_y_pos = STAR.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
+        adjacent_y_pos = STARBackend.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
       else:  #  previous channel
         adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
 
