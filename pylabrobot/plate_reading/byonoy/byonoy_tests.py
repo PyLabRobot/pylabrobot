@@ -1,28 +1,24 @@
 import unittest
 import unittest.mock
 
-from pylabrobot.liquid_handling import (
-  LiquidHandler,
-  LiquidHandlerBackend,
-  LiquidHandlerChatterboxBackend,
-)
+from pylabrobot.liquid_handling import LiquidHandler, LiquidHandlerBackend
 from pylabrobot.plate_reading.byonoy import (
-  byonoy_luminescence96_base_and_reader,
-  byonoy_luminescence_adapter,
+  byonoy_absorbance96_base_and_reader,
+  byonoy_absorbance_adapter,
 )
 from pylabrobot.resources import PLT_CAR_L5_DWP, CellVis_96_wellplate_350uL_Fb, Coordinate, STARDeck
 
 
 class ByonoyResourceTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.base, self.reader = byonoy_luminescence96_base_and_reader(name="byonoy_test", assign=True)
-    self.adapter = byonoy_luminescence_adapter(name="byonoy_test_adapter")
+    self.base, self.reader = byonoy_absorbance96_base_and_reader(name="byonoy_test", assign=True)
+    self.adapter = byonoy_absorbance_adapter(name="byonoy_test_adapter")
 
-    self.lh = LiquidHandler(deck=STARDeck(), backend=unittest.mock.Mock(spec=LiquidHandlerBackend))
-    # self.lh = LiquidHandler(deck=STARDeck(), backend=LiquidHandlerChatterboxBackend())
+    self.deck = STARDeck()
+    self.lh = LiquidHandler(deck=self.deck, backend=unittest.mock.Mock(spec=LiquidHandlerBackend))
     self.plate_carrier = PLT_CAR_L5_DWP(name="plate_carrier")
     self.plate_carrier[1] = self.adapter
-    self.lh.deck.assign_child_resource(self.plate_carrier, rails=28)
+    self.deck.assign_child_resource(self.plate_carrier, rails=28)
     self.adapter.assign_child_resource(self.base)
     self.plate_carrier[2] = self.plate = CellVis_96_wellplate_350uL_Fb(name="plate")
 

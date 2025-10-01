@@ -8,7 +8,6 @@ from typing import List, Optional
 
 from pylabrobot.io.hid import HID
 from pylabrobot.plate_reading.backend import PlateReaderBackend
-from pylabrobot.plate_reading.byonoy.parser import encode_hid_report, parse_hid_report
 from pylabrobot.resources.plate import Plate
 from pylabrobot.utils.list import reshape_2d
 
@@ -102,11 +101,9 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
     """Main ping loop that runs in the background thread."""
     while not self._stop_background.is_set():
       if self._sending_pings:
-        cmd = b"\x00" + encode_hid_report(
-          {"report_id": 64, "payload_name": "HEARTBEAT_IN", "payload": {"enabled": 1}}
-        )
-        await self.io.write(cmd)
         # don't read in background thread, data might get lost here
+        # not needed?
+        pass
 
       self._stop_background.wait(self._ping_interval)
 
