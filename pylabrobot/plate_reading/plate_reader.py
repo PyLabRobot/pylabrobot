@@ -113,7 +113,6 @@ class PlateReader(ResourceHolder, Machine):
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,
     )
-  
+
   def serialize(self) -> dict:
     return {**Resource.serialize(self), **Machine.serialize(self)}
-

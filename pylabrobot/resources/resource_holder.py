@@ -67,7 +67,7 @@ class ResourceHolder(Resource):
 
   def serialize(self):
     return {**super().serialize(), "child_location": serialize(self.child_location)}
-  
+
   def check_can_drop_resource_here(self, resource: Resource) -> None:
     if self.resource is not None:
       raise RuntimeError(

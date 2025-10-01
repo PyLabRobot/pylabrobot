@@ -1,6 +1,8 @@
 from typing import Optional, Tuple
-from pylabrobot.plate_reading import PlateReader, ByonoyAbsorbance96AutomateBackend
-from pylabrobot.resources import Resource, ResourceHolder, PlateHolder, Coordinate
+
+from pylabrobot.plate_reading.byonoy.byonoy_backend import ByonoyAbsorbance96AutomateBackend
+from pylabrobot.plate_reading.plate_reader import PlateReader
+from pylabrobot.resources import Coordinate, PlateHolder, Resource, ResourceHolder
 
 
 def byonoy_luminescence_adapter(name: str) -> ResourceHolder:
@@ -12,7 +14,7 @@ def byonoy_luminescence_adapter(name: str) -> ResourceHolder:
     child_location=Coordinate(
       x=-(138 - 127.76) / 2,  # measured
       y=-(95.7 - 85.59) / 2,  # measured
-      z=14.07-2.45  # measured
+      z=14.07 - 2.45,  # measured
     ),
   )
 
@@ -50,7 +52,7 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
         "ByonoyBase not assigned its plate holder. "
         "Please assign a ByonoyBase instance to the plate holder."
       )
-    
+
     if self._byonoy_base.reader_holder.resource is not None:
       raise RuntimeError(
         f"Cannot drop resource {resource.name} onto plate holder while reader is on the base. "
@@ -61,7 +63,7 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
 
 
 class ByonoyBase(Resource):
-  def __init__(self, name, rotation = None, category = None, model = None, barcode = None):
+  def __init__(self, name, rotation=None, category=None, model=None, barcode=None):
     super().__init__(
       name=name,
       size_x=138,
@@ -74,12 +76,8 @@ class ByonoyBase(Resource):
       size_x=127.76,
       size_y=85.59,
       size_z=0,
-      child_location=Coordinate(
-        x=(138 - 127.76) / 2,
-        y=(95.7 - 85.59) / 2,
-        z=27.7
-      ),
-      pedestal_size_z=0
+      child_location=Coordinate(x=(138 - 127.76) / 2, y=(95.7 - 85.59) / 2, z=27.7),
+      pedestal_size_z=0,
     )
     self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
 
@@ -88,21 +86,17 @@ class ByonoyBase(Resource):
       size_x=138,
       size_y=95.7,
       size_z=0,
-      child_location=Coordinate(
-        x=0,
-        y=0,
-        z=10.66
-      ),
+      child_location=Coordinate(x=0, y=0, z=10.66),
     )
     self.assign_child_resource(self.reader_holder, location=Coordinate.zero())
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate, reassign = True):
+  def assign_child_resource(self, resource: Resource, location: Coordinate, reassign=True):
     if isinstance(resource, _ByonoyAbsorbanceReaderPlateHolder):
       if self.plate_holder._byonoy_base is not None:
         raise ValueError("ByonoyBase can only have one plate holder assigned.")
       self.plate_holder._byonoy_base = self
     return super().assign_child_resource(resource, location, reassign)
-  
+
   def check_can_drop_resource_here(self, resource: Resource) -> None:
     raise RuntimeError(
       "ByonoyBase does not support assigning child resources directly. "
@@ -110,7 +104,7 @@ class ByonoyBase(Resource):
     )
 
 
-def byonoy_luminescence96_base_and_reader(name: str, assign = True) -> Tuple[ByonoyBase, PlateReader]:
+def byonoy_luminescence96_base_and_reader(name: str, assign=True) -> Tuple[ByonoyBase, PlateReader]:
   """Creates a ByonoyBase and a PlateReader instance."""
   byonoy_base = ByonoyBase(name=name + "_base")
   reader = PlateReader(
@@ -118,7 +112,6 @@ def byonoy_luminescence96_base_and_reader(name: str, assign = True) -> Tuple[Byo
     size_x=138,
     size_y=95.7,
     size_z=0,
-    
     backend=ByonoyAbsorbance96AutomateBackend(),
   )
   if assign:
@@ -155,4 +148,3 @@ def byonoy_luminescence96_base_and_reader(name: str, assign = True) -> Tuple[Byo
 # x: 155.5
 # y: 95.7
 # z: 56.9
-

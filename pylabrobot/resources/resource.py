@@ -796,11 +796,9 @@ class Resource:
     for resource in self.children:
       highest_point = max(highest_point, resource.get_highest_known_point())
     return highest_point
-  
+
   def check_can_drop_resource_here(self, resource: Resource) -> None:
     """Check if a resource can be dropped onto this resource.
     Will raise an error if the resource is not compatible with this resource.
     """
-    raise RuntimeError(
-      f"Resource {resource.name} cannot be dropped onto resource {self.name}."
-    )
+    raise RuntimeError(f"Resource {resource.name} cannot be dropped onto resource {self.name}.")

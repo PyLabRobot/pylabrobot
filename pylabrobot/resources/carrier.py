@@ -255,7 +255,7 @@ class PlateHolder(ResourceHolder):
       **super().serialize(),
       "pedestal_size_z": self.pedestal_size_z,
     }
-  
+
   def check_can_drop_resource_here(self, resource: Resource) -> None:
     if not isinstance(resource, PlateHolder._accepted_child_types):
       raise TypeError(
