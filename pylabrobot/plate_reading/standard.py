@@ -2,7 +2,12 @@ import enum
 from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Literal, Union
 
-Image = List[List[float]]
+try:
+  import numpy.typing as npt
+
+  Image = npt.NDArray
+except ImportError:
+  Image = object  # type: ignore
 
 
 class Objective(enum.Enum):
@@ -96,6 +101,15 @@ class AutoExposure:
   max_rounds: int
   low: float
   high: float
+
+
+@dataclass
+class AutoFocus:
+  evaluate_focus: Callable[[Image], float]
+  timeout: float
+  low: float
+  high: float
+  tolerance: float = 0.001  # 1 micron
 
 
 Exposure = Union[float, Literal["machine-auto"]]

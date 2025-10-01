@@ -6,6 +6,14 @@ import sys
 import time
 from typing import List, Optional, Union
 
+try:
+  from pylibftdi import driver
+
+  HAS_PYLIBFTDI = True
+except ImportError as e:
+  HAS_PYLIBFTDI = False
+  _FTDI_IMPORT_ERROR = e
+
 from pylabrobot import utils
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
@@ -19,8 +27,15 @@ else:
 
 logger = logging.getLogger("pylabrobot")
 
+# Make pylibftdi scan the CLARIOstar VID:PID
+# appears as ID 0403:bb68 Future Technology Devices International Limited CLARIOstar
 
-class CLARIOStarBackend(PlateReaderBackend):
+if HAS_PYLIBFTDI:
+  driver.USB_VID_LIST.append(0x0403)  # i.e. 1027
+  driver.USB_PID_LIST.append(0xBB68)  # i.e. 47976
+
+
+class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
@@ -349,3 +364,10 @@ class CLARIOStarBackend(PlateReaderBackend):
 class CLARIOStar:
   def __init__(self, *args, **kwargs):
     raise RuntimeError("`CLARIOStar` is deprecated. Please use `CLARIOStarBackend` instead.")
+
+
+class CLARIOStarBackend:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`CLARIOStarBackend` (capital 'S') is deprecated. Please use `CLARIOstarBackend` instead."
+    )

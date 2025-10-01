@@ -2,7 +2,7 @@
 
 This guide provides instructions for replacing the iSWAP arm on a Hamilton STAR liquid handling system.
 
-Caution/Disclaimer: 
+Caution/Disclaimer:
 1. This procedure is a work in progress and the user assumes all responsibility for any damage that may be done as a result.
 2. This procedure should not be performed on any system that are either under the OEM Warranty period or currently on a service contract with the OEM or any third party service organization. This will certainly void the OEM Warranty/Service contract and likely invalidate any service agreement with third parties.
 3. This procedure DOES NOT encapsulate the entire OEM adjustment procedure which includes specialized tooling and software to perform. Consult [iSWAP Auto Adjustment Guide](adjusting-iswap.md) for auto-calibrating arm after installation proceduce.
@@ -39,9 +39,9 @@ Note: Due to the way the iSWAP is taught, the calibration positions from machine
 
 ## Attaching the New iSWAP Arm and rough leveling
 
-6. Place the replacement arm on the system, insert and tighten the two fixing screws, reattach the comunication and Y-drive ribon cables.
+6. Place the replacement arm on the system, insert and tighten the two fixing screws, reattach the communication and Y-drive ribon cables.
 
-Note: Once physically installed on the system it is recomended that you level the arm in relation to the deck.
+Note: Once physically installed on the system it is recommended that you level the arm in relation to the deck.
 
 7. Loosen the two fixing screws until the iSWAP is fixed in position but can still be rotated about the X Axis (left to right) of the machine.
 8. Manually position the X-Arm in the center of the machine and the iSWAP in the middle of the X-Arm.

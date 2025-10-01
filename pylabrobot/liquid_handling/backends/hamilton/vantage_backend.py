@@ -30,6 +30,7 @@ from pylabrobot.liquid_handling.standard import (
 from pylabrobot.resources import (
   Coordinate,
   Liquid,
+  Plate,
   Resource,
   Tip,
   TipRack,
@@ -148,7 +149,7 @@ core96_errors = {
   82: "TADM measurement out of lower limit curve",
   83: "TADM measurement out of upper limit curve",
   84: "Not enough memory for TADM measurement",
-  90: "Limit curve not resetable",
+  90: "Limit curve not resettable",
   91: "Limit curve not programmable",
   92: "Limit curve name not found",
   93: "Limit curve data incorrect",
@@ -185,7 +186,7 @@ pip_errors = {
   56: "Y drive not initialized",
   57: "Y drive movement error",
   58: "Y drive position out of permitted area",
-  59: "Divergance Y motion controller to linear encoder to heigh",
+  59: "Divergance Y motion controller to linear encoder to height",
   60: "Z drive initialization failed",
   61: "Z drive not initialized",
   62: "Z drive movement error",
@@ -211,7 +212,7 @@ pip_errors = {
   84: "Not enough memory for TADM measurement",
   85: "Jet dispense pressure not reached",
   86: "ADC algorithm error",
-  90: "Limit curve not resetable",
+  90: "Limit curve not resettable",
   91: "Limit curve not programmable",
   92: "Limit curve name not found",
   93: "Limit curve data incorrect",
@@ -1046,16 +1047,26 @@ class VantageBackend(HamiltonLiquidHandler):
     # assert self.core96_head_installed, "96 head must be installed"
 
     if isinstance(aspiration, MultiHeadAspirationPlate):
-      top_left_well = aspiration.wells[0]
+      plate = aspiration.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 == 0:
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
+        ref_well.get_absolute_location()
+        + ref_well.center()
         + aspiration.offset
-        + Coordinate(z=top_left_well.material_z_thickness)
+        + Coordinate(z=ref_well.material_z_thickness)
       )
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
+      lld_search_height = well_bottoms + ref_well.get_absolute_size_z() + 2.7 - 1
     else:
       x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
       y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
@@ -1071,7 +1082,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
-    tip = aspiration.tips[0]
+    tip = next(tip for tip in aspiration.tips if tip is not None)
     liquid_to_be_aspirated = Liquid.WATER  # default to water
     if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][-1][0] is not None:
       # first part of tuple in last liquid of first well
@@ -1195,16 +1206,26 @@ class VantageBackend(HamiltonLiquidHandler):
     """
 
     if isinstance(dispense, MultiHeadDispensePlate):
-      top_left_well = dispense.wells[0]
+      plate = dispense.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = plate.get_well("H12")
+      elif rot.z % 360 == 0:
+        ref_well = plate.get_well("A1")
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
       position = (
-        top_left_well.get_absolute_location()
-        + top_left_well.center()
+        ref_well.get_absolute_location()
+        + ref_well.center()
         + dispense.offset
-        + Coordinate(z=top_left_well.material_z_thickness)
+        + Coordinate(z=ref_well.material_z_thickness)
       )
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7 - 1
+      lld_search_height = well_bottoms + ref_well.get_absolute_size_z() + 2.7 - 1
     else:
       x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
       y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
@@ -1220,7 +1241,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
-    tip = dispense.tips[0]
+    tip = next(tip for tip in dispense.tips if tip is not None)
     liquid_to_be_dispensed = Liquid.WATER  # default to WATER
     if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
       # first part of tuple in last liquid of first well

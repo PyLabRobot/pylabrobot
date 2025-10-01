@@ -149,8 +149,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
 
-    if rails is not None and not 0 <= rails <= self.num_rails:
-      raise ValueError(f"Rails must be between 0 and {self.num_rails}.")
+    if rails is not None and not -4 <= rails <= self.num_rails:
+      raise ValueError(f"Rails must be between -4 and {self.num_rails}.")
 
     # Check if resource exists.
     if self.has_resource(resource.name):
@@ -403,7 +403,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       self._trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
       self.assign_child_resource(
         resource=self._trash96,
-        location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=229.0),
+        location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
     if with_teaching_rack:

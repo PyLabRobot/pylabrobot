@@ -1,8 +1,15 @@
 import asyncio
 
+# Make pylibftdi scan the Hamilton HEPA Fan VID:PID
+# appears as ID 0856:ac11 B&B Electronics Model USOPTL4
+from pylibftdi import driver
+
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import FanBackend
+
+driver.USB_VID_LIST.append(0x0856)  # i.e. 2134
+driver.USB_PID_LIST.append(0xAC11)  # i.e. 44049
 
 
 class HamiltonHepaFanBackend(FanBackend):
@@ -135,7 +142,7 @@ class HamiltonHepaFanBackend(FanBackend):
       "55c10111f78c",
       "55c10111f982",
       "55c10111fc87",
-      "5c10111fe85",
+      "55c10111fe85",
     ]
 
     await self.send(bytes.fromhex(speed_array[intensity]))  # set speed

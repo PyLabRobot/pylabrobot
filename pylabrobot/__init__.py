@@ -55,6 +55,8 @@ def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
     fh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(fh)
 
+  logger.propagate = False
+
 
 def configure(cfg: Config):
   """Configure pylabrobot."""

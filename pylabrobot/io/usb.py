@@ -316,7 +316,7 @@ class USB(IOBase):
     if len(devices) == 0:
       raise RuntimeError("USB device not found.")
     if len(devices) > 1:
-      logging.warning("Multiple devices found. Using the first one.")
+      logger.warning("Multiple devices found. Using the first one.")
     self.dev = devices[0]
 
     logger.info("Found USB device.")
@@ -357,7 +357,7 @@ class USB(IOBase):
 
     if self.dev is None:
       raise ValueError("USB device was not connected.")
-    logging.warning("Closing connection to USB device.")
+    logger.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
 

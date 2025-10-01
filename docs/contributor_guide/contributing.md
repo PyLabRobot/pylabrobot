@@ -17,7 +17,7 @@ It is recommend that you use VSCode, as we provide a workspace config in `/.vsco
 Some VSCode Extensions I'd recommend:
 
 - [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
-- [Code Spell Checker](https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker)
+- [Typos Checker](https://github.com/tekumara/typos-lsp)
 - [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
 
 ## Testing, linting, formatting

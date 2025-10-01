@@ -22,21 +22,27 @@ await star.iswap_open_gripper()
 
 ## Rotations
 
-You can rotate the iSWAP to 12 predifined positions using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.iswap_rotate`.
+You can rotate the iSWAP to 12 predefined positions using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.iswap_rotate`.
 
 the positions and their corresponding integer specifications are shown visually here.
 
 ![alt text](iswap_positions.png)
 
-For example to extend the iSWAP fully to the left, the position parameter to `iswap_rotate` would be `12`
+The `iswap_rotate` method can be used to move the wrist drive and the rotation drive simultaneously in one smooth motion. It takes a parameter for the rotation drive, and the final `grip_direction` of the iswap. The `grip_direction` is the same parameter used by {meth}`~pylabrobot.liquid_handling.liquid_handler.LiquidHandler.pick_up_resource` and {meth}`~pylabrobot.liquid_handling.liquid_handler.LiquidHandler.drop_resource`, and is with respect to the deck. This is easier than controlling the rotation drive, which is with respect to the wrist drive.
 
-You can control the wrist (T-drive) and rotation drive (W-drive) individually using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.rotate_iswap_wrist` and {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.rotate_iswap_rotation_drive` respectively. Make sure you have enough space (you can use {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.move_iswap_y_relative`)
+To extend the iSWAP fully to the left, call `iswap_rotate(rotation_drive=STARBackend.RotationDriveOrientation.LEFT, grip_direction=GripDirection.RIGHT)`. `GripDirection.RIGHT` means the gripper will be gripping the object from the right hand side meaning the gripper fingers will be pointing left wrt the deck. Compared this to `iswap_rotate(rotation_drive=STARBackend.RotationDriveOrientation.RIGHT, grip_direction=GripDirection.RIGHT)`, where the gripper fingers will still be pointing left wrt the deck, but the rotation drive is pointing right. This means the wrist drive is in "REVERSE" orientation (folded up).
+
+Moving the iswap between two positions with the same `grip_direction` while changing the rotation drive will keep the plate pointing in one direction. The internal motion planner on the STAR will automatically adjust the wrist drive to keep the plate in the same orientation.
+
+### Controlling the wrist and rotation drive individually
+
+You can also control the wrist (T-drive) and rotation drive (W-drive) individually using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.rotate_iswap_wrist` and {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.rotate_iswap_rotation_drive` respectively. Make sure you have enough space (you can use {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.move_iswap_y_relative`)
 
 ```python
-rotation_drive = random.choice([STARBackend.RotationDriveOrientation.LEFT, STARBackend.RotationDriveOrientation.RIGHT, STARBackend.RotationDriveOrientation.FRONT])
-wrist_drive = random.choice([STARBackend.WristOrientation.LEFT, STARBackend.WristOrientation.RIGHT, STARBackend.WristOrientation.STRAIGHT, STARBackend.WristOrientation.REVERSE])
-await star.rotate_iswap_rotation_drive(rotation_drive)
-await star.rotate_iswap_wrist(wrist_drive)
+rotation_drive = random.choice([STAR.RotationDriveOrientation.LEFT, STAR.RotationDriveOrientation.RIGHT, STAR.RotationDriveOrientation.FRONT])
+wrist_drive = random.choice([STAR.WristOrientation.LEFT, STAR.WristOrientation.RIGHT, STAR.WristOrientation.STRAIGHT, STAR.WristOrientation.REVERSE])
+await lh.backend.rotate_iswap_rotation_drive(rotation_drive)
+await lh.backend.rotate_iswap_wrist(wrist_drive)
 ```
 
 ## Slow movement

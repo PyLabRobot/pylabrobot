@@ -26,6 +26,32 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 ```
 <hr>
 
+## Supported by
+
+```{image} /img/supported_by/logo_inheco.png
+:alt: Inheco
+:class: company
+:target: https://www.inheco.com/
+```
+
+```{image} /img/supported_by/logo_tek-matic.png
+:alt: Tek-Matic
+:class: company
+:target: https://www.tekmatic.com
+```
+
+```{image} /img/supported_by/logo_westportal.jpg
+:alt: West Portal Scientific
+:class: company
+:target: https://www.westportalsci.com
+```
+
+```{image} /img/supported_by/logo_byonoy.svg
+:alt: Byonoy
+:class: company
+:target: https://byonoy.com
+```
+
 ## Used by
 
 ```{image} /img/used_by/logo_mit.jpg
@@ -57,6 +83,36 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.cheshirelabs.io/
 ```
 
+```{image} /img/used_by/logo_pioneer_labs.png
+:alt: Pioneer Labs
+:class: company
+:target: https://www.pioneer-labs.org
+```
+
+```{image} /img/used_by/logo_x.png
+:alt: Google X
+:class: company
+:target: https://x.company/
+```
+
+```{image} /img/used_by/logo_constructive.png
+:alt: Constructive Bio
+:class: company constructive
+:target: https://www.constructive.bio
+```
+
+```{image} /img/used_by/logo_ukm.png
+:alt: UKM Biofoundry
+:class: company
+:target: https://www.ukm.my/inbiosis/en/ukm-biofoundry/
+```
+
+```{image} /img/used_by/logo_sanofi.png
+:alt: Sanofi
+:class: company
+:target: https://www.sanofi.com
+```
+
 ```{raw} html
 <style>
 .company {
@@ -66,6 +122,9 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 }
 .tt {
   max-width: 240px; /* T-Therapeutics logo is wider */
+}
+.constructive {
+  max-width: 300px; /* Constructive Bio logo is wider */
 }
 </style>
 ```

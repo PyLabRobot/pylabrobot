@@ -152,7 +152,7 @@ If you cannot find something, please contribute what you are looking for!
     </ul>
     <p>As a result, many automation software systems believe that it is impossible to reuse resource definitions.
     In contrast, PyLabRobot is convinced that carefully created resource definitions combined with smart automation can be reused most of the time.</p>
-    <p>PLR is actively addressing these resource resuse constraints in numerous ways:</p>
+    <p>PLR is actively addressing these resource reuse constraints in numerous ways:</p>
     <ul>
         <li>Development of self-correcting machine backend methods.</li>
         <li>Using Coordinate Measurement Machine-based generation of resource "ground truths" (e.g., via liquid handler-based resource probing or 3D scanning).</li>
@@ -169,6 +169,7 @@ If you cannot find something, please contribute what you are looking for!
 library/agenbio
 library/alpaqua
 library/azenta
+library/bioer
 library/biorad
 library/boekel
 library/celltreat
@@ -179,6 +180,7 @@ library/falcon
 library/hamilton
 library/nest
 library/opentrons
+library/perkin_elmer
 library/porvair
 library/revvity
 library/sergi

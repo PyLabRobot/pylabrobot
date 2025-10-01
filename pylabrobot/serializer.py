@@ -21,7 +21,6 @@ def get_plr_class_from_string(klass_type: str):
   import pylabrobot.config as config_module
   import pylabrobot.gui as gui_module
   import pylabrobot.heating_shaking as heating_shaking_module
-  import pylabrobot.incubators as incubators_module
   import pylabrobot.io as io_module
   import pylabrobot.liquid_handling as liquid_handling_module
   import pylabrobot.machines as machines_module
@@ -32,9 +31,11 @@ def get_plr_class_from_string(klass_type: str):
   import pylabrobot.resources as resources_module
   import pylabrobot.scales as scales_module
   import pylabrobot.shaking as shaking_module
+  import pylabrobot.storage as storage_module
   import pylabrobot.temperature_controlling as temperature_controlling_module
   import pylabrobot.testing as testing_module
   import pylabrobot.tests as tests_module
+  import pylabrobot.thermocycling as thermocycling_module
   import pylabrobot.tilting as tilting_module
   import pylabrobot.utils as utils_module
   import pylabrobot.visualizer as visualizer_module
@@ -44,7 +45,7 @@ def get_plr_class_from_string(klass_type: str):
     config_module,
     gui_module,
     heating_shaking_module,
-    incubators_module,
+    storage_module,
     io_module,
     liquid_handling_module,
     machines_module,
@@ -56,6 +57,7 @@ def get_plr_class_from_string(klass_type: str):
     scales_module,
     shaking_module,
     temperature_controlling_module,
+    thermocycling_module,
     testing_module,
     tests_module,
     tilting_module,

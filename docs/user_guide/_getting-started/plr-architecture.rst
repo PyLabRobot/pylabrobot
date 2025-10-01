@@ -12,10 +12,12 @@ PLR Architecture
 
 -------------------
 
+Table of contents
 
 .. toctree::
    :maxdepth: 3
-   :hidden:
+
+   units
 
 
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -61,10 +63,5 @@ Integrating New Machines
 
 
 
-For detailed information on how to integrate new machiens into PLR ecosystem,
+For detailed information on how to integrate new machines into PLR ecosystem,
 and contribute to the PLR project, please refer to `Contributor Guide`:
-
-
--------------------
-
-ds

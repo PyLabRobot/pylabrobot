@@ -1,7 +1,6 @@
 import itertools
 import tempfile
 import unittest
-import unittest.mock
 from typing import Any, Dict, List, Optional, Union, cast
 
 import pytest
@@ -25,6 +24,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   ResourceStack,
   TipRack,
+  nest_1_troughplate_195000uL_Vb,
   no_tip_tracking,
   set_tip_tracking,
 )
@@ -34,7 +34,11 @@ from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
 )
-from pylabrobot.resources.hamilton import HTF, STF, STARLetDeck
+from pylabrobot.resources.hamilton import (
+  STARLetDeck,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_1000uL_filter,
+)
 from pylabrobot.resources.opentrons.reservoirs import agilent_1_reservoir_290ml
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
@@ -42,6 +46,7 @@ from pylabrobot.resources.volume_tracker import (
   set_volume_tracking,
 )
 from pylabrobot.resources.well import Well
+from pylabrobot.serializer import serialize
 
 from . import backends
 from .liquid_handler import LiquidHandler
@@ -101,9 +106,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   def test_resource_assignment(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF(name="tip_rack_01")
-    tip_car[1] = STF(name="tip_rack_02")
-    tip_car[3] = HTF("tip_rack_04")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    tip_car[1] = hamilton_96_tiprack_300uL_filter(name="tip_rack_02")
+    tip_car[3] = hamilton_96_tiprack_1000uL_filter("tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
@@ -135,7 +140,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   def test_get_resource(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF(name="tip_rack_01")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
     self.deck.assign_child_resource(tip_car, rails=1)
@@ -158,8 +163,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   def test_subcoordinates(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF(name="tip_rack_01")
-    tip_car[3] = HTF(name="tip_rack_04")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    tip_car[3] = hamilton_96_tiprack_1000uL_filter(name="tip_rack_04")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
     plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
@@ -207,7 +212,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     # Test assigning subresource with the same name as another resource in another carrier. This
     # should raise an ValueError when the carrier is assigned to the liquid handler.
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF(name="sub")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="sub")
     self.deck.assign_child_resource(tip_car, rails=1)
@@ -218,7 +223,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     # Test assigning subresource with the same name as another resource in another carrier, after
     # the carrier has been assigned. This should raise an error.
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF(name="sub")
+    tip_car[0] = hamilton_96_tiprack_300uL_filter(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="ok")
     self.deck.assign_child_resource(tip_car, rails=1)
@@ -450,7 +455,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
-    self.tip_rack = STF(name="tip_rack")
+    self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
@@ -490,6 +495,51 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         },
       },
     )
+
+  async def test_default_offset_head96(self):
+    self.lh.default_offset_head96 = Coordinate(1, 2, 3)
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+    cmd = self.get_first_command("pick_up_tips96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["pickup"].offset, Coordinate(1, 2, 3))  # type: ignore
+    self.backend.clear()
+
+    # aspirate with extra offset; effective offset should be default + provided
+    await self.lh.aspirate96(self.plate, volume=10, offset=Coordinate(1, 0, 0))
+    cmd = self.get_first_command("aspirate96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["aspiration"].offset, Coordinate(2, 2, 3))  # type: ignore
+    self.backend.clear()
+
+    # dispense without providing offset uses default
+    await self.lh.dispense96(self.plate, volume=10)
+    cmd = self.get_first_command("dispense96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["dispense"].offset, Coordinate(1, 2, 3))  # type: ignore
+    self.backend.clear()
+
+    await self.lh.drop_tips96(self.tip_rack, offset=Coordinate(0, 1, 0))
+    cmd = self.get_first_command("drop_tips96")
+    self.assertIsNotNone(cmd)
+    self.assertEqual(cmd["kwargs"]["drop"].offset, Coordinate(1, 3, 3))  # type: ignore
+
+  async def test_default_offset_head96_initializer(self):
+    backend = backends.SaverBackend(num_channels=8)
+    deck = STARLetDeck()
+    lh = LiquidHandler(
+      backend=backend,
+      deck=deck,
+      default_offset_head96=Coordinate(1, 2, 3),
+    )
+    self.assertEqual(lh.default_offset_head96, Coordinate(1, 2, 3))
+
+  async def test_default_offset_head96_serialization(self):
+    self.lh.default_offset_head96 = Coordinate(1, 2, 3)
+    data = self.lh.serialize()
+    self.assertEqual(data["default_offset_head96"], serialize(Coordinate(1, 2, 3)))
+    new_lh = LiquidHandler.deserialize(data)
+    self.assertEqual(new_lh.default_offset_head96, Coordinate(1, 2, 3))
 
   async def test_with_use_channels(self):
     tip_spot = self.tip_rack.get_item("A1")
@@ -850,6 +900,19 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
     set_tip_tracking(enabled=False)
 
+  async def test_get_mounted_tips(self):
+    self.assertEqual(self.lh.get_mounted_tips(), [None] * 8)
+    await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1"])
+    mounted = self.lh.get_mounted_tips()
+    self.assertIsNotNone(self.tip_rack.get_item("A1").get_tip())
+    self.assertIsNotNone(self.tip_rack.get_item("B1").get_tip())
+    self.assertIsNotNone(self.tip_rack.get_item("C1").get_tip())
+    self.assertIsNone(mounted[3])
+    self.assertIsNone(mounted[4])
+    self.assertIsNone(mounted[5])
+    self.assertIsNone(mounted[6])
+    self.assertIsNone(mounted[7])
+
   async def test_tip_tracking_full_spot(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
     with self.assertRaises(HasTipError):
@@ -1037,10 +1100,12 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     self.backend = backends.SaverBackend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    self.tip_rack = STF(name="tip_rack")
-    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    self.single_well_plate = nest_1_troughplate_195000uL_Vb(name="single_well_plate")
+    self.deck.assign_child_resource(self.single_well_plate, location=Coordinate(300, 100, 0))
     await self.lh.setup()
     set_volume_tracking(enabled=True)
 
@@ -1088,10 +1153,10 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
     with self.assertRaises(ChannelizedError):
       await self.lh.dispense([well], vols=[60])
-    # test volume doens't change on failed dispense
+    # test volume doesn't change on failed dispense
     assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
 
-  async def test_96_head_volume_tracking(self):
+  async def test_96_head_volume_tracking_multi_container(self):
     for item in self.plate.get_all_items():
       item.tracker.set_liquids([(Liquid.WATER, 10)])
     await self.lh.pick_up_tips96(self.tip_rack)
@@ -1103,6 +1168,26 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     for i in range(96):
       self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
       self.plate.get_item(i).tracker.get_used_volume() == 10
+    await self.lh.return_tips96()
+
+  async def test_96_head_volume_tracking_single_container(self):
+    well = self.single_well_plate.get_item(0)
+    well.tracker.set_liquids([(Liquid.WATER, 10 * 96)])
+    await self.lh.pick_up_tips96(self.tip_rack)
+
+    await self.lh.aspirate96(self.single_well_plate, volume=10)
+    assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 10 for i in range(96))
+    assert all(
+      self.lh.head96[i].get_tip().tracker.liquids == [(Liquid.WATER, 10)] for i in range(96)
+    )
+    assert well.tracker.get_used_volume() == 0
+
+    await self.lh.dispense96(self.single_well_plate, volume=10)
+    assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 0 for i in range(96))
+    assert all(self.lh.head96[i].get_tip().tracker.liquids == [] for i in range(96))
+    assert well.tracker.get_used_volume() == 10 * 96
+
+    await self.lh.return_tips96()
 
 
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):
@@ -1110,7 +1195,7 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
     self.backend = backends.SaverBackend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    self.tip_rack = STF(name="tip_rack")
+    self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
