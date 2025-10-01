@@ -106,9 +106,9 @@ class AutoExposure:
 @dataclass
 class AutoFocus:
   evaluate_focus: Callable[[Image], float]
-  timeout: float
   low: float
   high: float
+  timeout: float = 60
   tolerance: float = 0.001  # 1 micron
 
 

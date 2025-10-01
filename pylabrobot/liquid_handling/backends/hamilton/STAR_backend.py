@@ -3112,10 +3112,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      # STAR machines do not allow channels y > 635 mm
-      max_y_pos = 635
+      if self.iswap_installed:
+        max_y_pos = await self.iswap_request_module_y()
+        limit = "iswap module y-position"
+      else:
+        # STAR machines do not allow channels y > 635 mm
+        max_y_pos = 635
+        limit = "machine limit"
       if y > max_y_pos:
-        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm (machine limit)")
+        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm ({limit})")
 
     if channel < (self.num_channels - 1):
       min_y_pos = await self.request_y_pos_channel_n(channel + 1)
@@ -6478,10 +6483,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # check if iswap will hit the first (backmost) channel
     # we only need to check for positive step sizes because the iswap is always behind the first channel
-    if step_size > 0:
+    if step_size < 0:
       y_pos_channel_0 = await self.request_y_pos_channel_n(0)
-      current_y_pos_iswap = await self.request_iswap_y()
-      if current_y_pos_iswap + step_size > y_pos_channel_0:
+      current_y_pos_iswap = await self.iswap_request_module_y()
+      if current_y_pos_iswap + step_size < y_pos_channel_0:
         raise ValueError(
           f"iSWAP will hit the first (backmost) channel. Current iSWAP Y position: {current_y_pos_iswap} mm, "
           f"first channel Y position: {y_pos_channel_0} mm, requested step size: {step_size} mm"
@@ -7226,13 +7231,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   @staticmethod
   def _iswap_y_inc_to_mm(y_inc: int) -> float:
-    mm_per_increment = 0.0025
+    mm_per_increment = 0.046302083
     return round(y_inc * mm_per_increment, 2)
 
-  async def request_iswap_y(self) -> float:
-    """Request iSWAP module Y position in mm"""
-    resp = await self.send_command(module="R0", command="RY", fmt="ry#### (n)")
-    iswap_y_pos = resp["ry"][1]  # 0 = Target position, 2 = Absolute position [increment]
+  async def iswap_request_module_y(self) -> float:
+    """Request iSWAP module (not gripper) Y position in mm"""
+    resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
+    iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
     return STARBackend._iswap_y_inc_to_mm(iswap_y_pos)
 
   async def request_iswap_initialization_status(self) -> bool:
