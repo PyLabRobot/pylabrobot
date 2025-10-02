@@ -123,9 +123,8 @@ function openSocket() {
 
   socketLoading = true;
   updateStatusLabel("loading");
-  let wsHostInput = document.querySelector(`input[id="ws_host"]`);
   let wsPortInput = document.querySelector(`input[id="ws_port"]`);
-  let wsHost = wsHostInput.value;
+  let wsHost = window.location.hostname;
   let wsPort = wsPortInput.value;
   webSocket = new WebSocket(`ws://${wsHost}:${wsPort}/`);
 
