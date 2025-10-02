@@ -41,7 +41,6 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
       raise RuntimeError(
         "Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
         f" Import error: {_OT_IMPORT_ERROR}."
-        " Only supported on Python 3.10 and below."
       )
     self.opentrons_id = opentrons_id
     self._current_protocol: Optional[Protocol] = None

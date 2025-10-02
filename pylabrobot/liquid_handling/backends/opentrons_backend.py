@@ -22,10 +22,9 @@ from pylabrobot.liquid_handling.standard import (
 )
 from pylabrobot.resources import (
   Coordinate,
-  Resource,
   Tip,
 )
-from pylabrobot.resources.opentrons import OTDeck, OTModule
+from pylabrobot.resources.opentrons import OTDeck
 from pylabrobot.resources.tip_rack import TipRack
 
 try:
@@ -46,8 +45,8 @@ except ImportError as e:
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 
 
-class OpentronsBackend(LiquidHandlerBackend):
-  """Backends for the Opentrons liquid handling robots. Only supported on Python 3.10."""
+class OpentronsOT2Backend(LiquidHandlerBackend):
+  """Backends for the Opentrons OT2 liquid handling robots."""
 
   pipette_name2volume = {
     "p10_single": 10,
@@ -73,7 +72,6 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise RuntimeError(
         "Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
         f" Import error: {_OT_IMPORT_ERROR}."
-        " Only supported on Python 3.10 and below."
       )
 
     self.host = host
@@ -159,9 +157,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     return None
 
   async def _assign_tip_rack(self, tip_rack: TipRack, tip: Tip):
-    """Assign a dummy tip rack."""
-    print([tip_spot.name for tip_spot in tip_rack.get_all_items()])
-
     lw = {
       "schemaVersion": 2,
       "version": 1,
@@ -357,12 +352,12 @@ class OpentronsBackend(LiquidHandlerBackend):
     """
 
     if self.left_pipette is not None:
-      left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
+      left_volume = OpentronsOT2Backend.pipette_name2volume[self.left_pipette["name"]]
       if left_volume >= volume and self.left_pipette_has_tip:
         return cast(str, self.left_pipette["pipetteId"])
 
     if self.right_pipette is not None:
-      right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
+      right_volume = OpentronsOT2Backend.pipette_name2volume[self.right_pipette["name"]]
       if right_volume >= volume and self.right_pipette_has_tip:
         return cast(str, self.right_pipette["pipetteId"])
 
@@ -489,7 +484,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
-    ot_api.lh.aspirate_in_place(
+    ot_api.lh.dispense_in_place(
       volume=volume,
       flow_rate=flow_rate,
       pipette_id=pipette_id,
@@ -573,17 +568,23 @@ class OpentronsBackend(LiquidHandlerBackend):
     )
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
-    print(channel_idx, tip)
+    def supports_tip(channel_vol: float, tip_vol: float) -> bool:
+      if channel_vol == 20:
+        return tip_vol in {10, 20}
+      if channel_vol == 300:
+        return tip_vol in {200, 300}
+      if channel_vol == 1000:
+        return tip_vol in {1000}
+      raise ValueError(f"Unknown channel volume: {channel_vol}")
+
     if channel_idx == 0:
       if self.left_pipette is None:
         return False
-      left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
-      print("left_volume", left_volume, tip.maximal_volume)
-      # return left_volume == tip.maximal_volume
-      return True  # TODO
+      left_volume = OpentronsOT2Backend.pipette_name2volume[self.left_pipette["name"]]
+      return supports_tip(left_volume, tip.maximal_volume)
     if channel_idx == 1:
       if self.right_pipette is None:
         return False
-      right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
-      return right_volume == tip.maximal_volume
+      right_volume = OpentronsOT2Backend.pipette_name2volume[self.right_pipette["name"]]
+      return supports_tip(right_volume, tip.maximal_volume)
     return False
