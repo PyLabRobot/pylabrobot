@@ -47,9 +47,9 @@ await lh.return_tips()
 To run the same protocol on an **Opentrons**, use the following:
 
 ```python
-from pylabrobot.liquid_handling.backends import OpentronsBackend
+from pylabrobot.liquid_handling.backends import OpentronsOT2Backend
 deck = Deck.load_from_json_file("opentrons-layout.json")
-lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
+lh = LiquidHandler(backend=OpentronsOT2Backend(host="x.x.x.x"), deck=deck)
 ```
 
 Or **Tecan** (also works on any operating system!):

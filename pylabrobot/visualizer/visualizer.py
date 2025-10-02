@@ -319,11 +319,7 @@ class Visualizer:
       )
 
     def start_server(lock):
-      host, ws_port, fs_port = (
-        self.host,
-        self.ws_port,
-        self.fs_port,
-      )
+      ws_port, fs_port = self.ws_port, self.fs_port
 
       # try to start the server. If the port is in use, try with another port until it succeeds.
       class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
