@@ -3113,7 +3113,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
     else:
       if self.iswap_installed:
-        max_y_pos = await self.iswap_request_module_y()
+        max_y_pos = await self.iswap_rotation_drive_request_y()
         limit = "iswap module y-position"
       else:
         # STAR machines do not allow channels y > 635 mm
@@ -6472,7 +6472,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # we only need to check for positive step sizes because the iswap is always behind the first channel
     if step_size < 0:
       y_pos_channel_0 = await self.request_y_pos_channel_n(0)
-      current_y_pos_iswap = await self.iswap_request_module_y()
+      current_y_pos_iswap = await self.iswap_rotation_drive_request_y()
       if current_y_pos_iswap + step_size < y_pos_channel_0:
         raise ValueError(
           f"iSWAP will hit the first (backmost) channel. Current iSWAP Y position: {current_y_pos_iswap} mm, "
@@ -7216,8 +7216,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=(resp["zj"] / 10) * (1 if resp["zd"] == 0 else -1),
     )
 
-  async def iswap_request_module_y(self) -> float:
-    """Request iSWAP module (not gripper) Y position in mm"""
+  async def iswap_rotation_drive_request_y(self) -> float:
+    """Request iSWAP rotation drive Y position (center) in mm. This is equivalent to the y location of the iSWAP module."""
+    if not self.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
     return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
