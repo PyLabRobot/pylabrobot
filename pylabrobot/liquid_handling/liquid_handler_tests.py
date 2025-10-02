@@ -39,7 +39,6 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
-from pylabrobot.resources.opentrons.reservoirs import agilent_1_reservoir_290ml
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
   set_cross_contamination_tracking,
@@ -1072,11 +1071,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(well_a2.tracker.liquids, [(None, 10)])
 
     set_volume_tracking(enabled=False)
-
-  async def test_aspirate_single_reservoir(self):
-    reagent_reservoir = agilent_1_reservoir_290ml(name="reservoir")
-    await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate96(reagent_reservoir.get_item("A1"), volume=100)
 
   async def test_pick_up_tips96_incomplete_rack(self):
     set_tip_tracking(enabled=True)

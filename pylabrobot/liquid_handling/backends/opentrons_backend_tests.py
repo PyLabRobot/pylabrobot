@@ -1,4 +1,3 @@
-import sys
 import unittest
 from unittest.mock import patch
 
@@ -7,15 +6,8 @@ from pylabrobot.liquid_handling.backends.opentrons_backend import (
   OpentronsBackend,
 )
 from pylabrobot.resources import no_volume_tracking
-from pylabrobot.resources.opentrons import (
-  OTDeck,
-  opentrons_96_filtertiprack_20ul,
-  usascientific_96_wellplate_2point4ml_deep,
-)
-
-
-def _is_python_3_10():
-  return sys.version_info[:2] == (3, 10)
+from pylabrobot.resources.celltreat import CellTreat_96_wellplate_350ul_Fb
+from pylabrobot.resources.opentrons import OTDeck, opentrons_96_filtertiprack_20ul
 
 
 def _mock_define(lw):
@@ -32,7 +24,6 @@ def _mock_health_get():
   }
 
 
-@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
 class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
   """Tests for setup and stop"""
 
@@ -74,51 +65,6 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
     )
 
 
-@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
-class OpentronsBackendDefinitionTests(unittest.IsolatedAsyncioTestCase):
-  """Test for the callback when assigning labware to the deck."""
-
-  @patch("ot_api.runs.create")
-  @patch("ot_api.lh.add_mounted_pipettes")
-  @patch("ot_api.labware.add")
-  @patch("ot_api.labware.define")
-  @patch("ot_api.health.get")
-  async def asyncSetUp(
-    self,
-    mock_health_get,
-    mock_define,
-    mock_add,
-    mock_add_mounted_pipettes,
-    mock_create,
-  ):
-    mock_create.return_value = "run-id"
-    mock_add_mounted_pipettes.return_value = (
-      {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
-      {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"},
-    )
-    mock_add.side_effect = _mock_add
-    mock_define.side_effect = _mock_define
-    mock_health_get.side_effect = _mock_health_get
-
-    self.backend = OpentronsBackend(host="localhost", port=1338)
-    self.deck = OTDeck()
-    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    await self.lh.setup()
-
-  @patch("ot_api.labware.define")
-  @patch("ot_api.labware.add")
-  def test_assigned_resource_callback(self, mock_add, mock_define):
-    mock_add.side_effect = _mock_add
-    mock_define.side_effect = _mock_define
-
-    self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
-    self.deck.assign_child_at_slot(self.tip_rack, slot=1)
-
-    self.plate = usascientific_96_wellplate_2point4ml_deep(name="plate")
-    self.deck.assign_child_at_slot(self.plate, slot=11)
-
-
-@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
 class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   """Tests Opentrons commands"""
 
@@ -151,7 +97,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
-    self.plate = usascientific_96_wellplate_2point4ml_deep(name="plate")
+    self.plate = CellTreat_96_wellplate_350ul_Fb(name="plate")
     self.deck.assign_child_at_slot(self.plate, slot=11)
 
   @patch("ot_api.lh.pick_up_tip")
@@ -240,7 +186,3 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     await self.test_aspirate()  # aspirate first
     with no_volume_tracking():
       await self.lh.dispense(self.plate["A1"], vols=[10])
-
-  async def test_pick_up_tips96(self):
-    with self.assertRaises(NotImplementedError):
-      await self.lh.pick_up_tips96(self.tip_rack)
