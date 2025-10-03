@@ -1038,7 +1038,7 @@ class VantageBackend(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_position_in_z_direction_from_liquid_surface: float = 0,
     surface_following_distance_during_mixing: float = 0,
-    mix_speed: float = 2,
+    mix_speed: float = 0,
     limit_curve_index: int = 0,
     tadm_channel_pattern: Optional[List[bool]] = None,
     tadm_algorithm_on_off: int = 0,
@@ -1055,6 +1055,11 @@ class VantageBackend(HamiltonLiquidHandler):
         determined automatically based on the tip and liquid used in the first well.
     """
     # assert self.core96_head_installed, "96 head must be installed"
+
+    if mix_volume != 0 or mix_cycles != 0 or mix_speed != 0:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead."
+      )
 
     if isinstance(aspiration, MultiHeadAspirationPlate):
       plate = aspiration.wells[0].parent
@@ -1151,15 +1156,15 @@ class VantageBackend(HamiltonLiquidHandler):
       lld_sensitivity=lld_sensitivity,
       swap_speed=round(swap_speed * 10),
       settling_time=round(settling_time * 10),
-      mix_volume=round(mix_volume * 100),
-      mix_cycles=mix_cycles,
+      mix_volume=round(aspiration.mix.volume * 100) if aspiration.mix is not None else 0,
+      mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
       mix_position_in_z_direction_from_liquid_surface=round(
         mix_position_in_z_direction_from_liquid_surface * 100
       ),
       surface_following_distance_during_mixing=round(
         surface_following_distance_during_mixing * 100
       ),
-      mix_speed=round(mix_speed * 10),
+      mix_speed=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 0,
       limit_curve_index=limit_curve_index,
       tadm_channel_pattern=tadm_channel_pattern,
       tadm_algorithm_on_off=tadm_algorithm_on_off,
@@ -1214,6 +1219,11 @@ class VantageBackend(HamiltonLiquidHandler):
       type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
         determined based on the jet, blow_out, and empty parameters.
     """
+
+    if mix_volume != 0 or mix_cycles != 0 or mix_speed is not None:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead."
+      )
 
     if isinstance(dispense, MultiHeadDispensePlate):
       plate = dispense.wells[0].parent
@@ -1313,13 +1323,13 @@ class VantageBackend(HamiltonLiquidHandler):
       side_touch_off_distance=round(side_touch_off_distance * 10),
       swap_speed=round(swap_speed * 10),
       settling_time=round(settling_time * 10),
-      mix_volume=round(mix_volume * 10),
-      mix_cycles=mix_cycles,
+      mix_volume=round(dispense.mix.volume * 100) if dispense.mix is not None else 0,
+      mix_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
       mix_position_in_z_direction_from_liquid_surface=round(
         mix_position_in_z_direction_from_liquid_surface * 10
       ),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      mix_speed=round(mix_speed * 10),
+      mix_speed=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 0,
       limit_curve_index=limit_curve_index,
       tadm_channel_pattern=tadm_channel_pattern,
       tadm_algorithm_on_off=tadm_algorithm_on_off,

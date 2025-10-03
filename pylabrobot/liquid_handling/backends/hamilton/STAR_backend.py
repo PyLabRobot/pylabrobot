@@ -2327,6 +2327,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       limit_curve_index: The index of the limit curve to use.
     """
 
+    if mix_volume != 0 or mix_cycles != 0 or speed_of_mix != 0:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate96 instead."
+      )
+
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
@@ -2444,11 +2449,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       gamma_lld_sensitivity=gamma_lld_sensitivity,
       swap_speed=round(swap_speed * 10),
       settling_time=round(settling_time * 10),
-      mix_volume=round(mix_volume * 10),
-      mix_cycles=mix_cycles,
+      mix_volume=round(aspiration.mix.volume * 10) if aspiration.mix is not None else 0,
+      mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
       surface_following_distance_during_mix=round(surface_following_distance_during_mix * 10),
-      speed_of_mix=round(speed_of_mix * 10),
+      speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 0,
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2482,7 +2487,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mixing: float = 0,
-    speed_of_mixing: float = 120.0,
+    speed_of_mixing: float = 0.0,
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
@@ -2522,6 +2527,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
     """
+
+    if mixing_volume != 0 or mixing_cycles != 0 or speed_of_mixing != 0:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+      )
 
     assert self.core96_head_installed, "96 head must be installed"
 
@@ -2628,11 +2638,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       gamma_lld_sensitivity=gamma_lld_sensitivity,
       swap_speed=round(swap_speed * 10),
       settling_time=round(settling_time * 10),
-      mixing_volume=round(mixing_volume * 10),
-      mixing_cycles=mixing_cycles,
+      mixing_volume=round(dispense.mix.volume * 10) if dispense.mix is not None else 0,
+      mixing_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
       mixing_position_from_liquid_surface=round(mixing_position_from_liquid_surface * 10),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      speed_of_mixing=round(speed_of_mixing * 10),
+      speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 0,
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
