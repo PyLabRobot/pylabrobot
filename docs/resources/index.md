@@ -167,6 +167,7 @@ If you cannot find something, please contribute what you are looking for!
 :caption: Resource Library
 
 library/agenbio
+library/agilent
 library/alpaqua
 library/azenta
 library/bioer
