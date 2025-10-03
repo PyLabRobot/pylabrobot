@@ -740,7 +740,7 @@ class VantageBackend(HamiltonLiquidHandler):
       mix_position_in_z_direction_from_liquid_surface=[
         round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
       ],
-      mix_speed=[round(op.mix.flow_rate * 10) if op.mix is not None else 0 for op in ops],
+      mix_speed=[round(op.mix.flow_rate * 10) if op.mix is not None else 2500 for op in ops],
       surface_following_distance_during_mixing=[
         round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
       ],
@@ -937,7 +937,7 @@ class VantageBackend(HamiltonLiquidHandler):
       mix_position_in_z_direction_from_liquid_surface=[
         round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
       ],
-      mix_speed=[round(op.mix.flow_rate * 10) if op.mix is not None else 0 for op in ops],
+      mix_speed=[round(op.mix.flow_rate * 100) if op.mix is not None else 10 for op in ops],
       surface_following_distance_during_mixing=[
         round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
       ],
@@ -1164,7 +1164,7 @@ class VantageBackend(HamiltonLiquidHandler):
       surface_following_distance_during_mixing=round(
         surface_following_distance_during_mixing * 100
       ),
-      mix_speed=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 0,
+      mix_speed=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 20,
       limit_curve_index=limit_curve_index,
       tadm_channel_pattern=tadm_channel_pattern,
       tadm_algorithm_on_off=tadm_algorithm_on_off,
@@ -1287,7 +1287,6 @@ class VantageBackend(HamiltonLiquidHandler):
     flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 250)
     swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
-    mix_speed = mix_speed or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
     type_of_dispensing_mode = type_of_dispensing_mode or _get_dispense_mode(
       jet=jet, empty=empty, blow_out=blow_out
     )
@@ -1329,7 +1328,7 @@ class VantageBackend(HamiltonLiquidHandler):
         mix_position_in_z_direction_from_liquid_surface * 10
       ),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      mix_speed=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 0,
+      mix_speed=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 10,
       limit_curve_index=limit_curve_index,
       tadm_channel_pattern=tadm_channel_pattern,
       tadm_algorithm_on_off=tadm_algorithm_on_off,

@@ -143,6 +143,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       liquid_height=10,
       blow_out_air_volume=0,
       liquids=[(None, 100)],
+      mix=None,
     )
     await self.evo.aspirate([op], use_channels=[0])
     self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
@@ -284,6 +285,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       liquid_height=10,
       blow_out_air_volume=0,
       liquids=[(None, 100)],
+      mix=None,
     )
     await self.evo.dispense([op], use_channels=[0])
     self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]

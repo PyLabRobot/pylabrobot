@@ -1882,6 +1882,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        mix=mix,
       )
     else:
       # ensure that wells are all in the same plate
@@ -1916,6 +1917,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=all_liquids,
+        mix=mix,
       )
 
     try:

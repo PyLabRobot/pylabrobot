@@ -1827,7 +1827,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_position_from_liquid_surface = _fill_in_defaults(
       mix_position_from_liquid_surface, [0.0] * n
     )
-    mix_speed = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 100.0 for op in ops]
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -2123,7 +2123,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_position_from_liquid_surface = _fill_in_defaults(
       mix_position_from_liquid_surface, [0.0] * n
     )
-    mix_speed = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 1.0 for op in ops]
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -2281,7 +2281,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mix: float = 0,
-    speed_of_mix: float = 120.0,
+    speed_of_mix: float = 0.0,
     limit_curve_index: int = 0,
   ):
     """Aspirate using the Core96 head.
@@ -2400,7 +2400,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
     swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
-    speed_of_mix = speed_of_mix or (hlc.aspiration_mix_flow_rate if hlc is not None else 10.0)
 
     channel_pattern = [True] * 12 * 8
 
@@ -2453,7 +2452,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
       surface_following_distance_during_mix=round(surface_following_distance_during_mix * 10),
-      speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 0,
+      speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2603,7 +2602,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
     swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
-    speed_of_mixing = speed_of_mixing or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
 
     channel_pattern = [True] * 12 * 8
 
@@ -2642,7 +2640,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mixing_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
       mixing_position_from_liquid_surface=round(mixing_position_from_liquid_surface * 10),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 0,
+      speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 1200,
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,

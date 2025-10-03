@@ -220,6 +220,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
           "use_channels": [0],
         },
       )
+      print(task)
       response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
       self.assertEqual(response.json.get("status"), "succeeded")
       self.assertEqual(response.status_code, 200)
