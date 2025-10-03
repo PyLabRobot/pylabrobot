@@ -203,7 +203,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
           "channels": [
             {
               "resource_name": well.name,
-              "volume": 10,
+              "volume": 10.0,
               "tip": serialize(tip),
               "offset": {
                 "type": "Coordinate",

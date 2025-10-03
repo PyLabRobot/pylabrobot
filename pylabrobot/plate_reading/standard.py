@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Literal, Union
 
 try:
-  import numpy.typing as npt
+  import numpy.typing as npt  # type: ignore
 
   Image = npt.NDArray
 except ImportError:

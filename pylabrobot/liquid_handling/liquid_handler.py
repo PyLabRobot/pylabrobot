@@ -976,7 +976,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
-        mix or [None] * len(use_channels),
+        mix or [None] * len(use_channels),  # type: ignore
       )
     ]
 
@@ -1209,7 +1209,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
-        mix or [None] * len(use_channels),
+        mix or [None] * len(use_channels),  # type: ignore
       )
     ]
 
