@@ -59,6 +59,7 @@ class SingleChannelAspiration:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
+  mix: Optional[Mix] = None
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,18 @@ class SingleChannelDispense:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
+  mix: Optional[Mix] = None
+
+
+@dataclass(frozen=True)
+class Mix:
+  # resource: Container
+  # offset: Coordinate
+  # tip: Tip
+  volume: float
+  repetitions: int
+  flow_rate: float
+  # liquid_height: float
 
 
 @dataclass(frozen=True)

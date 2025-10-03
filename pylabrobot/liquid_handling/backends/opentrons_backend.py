@@ -420,6 +420,19 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
+    if op.mix is not None:
+      for _ in range(op.mix.repetitions):
+        ot_api.lh.aspirate_in_place(
+          volume=op.mix.volume,
+          flow_rate=op.mix.flow_rate,
+          pipette_id=pipette_id,
+        )
+        ot_api.lh.dispense_in_place(
+          volume=op.mix.volume,
+          flow_rate=op.mix.flow_rate,
+          pipette_id=pipette_id,
+        )
+
     ot_api.lh.aspirate_in_place(
       volume=volume,
       flow_rate=flow_rate,
@@ -489,6 +502,19 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       flow_rate=flow_rate,
       pipette_id=pipette_id,
     )
+
+    if op.mix is not None:
+      for _ in range(op.mix.repetitions):
+        ot_api.lh.aspirate_in_place(
+          volume=op.mix.volume,
+          flow_rate=op.mix.flow_rate,
+          pipette_id=pipette_id,
+        )
+        ot_api.lh.dispense_in_place(
+          volume=op.mix.volume,
+          flow_rate=op.mix.flow_rate,
+          pipette_id=pipette_id,
+        )
 
     traversal_location = op.resource.get_absolute_location("c", "c", "cavity_bottom") + op.offset
     traversal_location.z = self.traversal_height

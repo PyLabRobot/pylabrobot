@@ -69,6 +69,7 @@ from .standard import (
   Drop,
   DropTipRack,
   GripDirection,
+  Mix,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
   MultiHeadDispenseContainer,
@@ -816,6 +817,7 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
+    mix: Optional[List[Mix]] = None,
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -963,8 +965,9 @@ class LiquidHandler(Resource, Machine):
         tip=t,
         blow_out_air_volume=bav,
         liquids=lvs,
+        mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs in zip(
+      for r, v, o, fr, lh, t, bav, lvs, m in zip(
         resources,
         vols,
         offsets,
@@ -973,6 +976,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
+        mix or [None] * len(use_channels),
       )
     ]
 
@@ -1039,6 +1043,7 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
+    mix: Optional[List[Mix]] = None,
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
@@ -1193,8 +1198,9 @@ class LiquidHandler(Resource, Machine):
         tip=t,
         liquids=lvs,
         blow_out_air_volume=bav,
+        mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs in zip(
+      for r, v, o, fr, lh, t, bav, lvs, m in zip(
         resources,
         vols,
         offsets,
@@ -1203,6 +1209,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
+        mix or [None] * len(use_channels),
       )
     ]
 
