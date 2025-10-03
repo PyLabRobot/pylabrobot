@@ -622,6 +622,11 @@ class VantageBackend(HamiltonLiquidHandler):
         determined automatically based on the tip and liquid used.
     """
 
+    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+      )
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     if jet is None:
@@ -730,12 +735,12 @@ class VantageBackend(HamiltonLiquidHandler):
       ],
       swap_speed=[round(ss * 10) for ss in swap_speed or [2] * len(ops)],
       settling_time=[round(st * 10) for st in settling_time or [1] * len(ops)],
-      mix_volume=[round(mv * 100) for mv in mix_volume or [0] * len(ops)],
-      mix_cycles=mix_cycles or [0] * len(ops),
+      mix_volume=[round(op.mix.volume * 100) if op.mix is not None else 0 for op in ops],
+      mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
       mix_position_in_z_direction_from_liquid_surface=[
         round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
       ],
-      mix_speed=[round(ms * 10) for ms in mix_speed or [250] * len(ops)],
+      mix_speed=[round(op.mix.flow_rate * 10) if op.mix is not None else 0 for op in ops],
       surface_following_distance_during_mixing=[
         round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
       ],
@@ -807,6 +812,11 @@ class VantageBackend(HamiltonLiquidHandler):
         Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
         documentation. Dispense mode 4.
     """
+
+    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+      )
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
@@ -922,12 +932,12 @@ class VantageBackend(HamiltonLiquidHandler):
       pressure_lld_sensitivity=pressure_lld_sensitivity or [1] * len(ops),
       swap_speed=[round(ss * 10) for ss in swap_speed or [1] * len(ops)],
       settling_time=[round(st * 10) for st in settling_time or [0] * len(ops)],
-      mix_volume=[round(mv * 100) for mv in mix_volume or [0] * len(ops)],
-      mix_cycles=mix_cycles or [0] * len(ops),
+      mix_volume=[round(op.mix.volume * 100) if op.mix is not None else 0 for op in ops],
+      mix_cycles=[op.mix.repetitions if op.mix is not None else 0 for op in ops],
       mix_position_in_z_direction_from_liquid_surface=[
         round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
       ],
-      mix_speed=[round(ms * 10) for ms in mix_speed or [1] * len(ops)],
+      mix_speed=[round(op.mix.flow_rate * 10) if op.mix is not None else 0 for op in ops],
       surface_following_distance_during_mixing=[
         round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
       ],

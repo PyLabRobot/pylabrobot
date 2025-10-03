@@ -1712,6 +1712,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           and 360. Defaults to well bottom + liquid height. Should use absolute z.
     """
 
+    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate instead."
+      )
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -1817,17 +1822,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         hlc.aspiration_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
-    mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
+    mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
     mix_position_from_liquid_surface = _fill_in_defaults(
       mix_position_from_liquid_surface, [0.0] * n
     )
-    mix_speed = _fill_in_defaults(
-      mix_speed,
-      default=[
-        hlc.aspiration_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -2007,6 +2007,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         documentation. Dispense mode 4.
     """
 
+    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+      )
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -2113,17 +2118,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
-    mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
+    mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
     mix_position_from_liquid_surface = _fill_in_defaults(
       mix_position_from_liquid_surface, [0.0] * n
     )
-    mix_speed = _fill_in_defaults(
-      mix_speed,
-      default=[
-        hlc.dispense_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
