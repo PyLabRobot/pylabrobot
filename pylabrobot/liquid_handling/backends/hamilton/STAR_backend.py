@@ -2436,9 +2436,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction,
-      surface_following_distance=round(
-        surface_following_distance * 10
-      ),
+      surface_following_distance=round(surface_following_distance * 10),
       aspiration_volumes=round(volume * 10),
       aspiration_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
@@ -2625,9 +2623,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction,
-      surface_following_distance=round(
-        surface_following_distance * 10
-      ),
+      surface_following_distance=round(surface_following_distance * 10),
       dispense_volume=round(volume * 10),
       dispense_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
