@@ -76,6 +76,7 @@ def _make_asp(
     liquid_height=None,
     blow_out_air_volume=None,
     liquids=[(None, vol)],
+    mix=None,
   )
 
 
@@ -94,6 +95,7 @@ def _make_disp(
     liquid_height=None,
     blow_out_air_volume=None,
     liquids=[(None, vol)],
+    mix=None,
   )
 
 
@@ -841,6 +843,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
             liquid_height=None,
             blow_out_air_volume=None,
             liquids=[[(None, 10)]] * 96,
+            mix=None,
           )
         },
       },
@@ -860,6 +863,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
             liquid_height=None,
             blow_out_air_volume=None,
             liquids=[[(None, 10)]] * 96,
+            mix=None,
           )
         },
       },

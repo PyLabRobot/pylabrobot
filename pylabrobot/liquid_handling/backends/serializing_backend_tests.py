@@ -105,6 +105,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "liquid_height": None,
             "blow_out_air_volume": None,
             "liquids": [[None, 10]],
+            "mix": None,
           }
         ],
         "use_channels": [0],
@@ -133,6 +134,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "liquid_height": None,
             "blow_out_air_volume": None,
             "liquids": [[None, 10]],
+            "mix": None,
           }
         ],
         "use_channels": [0],

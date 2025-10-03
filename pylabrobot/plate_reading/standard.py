@@ -1,13 +1,19 @@
 import enum
+import sys
 from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Literal, Union
 
-try:
-  import numpy.typing as npt
+if sys.version_info >= (3, 10):
+  from typing import TypeAlias
+else:
+  from typing_extensions import TypeAlias
 
-  Image = npt.NDArray
+try:
+  import numpy.typing as npt  # type: ignore
+
+  Image: TypeAlias = npt.NDArray
 except ImportError:
-  Image = object  # type: ignore
+  Image: TypeAlias = object  # type: ignore
 
 
 class Objective(enum.Enum):

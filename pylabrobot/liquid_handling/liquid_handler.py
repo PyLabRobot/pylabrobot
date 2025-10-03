@@ -69,6 +69,7 @@ from .standard import (
   Drop,
   DropTipRack,
   GripDirection,
+  Mix,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
   MultiHeadDispenseContainer,
@@ -816,6 +817,7 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
+    mix: Optional[List[Mix]] = None,
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -963,8 +965,9 @@ class LiquidHandler(Resource, Machine):
         tip=t,
         blow_out_air_volume=bav,
         liquids=lvs,
+        mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs in zip(
+      for r, v, o, fr, lh, t, bav, lvs, m in zip(
         resources,
         vols,
         offsets,
@@ -973,6 +976,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
+        mix or [None] * len(use_channels),  # type: ignore
       )
     ]
 
@@ -1039,6 +1043,7 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
+    mix: Optional[List[Mix]] = None,
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
@@ -1193,8 +1198,9 @@ class LiquidHandler(Resource, Machine):
         tip=t,
         liquids=lvs,
         blow_out_air_volume=bav,
+        mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs in zip(
+      for r, v, o, fr, lh, t, bav, lvs, m in zip(
         resources,
         vols,
         offsets,
@@ -1203,6 +1209,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
+        mix or [None] * len(use_channels),  # type: ignore
       )
     ]
 
@@ -1617,6 +1624,7 @@ class LiquidHandler(Resource, Machine):
     flow_rate: Optional[float] = None,
     liquid_height: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
+    mix: Optional[Mix] = None,
     **backend_kwargs,
   ):
     """Aspirate from all wells in a plate or from a container of a sufficient size.
@@ -1628,17 +1636,14 @@ class LiquidHandler(Resource, Machine):
       >>> await lh.aspirate96(container, volume=50)
 
     Args:
-      resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
-      volume (float): The volume to aspirate through each channel
-      offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Added to :attr:`default_offset_head96`.
-        Defaults to :func:`Coordinate.zero`.
-      flow_rate ([Optional[float]]): The flow rate to use when aspirating, in ul/s. If `None`, the
+      resource: Resource object or list of wells.
+      volume: The volume to aspirate through each channel
+      offset: Adjustment to where the 96 head should go to aspirate relative to where the plate or container is defined to be. Added to :attr:`default_offset_head96`.  Defaults to :func:`Coordinate.zero`.
+      flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the
         backend default will be used.
-      liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
-        mm. If `None`, the backend default will be used.
-      blow_out_air_volume ([Optional[float]]): The volume of air to aspirate after the liquid, in
-        ul. If `None`, the backend default will be used.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm. If `None`, the backend default will be used.
+      blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the backend default will be used.
+      mix: A mix operation to perform after the aspiration, optional.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1652,6 +1657,7 @@ class LiquidHandler(Resource, Machine):
       flow_rate=flow_rate,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
+      mix=mix,
     )
 
     if not (
@@ -1717,6 +1723,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        mix=mix,
       )
     else:  # multiple containers
       # ensure that wells are all in the same plate
@@ -1754,6 +1761,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        mix=mix,
       )
 
     try:
@@ -1782,6 +1790,7 @@ class LiquidHandler(Resource, Machine):
     flow_rate: Optional[float] = None,
     liquid_height: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
+    mix: Optional[Mix] = None,
     **backend_kwargs,
   ):
     """Dispense to all wells in a plate.
@@ -1792,17 +1801,13 @@ class LiquidHandler(Resource, Machine):
       >>> await lh.dispense96(plate, volume=50)
 
     Args:
-      resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
-      volume (float): The volume to dispense through each channel
-      offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Added to :attr:`default_offset_head96`.
-        Defaults to :func:`Coordinate.zero`.
-      flow_rate ([Optional[float]]): The flow rate to use when dispensing, in ul/s. If `None`, the
-        backend default will be used.
-      liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
-        mm. If `None`, the backend default will be used.
-      blow_out_air_volume ([Optional[float]]): The volume of air to dispense after the liquid, in
-        ul. If `None`, the backend default will be used.
+      resource: Resource object or list of wells.
+      volume: The volume to dispense through each channel
+      offset: Adjustment to where the 96 head should go to aspirate relative to where the plate or container is defined to be. Added to :attr:`default_offset_head96`.  Defaults to :func:`Coordinate.zero`.
+      flow_rate: The flow rate to use when dispensing, in ul/s. If `None`, the backend default will be used.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm. If `None`, the backend default will be used.
+      blow_out_air_volume: The volume of air to dispense after the liquid, in ul. If `None`, the backend default will be used.
+      mix: If provided, the tip will mix after dispensing.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1816,6 +1821,7 @@ class LiquidHandler(Resource, Machine):
       flow_rate=flow_rate,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
+      mix=mix,
     )
 
     if not (
@@ -1876,6 +1882,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        mix=mix,
       )
     else:
       # ensure that wells are all in the same plate
@@ -1910,6 +1917,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=all_liquids,
+        mix=mix,
       )
 
     try:
