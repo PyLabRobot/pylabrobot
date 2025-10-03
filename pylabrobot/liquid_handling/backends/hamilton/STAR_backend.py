@@ -2271,7 +2271,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
     immersion_depth_direction: int = 0,
-    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
+    surface_following_distance: float = 0,
     transport_air_volume: float = 5.0,
     pre_wetting_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
@@ -2436,8 +2436,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction,
-      liquid_surface_sink_distance_at_the_end_of_aspiration=round(
-        liquid_surface_sink_distance_at_the_end_of_aspiration * 10
+      surface_following_distance=round(
+        surface_following_distance * 10
       ),
       aspiration_volumes=round(volume * 10),
       aspiration_speed=round(flow_rate * 10),
@@ -2477,7 +2477,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
     immersion_depth_direction: int = 0,
-    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,
+    surface_following_distance: float = 0,
     transport_air_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
     swap_speed: float = 2.0,
@@ -2512,7 +2512,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio: Unknown.
       immersion_depth: Immersion depth, in mm. See `immersion_depth_direction`.
       immersion_depth_direction: Immersion depth direction. 0 = go deeper, 1 = go up out of liquid.
-      liquid_surface_sink_distance_at_the_end_of_dispense: Unknown.
+      surface_following_distance: Surface following distance, in mm. Default 0.
       transport_air_volume: Transport air volume, to dispense before aspiration.
       gamma_lld_sensitivity: Gamma LLD sensitivity.
       swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 0.3 and 160. Default 10.
@@ -2625,8 +2625,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction,
-      liquid_surface_sink_distance_at_the_end_of_dispense=round(
-        liquid_surface_sink_distance_at_the_end_of_dispense * 10
+      surface_following_distance=round(
+        surface_following_distance * 10
       ),
       dispense_volume=round(volume * 10),
       dispense_speed=round(flow_rate * 10),
@@ -5500,7 +5500,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_ratio: int = 3425,
     immersion_depth: int = 0,
     immersion_depth_direction: int = 0,
-    liquid_surface_sink_distance_at_the_end_of_aspiration: int = 0,
+    surface_following_distance: int = 0,
     aspiration_volumes: int = 0,
     aspiration_speed: int = 1000,
     transport_air_volume: int = 0,
@@ -5549,8 +5549,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       immersion_depth: Immersion depth [0.1mm]. Must be between 0 and 3600. Default 0.
       immersion_depth_direction: Direction of immersion depth (0 = go deeper, 1 = go up out of
           liquid). Must be between 0 and 1. Default 0.
-      liquid_surface_sink_distance_at_the_end_of_aspiration: Liquid surface sink distance at
-          the end of aspiration [0.1mm]. Must be between 0 and 990. Default 0.
+      surface_following_distance_at_the_end_of_aspiration: Surface following distance during
+          aspiration [0.1mm]. Must be between 0 and 990. Default 0. (renamed for clarity from
+          'liquid_surface_sink_distance_at_the_end_of_aspiration' in firmware docs)
       aspiration_volumes: Aspiration volume [0.1ul]. Must be between 0 and 11500. Default 0.
       aspiration_speed: Aspiration speed [0.1ul/s]. Must be between 3 and 5000. Default 1000.
       transport_air_volume: Transport air volume [0.1ul]. Must be between 0 and 500. Default 0.
@@ -5604,8 +5605,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
     assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
     assert (
-      0 <= liquid_surface_sink_distance_at_the_end_of_aspiration <= 990
-    ), "liquid_surface_sink_distance_at_the_end_of_aspiration must be between 0 and 990"
+      0 <= surface_following_distance <= 990
+    ), "surface_following_distance must be between 0 and 990"
     assert 0 <= aspiration_volumes <= 11500, "aspiration_volumes must be between 0 and 11500"
     assert 3 <= aspiration_speed <= 5000, "aspiration_speed must be between 3 and 5000"
     assert 0 <= transport_air_volume <= 500, "transport_air_volume must be between 0 and 500"
@@ -5650,7 +5651,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zq=f"{tube_2nd_section_ratio:05}",
       iw=f"{immersion_depth:03}",
       ix=immersion_depth_direction,
-      fh=f"{liquid_surface_sink_distance_at_the_end_of_aspiration:03}",
+      fh=f"{surface_following_distance:03}",
       af=f"{aspiration_volumes:05}",
       ag=f"{aspiration_speed:04}",
       vt=f"{transport_air_volume:03}",
@@ -5686,7 +5687,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     maximum_immersion_depth: int = 3425,
     immersion_depth: int = 0,
     immersion_depth_direction: int = 0,
-    liquid_surface_sink_distance_at_the_end_of_dispense: int = 0,
+    surface_following_distance: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
     minimal_end_height: int = 3425,
     dispense_volume: int = 0,
@@ -5735,8 +5736,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       immersion_depth: Immersion depth [0.1mm]. Must be between 0 and 3600. Default 0.
       immersion_depth_direction: Direction of immersion depth (0 = go deeper, 1 = go up out of
           liquid). Must be between 0 and 1. Default 0.
-      liquid_surface_sink_distance_at_the_end_of_dispense: Liquid surface sink elevation at
-          the end of aspiration [0.1mm]. Must be between 0 and 990. Default 0.
+      surface_following_distance: Liquid surface following distance during dispense [0.1mm].
+          Must be between 0 and 990. Default 0. (renamed for clarity from
+          'liquid_surface_sink_distance_at_the_end_of_dispense' in firmware docs)
       minimum_traverse_height_at_beginning_of_a_command: Minimal traverse height at begin of
           command [0.1mm]. Must be between 0 and 3425. Default 3425.
       minimal_end_height: Minimal height at command end [0.1mm]. Must be between 0 and 3425.
@@ -5792,8 +5794,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
     assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
     assert (
-      0 <= liquid_surface_sink_distance_at_the_end_of_dispense <= 990
-    ), "liquid_surface_sink_distance_at_the_end_of_dispense must be between 0 and 990"
+      0 <= surface_following_distance <= 990
+    ), "surface_following_distance must be between 0 and 990"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
@@ -5841,7 +5843,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       pp=f"{pull_out_distance_to_take_transport_air_in_function_without_lld:04}",
       iw=f"{immersion_depth:03}",
       ix=immersion_depth_direction,
-      fh=f"{liquid_surface_sink_distance_at_the_end_of_dispense:03}",
+      fh=f"{surface_following_distance:03}",
       zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
       ze=f"{minimal_end_height:04}",
       df=f"{dispense_volume:05}",
