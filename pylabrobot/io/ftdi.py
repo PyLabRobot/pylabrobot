@@ -12,6 +12,7 @@ try:
 except ImportError as e:
   HAS_PYLIBFTDI = False
   _FTDI_IMPORT_ERROR = e
+  Device = None  # type: ignore
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -31,44 +32,48 @@ class FTDI(IOBase):
   """Thin wrapper around pylibftdi to include PLR logging (for io testing)."""
 
   def __init__(self, device_id: Optional[str] = None):
-    self._dev = Device(lazy_open=True, device_id=device_id)
+    self._dev = Device(lazy_open=True, device_id=device_id) if HAS_PYLIBFTDI else None
     self._device_id = device_id or "None"  # for io
     self._executor: Optional[ThreadPoolExecutor] = None
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new FTDI object while capture or validation is active")
+  
+  @property
+  def dev(self) -> "Device":
+    if not HAS_PYLIBFTDI or self._dev is None:
+      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_IMPORT_ERROR}")
+    return self._dev
 
   async def setup(self):
-    if not HAS_PYLIBFTDI:
-      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_IMPORT_ERROR}")
-    self._dev.open()
+    self.dev.open()
     self._executor = ThreadPoolExecutor(max_workers=1)
 
   async def set_baudrate(self, baudrate: int):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: setattr(self._dev, "baudrate", baudrate))
+    await loop.run_in_executor(self._executor, lambda: setattr(self.dev, "baudrate", baudrate))
 
   async def set_rts(self, level: bool):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_setrts(level))
+    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setrts(level))
     logger.log(LOG_LEVEL_IO, "[%s] set_rts %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_rts", data=str(level)))
 
   async def set_dtr(self, level: bool):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_setdtr(level))
+    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setdtr(level))
     logger.log(LOG_LEVEL_IO, "[%s] set_dtr %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_dtr", data=str(level)))
 
   async def usb_reset(self):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_usb_reset())
+    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_reset())
     logger.log(LOG_LEVEL_IO, "[%s] usb_reset", self._device_id)
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_reset", data=""))
 
   async def set_latency_timer(self, latency: int):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(
-      self._executor, lambda: self._dev.ftdi_fn.ftdi_set_latency_timer(latency)
+      self._executor, lambda: self.dev.ftdi_fn.ftdi_set_latency_timer(latency)
     )
     logger.log(LOG_LEVEL_IO, "[%s] set_latency_timer %s", self._device_id, latency)
     capturer.record(
@@ -78,7 +83,7 @@ class FTDI(IOBase):
   async def set_line_property(self, bits: int, stopbits: int, parity: int):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(
-      self._executor, lambda: self._dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
+      self._executor, lambda: self.dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
     )
     logger.log(
       LOG_LEVEL_IO, "[%s] set_line_property %s,%s,%s", self._device_id, bits, stopbits, parity
@@ -91,7 +96,7 @@ class FTDI(IOBase):
 
   async def set_flowctrl(self, flowctrl: int):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_setflowctrl(flowctrl))
+    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setflowctrl(flowctrl))
     logger.log(LOG_LEVEL_IO, "[%s] set_flowctrl %s", self._device_id, flowctrl)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="set_flowctrl", data=str(flowctrl))
@@ -99,13 +104,13 @@ class FTDI(IOBase):
 
   async def usb_purge_rx_buffer(self):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_usb_purge_rx_buffer())
+    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer())
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_rx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_purge_rx_buffer", data=""))
 
   async def usb_purge_tx_buffer(self):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self._dev.ftdi_fn.ftdi_usb_purge_tx_buffer())
+    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_tx_buffer())
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_tx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_purge_tx_buffer", data=""))
 
@@ -113,7 +118,7 @@ class FTDI(IOBase):
     loop = asyncio.get_running_loop()
     stat = ctypes.c_ushort(0)
     await loop.run_in_executor(
-      self._executor, lambda: self._dev.ftdi_fn.ftdi_poll_modem_status(ctypes.byref(stat))
+      self._executor, lambda: self.dev.ftdi_fn.ftdi_poll_modem_status(ctypes.byref(stat))
     )
     logger.log(LOG_LEVEL_IO, "[%s] poll_modem_status %s", self._device_id, stat.value)
     capturer.record(
@@ -122,7 +127,7 @@ class FTDI(IOBase):
     return stat.value
 
   async def stop(self):
-    self._dev.close()
+    self.dev.close()
     if self._executor is not None:
       self._executor.shutdown(wait=True)
       self._executor = None
@@ -131,10 +136,10 @@ class FTDI(IOBase):
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self._device_id, action="write", data=data.hex()))
-    return cast(int, self._dev.write(data))
+    return cast(int, self.dev.write(data))
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    data = self._dev.read(num_bytes)
+    data = self.dev.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
     capturer.record(
       FTDICommand(
@@ -146,7 +151,7 @@ class FTDI(IOBase):
     return cast(bytes, data)
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    data = self._dev.readline()
+    data = self.dev.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self._device_id, action="readline", data=data.hex()))
     return cast(bytes, data)
