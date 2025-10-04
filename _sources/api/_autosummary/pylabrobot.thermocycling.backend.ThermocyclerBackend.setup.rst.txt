@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.backend.ThermocyclerBackend.setup
+==========================================================
+
+.. currentmodule:: pylabrobot.thermocycling.backend
+
+.. automethod:: ThermocyclerBackend.setup

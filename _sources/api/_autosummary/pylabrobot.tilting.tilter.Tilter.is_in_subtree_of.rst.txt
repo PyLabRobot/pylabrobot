@@ -1,0 +1,6 @@
+pylabrobot.tilting.tilter.Tilter.is\_in\_subtree\_of
+====================================================
+
+.. currentmodule:: pylabrobot.tilting.tilter
+
+.. automethod:: Tilter.is_in_subtree_of
