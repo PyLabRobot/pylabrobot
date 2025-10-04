@@ -37,7 +37,7 @@ class FTDI(IOBase):
     self._executor: Optional[ThreadPoolExecutor] = None
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new FTDI object while capture or validation is active")
-  
+
   @property
   def dev(self) -> "Device":
     if not HAS_PYLIBFTDI or self._dev is None:
