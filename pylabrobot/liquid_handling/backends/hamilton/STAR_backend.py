@@ -1714,7 +1714,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
@@ -2009,7 +2010,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
@@ -2329,7 +2331,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if mix_volume != 0 or mix_cycles != 0 or speed_of_mix != 0:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate96 instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate96 instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     assert self.core96_head_installed, "96 head must be installed"
@@ -2527,7 +2530,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if mixing_volume != 0 or mixing_cycles != 0 or speed_of_mixing != 0:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     assert self.core96_head_installed, "96 head must be installed"

@@ -624,7 +624,8 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
@@ -815,7 +816,8 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
@@ -1058,7 +1060,8 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if mix_volume != 0 or mix_cycles != 0 or mix_speed != 0:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     if isinstance(aspiration, MultiHeadAspirationPlate):
@@ -1222,7 +1225,8 @@ class VantageBackend(HamiltonLiquidHandler):
 
     if mix_volume != 0 or mix_cycles != 0 or mix_speed is not None:
       raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead."
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense96 instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
     if isinstance(dispense, MultiHeadDispensePlate):
