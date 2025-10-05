@@ -48,6 +48,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo.send_command.side_effect = send_command  # type: ignore[method-assign]
 
     self.deck = EVO150Deck()
+    self.evo.set_deck(self.deck)
 
     # setup
     self.evo.setup = unittest.mock.AsyncMock()  # type: ignore[method-assign]
