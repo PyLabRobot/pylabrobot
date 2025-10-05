@@ -381,7 +381,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     )
     drop = ResourceDrop(
       resource=self.plate,
-      destination=self.plate_carrier[0].get_absolute_location(),
+      destination=self.plate_carrier[0].get_location_wrt(self.deck),
       destination_absolute_rotation=Rotation(0, 0, 0),
       offset=Coordinate.zero(),
       pickup_distance_from_top=13.2,

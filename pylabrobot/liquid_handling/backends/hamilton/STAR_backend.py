@@ -1458,7 +1458,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError("Cannot mix tips with different tip types.")
     ttti = (await self.get_ttti(list(tips)))[0]
 
-    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
+    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
@@ -1532,7 +1532,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     # get highest z position
-    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
+    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     if drop_method == TipDropMethod.PLACE_SHIFT:
       # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
       begin_tip_deposit_process = (
@@ -1589,9 +1589,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""
     for resource in resources:
-      if resource.get_absolute_location().z < 100:
+      if resource.get_location_wrt(self.deck).z < 100:
         raise ValueError(
-          f"Resource {resource} is too low: {resource.get_absolute_location().z} < 100"
+          f"Resource {resource} is too low: {resource.get_location_wrt(self.deck).z} < 100"
         )
 
   class LLDMode(enum.Enum):
@@ -1764,7 +1764,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surfaces_no_lld or [
@@ -2069,7 +2069,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surface_no_lld or [
@@ -2217,7 +2217,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError("No tips found in the tip rack.")
     assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
     self._check_96_position_legal(position, skip_z=True)
     z_deposit_position += round(pickup.offset.z * 10)
 
@@ -2248,10 +2248,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
-      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+      position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
       tip_rack = tip_spot_a1.parent
       assert tip_rack is not None
-      position.z = tip_rack.get_absolute_location().z + 1.45
+      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
       # This should be the case for all normal hamilton tip carriers + racks
       # In the future, we might want to make this more flexible
       assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
@@ -2379,7 +2379,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
       position = (
-        ref_well.get_absolute_location()
+        ref_well.get_location_wrt(self.deck)
         + ref_well.center()
         + Coordinate(z=ref_well.material_z_thickness)
         + aspiration.offset
@@ -2390,7 +2390,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
       y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        aspiration.container.get_absolute_location(z="cavity_bottom")
+        aspiration.container.get_location_wrt(self.deck, z="cavity_bottom")
         + Coordinate(x=x_position, y=y_position)
         + aspiration.offset
       )
@@ -2588,7 +2588,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
       position = (
-        ref_well.get_absolute_location()
+        ref_well.get_location_wrt(self.deck)
         + ref_well.center()
         + Coordinate(z=ref_well.material_z_thickness)
         + dispense.offset
@@ -2601,7 +2601,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
       y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        dispense.container.get_absolute_location(z="cavity_bottom")
+        dispense.container.get_location_wrt(self.deck, z="cavity_bottom")
         + Coordinate(x=x_position, y=y_position)
         + dispense.offset
       )
@@ -2770,7 +2770,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Get center of source plate. Also gripping height and plate width.
-    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
+    center = resource.get_location_wrt(self.deck, x="c", y="c", z="b") + offset
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     grip_width = resource.get_absolute_size_y()  # grip width is y size of resource
 
@@ -2909,7 +2909,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         pickup.resource.get_absolute_rotation()
       )
       x, y, z = (
-        pickup.resource.get_absolute_location("l", "f", "t")
+        pickup.resource.get_location_wrt(self.deck, "l", "f", "t")
         + center_in_absolute_space
         + pickup.offset
       )
@@ -3310,7 +3310,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     head_size_x = 9 * 11  # 12 channels, 9mm spacing in between
     head_size_y = 9 * 7  #   8 channels, 9mm spacing in between
     channel_size = 9
-    loc = resource.get_absolute_location()
+    loc = resource.get_location_wrt(self.deck)
     loc.x += (resource.get_size_x() - head_size_x) / 2 + channel_size / 2
     loc.y += (resource.get_size_y() - head_size_y) / 2 + channel_size / 2
     return loc
@@ -4835,7 +4835,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
     # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
-    # a resource on the robot deck and use deck.get_resource().get_absolute_location().
+    # a resource on the robot deck and use deck.get_resource().get_location_wrt(self.deck).
     deck_size = self.deck.get_absolute_size_x()
     if deck_size == STARLET_SIZE_X:
       xs = 7975  # 1360-797.5 = 562.5
@@ -6136,7 +6136,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Use autoload to unload carrier."""
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
@@ -6199,7 +6199,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
@@ -8023,7 +8023,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if isinstance(wells, Well):
       well = wells
-      x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
+      x, y, z = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
 
       if spread == "wide":
         offsets = get_wide_single_resource_liquid_op_offsets(
@@ -8036,11 +8036,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ys = [y + offset.y for offset in offsets]
     else:
       assert (
-        len(set(w.get_absolute_location().x for w in wells)) == 1
+        len(set(w.get_location_wrt(self.deck).x for w in wells)) == 1
       ), "Wells must be on the same column"
-      absolute_center = wells[0].get_absolute_location("c", "c", "cavity_bottom")
+      absolute_center = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom")
       x = absolute_center.x
-      ys = [well.get_absolute_location(x="c", y="c").y for well in wells]
+      ys = [well.get_location_wrt(self.deck, x="c", y="c").y for well in wells]
       z = absolute_center.z
 
     await self.move_channel_x(0, x=x)
@@ -8087,7 +8087,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         well = plate.get_well("A3")
         await lh.aspirate(
           [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
-          min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
+          min_z_endpos=well.get_location_wrt(self.deck, z="cavity_bottom").z,
           surface_following_distance=0,
           pull_out_distance_transport_air=[0] * 4)
         await step_off_foil(lh.backend, [well], front_channel=11, back_channel=6, move_inwards=3)
@@ -8114,20 +8114,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plate = plates.pop()
     assert plate is not None
 
-    z_location = plate.get_absolute_location(z="top").z
+    z_location = plate.get_location_wrt(self.deck, z="top").z
 
     if plate.get_absolute_rotation().z % 360 == 0:
-      back_location = plate.get_absolute_location(y="b")
-      front_location = plate.get_absolute_location(y="f")
+      back_location = plate.get_location_wrt(self.deck, y="b")
+      front_location = plate.get_location_wrt(self.deck, y="f")
     elif plate.get_absolute_rotation().z % 360 == 90:
-      back_location = plate.get_absolute_location(x="r")
-      front_location = plate.get_absolute_location(x="l")
+      back_location = plate.get_location_wrt(self.deck, x="r")
+      front_location = plate.get_location_wrt(self.deck, x="l")
     elif plate.get_absolute_rotation().z % 360 == 180:
-      back_location = plate.get_absolute_location(y="f")
-      front_location = plate.get_absolute_location(y="b")
+      back_location = plate.get_location_wrt(self.deck, y="f")
+      front_location = plate.get_location_wrt(self.deck, y="b")
     elif plate.get_absolute_rotation().z % 360 == 270:
-      back_location = plate.get_absolute_location(x="l")
-      front_location = plate.get_absolute_location(x="r")
+      back_location = plate.get_location_wrt(self.deck, x="l")
+      front_location = plate.get_location_wrt(self.deck, x="r")
     else:
       raise ValueError("Plate rotation must be a multiple of 90 degrees")
 

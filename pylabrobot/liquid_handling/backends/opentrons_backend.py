@@ -409,7 +409,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     flow_rate = op.flow_rate or self._get_default_aspiration_flow_rate(pipette_name)
 
     location = (
-      op.resource.get_absolute_location("c", "c", "cavity_bottom")
+      op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
       + op.offset
       + Coordinate(z=op.liquid_height or 0)
     )
@@ -439,7 +439,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       pipette_id=pipette_id,
     )
 
-    traversal_location = op.resource.get_absolute_location("c", "c", "cavity_bottom") + op.offset
+    traversal_location = op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom") + op.offset
     traversal_location.z = self.traversal_height
     await self.move_pipette_head(
       location=traversal_location,
@@ -487,7 +487,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     flow_rate = op.flow_rate or self._get_default_dispense_flow_rate(pipette_name)
 
     location = (
-      op.resource.get_absolute_location("c", "c", "cavity_bottom")
+      op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
       + op.offset
       + Coordinate(z=op.liquid_height or 0)
     )
@@ -516,7 +516,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
           pipette_id=pipette_id,
         )
 
-    traversal_location = op.resource.get_absolute_location("c", "c", "cavity_bottom") + op.offset
+    traversal_location = op.resource.get_location_wrt(self.deck, "c", "c", "cavity_bottom") + op.offset
     traversal_location.z = self.traversal_height
     await self.move_pipette_head(
       location=traversal_location,

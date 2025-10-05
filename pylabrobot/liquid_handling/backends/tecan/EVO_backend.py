@@ -576,7 +576,7 @@ class EVOBackend(TecanLiquidHandler):
 
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(
-      pickup.resource, pickup.resource.get_absolute_location(), z_range
+      pickup.resource, pickup.resource.get_location_wrt(self.deck), z_range
     )
     h = int(pickup.resource.get_absolute_size_y() * 10)
 
@@ -609,7 +609,7 @@ class EVOBackend(TecanLiquidHandler):
     """Drop a resource like a plate or a lid using the integrated robotic arm."""
 
     z_range = await self.roma.report_z_param(5)
-    x, y, z = self._roma_positions(drop.resource, drop.resource.get_absolute_location(), z_range)
+    x, y, z = self._roma_positions(drop.resource, drop.resource.get_location_wrt(self.deck), z_range)
     xt, yt, zt = self._roma_positions(drop.resource, drop.destination, z_range)
 
     # move to target
@@ -682,7 +682,7 @@ class EVOBackend(TecanLiquidHandler):
       return int(self._z_range - z + z_off * 10 + tip_length)  # TODO: verify z formula
 
     for i, (op, channel) in enumerate(zip(ops, use_channels)):
-      location = ops[i].resource.get_absolute_location() + op.resource.center()
+      location = ops[i].resource.get_location_wrt(self.deck) + op.resource.center()
       x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
       y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
 
@@ -695,13 +695,13 @@ class EVOBackend(TecanLiquidHandler):
       if isinstance(op, (SingleChannelAspiration, SingleChannelDispense)):
         z_positions["travel"][channel] = round(self._z_traversal_height * 10)
       z_positions["start"][channel] = get_z_position(
-        par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_start, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
       z_positions["dispense"][channel] = get_z_position(
-        par.z_dispense, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_dispense, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
       z_positions["max"][channel] = get_z_position(
-        par.z_max, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_max, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
 
     return x_positions, y_positions, z_positions

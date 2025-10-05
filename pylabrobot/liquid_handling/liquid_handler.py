@@ -2133,7 +2133,7 @@ class LiquidHandler(Resource, Machine):
           f"got {resource_rotation_wrt_destination} degrees"
         )
 
-      to_location = destination.get_absolute_location() + destination.get_new_child_location(
+      to_location = destination.get_location_wrt(self.deck) + destination.get_new_child_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
     elif isinstance(destination, Coordinate):
@@ -2144,7 +2144,7 @@ class LiquidHandler(Resource, Machine):
       child_wrt_parent = destination.get_default_child_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
-      to_location = destination.get_absolute_location() + child_wrt_parent
+      to_location = destination.get_location_wrt(self.deck) + child_wrt_parent
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
@@ -2152,16 +2152,16 @@ class LiquidHandler(Resource, Machine):
       adjusted_plate_anchor = destination.compute_plate_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
-      to_location = destination.get_absolute_location() + adjusted_plate_anchor
+      to_location = destination.get_location_wrt(self.deck) + adjusted_plate_anchor
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
-      plate_location = destination.get_absolute_location()
+      plate_location = destination.get_location_wrt(self.deck)
       child_wrt_parent = destination.get_lid_location(
         lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
       to_location = plate_location + child_wrt_parent
     else:
-      to_location = destination.get_absolute_location()
+      to_location = destination.get_location_wrt(self.deck)
 
     drop = ResourceDrop(
       resource=self._resource_pickup.resource,
@@ -2531,7 +2531,7 @@ class LiquidHandler(Resource, Machine):
       )
 
     presence_flags = [True] * len(tip_spots)
-    z_height = tip_spots[0].get_absolute_location(z="top").z + 5
+    z_height = tip_spots[0].get_location_wrt(self.deck, z="top").z + 5
 
     # Step 1: Cluster tip spots by x-coordinate
     clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}
