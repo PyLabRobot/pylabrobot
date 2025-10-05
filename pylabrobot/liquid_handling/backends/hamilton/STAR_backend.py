@@ -1718,6 +1718,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -1782,9 +1790,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
-    # TODO: I think minimum height should be the minimum height of the well
     immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
-    immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
+    immersion_depth_direction = immersion_depth_direction or [
+      0 if (id_ >= 0) else 1 for id_ in immersion_depth
+    ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
@@ -2014,6 +2023,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -2078,7 +2095,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
     immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
-    immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
+    immersion_depth_direction = immersion_depth_direction or [
+      0 if (id_ >= 0) else 1 for id_ in immersion_depth
+    ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
@@ -2272,7 +2291,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_height_measured_from_zm: float = 3.2,
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
-    immersion_depth_direction: int = 0,
+    immersion_depth_direction: Optional[int] = None,
     liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
     transport_air_volume: float = 5.0,
     pre_wetting_volume: float = 5.0,
@@ -2333,6 +2352,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise NotImplementedError(
         "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate96 instead. "
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
       )
 
     assert self.core96_head_installed, "96 head must be installed"
@@ -2438,7 +2465,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction,
+      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
       liquid_surface_sink_distance_at_the_end_of_aspiration=round(
         liquid_surface_sink_distance_at_the_end_of_aspiration * 10
       ),
@@ -2479,7 +2506,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_height_measured_from_zm: float = 3.2,
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
-    immersion_depth_direction: int = 0,
+    immersion_depth_direction: Optional[int] = None,
     liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,
     transport_air_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
@@ -2534,6 +2561,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise NotImplementedError(
         "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
       )
 
     assert self.core96_head_installed, "96 head must be installed"
@@ -2628,7 +2663,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction,
+      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
       liquid_surface_sink_distance_at_the_end_of_dispense=round(
         liquid_surface_sink_distance_at_the_end_of_dispense * 10
       ),

@@ -22,6 +22,30 @@ The `lld_mode` parameter is a list, so you can specify a different LLD mode for 
 The `lld_mode` parameter is only available when using the `STAR` backend.
 ```
 
+## Going into or out of the liquid
+
+You can use the `immersion_depth` backend kwarg to move the tip with respect to the found liquid surface. A positive value means to go deeper into the liquid, a negative value means to go above the liquid.
+
+Going 1mm below the liquid for aspiration:
+
+```python
+await lh.aspirate(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  immersion_depth=[1])
+```
+
+Going 1mm above the liquid for dispens:
+
+```python
+await lh.dispense(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  immersion_depth=[-1])
+```
+
 ## Catching errors
 
 All channelized pipetting operations raise a `ChannelizedError` exception when an error occurs, so that we can have specific error handling for each channel.
