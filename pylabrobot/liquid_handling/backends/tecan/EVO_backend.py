@@ -609,7 +609,9 @@ class EVOBackend(TecanLiquidHandler):
     """Drop a resource like a plate or a lid using the integrated robotic arm."""
 
     z_range = await self.roma.report_z_param(5)
-    x, y, z = self._roma_positions(drop.resource, drop.resource.get_location_wrt(self.deck), z_range)
+    x, y, z = self._roma_positions(
+      drop.resource, drop.resource.get_location_wrt(self.deck), z_range
+    )
     xt, yt, zt = self._roma_positions(drop.resource, drop.destination, z_range)
 
     # move to target

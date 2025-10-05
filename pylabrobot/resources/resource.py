@@ -237,8 +237,10 @@ class Resource:
       )
     )
     return parent_pos + rotated_location + rotated_anchor
-  
-  def get_location_wrt(self, other: Resource, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
+
+  def get_location_wrt(
+    self, other: Resource, x: str = "l", y: str = "f", z: str = "b"
+  ) -> Coordinate:
     """Get the location of this resource with respect to another resource.
 
     Args:
@@ -253,8 +255,10 @@ class Resource:
         f"Resources '{self.name}' is not in the subtree of '{other.name}'. "
         "This operation is not currently supported."
       )
-    
-    return self.get_absolute_location(x=x, y=y, z=z) - other.get_absolute_location(x="l", y="f", z="b")
+
+    return self.get_absolute_location(x=x, y=y, z=z) - other.get_absolute_location(
+      x="l", y="f", z="b"
+    )
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
