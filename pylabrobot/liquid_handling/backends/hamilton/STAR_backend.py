@@ -2452,9 +2452,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # # # TODO: delete > 2026-01 # # #
     # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
     if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
-      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_aspiration
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
       warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will" \
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will"
         "be removed in the future."
         "Use the universal surface_following_distance parameter instead.\n"
         "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
@@ -2483,10 +2483,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
-
-      surface_following_distance=round(
-        surface_following_distance * 10
-      ),
+      surface_following_distance=round(surface_following_distance * 10),
       aspiration_volumes=round(volume * 10),
       aspiration_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
@@ -2540,7 +2537,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     stop_back_volume: float = 0,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
-    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0, # surface_following_distance!
+    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,  # surface_following_distance!
   ):
     """Dispense using the Core96 head.
 
@@ -2670,9 +2667,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # # # TODO: delete > 2026-01 # # #
     # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
     if liquid_surface_sink_distance_at_the_end_of_dispense != 0:
-      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_dispense
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_dispense
       warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will" \
+        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will"
         "be removed in the future."
         "Use the universal surface_following_distance parameter instead.\n"
         "liquid_surface_sink_distance_at_the_end_of_dispense currently superseding"
@@ -5594,7 +5591,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     recording_mode: int = 0,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01:
-    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0
+    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
   ):
     """aspirate CoRe 96
 
@@ -5712,10 +5709,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # # # TODO: delete > 2026-01 # # #
     # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
-    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
-      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_aspiration
+    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0.0:
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
       warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will" \
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will"
         "be removed in the future."
         "Use the universal surface_following_distance parameter instead.\n"
         "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
@@ -5802,7 +5799,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     recording_mode: int = 0,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01:
-    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0 # surface_following_distance!
+    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,  # surface_following_distance!
   ):
     """dispense CoRe 96
 
@@ -5886,7 +5883,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ), "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3425"
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
     assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
-    assert 0 <= surface_following_distance <= 990, "surface_following_distance must be between 0 and 990"
+    assert (
+      0 <= surface_following_distance <= 990
+    ), "surface_following_distance must be between 0 and 990"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
@@ -5921,10 +5920,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # # # TODO: delete > 2026-01 # # #
     # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
-    if liquid_surface_sink_distance_at_the_end_of_dispense != 0:
-      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_dispense
+    if liquid_surface_sink_distance_at_the_end_of_dispense != 0.0:
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_dispense
       warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will" \
+        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will"
         "be removed in the future."
         "Use the universal surface_following_distance parameter instead.\n"
         "liquid_surface_sink_distance_at_the_end_of_dispense currently superseding"
