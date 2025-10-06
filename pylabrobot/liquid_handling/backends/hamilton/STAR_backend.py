@@ -2292,7 +2292,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
     immersion_depth_direction: Optional[int] = None,
-    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0, # deprecated, rm: >2026-01
     surface_following_distance: float = 0,
     transport_air_volume: float = 5.0,
     pre_wetting_volume: float = 5.0,
@@ -2305,6 +2304,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     surface_following_distance_during_mix: float = 0,
     speed_of_mix: float = 0.0,
     limit_curve_index: int = 0,
+    # Deprecated parameters, to be removed in future versions
+    # rm: >2026-01
+    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
   ):
     """Aspirate using the Core96 head.
 
@@ -2447,7 +2449,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     #     aspiration_volumes=int(blow_out_air_volume * 10)
     #   )
 
-    # # # TODO: delete > 2025-01# # #
+    # # # TODO: delete > 2026-01 # # #
     # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
     if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
       surface_following_distance=liquid_surface_sink_distance_at_the_end_of_aspiration
@@ -2523,7 +2525,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
     immersion_depth_direction: Optional[int] = None,
-    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,
+    surface_following_distance: float = 0,
     transport_air_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
     swap_speed: float = 2.0,
@@ -2536,6 +2538,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
+    # Deprecated parameters, to be removed in future versions
+    # rm: >2026-01
+    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0, # surface_following_distance!
   ):
     """Dispense using the Core96 head.
 
@@ -2661,6 +2666,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern = [True] * 12 * 8
 
     x_direction = 0 if position.x >= 0 else 1
+
+    # # # TODO: delete > 2026-01 # # #
+    # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
+    if liquid_surface_sink_distance_at_the_end_of_dispense != 0:
+      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_dispense
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will" \
+        "be removed in the future."
+        "Use the universal surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_dispense currently superseding"
+        "surface_following_distance.",
+        DeprecationWarning,
+      )
+    # # # delete # # #
+
     ret = await self.dispense_core_96(
       dispensing_mode=dispense_mode,
       x_position=abs(round(position.x * 10)),
@@ -2680,9 +2700,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
-      liquid_surface_sink_distance_at_the_end_of_dispense=round(
-        liquid_surface_sink_distance_at_the_end_of_dispense * 10
-      ),
+      surface_following_distance=round(surface_following_distance * 10),
       dispense_volume=round(volume * 10),
       dispense_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
@@ -5565,7 +5583,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     gamma_lld_sensitivity: int = 1,
     swap_speed: int = 100,
     settling_time: int = 5,
-
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
     mix_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mix: int = 0,
     speed_of_mix: int = 1000,
@@ -5573,10 +5592,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0,
-    # Deprecated parameters (to be removed in 2026-01):
-    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0, # deprecated, rm: >2026-01
-    mix_volume: int = 0,
-    mix_cycles: int = 0,
+    # Deprecated parameters, to be removed in future versions
+    # rm: >2026-01:
+    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0
   ):
     """aspirate CoRe 96
 
@@ -5692,6 +5710,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
+    # # # TODO: delete > 2026-01 # # #
+    # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
+    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
+      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_aspiration
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will" \
+        "be removed in the future."
+        "Use the universal surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
+        "surface_following_distance.",
+        DeprecationWarning,
+      )
+    # # # delete # # #
+
     return await self.send_command(
       module="C0",
       command="EA",
@@ -5768,6 +5800,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0,
+    # Deprecated parameters, to be removed in future versions
+    # rm: >2026-01:
+    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0 # surface_following_distance!
   ):
     """dispense CoRe 96
 
@@ -5851,9 +5886,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ), "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3425"
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
     assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
-    assert (
-      0 <= surface_following_distance <= 990
-    ), "surface_following_distance must be between 0 and 990"
+    assert 0 <= surface_following_distance <= 990, "surface_following_distance must be between 0 and 990"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
@@ -5885,6 +5918,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
+
+    # # # TODO: delete > 2026-01 # # #
+    # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
+    if liquid_surface_sink_distance_at_the_end_of_dispense != 0:
+      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_dispense
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will" \
+        "be removed in the future."
+        "Use the universal surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_dispense currently superseding"
+        "surface_following_distance.",
+        DeprecationWarning,
+      )
+    # # # delete # # #
 
     return await self.send_command(
       module="C0",
