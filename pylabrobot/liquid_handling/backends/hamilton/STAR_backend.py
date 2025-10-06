@@ -2292,7 +2292,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
     immersion_depth_direction: Optional[int] = None,
-    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
+    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0, # deprecated, rm: >2026-01
+    surface_following_distance: float = 0,
     transport_air_volume: float = 5.0,
     pre_wetting_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
@@ -2446,6 +2447,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     #     aspiration_volumes=int(blow_out_air_volume * 10)
     #   )
 
+    # # # TODO: delete > 2025-01# # #
+    # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
+    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
+      surface_following_distance=liquid_surface_sink_distance_at_the_end_of_aspiration
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will" \
+        "be removed in the future."
+        "Use the universal surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
+        "surface_following_distance.",
+        DeprecationWarning,
+      )
+    # # # delete # # #
+
     x_direction = 0 if position.x >= 0 else 1
     return await self.aspirate_core_96(
       x_position=abs(round(position.x * 10)),
@@ -2466,8 +2481,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
-      liquid_surface_sink_distance_at_the_end_of_aspiration=round(
-        liquid_surface_sink_distance_at_the_end_of_aspiration * 10
+
+      surface_following_distance=round(
+        surface_following_distance * 10
       ),
       aspiration_volumes=round(volume * 10),
       aspiration_speed=round(flow_rate * 10),
@@ -5549,8 +5565,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     gamma_lld_sensitivity: int = 1,
     swap_speed: int = 100,
     settling_time: int = 5,
-    mix_volume: int = 0,
-    mix_cycles: int = 0,
+
     mix_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mix: int = 0,
     speed_of_mix: int = 1000,
@@ -5558,6 +5573,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0,
+    # Deprecated parameters (to be removed in 2026-01):
+    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0, # deprecated, rm: >2026-01
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
   ):
     """aspirate CoRe 96
 
