@@ -258,7 +258,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_lid(self):
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
-    plate.location = Coordinate(0, 0, 100)
+    self.deck.assign_child_resource(plate, location=Coordinate(0, 0, 100))
     lid_height = 10
     lid = Lid(
       name="lid",
@@ -267,7 +267,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       size_z=lid_height,
       nesting_z_height=lid_height,
     )
-    lid.location = Coordinate(100, 100, 200)
+    self.deck.assign_child_resource(lid, location=Coordinate(100, 100, 200))
 
     assert plate.get_absolute_location().x != lid.get_absolute_location().x
     assert plate.get_absolute_location().y != lid.get_absolute_location().y

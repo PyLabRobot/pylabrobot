@@ -80,7 +80,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     def check_z_height(resource: Resource):
       try:
-        z_top = resource.get_absolute_location(z="top").z
+        z_top = resource.get_location_wrt(self, z="top").z
       except NoLocationError:
         # if a resource has no location, we cannot check its z height
         # this is fine, because it's a convenience feature and not critical
@@ -295,7 +295,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print rail
       if depth == 0:
-        rails = _rails_for_x_coordinate(resource.get_absolute_location().x)
+        rails = _rails_for_x_coordinate(resource.get_location_wrt(self).x)
         r_summary += f"({rails})".ljust(rail_column_length)
       else:
         r_summary += " " * rail_column_length
@@ -309,7 +309,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print resource location
       try:
-        x, y, z = resource.get_absolute_location()
+        x, y, z = resource.get_location_wrt(self)
         location = f"({x:07.3f}, {y:07.3f}, {z:07.3f})"
       except NoLocationError:
         location = "Undefined"
@@ -334,7 +334,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       return r_summary
 
     # Sort resources by rails, left to right in reality.
-    sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
+    sorted_resources = sorted(self.children, key=lambda r: r.get_location_wrt(self).x)
 
     # Print table body.
     summary_ += print_tree(sorted_resources[0]) + "\n"

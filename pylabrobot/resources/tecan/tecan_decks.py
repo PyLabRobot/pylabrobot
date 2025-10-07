@@ -165,7 +165,7 @@ class TecanDeck(Deck):
       r_summary = (
         f"{rail_label:4} ├── {resource.name:27}"
         + f"{resource.__class__.__name__:20}"
-        + f"{resource.get_absolute_location()}\n"
+        + f"{resource.get_location_wrt(self)}\n"
       )
 
       if isinstance(resource, Carrier):
@@ -176,11 +176,11 @@ class TecanDeck(Deck):
             subresource = site.resource
             if isinstance(subresource, (TipRack, Plate)):
               location = (
-                subresource.get_item("A1").get_absolute_location()
+                subresource.get_item("A1").get_location_wrt(self)
                 + subresource.get_item("A1").center()
               )
             else:
-              location = subresource.get_absolute_location()
+              location = subresource.get_location_wrt(self)
             r_summary += (
               f"     │   ├── {subresource.name:23}"
               + f"{subresource.__class__.__name__:20}"
@@ -190,7 +190,7 @@ class TecanDeck(Deck):
       return r_summary
 
     # Sort resources by rails, left to right in reality.
-    sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
+    sorted_resources = sorted(self.children, key=lambda r: r.get_location_wrt(self).x)
 
     # Print table body.
     summary_ += parse_resource(sorted_resources[0])
