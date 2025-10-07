@@ -2242,24 +2242,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
-    x_direction = 0 if pickup_position.x >= 0 else 1
-
-    # Fallback to default heights
-    traverse_height = round(
-      (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-    )
-    end_cmd_height = round((minimum_height_command_end or self._channel_traversal_height) * 10)
-
     try:
       return await self.pick_up_tips_core96(
         x_position=abs(round(pickup_position.x * 10)),
-        x_direction=x_direction,
+        x_direction=0 if pickup_position.x >= 0 else 1,
         y_position=round(pickup_position.y * 10),
         tip_type_idx=ttti,
         tip_pickup_method=tip_pickup_method,
         z_deposit_position=round(pickup_position.z * 10),
-        minimum_traverse_height_at_beginning_of_a_command=traverse_height,
-        minimum_height_command_end=end_cmd_height,
+        minimum_traverse_height_at_beginning_of_a_command=round(
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        ),
+        minimum_height_command_end=round((minimum_height_command_end or self._channel_traversal_height) * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
