@@ -2211,6 +2211,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Pick up tips using the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
+    tip_spot_top = pickup.resource.get_absolute_location(z="top").z - 8 - 2 # fitting_depth, tip_collar
     try:
       prototypical_tip = next(tip for tip in pickup.tips if tip is not None)
     except StopIteration:
@@ -2218,8 +2219,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
     position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
+    position.z = tip_spot_top + pickup.offset.z
     self._check_96_position_legal(position, skip_z=True)
-    z_deposit_position += round(pickup.offset.z * 10)
+    z_deposit_position += pickup.offset.z
 
     x_direction = 0 if position.x >= 0 else 1
     return await self.pick_up_tips_core96(
