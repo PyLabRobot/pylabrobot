@@ -2268,6 +2268,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     check_tip_presence: bool = True,
+    drop_safe_distance_above_rack: float = 1.5  # mm
   ):
     """Drop tips using the 96 head.
 
@@ -2303,14 +2304,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert self.core96_head_installed, "96 head must be installed"
 
     prototypical_tip = next((tip for tip in drop.tips if tip is not None), None)
-    assert (
-      len({tip.total_tip_length for tip in drop.tips}) == 1
-    ), "All tips must have the same length."
 
     if check_tip_presence and prototypical_tip is None:
       raise ValueError("No tips found on head96.")
-    if not isinstance(prototypical_tip, HamiltonTip):
-      raise TypeError("Tip type must be HamiltonTip.")
 
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
@@ -2319,6 +2315,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       assert tip_rack is not None
 
       if check_tip_presence:
+        if not isinstance(prototypical_tip, HamiltonTip):
+          raise TypeError("Tip type must be HamiltonTip.")
+
+        assert (
+          len({tip.total_tip_length for tip in drop.tips}) == 1
+        ), "All tips must have the same length."
+
         tip_length = prototypical_tip.total_tip_length
         fitting_depth = prototypical_tip.fitting_depth
         tip_engage_height_from_tipspot = tip_length - fitting_depth
@@ -2332,11 +2335,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         # Compute pickup Z
         tip_spot_z = tip_spot_a1.get_location_wrt(self.deck).z + drop.offset.z
         z_drop_coordinate = (
-          tip_spot_z + tip_engage_height_from_tipspot + 1.5
+          tip_spot_z + tip_engage_height_from_tipspot + drop_safe_distance_above_rack
         )  # add 1.5mm to avoid crashing into the rack
 
       else:
-        z_drop_coordinate = 216.4 + 1.5  # default z for hamilton tip racks on standard tip_carrier
+        z_drop_coordinate = 216.4 + drop_safe_distance_above_rack  # default z for hamilton tip racks on standard tip_carrier
 
       # Compute full position
       drop_position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
