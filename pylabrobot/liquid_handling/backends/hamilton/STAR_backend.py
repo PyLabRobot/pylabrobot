@@ -2268,15 +2268,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     check_tip_presence: bool = True,
-    drop_safe_distance_above_rack: float = 1.5  # mm
+    drop_safe_distance_above_rack: float = 0.0,  # mm
   ):
     """Drop tips using the 96 head.
 
     Releases tips from the 96 head into a tip rack or trash resource. The drop
     Z-position is computed based on tip type if `check_tip_presence` is True,
     ensuring tips are safely ejected without crashing into the rack. If
-    `check_tip_presence` is False, a fixed Z-position of 216.4 + 1.5 mm is used,
-    corresponding to standard Hamilton tip racks on standard carriers.
+    `check_tip_presence` is False, a fixed Z-position of 216.4 + drop_safe_distance_above_rack
+    (mm) is used, corresponding to standard Hamilton tip racks on standard carriers.
 
     This method is robust to uncertain system state: disabling
     `check_tip_presence` allows tips to be dropped even when PyLabRobot has
@@ -2292,7 +2292,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       check_tip_presence: Whether to verify that tips are currently mounted on
         the 96 head. If True, tip type information is used to compute a safe
         Z-drop position. If False, the drop Z is assumed to be a fixed standard
-        height (217.9 mm).
+        height (216.4 mm).
 
     Raises:
       AssertionError: If the 96 head is not installed.
@@ -2339,7 +2339,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )  # add 1.5mm to avoid crashing into the rack
 
       else:
-        z_drop_coordinate = 216.4 + drop_safe_distance_above_rack  # default z for hamilton tip racks on standard tip_carrier
+        z_drop_coordinate = (
+          216.4 + drop_safe_distance_above_rack
+        )  # default z for hamilton tip racks on standard tip_carrier
 
       # Compute full position
       drop_position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
