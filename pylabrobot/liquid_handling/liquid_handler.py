@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import inspect
+from itertools import zip_longest
 import json
 import logging
 import threading
@@ -1263,92 +1264,93 @@ class LiquidHandler(Resource, Machine):
 
   async def transfer(
     self,
-    source: Well,
-    targets: List[Well],
-    source_vol: Optional[float] = None,
-    ratios: Optional[List[float]] = None,
-    target_vols: Optional[List[float]] = None,
-    aspiration_flow_rate: Optional[float] = None,
-    dispense_flow_rates: Optional[List[Optional[float]]] = None,
-    **backend_kwargs,
+    source_resources: Sequence[Container],
+    dest_resources: Sequence[Container],
+    vols: List[float],
+    aspiration_kwargs: Optional[Dict[str, Any]] = None,
+    dispense_kwargs: Optional[Dict[str, Any]] = None,
   ):
-    """Transfer liquid from one well to another.
+    """Transfer liquid from one set of resources to another. Each input resource matches to exactly one output resource.
 
     Examples:
-
-      Transfer 50 uL of liquid from the first well to the second well:
-
-      >>> await lh.transfer(plate["A1"], plate["B1"], source_vol=50)
-
-      Transfer 80 uL of liquid from the first well equally to the first column:
-
-      >>> await lh.transfer(plate["A1"], plate["A1:H1"], source_vol=80)
-
-      Transfer 60 uL of liquid from the first well in a 1:2 ratio to 2 other wells:
-
-      >>> await lh.transfer(plate["A1"], plate["B1:C1"], source_vol=60, ratios=[2, 1])
-
-      Transfer arbitrary volumes to the first column:
-
-      >>> await lh.transfer(plate["A1"], plate["A1:H1"], target_vols=[3, 1, 4, 1, 5, 9, 6, 2])
-
-    Args:
-      source: The source well.
-      targets: The target wells.
-      source_vol: The volume to transfer from the source well.
-      ratios: The ratios to use when transferring liquid to the target wells. If not specified, then
-        the volumes will be distributed equally.
-      target_vols: The volumes to transfer to the target wells. If specified, `source_vols` and
-        `ratios` must be `None`.
-      aspiration_flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend
-        default will be used.
-      dispense_flow_rates: The flow rates to use when dispensing, in ul/s. If `None`, the backend
-        default will be used. Either a single flow rate for all channels, or a list of flow rates,
-        one for each target well.
-
-    Raises:
-      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
+      Transfer liquid from one column to another column:
+      >>> await lh.transfer(
+      ...   source_resources=plate1["A1":"H8"],
+      ...   dest_resources=plate2["A1":"H8"],
+      ...   vols=[50] * 8,
+      ... )
     """
 
-    self._log_command(
-      "transfer",
-      source=source,
-      targets=targets,
-      source_vol=source_vol,
-      ratios=ratios,
-      target_vols=target_vols,
-      aspiration_flow_rate=aspiration_flow_rate,
-      dispense_flow_rates=dispense_flow_rates,
-    )
+    if not (len(source_resources) == len(dest_resources) == len(vols)):
+      raise ValueError(
+        "Number of source and destination resources must match, but got "
+        f"{len(source_resources)} source resources, {len(dest_resources)} destination resources, "
+        f"and {len(vols)} volumes."
+      )
 
-    if target_vols is not None:
-      if ratios is not None:
-        raise TypeError("Cannot specify ratios and target_vols at the same time")
-      if source_vol is not None:
-        raise TypeError("Cannot specify source_vol and target_vols at the same time")
-    else:
-      if source_vol is None:
-        raise TypeError("Must specify either source_vol or target_vols")
+    if len(source_resources) > self.backend.num_channels:
+      raise ValueError("Number of resources exceeds number of channels.")
 
-      if ratios is None:
-        ratios = [1] * len(targets)
-
-      target_vols = [source_vol * r / sum(ratios) for r in ratios]
+    use_channels = list(range(len(source_resources)))
 
     await self.aspirate(
-      resources=[source],
-      vols=[sum(target_vols)],
-      flow_rates=[aspiration_flow_rate],
-      **backend_kwargs,
+      resources=source_resources,
+      vols=vols,
+      use_channels=use_channels,
+      **(aspiration_kwargs or {}),
     )
-    dispense_flow_rates = dispense_flow_rates or [None] * len(targets)
-    for target, vol, dfr in zip(targets, target_vols, dispense_flow_rates):
+
+    await self.dispense(
+      resources=dest_resources,
+      vols=vols,
+      use_channels=use_channels,
+      **(dispense_kwargs or {}),
+    )
+
+  async def distribute(
+    self,
+    operations: Dict[Container, List[Tuple[Container, float]]],
+    dead_volume: float = 10,
+  ):
+    """
+    Distribute liquid from one resource to multiple resources.
+
+    Examples:
+      Distribute liquid from one well to multiple wells:
+      >>> await lh.distribute({
+      ...   plate1["A1"]: [(plate2["A1"], 50), (plate2["A2"], 50)],
+      ...   plate1["A2"]: [(plate2["B1"], 100), (plate2["B2"], 100), (plate2["B3"], 100)],
+      ... })
+
+    Args:
+      operations: A dictionary mapping source resources to a list of tuples, each containing a
+        destination resource and the volume to dispense to that resource.
+    """
+
+    if len(operations) > self.backend.num_channels:
+      raise ValueError("Number of source resources exceeds number of channels.")
+
+    use_channels = list(range(len(operations)))
+
+    # Aspirate from all source resources
+    await self.aspirate(
+      resources=list(operations.keys()),
+      vols=[sum(v for _, v in dests) + dead_volume for dests in operations.values()],
+      use_channels=use_channels,
+    )
+
+    for group in zip_longest(*operations.values()):
+      dest, vols, channels = zip(
+        *(
+          (pair[0], pair[1], ch)
+          for pair, ch in zip_longest(group, use_channels)
+          if pair is not None
+        )
+      )
       await self.dispense(
-        resources=[target],
-        vols=[vol],
-        flow_rates=[dfr],
-        use_channels=[0],
-        **backend_kwargs,
+        resources=list(dest),
+        vols=list(vols),
+        use_channels=list(channels),
       )
 
   @contextlib.contextmanager
