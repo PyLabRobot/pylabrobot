@@ -2204,38 +2204,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     pickup: PickupTipRack,
     tip_pickup_method: int = 0,
-    z_deposit_position: float = 216.4,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """Pick up tips using the 96 head."""
-    assert self.core96_head_installed, "96 head must be installed"
-    tip_spot_a1 = pickup.resource.get_item("A1")
-    try:
-      prototypical_tip = next(tip for tip in pickup.tips if tip is not None)
-    except StopIteration:
-      raise ValueError("No tips found in the tip rack.")
-    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
-    position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
-    self._check_96_position_legal(position, skip_z=True)
-    z_deposit_position += round(pickup.offset.z * 10)
 
-    x_direction = 0 if position.x >= 0 else 1
-    return await self.pick_up_tips_core96(
-      x_position=abs(round(position.x * 10)),
-      x_direction=x_direction,
-      y_position=round(position.y * 10),
-      tip_type_idx=ttti,
-      tip_pickup_method=tip_pickup_method,
-      z_deposit_position=round(z_deposit_position * 10),
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      minimum_height_command_end=round(
-        (minimum_height_command_end or self._channel_traversal_height) * 10
-      ),
-    )
+    assert self.core96_head_installed, "96 head must be installed"
+
+    tip_spot_a1 = pickup.resource.get_item("A1")
+
+    prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    if not isinstance(prototypical_tip, HamiltonTip):
+      raise TypeError("Tip type must be HamiltonTip.")
+
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
+
+    tip_length = prototypical_tip.total_tip_length
+    fitting_depth = prototypical_tip.fitting_depth
+    tip_engage_height_from_tipspot = tip_length - fitting_depth
+
+    # Tip size–based z-adjustment
+    h_tip = self._get_hamilton_tip([tip_spot_a1])
+    if h_tip.tip_size == TipSize.LOW_VOLUME:
+      tip_engage_height_from_tipspot += 2
+    elif h_tip.tip_size != TipSize.STANDARD_VOLUME:
+      tip_engage_height_from_tipspot -= 2
+
+    # Compute pickup Z
+    tip_spot_z = tip_spot_a1.get_location_wrt(self.deck).z + pickup.offset.z
+    z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
+
+    # Compute full position (used for x/y)
+    pickup_position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
+    pickup_position.z = round(z_pickup_position, 2)
+
+    self._check_96_position_legal(pickup_position, skip_z=True)
+
+    try:
+      return await self.pick_up_tips_core96(
+        x_position=abs(round(pickup_position.x * 10)),
+        x_direction=0 if pickup_position.x >= 0 else 1,
+        y_position=round(pickup_position.y * 10),
+        tip_type_idx=ttti,
+        tip_pickup_method=tip_pickup_method,
+        z_deposit_position=round(pickup_position.z * 10),
+        minimum_traverse_height_at_beginning_of_a_command=round(
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        ),
+        minimum_height_command_end=round(
+          (minimum_height_command_end or self._channel_traversal_height) * 10
+        ),
+      )
+    except STARFirmwareError as e:
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
+      raise e
 
   async def drop_tips96(
     self,
