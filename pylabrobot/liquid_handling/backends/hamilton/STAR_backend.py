@@ -899,7 +899,7 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       66: "Squeezer drive not initialized",
       67: "Squeezer drive movement error: Step loss",
       68: "Init position adjustment error",
-      70: "No liquid level found (possibly because no liquid was present)",
+      70: "No liquid level found (possibly because no or too little liquid was present)",
       71: "Not enough liquid present (Immersion depth or surface following position possibly"
       "below minimal access range)",
       72: "Auto calibration at pressure (Sensor not possible)",
