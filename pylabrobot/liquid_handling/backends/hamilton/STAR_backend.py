@@ -2253,7 +2253,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         minimum_traverse_height_at_beginning_of_a_command=round(
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
-        minimum_height_command_end=round((minimum_height_command_end or self._channel_traversal_height) * 10),
+        minimum_height_command_end=round(
+          (minimum_height_command_end or self._channel_traversal_height) * 10
+        ),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
