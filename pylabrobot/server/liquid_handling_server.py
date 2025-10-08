@@ -26,6 +26,7 @@ from pylabrobot.liquid_handling.backends.backend import (
 )
 from pylabrobot.liquid_handling.standard import (
   Drop,
+  Mix,
   Pickup,
   SingleChannelAspiration,
   SingleChannelDispense,
@@ -234,6 +235,7 @@ async def aspirate():
         List[Tuple[Optional[Liquid], float]],
         deserialize(sc["liquids"]),
       )
+      mix = Mix(**sc["mix"]) if sc.get("mix") is not None else None
       aspirations.append(
         SingleChannelAspiration(
           resource=resource,
@@ -244,6 +246,7 @@ async def aspirate():
           liquid_height=liquid_height,
           blow_out_air_volume=blow_out_air_volume,
           liquids=liquids,
+          mix=mix,
         )
       )
     use_channels = data["use_channels"]
@@ -290,6 +293,7 @@ async def dispense():
         List[Tuple[Optional[Liquid], float]],
         deserialize(sc["liquids"]),
       )
+      mix = Mix(**sc["mix"]) if sc.get("mix") is not None else None
       dispenses.append(
         SingleChannelDispense(
           resource=resource,
@@ -300,6 +304,7 @@ async def dispense():
           liquid_height=liquid_height,
           blow_out_air_volume=blow_out_air_volume,
           liquids=liquids,
+          mix=mix,
         )
       )
     use_channels = data["use_channels"]

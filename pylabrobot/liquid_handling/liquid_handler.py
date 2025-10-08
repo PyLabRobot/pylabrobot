@@ -69,6 +69,7 @@ from .standard import (
   Drop,
   DropTipRack,
   GripDirection,
+  Mix,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
   MultiHeadDispenseContainer,
@@ -769,6 +770,36 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
+  async def move_tips(
+    self,
+    source_tip_spots: List[TipSpot],
+    dest_tip_spots: List[TipSpot],
+  ):
+    """Move tips from one tip rack to another.
+
+    This is a convenience method that picks up tips from `source_tip_spots` and drops them to
+    `dest_tip_spots`.
+
+    Examples:
+      Move tips from one tip rack to another:
+
+      >>> await lh.move_tips(source_tip_rack["A1":"A8"], dest_tip_rack["B1":"B8"])
+    """
+
+    if len(source_tip_spots) != len(dest_tip_spots):
+      raise ValueError("Number of source and destination tip spots must match.")
+
+    use_channels = list(range(len(source_tip_spots)))
+
+    await self.pick_up_tips(
+      tip_spots=source_tip_spots,
+      use_channels=use_channels,
+    )
+    await self.drop_tips(
+      tip_spots=dest_tip_spots,
+      use_channels=use_channels,
+    )
+
   def _check_containers(self, resources: Sequence[Resource]):
     """Checks that all resources are containers."""
     not_containers = [r for r in resources if not isinstance(r, Container)]
@@ -786,6 +817,7 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
+    mix: Optional[List[Mix]] = None,
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -933,8 +965,9 @@ class LiquidHandler(Resource, Machine):
         tip=t,
         blow_out_air_volume=bav,
         liquids=lvs,
+        mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs in zip(
+      for r, v, o, fr, lh, t, bav, lvs, m in zip(
         resources,
         vols,
         offsets,
@@ -943,6 +976,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
+        mix or [None] * len(use_channels),  # type: ignore
       )
     ]
 
@@ -1009,6 +1043,7 @@ class LiquidHandler(Resource, Machine):
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     spread: Literal["wide", "tight", "custom"] = "wide",
+    mix: Optional[List[Mix]] = None,
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
@@ -1163,8 +1198,9 @@ class LiquidHandler(Resource, Machine):
         tip=t,
         liquids=lvs,
         blow_out_air_volume=bav,
+        mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs in zip(
+      for r, v, o, fr, lh, t, bav, lvs, m in zip(
         resources,
         vols,
         offsets,
@@ -1173,6 +1209,7 @@ class LiquidHandler(Resource, Machine):
         tips,
         blow_out_air_volume,
         liquids,
+        mix or [None] * len(use_channels),  # type: ignore
       )
     ]
 
@@ -1587,6 +1624,7 @@ class LiquidHandler(Resource, Machine):
     flow_rate: Optional[float] = None,
     liquid_height: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
+    mix: Optional[Mix] = None,
     **backend_kwargs,
   ):
     """Aspirate from all wells in a plate or from a container of a sufficient size.
@@ -1598,17 +1636,14 @@ class LiquidHandler(Resource, Machine):
       >>> await lh.aspirate96(container, volume=50)
 
     Args:
-      resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
-      volume (float): The volume to aspirate through each channel
-      offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Added to :attr:`default_offset_head96`.
-        Defaults to :func:`Coordinate.zero`.
-      flow_rate ([Optional[float]]): The flow rate to use when aspirating, in ul/s. If `None`, the
+      resource: Resource object or list of wells.
+      volume: The volume to aspirate through each channel
+      offset: Adjustment to where the 96 head should go to aspirate relative to where the plate or container is defined to be. Added to :attr:`default_offset_head96`.  Defaults to :func:`Coordinate.zero`.
+      flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the
         backend default will be used.
-      liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
-        mm. If `None`, the backend default will be used.
-      blow_out_air_volume ([Optional[float]]): The volume of air to aspirate after the liquid, in
-        ul. If `None`, the backend default will be used.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm. If `None`, the backend default will be used.
+      blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the backend default will be used.
+      mix: A mix operation to perform after the aspiration, optional.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1622,6 +1657,7 @@ class LiquidHandler(Resource, Machine):
       flow_rate=flow_rate,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
+      mix=mix,
     )
 
     if not (
@@ -1687,6 +1723,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        mix=mix,
       )
     else:  # multiple containers
       # ensure that wells are all in the same plate
@@ -1724,6 +1761,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        mix=mix,
       )
 
     try:
@@ -1752,6 +1790,7 @@ class LiquidHandler(Resource, Machine):
     flow_rate: Optional[float] = None,
     liquid_height: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
+    mix: Optional[Mix] = None,
     **backend_kwargs,
   ):
     """Dispense to all wells in a plate.
@@ -1762,17 +1801,13 @@ class LiquidHandler(Resource, Machine):
       >>> await lh.dispense96(plate, volume=50)
 
     Args:
-      resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
-      volume (float): The volume to dispense through each channel
-      offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Added to :attr:`default_offset_head96`.
-        Defaults to :func:`Coordinate.zero`.
-      flow_rate ([Optional[float]]): The flow rate to use when dispensing, in ul/s. If `None`, the
-        backend default will be used.
-      liquid_height ([Optional[float]]): The height of the liquid in the well wrt the bottom, in
-        mm. If `None`, the backend default will be used.
-      blow_out_air_volume ([Optional[float]]): The volume of air to dispense after the liquid, in
-        ul. If `None`, the backend default will be used.
+      resource: Resource object or list of wells.
+      volume: The volume to dispense through each channel
+      offset: Adjustment to where the 96 head should go to aspirate relative to where the plate or container is defined to be. Added to :attr:`default_offset_head96`.  Defaults to :func:`Coordinate.zero`.
+      flow_rate: The flow rate to use when dispensing, in ul/s. If `None`, the backend default will be used.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm. If `None`, the backend default will be used.
+      blow_out_air_volume: The volume of air to dispense after the liquid, in ul. If `None`, the backend default will be used.
+      mix: If provided, the tip will mix after dispensing.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1786,6 +1821,7 @@ class LiquidHandler(Resource, Machine):
       flow_rate=flow_rate,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
+      mix=mix,
     )
 
     if not (
@@ -1846,6 +1882,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        mix=mix,
       )
     else:
       # ensure that wells are all in the same plate
@@ -1880,6 +1917,7 @@ class LiquidHandler(Resource, Machine):
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
         liquids=all_liquids,
+        mix=mix,
       )
 
     try:
@@ -2095,7 +2133,7 @@ class LiquidHandler(Resource, Machine):
           f"got {resource_rotation_wrt_destination} degrees"
         )
 
-      to_location = destination.get_absolute_location() + destination.get_new_child_location(
+      to_location = destination.get_location_wrt(self.deck) + destination.get_new_child_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
     elif isinstance(destination, Coordinate):
@@ -2106,7 +2144,7 @@ class LiquidHandler(Resource, Machine):
       child_wrt_parent = destination.get_default_child_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
-      to_location = destination.get_absolute_location() + child_wrt_parent
+      to_location = destination.get_location_wrt(self.deck) + child_wrt_parent
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
@@ -2114,16 +2152,16 @@ class LiquidHandler(Resource, Machine):
       adjusted_plate_anchor = destination.compute_plate_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
-      to_location = destination.get_absolute_location() + adjusted_plate_anchor
+      to_location = destination.get_location_wrt(self.deck) + adjusted_plate_anchor
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
-      plate_location = destination.get_absolute_location()
+      plate_location = destination.get_location_wrt(self.deck)
       child_wrt_parent = destination.get_lid_location(
         lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
       ).rotated(destination.get_absolute_rotation())
       to_location = plate_location + child_wrt_parent
     else:
-      to_location = destination.get_absolute_location()
+      to_location = destination.get_location_wrt(self.deck)
 
     drop = ResourceDrop(
       resource=self._resource_pickup.resource,
@@ -2493,7 +2531,7 @@ class LiquidHandler(Resource, Machine):
       )
 
     presence_flags = [True] * len(tip_spots)
-    z_height = tip_spots[0].get_absolute_location(z="top").z + 5
+    z_height = tip_spots[0].get_location_wrt(self.deck, z="top").z + 5
 
     # Step 1: Cluster tip spots by x-coordinate
     clusters_by_x: Dict[float, List[Tuple[TipSpot, int, int]]] = {}

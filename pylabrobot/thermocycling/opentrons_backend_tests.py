@@ -1,4 +1,3 @@
-import sys
 import unittest
 from unittest.mock import patch
 
@@ -8,11 +7,6 @@ from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerBack
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 
 
-def _is_python_3_10():
-  return sys.version_info[:2] == (3, 10)
-
-
-@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
 class TestOpentronsThermocyclerBackend(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     await super().asyncSetUp()

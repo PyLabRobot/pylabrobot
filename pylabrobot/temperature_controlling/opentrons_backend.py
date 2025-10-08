@@ -39,7 +39,6 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
       raise RuntimeError(
         "Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
         f" Import error: {_OT_IMPORT_ERROR}."
-        " Only supported on Python 3.10."
       )
 
   async def setup(self):

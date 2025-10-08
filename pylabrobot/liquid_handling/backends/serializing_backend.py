@@ -108,6 +108,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "liquid_height": serialize(op.liquid_height),
         "blow_out_air_volume": serialize(op.blow_out_air_volume),
         "liquids": serialize(op.liquids),
+        "mix": serialize(op.mix),
       }
       for op in ops
     ]
@@ -127,6 +128,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "liquid_height": serialize(op.liquid_height),
         "blow_out_air_volume": serialize(op.blow_out_air_volume),
         "liquids": serialize(op.liquids),
+        "mix": serialize(op.mix),
       }
       for op in ops
     ]
