@@ -2267,38 +2267,103 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     drop: DropTipRack,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    check_tip_presence: bool = True,
   ):
-    """Drop tips from the 96 head."""
+    """Drop tips using the 96 head.
+
+    Releases tips from the 96 head into a tip rack or trash resource. The drop
+    Z-position is computed based on tip type if `check_tip_presence` is True,
+    ensuring tips are safely ejected without crashing into the rack. If
+    `check_tip_presence` is False, a fixed Z-position of 216.4 + 1.5 mm is used,
+    corresponding to standard Hamilton tip racks on standard carriers.
+
+    This method is robust to uncertain system state: disabling
+    `check_tip_presence` allows tips to be dropped even when PyLabRobot has
+    lost track of whether tips are present on the head.
+
+    Args:
+      drop: Target tip rack or trash resource to drop tips into, along with a
+        positional offset.
+      minimum_height_command_end: Optional minimum Z-height (in mm) at the end
+        of the movement.
+      minimum_traverse_height_at_beginning_of_a_command: Optional minimum
+        Z-height (in mm) at the beginning of the movement.
+      check_tip_presence: Whether to verify that tips are currently mounted on
+        the 96 head. If True, tip type information is used to compute a safe
+        Z-drop position. If False, the drop Z is assumed to be a fixed standard
+        height (217.9 mm).
+
+    Raises:
+      AssertionError: If the 96 head is not installed.
+      ValueError: If `check_tip_presence` is True but no tips are found on the
+        head.
+      TypeError: If the tips are not instances of HamiltonTip.
+    """
+
     assert self.core96_head_installed, "96 head must be installed"
+
+    prototypical_tip = next((tip for tip in drop.tips if tip is not None), None)
+    assert (
+      len({tip.total_tip_length for tip in drop.tips}) == 1
+    ), "All tips must have the same length."
+
+    if check_tip_presence and prototypical_tip is None:
+      raise ValueError("No tips found on head96.")
+    if not isinstance(prototypical_tip, HamiltonTip):
+      raise TypeError("Tip type must be HamiltonTip.")
 
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
-      position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
+
       tip_rack = tip_spot_a1.parent
       assert tip_rack is not None
-      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
-      # This should be the case for all normal hamilton tip carriers + racks
-      # In the future, we might want to make this more flexible
-      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
-    else:
-      position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
-    self._check_96_position_legal(position, skip_z=True)
+      if check_tip_presence:
+        tip_length = prototypical_tip.total_tip_length
+        fitting_depth = prototypical_tip.fitting_depth
+        tip_engage_height_from_tipspot = tip_length - fitting_depth
 
-    x_direction = 0 if position.x >= 0 else 1
+        # Tip size–based z-adjustment
+        if prototypical_tip.tip_size == TipSize.LOW_VOLUME:
+          tip_engage_height_from_tipspot += 2
+        elif prototypical_tip.tip_size != TipSize.STANDARD_VOLUME:
+          tip_engage_height_from_tipspot -= 2
 
-    return await self.discard_tips_core96(
-      x_position=abs(round(position.x * 10)),
-      x_direction=x_direction,
-      y_position=round(position.y * 10),
-      z_deposit_position=round(position.z * 10),
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      minimum_height_command_end=round(
-        (minimum_height_command_end or self._channel_traversal_height) * 10
-      ),
-    )
+        # Compute pickup Z
+        tip_spot_z = tip_spot_a1.get_location_wrt(self.deck).z + drop.offset.z
+        z_drop_coordinate = (
+          tip_spot_z + tip_engage_height_from_tipspot + 1.5
+        )  # add 1.5mm to avoid crashing into the rack
+
+      else:
+        z_drop_coordinate = 216.4 + 1.5  # default z for hamilton tip racks on standard tip_carrier
+
+      # Compute full position
+      drop_position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
+      drop_position.z = round(z_drop_coordinate, 2)
+
+    else:  # drop.resource is Trash or other (e.g. Container)
+      drop_position = self._position_96_head_in_resource(drop.resource) + drop.offset
+
+    self._check_96_position_legal(drop_position, skip_z=False)
+
+    try:
+      return await self.discard_tips_core96(
+        x_position=abs(round(drop_position.x * 10)),
+        x_direction=0 if drop_position.x >= 0 else 1,
+        y_position=round(drop_position.y * 10),
+        z_deposit_position=round(drop_position.z * 10),
+        minimum_traverse_height_at_beginning_of_a_command=round(
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        ),
+        minimum_height_command_end=round(
+          (minimum_height_command_end or self._channel_traversal_height) * 10
+        ),
+      )
+    except STARFirmwareError as e:
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
+      raise e
 
   async def aspirate96(
     self,

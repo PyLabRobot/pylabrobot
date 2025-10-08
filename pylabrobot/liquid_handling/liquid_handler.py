@@ -1497,12 +1497,14 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
+    tips_on_head96 = []
     # queue operation on all tip trackers
     for i in range(96):
       # it's possible not every channel on this head has a tip.
       if not self.head96[i].has_tip:
         continue
       tip = self.head96[i].get_tip()
+      tips_on_head96.append(tip)
       if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
         error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
         raise RuntimeError(error)
@@ -1512,7 +1514,7 @@ class LiquidHandler(Resource, Machine):
           tip_spot.tracker.add_tip(tip, commit=False)
       self.head96[i].remove_tip()
 
-    drop_operation = DropTipRack(resource=resource, offset=offset)
+    drop_operation = DropTipRack(resource=resource, offset=offset, tips=tips_on_head96)
     try:
       await self.backend.drop_tips96(drop=drop_operation, **backend_kwargs)
     except Exception as e:
