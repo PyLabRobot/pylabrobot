@@ -1394,31 +1394,31 @@ class LiquidHandler(Resource, Machine):
     will be returned instead of discarded.
 
     Examples:
-      Use tips from A1 to A8 on channels 0 to 7:
+      Use tips from A1 to H1 on channels 0 to 7, then discard:
 
-      >>> with lh.use_tips(tip_rack["A1":"A8"], channels=list(range(8))):
-      ...   await lh.aspirate(plate["A1":"A8"], 50)
-      ...   await lh.dispense(plate["A1":"A8"], 50)
-
-      This is equivalent to:
-
-      >>> await lh.pick_up_tips(tip_rack["A1":"A8"], use_channels=list(range(8)))
-      >>> await lh.aspirate(plate["A1":"A8"], 50, use_channels=list(range(8)))
-      >>> await lh.dispense(plate["A1":"A8"], 50, use_channels=list(range(8)))
-      >>> await lh.return_tips(use_channels=list(range(8)))
-
-      Use tips from A1 to A8 on channels 0 to 7, but return them instead of discarding:
-
-      >>> with lh.use_tips(tip_rack["A1":"A8"], channels=list(range(8)), discard=False):
-      ...   await lh.aspirate(plate["A1":"A8"], 50)
-      ...   await lh.dispense(plate["A1":"A8"], 50)
+      >>> with lh.use_tips(tip_rack["A1":"H1"], channels=list(range(8))):
+      ...   await lh.aspirate(plate["A1":"H1"], vols=[50]*8)
+      ...   await lh.dispense(plate["A1":"H1"], vols=[50]*8)
 
       This is equivalent to:
 
-      >>> await lh.pick_up_tips(tip_rack["A1":"A8"], use_channels=list(range(8)))
-      >>> await lh.aspirate(plate["A1":"A8"], 50, use_channels=list(range(8)))
-      >>> await lh.dispense(plate["A1":"A8"], 50, use_channels=list(range(8)))
+      >>> await lh.pick_up_tips(tip_rack["A1":"H1"], use_channels=list(range(8)))
+      >>> await lh.aspirate(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
+      >>> await lh.dispense(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
       >>> await lh.discard_tips(use_channels=list(range(8)))
+
+      Use tips from A1 to H1 on channels 0 to 7, but return them instead of discarding:
+
+      >>> with lh.use_tips(tip_rack["A1":"H1"], channels=list(range(8)), discard=False):
+      ...   await lh.aspirate(plate["A1":"H1"], vols=[50]*8)
+      ...   await lh.dispense(plate["A1":"H1"], vols=[50]*8)
+
+      This is equivalent to:
+
+      >>> await lh.pick_up_tips(tip_rack["A1":"H1"], use_channels=list(range(8)))
+      >>> await lh.aspirate(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
+      >>> await lh.dispense(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
+      >>> await lh.return_tips(use_channels=list(range(8)))
     """
 
     if channels is None:
