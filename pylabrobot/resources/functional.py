@@ -4,7 +4,7 @@ import logging
 import os
 import random
 from collections import deque
-from typing import AsyncGenerator, Deque, List, Optional
+from typing import Deque, List, Optional
 
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
