@@ -70,6 +70,7 @@ class linear_tip_spot_generator:
 
   async def get(self, n: int) -> List[TipSpot]:
     """Get the next n tip spots."""
+    assert 0 <= n <= self.get_num_tips_left()
     return [await self.__anext__() for _ in range(n)]
 
 
@@ -97,19 +98,24 @@ class randomized_tip_spot_generator:
           self.recently_sampled,
         )
 
+    atexit.register(self.save_state)
+
+  def save_state(self):
+    if self.cache_file_path is not None:
+      with open(self.cache_file_path, "w", encoding="utf-8") as f:
+        json.dump({"recently_sampled": list(self.recently_sampled)}, f)
+
   async def __anext__(self) -> TipSpot:
     while True:
       available_tips = [ts for ts in self.tip_spots if ts.name not in self.recently_sampled]
 
       if not available_tips:
-        raise RuntimeError("All tips have been used recently, resetting list.")
+        raise RuntimeError("All tips have been used recently. No tips available.")
 
       chosen_tip_spot = random.choice(available_tips)
       self.recently_sampled.append(chosen_tip_spot.name)
 
-      if self.cache_file_path is not None:
-        with open(self.cache_file_path, "w", encoding="utf-8") as f:
-          json.dump({"recently_sampled": list(self.recently_sampled)}, f)
+      self.save_state()
 
       return chosen_tip_spot
 
@@ -118,4 +124,5 @@ class randomized_tip_spot_generator:
 
   async def get(self, n: int) -> List[TipSpot]:
     """Get the next n tip spots."""
+    assert 0 <= n
     return [await self.__anext__() for _ in range(n)]
