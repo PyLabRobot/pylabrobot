@@ -6,13 +6,12 @@ from io import IOBase
 from typing import Optional, cast
 
 try:
-  from pylibftdi import Device
+  from pylibftdi import Device, LibraryMissingError
 
   HAS_PYLIBFTDI = True
 except ImportError as e:
   HAS_PYLIBFTDI = False
-  _FTDI_IMPORT_ERROR = e
-  Device = None  # type: ignore
+  _FTDI_ERROR = e
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -32,7 +31,15 @@ class FTDI(IOBase):
   """Thin wrapper around pylibftdi to include PLR logging (for io testing)."""
 
   def __init__(self, device_id: Optional[str] = None):
-    self._dev = Device(lazy_open=True, device_id=device_id) if HAS_PYLIBFTDI else None
+    if HAS_PYLIBFTDI:
+      try:
+        self._dev = Device(lazy_open=True, device_id=device_id)
+      except LibraryMissingError as e:
+        global _FTDI_ERROR
+        _FTDI_ERROR = e
+        self._dev = None
+    else:
+      self._dev = None
     self._device_id = device_id or "None"  # for io
     self._executor: Optional[ThreadPoolExecutor] = None
     if get_capture_or_validation_active():
@@ -41,7 +48,7 @@ class FTDI(IOBase):
   @property
   def dev(self) -> "Device":
     if not HAS_PYLIBFTDI or self._dev is None:
-      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_IMPORT_ERROR}")
+      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_ERROR}")
     return self._dev
 
   async def setup(self):
@@ -288,6 +295,7 @@ class FTDIValidator(FTDI):
     if not next_command.data == data.hex():
       align_sequences(expected=next_command.data, actual=data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
+    return len(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
     next_command = FTDICommand(**self.cr.next_command())
