@@ -5,13 +5,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import inspect
-from itertools import zip_longest
 import json
 import logging
 import threading
 import warnings
+from itertools import zip_longest
 from typing import (
   Any,
+  AsyncGenerator,
+  AsyncIterator,
   Awaitable,
   Callable,
   Dict,
@@ -1269,6 +1271,7 @@ class LiquidHandler(Resource, Machine):
     vols: List[float],
     aspiration_kwargs: Optional[Dict[str, Any]] = None,
     dispense_kwargs: Optional[Dict[str, Any]] = None,
+    tip_spots: Optional[Union[List[TipSpot], AsyncIterator[TipSpot]]] = None,
   ):
     """Transfer liquid from one set of resources to another. Each input resource matches to exactly one output resource.
 
@@ -1293,6 +1296,27 @@ class LiquidHandler(Resource, Machine):
 
     use_channels = list(range(len(source_resources)))
 
+    channels_with_tips = [self.get_mounted_tips()[ch] for ch in use_channels]
+    if any(channels_with_tips) and not all(channels_with_tips):
+      raise RuntimeError("Either all or none of the channels must have tips.")
+
+    did_pick_up_tips = False
+    if not any(channels_with_tips):
+      if tip_spots is None:
+        raise ValueError("No tips are mounted and no tip generator was provided.")
+      if isinstance(tip_spots, list) and len(tip_spots) < len(use_channels):
+        raise ValueError(
+          "Number of tip spots must be at least the number of channels, "
+          f"but got {len(tip_spots)} tip spots and {len(use_channels)} channels."
+        )
+      if hasattr(tip_spots, "__aiter__") and hasattr(tip_spots, "__anext__"):
+        tip_spots = [await tip_spots.__anext__() for _ in use_channels]  # type: ignore
+      assert isinstance(tip_spots, list)
+      await self.pick_up_tips(tip_spots=tip_spots, use_channels=use_channels)
+      did_pick_up_tips = True
+    elif tip_spots is not None:
+      warnings.warn("Tips are already mounted, ignoring provided tips.")
+
     await self.aspirate(
       resources=source_resources,
       vols=vols,
@@ -1306,6 +1330,9 @@ class LiquidHandler(Resource, Machine):
       use_channels=use_channels,
       **(dispense_kwargs or {}),
     )
+
+    if did_pick_up_tips:
+      await self.discard_tips(use_channels=use_channels)
 
   async def distribute(
     self,
