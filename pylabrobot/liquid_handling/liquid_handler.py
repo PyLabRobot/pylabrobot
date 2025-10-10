@@ -66,6 +66,7 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.tilting.tilter import Tilter
+from pylabrobot.utils.list import batched
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -1269,9 +1270,10 @@ class LiquidHandler(Resource, Machine):
     source_resources: Sequence[Container],
     dest_resources: Sequence[Container],
     vols: List[float],
+    tip_spots: Union[List[TipSpot], AsyncIterator[TipSpot]],
     aspiration_kwargs: Optional[Dict[str, Any]] = None,
     dispense_kwargs: Optional[Dict[str, Any]] = None,
-    tip_spots: Optional[Union[List[TipSpot], AsyncIterator[TipSpot]]] = None,
+    tip_drop_method: Literal["return", "discard"] = "discard",
   ):
     """Transfer liquid from one set of resources to another. Each input resource matches to exactly one output resource.
 
@@ -1281,6 +1283,7 @@ class LiquidHandler(Resource, Machine):
       ...   source_resources=plate1["A1":"H8"],
       ...   dest_resources=plate2["A1":"H8"],
       ...   vols=[50] * 8,
+      ...   tip_spots=tip_rack["A1":"H1"],
       ... )
     """
 
@@ -1291,48 +1294,39 @@ class LiquidHandler(Resource, Machine):
         f"and {len(vols)} volumes."
       )
 
-    if len(source_resources) > self.backend.num_channels:
-      raise ValueError("Number of resources exceeds number of channels.")
+    if isinstance(tip_spots, list) and len(tip_spots) < len(source_resources):
+      raise ValueError(
+        "Number of tip spots must be at least the number of channels, "
+        f"but got {len(tip_spots)} tip spots and {len(source_resources)} transfers."
+      )
+    if hasattr(tip_spots, "__aiter__") and hasattr(tip_spots, "__anext__"):
+      tip_spots = [await tip_spots.__anext__() for _ in source_resources]  # type: ignore
+    assert isinstance(tip_spots, list)
 
-    use_channels = list(range(len(source_resources)))
+    for batch in range(0, len(source_resources), self.backend.num_channels):
+      batch_sources = source_resources[batch : batch + self.backend.num_channels]
+      batch_destinations = dest_resources[batch : batch + self.backend.num_channels]
+      batch_vols = vols[batch : batch + self.backend.num_channels]
+      batch_tip_spots = tip_spots[batch : batch + self.backend.num_channels]
 
-    channels_with_tips = [self.get_mounted_tips()[ch] for ch in use_channels]
-    if any(channels_with_tips) and not all(channels_with_tips):
-      raise RuntimeError("Either all or none of the channels must have tips.")
+      await self.pick_up_tips(batch_tip_spots)
 
-    did_pick_up_tips = False
-    if not any(channels_with_tips):
-      if tip_spots is None:
-        raise ValueError("No tips are mounted and no tip generator was provided.")
-      if isinstance(tip_spots, list) and len(tip_spots) < len(use_channels):
-        raise ValueError(
-          "Number of tip spots must be at least the number of channels, "
-          f"but got {len(tip_spots)} tip spots and {len(use_channels)} channels."
-        )
-      if hasattr(tip_spots, "__aiter__") and hasattr(tip_spots, "__anext__"):
-        tip_spots = [await tip_spots.__anext__() for _ in use_channels]  # type: ignore
-      assert isinstance(tip_spots, list)
-      await self.pick_up_tips(tip_spots=tip_spots, use_channels=use_channels)
-      did_pick_up_tips = True
-    elif tip_spots is not None:
-      warnings.warn("Tips are already mounted, ignoring provided tips.")
+      await self.aspirate(
+        resources=batch_sources,
+        vols=batch_vols,
+        **(aspiration_kwargs or {}),
+      )
 
-    await self.aspirate(
-      resources=source_resources,
-      vols=vols,
-      use_channels=use_channels,
-      **(aspiration_kwargs or {}),
-    )
+      await self.dispense(
+        resources=batch_destinations,
+        vols=batch_vols,
+        **(dispense_kwargs or {}),
+      )
 
-    await self.dispense(
-      resources=dest_resources,
-      vols=vols,
-      use_channels=use_channels,
-      **(dispense_kwargs or {}),
-    )
-
-    if did_pick_up_tips:
-      await self.discard_tips(use_channels=use_channels)
+      if tip_drop_method == "return":
+        await self.return_tips()
+      else:
+        await self.discard_tips()
 
   async def distribute(
     self,

@@ -1795,7 +1795,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth_direction = immersion_depth_direction or [
       0 if (id_ >= 0) else 1 for id_ in immersion_depth
     ]
-    immersion_depth = [im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)]
+    immersion_depth = [
+      im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)
+    ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
@@ -2101,7 +2103,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth_direction = immersion_depth_direction or [
       0 if (id_ >= 0) else 1 for id_ in immersion_depth
     ]
-    immersion_depth = [im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)]
+    immersion_depth = [
+      im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)
+    ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
