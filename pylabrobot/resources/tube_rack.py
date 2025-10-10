@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Dict, Optional, Union, cast
 
 from .coordinate import Coordinate
 from .itemized_resource import ItemizedResource
