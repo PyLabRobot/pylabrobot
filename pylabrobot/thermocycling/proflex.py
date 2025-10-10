@@ -401,8 +401,11 @@ class ProflexBackend(ThermocyclerBackend):
     elif self.bid == "13":
       self._num_blocks = 3
       self.num_temp_zones = 2
+    elif self.bid == "31":
+      self._num_blocks = 1
+      self.num_temp_zones = 1
     else:
-      raise NotImplementedError("Only BID 12 and 13 are supported")
+      raise NotImplementedError("Only BID 31, 12 and 13 are supported")
 
   async def is_block_running(self, block_id: int) -> bool:
     run_name = await self.get_run_name(block_id=block_id)
@@ -553,6 +556,20 @@ class ProflexBackend(ThermocyclerBackend):
     res = await self.send_command({"cmd": "BUZZer-"})
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to turn off buzzer")
+
+  async def close_lid(self):
+    if self.bid != '31':
+      raise NotImplementedError("Lid control is only available for BID 31 (ATC)")
+    res=await self.send_command({"cmd": f"lidclose"}, response_timeout=20, read_once=False)
+    if self._parse_scpi_response(res)["status"] != "OK":
+      raise ValueError("Failed to close lid")
+
+  async def open_lid(self):
+    if self.bid != '31':
+      raise NotImplementedError("Lid control is only available for BID 31 (ATC)")
+    res=await self.send_command({"cmd": f"lidopen"}, response_timeout=20, read_once=False)
+    if self._parse_scpi_response(res)["status"] != "OK":
+      raise ValueError("Failed to open lid")
 
   async def send_morse_code(self, morse_code: str):
     short_beep_duration = 0.1
@@ -852,11 +869,7 @@ class ProflexBackend(ThermocyclerBackend):
       await self.set_block_idle_temp(temp=block_idle_temp, block_id=block_index)
       await self.set_cover_idle_temp(temp=cover_idle_temp, block_id=block_index)
 
-  async def open_lid(self):
-    raise NotImplementedError("Open lid command is not implemented for Proflex thermocycler")
 
-  async def close_lid(self):
-    raise NotImplementedError("Close lid command is not implemented for Proflex thermocycler")
 
   async def deactivate_lid(self, block_id: Optional[int] = None):
     assert block_id is not None, "block_id must be specified"
