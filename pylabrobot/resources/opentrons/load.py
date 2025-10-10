@@ -46,10 +46,6 @@ def load_ot_tip_rack(
   if not display_category == "tipRack":
     raise ValueError("Not a tip rack definition file.")
 
-  size_x = data["dimensions"]["xDimension"]
-  size_y = data["dimensions"]["yDimension"]
-  size_z = data["dimensions"]["zDimension"]
-
   items = data["ordering"]
   wells: List[TipSpot] = []
 
@@ -60,12 +56,6 @@ def load_ot_tip_rack(
       assert well_data["shape"] == "circular", "We assume all tip racks are circular."
       diameter = well_data["diameter"]
       well_size_x = well_size_y = round(diameter / math.sqrt(2), 3)
-
-      location = Coordinate(
-        x=well_data["x"] - well_size_x / 2,
-        y=well_data["y"] - well_size_y / 2,
-        z=well_data["z"],
-      )
 
       # closure
       def make_tip() -> Tip:
@@ -82,7 +72,11 @@ def load_ot_tip_rack(
         size_y=well_size_y,
         make_tip=make_tip,
       )
-      tip_spot.location = location
+      tip_spot.location = Coordinate(
+        x=well_data["x"] - well_size_x / 2,
+        y=well_data["y"] - well_size_y / 2,
+        z=well_data["z"],
+      )
       wells.append(tip_spot)
 
   ordering = data["ordering"]
@@ -91,9 +85,9 @@ def load_ot_tip_rack(
 
   tr = TipRack(
     name=plr_resource_name,
-    size_x=size_x,
-    size_y=size_y,
-    size_z=size_z,
+    size_x=data["dimensions"]["xDimension"],
+    size_y=data["dimensions"]["yDimension"],
+    size_z=data["dimensions"]["zDimension"],
     ordered_items=cast(Dict[str, TipSpot], ordered_items),
     model=data["metadata"]["displayName"],
   )
@@ -115,10 +109,6 @@ def load_ot_tube_rack(
   if display_category not in {"tubeRack", "aluminumBlock"}:
     raise ValueError("Not a tube rack definition file.")
 
-  size_x = data["dimensions"]["xDimension"]
-  size_y = data["dimensions"]["yDimension"]
-  size_z = data["dimensions"]["zDimension"]
-
   items = data["ordering"]
   wells: List[ResourceHolder] = []
 
@@ -131,19 +121,17 @@ def load_ot_tube_rack(
       well_size_x = well_size_y = round(diameter / math.sqrt(2), 3)
       well_size_z = well_data["depth"]
 
-      location = Coordinate(
-        x=well_data["x"] - well_size_x / 2,
-        y=well_data["y"] - well_size_y / 2,
-        z=well_data["z"],
-      )
-
       resource_holder = ResourceHolder(
         name=item,
         size_x=well_size_x,
         size_y=well_size_y,
         size_z=well_size_z,
       )
-      resource_holder.location = location
+      resource_holder.location = Coordinate(
+        x=well_data["x"] - well_size_x / 2,
+        y=well_data["y"] - well_size_y / 2,
+        z=well_data["z"],
+      )
       wells.append(resource_holder)
 
   ordering = data["ordering"]
@@ -152,9 +140,9 @@ def load_ot_tube_rack(
 
   return TubeRack(
     name=plr_resource_name,
-    size_x=size_x,
-    size_y=size_y,
-    size_z=size_z,
+    size_x=data["dimensions"]["xDimension"],
+    size_y=data["dimensions"]["yDimension"],
+    size_z=data["dimensions"]["zDimension"],
     ordered_items=cast(Dict[str, ResourceHolder], ordered_items),
     model=data["metadata"]["displayName"],
   )
