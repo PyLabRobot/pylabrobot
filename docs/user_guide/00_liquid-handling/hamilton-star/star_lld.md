@@ -11,8 +11,8 @@ await lh.aspirate([tube], vols=[300], lld_mode=[STARBackend.LLDMode.GAMMA])
 The `lld_mode` parameter can be one of the following:
 
 - `STARBackend.LLDMode.OFF`: default, no LLD
-- `STARBackend.LLDMode.GAMMA`: capacative LLD
-- `STARBackend.LLDMode.PRESSURE`: pressure LLD
+- `STARBackend.LLDMode.GAMMA`: capacative LLD (cLLD)
+- `STARBackend.LLDMode.PRESSURE`: pressure LLD (pLLD)
 - `STARBackend.LLDMode.DUAL`: both capacative and pressure LLD
 - `STARBackend.LLDMode.Z_TOUCH_OFF`: find the bottom of the container
 
