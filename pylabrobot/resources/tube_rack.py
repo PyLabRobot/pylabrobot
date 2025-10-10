@@ -58,10 +58,14 @@ class TubeRack(ItemizedResource[ResourceHolder]):
       raise ValueError("Only Tubes resources can be added to a TubeRack.")
     self.get_item(key).resource = value
 
-  def __getitem__(
-    self, identifier: Union[str, int, Sequence[int], Sequence[str], slice, range]
-  ) -> List[Tube]:
-    resource_holders = super().__getitem__(identifier)
-    return [
-      cast(Tube, holder.resource) for holder in resource_holders if holder.resource is not None
-    ]
+  def get_tube(self, key: Union[int, str]) -> Optional[Tube]:
+    """Get the tube at the given position.
+
+    Args:
+      key: Position of the tube to get. Can be an integer index or a string name.
+
+    Returns:
+      The tube at the given position, or None if there is no tube at that position.
+    """
+    holder = self.get_item(key)
+    return cast(Optional[Tube], holder.resource) if holder.resource is not None else None
