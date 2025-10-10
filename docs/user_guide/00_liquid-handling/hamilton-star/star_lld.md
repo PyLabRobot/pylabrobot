@@ -46,6 +46,19 @@ await lh.dispense(
   immersion_depth=[-1])
 ```
 
+## Moving with liquid surface (liquid following)
+
+Through another backend kwarg, `surface_following_distance`, you can move with the liquid:
+
+```python
+await lh.aspirate(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  surface_following_distance=[10],  # 10mm
+)
+```
+
 ## Catching errors
 
 All channelized pipetting operations raise a `ChannelizedError` exception when an error occurs, so that we can have specific error handling for each channel.
