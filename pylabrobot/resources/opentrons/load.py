@@ -112,7 +112,7 @@ def load_ot_tube_rack(
   data = _download_ot_resource_file(ot_name=ot_name, force_download=force_download)
 
   display_category = data["metadata"]["displayCategory"]
-  if not display_category in {"tubeRack", "aluminumBlock"}:
+  if display_category not in {"tubeRack", "aluminumBlock"}:
     raise ValueError("Not a tube rack definition file.")
 
   size_x = data["dimensions"]["xDimension"]
