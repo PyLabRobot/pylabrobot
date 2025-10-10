@@ -389,10 +389,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         y_positions.append(0)
       channels_involved.append(True)
 
-      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
+      x_pos = ops[i].resource.get_location_wrt(self.deck, x="c", y="c", z="b").x + ops[i].offset.x
       x_positions.append(round(x_pos * 10))
 
-      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
+      y_pos = ops[i].resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + ops[i].offset.y
       y_positions.append(round(y_pos * 10))
 
     # check that the minimum d between any two y positions is >9mm

@@ -487,7 +487,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
     ttti = await self.get_ttti(tips)
 
-    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
+    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
@@ -532,7 +532,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
-    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
+    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
 
     try:
       return await self.pip_tip_discard(
@@ -561,9 +561,9 @@ class VantageBackend(HamiltonLiquidHandler):
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""
     for resource in resources:
-      if resource.get_absolute_location().z < 100:
+      if resource.get_location_wrt(self.deck).z < 100:
         raise ValueError(
-          f"Resource {resource} is too low: {resource.get_absolute_location().z} < 100"
+          f"Resource {resource} is too low: {resource.get_location_wrt(self.deck).z} < 100"
         )
 
   async def aspirate(
@@ -663,7 +663,7 @@ class VantageBackend(HamiltonLiquidHandler):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [
@@ -857,7 +857,7 @@ class VantageBackend(HamiltonLiquidHandler):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
@@ -968,7 +968,7 @@ class VantageBackend(HamiltonLiquidHandler):
       raise ValueError("No tips found in the tip rack.")
     assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
     offset_z = pickup.offset.z
 
     return await self.core96_tip_pick_up(
@@ -995,7 +995,7 @@ class VantageBackend(HamiltonLiquidHandler):
     # assert self.core96_head_installed, "96 head must be installed"
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
-      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+      position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
     else:
       raise NotImplementedError(
         "Only TipRacks are supported for dropping tips on Vantage",
@@ -1077,7 +1077,7 @@ class VantageBackend(HamiltonLiquidHandler):
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
       position = (
-        ref_well.get_absolute_location()
+        ref_well.get_location_wrt(self.deck)
         + ref_well.center()
         + aspiration.offset
         + Coordinate(z=ref_well.material_z_thickness)
@@ -1091,7 +1091,7 @@ class VantageBackend(HamiltonLiquidHandler):
       x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
       y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        aspiration.container.get_absolute_location(z="cavity_bottom")
+        aspiration.container.get_location_wrt(self.deck, z="cavity_bottom")
         + Coordinate(x=x_position, y=y_position)
         + aspiration.offset
       )
@@ -1242,7 +1242,7 @@ class VantageBackend(HamiltonLiquidHandler):
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
       position = (
-        ref_well.get_absolute_location()
+        ref_well.get_location_wrt(self.deck)
         + ref_well.center()
         + dispense.offset
         + Coordinate(z=ref_well.material_z_thickness)
@@ -1256,7 +1256,7 @@ class VantageBackend(HamiltonLiquidHandler):
       x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
       y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        dispense.container.get_absolute_location(z="cavity_bottom")
+        dispense.container.get_location_wrt(self.deck, z="cavity_bottom")
         + Coordinate(x=x_position, y=y_position)
         + dispense.offset
       )
@@ -1352,7 +1352,7 @@ class VantageBackend(HamiltonLiquidHandler):
     """Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
     allows you to pick up and move a resource with a single command."""
 
-    center = pickup.resource.get_absolute_location(x="c", y="c", z="b") + pickup.offset
+    center = pickup.resource.get_location_wrt(self.deck, x="c", y="c", z="b") + pickup.offset
     grip_height = center.z + pickup.resource.get_absolute_size_z() - pickup.pickup_distance_from_top
     plate_width = pickup.resource.get_absolute_size_x()
 
