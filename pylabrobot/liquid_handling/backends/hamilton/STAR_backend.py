@@ -6102,7 +6102,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= mixing_cycles <= 99, "mixing_cycles must be between 0 and 99"
     assert (
       0 <= mix_position_from_liquid_surface <= 990
-    ), "mixing_position_from_liquid_surface must be between 0 and 990"
+    ), "mix_position_from_liquid_surface must be between 0 and 990"
     assert (
       0 <= mix_surface_following_distance <= 990
     ), "mix_surface_following_distance must be between 0 and 990"
