@@ -2335,17 +2335,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_height: Minimum height (maximum immersion depth)
       tube_2nd_section_height_measured_from_zm: Unknown.
       tube_2nd_section_ratio: Unknown.
-      immersion_depth: The immersion depth above or below the liquid level. See
-       `immersion_depth_direction`.
-      immersion_depth_direction: The direction of the immersion depth. (0 = deeper, 1 = out of
-        liquid)
+      immersion_depth: The immersion depth above or below the liquid level.
+      surface_following_distance: The distance to follow the liquid surface when aspirating.
       transport_air_volume: The volume of air to aspirate after the liquid.
       pre_wetting_volume: The volume of liquid to use for pre-wetting.
       gamma_lld_sensitivity: The sensitivity of the gamma liquid level detection.
       swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 0.3 and 160. Default 2.
       settling_time: The time to wait after aspirating.
-      mix_position_from_liquid_surface: The position of the mix from the
-        liquid surface.
+      mix_position_from_liquid_surface: The position of the mix from the liquid surface.
       mix_surface_following_distance: The distance to follow the liquid surface during mix.
       limit_curve_index: The index of the limit curve to use.
     """
@@ -2481,8 +2478,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
 
-    channel_pattern = [True] * 12 * 8
-
     x_direction = 0 if position.x >= 0 else 1
     return await self.aspirate_core_96(
       x_position=abs(round(position.x * 10)),
@@ -2516,7 +2511,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
       mix_surface_following_distance=round(mix_surface_following_distance * 10),
       speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
-      channel_pattern=channel_pattern,
+      channel_pattern=[True] * 12 * 8,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
       recording_mode=0,
@@ -2582,8 +2577,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_height: Maximum immersion depth, in mm. Equals Minimum height during command.
       tube_2nd_section_height_measured_from_zm: Unknown.
       second_section_ratio: Unknown.
-      immersion_depth: Immersion depth, in mm. See `immersion_depth_direction`.
-      immersion_depth_direction: Immersion depth direction. 0 = go deeper, 1 = go up out of liquid.
+      immersion_depth: Immersion depth, in mm.
       surface_following_distance: Surface following distance, in mm. Default 0.
       transport_air_volume: Transport air volume, to dispense before aspiration.
       gamma_lld_sensitivity: Gamma LLD sensitivity.
@@ -2746,14 +2740,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
 
-    channel_pattern = [True] * 12 * 8
-
-    x_direction = 0 if position.x >= 0 else 1
-
-    ret = await self.dispense_core_96(
+    return await self.dispense_core_96(
       dispensing_mode=dispense_mode,
       x_position=abs(round(position.x * 10)),
-      x_direction=x_direction,
+      x_direction=0 if position.x >= 0 else 1,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
@@ -2781,15 +2771,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
       mix_surface_following_distance=round(mix_surface_following_distance * 10),
       speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 1200,
-      channel_pattern=channel_pattern,
+      channel_pattern=[True] * 12 * 8,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
       recording_mode=0,
       cut_off_speed=round(cut_off_speed * 10),
       stop_back_volume=round(stop_back_volume * 10),
     )
-
-    return ret
 
   async def iswap_move_picked_up_resource(
     self,
