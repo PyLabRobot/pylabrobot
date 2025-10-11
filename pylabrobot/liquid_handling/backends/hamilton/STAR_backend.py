@@ -2281,13 +2281,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     jet: bool = False,
     blow_out: bool = False,
     use_lld: bool = False,
-    air_transport_retract_dist: float = 10,
+    pull_out_distance_transport_air: float = 10,
     hlc: Optional[HamiltonLiquidClass] = None,
     aspiration_type: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    minimal_end_height: Optional[float] = None,
+    min_z_endpos: Optional[float] = None,
     lld_search_height: float = 199.9,
-    maximum_immersion_depth: Optional[float] = None,
+    minimum_height: Optional[float] = None,
     tube_2nd_section_height_measured_from_zm: float = 3.2,
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
@@ -2301,12 +2301,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_volume: float = 0,
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
-    surface_following_distance_during_mix: float = 0,
+    mix_surface_following_distance: float = 0,
     speed_of_mix: float = 0.0,
     limit_curve_index: int = 0,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
     liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
+    minimal_end_height: Optional[float] = None,
+    air_transport_retract_dist: Optional[float] = None,
+    maximum_immersion_depth: Optional[float] = None,
+    surface_following_distance_during_mix: float = 0,
   ):
     """Aspirate using the Core96 head.
 
@@ -2321,15 +2325,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         automatically.
 
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
-      air_transport_retract_dist: The distance to retract after aspirating, in millimeters.
+      pull_out_distance_transport_air: The distance to retract after aspirating, in millimeters.
 
-      aspiration_type: The type of aspiration to perform. (0 = simple; 1 = sequence; 2 = cup emptied
-        )
+      aspiration_type: The type of aspiration to perform. (0 = simple; 1 = sequence; 2 = cup emptied)
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
         starting the command.
-      minimal_end_height: The minimum height to move to after the command.
+      min_z_endpos: The minimum height to move to after the command.
       lld_search_height: The height to search for the liquid level.
-      maximum_immersion_depth: The maximum immersion depth.
+      minimum_height: Minimum height (maximum immersion depth)
       tube_2nd_section_height_measured_from_zm: Unknown.
       tube_2nd_section_ratio: Unknown.
       immersion_depth: The immersion depth above or below the liquid level. See
@@ -2345,8 +2348,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_cycles: The number of cycles to perform for mix.
       mix_position_from_liquid_surface: The position of the mix from the
         liquid surface.
-      surface_following_distance_during_mix: The distance to follow the liquid surface
-        during mix.
+      mix_surface_following_distance: The distance to follow the liquid surface during mix.
       speed_of_mix: The speed of mix.
       limit_curve_index: The index of the limit curve to use.
     """
@@ -2357,6 +2359,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
       )
 
+    # # # TODO: delete > 2026-01 # # #
     if immersion_depth_direction is not None:
       warnings.warn(
         "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
@@ -2364,6 +2367,54 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "out of the liquid.",
         DeprecationWarning,
       )
+
+    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will"
+        "be removed in the future."
+        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
+        "surface_following_distance.",
+        DeprecationWarning,
+      )
+
+    if minimal_end_height is not None:
+      minimal_end_height = min_z_endpos
+      warnings.warn(
+        "The minimal_end_height parameter is deprecated and will be removed in the future."
+        "Use the Hamilton-standard min_z_endpos parameter instead.\n"
+        "min_z_endpos currently superseding minimal_end_height.",
+        DeprecationWarning,
+      )
+
+    if air_transport_retract_dist is not None:
+      pull_out_distance_transport_air = air_transport_retract_dist
+      warnings.warn(
+        "The air_transport_retract_dist parameter is deprecated and will be removed in the future."
+        "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
+        "pull_out_distance_transport_air currently superseding air_transport_retract_dist.",
+        DeprecationWarning,
+      )
+
+    if maximum_immersion_depth is not None:
+      minimum_height = maximum_immersion_depth
+      warnings.warn(
+        "The maximum_immersion_depth parameter is deprecated and will be removed in the future."
+        "Use the Hamilton-standard minimum_height parameter instead.\n"
+        "minimum_height currently superseding maximum_immersion_depth.",
+        DeprecationWarning,
+      )
+
+    if surface_following_distance_during_mix != 0:
+      mix_surface_following_distance = surface_following_distance_during_mix
+      warnings.warn(
+        "The surface_following_distance_during_mix parameter is deprecated and will be removed in the future."
+        "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
+        "mix_surface_following_distance currently superseding surface_following_distance_during_mix.",
+        DeprecationWarning,
+      )
+    # # # delete # # #
 
     assert self.core96_head_installed, "96 head must be installed"
 
@@ -2436,33 +2487,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     channel_pattern = [True] * 12 * 8
 
-    # Was this ever true? Just copied it over from pyhamilton. Could have something to do with
-    # the liquid classes and whether blow_out mode is enabled.
-    # # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
-    # # manually.
-    # if blow_out_air_volume is not None and blow_out_air_volume > 0:
-    #   await self.aspirate_core_96(
-    #     x_position=int(position.x * 10),
-    #     y_positions=int(position.y * 10),
-    #     lld_mode=0,
-    #     liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
-    #     aspiration_volumes=int(blow_out_air_volume * 10)
-    #   )
-
-    # # # TODO: delete > 2026-01 # # #
-    # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
-    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
-      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
-      warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will"
-        "be removed in the future."
-        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
-        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
-        "surface_following_distance.",
-        DeprecationWarning,
-      )
-    # # # delete # # #
-
     x_direction = 0 if position.x >= 0 else 1
     return await self.aspirate_core_96(
       x_position=abs(round(position.x * 10)),
@@ -2472,13 +2496,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimal_end_height=round((minimal_end_height or self._channel_traversal_height) * 10),
+      minimal_end_height=round((min_z_endpos or self._channel_traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
-      liquid_surface_at_function_without_lld=round(liquid_height * 10),
-      pull_out_distance_to_take_transport_air_in_function_without_lld=round(
-        air_transport_retract_dist * 10
-      ),
-      maximum_immersion_depth=round((maximum_immersion_depth or position.z) * 10),
+      liquid_surface_no_lld=round(liquid_height * 10),
+      pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
+      maximum_immersion_depth=round((minimum_height or position.z) * 10),
       tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
@@ -2496,7 +2518,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_volume=round(aspiration.mix.volume * 10) if aspiration.mix is not None else 0,
       mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
-      surface_following_distance_during_mix=round(surface_following_distance_during_mix * 10),
+      mix_surface_following_distance=round(mix_surface_following_distance * 10),
       speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
@@ -2718,19 +2740,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       cut_off_speed=round(cut_off_speed * 10),
       stop_back_volume=round(stop_back_volume * 10),
     )
-
-    # Was this ever true? Just copied it over from pyhamilton. Could have something to do with
-    # the liquid classes and whether blow_out mode is enabled.
-    # # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we dispense air
-    # # manually.
-    # if blow_out_air_volume is not None and blow_out_air_volume > 0:
-    #   await self.dispense_core_96(
-    #     x_position=int(position.x * 10),
-    #     y_position=int(position.y * 10),
-    #     lld_mode=0,
-    #     liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
-    #     dispense_volume=int(blow_out_air_volume * 10),
-    #   )
 
     return ret
 
@@ -5561,13 +5570,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     x_direction: int = 0,
     y_positions: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
-    minimal_end_height: int = 3425,
+    min_z_endpos: int = 3425,
     lld_search_height: int = 3425,
-    liquid_surface_at_function_without_lld: int = 3425,
-    pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
-    maximum_immersion_depth: int = 3425,
+    liquid_surface_no_lld: int = 3425,
+    pull_out_distance_transport_air: int = 3425,
+    minimum_height: int = 3425,
     tube_2nd_section_height_measured_from_zm: int = 0,
-    tube_2nd_section_ratio: int = 3425,
+    second_section_ratio: int = 3425,
     immersion_depth: int = 0,
     immersion_depth_direction: int = 0,
     surface_following_distance: float = 0,
@@ -5583,7 +5592,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_volume: int = 0,
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: int = 250,
-    surface_following_distance_during_mix: int = 0,
+    mix_surface_following_distance: int = 0,
     speed_of_mix: int = 1000,
     channel_pattern: List[bool] = [True] * 96,
     limit_curve_index: int = 0,
@@ -5592,6 +5601,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01:
     liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
+    minimal_end_height: int = 3425,
+    liquid_surface_at_function_without_lld: int = 3425,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
+    maximum_immersion_depth: int = 3425,
+    surface_following_distance_during_mix: int = 0,
+    tube_2nd_section_ratio: int = 3425,
   ):
     """aspirate CoRe 96
 
@@ -5606,19 +5621,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
           a command 0.1mm] (refers to all channels independent of tip pattern parameter 'tm').
           Must be between 0 and 3425. Default 3425.
-      minimal_end_height: Minimal height at command end [0.1mm]. Must be between 0 and 3425.
-          Default 3425.
+      min_z_endpos: Minimal height at command end [0.1mm]. Must be between 0 and 3425. Default 3425.
       lld_search_height: LLD search height [0.1mm]. Must be between 0 and 3425. Default 3425.
-      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
-          Must be between 0 and 3425. Default 3425.
-      pull_out_distance_to_take_transport_air_in_function_without_lld: pull out distance to take
-          transport air in function without LLD [0.1mm]. Must be between 0 and 3425. Default 50.
-      maximum_immersion_depth: Minimum height (maximum immersion depth) [0.1mm]. Must be between
-          0 and 3425. Default 3425.
+      liquid_surface_no_lld: Liquid surface at function without LLD [0.1mm]. Must be between 0 and 3425. Default 3425.
+      pull_out_distance_transport_air: pull out distance to take transport air in function without LLD [0.1mm]. Must be between 0 and 3425. Default 50.
+      minimum_height: Minimum height (maximum immersion depth) [0.1mm]. Must be between 0 and 3425. Default 3425.
       tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from "zm" [0.1mm]
            Must be between 0 and 3425. Default 0.
-      tube_2nd_section_ratio: Tube 2nd section ratio (See Fig 2.). Must be between 0 and 10000.
-          Default 3425.
+      second_section_ratio: Tube 2nd section ratio (See Fig 2.). Must be between 0 and 10000. Default 3425.
       immersion_depth: Immersion depth [0.1mm]. Must be between 0 and 3600. Default 0.
       immersion_depth_direction: Direction of immersion depth (0 = go deeper, 1 = go up out of
           liquid). Must be between 0 and 1. Default 0.
@@ -5640,7 +5650,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_cycles: Number of mix cycles. Must be between 0 and 99. Default 0.
       mix_position_from_liquid_surface: mix position in Z- direction from
           liquid surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
-      surface_following_distance_during_mix: surface following distance during
+      mix_surface_following_distance: surface following distance during
           mix [0.1mm]. Must be between 0 and 990. Default 0.
       speed_of_mix: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
           Default 1000.
@@ -5651,6 +5661,75 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           Must be between 0 and 2. Default 0.
     """
 
+    # # # TODO: delete > 2026-01 # # #
+    # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
+    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0.0:
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
+        "surface_following_distance.",
+        DeprecationWarning,
+      )
+
+    if minimal_end_height != 3425:
+      min_z_endpos = minimal_end_height
+      warnings.warn(
+        "The minimal_end_height parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard min_z_endpos parameter instead.\n"
+        "minimal_end_height currently superseding min_z_endpos.",
+        DeprecationWarning,
+      )
+
+    if liquid_surface_at_function_without_lld != 3425:
+      liquid_surface_no_lld = liquid_surface_at_function_without_lld
+      warnings.warn(
+        "The liquid_surface_at_function_without_lld parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard liquid_surface_no_lld parameter instead.\n"
+        "liquid_surface_at_function_without_lld currently superseding liquid_surface_no_lld.",
+        DeprecationWarning,
+      )
+
+    if pull_out_distance_to_take_transport_air_in_function_without_lld != 50:
+      pull_out_distance_transport_air = (
+        pull_out_distance_to_take_transport_air_in_function_without_lld
+      )
+      warnings.warn(
+        "The pull_out_distance_to_take_transport_air_in_function_without_lld parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
+        "pull_out_distance_to_take_transport_air_in_function_without_lld currently superseding pull_out_distance_transport_air.",
+        DeprecationWarning,
+      )
+
+    if maximum_immersion_depth != 3425:
+      minimum_height = maximum_immersion_depth
+      warnings.warn(
+        "The maximum_immersion_depth parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard minimum_height parameter instead.\n"
+        "minimum_height currently superseding maximum_immersion_depth.",
+        DeprecationWarning,
+      )
+
+    if surface_following_distance_during_mix != 0:
+      mix_surface_following_distance = surface_following_distance_during_mix
+      warnings.warn(
+        "The surface_following_distance_during_mix parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
+        "surface_following_distance_during_mix currently superseding mix_surface_following_distance.",
+        DeprecationWarning,
+      )
+
+    if tube_2nd_section_ratio != 3425:
+      second_section_ratio = tube_2nd_section_ratio
+      warnings.warn(
+        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future."
+        "Use the Hamilton-standard second_section_ratio parameter instead.\n"
+        "tube_2nd_section_ratio currently superseding second_section_ratio.",
+        DeprecationWarning,
+      )
+    # # # delete # # #
+
     assert 0 <= aspiration_type <= 2, "aspiration_type must be between 0 and 2"
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
@@ -5658,23 +5737,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
-    assert 0 <= minimal_end_height <= 3425, "minimal_end_height must be between 0 and 3425"
+    assert 0 <= min_z_endpos <= 3425, "min_z_endpos must be between 0 and 3425"
     assert 0 <= lld_search_height <= 3425, "lld_search_height must be between 0 and 3425"
+    assert 0 <= liquid_surface_no_lld <= 3425, "liquid_surface_no_lld must be between 0 and 3425"
     assert (
-      0 <= liquid_surface_at_function_without_lld <= 3425
-    ), "liquid_surface_at_function_without_lld must be between 0 and 3425"
-    assert (
-      0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3425
-    ), "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3425"
-    assert (
-      0 <= maximum_immersion_depth <= 3425
-    ), "maximum_immersion_depth must be between 0 and 3425"
+      0 <= pull_out_distance_transport_air <= 3425
+    ), "pull_out_distance_transport_air must be between 0 and 3425"
+    assert 0 <= minimum_height <= 3425, "minimum_height must be between 0 and 3425"
     assert (
       0 <= tube_2nd_section_height_measured_from_zm <= 3425
     ), "tube_2nd_section_height_measured_from_zm must be between 0 and 3425"
-    assert (
-      0 <= tube_2nd_section_ratio <= 10000
-    ), "tube_2nd_section_ratio must be between 0 and 10000"
+    assert 0 <= second_section_ratio <= 10000, "second_section_ratio must be between 0 and 10000"
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
     assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
     assert (
@@ -5695,8 +5768,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       0 <= mix_position_from_liquid_surface <= 990
     ), "mix_position_from_liquid_surface must be between 0 and 990"
     assert (
-      0 <= surface_following_distance_during_mix <= 990
-    ), "surface_following_distance_during_mix must be between 0 and 990"
+      0 <= mix_surface_following_distance <= 990
+    ), "mix_surface_following_distance must be between 0 and 990"
     assert 3 <= speed_of_mix <= 5000, "speed_of_mix must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
 
@@ -5707,20 +5780,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
-    # # # TODO: delete > 2026-01 # # #
-    # deprecated liquid_surface_sink_distance_at_the_end_of_aspiration:
-    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0.0:
-      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
-      warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will"
-        "be removed in the future."
-        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
-        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
-        "surface_following_distance.",
-        DeprecationWarning,
-      )
-    # # # delete # # #
-
     return await self.send_command(
       module="C0",
       command="EA",
@@ -5729,13 +5788,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       xd=x_direction,
       yh=f"{y_positions:04}",
       zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      ze=f"{minimal_end_height:04}",
+      ze=f"{min_z_endpos:04}",
       lz=f"{lld_search_height:04}",
-      zt=f"{liquid_surface_at_function_without_lld:04}",
-      pp=f"{pull_out_distance_to_take_transport_air_in_function_without_lld:04}",
-      zm=f"{maximum_immersion_depth:04}",
+      zt=f"{liquid_surface_no_lld:04}",
+      pp=f"{pull_out_distance_transport_air:04}",
+      zm=f"{minimum_height:04}",
       zv=f"{tube_2nd_section_height_measured_from_zm:04}",
-      zq=f"{tube_2nd_section_ratio:05}",
+      zq=f"{second_section_ratio:05}",
       iw=f"{immersion_depth:03}",
       ix=immersion_depth_direction,
       fh=f"{surface_following_distance:03}",
@@ -5751,7 +5810,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       hv=f"{mix_volume:05}",
       hc=f"{mix_cycles:02}",
       hp=f"{mix_position_from_liquid_surface:03}",
-      mj=f"{surface_following_distance_during_mix:03}",
+      mj=f"{mix_surface_following_distance:03}",
       hs=f"{speed_of_mix:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
