@@ -5737,7 +5737,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       warnings.warn(
         "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard surface_following_distance parameter instead.\n"
-        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
+        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding "
         "surface_following_distance.",
         DeprecationWarning,
       )
