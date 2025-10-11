@@ -5982,7 +5982,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       second_section_ratio = tube_2nd_section_ratio
       warnings.warn(
         "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future."
-        "Use the Hamilton-standard second_section_ratio parameter instead.\n"
+        " Use the Hamilton-standard second_section_ratio parameter instead.\n"
         "second_section_ratio currently superseding tube_2nd_section_ratio.",
         DeprecationWarning,
       )
