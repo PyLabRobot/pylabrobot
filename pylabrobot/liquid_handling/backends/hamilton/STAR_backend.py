@@ -2368,8 +2368,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
       surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
       warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will"
-        " be removed in the future."
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard surface_following_distance parameter instead.\n"
         "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding"
         "surface_following_distance.",
@@ -2379,7 +2378,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if minimal_end_height is not None:
       min_z_endpos = minimal_end_height
       warnings.warn(
-        "The minimal_end_height parameter is deprecated and will be removed in the future."
+        "The minimal_end_height parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard min_z_endpos parameter instead.\n"
         "min_z_endpos currently superseding minimal_end_height.",
         DeprecationWarning,
@@ -2388,7 +2387,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if air_transport_retract_dist is not None:
       pull_out_distance_transport_air = air_transport_retract_dist
       warnings.warn(
-        "The air_transport_retract_dist parameter is deprecated and will be removed in the future."
+        "The air_transport_retract_dist parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
         "pull_out_distance_transport_air currently superseding air_transport_retract_dist.",
         DeprecationWarning,
@@ -2397,7 +2396,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if maximum_immersion_depth is not None:
       minimum_height = maximum_immersion_depth
       warnings.warn(
-        "The maximum_immersion_depth parameter is deprecated and will be removed in the future."
+        "The maximum_immersion_depth parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard minimum_height parameter instead.\n"
         "minimum_height currently superseding maximum_immersion_depth.",
         DeprecationWarning,
@@ -2406,7 +2405,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if surface_following_distance_during_mix != 0:
       mix_surface_following_distance = surface_following_distance_during_mix
       warnings.warn(
-        "The surface_following_distance_during_mix parameter is deprecated and will be removed in the future."
+        "The surface_following_distance_during_mix parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
         "mix_surface_following_distance currently superseding surface_following_distance_during_mix.",
         DeprecationWarning,
@@ -5772,7 +5771,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if tube_2nd_section_ratio != 3425:
       second_section_ratio = tube_2nd_section_ratio
       warnings.warn(
-        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future."
+        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard second_section_ratio parameter instead.\n"
         "tube_2nd_section_ratio currently superseding second_section_ratio.",
         DeprecationWarning,
@@ -5981,8 +5980,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if tube_2nd_section_ratio != 3425:
       second_section_ratio = tube_2nd_section_ratio
       warnings.warn(
-        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future."
-        " Use the Hamilton-standard second_section_ratio parameter instead.\n"
+        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard second_section_ratio parameter instead.\n"
         "second_section_ratio currently superseding tube_2nd_section_ratio.",
         DeprecationWarning,
       )
