@@ -2685,7 +2685,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if air_transport_retract_dist != 10:
       pull_out_distance_transport_air = air_transport_retract_dist
       warnings.warn(
-        "The air_transport_retract_dist parameter is deprecated and will be removed in the future "
+        "The air_transport_retract_dist parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
         "pull_out_distance_transport_air currently superseding air_transport_retract_dist.",
         DeprecationWarning,
