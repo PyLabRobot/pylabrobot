@@ -62,7 +62,7 @@ def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plat
   )
 
 
-def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
+def AGenBio_4_troughplate_75000uL_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. RES-75-4MW
   - Material: Polypropylene
@@ -96,7 +96,7 @@ def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plat
     size_y=85.48,  # from spec
     size_z=43.80,  # measured
     lid=lid,
-    model=AGenBio_4_troughplate_75000_Vb.__name__,
+    model=AGenBio_4_troughplate_75000uL_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=4,
@@ -109,6 +109,10 @@ def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plat
       **well_kwargs,
     ),
   )
+
+
+def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
+  raise NotImplementedError("deprecated. use AGenBio_4_troughplate_75000uL_Vb instead")
 
 
 def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:

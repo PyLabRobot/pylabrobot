@@ -29,7 +29,7 @@ except ImportError as e:
   _CV2_IMPORT_ERROR = e
 
 try:
-  import numpy as np
+  import numpy as np  # type: ignore
 except ImportError:
   np = None  # type: ignore[assignment]
 

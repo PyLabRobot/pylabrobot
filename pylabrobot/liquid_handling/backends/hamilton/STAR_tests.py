@@ -584,6 +584,11 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_tip_tracking_pick_up96(self):
+    set_tip_tracking(enabled=True)
+    await self.lh.pick_up_tips96(self.tip_rack)
+    set_tip_tracking(enabled=False)
+
   async def test_core_96_tip_drop(self):
     await self.lh.pick_up_tips96(self.tip_rack)  # pick up tips first
     self.STAR._write_and_read_command.reset_mock()

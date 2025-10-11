@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.liquid import Liquid
@@ -40,6 +40,7 @@ class Drop:
 class PickupTipRack:
   resource: TipRack
   offset: Coordinate
+  tips: Sequence[Optional[Tip]]
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class SingleChannelAspiration:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
@@ -70,54 +72,66 @@ class SingleChannelDispense:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
+  mix: Optional[Mix]
+
+
+@dataclass(frozen=True)
+class Mix:
+  volume: float
+  repetitions: int
+  flow_rate: float
 
 
 @dataclass(frozen=True)
 class MultiHeadAspirationPlate:
   wells: List[Well]
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
 class MultiHeadDispensePlate:
   wells: List[Well]
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
 class MultiHeadAspirationContainer:
   container: Container
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
 class MultiHeadDispenseContainer:
   container: Container
   offset: Coordinate
-  tips: List[Tip]
+  tips: Sequence[Optional[Tip]]
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 class GripDirection(enum.Enum):

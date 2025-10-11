@@ -85,7 +85,7 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|----------|-------------|--------|
 | Inheco | Thermoshake RM | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-classic.html) |
 | Inheco | Thermoshake | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake.html) |
-| Inheco | Thermoshake AC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-ac.html) |
+| Inheco | Thermoshake AC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-ac.html) |
 | Opentrons | Thermoshake | <span class="badge badge-heating">heating</span> | Full | [OEM](https://opentrons.com/products/heater-shaker-module) |
 | Hamilton | Heater Shaker | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/hamilton.html) / [OEM](https://www.hamiltoncompany.com/temperature-control/hamilton-heater-shaker) |
 
@@ -128,7 +128,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
 | Opentrons | Temperature Module | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/temperature.html) / [OEM](https://opentrons.com/products/temperature-module-gen2) |
-| Inheco | CPAC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | WIP | [OEM](https://www.inheco.com/cpac.html) |
+| Inheco | CPAC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [OEM](https://www.inheco.com/cpac.html) |
 
 ### Tilting
 
@@ -174,10 +174,10 @@ tr > td:nth-child(5) { width: 15%; }
 
 Classifying lab automation equipment can be challenging.
 There are many reasons for this, including (but not limited to):
-- many machines have overlapping capabilities (the TFS Cytomat 2 C470 can be a fridge, heated chamber, oven, smart storage/plate hotel and shaker all in one machine!), 
+- many machines have overlapping capabilities (the TFS Cytomat 2 C470 can be a fridge, heated chamber, oven, smart storage/plate hotel and shaker all in one machine!),
 - different user groups require varying levels of software integration but tend to only refer to the capabilities they use in that moment (e.g. what is a shaker to one group might be a heater to another),
 - balancing naming/classification based on user intuition/historic legacy and first principles, (e.g. a thermocycler is just a speedy heater/cooler but scientists are used to the term thermocycler)
-- there is no widely accepted naming standard.  
+- there is no widely accepted naming standard.
 
 PyLabRobot does not solve these human classification issues.
 But to provide *some* structure PyLabRobot classifies machines into three purposefully broad categories:

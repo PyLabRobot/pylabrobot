@@ -451,40 +451,40 @@ def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
 
 
 def LTF(name: str) -> TipRack:
-  raise NotImplementedError("LTF is deprecated. use hamilton_96_tiprack_10ul_filter instead")
+  raise NotImplementedError("LTF is deprecated. use hamilton_96_tiprack_10uL_filter instead")
 
 
 def LT(name: str) -> TipRack:
-  raise NotImplementedError("LT is deprecated. use hamilton_96_tiprack_10ul instead")
+  raise NotImplementedError("LT is deprecated. use hamilton_96_tiprack_10uL instead")
 
 
 def TIP_50ul_w_filter(name: str) -> TipRack:
   raise NotImplementedError(
-    "TIP_50ul_w_filter is deprecated. use hamilton_96_tiprack_50ul_filter instead"
+    "TIP_50ul_w_filter is deprecated. use hamilton_96_tiprack_50uL_filter instead"
   )
 
 
 def TIP_50ul(name: str) -> TipRack:
-  raise NotImplementedError("TIP_50ul is deprecated. use hamilton_96_tiprack_50ul instead")
+  raise NotImplementedError("TIP_50ul is deprecated. use hamilton_96_tiprack_50uL instead")
 
 
 def STF(name: str) -> TipRack:
-  raise NotImplementedError("STF is deprecated. use hamilton_96_tiprack_300ul_filter instead")
+  raise NotImplementedError("STF is deprecated. use hamilton_96_tiprack_300uL_filter instead")
 
 
 def ST(name: str) -> TipRack:
-  raise NotImplementedError("ST is deprecated. use hamilton_96_tiprack_300ul instead")
+  raise NotImplementedError("ST is deprecated. use hamilton_96_tiprack_300uL instead")
 
 
 def STF_Slim(name: str) -> TipRack:
   raise NotImplementedError(
-    "STF_Slim is deprecated. use hamilton_96_tiprack_300ul_filter_slim instead"
+    "STF_Slim is deprecated. use hamilton_96_tiprack_300uL_filter_slim instead"
   )
 
 
 def HTF(name: str) -> TipRack:
-  raise NotImplementedError("HTF is deprecated. use hamilton_96_tiprack_1000ul_filter instead")
+  raise NotImplementedError("HTF is deprecated. use hamilton_96_tiprack_1000uL_filter instead")
 
 
 def HT(name: str) -> TipRack:
-  raise NotImplementedError("HT is deprecated. use hamilton_96_tiprack_1000ul instead")
+  raise NotImplementedError("HT is deprecated. use hamilton_96_tiprack_1000uL instead")

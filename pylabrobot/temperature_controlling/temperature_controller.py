@@ -65,14 +65,10 @@ class TemperatureController(ResourceHolder, Machine):
     return await self.backend.set_temperature(temperature)
 
   async def get_temperature(self) -> float:
-    """Get the current temperature of the temperature controller.
-
-    Returns:
-      Temperature in Celsius.
-    """
+    """Get the current temperature of the temperature controller in Celsius."""
     return await self.backend.get_current_temperature()
 
-  async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5):
+  async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5) -> None:
     """Wait for the temperature to reach the target temperature. The target temperature must be
     set by `set_temperature()`.
 

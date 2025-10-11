@@ -20,7 +20,6 @@ from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.liquid_handling.backends.serializing_backend import (
   SerializingBackend,
 )
-from pylabrobot.resources import Resource
 
 if TYPE_CHECKING:
   import websockets.legacy
@@ -171,24 +170,6 @@ class WebSocketBackend(SerializingBackend):
 
     while not self.has_connection():
       time.sleep(0.1)
-
-  async def assigned_resource_callback(self, resource: Resource):
-    # override SerializingBackend so we don't wait for a response
-    await self.send_command(
-      command="resource_assigned",
-      data={
-        "resource": resource.serialize(),
-        "parent_name": (resource.parent.name if resource.parent else None),
-      },
-      wait_for_response=False,
-    )
-
-  async def unassigned_resource_callback(self, name: str):
-    # override SerializingBackend so we don't wait for a response
-    await self.send_command(
-      command="resource_unassigned",
-      data={"resource_name": name, "wait_for_response": False},
-    )
 
   async def send_command(
     self,

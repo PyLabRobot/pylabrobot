@@ -899,7 +899,7 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       66: "Squeezer drive not initialized",
       67: "Squeezer drive movement error: Step loss",
       68: "Init position adjustment error",
-      70: "No liquid level found (possibly because no liquid was present)",
+      70: "No liquid level found (possibly because no liquid was present, or too little liquid was present to trigger cLLD)",
       71: "Not enough liquid present (Immersion depth or surface following position possibly"
       "below minimal access range)",
       72: "Auto calibration at pressure (Sensor not possible)",
@@ -1381,10 +1381,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     initialized = await self.request_instrument_initialization_status()
 
-    if not initialized and not skip_instrument_initialization:
-      logger.info("Running backend initialization procedure.")
+    if not initialized:
+      if not skip_instrument_initialization:
+        logger.info("Running backend initialization procedure.")
 
-      await self.pre_initialize_instrument()
+        await self.pre_initialize_instrument()
+    else:
+      # pre_initialize only runs when the robot is not initialized
+      # pre_initialize will move all channels to Z safety
+      # so if we skip pre_initialize, we need to raise the channels ourselves
+      await self.move_all_channels_in_z_safety()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -1452,7 +1458,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError("Cannot mix tips with different tip types.")
     ttti = (await self.get_ttti(list(tips)))[0]
 
-    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
+    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
@@ -1526,7 +1532,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     # get highest z position
-    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
+    max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     if drop_method == TipDropMethod.PLACE_SHIFT:
       # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
       begin_tip_deposit_process = (
@@ -1583,9 +1589,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""
     for resource in resources:
-      if resource.get_absolute_location().z < 100:
+      if resource.get_location_wrt(self.deck).z < 100:
         raise ValueError(
-          f"Resource {resource} is too low: {resource.get_absolute_location().z} < 100"
+          f"Resource {resource} is too low: {resource.get_location_wrt(self.deck).z} < 100"
         )
 
   class LLDMode(enum.Enum):
@@ -1706,6 +1712,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           and 360. Defaults to well bottom + liquid height. Should use absolute z.
     """
 
+    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -1744,7 +1764,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surfaces_no_lld or [
@@ -1770,9 +1790,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
-    # TODO: I think minimum height should be the minimum height of the well
-    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
-    immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
+    if immersion_depth is None:
+      immersion_depth = [0.0] * n
+    immersion_depth_direction = immersion_depth_direction or [
+      0 if (id_ >= 0) else 1 for id_ in immersion_depth
+    ]
+    immersion_depth = [
+      im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)
+    ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
@@ -1811,17 +1836,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         hlc.aspiration_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
-    mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
+    mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
     mix_position_from_liquid_surface = _fill_in_defaults(
       mix_position_from_liquid_surface, [0.0] * n
     )
-    mix_speed = _fill_in_defaults(
-      mix_speed,
-      default=[
-        hlc.aspiration_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 100.0 for op in ops]
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -2001,6 +2021,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         documentation. Dispense mode 4.
     """
 
+    if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -2039,7 +2073,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surface_no_lld or [
@@ -2064,8 +2098,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
-    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
-    immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
+    if immersion_depth is None:
+      immersion_depth = [0.0] * n
+    immersion_depth_direction = immersion_depth_direction or [
+      0 if (id_ >= 0) else 1 for id_ in immersion_depth
+    ]
+    immersion_depth = [
+      im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)
+    ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
@@ -2107,17 +2147,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    mix_volume = _fill_in_defaults(mix_volume, [0.0] * n)
-    mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
+    mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
     mix_position_from_liquid_surface = _fill_in_defaults(
       mix_position_from_liquid_surface, [0.0] * n
     )
-    mix_speed = _fill_in_defaults(
-      mix_speed,
-      default=[
-        hlc.dispense_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
-      ],
-    )
+    mix_speed = [op.mix.flow_rate if op.mix is not None else 1.0 for op in ops]
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -2177,64 +2212,94 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     pickup: PickupTipRack,
     tip_pickup_method: int = 0,
-    z_deposit_position: float = 216.4,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """Pick up tips using the 96 head."""
+
     assert self.core96_head_installed, "96 head must be installed"
+
     tip_spot_a1 = pickup.resource.get_item("A1")
-    prototypical_tip = None
-    for tip_spot in pickup.resource.get_all_items():
-      if tip_spot.has_tip():
-        prototypical_tip = tip_spot.get_tip()
-        break
+
+    prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
     if prototypical_tip is None:
       raise ValueError("No tips found in the tip rack.")
-    assert isinstance(prototypical_tip, HamiltonTip), "Tip type must be HamiltonTip."
-    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
-    self._check_96_position_legal(position, skip_z=True)
-    z_deposit_position += round(pickup.offset.z * 10)
+    if not isinstance(prototypical_tip, HamiltonTip):
+      raise TypeError("Tip type must be HamiltonTip.")
 
-    x_direction = 0 if position.x >= 0 else 1
-    return await self.pick_up_tips_core96(
-      x_position=abs(round(position.x * 10)),
-      x_direction=x_direction,
-      y_position=round(position.y * 10),
-      tip_type_idx=ttti,
-      tip_pickup_method=tip_pickup_method,
-      z_deposit_position=round(z_deposit_position * 10),
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      minimum_height_command_end=round(
-        (minimum_height_command_end or self._channel_traversal_height) * 10
-      ),
-    )
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
+
+    tip_length = prototypical_tip.total_tip_length
+    fitting_depth = prototypical_tip.fitting_depth
+    tip_engage_height_from_tipspot = tip_length - fitting_depth
+
+    # Tip size–based z-adjustment
+    h_tip = self._get_hamilton_tip([tip_spot_a1])
+    if h_tip.tip_size == TipSize.LOW_VOLUME:
+      tip_engage_height_from_tipspot += 2
+    elif h_tip.tip_size != TipSize.STANDARD_VOLUME:
+      tip_engage_height_from_tipspot -= 2
+
+    # Compute pickup Z
+    tip_spot_z = tip_spot_a1.get_location_wrt(self.deck).z + pickup.offset.z
+    z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
+
+    # Compute full position (used for x/y)
+    pickup_position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
+    pickup_position.z = round(z_pickup_position, 2)
+
+    self._check_96_position_legal(pickup_position, skip_z=True)
+
+    try:
+      return await self.pick_up_tips_core96(
+        x_position=abs(round(pickup_position.x * 10)),
+        x_direction=0 if pickup_position.x >= 0 else 1,
+        y_position=round(pickup_position.y * 10),
+        tip_type_idx=ttti,
+        tip_pickup_method=tip_pickup_method,
+        z_deposit_position=round(pickup_position.z * 10),
+        minimum_traverse_height_at_beginning_of_a_command=round(
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        ),
+        minimum_height_command_end=round(
+          (minimum_height_command_end or self._channel_traversal_height) * 10
+        ),
+      )
+    except STARFirmwareError as e:
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
+      raise e
 
   async def drop_tips96(
     self,
     drop: DropTipRack,
-    z_deposit_position: float = 216.4,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
+
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
-      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+      position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
+      tip_rack = tip_spot_a1.parent
+      assert tip_rack is not None
+      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
+      # This should be the case for all normal hamilton tip carriers + racks
+      # In the future, we might want to make this more flexible
+      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
+
     self._check_96_position_legal(position, skip_z=True)
 
     x_direction = 0 if position.x >= 0 else 1
+
     return await self.discard_tips_core96(
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
       y_position=round(position.y * 10),
-      z_deposit_position=round(z_deposit_position * 10),
+      z_deposit_position=round(position.z * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
@@ -2259,7 +2324,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_height_measured_from_zm: float = 3.2,
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
-    immersion_depth_direction: int = 0,
+    immersion_depth_direction: Optional[int] = None,
     liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
     transport_air_volume: float = 5.0,
     pre_wetting_volume: float = 5.0,
@@ -2270,7 +2335,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mix: float = 0,
-    speed_of_mix: float = 120.0,
+    speed_of_mix: float = 0.0,
     limit_curve_index: int = 0,
   ):
     """Aspirate using the Core96 head.
@@ -2316,6 +2381,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       limit_curve_index: The index of the limit curve to use.
     """
 
+    if mix_volume != 0 or mix_cycles != 0 or speed_of_mix != 0:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate96 instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
@@ -2333,7 +2412,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
       position = (
-        ref_well.get_absolute_location()
+        ref_well.get_location_wrt(self.deck)
         + ref_well.center()
         + Coordinate(z=ref_well.material_z_thickness)
         + aspiration.offset
@@ -2344,13 +2423,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
       y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        aspiration.container.get_absolute_location(z="cavity_bottom")
+        aspiration.container.get_location_wrt(self.deck, z="cavity_bottom")
         + Coordinate(x=x_position, y=y_position)
         + aspiration.offset
       )
     self._check_96_position_legal(position, skip_z=True)
 
-    tip = aspiration.tips[0]
+    tip = next(tip for tip in aspiration.tips if tip is not None)
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
@@ -2384,7 +2463,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
     swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
-    speed_of_mix = speed_of_mix or (hlc.aspiration_mix_flow_rate if hlc is not None else 10.0)
 
     channel_pattern = [True] * 12 * 8
 
@@ -2420,7 +2498,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction,
+      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
       liquid_surface_sink_distance_at_the_end_of_aspiration=round(
         liquid_surface_sink_distance_at_the_end_of_aspiration * 10
       ),
@@ -2433,11 +2511,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       gamma_lld_sensitivity=gamma_lld_sensitivity,
       swap_speed=round(swap_speed * 10),
       settling_time=round(settling_time * 10),
-      mix_volume=round(mix_volume * 10),
-      mix_cycles=mix_cycles,
+      mix_volume=round(aspiration.mix.volume * 10) if aspiration.mix is not None else 0,
+      mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
       surface_following_distance_during_mix=round(surface_following_distance_during_mix * 10),
-      speed_of_mix=round(speed_of_mix * 10),
+      speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2461,7 +2539,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tube_2nd_section_height_measured_from_zm: float = 3.2,
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
-    immersion_depth_direction: int = 0,
+    immersion_depth_direction: Optional[int] = None,
     liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,
     transport_air_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
@@ -2471,7 +2549,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mixing: float = 0,
-    speed_of_mixing: float = 120.0,
+    speed_of_mixing: float = 0.0,
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
@@ -2512,6 +2590,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       stop_back_volume: Unknown.
     """
 
+    if mixing_volume != 0 or mixing_cycles != 0 or speed_of_mixing != 0:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
@@ -2529,7 +2621,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
       position = (
-        ref_well.get_absolute_location()
+        ref_well.get_location_wrt(self.deck)
         + ref_well.center()
         + Coordinate(z=ref_well.material_z_thickness)
         + dispense.offset
@@ -2542,12 +2634,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
       y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
       position = (
-        dispense.container.get_absolute_location(z="cavity_bottom")
+        dispense.container.get_location_wrt(self.deck, z="cavity_bottom")
         + Coordinate(x=x_position, y=y_position)
         + dispense.offset
       )
     self._check_96_position_legal(position, skip_z=True)
-    tip = dispense.tips[0]
+    tip = next(tip for tip in dispense.tips if tip is not None)
 
     liquid_height = position.z + (dispense.liquid_height or 0)
 
@@ -2582,7 +2674,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
     swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
     settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
-    speed_of_mixing = speed_of_mixing or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
 
     channel_pattern = [True] * 12 * 8
 
@@ -2605,7 +2696,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction,
+      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
       liquid_surface_sink_distance_at_the_end_of_dispense=round(
         liquid_surface_sink_distance_at_the_end_of_dispense * 10
       ),
@@ -2617,11 +2708,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       gamma_lld_sensitivity=gamma_lld_sensitivity,
       swap_speed=round(swap_speed * 10),
       settling_time=round(settling_time * 10),
-      mixing_volume=round(mixing_volume * 10),
-      mixing_cycles=mixing_cycles,
+      mixing_volume=round(dispense.mix.volume * 10) if dispense.mix is not None else 0,
+      mixing_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
       mixing_position_from_liquid_surface=round(mixing_position_from_liquid_surface * 10),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      speed_of_mixing=round(speed_of_mixing * 10),
+      speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 1200,
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2712,7 +2803,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Get center of source plate. Also gripping height and plate width.
-    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
+    center = resource.get_location_wrt(self.deck, x="c", y="c", z="b") + offset
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     grip_width = resource.get_absolute_size_y()  # grip width is y size of resource
 
@@ -2851,7 +2942,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         pickup.resource.get_absolute_rotation()
       )
       x, y, z = (
-        pickup.resource.get_absolute_location("l", "f", "t")
+        pickup.resource.get_location_wrt(self.deck, "l", "f", "t")
         + center_in_absolute_space
         + pickup.offset
       )
@@ -3101,10 +3192,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      # STAR machines appear to lose connection to a channel if y > 635 mm
-      max_y_pos = 635
+      if self.iswap_installed:
+        max_y_pos = await self.iswap_rotation_drive_request_y()
+        limit = "iswap module y-position"
+      else:
+        # STAR machines do not allow channels y > 635 mm
+        max_y_pos = 635
+        limit = "machine limit"
       if y > max_y_pos:
-        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm (machine limit)")
+        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm ({limit})")
 
     if channel < (self.num_channels - 1):
       min_y_pos = await self.request_y_pos_channel_n(channel + 1)
@@ -3114,7 +3210,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel + 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      # STAR machines appear to lose connection to a channel if y < 6 mm
+      # STAR machines do not allow channels y < 6 mm
       min_y_pos = 6
       if y < min_y_pos:
         raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm (machine limit)")
@@ -3247,7 +3343,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     head_size_x = 9 * 11  # 12 channels, 9mm spacing in between
     head_size_y = 9 * 7  #   8 channels, 9mm spacing in between
     channel_size = 9
-    loc = resource.get_absolute_location()
+    loc = resource.get_location_wrt(self.deck)
     loc.x += (resource.get_size_x() - head_size_x) / 2 + channel_size / 2
     loc.y += (resource.get_size_y() - head_size_y) / 2 + channel_size / 2
     return loc
@@ -4772,7 +4868,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
     # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
-    # a resource on the robot deck and use deck.get_resource().get_absolute_location().
+    # a resource on the robot deck and use deck.get_resource().get_location_wrt(self.deck).
     deck_size = self.deck.get_absolute_size_x()
     if deck_size == STARLET_SIZE_X:
       xs = 7975  # 1360-797.5 = 562.5
@@ -6073,7 +6169,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Use autoload to unload carrier."""
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
@@ -6136,7 +6232,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
@@ -6423,19 +6519,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="FY")
 
-  async def request_y_pos_iswap_channel(self):
-    """Query the current Y-axis position of the iSWAP channel."""
-
-    y_pos_query_increments = await self.send_command(
-      module="R0",
-      command="RY",
-      fmt="ry######",
-    )
-
-    y_pos_query_mm = self.y_drive_increment_to_mm(y_pos_query_increments["ry"])
-
-    return round(y_pos_query_mm, 1)
-
   async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
@@ -6464,6 +6547,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       step_size: Y Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
       allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
+
+    # check if iswap will hit the first (backmost) channel
+    # we only need to check for positive step sizes because the iswap is always behind the first channel
+    if step_size < 0:
+      y_pos_channel_0 = await self.request_y_pos_channel_n(0)
+      current_y_pos_iswap = await self.iswap_rotation_drive_request_y()
+      if current_y_pos_iswap + step_size < y_pos_channel_0:
+        raise ValueError(
+          f"iSWAP will hit the first (backmost) channel. Current iSWAP Y position: {current_y_pos_iswap} mm, "
+          f"first channel Y position: {y_pos_channel_0} mm, requested step size: {step_size} mm"
+        )
 
     direction = 0 if step_size >= 0 else 1
     max_step_size = 99.9
@@ -7202,6 +7296,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z=(resp["zj"] / 10) * (1 if resp["zd"] == 0 else -1),
     )
 
+  async def iswap_rotation_drive_request_y(self) -> float:
+    """Request iSWAP rotation drive Y position (center) in mm. This is equivalent to the y location of the iSWAP module."""
+    if not self.iswap_installed:
+      raise RuntimeError("iSWAP is not installed")
+    resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
+    iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
+    return round(STARBackend.y_drive_increment_to_mm(iswap_y_pos), 1)
+
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status
 
@@ -7287,6 +7389,193 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @staticmethod
   def z_drive_increment_to_mm(value_increments: int) -> float:
     return round(value_increments * STARBackend.z_drive_mm_per_increment, 2)
+
+  async def clld_probe_y_position_using_channel(
+    self,
+    channel_idx: int,  # 0-based indexing of channels!
+    probing_direction: Literal["forward", "backward"],
+    start_pos_search: Optional[float] = None,  # mm
+    end_pos_search: Optional[float] = None,  # mm
+    channel_speed: float = 10.0,  # mm/sec
+    channel_acceleration_int: Literal[1, 2, 3, 4] = 4,  # * 5_000 steps/sec**2 == 926 mm/sec**2
+    detection_edge: int = 10,
+    current_limit_int: Literal[1, 2, 3, 4, 5, 6, 7] = 7,
+    post_detection_dist: float = 2.0,  # mm,
+    tip_bottom_diameter: float = 1.2,  # mm
+  ) -> float:
+    """
+    Probe the y-position of a conductive material using the channel's capacitive Liquid Level
+    Detection (cLLD).
+
+    This method carefully moves a specified STAR channel along the y-axis to detect the presence
+    of a conductive surface. It uses STAR's built-in capacitive sensing to measure where the
+    needle tip first encounters the material, applying safety checks to prevent channel collisions
+    with adjacent channels. After detection, the channel is retracted by a configurable safe
+    distance (`post_detection_dist`) to avoid mechanical interference.
+
+    By default, the parameter `tip_bottom_diameter` assumes STAR's **integrated teaching needles**,
+    which feature an extended, straight bottom section. The correction accounts for the needle's
+    geometry by adjusting the final reported material y-position to represent the material center
+    rather than the conductive detection edge. If you are using different tips or needle designs
+    (e.g., conical tips or third-party teaching needles), you should adapt the
+    `tip_bottom_diameter` value to reflect their actual geometry.
+
+    Args:
+      channel_idx: Index of the channel to probe (0-based). The backmost channel is 0.
+      probing_direction: Direction of probing:
+        - "forward" decreases y-position,
+        - "backward" increases y-position.
+      start_pos_search: Initial y-position for the search (in mm). If not set, defaults to the current channel y-position.
+      end_pos_search: Final y-position for the search (in mm). If not set, defaults to the maximum safe travel range.
+      channel_speed: Channel movement speed during probing (mm/sec). Defaults to 10.0 mm/sec.
+      channel_acceleration_int: Acceleration ramp setting [1-4], where the physical acceleration is `value * 5,000 steps/sec²`. Defaults to 4.
+      detection_edge: Edge steepness for capacitive detection [0-1024]. Defaults to 10.
+      current_limit_int: Current limit setting [1-7]. Defaults to 7.
+      post_detection_dist: Retraction distance after detection (in mm). Defaults to 2.0 mm.
+      tip_bottom_diameter: Effective diameter of the needle/tip bottom (in mm).  Defaults to 1.2 mm, corresponding to STAR's integrated teaching needles.
+
+    Returns:
+      The corrected y-position (in mm) of the detected conductive material, adjusted for the specified `tip_bottom_diameter`.
+
+    Raises:
+      ValueError:
+        - If `probing_direction` is invalid.
+        - If `start_pos_search` or `end_pos_search` is outside the safe range.
+        - If the configured end position conflicts with the probing direction.
+        - If no conductive material is detected.
+    """
+
+    assert probing_direction in [
+      "forward",
+      "backward",
+    ], f"Probing direction must be either 'forward' or 'backward', is {probing_direction}."
+
+    # Anti-channel-crash feature
+    if channel_idx > 0:
+      channel_idx_minus_one_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
+    else:
+      channel_idx_minus_one_y_pos = (
+        STARBackend.y_drive_increment_to_mm(13_714) + 9
+      )  # y-position=635 mm
+    if channel_idx < (self.num_channels - 1):
+      channel_idx_plus_one_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
+    else:
+      channel_idx_plus_one_y_pos = 6
+      # Insight: STAR machines appear to lose connection to a channel below y-position=6 mm
+
+    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - 9
+    max_safe_lower_y_pos = channel_idx_plus_one_y_pos + 9 if channel_idx_plus_one_y_pos != 0 else 6
+
+    # Enable safe start and end positions
+    if start_pos_search:
+      assert max_safe_lower_y_pos <= start_pos_search <= max_safe_upper_y_pos, (
+        f"Start position for y search must be between \n{max_safe_lower_y_pos} and "
+        + f"{max_safe_upper_y_pos} mm, is {end_pos_search} mm. Otherwise channel will crash."
+      )
+      await self.move_channel_y(y=start_pos_search, channel=channel_idx)
+
+    if end_pos_search:
+      assert max_safe_lower_y_pos <= end_pos_search <= max_safe_upper_y_pos, (
+        f"End position for y search must be between \n{max_safe_lower_y_pos} and "
+        + f"{max_safe_upper_y_pos} mm, is {end_pos_search} mm. Otherwise channel will crash."
+      )
+
+    # Set safe y-search end position based on the probing direction
+    current_channel_y_pos = await self.request_y_pos_channel_n(channel_idx)
+    if probing_direction == "backward":
+      max_y_search_pos = end_pos_search or max_safe_upper_y_pos
+      if max_y_search_pos < current_channel_y_pos:
+        raise ValueError(
+          f"Channel {channel_idx} cannot move forward: "
+          f"End position = {max_y_search_pos} < current position = {current_channel_y_pos}"
+          f"\nDid you mean to move forward?"
+        )
+    else:  # probing_direction == "forward"
+      max_y_search_pos = end_pos_search or max_safe_lower_y_pos
+      if max_y_search_pos > current_channel_y_pos:
+        raise ValueError(
+          f"Channel {channel_idx} cannot move forward: "
+          f"End position = {max_y_search_pos} > current position = {current_channel_y_pos}"
+          f"\nDid you mean to move backward?"
+        )
+
+    # Convert mm to increments
+    max_y_search_pos_increments = STAR.mm_to_y_drive_increment(max_y_search_pos)
+    channel_speed_increments = STAR.mm_to_y_drive_increment(channel_speed)
+
+    # Machine-compatibility check of calculated parameters
+    assert 0 <= max_y_search_pos_increments <= 13_714, (
+      "Maximum y search position must be between \n0 and"
+      + f"{STARBackend.y_drive_increment_to_mm(13_714)+9} mm, is {max_y_search_pos_increments} mm"
+    )
+    assert 20 <= channel_speed_increments <= 8_000, (
+      f"LLD search speed must be between \n{STARBackend.y_drive_increment_to_mm(20)}"
+      + f"and {STARBackend.y_drive_increment_to_mm(8_000)} mm/sec, is {channel_speed} mm/sec"
+    )
+    assert channel_acceleration_int in [1, 2, 3, 4], (
+      "Channel speed must be in [1, 2, 3, 4] (* 5_000 steps/sec**2)"
+      + f", is {channel_speed} mm/sec"
+    )
+    assert (
+      0 <= detection_edge <= 1_0234
+    ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
+    assert current_limit_int in [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+    ], f"Current limit must be in [1, 2, 3, 4, 5, 6, 7], is {channel_speed} mm/sec"
+
+    # Move channel for cLLD (Note: does not return detected y-position!)
+    await self.send_command(
+      module=STARBackend.channel_id(channel_idx),
+      command="YL",
+      ya=f"{max_y_search_pos_increments:05}",  # Maximum search position [steps]
+      gt=f"{detection_edge:04}",  # Edge steepness at capacitive LLD detection
+      gl=f"{0:04}",  # Offset after edge detection -> always 0 to measure y-pos!
+      yv=f"{channel_speed_increments:04}",  # Max speed [steps/second]
+      yr=f"{channel_acceleration_int}",  # Acceleration ramp [yr * 5_000 steps/second**2]
+      yw=f"{current_limit_int}",  # Current limit
+      read_timeout=120,  # default 30 seconds is often not enough
+    )
+
+    detected_material_y_pos = await self.request_y_pos_channel_n(channel_idx)
+
+    # Dynamically evaluate post-detection distance to avoid crashes
+    if probing_direction == "backward":
+      if channel_idx == self.num_channels - 1:  # safe default
+        adjacent_y_pos = 6.0
+      else:  # next channel
+        adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
+
+      max_safe_y_mov_dist_post_detection = detected_material_y_pos - adjacent_y_pos - 9.0
+      move_target = detected_material_y_pos - min(
+        post_detection_dist, max_safe_y_mov_dist_post_detection
+      )
+
+    else:  # probing_direction == "forward"
+      if channel_idx == 0:  # safe default
+        adjacent_y_pos = STARBackend.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
+      else:  #  previous channel
+        adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
+
+      max_safe_y_mov_dist_post_detection = adjacent_y_pos - detected_material_y_pos - 9.0
+      move_target = detected_material_y_pos + min(
+        post_detection_dist, max_safe_y_mov_dist_post_detection
+      )
+
+    await self.move_channel_y(y=move_target, channel=channel_idx)
+
+    # Correct for tip_bottom_diameter
+    if probing_direction == "backward":
+      material_y_pos = detected_material_y_pos + tip_bottom_diameter / 2
+    else:  # probing_direction == "forward"
+      material_y_pos = detected_material_y_pos - tip_bottom_diameter / 2
+
+    return material_y_pos
 
   async def clld_probe_z_height_using_channel(
     self,
@@ -7767,7 +8056,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if isinstance(wells, Well):
       well = wells
-      x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
+      x, y, z = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
 
       if spread == "wide":
         offsets = get_wide_single_resource_liquid_op_offsets(
@@ -7780,11 +8069,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ys = [y + offset.y for offset in offsets]
     else:
       assert (
-        len(set(w.get_absolute_location().x for w in wells)) == 1
+        len(set(w.get_location_wrt(self.deck).x for w in wells)) == 1
       ), "Wells must be on the same column"
-      absolute_center = wells[0].get_absolute_location("c", "c", "cavity_bottom")
+      absolute_center = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom")
       x = absolute_center.x
-      ys = [well.get_absolute_location(x="c", y="c").y for well in wells]
+      ys = [well.get_location_wrt(self.deck, x="c", y="c").y for well in wells]
       z = absolute_center.z
 
     await self.move_channel_x(0, x=x)
@@ -7829,9 +8118,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     .. code-block:: python
 
         well = plate.get_well("A3")
-        await wc.lh.aspirate(
+        await lh.aspirate(
           [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
-          min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
+          min_z_endpos=well.get_location_wrt(self.deck, z="cavity_bottom").z,
           surface_following_distance=0,
           pull_out_distance_transport_air=[0] * 4)
         await step_off_foil(lh.backend, [well], front_channel=11, back_channel=6, move_inwards=3)
@@ -7858,20 +8147,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plate = plates.pop()
     assert plate is not None
 
-    z_location = plate.get_absolute_location(z="top").z
+    z_location = plate.get_location_wrt(self.deck, z="top").z
 
     if plate.get_absolute_rotation().z % 360 == 0:
-      back_location = plate.get_absolute_location(y="b")
-      front_location = plate.get_absolute_location(y="f")
+      back_location = plate.get_location_wrt(self.deck, y="b")
+      front_location = plate.get_location_wrt(self.deck, y="f")
     elif plate.get_absolute_rotation().z % 360 == 90:
-      back_location = plate.get_absolute_location(x="r")
-      front_location = plate.get_absolute_location(x="l")
+      back_location = plate.get_location_wrt(self.deck, x="r")
+      front_location = plate.get_location_wrt(self.deck, x="l")
     elif plate.get_absolute_rotation().z % 360 == 180:
-      back_location = plate.get_absolute_location(y="f")
-      front_location = plate.get_absolute_location(y="b")
+      back_location = plate.get_location_wrt(self.deck, y="f")
+      front_location = plate.get_location_wrt(self.deck, y="b")
     elif plate.get_absolute_rotation().z % 360 == 270:
-      back_location = plate.get_absolute_location(x="l")
-      front_location = plate.get_absolute_location(x="r")
+      back_location = plate.get_location_wrt(self.deck, x="l")
+      front_location = plate.get_location_wrt(self.deck, x="r")
     else:
       raise ValueError("Plate rotation must be a multiple of 90 degrees")
 

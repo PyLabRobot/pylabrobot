@@ -4215,7 +4215,7 @@ star_mapping[(1000, False, True, False, Liquid.BRAINHOMOGENATE, True, False)] = 
 # - a break time after dispense with about 10s time counter, makes sure the drop which  residue
 #   after dispense drops back into the probetube
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
-# - sometimes it helpes using Filtertips
+# - sometimes it helps to use Filtertips
 # - Correction Curve is taken from MeOH Liqiudclass
 #
 #
@@ -5581,7 +5581,7 @@ star_mapping[(1000, False, True, True, Liquid.WATER, False, False)] = (
 # - To protect, the distance from Asp. to Disp. should be as short as possible,
 #   because MeOH could be drop out in a long way!
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
-# - sometimes it helpes using Filtertips
+# - sometimes it helps to use Filtertips
 #
 #
 #
@@ -5633,7 +5633,7 @@ star_mapping[(1000, False, True, False, Liquid.METHANOL, True, False)] = (
 # - To protect, the distance from Asp. to Disp. should be as short as possible,
 #   because MeOH could be drop out in a long way!
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
-# - sometimes it helpes using Filtertips
+# - sometimes it helps to use Filtertips
 #
 #
 #
@@ -12002,7 +12002,7 @@ star_mapping[(300, False, True, True, Liquid.WATER, False, False)] = (
 # - To protect, the distance from Asp. to Disp. should be as short as possible( about 12slot),
 #   because MeOH could  drop out in a long way!
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
-# - sometimes it helpes using Filtertips
+# - sometimes it helps to use Filtertips
 #
 #
 #
@@ -12054,7 +12054,7 @@ star_mapping[(300, False, True, False, Liquid.METHANOL, True, False)] = (
 # - To protect, the distance from Asp. to Disp. should be as short as possible( about 12slot),
 #   because MeOH could  drop out in a long way!
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
-# - sometimes it helpes using Filtertips
+# - sometimes it helps to use Filtertips
 #
 #
 #

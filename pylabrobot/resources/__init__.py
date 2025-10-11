@@ -1,5 +1,6 @@
 # labware manufacturers and suppliers
 from .agenbio import *
+from .agilent import *
 from .alpaqua import *
 from .azenta import *
 from .biorad import *

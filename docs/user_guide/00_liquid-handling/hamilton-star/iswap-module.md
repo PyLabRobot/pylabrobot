@@ -90,7 +90,7 @@ plate_lfb_absolute = calibrated_position - plate.get_anchor("c", "c", "b")
 Then you get the plate's LFB position in absolute coordinates. The location of the plate will probably be defined wrt some other resource. To get the relative location of the plate wrt that parent resource, you have to subtract the absolute location of the parent from the absolute location of the plate:
 
 ```python
-parent_absolute = parent.get_absolute_location()
+parent_absolute = parent.get_location_wrt(deck)
 plate_relative = plate_lfb_absolute - parent_absolute
 ```
 
