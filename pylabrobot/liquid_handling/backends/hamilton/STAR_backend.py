@@ -1790,9 +1790,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
-    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
+    if immersion_depth is None:
+      immersion_depth = [0.0] * n
     immersion_depth_direction = immersion_depth_direction or [
       0 if (id_ >= 0) else 1 for id_ in immersion_depth
+    ]
+    immersion_depth = [
+      im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)
     ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
@@ -2094,9 +2098,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
-    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
+    if immersion_depth is None:
+      immersion_depth = [0.0] * n
     immersion_depth_direction = immersion_depth_direction or [
       0 if (id_ >= 0) else 1 for id_ in immersion_depth
+    ]
+    immersion_depth = [
+      im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)
     ]
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [

@@ -453,6 +453,17 @@ class HamiltonSTARDeck(HamiltonDeck):
       )
     return self._trash96
 
+  def clear(self, include_trash: bool = False):
+    """Clear the deck, removing all resources except the trash areas and the waste block."""
+    children_names = [child.name for child in self.children]
+    for resource_name in children_names:
+      resource = self.get_resource(resource_name)
+      if isinstance(resource, Trash) and not include_trash:
+        continue
+      if resource.name == "waste_block":
+        continue
+      resource.unassign()
+
 
 def STARLetDeck(
   origin: Coordinate = Coordinate.zero(),

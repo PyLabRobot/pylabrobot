@@ -13,6 +13,7 @@ from pylabrobot.resources.tecan.wash import (
   Wash_Station_Waste,
 )
 from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.trash import Trash
 
 _RAILS_WIDTH = 25
 
@@ -199,6 +200,17 @@ class TecanDeck(Deck):
       summary_ += parse_resource(resource)
 
     return summary_
+
+  def clear(self, include_trash: bool = False):
+    """Clear the deck, removing all resources except the trash areas."""
+    children_names = [child.name for child in self.children]
+    for resource_name in children_names:
+      resource = self.get_resource(resource_name)
+      if isinstance(resource, Trash) and not include_trash:
+        continue
+      if resource.name == "wash_station":
+        continue
+      resource.unassign()
 
 
 def EVO100Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
