@@ -2676,7 +2676,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if surface_following_distance_during_mixing != 0:
       mix_surface_following_distance = surface_following_distance_during_mixing
       warnings.warn(
-        "The surface_following_distance_during_mixing parameter is deprecated and will be removed in the future "
+        "The surface_following_distance_during_mixing parameter is deprecated and will be removed in the future. "
         "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
         "mix_surface_following_distance currently superseding surface_following_distance_during_mixing.",
         DeprecationWarning,
