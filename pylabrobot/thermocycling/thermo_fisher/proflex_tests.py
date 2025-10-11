@@ -2,8 +2,8 @@ import textwrap
 import unittest
 import unittest.mock
 
-from pylabrobot.thermocycling.proflex import ProflexBackend
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
+from pylabrobot.thermocycling.thermo_fisher.proflex import ProflexBackend
 
 
 class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
@@ -168,7 +168,7 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     -cover= 105
     -mode= Fast
     -coverEnabled= On
-    -notes= 
+    -notes=
     </multiline.write>
     """
       ).strip()

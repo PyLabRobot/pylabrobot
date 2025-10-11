@@ -4,15 +4,15 @@ import hmac
 import logging
 import re
 import xml.etree.ElementTree as ET
+from abc import ABCMeta
 from base64 import b64decode
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
 
 from pylabrobot.io import Socket
+from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
-
-from .backend import ThermocyclerBackend
 
 
 def _generate_run_info_files(
@@ -203,7 +203,7 @@ def _gen_protocol_data(
   return data
 
 
-class ProflexBackend(ThermocyclerBackend):
+class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   """Backend for Proflex thermocycler."""
 
   def __init__(self, ip: str, port: int = 7000, shared_secret: bytes = b"f4ct0rymt55"):
@@ -557,20 +557,6 @@ class ProflexBackend(ThermocyclerBackend):
     if self._parse_scpi_response(res)["status"] != "OK":
       raise ValueError("Failed to turn off buzzer")
 
-  async def close_lid(self):
-    if self.bid != '31':
-      raise NotImplementedError("Lid control is only available for BID 31 (ATC)")
-    res=await self.send_command({"cmd": f"lidclose"}, response_timeout=20, read_once=False)
-    if self._parse_scpi_response(res)["status"] != "OK":
-      raise ValueError("Failed to close lid")
-
-  async def open_lid(self):
-    if self.bid != '31':
-      raise NotImplementedError("Lid control is only available for BID 31 (ATC)")
-    res=await self.send_command({"cmd": f"lidopen"}, response_timeout=20, read_once=False)
-    if self._parse_scpi_response(res)["status"] != "OK":
-      raise ValueError("Failed to open lid")
-
   async def send_morse_code(self, morse_code: str):
     short_beep_duration = 0.1
     long_beep_duration = short_beep_duration * 3
@@ -795,7 +781,7 @@ class ProflexBackend(ThermocyclerBackend):
     run_name = await self.get_run_name(block_id=block_id)
     if not progress:
       self.logger.info("Protocol completed")
-      return ProflexBackend.RunProgress(
+      return ThermoFisherThermocyclerBackend.RunProgress(
         running=False,
         stage="completed",
         elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
@@ -805,7 +791,7 @@ class ProflexBackend(ThermocyclerBackend):
     if progress["RunTitle"] == "-":
       await self._read_response(timeout=5)
       self.logger.info("Protocol completed")
-      return ProflexBackend.RunProgress(
+      return ThermoFisherThermocyclerBackend.RunProgress(
         running=False,
         stage="completed",
         elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
@@ -814,7 +800,7 @@ class ProflexBackend(ThermocyclerBackend):
 
     if progress["Stage"] == "POSTRun":
       self.logger.info("Protocol in POSTRun")
-      return ProflexBackend.RunProgress(
+      return ThermoFisherThermocyclerBackend.RunProgress(
         running=True,
         stage="POSTRun",
         elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
@@ -837,7 +823,7 @@ class ProflexBackend(ThermocyclerBackend):
             break
           await asyncio.sleep(5)
         self.logger.info("Infinite hold")
-        return ProflexBackend.RunProgress(
+        return ThermoFisherThermocyclerBackend.RunProgress(
           running=False,
           stage="infinite_hold",
           elapsed_time=time_elapsed,
@@ -846,7 +832,7 @@ class ProflexBackend(ThermocyclerBackend):
 
     self.logger.info(f"Elapsed time: {time_elapsed}")
     self.logger.info(f"Remaining time: {remaining_time}")
-    return ProflexBackend.RunProgress(
+    return ThermoFisherThermocyclerBackend.RunProgress(
       running=True,
       stage=progress["Stage"],
       elapsed_time=time_elapsed,
@@ -868,8 +854,6 @@ class ProflexBackend(ThermocyclerBackend):
     for block_index in self.available_blocks:
       await self.set_block_idle_temp(temp=block_idle_temp, block_id=block_index)
       await self.set_cover_idle_temp(temp=cover_idle_temp, block_id=block_index)
-
-
 
   async def deactivate_lid(self, block_id: Optional[int] = None):
     assert block_id is not None, "block_id must be specified"
