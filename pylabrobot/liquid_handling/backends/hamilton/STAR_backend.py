@@ -1456,7 +1456,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tips = set(cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots)
     if len(tips) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
-    ttti = (await self.get_ttti(list(tips)))[0]
+    ttti = await self.get_or_assign_tip_type_index(tips.pop())
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
