@@ -2377,7 +2377,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     if minimal_end_height is not None:
-      minimal_end_height = min_z_endpos
+      min_z_endpos = minimal_end_height
       warnings.warn(
         "The minimal_end_height parameter is deprecated and will be removed in the future."
         "Use the Hamilton-standard min_z_endpos parameter instead.\n"
