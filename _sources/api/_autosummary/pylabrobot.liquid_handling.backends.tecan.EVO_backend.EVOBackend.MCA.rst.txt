@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.tecan.EVO\_backend.EVOBackend.MCA
+======================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.tecan.EVO_backend
+
+.. autoattribute:: EVOBackend.MCA

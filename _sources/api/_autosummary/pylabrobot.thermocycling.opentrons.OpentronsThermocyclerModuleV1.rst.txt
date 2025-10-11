@@ -1,0 +1,101 @@
+﻿pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV1
+================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons
+
+.. autoclass:: OpentronsThermocyclerModuleV1
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsThermocyclerModuleV1.name
+      ~OpentronsThermocyclerModuleV1.resource
+      ~OpentronsThermocyclerModuleV1.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsThermocyclerModuleV1.__init__
+      ~OpentronsThermocyclerModuleV1.assign_child_resource
+      ~OpentronsThermocyclerModuleV1.at
+      ~OpentronsThermocyclerModuleV1.center
+      ~OpentronsThermocyclerModuleV1.centers
+      ~OpentronsThermocyclerModuleV1.close_lid
+      ~OpentronsThermocyclerModuleV1.copy
+      ~OpentronsThermocyclerModuleV1.deactivate_block
+      ~OpentronsThermocyclerModuleV1.deactivate_lid
+      ~OpentronsThermocyclerModuleV1.deregister_did_assign_resource_callback
+      ~OpentronsThermocyclerModuleV1.deregister_did_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV1.deregister_state_update_callback
+      ~OpentronsThermocyclerModuleV1.deregister_will_assign_resource_callback
+      ~OpentronsThermocyclerModuleV1.deregister_will_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV1.deserialize
+      ~OpentronsThermocyclerModuleV1.get_absolute_location
+      ~OpentronsThermocyclerModuleV1.get_absolute_rotation
+      ~OpentronsThermocyclerModuleV1.get_absolute_size_x
+      ~OpentronsThermocyclerModuleV1.get_absolute_size_y
+      ~OpentronsThermocyclerModuleV1.get_absolute_size_z
+      ~OpentronsThermocyclerModuleV1.get_all_children
+      ~OpentronsThermocyclerModuleV1.get_anchor
+      ~OpentronsThermocyclerModuleV1.get_block_current_temperature
+      ~OpentronsThermocyclerModuleV1.get_block_status
+      ~OpentronsThermocyclerModuleV1.get_block_target_temperature
+      ~OpentronsThermocyclerModuleV1.get_current_cycle_index
+      ~OpentronsThermocyclerModuleV1.get_current_step_index
+      ~OpentronsThermocyclerModuleV1.get_default_child_location
+      ~OpentronsThermocyclerModuleV1.get_highest_known_point
+      ~OpentronsThermocyclerModuleV1.get_hold_time
+      ~OpentronsThermocyclerModuleV1.get_lid_current_temperature
+      ~OpentronsThermocyclerModuleV1.get_lid_open
+      ~OpentronsThermocyclerModuleV1.get_lid_status
+      ~OpentronsThermocyclerModuleV1.get_lid_target_temperature
+      ~OpentronsThermocyclerModuleV1.get_location_wrt
+      ~OpentronsThermocyclerModuleV1.get_resource
+      ~OpentronsThermocyclerModuleV1.get_root
+      ~OpentronsThermocyclerModuleV1.get_size_x
+      ~OpentronsThermocyclerModuleV1.get_size_y
+      ~OpentronsThermocyclerModuleV1.get_size_z
+      ~OpentronsThermocyclerModuleV1.get_total_cycle_count
+      ~OpentronsThermocyclerModuleV1.get_total_step_count
+      ~OpentronsThermocyclerModuleV1.is_in_subtree_of
+      ~OpentronsThermocyclerModuleV1.is_profile_running
+      ~OpentronsThermocyclerModuleV1.load_all_state
+      ~OpentronsThermocyclerModuleV1.load_from_json_file
+      ~OpentronsThermocyclerModuleV1.load_state
+      ~OpentronsThermocyclerModuleV1.load_state_from_file
+      ~OpentronsThermocyclerModuleV1.open_lid
+      ~OpentronsThermocyclerModuleV1.register_did_assign_resource_callback
+      ~OpentronsThermocyclerModuleV1.register_did_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV1.register_state_update_callback
+      ~OpentronsThermocyclerModuleV1.register_will_assign_resource_callback
+      ~OpentronsThermocyclerModuleV1.register_will_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV1.rotate
+      ~OpentronsThermocyclerModuleV1.rotated
+      ~OpentronsThermocyclerModuleV1.run_pcr_profile
+      ~OpentronsThermocyclerModuleV1.run_protocol
+      ~OpentronsThermocyclerModuleV1.save
+      ~OpentronsThermocyclerModuleV1.save_state_to_file
+      ~OpentronsThermocyclerModuleV1.serialize
+      ~OpentronsThermocyclerModuleV1.serialize_all_state
+      ~OpentronsThermocyclerModuleV1.serialize_state
+      ~OpentronsThermocyclerModuleV1.set_block_temperature
+      ~OpentronsThermocyclerModuleV1.set_lid_temperature
+      ~OpentronsThermocyclerModuleV1.setup
+      ~OpentronsThermocyclerModuleV1.stop
+      ~OpentronsThermocyclerModuleV1.unassign
+      ~OpentronsThermocyclerModuleV1.unassign_child_resource
+      ~OpentronsThermocyclerModuleV1.wait_for_block
+      ~OpentronsThermocyclerModuleV1.wait_for_lid
+      ~OpentronsThermocyclerModuleV1.wait_for_profile_completion
+   
+   

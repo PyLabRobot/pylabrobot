@@ -1,0 +1,30 @@
+﻿pylabrobot.resources.opentrons.load
+===================================
+
+.. currentmodule:: pylabrobot.resources.opentrons
+
+.. automodule:: pylabrobot.resources.opentrons.load
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      load_ot_tip_rack
+      load_ot_tube_rack
+   
+   
+
+   
+   
+   
+
+   
+   
+   

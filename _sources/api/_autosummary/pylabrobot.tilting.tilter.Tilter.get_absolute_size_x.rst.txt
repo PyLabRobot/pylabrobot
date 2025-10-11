@@ -1,0 +1,6 @@
+pylabrobot.tilting.tilter.Tilter.get\_absolute\_size\_x
+=======================================================
+
+.. currentmodule:: pylabrobot.tilting.tilter
+
+.. automethod:: Tilter.get_absolute_size_x

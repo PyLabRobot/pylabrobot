@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV2.get\_lid\_open
+===============================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons
+
+.. automethod:: OpentronsThermocyclerModuleV2.get_lid_open
