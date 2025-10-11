@@ -1626,10 +1626,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     detection_height_difference_for_dual_lld: Optional[List[float]] = None,
     swap_speed: Optional[List[float]] = None,
     settling_time: Optional[List[float]] = None,
-    mix_volume: Optional[List[float]] = None,
-    mix_cycles: Optional[List[int]] = None,
     mix_position_from_liquid_surface: Optional[List[float]] = None,
-    mix_speed: Optional[List[float]] = None,
     mix_surface_following_distance: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
     use_2nd_section_aspiration: Optional[List[bool]] = None,
@@ -1646,6 +1643,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     liquid_surfaces_no_lld: Optional[List[float]] = None,
     # remove > 2026-01
     immersion_depth_direction: Optional[List[int]] = None,
+    mix_volume: Optional[List[float]] = None,
+    mix_cycles: Optional[List[int]] = None,
+    mix_speed: Optional[List[float]] = None,
   ):
     """Aspirate liquid from the specified channels.
 
@@ -1681,13 +1681,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         the LLD mode is DUAL.
       swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after mix.
-      mix_volume: The volume to aspirate for mix.
-      mix_cycles: The number of cycles to perform for mix.
-      mix_position_from_liquid_surface: The height to aspirate from for mix
-        (LLD or absolute terms).
-      mix_speed: The speed to aspirate at for mix.
-      mix_surface_following_distance: The distance to follow the liquid surface for
-        mix.
+      mix_position_from_liquid_surface: The height to aspirate from for mix (LLD or absolute terms).
+      mix_surface_following_distance: The distance to follow the liquid surface for mix.
       limit_curve_index: The index of the limit curve to use.
 
       use_2nd_section_aspiration: Whether to use the second section of aspiration.
@@ -1934,7 +1929,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     use_channels: List[int],
     lld_search_height: Optional[List[float]] = None,
     liquid_surface_no_lld: Optional[List[float]] = None,
-    dispensing_mode: Optional[List[int]] = None,
     pull_out_distance_transport_air: Optional[List[float]] = None,
     second_section_height: Optional[List[float]] = None,
     second_section_ratio: Optional[List[float]] = None,
@@ -1950,10 +1944,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dp_lld_sensitivity: Optional[List[int]] = None,
     swap_speed: Optional[List[float]] = None,
     settling_time: Optional[List[float]] = None,
-    mix_volume: Optional[List[float]] = None,
-    mix_cycles: Optional[List[int]] = None,
     mix_position_from_liquid_surface: Optional[List[float]] = None,
-    mix_speed: Optional[List[float]] = None,
     mix_surface_following_distance: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
@@ -1965,6 +1956,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
     # remove  in the future
     immersion_depth_direction: Optional[List[int]] = None,
+    mix_volume: Optional[List[float]] = None,
+    mix_cycles: Optional[List[int]] = None,
+    mix_speed: Optional[List[float]] = None,
+    dispensing_mode: Optional[List[int]] = None,
   ):
     """Dispense liquid from the specified channels.
 
@@ -1975,7 +1970,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       ops: The dispense operations to perform.
       use_channels: The channels to use for the dispense operations.
-      dispensing_mode: The dispensing mode to use for each operation.
       lld_search_height: The height to start searching for the liquid level when using LLD.
       liquid_surface_no_lld: Liquid surface at function without LLD.
       pull_out_distance_transport_air: The distance to pull out the tip for aspirating transport air if LLD is disabled.
@@ -1994,11 +1988,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
       swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The settling time.
-      mix_volume: The volume to use for mix.
-      mix_cycles: The number of mix cycles.
       mix_position_from_liquid_surface: The height to move above the liquid surface for
         mix.
-      mix_speed: The mix speed.
       mix_surface_following_distance: The distance to follow the liquid surface for mix.
       limit_curve_index: The limit curve to use for the dispense.
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
@@ -2019,6 +2010,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         documentation. Dispense mode 4.
     """
 
+    if jet is None:
+      jet = [False] * n
+    if empty is None:
+      empty = [False] * n
+    if blow_out is None:
+      blow_out = [False] * n
+
     # # # TODO: delete > 2026-01 # # #
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
       raise NotImplementedError(
@@ -2033,18 +2031,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "out of the liquid.",
         DeprecationWarning,
       )
+
+    if dispensing_mode is not None:
+      warnings.warn(
+        "The dispensing_mode parameter is deprecated and will be removed in the future. "
+        "Use the jet, blow_out and empty parameters instead. "
+        "dispensing_mode currently supersedes the other three parameters if both are provided.",
+        DeprecationWarning,
+      )
+      dispensing_modes = dispensing_mode
+    else:
+      dispensing_modes = [
+        _dispensing_mode_for_op(empty=empty[i], jet=jet[i], blow_out=blow_out[i])
+        for i in range(len(ops))
+      ]
     # # # delete # # #
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
-
-    if jet is None:
-      jet = [False] * n
-    if empty is None:
-      empty = [False] * n
-    if blow_out is None:
-      blow_out = [False] * n
 
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = []
@@ -2088,11 +2093,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ]
     else:
       lld_search_height = [wb + sh for wb, sh in zip(well_bottoms, lld_search_height)]
-
-    dispensing_modes = dispensing_mode or [
-      _dispensing_mode_for_op(empty=empty[i], jet=jet[i], blow_out=blow_out[i])
-      for i in range(len(ops))
-    ]
 
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10.0] * n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
@@ -2324,18 +2324,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height: float = 3.2,
     second_section_ratio: float = 618.0,
     immersion_depth: float = 0,
-    immersion_depth_direction: Optional[int] = None,
     surface_following_distance: float = 0,
     transport_air_volume: float = 5.0,
     pre_wetting_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
     swap_speed: float = 2.0,
     settling_time: float = 1.0,
-    mix_volume: float = 0,
-    mix_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
     mix_surface_following_distance: float = 0,
-    speed_of_mix: float = 0.0,
     limit_curve_index: int = 0,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
@@ -2346,6 +2342,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     surface_following_distance_during_mix: float = 0,
     tube_2nd_section_height_measured_from_zm: float = 3.2,
     tube_2nd_section_ratio: float = 618.0,
+    immersion_depth_direction: Optional[int] = None,
+    mix_volume: float = 0,
+    mix_cycles: int = 0,
+    speed_of_mix: float = 0.0,
   ):
     """Aspirate using the Core96 head.
 
@@ -2576,7 +2576,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     empty: bool = False,
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
-    dispense_mode: Optional[int] = None,
     pull_out_distance_transport_air=10,
     use_lld: bool = False,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
@@ -2586,17 +2585,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_height: float = 3.2,
     second_section_ratio: float = 618.0,
     immersion_depth: float = 0,
-    immersion_depth_direction: Optional[int] = None,
     surface_following_distance: float = 0,
     transport_air_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
     swap_speed: float = 2.0,
     settling_time: float = 0,
-    mixing_volume: float = 0,
-    mixing_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
     mix_surface_following_distance: float = 0,
-    speed_of_mixing: float = 0.0,
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
@@ -2610,16 +2605,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     air_transport_retract_dist=10,
     tube_2nd_section_ratio: float = 618.0,
     tube_2nd_section_height_measured_from_zm: float = 3.2,
+    immersion_depth_direction: Optional[int] = None,
+    mixing_volume: float = 0,
+    mixing_cycles: int = 0,
+    speed_of_mixing: float = 0.0,
+    dispense_mode: Optional[int] = None,
   ):
     """Dispense using the Core96 head.
 
     Args:
       dispense: The Dispense command to execute.
       jet: Whether to use jet dispense mode.
+      empty: Whether to use empty dispense mode.
       blow_out: Whether to blow out after dispensing.
-      dispense_mode: The dispense mode to use. 0 = Partial volume in jet mode 1 = Blow out in jet
-        mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix position.
-        If `None`, the mode will be determined based on the `jet`, `empty`, and `blow_out`
       pull_out_distance_transport_air: The distance to retract after dispensing, in mm.
       use_lld: Whether to use gamma LLD.
 
@@ -2729,6 +2727,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "second_section_height currently superseding tube_2nd_section_height_measured_from_zm.",
         DeprecationWarning,
       )
+
+    if dispense_mode is not None:
+      warnings.warn(
+        "The dispense_mode parameter is deprecated and will be removed in the future. "
+        "Use the combination of the `jet`, `empty` and `blow_out` parameters instead. "
+        "dispense_mode currently superseding those parameters.",
+        DeprecationWarning,
+      )
+    else:
+      dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
     # # # delete # # #
 
     assert self.core96_head_installed, "96 head must be installed"
@@ -2769,8 +2777,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip = next(tip for tip in dispense.tips if tip is not None)
 
     liquid_height = position.z + (dispense.liquid_height or 0)
-
-    dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 
     liquid_to_be_dispensed = Liquid.WATER  # default to water.
     if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
