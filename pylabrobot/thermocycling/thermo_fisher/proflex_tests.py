@@ -168,7 +168,7 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     -cover= 105
     -mode= Fast
     -coverEnabled= On
-    -notes=
+    -notes=\x20
     </multiline.write>
     """
       ).strip()
