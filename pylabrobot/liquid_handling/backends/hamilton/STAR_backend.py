@@ -2010,6 +2010,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         documentation. Dispense mode 4.
     """
 
+    n = len(ops)
+
     if jet is None:
       jet = [False] * n
     if empty is None:
@@ -2048,8 +2050,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # # # delete # # #
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
-
-    n = len(ops)
 
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = []
