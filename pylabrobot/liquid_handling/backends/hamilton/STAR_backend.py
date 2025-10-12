@@ -1391,6 +1391,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # pre_initialize will move all channels to Z safety
       # so if we skip pre_initialize, we need to raise the channels ourselves
       await self.move_all_channels_in_z_safety()
+      if self.core96_head_installed:
+        await self.move_core_96_to_safe_position()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -1456,7 +1458,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tips = set(cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots)
     if len(tips) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
-    ttti = (await self.get_ttti(list(tips)))[0]
+    ttti = await self.get_or_assign_tip_type_index(tips.pop())
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)

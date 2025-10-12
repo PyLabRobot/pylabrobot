@@ -99,7 +99,7 @@ def load_ot_tip_rack(
 
 
 def load_ot_tube_rack(
-  ot_name: str, plr_resource_name: str, with_tips: bool = True, force_download: bool = False
+  ot_name: str, plr_resource_name: str, force_download: bool = False
 ) -> TubeRack:
   """Convert an Opentrons tube rack definition file to a PyLabRobot TubeRack resource."""
 
