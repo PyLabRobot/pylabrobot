@@ -1391,6 +1391,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # pre_initialize will move all channels to Z safety
       # so if we skip pre_initialize, we need to raise the channels ourselves
       await self.move_all_channels_in_z_safety()
+      if self.core96_head_installed:
+        await self.move_core_96_to_safe_position()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
