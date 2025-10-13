@@ -10,6 +10,7 @@ expected reference values.
 import textwrap
 import unittest
 
+from pylabrobot.resources.carrier import Coordinate, ResourceHolder
 from pylabrobot.resources.hamilton import (
   TIP_CAR_480_A00,
   MFX_CAR_L5_base,
@@ -19,6 +20,8 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_10uL_filter,
   hamilton_96_tiprack_50uL,
   hamilton_96_tiprack_50uL_filter,
+  # NTRs
+  hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_300uL_filter_slim,
@@ -26,22 +29,21 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_1000uL_filter,
   hamilton_96_tiprack_1000uL_filter_ultrawide,
   hamilton_96_tiprack_1000uL_filter_wide,
-  # NTRs
-  hamilton_96_tiprack_50uL_NTR,
 )
-from pylabrobot.resources.carrier import Coordinate, ResourceHolder
+
 
 # TODO: replace with official Hamilton NTR ResourceHolder import when integrated in PLR
-def diy_mfx_resource_holder_ntr(name: str) -> ResourceHolder: 
-    """Self-built ResourceHolder for NTRs, attached onto a MFX Carrier"""
-    return ResourceHolder(
-        name=name,
-        size_x=135.0,
-        size_y=94.0,
-        size_z=32.9,
-        child_location=Coordinate(3.42, 4.26, 13),
-        model=diy_mfx_resource_holder_ntr.__name__,
-    )
+def diy_mfx_resource_holder_ntr(name: str) -> ResourceHolder:
+  """Self-built ResourceHolder for NTRs, attached onto a MFX Carrier"""
+  return ResourceHolder(
+    name=name,
+    size_x=135.0,
+    size_y=94.0,
+    size_z=32.9,
+    child_location=Coordinate(3.42, 4.26, 13),
+    model=diy_mfx_resource_holder_ntr.__name__,
+  )
+
 
 class HamiltonTipSpotTests(unittest.TestCase):
   """Tests for PLR-integrated Hamilton TipRacks' accurate TipSpot center-center coordinates."""
@@ -73,14 +75,15 @@ class HamiltonTipSpotTests(unittest.TestCase):
     deck.assign_child_resource(tip_carrier_2, rails=13)
 
     # Nested Tip Racks (NTRs) require a ResourceHolder on a MFX Carrier
-    diy_mfx_resource_holder_ntr_0 = diy_mfx_resource_holder_ntr(name="diy_mfx_resource_holder_ntr_0")
-    diy_mfx_resource_holder_ntr_0.assign_child_resource(hamilton_96_tiprack_50uL_NTR(name="tiprack_50ul_ntr_0"))
-    
-    mfx_carrier_modules = {4: diy_mfx_resource_holder_ntr_0}
-    mfx_carrier_0 = MFX_CAR_L5_base(
-      name="mfx_carrier_0",
-      modules=mfx_carrier_modules
+    diy_mfx_resource_holder_ntr_0 = diy_mfx_resource_holder_ntr(
+      name="diy_mfx_resource_holder_ntr_0"
     )
+    diy_mfx_resource_holder_ntr_0.assign_child_resource(
+      hamilton_96_tiprack_50uL_NTR(name="tiprack_50ul_ntr_0")
+    )
+
+    mfx_carrier_modules = {4: diy_mfx_resource_holder_ntr_0}
+    mfx_carrier_0 = MFX_CAR_L5_base(name="mfx_carrier_0", modules=mfx_carrier_modules)
     deck.assign_child_resource(mfx_carrier_0, rails=19)
 
     return deck
