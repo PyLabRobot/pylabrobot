@@ -1,4 +1,4 @@
-"""Unit tests validating center-center coordinates of Hamilton
+"""Unit test validating center-center coordinates of Hamilton
 tip spots across all PLR-integrated Hamilton tip racks.
 
 These tests instantiate Hamilton tip rack models, compute each
@@ -15,12 +15,11 @@ from pylabrobot.resources.hamilton import (
   TIP_CAR_480_A00,
   MFX_CAR_L5_base,
   STARLetDeck,
-  # 'Standard' Hamilton TipRacks
+  # Hamilton TipRacks
   hamilton_96_tiprack_10uL,
   hamilton_96_tiprack_10uL_filter,
   hamilton_96_tiprack_50uL,
   hamilton_96_tiprack_50uL_filter,
-  # NTRs
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_300uL_filter,
