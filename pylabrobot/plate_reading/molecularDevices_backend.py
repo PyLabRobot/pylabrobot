@@ -209,11 +209,19 @@ class MolecularDevicesBackend(PlateReaderBackend):
     self._parse_basic_errors(response, command)
     return response
 
-  async def _send_commands(self, commands: List[Optional[str]]) -> None:
+  async def _send_commands(
+    self,
+    commands: List[Union[Optional[str], Tuple[str, int]]]
+  ) -> None:
     """Send a sequence of commands to the plate reader."""
-    for command in commands:
-      if command:
-        await self.send_command(command)
+    for command_info in commands:
+      if not command_info:
+        continue
+      if isinstance(command_info, tuple):
+        command, num_res_fields = command_info
+        await self.send_command(command, num_res_fields=num_res_fields)
+      else:
+        await self.send_command(command_info)
 
   def _parse_basic_errors(self, response: List[str], command: str) -> None:
     if not response or 'OK' not in response[0]:
@@ -329,15 +337,16 @@ class MolecularDevicesBackend(PlateReaderBackend):
     num_cols, num_rows, size_y = plate.num_items_x, plate.num_items_y, plate.get_size_y()
     if num_cols < 2 or num_rows < 2:
         raise ValueError("Plate must have at least 2 rows and 2 columns to calculate well spacing.")
-
+    top_left_well = plate.get_item(0)
+    top_left_well_center=top_left_well.location + top_left_well.get_anchor(x="c", y="c")
     loc_A1 = plate.get_item("A1").location
     loc_A2 = plate.get_item("A2").location
     loc_B1 = plate.get_item("B1").location
     dx = loc_A2.x - loc_A1.x
     dy = loc_A1.y - loc_B1.y
 
-    x_pos_cmd = f"!XPOS {loc_A1.x:.3f} {dx:.3f} {num_cols}"
-    y_pos_cmd = f"!YPOS {size_y-loc_A1.y:.3f} {dy:.3f} {num_rows}"
+    x_pos_cmd = f"!XPOS {top_left_well_center.x:.3f} {dx:.3f} {num_cols}"
+    y_pos_cmd = f"!YPOS {size_y-top_left_well_center.y:.3f} {dy:.3f} {num_rows}"
     return [x_pos_cmd, y_pos_cmd]
 
   def _get_strip_command(self, settings: MolecularDevicesSettings) -> str:
@@ -404,6 +413,29 @@ class MolecularDevicesBackend(PlateReaderBackend):
       return f"!SPEED {mode}"
     return None
 
+  def _get_readtype_command(self, settings: MolecularDevicesSettings) -> Tuple[str, int]:
+    """Get the READTYPE command and the expected number of response fields."""
+    cuvette = settings.cuvette
+    num_res_fields = COMMAND_TERMINATORS.get("!READTYPE", 2)
+
+    if settings.read_mode == ReadMode.ABS:
+      cmd = f"!READTYPE ABS{'CUV' if cuvette else 'PLA'}"
+    elif settings.read_mode == ReadMode.FLU:
+      cmd = f"!READTYPE FLU{'CUV' if cuvette else ''}"
+      num_res_fields = 2 if cuvette else 1
+    elif settings.read_mode == ReadMode.LUM:
+      cmd = f"!READTYPE LUM{'CUV' if cuvette else ''}"
+      num_res_fields = 2 if cuvette else 1
+    elif settings.read_mode == ReadMode.POLAR:
+      cmd = "!READTYPE POLAR"
+    elif settings.read_mode == ReadMode.TIME:
+      cmd = "!READTYPE TIME 0 250"
+      num_res_fields = 1
+    else:
+      raise ValueError(f"Unsupported read mode: {settings.read_mode}")
+
+    return (cmd, num_res_fields)
+
   def _get_integration_time_commands(
     self,
     settings: MolecularDevicesSettings,
@@ -450,18 +482,22 @@ class MolecularDevicesBackend(PlateReaderBackend):
         kinetic_settings=kinetic_settings, spectrum_settings=spectrum_settings,
         wavelengths=wavelengths, cuvette=cuvette
     )
-    commands = [self._get_clear_command()]
+    commands: List[Union[Optional[str], Tuple[str, int]]] = [self._get_clear_command()]
     if not cuvette:
       # commands.extend(self._get_plate_position_commands(settings))
-      commands.append(self._get_strip_command(settings))
-      commands.append(self._get_carriage_speed_command(settings))
-    commands.extend(self._get_shake_commands(settings))
-    commands.extend(self._get_wavelength_commands(settings))
-    commands.append(self._get_calibrate_command(settings))
-    commands.append(self._get_mode_command(settings))
-    commands.append(self._get_order_command(settings))
-    commands.append(self._get_speed_command(settings))
-    commands.append(f"!READTYPE ABS{'CUV' if cuvette else 'PLA'}")
+      commands.extend([
+        self._get_strip_command(settings),
+        self._get_carriage_speed_command(settings)
+      ])
+    commands.extend([
+        *self._get_shake_commands(settings),
+        *self._get_wavelength_commands(settings),
+        self._get_calibrate_command(settings),
+        self._get_mode_command(settings),
+        self._get_order_command(settings),
+        self._get_speed_command(settings),
+        self._get_readtype_command(settings)
+    ])
 
     await self._send_commands(commands)
     await self._read_now()
@@ -497,27 +533,27 @@ class MolecularDevicesBackend(PlateReaderBackend):
         emission_wavelengths=emission_wavelengths, cutoff_filters=cutoff_filters,
         cuvette=cuvette,speed_read=False
     )
-    commands = [self._get_clear_command()]
+    commands: List[Union[Optional[str], Tuple[str, int]]] = [self._get_clear_command()]
     # commands.append(self._get_read_stage_command(settings))
     if not cuvette:
         commands.extend(self._get_plate_position_commands(settings))
-        commands.append(self._get_strip_command(settings))
-        commands.append(self._get_carriage_speed_command(settings))
-    commands.extend(self._get_shake_commands(settings))
-    commands.append(self._get_flashes_per_well_command(settings))
-    commands.extend(self._get_pmt_commands(settings))
-    commands.extend(self._get_wavelength_commands(settings))
-    commands.extend(self._get_filter_commands(settings))
-    commands.append(self._get_calibrate_command(settings))
-    commands.append(self._get_mode_command(settings))
-    commands.append(self._get_order_command(settings))
-
+        commands.extend([
+          self._get_strip_command(settings),
+          self._get_carriage_speed_command(settings)
+        ])
+    commands.extend([
+        *self._get_shake_commands(settings),
+        self._get_flashes_per_well_command(settings),
+        *self._get_pmt_commands(settings),
+        *self._get_wavelength_commands(settings),
+        *self._get_filter_commands(settings),
+        self._get_calibrate_command(settings),
+        self._get_mode_command(settings),
+        self._get_order_command(settings),
+        self._get_readtype_command(settings)
+    ])
 
     await self._send_commands(commands)
-    if cuvette:
-      await self.send_command("!READTYPE FLUCUV",num_res_fields=2)
-    else:
-      await self.send_command("!READTYPE FLU",num_res_fields=1)
     await self._read_now()
     await self._wait_for_idle()
     data_str = await self._transfer_data()
@@ -547,26 +583,28 @@ class MolecularDevicesBackend(PlateReaderBackend):
         kinetic_settings=kinetic_settings, spectrum_settings=spectrum_settings,
         emission_wavelengths=emission_wavelengths, cuvette=cuvette, speed_read=False
     )
-    commands = [self._get_clear_command()]
-    commands.append(self._get_read_stage_command(settings))
+    commands: List[Union[Optional[str], Tuple[str, int]]] = [
+        self._get_clear_command(),
+        self._get_read_stage_command(settings)
+    ]
     if not cuvette:
         commands.extend(self._get_plate_position_commands(settings))
-        commands.append(self._get_strip_command(settings))
-        commands.append(self._get_carriage_speed_command(settings))
-    commands.extend(self._get_shake_commands(settings))
-    commands.append(self._get_flashes_per_well_command(settings))
-    commands.extend(self._get_pmt_commands(settings))
-    commands.extend(self._get_wavelength_commands(settings))
-    commands.append(self._get_calibrate_command(settings))
-    commands.append(self._get_mode_command(settings))
-    commands.append(self._get_order_command(settings))
-
+        commands.extend([
+          self._get_strip_command(settings),
+          self._get_carriage_speed_command(settings)
+        ])
+    commands.extend([
+        *self._get_shake_commands(settings),
+        self._get_flashes_per_well_command(settings),
+        *self._get_pmt_commands(settings),
+        *self._get_wavelength_commands(settings),
+        self._get_calibrate_command(settings),
+        self._get_mode_command(settings),
+        self._get_order_command(settings),
+        self._get_readtype_command(settings)
+    ])
 
     await self._send_commands(commands)
-    if cuvette:
-      await self.send_command("!READTYPE LUMCUV",num_res_fields=2)
-    else:
-      await self.send_command("!READTYPE LUM",num_res_fields=1)
     await self._read_now()
     await self._wait_for_idle()
     data_str = await self._transfer_data()
@@ -600,21 +638,25 @@ class MolecularDevicesBackend(PlateReaderBackend):
         emission_wavelengths=emission_wavelengths, cutoff_filters=cutoff_filters,
         cuvette=cuvette,speed_read=False
     )
-    commands = [self._get_clear_command()]
+    commands: List[Union[Optional[str], Tuple[str, int]]] = [self._get_clear_command()]
     # commands.append(self._get_read_stage_command(settings))
     if not cuvette:
         commands.extend(self._get_plate_position_commands(settings))
-        commands.append(self._get_strip_command(settings))
-        commands.append(self._get_carriage_speed_command(settings))
-    commands.extend(self._get_shake_commands(settings))
-    commands.append(self._get_flashes_per_well_command(settings))
-    commands.extend(self._get_pmt_commands(settings))
-    commands.extend(self._get_wavelength_commands(settings))
-    commands.extend(self._get_filter_commands(settings))
-    commands.append(self._get_calibrate_command(settings))
-    commands.append(self._get_mode_command(settings))
-    commands.append(self._get_order_command(settings))
-    commands.append("!READTYPE POLAR")
+        commands.extend([
+          self._get_strip_command(settings),
+          self._get_carriage_speed_command(settings)
+        ])
+    commands.extend([
+        *self._get_shake_commands(settings),
+        self._get_flashes_per_well_command(settings),
+        *self._get_pmt_commands(settings),
+        *self._get_wavelength_commands(settings),
+        *self._get_filter_commands(settings),
+        self._get_calibrate_command(settings),
+        self._get_mode_command(settings),
+        self._get_order_command(settings),
+        self._get_readtype_command(settings)
+    ])
 
     await self._send_commands(commands)
     await self._read_now()
@@ -652,21 +694,27 @@ class MolecularDevicesBackend(PlateReaderBackend):
         emission_wavelengths=emission_wavelengths, cutoff_filters=cutoff_filters,
         cuvette=cuvette,speed_read=False
     )
-    commands = [self._get_clear_command()]
-    commands.append("!READTYPE TIME 0 250")
-    commands.extend(self._get_integration_time_commands(settings, delay_time, integration_time))
+    commands: List[Union[Optional[str], Tuple[str, int]]] = [
+        self._get_clear_command(),
+        self._get_readtype_command(settings),
+        *self._get_integration_time_commands(settings, delay_time, integration_time)
+    ]
     if not cuvette:
         commands.extend(self._get_plate_position_commands(settings))
-        commands.append(self._get_strip_command(settings))
-        commands.append(self._get_carriage_speed_command(settings))
-    commands.extend(self._get_shake_commands(settings))
-    commands.append(self._get_flashes_per_well_command(settings))
-    commands.extend(self._get_pmt_commands(settings))
-    commands.extend(self._get_wavelength_commands(settings))
-    commands.extend(self._get_filter_commands(settings))
-    commands.append(self._get_calibrate_command(settings))
-    commands.append(self._get_mode_command(settings))
-    commands.append(self._get_order_command(settings))
+        commands.extend([
+          self._get_strip_command(settings),
+          self._get_carriage_speed_command(settings)
+        ])
+    commands.extend([
+        *self._get_shake_commands(settings),
+        self._get_flashes_per_well_command(settings),
+        *self._get_pmt_commands(settings),
+        *self._get_wavelength_commands(settings),
+        *self._get_filter_commands(settings),
+        self._get_calibrate_command(settings),
+        self._get_mode_command(settings),
+        self._get_order_command(settings)
+    ])
 
     await self._send_commands(commands)
     await self._read_now()
