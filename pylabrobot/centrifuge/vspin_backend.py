@@ -146,7 +146,7 @@ class VSpinBackend(CentrifugeBackend):
 
   async def setup(self):
     await self.io.setup()
-    # TODO: add functionality where if robot has been intialized before nothing needs to happen
+    # TODO: add functionality where if robot has been initialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
       await self.send(b"\xaa\x00\x21\x01\xff\x21")

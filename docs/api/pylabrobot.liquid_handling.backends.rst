@@ -27,7 +27,7 @@ Hardware
     backends.hamilton.base.HamiltonLiquidHandler
     backends.hamilton.STAR_backend.STAR
     backends.hamilton.vantage_backend.Vantage
-    backends.opentrons_backend.OpentronsBackend
+    backends.opentrons_backend.OpentronsOT2Backend
     backends.tecan.EVO_backend.EVOBackend
 
 Net

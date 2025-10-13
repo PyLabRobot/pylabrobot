@@ -99,7 +99,7 @@ class CytomatBackend(IncubatorBackend):
 
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
-      logging.debug(command_str.encode(self.serial_message_encoding))
+      logger.debug(command_str.encode(self.serial_message_encoding))
       await self.io.write(command_str.encode(self.serial_message_encoding))
       resp = (await self.io.read(128)).decode(self.serial_message_encoding)
       if len(resp) == 0:
@@ -122,7 +122,7 @@ class CytomatBackend(IncubatorBackend):
         await self.reset_error_register()
         raise Exception(f"Unknown cytomat error code in response: {resp}")
 
-      logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
+      logger.error("Command %s received an unknown response: '%s'", command_str, resp)
       await self.reset_error_register()
       raise Exception(f"Unknown response from cytomat: {resp}")
 
@@ -248,7 +248,7 @@ class CytomatBackend(IncubatorBackend):
       if int(action, base=2) == int(action_register_member.value, base=16):
         action_enum = action_register_member
         break
-    assert action_enum is not None, f"Unknown HIGH_LEVEL_COMMANDment value: {action}"
+    assert action_enum is not None, f"Unknown value: {action}"
 
     return ActionRegisterState(target=target_enum, action=action_enum)
 
@@ -271,7 +271,7 @@ class CytomatBackend(IncubatorBackend):
     self, site: PlateHolder
   ) -> OverviewRegisterState:
     """Open lift door, retrieve from transfer, close door, place at storage"""
-    return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
+    return await self.send_action("mv", "ts", self._site_to_firmware_string(site), timeout=120)
 
   async def action_storage_to_transfer(  # used by retrieve_plate
     self, site: PlateHolder

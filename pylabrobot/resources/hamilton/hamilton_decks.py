@@ -80,7 +80,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     def check_z_height(resource: Resource):
       try:
-        z_top = resource.get_absolute_location(z="top").z
+        z_top = resource.get_location_wrt(self, z="top").z
       except NoLocationError:
         # if a resource has no location, we cannot check its z height
         # this is fine, because it's a convenience feature and not critical
@@ -149,8 +149,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
 
-    if rails is not None and not 0 <= rails <= self.num_rails:
-      raise ValueError(f"Rails must be between 0 and {self.num_rails}.")
+    if rails is not None and not -4 <= rails <= self.num_rails:
+      raise ValueError(f"Rails must be between -4 and {self.num_rails}.")
 
     # Check if resource exists.
     if self.has_resource(resource.name):
@@ -295,7 +295,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print rail
       if depth == 0:
-        rails = _rails_for_x_coordinate(resource.get_absolute_location().x)
+        rails = _rails_for_x_coordinate(resource.get_location_wrt(self).x)
         r_summary += f"({rails})".ljust(rail_column_length)
       else:
         r_summary += " " * rail_column_length
@@ -309,7 +309,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print resource location
       try:
-        x, y, z = resource.get_absolute_location()
+        x, y, z = resource.get_location_wrt(self)
         location = f"({x:07.3f}, {y:07.3f}, {z:07.3f})"
       except NoLocationError:
         location = "Undefined"
@@ -334,7 +334,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       return r_summary
 
     # Sort resources by rails, left to right in reality.
-    sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
+    sorted_resources = sorted(self.children, key=lambda r: r.get_location_wrt(self).x)
 
     # Print table body.
     summary_ += print_tree(sorted_resources[0]) + "\n"
@@ -403,7 +403,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       self._trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
       self.assign_child_resource(
         resource=self._trash96,
-        location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=229.0),
+        location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
     if with_teaching_rack:
@@ -452,6 +452,17 @@ class HamiltonSTARDeck(HamiltonDeck):
         "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
       )
     return self._trash96
+
+  def clear(self, include_trash: bool = False):
+    """Clear the deck, removing all resources except the trash areas and the waste block."""
+    children_names = [child.name for child in self.children]
+    for resource_name in children_names:
+      resource = self.get_resource(resource_name)
+      if isinstance(resource, Trash) and not include_trash:
+        continue
+      if resource.name == "waste_block":
+        continue
+      resource.unassign()
 
 
 def STARLetDeck(

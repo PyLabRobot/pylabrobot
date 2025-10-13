@@ -238,6 +238,28 @@ class Resource:
     )
     return parent_pos + rotated_location + rotated_anchor
 
+  def get_location_wrt(
+    self, other: Resource, x: str = "l", y: str = "f", z: str = "b"
+  ) -> Coordinate:
+    """Get the location of this resource with respect to another resource.
+
+    Args:
+      other: The resource to get the location with respect to.
+      x: `"l"`/`"left"`, `"c"`/`"center"`, or `"r"`/`"right"`
+      y: `"b"`/`"back"`, `"c"`/`"center"`, or `"f"`/`"front"`
+      z: `"t"`/`"top"`, `"c"`/`"center"`, or `"b"`/`"bottom"`
+    """
+
+    if not self.is_in_subtree_of(other):
+      raise ValueError(
+        f"Resources '{self.name}' is not in the subtree of '{other.name}'. "
+        "This operation is not currently supported."
+      )
+
+    return self.get_absolute_location(x=x, y=y, z=z) - other.get_absolute_location(
+      x="l", y="f", z="b"
+    )
+
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
     rot_mat = absolute_rotation.get_rotation_matrix()
@@ -800,9 +822,9 @@ class Resource:
     this method might not return the correct value.
     ```
     """
-    heighest_point = self.get_absolute_location(z="t").z
+    highest_point = self.get_absolute_location(z="t").z
     if self.name == "deck":
-      heighest_point = 0
+      highest_point = 0
     for resource in self.children:
-      heighest_point = max(heighest_point, resource.get_highest_known_point())
-    return heighest_point
+      highest_point = max(highest_point, resource.get_highest_known_point())
+    return highest_point

@@ -11,15 +11,52 @@ await lh.aspirate([tube], vols=[300], lld_mode=[STARBackend.LLDMode.GAMMA])
 The `lld_mode` parameter can be one of the following:
 
 - `STARBackend.LLDMode.OFF`: default, no LLD
-- `STARBackend.LLDMode.GAMMA`: capacative LLD
-- `STARBackend.LLDMode.PRESSURE`: pressure LLD
+- `STARBackend.LLDMode.GAMMA`: capacative LLD (cLLD)
+- `STARBackend.LLDMode.PRESSURE`: pressure LLD (pLLD)
 - `STARBackend.LLDMode.DUAL`: both capacative and pressure LLD
 - `STARBackend.LLDMode.Z_TOUCH_OFF`: find the bottom of the container
 
 The `lld_mode` parameter is a list, so you can specify a different LLD mode for each channel.
 
 ```{note}
-The `lld_mode` parameter is only avilable when using the `STAR` backend.
+The `lld_mode` parameter is only available when using the `STAR` backend.
+```
+
+## Going into or out of the liquid
+
+You can use the `immersion_depth` backend kwarg to move the tip with respect to the found liquid surface. A positive value means to go deeper into the liquid, a negative value means to go above the liquid.
+
+Going 1mm below the liquid for aspiration:
+
+```python
+await lh.aspirate(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  immersion_depth=[1])
+```
+
+Going 1mm above the liquid for dispens:
+
+```python
+await lh.dispense(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  immersion_depth=[-1])
+```
+
+## Moving with liquid surface (liquid following)
+
+Through another backend kwarg, `surface_following_distance`, you can move with the liquid:
+
+```python
+await lh.aspirate(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  surface_following_distance=[10],  # 10mm
+)
 ```
 
 ## Catching errors

@@ -554,7 +554,7 @@ class EVOBackend(TecanLiquidHandler):
     )
 
     # TODO check channel positions match resource positions for z-axis
-    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_hight=0)
+    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("MCA not implemented yet")
@@ -576,7 +576,7 @@ class EVOBackend(TecanLiquidHandler):
 
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(
-      pickup.resource, pickup.resource.get_absolute_location(), z_range
+      pickup.resource, pickup.resource.get_location_wrt(self.deck), z_range
     )
     h = int(pickup.resource.get_absolute_size_y() * 10)
 
@@ -609,7 +609,9 @@ class EVOBackend(TecanLiquidHandler):
     """Drop a resource like a plate or a lid using the integrated robotic arm."""
 
     z_range = await self.roma.report_z_param(5)
-    x, y, z = self._roma_positions(drop.resource, drop.resource.get_absolute_location(), z_range)
+    x, y, z = self._roma_positions(
+      drop.resource, drop.resource.get_location_wrt(self.deck), z_range
+    )
     xt, yt, zt = self._roma_positions(drop.resource, drop.destination, z_range)
 
     # move to target
@@ -682,7 +684,7 @@ class EVOBackend(TecanLiquidHandler):
       return int(self._z_range - z + z_off * 10 + tip_length)  # TODO: verify z formula
 
     for i, (op, channel) in enumerate(zip(ops, use_channels)):
-      location = ops[i].resource.get_absolute_location() + op.resource.center()
+      location = ops[i].resource.get_location_wrt(self.deck) + op.resource.center()
       x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
       y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
 
@@ -695,13 +697,13 @@ class EVOBackend(TecanLiquidHandler):
       if isinstance(op, (SingleChannelAspiration, SingleChannelDispense)):
         z_positions["travel"][channel] = round(self._z_traversal_height * 10)
       z_positions["start"][channel] = get_z_position(
-        par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_start, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
       z_positions["dispense"][channel] = get_z_position(
-        par.z_dispense, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_dispense, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
       z_positions["max"][channel] = get_z_position(
-        par.z_max, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_max, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
 
     return x_positions, y_positions, z_positions
@@ -718,7 +720,7 @@ class EVOBackend(TecanLiquidHandler):
       airgap: `lag` for leading airgap, `tag` for trailing airgap.
 
     Returns:
-      pvl: position_valve_logial
+      pvl: position_valve_logical
       sep: set_end_speed_plunger
       ppr: move_plunger_relative
     """
@@ -976,7 +978,7 @@ class LiHa(EVOArm):
     """Position absolute for all LiHa axes.
 
     Args:
-      x: aboslute x position in 1/10 mm, must be in allowed machine range
+      x: absolute x position in 1/10 mm, must be in allowed machine range
       y: absolute y position in 1/10 mm, must be in allowed machine range
       ys: absolute y spacing in 1/10 mm, must be between 90 and 380
       z: absolute z position in 1/10 mm for each channel, must be in
@@ -1179,23 +1181,25 @@ class LiHa(EVOArm):
 
   async def discard_disposable_tip_high(self, tips):
     """Drops tips
-    Discards at the Z-axes initialization hight
+    Discards at the Z-axes initialization height
     Args:
       tips: binary coded tip select
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
 
-  async def _drop_disposable_tip(self, tips, discard_hight):
+  async def _drop_disposable_tip(self, tips, discard_height):
     """Drops tips
     Discards at a variable Z-axis initialization height
 
     Args:
       tips: binary coded tip select
-      discard_hight: binary. 0 above tip rack, 1 in tip rack
+      discard_height: binary. 0 above tip rack, 1 in tip rack
     """
 
-    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
+    await self.backend.send_command(
+      module=self.module, command="AST", params=[tips, discard_height]
+    )
 
 
 class Mca(EVOArm):
@@ -1307,11 +1311,11 @@ class RoMa(EVOArm):
 
     Args:
       v: vector to be defined, must be between 1 and 100
-      x: aboslute x position in 1/10 mm
-      y: aboslute y position in 1/10 mm
-      z: aboslute z position in 1/10 mm
-      r: aboslute r position in 1/10 mm
-      g: aboslute g position in 1/10 mm
+      x: absolute x position in 1/10 mm
+      y: absolute y position in 1/10 mm
+      z: absolute z position in 1/10 mm
+      r: absolute r position in 1/10 mm
+      g: absolute g position in 1/10 mm
       speed: speed select, 0 - slow, 1 - fast
       tw: target window class, set with STW
 

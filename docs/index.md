@@ -26,6 +26,38 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 ```
 <hr>
 
+## Supported by
+
+```{image} /img/supported_by/logo_inheco.png
+:alt: Inheco
+:class: company
+:target: https://www.inheco.com/
+```
+
+```{image} /img/supported_by/logo_tek-matic.png
+:alt: Tek-Matic
+:class: company
+:target: https://www.tekmatic.com
+```
+
+```{image} /img/supported_by/logo_westportal.jpg
+:alt: West Portal Scientific
+:class: company
+:target: https://www.westportalsci.com
+```
+
+```{image} /img/supported_by/logo_byonoy.svg
+:alt: Byonoy
+:class: company
+:target: https://byonoy.com
+```
+
+```{image} /img/supported_by/logo_nugget.png
+:alt: Nugget
+:class: company
+:target: https://www.nuggetscientific.com
+```
+
 ## Used by
 
 ```{image} /img/used_by/logo_mit.jpg
@@ -79,6 +111,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :alt: UKM Biofoundry
 :class: company
 :target: https://www.ukm.my/inbiosis/en/ukm-biofoundry/
+```
+
+```{image} /img/used_by/logo_sanofi.png
+:alt: Sanofi
+:class: company
+:target: https://www.sanofi.com
 ```
 
 ```{raw} html

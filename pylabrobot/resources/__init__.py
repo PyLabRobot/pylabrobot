@@ -1,5 +1,6 @@
 # labware manufacturers and suppliers
 from .agenbio import *
+from .agilent import *
 from .alpaqua import *
 from .azenta import *
 from .biorad import *
@@ -26,6 +27,7 @@ from .itemized_resource import ItemizedResource
 from .liquid import Liquid
 from .nest import *
 from .opentrons import *
+from .perkin_elmer import *
 from .petri_dish import PetriDish, PetriDishHolder
 from .plate import Lid, Plate
 from .plate_adapter import PlateAdapter

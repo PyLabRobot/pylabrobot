@@ -39,9 +39,10 @@ class Shaker(ResourceHolder, Machine):
 
     Args:
       speed: Speed of shaking in revolutions per minute (RPM)
-      duration: Duration of shaking in seconds. If None, shake indefinitely.
+      duration: Duration of shaking in seconds. If None, shake indefinitely (and return immediately).
     """
-    await self.backend.lock_plate()
+    if self.backend.supports_locking:
+      await self.backend.lock_plate()
     await self.backend.shake(speed=speed, **backend_kwargs)
 
     if duration is None:
@@ -49,7 +50,8 @@ class Shaker(ResourceHolder, Machine):
 
     await asyncio.sleep(duration)
     await self.backend.stop_shaking()
-    await self.backend.unlock_plate()
+    if self.backend.supports_locking:
+      await self.backend.unlock_plate()
 
   async def stop_shaking(self):
     await self.backend.stop_shaking()
