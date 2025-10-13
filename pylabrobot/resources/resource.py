@@ -226,7 +226,7 @@ class Resource:
       )
     )
 
-    if self.parent is None:
+    if self.parent is None or self.parent.location is None:
       return self.location + rotated_anchor
 
     parent_pos = self.parent.get_absolute_location()
