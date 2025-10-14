@@ -13,3 +13,4 @@ from pylabrobot.heating_shaking.inheco.thermoshake import (
   inheco_thermoshake_rm,
 )
 from pylabrobot.heating_shaking.inheco.thermoshake_backend import InhecoThermoshakeBackend
+from pylabrobot.heating_shaking.bioshake_backend import BioShake
