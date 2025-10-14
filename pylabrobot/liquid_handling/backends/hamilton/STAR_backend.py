@@ -4987,23 +4987,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if deck_size == STARLET_SIZE_X:
       xs = 7975  # 1360-797.5 = 562.5 (distance to right edge of deck)
     elif deck_size == STAR_SIZE_X:
-      xs = 13375 #13385  # 1900-1337.5 = 562.5 (distance to right edge of deck)
+      xs = 13375  # 1900-1337.5 = 562.5 (distance to right edge of deck)
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
 
-    channel_x_coord = round(xs+self.core_adjustment.x*10)
-    back_channel_y_coord = round(1250+self.core_adjustment.y*10)
-    front_channel_y_coord = round(1070+self.core_adjustment.y*10)
-    begin_z_coord = round(2350+self.core_adjustment.z*10)
-    end_z_coord = round(2250+self.core_adjustment.z*10)
+    channel_x_coord = round(xs + self.core_adjustment.x * 10)
+    back_channel_y_center = round(1250 + self.core_adjustment.y * 10)
+    front_channel_y_center = round(1070 + self.core_adjustment.y * 10)
+    begin_z_coord = round(2350 + self.core_adjustment.z * 10)
+    end_z_coord = round(2250 + self.core_adjustment.z * 10)
 
     command_output = await self.send_command(
       module="C0",
       command="ZT",
       xs=f"{channel_x_coord:05}",
       xd="0",
-      ya=f"{back_channel_y_coord:04}",
-      yb=f"{front_channel_y_coord:04}",
+      ya=f"{back_channel_y_center:04}",
+      yb=f"{front_channel_y_center:04}",
       pa=f"{p1:02}",
       pb=f"{p2:02}",
       tp=f"{begin_z_coord:04}",
@@ -5028,19 +5028,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
 
-    channel_x_coord = round(xs+self.core_adjustment.x*10)
-    back_channel_y_coord = round(1240+self.core_adjustment.y*10)
-    front_channel_y_coord = round(1065+self.core_adjustment.y*10)
-    begin_z_coord = round(2150+self.core_adjustment.z*10)
-    end_z_coord = round(2050+self.core_adjustment.z*10)
+    channel_x_coord = round(xs + self.core_adjustment.x * 10)
+    back_channel_y_center = round(1240 + self.core_adjustment.y * 10)
+    front_channel_y_center = round(1065 + self.core_adjustment.y * 10)
+    begin_z_coord = round(2150 + self.core_adjustment.z * 10)
+    end_z_coord = round(2050 + self.core_adjustment.z * 10)
 
     command_output = await self.send_command(
       module="C0",
       command="ZS",
       xs=f"{channel_x_coord:05}",
       xd="0",
-      ya=f"{back_channel_y_coord:04}",
-      yb=f"{front_channel_y_coord:04}",
+      ya=f"{back_channel_y_center:04}",
+      yb=f"{front_channel_y_center:04}",
       tp=f"{begin_z_coord:04}",
       tz=f"{end_z_coord:04}",
       th=round(self._iswap_traversal_height * 10),
