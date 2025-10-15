@@ -52,6 +52,7 @@ from pylabrobot.liquid_handling.utils import (
 )
 from pylabrobot.resources import (
   Carrier,
+  Container,
   Coordinate,
   Plate,
   Resource,
@@ -1607,7 +1608,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def probe_liquid_heights(
     self,
-    resources: List[Resource],
+    containers: List[Container],
     use_channels: List[int],
     tips: List[HamiltonTip],
     resource_offsets: Optional[List[Coordinate]] = None,
@@ -1618,14 +1619,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns the liquid height in each well in mm with respect to the bottom of the container cavity.
     """
 
-    if any(not resource.supports_compute_height_volume_functions() for resource in resources):
+    if any(not resource.supports_compute_height_volume_functions() for resource in containers):
       raise ValueError(
         "automatic_surface_following can only be used with containers that support height<->volume functions."
       )
 
-    resource_offsets = resource_offsets or [Coordinate.zero()] * len(resources)
+    resource_offsets = resource_offsets or [Coordinate.zero()] * len(containers)
 
-    assert len(resources) == len(use_channels) == len(resource_offsets) == len(tips)
+    assert len(containers) == len(use_channels) == len(resource_offsets) == len(tips)
 
     # if the liquid height is not specified, we need to detect it using CLLD
     async def try_clld(channel, container, tip):
@@ -1650,7 +1651,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Check if all channels are on the same x position, then move there
     x_pos = [
       resource.get_location_wrt(self.deck, x="c", y="c", z="b").x + offset.x
-      for resource, offset in zip(resources, resource_offsets)
+      for resource, offset in zip(containers, resource_offsets)
     ]
     if len(set(x_pos)) > 1:
       raise NotImplementedError(
@@ -1661,7 +1662,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # move channels to above their y positions
     y_pos = [
       resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + offset.y
-      for resource, offset in zip(resources, resource_offsets)
+      for resource, offset in zip(containers, resource_offsets)
     ]
     await self.position_channels_in_y_direction(
       {channel: y for channel, y in zip(use_channels, y_pos)}
@@ -1671,14 +1672,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_absolute_liquid_heights = await asyncio.gather(
       *[
         try_clld(channel, resource, tip)
-        for channel, resource, tip in zip(use_channels, resources, tips)
+        for channel, resource, tip in zip(use_channels, containers, tips)
       ]
     )
 
     relative_to_well = [
       current_absolute_liquid_heights[i]
       - resource.get_absolute_location("c", "c", "cavity_bottom").z
-      for i, resource in enumerate(resources)
+      for i, resource in enumerate(containers)
     ]
 
     if move_to_z_safety_after:
@@ -1936,9 +1937,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if probe_liquid_height:
       liquid_heights = await self.probe_liquid_heights(
-        resources=[op.resource for op in ops],
+        containers=[op.resource for op in ops],
         use_channels=use_channels,
-        tips=[op.tip for op in ops],
+        tips=[cast(HamiltonTip, op.tip) for op in ops],
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
       )
@@ -2255,9 +2256,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if probe_liquid_height:
       liquid_heights = await self.probe_liquid_heights(
-        resources=[op.resource for op in ops],
+        containers=[op.resource for op in ops],
         use_channels=use_channels,
-        tips=[op.tip for op in ops],
+        tips=[cast(HamiltonTip, op.tip) for op in ops],
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
       )
