@@ -1350,11 +1350,6 @@ class LiquidHandler(Resource, Machine):
         destination resource and the volume to dispense to that resource.
     """
 
-    if len(operations) > self.backend.num_channels:
-      raise ValueError("Number of source resources exceeds number of channels.")
-
-    use_channels = list(range(len(operations)))
-
     if isinstance(tip_spots, list) and len(tip_spots) < len(operations):
       raise ValueError(
         "Number of tip spots must be at least the number of channels, "
@@ -1363,16 +1358,6 @@ class LiquidHandler(Resource, Machine):
     if hasattr(tip_spots, "__aiter__") and hasattr(tip_spots, "__anext__"):
       tip_spots = [await tip_spots.__anext__() for _ in operations]  # type: ignore
     assert isinstance(tip_spots, list)
-
-    await self.pick_up_tips(tip_spots, use_channels=use_channels)
-
-    # Aspirate from all source resources
-    await self.aspirate(
-      resources=list(operations.keys()),
-      vols=[sum(v for _, v in dests) + dead_volume for dests in operations.values()],
-      use_channels=use_channels,
-      **(aspiration_kwargs or {}),
-    )
 
     for source, dests in operations.items():
       for i, (dest, vol) in enumerate(dests):
@@ -1383,25 +1368,43 @@ class LiquidHandler(Resource, Machine):
             raise ValueError("Destination list cannot be empty.")
           operations[source][i] = (dest[0], vol)
 
-    for group in zip_longest(*operations.values()):
-      dest, vols, channels = zip(
-        *(
-          (pair[0], pair[1], ch)
-          for pair, ch in zip_longest(group, use_channels)
-          if pair is not None
-        )
-      )
-      await self.dispense(
-        resources=list(dest),
-        vols=list(vols),
-        use_channels=list(channels),
-        **(dispense_kwargs or {}),
+    operations_list = list(operations.items())
+    for batch in range(0, len(operations_list), self.backend.num_channels):
+      batch_operations = operations_list[batch : batch + self.backend.num_channels]
+      batch_tips = tip_spots[batch : batch + self.backend.num_channels]
+      batch_sources = [src for src, _ in batch_operations]
+      batch_destinations = [dest for _, dest in batch_operations]
+      batch_volumes = [sum(v for _, v in dests) + dead_volume for dests in batch_destinations]
+      use_channels = list(range(len(batch_operations)))
+
+      await self.pick_up_tips(batch_tips)
+
+      # Aspirate from all source resources
+      await self.aspirate(
+        resources=batch_sources,
+        vols=batch_volumes,
+        **(aspiration_kwargs or {}),
       )
 
-    if tip_drop_method == "return":
-      await self.return_tips(use_channels=use_channels)
-    else:
-      await self.discard_tips(use_channels=use_channels)
+      for group in zip_longest(*batch_destinations):
+        dest, vols, channels = zip(
+          *(
+            (pair[0], pair[1], ch)
+            for pair, ch in zip_longest(group, use_channels)
+            if pair is not None
+          )
+        )
+        await self.dispense(
+          resources=list(dest),
+          vols=list(vols),
+          use_channels=list(channels),
+          **(dispense_kwargs or {}),
+        )
+
+      if tip_drop_method == "return":
+        await self.return_tips()
+      else:
+        await self.discard_tips()
 
   @contextlib.contextmanager
   def use_channels(self, channels: List[int]):
