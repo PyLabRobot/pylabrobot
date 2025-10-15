@@ -1199,6 +1199,8 @@ class Cytation5Backend(ImageReaderBackend):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
+    await self.set_plate(plate)
+
     if not self._acquiring:
       self.start_acquisition()
 
