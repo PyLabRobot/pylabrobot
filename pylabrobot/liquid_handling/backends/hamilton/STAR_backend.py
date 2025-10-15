@@ -1605,6 +1605,87 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     DUAL = 3
     Z_TOUCH_OFF = 4
 
+  async def probe_liquid_heights(
+    self,
+    resources: List[Resource],
+    use_channels: List[int],
+    tips: List[HamiltonTip],
+    resource_offsets: Optional[List[Coordinate]] = None,
+    move_to_z_safety_after: bool = True,
+  ):
+    """Probe liquid heights for the specified channels.
+
+    Returns the liquid height in each well in mm with respect to the bottom of the container cavity.
+    """
+
+    if any(not resource.supports_compute_height_volume_functions() for resource in resources):
+      raise ValueError(
+        "automatic_surface_following can only be used with containers that support height<->volume functions."
+      )
+
+    resource_offsets = resource_offsets or [Coordinate.zero()] * len(resources)
+
+    assert len(resources) == len(use_channels) == len(resource_offsets) == len(tips)
+
+    # if the liquid height is not specified, we need to detect it using CLLD
+    async def try_clld(channel, container, tip):
+      try:
+        return await self.clld_probe_z_height_using_channel(
+          channel_idx=channel,
+          move_channels_to_save_pos_after=False,
+          lowest_immers_pos=container.get_absolute_location("c", "c", "cavity_bottom").z
+          + tip.total_tip_length
+          - tip.fitting_depth,
+          start_pos_search=container.get_absolute_location("c", "c", "t").z
+          + tip.total_tip_length
+          - tip.fitting_depth
+          + 5,
+        )
+      except STARFirmwareError as e:
+        print(f"Channel {channel} in well {container.name} failed: {e}")
+        return None
+
+    await self.move_all_channels_in_z_safety()
+
+    # Check if all channels are on the same x position, then move there
+    x_pos = [
+      resource.get_location_wrt(self.deck, x="c", y="c", z="b").x + offset.x
+      for resource, offset in zip(resources, resource_offsets)
+    ]
+    if len(set(x_pos)) > 1:
+      raise NotImplementedError(
+        "automatic_surface_following is not supported for multiple x positions."
+      )
+    await self.move_channel_x(0, x_pos[0])
+
+    # move channels to above their y positions
+    y_pos = [
+      resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + offset.y
+      for resource, offset in zip(resources, resource_offsets)
+    ]
+    await self.position_channels_in_y_direction(
+      {channel: y for channel, y in zip(use_channels, y_pos)}
+    )
+
+    # detect liquid heights
+    current_absolute_liquid_heights = await asyncio.gather(
+      *[
+        try_clld(channel, resource, tip)
+        for channel, resource, tip in zip(use_channels, resources, tips)
+      ]
+    )
+
+    relative_to_well = [
+      current_absolute_liquid_heights[i]
+      - resource.get_absolute_location("c", "c", "cavity_bottom").z
+      for i, resource in enumerate(resources)
+    ]
+
+    if move_to_z_safety_after:
+      await self.move_all_channels_in_z_safety()
+
+    return relative_to_well
+
   async def aspirate(
     self,
     ops: List[SingleChannelAspiration],
@@ -1644,7 +1725,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     liquid_surfaces_no_lld: Optional[List[float]] = None,
     # PLR:
-    automatic_surface_following: Optional[List[bool]] = None,
+    probe_liquid_height: bool = False,
     # remove >2026-01
     mix_volume: Optional[List[float]] = None,
     mix_cycles: Optional[List[int]] = None,
@@ -1701,7 +1782,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       hamilton_liquid_classes: Override the default liquid classes. See pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
       liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0 and 360. Defaults to well bottom + liquid height. Should use absolute z.
 
-      automatic_surface_following: PLR-specific parameter. If True, surface_following_distance will be automatically adjusted based on the detected liquid height and the height->volume function of the Container. `lld_mode` must not be SET for this parameter to be used.
+      probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -1760,9 +1841,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     well_bottoms = [
       op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
-    ]
-    liquid_surfaces_no_lld = liquid_surfaces_no_lld or [
-      wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)
     ]
     if lld_search_height is None:
       lld_search_height = [
@@ -1856,65 +1934,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
     immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
 
-    if automatic_surface_following is None:
-      automatic_surface_following = [False] * n
-
-    if any(automatic_surface_following):
-      channels_with_automatic_surface_following = [
-        use_channels[i] for i in range(n) if automatic_surface_following[i]
-      ]
-
-      containers = [op.resource for op in ops]
-      if any(
-        not containers[i].supports_compute_volume_from_height()
-        for i in range(n)
-        if automatic_surface_following[i]
-      ):
-        raise ValueError(
-          "automatic_surface_following can only be used with containers that support compute_volume_from_height()."
-        )
-
-      # move channels to above their positions
-      await self.position_channels_in_y_direction(
-        {channel: y for channel, y in zip(use_channels, y_positions)}
+    if probe_liquid_height:
+      liquid_heights = await self.probe_liquid_heights(
+        resources=[op.resource for op in ops],
+        use_channels=use_channels,
+        tips=[op.tip for op in ops],
+        resource_offsets=[op.offset for op in ops],
+        move_to_z_safety_after=False,
       )
 
-      # detect liquid heights
-      current_liquid_heights = await asyncio.gather(
-        *[
-          self.clld_probe_z_height_using_channel(
-            channel_idx=channel, move_channels_to_save_pos_after=False
-          )
-          for channel in use_channels
-        ]
-      )
+      # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
+      minimum_traverse_height_at_beginning_of_a_command = 100
+      logger.info(f"Detected liquid heights: {liquid_heights}")
+    else:
+      liquid_heights = [op.liquid_height or 0 for op in ops]
 
-      current_volumes = [
-        container.compute_volume_from_height(height=lh)
-        for container, lh in zip(containers, current_liquid_heights)
-      ]
-
-      # compute new liquid_height after aspiration
-      after_aspiration_liquid_heights = [
-        op.resource.compute_height_from_volume(volume - op.volume)
-        for volume, op in zip(current_volumes, ops)
-      ]
-
-      # compute new surface_following_distance
-      surface_following_distance = [
-        (after_aspiration_liquid_heights[i] - current_liquid_heights[i])
-        if automatic_surface_following[i]
-        else surface_following_distance[i]
-        for i in range(n)
-      ]
-
-      # check if the surface_following_distance would fall below the minimum height
-      for i in range(n):
-        if (well_bottoms[i] + surface_following_distance[i]) < minimum_height[i]:
-          raise ValueError(
-            f"automatic_surface_following would result in a surface_following_distance that goes below the minimum_height. "
-            f"Well bottom: {well_bottoms[i]}, surface_following_distance: {surface_following_distance[i]}, minimum_height: {minimum_height[i]}"
-          )
+    liquid_surfaces_no_lld = liquid_surfaces_no_lld or [
+      wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
+    ]
 
     try:
       return await self.aspirate_pip(
@@ -2013,6 +2050,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
     empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
+    # PLR specific
+    probe_liquid_height: bool = False,
     # remove  in the future
     immersion_depth_direction: Optional[List[int]] = None,
     mix_volume: Optional[List[float]] = None,
@@ -2067,6 +2106,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       empty: Whether to use "empty" dispense mode for each dispense. Defaults to `False` for all.
         Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
         documentation. Dispense mode 4.
+
+      probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
     """
 
     n = len(ops)
@@ -2140,9 +2181,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       op.resource.get_location_wrt(self.deck).z + op.offset.z + op.resource.material_z_thickness
       for op in ops
     ]
-    liquid_surfaces_no_lld = liquid_surface_no_lld or [
-      ls + (op.liquid_height or 0) for ls, op in zip(well_bottoms, ops)
-    ]
     if lld_search_height is None:
       lld_search_height = [
         (
@@ -2214,6 +2252,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_speed = [op.mix.flow_rate if op.mix is not None else 1.0 for op in ops]
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
+
+    if probe_liquid_height:
+      liquid_heights = await self.probe_liquid_heights(
+        resources=[op.resource for op in ops],
+        use_channels=use_channels,
+        tips=[op.tip for op in ops],
+        resource_offsets=[op.offset for op in ops],
+        move_to_z_safety_after=False,
+      )
+
+      # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
+      minimum_traverse_height_at_beginning_of_a_command = 100
+      logger.info(f"Detected liquid heights: {liquid_heights}")
+    else:
+      liquid_heights = [op.liquid_height or 0 for op in ops]
+
+    liquid_surfaces_no_lld = liquid_surface_no_lld or [
+      wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
+    ]
 
     try:
       ret = await self.dispense_pip(
@@ -7921,17 +7978,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       channel_idx: The index of the channel to use for probing. Backmost channel = 0.
-      lowest_immers_pos: The lowest immersion position in mm.
-      start_pos_lld_search: The start position for z-touch search in mm.
+      lowest_immers_pos: The lowest immersion position in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
+      start_pos_lld_search: The start position for z-touch search in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
       channel_speed: The speed of channel movement in mm/sec.
       channel_acceleration: The acceleration of the channel in mm/sec**2.
       detection_edge: The edge steepness at capacitive LLD detection.
       detection_drop: The offset after capacitive LLD edge detection.
-      post_detection_trajectory (0, 1): Movement of the channel up (1) or down (0) after
-        contacting the surface.
+      post_detection_trajectory (0, 1): Movement of the channel up (1) or down (0) after contacting the surface.
       post_detection_dist: Distance to move into the trajectory after detection in mm.
-      move_channels_to_save_pos_after: Flag to move channels to a safe position after
-       operation.
+      move_channels_to_save_pos_after: Flag to move channels to a safe position after operation.
 
     Returns:
       The detected Z-height in mm.
@@ -7972,26 +8027,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f" and {STARBackend.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
     )
 
-    lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
-    start_pos_search_str = f"{start_pos_search_increments:05}"
-    channel_speed_str = f"{channel_speed_increments:05}"
-    channel_acc_str = f"{channel_acceleration_thousand_increments:03}"
-    detection_edge_str = f"{detection_edge:04}"
-    detection_drop_str = f"{detection_drop:04}"
-    post_detection_dist_str = f"{post_detection_dist_increments:04}"
-
     try:
       await self.send_command(
         module=STARBackend.channel_id(channel_idx),
         command="ZL",
-        zh=lowest_immers_pos_str,  # Lowest immersion position [increment]
-        zc=start_pos_search_str,  # Start position of LLD search [increment]
-        zl=channel_speed_str,  # Speed of channel movement
-        zr=channel_acc_str,  # Acceleration [1000 increment/second^2]
-        gt=detection_edge_str,  # Edge steepness at capacitive LLD detection
-        gl=detection_drop_str,  # Offset after capacitive LLD edge detection
+        zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
+        zc=f"{start_pos_search_increments:05}",  # Start position of LLD search [increment]
+        zl=f"{channel_speed_increments:05}",  # Speed of channel movement
+        zr=f"{channel_acceleration_thousand_increments:03}",  # Acceleration [1000 increment/second^2]
+        gt=f"{detection_edge:04}",  # Edge steepness at capacitive LLD detection
+        gl=f"{detection_drop:04}",  # Offset after capacitive LLD edge detection
         zj=post_detection_trajectory,  # Movement of the channel after contacting surface
-        zi=post_detection_dist_str,  # Distance to move up after detection [increment]
+        zi=f"{post_detection_dist_increments:04}",  # Distance to move up after detection [increment]
       )
     except STARFirmwareError:
       await self.move_all_channels_in_z_safety()
@@ -8314,7 +8361,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError("Channel N would hit the front of the robot")
 
     if not all(
-      int((channel_locations[i] - channel_locations[i + 1]) * 1000) >= 8_999  # float fixing
+      round((channel_locations[i] - channel_locations[i + 1]) * 1000) >= 8_990  # float fixing
       for i in range(len(channel_locations) - 1)
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
