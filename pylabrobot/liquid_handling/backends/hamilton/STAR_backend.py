@@ -1984,12 +1984,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
 
     # check if the surface_following_distance would fall below the minimum height
-    for i in range(n):
-      if (liquid_heights[i] - surface_following_distance[i]) < minimum_height[i]:
-        raise ValueError(
-          f"automatic_surface_following would result in a surface_following_distance that goes below the minimum_height. "
-          f"Well bottom: {well_bottoms[i]}, surface_following_distance: {surface_following_distance[i]}, minimum_height: {minimum_height[i]}"
-        )
+    if any(
+      ops[i].resource.get_absolute_location(z="cavity_bottom").z
+      + liquid_heights[i]
+      - surface_following_distance[i]
+      < minimum_height[i]
+      for i in range(n)
+    ):
+      raise ValueError(
+        f"automatic_surface_following would result in a surface_following_distance that goes below the minimum_height. "
+        f"Well bottom: {well_bottoms[i]}, surface_following_distance: {surface_following_distance[i]}, minimum_height: {minimum_height[i]}"
+      )
 
     try:
       return await self.aspirate_pip(
