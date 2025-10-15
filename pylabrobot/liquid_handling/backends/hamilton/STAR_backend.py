@@ -1613,10 +1613,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tips: List[HamiltonTip],
     resource_offsets: Optional[List[Coordinate]] = None,
     move_to_z_safety_after: bool = True,
-  ):
+  ) -> List[float]:
     """Probe liquid heights for the specified channels.
 
+    Moves the channels to the x and y positions of the containers, then probes the liquid height
+    using the CLLD function.
+
     Returns the liquid height in each well in mm with respect to the bottom of the container cavity.
+    Returns `None` for channels where the liquid height could not be determined.
     """
 
     if any(not resource.supports_compute_height_volume_functions() for resource in containers):
@@ -1627,24 +1631,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resource_offsets = resource_offsets or [Coordinate.zero()] * len(containers)
 
     assert len(containers) == len(use_channels) == len(resource_offsets) == len(tips)
-
-    # if the liquid height is not specified, we need to detect it using CLLD
-    async def try_clld(channel, container, tip):
-      try:
-        return await self.clld_probe_z_height_using_channel(
-          channel_idx=channel,
-          move_channels_to_save_pos_after=False,
-          lowest_immers_pos=container.get_absolute_location("c", "c", "cavity_bottom").z
-          + tip.total_tip_length
-          - tip.fitting_depth,
-          start_pos_search=container.get_absolute_location("c", "c", "t").z
-          + tip.total_tip_length
-          - tip.fitting_depth
-          + 5,
-        )
-      except STARFirmwareError as e:
-        print(f"Channel {channel} in well {container.name} failed: {e}")
-        return None
 
     await self.move_all_channels_in_z_safety()
 
@@ -1671,8 +1657,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # detect liquid heights
     current_absolute_liquid_heights = await asyncio.gather(
       *[
-        try_clld(channel, resource, tip)
-        for channel, resource, tip in zip(use_channels, containers, tips)
+        self.clld_probe_z_height_using_channel(
+          channel_idx=channel,
+          move_channels_to_save_pos_after=False,
+          lowest_immers_pos=container.get_absolute_location("c", "c", "cavity_bottom").z
+          + tip.total_tip_length
+          - tip.fitting_depth,
+          start_pos_search=container.get_absolute_location("c", "c", "t").z
+          + tip.total_tip_length
+          - tip.fitting_depth
+          + 5,
+        )
+        for channel, container, tip in zip(use_channels, containers, tips)
       ]
     )
 
@@ -1936,6 +1932,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
 
     if probe_liquid_height:
+      if any(op.liquid_height is not None for op in ops):
+        raise ValueError("Cannot use probe_liquid_height when liquid heights are set.")
+
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
@@ -2255,6 +2254,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
     if probe_liquid_height:
+      if any(op.liquid_height is not None for op in ops):
+        raise ValueError("Cannot use probe_liquid_height when liquid heights are set.")
+
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
@@ -2286,7 +2288,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         second_section_height=[round(sh * 10) for sh in second_section_height],
         second_section_ratio=[round(sr * 10) for sr in second_section_ratio],
         minimum_height=[round(mh * 10) for mh in minimum_height],
-        immersion_depth=[round(id_ * 10) for id_ in immersion_depth],  # [0, 0]
+        immersion_depth=[round(id_ * 10) for id_ in immersion_depth],
         immersion_depth_direction=immersion_depth_direction,
         surface_following_distance=[round(sfd * 10) for sfd in surface_following_distance],
         dispense_speed=[round(fr * 10) for fr in flow_rates],
