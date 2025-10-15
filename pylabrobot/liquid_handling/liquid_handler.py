@@ -12,7 +12,6 @@ import warnings
 from itertools import zip_longest
 from typing import (
   Any,
-  AsyncGenerator,
   AsyncIterator,
   Awaitable,
   Callable,
@@ -66,7 +65,6 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.tilting.tilter import Tilter
-from pylabrobot.utils.list import batched
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -1330,8 +1328,12 @@ class LiquidHandler(Resource, Machine):
 
   async def distribute(
     self,
-    operations: Dict[Container, List[Tuple[Container, float]]],
+    operations: Dict[Container, List[Tuple[Union[Container, List[Container]], float]]],
+    tip_spots: Union[List[TipSpot], AsyncIterator[TipSpot]],
     dead_volume: float = 10,
+    tip_drop_method: Literal["return", "discard"] = "discard",
+    aspiration_kwargs: Optional[Dict[str, Any]] = None,
+    dispense_kwargs: Optional[Dict[str, Any]] = None,
   ):
     """
     Distribute liquid from one resource to multiple resources.
@@ -1353,12 +1355,33 @@ class LiquidHandler(Resource, Machine):
 
     use_channels = list(range(len(operations)))
 
+    if isinstance(tip_spots, list) and len(tip_spots) < len(operations):
+      raise ValueError(
+        "Number of tip spots must be at least the number of channels, "
+        f"but got {len(tip_spots)} tip spots and {len(operations)} distributions."
+      )
+    if hasattr(tip_spots, "__aiter__") and hasattr(tip_spots, "__anext__"):
+      tip_spots = [await tip_spots.__anext__() for _ in operations]  # type: ignore
+    assert isinstance(tip_spots, list)
+
+    await self.pick_up_tips(tip_spots, use_channels=use_channels)
+
     # Aspirate from all source resources
     await self.aspirate(
       resources=list(operations.keys()),
       vols=[sum(v for _, v in dests) + dead_volume for dests in operations.values()],
       use_channels=use_channels,
+      **(aspiration_kwargs or {}),
     )
+
+    for source, dests in operations.items():
+      for i, (dest, vol) in enumerate(dests):
+        if isinstance(dest, list):
+          if len(dest) > 1:
+            raise ValueError("Only one destination per dispense operation is supported.")
+          if len(dest) == 0:
+            raise ValueError("Destination list cannot be empty.")
+          operations[source][i] = (dest[0], vol)
 
     for group in zip_longest(*operations.values()):
       dest, vols, channels = zip(
@@ -1372,7 +1395,13 @@ class LiquidHandler(Resource, Machine):
         resources=list(dest),
         vols=list(vols),
         use_channels=list(channels),
+        **(dispense_kwargs or {}),
       )
+
+    if tip_drop_method == "return":
+      await self.return_tips(use_channels=use_channels)
+    else:
+      await self.discard_tips(use_channels=use_channels)
 
   @contextlib.contextmanager
   def use_channels(self, channels: List[int]):
