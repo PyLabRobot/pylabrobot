@@ -85,7 +85,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.left_pipette: Optional[Dict[str, str]] = None
     self.right_pipette: Optional[Dict[str, str]] = None
 
-    self.traversal_height = 170  # test
+    self.traversal_height = 120  # test
     self._tip_racks: Dict[str, int] = {}  # tip_rack.name -> slot index
     self._plr_name_to_load_name: Dict[str, str] = {}
 
@@ -202,8 +202,9 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
       ),
       "cornerOffsetFromSlot": {
         "x": 0,
-        "y": ot_slot_size_y - tip_rack.get_absolute_size_y(), # hinges push it to the back (PLR is LFB, OT is LBB)
-        "z": 0
+        "y": ot_slot_size_y
+        - tip_rack.get_absolute_size_y(),  # hinges push it to the back (PLR is LFB, OT is LBB)
+        "z": 0,
       },
       "dimensions": {
         "xDimension": tip_rack.get_absolute_size_x(),
