@@ -1960,6 +1960,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           "To use auto_surface_following_distance all liquid heights must be set or probe_liquid_height must be True."
         )
 
+      if any(not op.resource.supports_compute_height_volume_functions() for op in ops):
+        raise ValueError(
+          "automatic_surface_following can only be used with containers that support height<->volume functions."
+        )
+
       current_volumes = [
         op.resource.compute_volume_from_height(liquid_heights[i]) for i, op in enumerate(ops)
       ]
