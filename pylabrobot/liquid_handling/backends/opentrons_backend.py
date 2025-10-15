@@ -174,6 +174,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     return None
 
   async def _assign_tip_rack(self, tip_rack: TipRack, tip: Tip):
+    ot_slot_size_y = 86
     lw = {
       "schemaVersion": 2,
       "version": 1,
@@ -199,7 +200,11 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         [self.get_ot_name(tip_spot.name) for tip_spot in tip_rack.get_all_items()],
         (tip_rack.num_items_x, tip_rack.num_items_y),
       ),
-      "cornerOffsetFromSlot": {"x": 0, "y": 0, "z": 0},
+      "cornerOffsetFromSlot": {
+        "x": 0,
+        "y": ot_slot_size_y - tip_rack.get_absolute_size_y(), # hinges push it to the back (PLR is LFB, OT is LBB)
+        "z": 0
+      },
       "dimensions": {
         "xDimension": tip_rack.get_absolute_size_x(),
         "yDimension": tip_rack.get_absolute_size_y(),
@@ -276,8 +281,6 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if tip_rack.name not in self._tip_racks:
       await self._assign_tip_rack(tip_rack, op.tip)
 
-    # ad-hoc offset adjustment that makes it smoother.
-    # TODO: is this needed?
     offset_z += op.tip.total_tip_length
 
     ot_api.lh.pick_up_tip(
