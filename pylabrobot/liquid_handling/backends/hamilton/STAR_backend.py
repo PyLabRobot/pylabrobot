@@ -1643,11 +1643,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     min_z_endpos: Optional[float] = None,
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     liquid_surfaces_no_lld: Optional[List[float]] = None,
-    # remove > 2026-01
-    immersion_depth_direction: Optional[List[int]] = None,
+    # PLR:
+    automatic_surface_following: Optional[List[bool]] = None,
+    # remove >2026-01
     mix_volume: Optional[List[float]] = None,
     mix_cycles: Optional[List[int]] = None,
     mix_speed: Optional[List[float]] = None,
+    immersion_depth_direction: Optional[List[int]] = None,
   ):
     """Aspirate liquid from the specified channels.
 
@@ -1667,9 +1669,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       pull_out_distance_transport_air: The distance to pull out when aspirating air, if LLD is
         disabled.
       second_section_height: The height to start the second section of aspiration.
-      second_section_ratio: The ratio of [the bottom of the container * 10000] / [the height top of the container].
-      minimum_height: The minimum height to move to, this is the end of aspiration. The channel
-       will move linearly from the liquid surface to this height over the course of the aspiration.
+      second_section_ratio:
+      minimum_height: The minimum height to move to, this is the end of aspiration. The channel will move linearly from the liquid surface to this height over the course of the aspiration.
       immersion_depth: The z distance to move after detecting the liquid, can be into or away from the liquid surface.
       surface_following_distance: The distance to follow the liquid surface.
       transport_air_volume: The volume of air to aspirate after the liquid.
@@ -1677,10 +1678,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_mode: The liquid level detection mode to use.
       gamma_lld_sensitivity: The sensitivity of the gamma LLD.
       dp_lld_sensitivity: The sensitivity of the DP LLD.
-      aspirate_position_above_z_touch_off: If the LLD mode is Z_TOUCH_OFF, this is the height above
-        the bottom of the well (presumably) to aspirate from.
-      detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if
-        the LLD mode is DUAL.
+      aspirate_position_above_z_touch_off: If the LLD mode is Z_TOUCH_OFF, this is the height above the bottom of the well (presumably) to aspirate from.
+      detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if the LLD mode is DUAL.
       swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after mix.
       mix_position_from_liquid_surface: The height to aspirate from for mix (LLD or absolute terms).
@@ -1694,17 +1693,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_drive_speed_during_2nd_section_search: Unknown.
       cup_upper_edge: Unknown.
       ratio_liquid_rise_to_tip_deep_in: Unknown.
-      immersion_depth_2nd_section: The depth to move into the liquid for the second section of
-        aspiration.
+      immersion_depth_2nd_section: The depth to move into the liquid for the second section of aspiration.
 
-      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
-        starting an aspiration.
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before starting an aspiration.
       min_z_endpos: The minimum height to move to, this is the end of aspiration.
 
-      hamilton_liquid_classes: Override the default liquid classes. See
-        pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
-      liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0
-          and 360. Defaults to well bottom + liquid height. Should use absolute z.
+      hamilton_liquid_classes: Override the default liquid classes. See pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
+      liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0 and 360. Defaults to well bottom + liquid height. Should use absolute z.
+
+      automatic_surface_following: PLR-specific parameter. If True, surface_following_distance will be automatically adjusted based on the detected liquid height and the height->volume function of the Container. `lld_mode` must not be SET for this parameter to be used.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -1858,6 +1855,66 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0.0] * n)
     ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
     immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
+
+    if automatic_surface_following is None:
+      automatic_surface_following = [False] * n
+
+    if any(automatic_surface_following):
+      channels_with_automatic_surface_following = [
+        use_channels[i] for i in range(n) if automatic_surface_following[i]
+      ]
+
+      containers = [op.resource for op in ops]
+      if any(
+        not containers[i].supports_compute_volume_from_height()
+        for i in range(n)
+        if automatic_surface_following[i]
+      ):
+        raise ValueError(
+          "automatic_surface_following can only be used with containers that support compute_volume_from_height()."
+        )
+
+      # move channels to above their positions
+      await self.position_channels_in_y_direction(
+        {channel: y for channel, y in zip(use_channels, y_positions)}
+      )
+
+      # detect liquid heights
+      current_liquid_heights = await asyncio.gather(
+        *[
+          self.clld_probe_z_height_using_channel(
+            channel_idx=channel, move_channels_to_save_pos_after=False
+          )
+          for channel in use_channels
+        ]
+      )
+
+      current_volumes = [
+        container.compute_volume_from_height(height=lh)
+        for container, lh in zip(containers, current_liquid_heights)
+      ]
+
+      # compute new liquid_height after aspiration
+      after_aspiration_liquid_heights = [
+        op.resource.compute_height_from_volume(volume - op.volume)
+        for volume, op in zip(current_volumes, ops)
+      ]
+
+      # compute new surface_following_distance
+      surface_following_distance = [
+        (after_aspiration_liquid_heights[i] - current_liquid_heights[i])
+        if automatic_surface_following[i]
+        else surface_following_distance[i]
+        for i in range(n)
+      ]
+
+      # check if the surface_following_distance would fall below the minimum height
+      for i in range(n):
+        if (well_bottoms[i] + surface_following_distance[i]) < minimum_height[i]:
+          raise ValueError(
+            f"automatic_surface_following would result in a surface_following_distance that goes below the minimum_height. "
+            f"Well bottom: {well_bottoms[i]}, surface_following_distance: {surface_following_distance[i]}, minimum_height: {minimum_height[i]}"
+          )
 
     try:
       return await self.aspirate_pip(
