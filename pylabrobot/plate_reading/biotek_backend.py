@@ -649,11 +649,13 @@ class Cytation5Backend(ImageReaderBackend):
     # check if wells are in a grid
     rows = sorted(set(well.get_row() for well in wells))
     columns = sorted(set(well.get_column() for well in wells))
-    if len(rows) * len(columns) != len(wells):
-      raise ValueError("Wells must be in a grid")
     min_row, max_row, min_col, max_col = rows[0], rows[-1], columns[0], columns[-1]
-    assert rows == list(range(min_row, max_row + 1))
-    assert columns == list(range(min_col, max_col + 1))
+    if (
+      (len(rows) * len(columns) != len(wells))
+      or rows != list(range(min_row, max_row + 1))
+      or columns != list(range(min_col, max_col + 1))
+    ):
+      raise ValueError("Wells must be in a grid")
 
     return min_row, max_row, min_col, max_col
 
