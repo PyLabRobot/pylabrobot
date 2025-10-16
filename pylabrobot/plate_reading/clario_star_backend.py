@@ -261,6 +261,9 @@ class CLARIOstarBackend(PlateReaderBackend):
     self, plate: Plate, wells: List[Well], focal_height: float = 13
   ) -> List[List[Optional[float]]]:
     """Read luminescence values from the plate reader."""
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
+
     await self._mp_and_focus_height_value()
 
     await self._run_luminescence(focal_height=focal_height)
@@ -307,6 +310,9 @@ class CLARIOstarBackend(PlateReaderBackend):
     Returns:
       A 2d array of absorbance values, as transmission percentage (values between 0 and 100).
     """
+
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
 
     await self._mp_and_focus_height_value()
 
