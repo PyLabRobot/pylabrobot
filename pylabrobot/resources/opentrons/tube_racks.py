@@ -4,6 +4,7 @@ from pylabrobot.resources.opentrons.load import (
   load_shared_opentrons_resource,
 )
 from pylabrobot.resources.tube_rack import TubeRack
+from pylabrobot.resources.opentrons.load import load_ot_tube_rack
 from pylabrobot.resources.tube import Tube
 from pylabrobot.resources.utils import create_ordered_items_2d
 
@@ -289,9 +290,7 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
         item_dy=19.28, # spec
         **tube_kwargs,
     ),
-  )from pylabrobot.resources.opentrons.load import load_ot_tube_rack
-from pylabrobot.resources.tube_rack import TubeRack
-
+  )
 
 def opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical(name: str) -> TubeRack:
   return load_ot_tube_rack(
