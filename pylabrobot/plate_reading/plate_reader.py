@@ -74,24 +74,28 @@ class PlateReader(ResourceHolder, Machine):
     await self.backend.close(plate=plate, **backend_kwargs)
 
   @need_setup_finished
-  async def read_luminescence(self, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(self, focal_height: float, **backend_kwargs) -> List[List[float]]:
     """Read the luminescence from the plate.
 
     Args:
       focal_height: The focal height to read the luminescence at, in micrometers.
     """
 
-    return await self.backend.read_luminescence(plate=self.get_plate(), focal_height=focal_height)
+    return await self.backend.read_luminescence(
+      plate=self.get_plate(), focal_height=focal_height, **backend_kwargs
+    )
 
   @need_setup_finished
-  async def read_absorbance(self, wavelength: int) -> List[List[float]]:
+  async def read_absorbance(self, wavelength: int, **backend_kwargs) -> List[List[float]]:
     """Read the absorbance from the plate in OD, unless otherwise specified by the backend.
 
     Args:
       wavelength: The wavelength to read the absorbance at, in nanometers.
     """
 
-    return await self.backend.read_absorbance(plate=self.get_plate(), wavelength=wavelength)
+    return await self.backend.read_absorbance(
+      plate=self.get_plate(), wavelength=wavelength, **backend_kwargs
+    )
 
   @need_setup_finished
   async def read_fluorescence(
@@ -99,6 +103,7 @@ class PlateReader(ResourceHolder, Machine):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    **backend_kwargs,
   ) -> List[List[float]]:
     """
 
@@ -118,4 +123,5 @@ class PlateReader(ResourceHolder, Machine):
       excitation_wavelength=excitation_wavelength,
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,
+      **backend_kwargs,
     )
