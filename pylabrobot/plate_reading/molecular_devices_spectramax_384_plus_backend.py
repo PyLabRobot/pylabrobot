@@ -2,8 +2,7 @@ from typing import List, Tuple
 
 from .molecular_devices_backend import (
   MolecularDevicesBackend,
-  MolecularDevicesSettings,
-  ReadMode
+  MolecularDevicesSettings
 )
 
 

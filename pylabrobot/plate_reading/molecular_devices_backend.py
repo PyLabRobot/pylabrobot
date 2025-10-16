@@ -443,7 +443,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   def _parse_data(self, data_str: str) -> "MolecularDevicesDataCollection":
     lines = re.split(r'\r\n|\n', data_str.strip())
-    lines = [l.strip() for l in lines if l.strip()]
+    lines = [line.strip() for line in lines if line.strip()]
 
     # 1. Parse header
     header_parts = lines[0].split('\t')
@@ -585,7 +585,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       cmd += f" {ks.interval} {ks.num_readings}"
     elif settings.read_type == ReadType.SPECTRUM and settings.spectrum_settings:
       ss = settings.spectrum_settings
-      cmd= f"!MODE"
+      cmd= "!MODE"
       scan_type = ss.excitation_emission_type or "SPECTRUM"
       cmd += f" {scan_type} {ss.start_wavelength} {ss.step} {ss.num_steps}"
     return cmd
