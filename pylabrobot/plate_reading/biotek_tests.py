@@ -96,8 +96,9 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       )
     )
 
+    plate = CellVis_96_wellplate_350uL_Fb(name="plate")
     resp = await self.backend.read_absorbance(
-      plate=CellVis_96_wellplate_350uL_Fb(name="plate"), wavelength=580
+      plate=plate, wells=plate.get_all_items(), wavelength=580
     )
 
     self.backend.io.write.assert_any_call(b"D")
@@ -212,8 +213,10 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       )
     )
 
+    plate = CellVis_96_wellplate_350uL_Fb(name="plate")
     resp = await self.backend.read_fluorescence(
-      plate=CellVis_96_wellplate_350uL_Fb(name="plate"),
+      plate=plate,
+      wells=plate.get_all_items(),
       excitation_wavelength=485,
       emission_wavelength=528,
       focal_height=7.5,
