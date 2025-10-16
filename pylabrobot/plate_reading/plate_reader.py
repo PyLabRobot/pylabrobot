@@ -4,8 +4,7 @@ from typing import List, Optional, cast
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.standard import NoPlateError
-from pylabrobot.resources import Coordinate, Plate, Resource
-from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources import Coordinate, Plate, Resource, ResourceHolder, Well
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +73,9 @@ class PlateReader(ResourceHolder, Machine):
     await self.backend.close(plate=plate, **backend_kwargs)
 
   @need_setup_finished
-  async def read_luminescence(self, focal_height: float, **backend_kwargs) -> List[List[Optional[float]]]:
+  async def read_luminescence(
+    self, focal_height: float, wells: Optional[List[Well]] = None, **backend_kwargs
+  ) -> List[List[Optional[float]]]:
     """Read the luminescence from the plate.
 
     Args:
@@ -82,11 +83,16 @@ class PlateReader(ResourceHolder, Machine):
     """
 
     return await self.backend.read_luminescence(
-      plate=self.get_plate(), focal_height=focal_height, **backend_kwargs
+      plate=self.get_plate(),
+      wells=wells or self.get_plate().get_all_items(),
+      focal_height=focal_height,
+      **backend_kwargs,
     )
 
   @need_setup_finished
-  async def read_absorbance(self, wavelength: int, **backend_kwargs) -> List[List[Optional[float]]]:
+  async def read_absorbance(
+    self, wavelength: int, wells: Optional[List[Well]] = None, **backend_kwargs
+  ) -> List[List[Optional[float]]]:
     """Read the absorbance from the plate in OD, unless otherwise specified by the backend.
 
     Args:
@@ -94,7 +100,10 @@ class PlateReader(ResourceHolder, Machine):
     """
 
     return await self.backend.read_absorbance(
-      plate=self.get_plate(), wavelength=wavelength, **backend_kwargs
+      plate=self.get_plate(),
+      wells=wells or self.get_plate().get_all_items(),
+      wavelength=wavelength,
+      **backend_kwargs,
     )
 
   @need_setup_finished
@@ -103,6 +112,7 @@ class PlateReader(ResourceHolder, Machine):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    wells: Optional[List[Well]] = None,
     **backend_kwargs,
   ) -> List[List[Optional[float]]]:
     """
@@ -120,6 +130,7 @@ class PlateReader(ResourceHolder, Machine):
 
     return await self.backend.read_fluorescence(
       plate=self.get_plate(),
+      wells=wells or self.get_plate().get_all_items(),
       excitation_wavelength=excitation_wavelength,
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,

@@ -639,7 +639,7 @@ class Cytation5Backend(ImageReaderBackend):
     resp = await self.send_command("y", cmd, timeout=1)
     self._plate = plate
     return resp
-  
+
   def _get_min_max_row_col(self, wells: List[Well], plate: Plate) -> Tuple[int, int, int, int]:
     # check if all wells are in the same plate
     plates = set(well.parent for well in wells)
@@ -648,23 +648,26 @@ class Cytation5Backend(ImageReaderBackend):
 
     # check if wells are in a grid
     rows = sorted(set(well.get_row() for well in wells))
-    columns = sorted(set(well.get_column() for well in wells)) 
+    columns = sorted(set(well.get_column() for well in wells))
     if len(rows) * len(columns) != len(wells):
       raise ValueError("Wells must be in a grid")
     min_row, max_row, min_col, max_col = rows[0], rows[-1], columns[0], columns[-1]
     assert rows == list(range(min_row, max_row + 1))
     assert columns == list(range(min_col, max_col + 1))
-    
+
     return min_row, max_row, min_col, max_col
 
-  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[Optional[float]]]:
+  async def read_absorbance(
+    self, plate: Plate, wells: List[Well], wavelength: int
+  ) -> List[List[Optional[float]]]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
     await self.set_plate(plate)
 
     wavelength_str = str(wavelength).zfill(4)
-    cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
+    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
+    cmd = f"004701{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000010600008{wavelength_str}1"
     checksum = str(sum(cmd.encode()) % 100).zfill(2)
     cmd = cmd + checksum + "\x03"
     await self.send_command("D", cmd)
@@ -699,7 +702,7 @@ class Cytation5Backend(ImageReaderBackend):
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 
-    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate) 
+    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
 
     cmd = f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
     checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
@@ -719,6 +722,7 @@ class Cytation5Backend(ImageReaderBackend):
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
@@ -737,8 +741,9 @@ class Cytation5Backend(ImageReaderBackend):
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
+    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
     cmd = (
-      f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
+      f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}0001200100001100100000135000100200200{excitation_wavelength_str}000"
       f"{emission_wavelength_str}000000000000000000210011"
     )
     checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7

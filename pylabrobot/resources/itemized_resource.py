@@ -427,7 +427,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       if i_item_name == item.name:
         return identifier
     raise ValueError(f"Item {item} not found in resource.")
-  
+
   def get_child_column(self, item: T) -> int:
     """Get the column of the item."""
     identifier = self.get_child_identifier(item)
