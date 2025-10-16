@@ -25,11 +25,11 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
   async def close(self, plate: Optional[Plate]) -> None:
     print(f"Closing the plate reader with plate, {plate}.")
 
-  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[Optional[float]]]:
     print(f"Reading luminescence at focal height {focal_height}.")
     return self.dummy_luminescence
 
-  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
+  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[Optional[float]]]:
     print(f"Reading absorbance at wavelength {wavelength}.")
     return self.dummy_absorbance
 
@@ -39,5 +39,5 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     return self.dummy_fluorescence

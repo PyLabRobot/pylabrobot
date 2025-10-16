@@ -120,12 +120,20 @@ class Well(Container):
     """
 
     self.tracker.set_liquids(liquids)
+  
+  def _get_parent_plate(self) -> Plate:
+    if self.parent is None or not isinstance(self.parent, Plate):
+      raise ValueError("Well must be in a plate to get its parent plate.")
+    return self.parent
 
   def get_identifier(self) -> str:
-    """Get the (canonical) identifier, like `"A1"` of the well in the parent plate. If the well is
-    not in a plate, this will raise a ValueError."""
+    """Get the (canonical) identifier, like `"A1"` of the well in the parent plate. If the well is not in a plate, this will raise a ValueError."""
+    return self._get_parent_plate().get_child_identifier(self)
+  
+  def get_row(self) -> int:
+    """Get the row (0-indexed) of the well in the parent plate. If the well is not in a plate, this will raise a ValueError."""
+    return self._get_parent_plate().get_child_row(self)
 
-    if self.parent is None or not isinstance(self.parent, Plate):
-      raise ValueError("Well must be in a plate to get its identifier.")
-
-    return self.parent.get_child_identifier(self)
+  def get_column(self) -> int:
+    """Get the column (0-indexed) of the well in the parent plate. If the well is not in a plate, this will raise a ValueError."""
+    return self._get_parent_plate().get_child_column(self)

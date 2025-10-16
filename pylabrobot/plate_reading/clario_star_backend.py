@@ -255,7 +255,7 @@ class CLARIOstarBackend(PlateReaderBackend):
   async def _get_measurement_values(self):
     return await self.send(b"\x02\x00\x0f\x0c\x05\x02\x00\x00\x00\x00\x00\x00")
 
-  async def read_luminescence(self, plate: Plate, focal_height: float = 13) -> List[List[float]]:
+  async def read_luminescence(self, plate: Plate, focal_height: float = 13) -> List[List[Optional[float]]]:
     """Read luminescence values from the plate reader."""
     await self._mp_and_focus_height_value()
 
@@ -289,7 +289,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     plate: Plate,
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     """Read absorbance values from the device.
 
     Args:
@@ -353,7 +353,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     raise NotImplementedError("Not implemented yet")
 
 

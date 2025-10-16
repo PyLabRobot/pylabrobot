@@ -6,9 +6,9 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union, cast
+from typing import List, Literal, Optional, Tuple, Union
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources import Plate, Well
 
 try:
   import PySpin  # type: ignore
@@ -564,7 +564,7 @@ class Cytation5Backend(ImageReaderBackend):
   async def stop_heating_or_cooling(self):
     return await self.send_command("g", "00000")
 
-  def _parse_body(self, body: bytes) -> List[List[float]]:
+  def _parse_body(self, body: bytes) -> List[List[Optional[float]]]:
     start_index = body.index(b"01,01")
     end_index = body.rindex(b"\r\n")
     num_rows = 8
@@ -585,7 +585,7 @@ class Cytation5Backend(ImageReaderBackend):
         value = float(group[2].decode())
         parsed_data[row_index][column_index] = value
 
-    return cast(List[List[float]], parsed_data)
+    return parsed_data
 
   async def set_plate(self, plate: Plate):
     # 08120112207434014351135308559127881422
@@ -639,8 +639,25 @@ class Cytation5Backend(ImageReaderBackend):
     resp = await self.send_command("y", cmd, timeout=1)
     self._plate = plate
     return resp
+  
+  def _get_min_max_row_col(self, wells: List[Well], plate: Plate) -> Tuple[int, int, int, int]:
+    # check if all wells are in the same plate
+    plates = set(well.parent for well in wells)
+    if len(plates) != 1 or plates.pop() != plate:
+      raise ValueError("All wells must be in the specified plate")
 
-  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
+    # check if wells are in a grid
+    rows = sorted(set(well.get_row() for well in wells))
+    columns = sorted(set(well.get_column() for well in wells)) 
+    if len(rows) * len(columns) != len(wells):
+      raise ValueError("Wells must be in a grid")
+    min_row, max_row, min_col, max_col = rows[0], rows[-1], columns[0], columns[-1]
+    assert rows == list(range(min_row, max_row + 1))
+    assert columns == list(range(min_col, max_col + 1))
+    
+    return min_row, max_row, min_col, max_col
+
+  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[Optional[float]]]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
@@ -661,8 +678,8 @@ class Cytation5Backend(ImageReaderBackend):
     return self._parse_body(body)
 
   async def read_luminescence(
-    self, plate: Plate, focal_height: float, integration_time: float = 1
-  ) -> List[List[float]]:
+    self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
+  ) -> List[List[Optional[float]]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
 
@@ -682,11 +699,9 @@ class Cytation5Backend(ImageReaderBackend):
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 
-    cmd = f"00840101010812000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
-    #                   ^^ end column
-    #                 ^^ end row
-    #               ^^ start column
-    #             ^^ start row
+    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate) 
+
+    cmd = f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
     checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
     cmd = cmd + checksum
     await self.send_command("D", cmd)
@@ -707,7 +722,7 @@ class Cytation5Backend(ImageReaderBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
     if not 250 <= excitation_wavelength <= 700:
