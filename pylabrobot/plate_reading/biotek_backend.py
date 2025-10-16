@@ -124,6 +124,8 @@ class Cytation5Backend(ImageReaderBackend):
     await self.io.set_flowctrl(SIO_RTS_CTS_HS)
     await self.io.set_rts(True)
 
+    await self._abort()
+
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
       self._version = await self.get_firmware_version()
@@ -692,7 +694,10 @@ class Cytation5Backend(ImageReaderBackend):
     resp = await self.send_command("O")
     assert resp == b"\x060000\x03"
 
-    body = await self._read_until(b"\x03", timeout=60 * 3)
+    # 2m10s of reading per 1 second of integration time
+    # allow 60 seconds flat
+    timeout = 60 + integration_time_seconds * (2 * 60 + 10)
+    body = await self._read_until(b"\x03", timeout=timeout)
     assert body is not None
     return self._parse_body(body)
 
