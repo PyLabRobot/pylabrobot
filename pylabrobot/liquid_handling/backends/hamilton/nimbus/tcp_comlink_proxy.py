@@ -14,7 +14,7 @@ from pylabrobot.io.capture import capturer, get_capture_or_validation_active, Co
 from pylabrobot.io.io import IOBase
 from pylabrobot.liquid_handling.backends.hamilton.nimbus import COMLINKDLL
 
-import System
+import System #type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +191,8 @@ class TcpComLinkProxy(IOBase):
 
         # Unique identifier for logging
         self._unique_id = f"[{self._host}:{self._port}]"
+        # Client address for HARP Network
+        self._client_address = None
 
         # Connection state tracking
         self._connection_state = "disconnected"
@@ -266,8 +268,8 @@ class TcpComLinkProxy(IOBase):
             await asyncio.sleep(0.5)
 
             # Use execute_command for GetClientAddress
-            client_address = await self.execute_command("GetClientAddress")
-            logger.info(f"{self._unique_id} Connected successfully. Client address: {client_address}")
+            self._client_address = await self.execute_command("GetClientAddress")
+            logger.info(f"{self._unique_id} Connected successfully. Client address: {self._client_address}")
             self._connection_state = "connected"
 
         except Exception as e:
