@@ -412,7 +412,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     await self.send_command(f"!TEMP {temperature}")
 
   async def get_firmware_version(self) -> str:
-    await self.send_command("!OPTION")
+    return await self.send_command("!OPTION")
 
   async def start_shake(self) -> None:
     await self.send_command("!SHAKE NOW")
@@ -619,14 +619,16 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       if settings.path_check:
         wl_str += " 900 998"
       await self.send_command(f"!WAVELENGTH {wl_str}")
-    if settings.read_mode in (ReadMode.FLU, ReadMode.POLAR, ReadMode.TIME):
+    elif settings.read_mode in (ReadMode.FLU, ReadMode.POLAR, ReadMode.TIME):
       ex_wl_str = " ".join(map(str, settings.excitation_wavelengths))
       em_wl_str = " ".join(map(str, settings.emission_wavelengths))
       await self.send_command(f"!EXWAVELENGTH {ex_wl_str}")
       await self.send_command(f"!EMWAVELENGTH {em_wl_str}")
-    if settings.read_mode == ReadMode.LUM:
+    elif settings.read_mode == ReadMode.LUM:
       wl_str = " ".join(map(str, settings.emission_wavelengths))
       await self.send_command(f"!EMWAVELENGTH {wl_str}")
+    else:
+      raise NotImplementedError("f{settings.read_mode} not supported")
 
   async def _set_plate_position(self, settings: MolecularDevicesSettings) -> None:
     plate = settings.plate
@@ -1057,6 +1059,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     spectrum_settings: Optional[SpectrumSettings] = None,
     cuvette: bool = False,
     settling_time: int = 0,
+    timeout: int = 600,
   ) -> MolecularDevicesDataCollection:
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -1100,5 +1103,5 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     await self._set_nvram(settings)
 
     await self._read_now()
-    await self._wait_for_idle()
+    await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
