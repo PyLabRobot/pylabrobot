@@ -183,6 +183,61 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [0.1427, 0.1174, 0.0684, 0.0657, 0.0732, 0.067, 0.0602, 0.079, 0.0667, 0.1103, 0.129, 0.1316],
     ]
 
+  async def test_read_luminescence_partial(self):
+    self.backend.io.read.side_effect = _byte_iter(
+      # plate
+      "\x06"
+      + "\x03"
+      # focal height
+      + "\x06"
+      + "\x03"
+      # read block 1
+      + "\x06"
+      + "0350000000000000010000000000490300000\x03"
+      + "\x060000\x03"
+      + "01,1,\r000:00:00.0,237,01,01,0000003\r\n,02,01,0000003\r\n,03,01,0000005\r\n,04,01,0000004\r\n,05,01,0000003\r\n,06,01,0000002\r\n,07,01,0000000\r\n237\x1a132\x1a0000\x03"
+      # read block 2
+      + "\x06"
+      + "0350000000000000010000000000030200000\x03"
+      + "\x060000\x03"
+      + "01,1,\r000:00:00.0,237,02,02,0000043,02,03,0000014\r\n,03,03,0000014,03,02,0000012\r\n,04,02,0000011,04,03,0000014\r\n,05,03,0000010,05,02,0000010\r\n,06,02,0000011,06,03,0000027\r\n,07,03,0000009,07,02,0000010\r\n237\x1a160\x1a0000\x03"
+      # read block 3
+      + "\x06"
+      + "0350000000000000010000000000000170000\x03"
+      + "\x060000\x03"
+      + "01,1,\r000:00:00.0,237,04,04,0000018\r\n,05,04,0000017\r\n,06,04,0000014\r\n237\x1a210\x1a0000\x03"
+    )
+
+    plate = CellVis_96_wellplate_350uL_Fb(name="plate")
+    wells = plate["A1"] + plate["B1:G3"] + plate["D4:F4"]
+    resp = await self.backend.read_luminescence(
+      focal_height=4.5, integration_time=0.4, plate=plate, wells=wells
+    )
+
+    print(self.backend.io.write.mock_calls)
+    self.backend.io.write.assert_any_call(b"D")
+    self.backend.io.write.assert_any_call(
+      b"008401010107010001200100001100100000123000020200200-001000-00300000000000000000001351086"
+    )
+    self.backend.io.write.assert_any_call(
+      b"008401020207030001200100001100100000123000020200200-001000-00300000000000000000001351090"
+    )
+    self.backend.io.write.assert_any_call(
+      b"008401040406040001200100001100100000123000020200200-001000-00300000000000000000001351094"
+    )
+    self.backend.io.write.assert_any_call(b"O")
+
+    assert resp == [
+      [3.0, None, None, None, None, None, None, None, None, None, None, None],
+      [3.0, 43.0, 14.0, None, None, None, None, None, None, None, None, None],
+      [5.0, 12.0, 14.0, None, None, None, None, None, None, None, None, None],
+      [4.0, 11.0, 14.0, 18.0, None, None, None, None, None, None, None, None],
+      [3.0, 10.0, 10.0, 17.0, None, None, None, None, None, None, None, None],
+      [2.0, 11.0, 27.0, 14.0, None, None, None, None, None, None, None, None],
+      [0.0, 10.0, 9.0, None, None, None, None, None, None, None, None, None],
+      [None, None, None, None, None, None, None, None, None, None, None, None],
+    ]
+
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
       "\x06"
