@@ -13,7 +13,7 @@ from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger("pylabrobot")
 
-RES_TERM_CHAR = b'>'
+RES_TERM_CHAR = b">"
 COMMAND_TERMINATORS: Dict[str, int] = {
   "!AUTOFILTER": 1,
   "!AUTOPMT": 1,
@@ -246,7 +246,6 @@ class MolecularDevicesSettings:
   settling_time: int = 0
 
 
-
 @dataclass
 class MolecularDevicesData:
   """Data from a Molecular Devices plate reader."""
@@ -320,7 +319,6 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     self.port = port
     self.io = Serial(self.port, baudrate=9600, timeout=0.2)
 
-
   async def setup(self) -> None:
     await self.io.setup()
     await self.send_command("!")
@@ -374,8 +372,8 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
           message, err_class = ERROR_CODES[error_code]
           raise err_class(f"Command '{command}' failed with error {error_code}: {message}")
         raise MolecularDevicesError(
-            f"Command '{command}' failed with unknown error code: {error_code}"
-          )
+          f"Command '{command}' failed with unknown error code: {error_code}"
+        )
       except (ValueError, IndexError):
         raise MolecularDevicesError(
           f"Command '{command}' failed with unparsable error: {response[0]}"
@@ -1014,7 +1012,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       cutoff_filters=cutoff_filters,
       cuvette=cuvette,
       speed_read=False,
-      settling_time=settling_time
+      settling_time=settling_time,
     )
     await self._set_clear()
     if not cuvette:

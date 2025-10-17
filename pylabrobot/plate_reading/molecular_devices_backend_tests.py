@@ -295,9 +295,7 @@ class TestMolecularDevicesBackend(unittest.TestCase):
       spectrum_settings=None,
     )
     asyncio.run(self.backend._set_filter(settings))
-    self.backend.send_command.assert_has_calls(
-      [call("!AUTOFILTER OFF"), call("!EMFILTER 8 9")]
-    )
+    self.backend.send_command.assert_has_calls([call("!AUTOFILTER OFF"), call("!EMFILTER 8 9")])
     self.backend.send_command.reset_mock()
     settings.cutoff_filters = []
     asyncio.run(self.backend._set_filter(settings))
@@ -386,9 +384,7 @@ class TestMolecularDevicesBackend(unittest.TestCase):
       spectrum_settings=None,
     )
     asyncio.run(self.backend._set_integration_time(settings, 10, 100))
-    self.backend.send_command.assert_has_calls(
-      [call("!COUNTTIMEDELAY 10"), call("!COUNTTIME 0.1")]
-    )
+    self.backend.send_command.assert_has_calls([call("!COUNTTIMEDELAY 10"), call("!COUNTTIME 0.1")])
     self.backend.send_command.reset_mock()
     settings.read_mode = ReadMode.ABS
     asyncio.run(self.backend._set_integration_time(settings, 10, 100))
@@ -667,9 +663,7 @@ class TestMolecularDevicesBackend(unittest.TestCase):
     self.assertIn("!READSTAGE TOP", commands)
 
     readtype_call = next(
-      c
-      for c in self.backend.send_command.call_args_list
-      if c.args[0] == "!READTYPE TIME 0 250"
+      c for c in self.backend.send_command.call_args_list if c.args[0] == "!READTYPE TIME 0 250"
     )
     self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
 
