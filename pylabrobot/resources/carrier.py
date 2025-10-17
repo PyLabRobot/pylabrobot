@@ -151,8 +151,6 @@ class TipCarrier(Carrier):
 class PlateHolder(ResourceHolder):
   """A single site within a plate carrier."""
 
-  _accepted_child_types = (Plate, PlateAdapter, Lid)
-
   def __init__(
     self,
     name: str,
@@ -192,11 +190,6 @@ class PlateHolder(ResourceHolder):
           "If a ResourceStack is assigned to a PlateHolder, the items "
           + f"must be Plates, not {type(resource.children[-1])}"
         )
-    elif not isinstance(resource, self._accepted_child_types):
-      raise TypeError(
-        "PlateHolder can only store Plate, PlateAdapter or ResourceStack "
-        + f"resources, not {type(resource)}"
-      )
     if isinstance(resource, Plate) and resource.plate_type != "skirted":
       raise ValueError("PlateHolder can only store plates that are skirted")
     return super().assign_child_resource(resource, location, reassign)
@@ -255,15 +248,6 @@ class PlateHolder(ResourceHolder):
       **super().serialize(),
       "pedestal_size_z": self.pedestal_size_z,
     }
-
-  def check_can_drop_resource_here(self, resource: Resource) -> None:
-    if not isinstance(resource, PlateHolder._accepted_child_types):
-      raise TypeError(
-        f"Cannot drop resource {resource.name} onto plate holder {self.name}. "
-        f"Only {self._accepted_child_types} resources are allowed."
-      )
-
-    super().check_can_drop_resource_here(resource)
 
 
 class PlateCarrier(Carrier):

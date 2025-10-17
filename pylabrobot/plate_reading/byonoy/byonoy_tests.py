@@ -27,6 +27,7 @@ class ByonoyResourceTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.move_resource(self.reader, to=Coordinate(x=400, y=209.995, z=100))
 
     # move reader to base
+    print("moving")
     await self.lh.move_resource(
       self.reader,
       self.base.reader_holder,
