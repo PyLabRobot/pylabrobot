@@ -2095,6 +2095,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
     # PLR specific
     probe_liquid_height: bool = False,
+    auto_surface_following_distance: bool = False,
     # remove  in the future
     immersion_depth_direction: Optional[List[int]] = None,
     mix_volume: Optional[List[float]] = None,
@@ -2151,6 +2152,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         documentation. Dispense mode 4.
 
       probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
+      auto_surface_following_distance: automatically compute the surface following distance based on the container height<->volume functions. Requires liquid height to be specified or `probe_liquid_height=True`.
     """
 
     n = len(ops)
@@ -2246,7 +2248,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth = [
       im * (-1 if immersion_depth_direction[i] else 1) for i, im in enumerate(immersion_depth)
     ]
-    surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
     flow_rates = [
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
       for op, hlc in zip(ops, hamilton_liquid_classes)
@@ -2313,6 +2314,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       logger.info(f"Detected liquid heights: {liquid_heights}")
     else:
       liquid_heights = [op.liquid_height or 0 for op in ops]
+
+    if auto_surface_following_distance:
+      if any(op.liquid_height is None for op in ops) and not probe_liquid_height:
+        raise ValueError(
+          "To use auto_surface_following_distance all liquid heights must be set or probe_liquid_height must be True."
+        )
+
+      if any(not op.resource.supports_compute_height_volume_functions() for op in ops):
+        raise ValueError(
+          "automatic_surface_following can only be used with containers that support height<->volume functions."
+        )
+
+      current_volumes = [
+        op.resource.compute_volume_from_height(liquid_heights[i]) for i, op in enumerate(ops)
+      ]
+
+      # compute new liquid_height after aspiration
+      liquid_height_after_aspiration = [
+        op.resource.compute_height_from_volume(current_volumes[i] + op.volume)
+        for i, op in enumerate(ops)
+      ]
+
+      # compute new surface_following_distance
+      surface_following_distance = [
+        liquid_height_after_aspiration[i] - liquid_heights[i]
+        for i in range(len(liquid_height_after_aspiration))
+      ]
+    else:
+      surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
 
     liquid_surfaces_no_lld = liquid_surface_no_lld or [
       wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
