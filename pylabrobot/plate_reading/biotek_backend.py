@@ -6,7 +6,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Literal, Optional, Tuple, Union
 
 from pylabrobot.resources import Plate, Well
 
@@ -70,6 +70,34 @@ def retry(func, *args, **kwargs):
         str(ex),
       )
       time.sleep(delay)
+
+
+def non_overlapping_rectangles(
+  points: Iterable[Tuple[int, int]],
+) -> List[Tuple[int, int, int, int]]:
+  pts = set(points)
+  rects = []
+
+  while pts:
+    # start a rectangle from one arbitrary point
+    r0, c0 = min(pts)
+    # expand right
+    c1 = c0
+    while (r0, c1 + 1) in pts:
+      c1 += 1
+    # expand downward as long as entire row segment is filled
+    r1 = r0
+    while all((r1 + 1, c) in pts for c in range(c0, c1 + 1)):
+      r1 += 1
+
+    rects.append((r0, c0, r1, c1))
+    # remove covered points
+    for r in range(r0, r1 + 1):
+      for c in range(c0, c1 + 1):
+        pts.discard((r, c))
+
+  rects.sort()
+  return rects
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -564,16 +592,14 @@ class Cytation5Backend(ImageReaderBackend):
   async def stop_heating_or_cooling(self):
     return await self.send_command("g", "00000")
 
-  def _parse_body(self, body: bytes) -> List[List[Optional[float]]]:
+  def _parse_body(self, body: bytes) -> Dict[Tuple[int, int], float]:
     start_index = body.index(b"01,01")
     end_index = body.rindex(b"\r\n")
     num_rows = 8
     rows = body[start_index:end_index].split(b"\r\n,")[:num_rows]
 
     assert self._plate is not None, "Plate must be set before reading data"
-    parsed_data: List[List[Optional[float]]] = [
-      [None for _ in range(self._plate.num_items_x)] for _ in range(self._plate.num_items_y)
-    ]
+    parsed_data: Dict[Tuple[int, int], float] = {}
     for row in rows:
       values = row.split(b",")
       grouped_values = [values[i : i + 3] for i in range(0, len(values), 3)]
@@ -583,9 +609,17 @@ class Cytation5Backend(ImageReaderBackend):
         row_index = int(group[0].decode()) - 1  # 1-based index in the response
         column_index = int(group[1].decode()) - 1  # 1-based index in the response
         value = float(group[2].decode())
-        parsed_data[row_index][column_index] = value
+        parsed_data[(row_index, column_index)] = value
 
     return parsed_data
+
+  def _data_dict_to_list(
+    self, data: Dict[Tuple[int, int], float], plate: Plate
+  ) -> List[List[Optional[float]]]:
+    result = [[None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)]
+    for (row, col), value in data.items():
+      result[row][col] = value
+    return result
 
   async def set_plate(self, plate: Plate):
     # 08120112207434014351135308559127881422
@@ -640,24 +674,15 @@ class Cytation5Backend(ImageReaderBackend):
     self._plate = plate
     return resp
 
-  def _get_min_max_row_col(self, wells: List[Well], plate: Plate) -> Tuple[int, int, int, int]:
+  def _get_min_max_row_col_tuples(
+    self, wells: List[Well], plate: Plate
+  ) -> List[Tuple[int, int, int, int]]:
     # check if all wells are in the same plate
     plates = set(well.parent for well in wells)
     if len(plates) != 1 or plates.pop() != plate:
       raise ValueError("All wells must be in the specified plate")
 
-    # check if wells are in a grid
-    rows = sorted(set(well.get_row() for well in wells))
-    columns = sorted(set(well.get_column() for well in wells))
-    min_row, max_row, min_col, max_col = rows[0], rows[-1], columns[0], columns[-1]
-    if (
-      (len(rows) * len(columns) != len(wells))
-      or rows != list(range(min_row, max_row + 1))
-      or columns != list(range(min_col, max_col + 1))
-    ):
-      raise ValueError("Wells must be in a grid")
-
-    return min_row, max_row, min_col, max_col
+    return non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
 
   async def read_absorbance(
     self, plate: Plate, wells: List[Well], wavelength: int
@@ -668,19 +693,22 @@ class Cytation5Backend(ImageReaderBackend):
     await self.set_plate(plate)
 
     wavelength_str = str(wavelength).zfill(4)
-    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
-    cmd = f"004701{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000010600008{wavelength_str}1"
-    checksum = str(sum(cmd.encode()) % 100).zfill(2)
-    cmd = cmd + checksum + "\x03"
-    await self.send_command("D", cmd)
+    data: Dict[Tuple[int, int], float] = {}
 
-    resp = await self.send_command("O")
-    assert resp == b"\x060000\x03"
+    for min_row, max_row, min_col, max_col in self._get_min_max_row_col_tuples(wells, plate):
+      cmd = f"004701{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000010600008{wavelength_str}1"
+      checksum = str(sum(cmd.encode()) % 100).zfill(2)
+      cmd = cmd + checksum + "\x03"
+      await self.send_command("D", cmd)
 
-    # read data
-    body = await self._read_until(b"\x03", timeout=60 * 3)
-    assert resp is not None
-    return self._parse_body(body)
+      resp = await self.send_command("O")
+      assert resp == b"\x060000\x03"
+
+      # read data
+      body = await self._read_until(b"\x03", timeout=60 * 3)
+      assert resp is not None
+      data.update(self._parse_body(body))
+    return self._data_dict_to_list(data, plate)
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
