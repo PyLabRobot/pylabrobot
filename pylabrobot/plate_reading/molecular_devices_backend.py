@@ -13,7 +13,7 @@ from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger("pylabrobot")
 
-
+RES_TERM_CHAR = b'>'
 COMMAND_TERMINATORS: Dict[str, int] = {
   "!AUTOFILTER": 1,
   "!AUTOPMT": 1,
@@ -244,7 +244,7 @@ class MolecularDevicesSettings:
   flashes_per_well: int = 1
   cuvette: bool = False
   settling_time: int = 0
-  is_settling_time_on: bool = False
+
 
 
 @dataclass
@@ -316,10 +316,10 @@ class MolecularDevicesDataCollectionLuminescence(MolecularDevicesDataCollection)
 class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
   """Backend for Molecular Devices plate readers."""
 
-  def __init__(self, port: str, res_term_char: bytes = b">") -> None:
+  def __init__(self, port: str) -> None:
     self.port = port
     self.io = Serial(self.port, baudrate=9600, timeout=0.2)
-    self.res_term_char = res_term_char
+
 
   async def setup(self) -> None:
     await self.io.setup()
@@ -351,24 +351,13 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       await asyncio.sleep(0.001)
       if time.time() > timeout_time:
         raise TimeoutError(f"Timeout waiting for response to command: {command}")
-      if raw_response.count(self.res_term_char) >= num_res_fields:
+      if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
         break
     logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
-    response = raw_response.decode("utf-8").strip().split(self.res_term_char.decode())
+    response = raw_response.decode("utf-8").strip().split(RES_TERM_CHAR.decode())
     response = [r.strip() for r in response if r.strip() != ""]
     self._parse_basic_errors(response, command)
     return response
-
-  async def _send_commands(self, commands: List[Union[Optional[str], Tuple[str, int]]]) -> None:
-    """Send a sequence of commands to the plate reader."""
-    for command_info in commands:
-      if not command_info:
-        continue
-      if isinstance(command_info, tuple):
-        command, num_res_fields = command_info
-        await self.send_command(command, num_res_fields=num_res_fields)
-      else:
-        await self.send_command(command_info)
 
   def _parse_basic_errors(self, response: List[str], command: str) -> None:
     if not response:
@@ -384,8 +373,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
         if error_code in ERROR_CODES:
           message, err_class = ERROR_CODES[error_code]
           raise err_class(f"Command '{command}' failed with error {error_code}: {message}")
-        else:
-          raise MolecularDevicesError(
+        raise MolecularDevicesError(
             f"Command '{command}' failed with unknown error code: {error_code}"
           )
       except (ValueError, IndexError):
@@ -395,7 +383,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
     if "OK" not in response[0]:
       raise MolecularDevicesError(f"Command '{command}' failed with response: {response}")
-    elif "warning" in response[0].lower():
+    if "warning" in response[0].lower():
       logger.warning("Warning for command '%s': %s", command, response)
 
   async def open(self) -> None:
@@ -466,10 +454,10 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
       collection.reads = all_reads
       return collection
-    else:
-      res = await self.send_command("!TRANSFER")
-      data_str = res[1]
-      return self._parse_data(data_str)
+
+    res = await self.send_command("!TRANSFER")
+    data_str = res[1]
+    return self._parse_data(data_str)
 
   def _parse_data(self, data_str: str) -> "MolecularDevicesDataCollection":
     lines = re.split(r"\r\n|\n", data_str.strip())
@@ -609,10 +597,10 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     # Default to generic MolecularDevicesData if no specific wavelengths found
     raise ValueError("Unable to determine data type from response.")
 
-  def _get_clear_command(self) -> str:
-    return "!CLEAR DATA"
+  async def _set_clear(self) -> None:
+    await self.send_command("!CLEAR DATA")
 
-  def _get_mode_command(self, settings: MolecularDevicesSettings) -> str:
+  async def _set_mode(self, settings: MolecularDevicesSettings) -> None:
     cmd = f"!MODE {settings.read_type.value}"
     if settings.read_type == ReadType.KINETIC and settings.kinetic_settings:
       ks = settings.kinetic_settings
@@ -622,9 +610,9 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       cmd = "!MODE"
       scan_type = ss.excitation_emission_type or "SPECTRUM"
       cmd += f" {scan_type} {ss.start_wavelength} {ss.step} {ss.num_steps}"
-    return cmd
+    await self.send_command(cmd)
 
-  def _get_wavelength_commands(self, settings: MolecularDevicesSettings) -> List[str]:
+  async def _set_wavelengths(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
       wl_parts = []
       for wl in settings.wavelengths:
@@ -632,17 +620,17 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       wl_str = " ".join(wl_parts)
       if settings.path_check:
         wl_str += " 900 998"
-      return [f"!WAVELENGTH {wl_str}"]
+      await self.send_command(f"!WAVELENGTH {wl_str}")
     if settings.read_mode in (ReadMode.FLU, ReadMode.POLAR, ReadMode.TIME):
       ex_wl_str = " ".join(map(str, settings.excitation_wavelengths))
       em_wl_str = " ".join(map(str, settings.emission_wavelengths))
-      return [f"!EXWAVELENGTH {ex_wl_str}", f"!EMWAVELENGTH {em_wl_str}"]
+      await self.send_command(f"!EXWAVELENGTH {ex_wl_str}")
+      await self.send_command(f"!EMWAVELENGTH {em_wl_str}")
     if settings.read_mode == ReadMode.LUM:
       wl_str = " ".join(map(str, settings.emission_wavelengths))
-      return [f"!EMWAVELENGTH {wl_str}"]
-    return []
+      await self.send_command(f"!EMWAVELENGTH {wl_str}")
 
-  def _get_plate_position_commands(self, settings: MolecularDevicesSettings) -> List[str]:
+  async def _set_plate_position(self, settings: MolecularDevicesSettings) -> None:
     plate = settings.plate
     num_cols, num_rows, size_y = plate.num_items_x, plate.num_items_y, plate.get_size_y()
     if num_cols < 2 or num_rows < 2:
@@ -657,14 +645,16 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
     x_pos_cmd = f"!XPOS {top_left_well_center.x:.3f} {dx:.3f} {num_cols}"
     y_pos_cmd = f"!YPOS {size_y-top_left_well_center.y:.3f} {dy:.3f} {num_rows}"
-    return [x_pos_cmd, y_pos_cmd]
+    await self.send_command(x_pos_cmd)
+    await self.send_command(y_pos_cmd)
 
-  def _get_strip_command(self, settings: MolecularDevicesSettings) -> str:
-    return f"!STRIP 1 {settings.plate.num_items_x}"
+  async def _set_strip(self, settings: MolecularDevicesSettings) -> None:
+    await self.send_command(f"!STRIP 1 {settings.plate.num_items_x}")
 
-  def _get_shake_commands(self, settings: MolecularDevicesSettings) -> List[str]:
+  async def _set_shake(self, settings: MolecularDevicesSettings) -> None:
     if not settings.shake_settings:
-      return ["!SHAKE OFF"]
+      await self.send_command("!SHAKE OFF")
+      return
     ss = settings.shake_settings
     shake_mode = "ON" if ss.before_read or ss.between_reads else "OFF"
     before_duration = ss.before_read_duration if ss.before_read else 0
@@ -675,73 +665,74 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     else:
       between_duration = 0
       wait_duration = 0
-    return [
-      f"!SHAKE {shake_mode}",
-      f"!SHAKE {before_duration} {ki} {wait_duration} {between_duration} 0",
-    ]
+    await self.send_command(f"!SHAKE {shake_mode}")
+    await self.send_command(f"!SHAKE {before_duration} {ki} {wait_duration} {between_duration} 0")
 
-  def _get_carriage_speed_command(self, settings: MolecularDevicesSettings) -> str:
-    return f"!CSPEED {settings.carriage_speed.value}"
+  async def _set_carriage_speed(self, settings: MolecularDevicesSettings) -> None:
+    await self.send_command(f"!CSPEED {settings.carriage_speed.value}")
 
-  def _get_read_stage_command(self, settings: MolecularDevicesSettings) -> Optional[str]:
+  async def _set_read_stage(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
       stage = "BOT" if settings.read_from_bottom else "TOP"
-      return f"!READSTAGE {stage}"
-    return None
+      await self.send_command(f"!READSTAGE {stage}")
 
-  def _get_flashes_per_well_command(self, settings: MolecularDevicesSettings) -> Optional[str]:
+  async def _set_flashes_per_well(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
-      return f"!FPW {settings.flashes_per_well}"
-    return None
+      await self.send_command(f"!FPW {settings.flashes_per_well}")
 
-  def _get_pmt_commands(self, settings: MolecularDevicesSettings) -> List[str]:
+  async def _set_pmt(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode not in (ReadMode.FLU, ReadMode.LUM, ReadMode.POLAR, ReadMode.TIME):
-      return []
+      return
     gain = settings.pmt_gain
     if gain == PmtGain.AUTO:
-      return ["!AUTOPMT ON"]
-    gain_val = gain.value if isinstance(gain, PmtGain) else gain
-    return ["!AUTOPMT OFF", f"!PMT {gain_val}"]
+      await self.send_command("!AUTOPMT ON")
+    else:
+      gain_val = gain.value if isinstance(gain, PmtGain) else gain
+      await self.send_command("!AUTOPMT OFF")
+      await self.send_command(f"!PMT {gain_val}")
 
-  def _get_filter_commands(self, settings: MolecularDevicesSettings) -> List[str]:
+  async def _set_filter(self, settings: MolecularDevicesSettings) -> None:
     if (
       settings.read_mode in (ReadMode.FLU, ReadMode.POLAR, ReadMode.TIME)
       and settings.cutoff_filters
     ):
       cf_str = " ".join(map(str, settings.cutoff_filters))
-      return ["!AUTOFILTER OFF", f"!EMFILTER {cf_str}"]
-    return ["!AUTOFILTER ON"]
+      await self.send_command("!AUTOFILTER OFF")
+      await self.send_command(f"!EMFILTER {cf_str}")
+    else:
+      await self.send_command("!AUTOFILTER ON")
 
-  def _get_calibrate_command(self, settings: MolecularDevicesSettings) -> str:
+  async def _set_calibrate(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
-      return f"!CALIBRATE {settings.calibrate.value}"
-    return f"!PMTCAL {settings.calibrate.value}"
+      await self.send_command(f"!CALIBRATE {settings.calibrate.value}")
+    else:
+      await self.send_command(f"!PMTCAL {settings.calibrate.value}")
 
-  def _get_order_command(self, settings: MolecularDevicesSettings) -> str:
-    return f"!ORDER {settings.read_order.value}"
+  async def _set_order(self, settings: MolecularDevicesSettings) -> None:
+    await self.send_command(f"!ORDER {settings.read_order.value}")
 
-  def _get_speed_command(self, settings: MolecularDevicesSettings) -> Optional[str]:
+  async def _set_speed(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.ABS:
       mode = "ON" if settings.speed_read else "OFF"
-      return f"!SPEED {mode}"
-    return None
+      await self.send_command(f"!SPEED {mode}")
 
-  def _get_nvram_commands(self, settings: MolecularDevicesSettings) -> List[str]:
+  async def _set_nvram(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.POLAR:
       command = "FPSETTLETIME"
-      value = settings.settling_time if settings.is_settling_time_on else 0
+      value = settings.settling_time
     else:
       command = "CARCOL"
-      value = settings.settling_time if settings.is_settling_time_on else 100
-    return [f"!NVRAM {command} {value}"]
+      value = settings.settling_time if settings.settling_time > 100 else 100
+    await self.send_command(f"!NVRAM {command} {value}")
 
-  def _get_tag_command(self, settings: MolecularDevicesSettings) -> str:
+  async def _set_tag(self, settings: MolecularDevicesSettings) -> None:
     if settings.read_mode == ReadMode.POLAR and settings.read_type == ReadType.KINETIC:
-      return "!TAG ON"
-    return "!TAG OFF"
+      await self.send_command("!TAG ON")
+    else:
+      await self.send_command("!TAG OFF")
 
-  def _get_readtype_command(self, settings: MolecularDevicesSettings) -> Tuple[str, int]:
-    """Get the READTYPE command and the expected number of response fields."""
+  async def _set_readtype(self, settings: MolecularDevicesSettings) -> None:
+    """Set the READTYPE command and the expected number of response fields."""
     cuvette = settings.cuvette
     num_res_fields = COMMAND_TERMINATORS.get("!READTYPE", 2)
 
@@ -762,14 +753,14 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     else:
       raise ValueError(f"Unsupported read mode: {settings.read_mode}")
 
-    return (cmd, num_res_fields)
+    await self.send_command(cmd, num_res_fields=num_res_fields)
 
-  def _get_integration_time_commands(
+  async def _set_integration_time(
     self, settings: MolecularDevicesSettings, delay_time: int, integration_time: int
-  ) -> List[str]:
+  ) -> None:
     if settings.read_mode == ReadMode.TIME:
-      return [f"!COUNTTIMEDELAY {delay_time}", f"!COUNTTIME {integration_time * 0.001}"]
-    return []
+      await self.send_command(f"!COUNTTIMEDELAY {delay_time}")
+      await self.send_command(f"!COUNTTIME {integration_time * 0.001}")
 
   def _get_cutoff_filter_index_from_wavelength(self, wavelength: int) -> int:
     """Converts a wavelength to a cutoff filter index."""
@@ -798,7 +789,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
         return cutoff_filter_index
     raise ValueError(f"No cutoff filter found for wavelength {wavelength}")
 
-  async def _wait_for_idle(self, timeout: int = 120):
+  async def _wait_for_idle(self, timeout: int = 600):
     """Wait for the plate reader to become idle."""
     start_time = time.time()
     while True:
@@ -824,7 +815,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     spectrum_settings: Optional[SpectrumSettings] = None,
     cuvette: bool = False,
     settling_time: int = 0,
-    is_settling_time_on: bool = False,
+    timeout: int = 600,
   ) -> MolecularDevicesDataCollection:
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -841,35 +832,25 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       wavelengths=wavelengths,
       cuvette=cuvette,
       settling_time=settling_time,
-      is_settling_time_on=is_settling_time_on,
     )
-    commands: List[Union[Optional[str], Tuple[str, int]]] = [self._get_clear_command()]
+    await self._set_clear()
     if not cuvette:
-      # commands.extend()
-      commands.extend(
-        [
-          *self._get_plate_position_commands(settings),
-          self._get_strip_command(settings),
-          self._get_carriage_speed_command(settings),
-        ]
-      )
-    commands.extend(
-      [
-        *self._get_shake_commands(settings),
-        *self._get_wavelength_commands(settings),
-        self._get_calibrate_command(settings),
-        self._get_mode_command(settings),
-        self._get_order_command(settings),
-        self._get_speed_command(settings),
-        self._get_tag_command(settings),
-        *self._get_nvram_commands(settings),
-        self._get_readtype_command(settings),
-      ]
-    )
+      await self._set_plate_position(settings)
+      await self._set_strip(settings)
+      await self._set_carriage_speed(settings)
 
-    await self._send_commands(commands)
+    await self._set_shake(settings)
+    await self._set_wavelengths(settings)
+    await self._set_calibrate(settings)
+    await self._set_mode(settings)
+    await self._set_order(settings)
+    await self._set_speed(settings)
+    await self._set_tag(settings)
+    await self._set_nvram(settings)
+    await self._set_readtype(settings)
+
     await self._read_now()
-    await self._wait_for_idle()
+    await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
   async def read_fluorescence(
@@ -890,7 +871,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     spectrum_settings: Optional[SpectrumSettings] = None,
     cuvette: bool = False,
     settling_time: int = 0,
-    is_settling_time_on: bool = False,
+    timeout: int = 600,
   ) -> MolecularDevicesDataCollection:
     """use  _get_cutoff_filter_index_from_wavelength for cutoff_filters"""
     settings = MolecularDevicesSettings(
@@ -912,35 +893,28 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       cuvette=cuvette,
       speed_read=False,
       settling_time=settling_time,
-      is_settling_time_on=is_settling_time_on,
     )
-    commands: List[Union[Optional[str], Tuple[str, int]]] = [self._get_clear_command()]
-    # commands.append(self._get_read_stage_command(settings))
+    await self._set_clear()
     if not cuvette:
-      commands.extend(self._get_plate_position_commands(settings))
-      commands.extend(
-        [self._get_strip_command(settings), self._get_carriage_speed_command(settings)]
-      )
-    commands.extend(
-      [
-        *self._get_shake_commands(settings),
-        self._get_flashes_per_well_command(settings),
-        *self._get_pmt_commands(settings),
-        *self._get_wavelength_commands(settings),
-        *self._get_filter_commands(settings),
-        self._get_read_stage_command(settings),
-        self._get_calibrate_command(settings),
-        self._get_mode_command(settings),
-        self._get_order_command(settings),
-        self._get_tag_command(settings),
-        *self._get_nvram_commands(settings),
-        self._get_readtype_command(settings),
-      ]
-    )
+      await self._set_plate_position(settings)
+      await self._set_strip(settings)
+      await self._set_carriage_speed(settings)
 
-    await self._send_commands(commands)
+    await self._set_shake(settings)
+    await self._set_flashes_per_well(settings)
+    await self._set_pmt(settings)
+    await self._set_wavelengths(settings)
+    await self._set_filter(settings)
+    await self._set_read_stage(settings)
+    await self._set_calibrate(settings)
+    await self._set_mode(settings)
+    await self._set_order(settings)
+    await self._set_tag(settings)
+    await self._set_nvram(settings)
+    await self._set_readtype(settings)
+
     await self._read_now()
-    await self._wait_for_idle()
+    await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
   async def read_luminescence(
@@ -959,7 +933,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     spectrum_settings: Optional[SpectrumSettings] = None,
     cuvette: bool = False,
     settling_time: int = 0,
-    is_settling_time_on: bool = False,
+    timeout: int = 600,
   ) -> MolecularDevicesDataCollection:
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -978,35 +952,28 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       cuvette=cuvette,
       speed_read=False,
       settling_time=settling_time,
-      is_settling_time_on=is_settling_time_on,
     )
-    commands: List[Union[Optional[str], Tuple[str, int]]] = [
-      self._get_clear_command(),
-      self._get_read_stage_command(settings),
-    ]
-    if not cuvette:
-      commands.extend(self._get_plate_position_commands(settings))
-      commands.extend(
-        [self._get_strip_command(settings), self._get_carriage_speed_command(settings)]
-      )
-    commands.extend(
-      [
-        *self._get_shake_commands(settings),
-        *self._get_pmt_commands(settings),
-        *self._get_wavelength_commands(settings),
-        self._get_read_stage_command(settings),
-        self._get_calibrate_command(settings),
-        self._get_mode_command(settings),
-        self._get_order_command(settings),
-        self._get_tag_command(settings),
-        *self._get_nvram_commands(settings),
-        self._get_readtype_command(settings),
-      ]
-    )
+    await self._set_clear()
+    await self._set_read_stage(settings)
 
-    await self._send_commands(commands)
+    if not cuvette:
+      await self._set_plate_position(settings)
+      await self._set_strip(settings)
+      await self._set_carriage_speed(settings)
+
+    await self._set_shake(settings)
+    await self._set_pmt(settings)
+    await self._set_wavelengths(settings)
+    await self._set_read_stage(settings)
+    await self._set_calibrate(settings)
+    await self._set_mode(settings)
+    await self._set_order(settings)
+    await self._set_tag(settings)
+    await self._set_nvram(settings)
+    await self._set_readtype(settings)
+
     await self._read_now()
-    await self._wait_for_idle()
+    await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
   async def read_fluorescence_polarization(
@@ -1027,7 +994,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     spectrum_settings: Optional[SpectrumSettings] = None,
     cuvette: bool = False,
     settling_time: int = 0,
-    is_settling_time_on: bool = False,
+    timeout: int = 600,
   ) -> MolecularDevicesDataCollection:
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -1047,36 +1014,29 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       cutoff_filters=cutoff_filters,
       cuvette=cuvette,
       speed_read=False,
-      settling_time=settling_time,
-      is_settling_time_on=is_settling_time_on,
+      settling_time=settling_time
     )
-    commands: List[Union[Optional[str], Tuple[str, int]]] = [self._get_clear_command()]
-    # commands.append(self._get_read_stage_command(settings))
+    await self._set_clear()
     if not cuvette:
-      commands.extend(self._get_plate_position_commands(settings))
-      commands.extend(
-        [self._get_strip_command(settings), self._get_carriage_speed_command(settings)]
-      )
-    commands.extend(
-      [
-        *self._get_shake_commands(settings),
-        self._get_flashes_per_well_command(settings),
-        *self._get_pmt_commands(settings),
-        *self._get_wavelength_commands(settings),
-        *self._get_filter_commands(settings),
-        self._get_read_stage_command(settings),
-        self._get_calibrate_command(settings),
-        self._get_mode_command(settings),
-        self._get_order_command(settings),
-        self._get_tag_command(settings),
-        *self._get_nvram_commands(settings),
-        self._get_readtype_command(settings),
-      ]
-    )
+      await self._set_plate_position(settings)
+      await self._set_strip(settings)
+      await self._set_carriage_speed(settings)
 
-    await self._send_commands(commands)
+    await self._set_shake(settings)
+    await self._set_flashes_per_well(settings)
+    await self._set_pmt(settings)
+    await self._set_wavelengths(settings)
+    await self._set_filter(settings)
+    await self._set_read_stage(settings)
+    await self._set_calibrate(settings)
+    await self._set_mode(settings)
+    await self._set_order(settings)
+    await self._set_tag(settings)
+    await self._set_nvram(settings)
+    await self._set_readtype(settings)
+
     await self._read_now()
-    await self._wait_for_idle()
+    await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
   async def read_time_resolved_fluorescence(
@@ -1099,7 +1059,6 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     spectrum_settings: Optional[SpectrumSettings] = None,
     cuvette: bool = False,
     settling_time: int = 0,
-    is_settling_time_on: bool = False,
   ) -> MolecularDevicesDataCollection:
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -1120,35 +1079,28 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       cuvette=cuvette,
       speed_read=False,
       settling_time=settling_time,
-      is_settling_time_on=is_settling_time_on,
     )
-    commands: List[Union[Optional[str], Tuple[str, int]]] = [
-      self._get_clear_command(),
-      self._get_readtype_command(settings),
-      *self._get_integration_time_commands(settings, delay_time, integration_time),
-    ]
-    if not cuvette:
-      commands.extend(self._get_plate_position_commands(settings))
-      commands.extend(
-        [self._get_strip_command(settings), self._get_carriage_speed_command(settings)]
-      )
-    commands.extend(
-      [
-        *self._get_shake_commands(settings),
-        self._get_flashes_per_well_command(settings),
-        *self._get_pmt_commands(settings),
-        *self._get_wavelength_commands(settings),
-        *self._get_filter_commands(settings),
-        self._get_calibrate_command(settings),
-        self._get_read_stage_command(settings),
-        self._get_mode_command(settings),
-        self._get_order_command(settings),
-        self._get_tag_command(settings),
-        *self._get_nvram_commands(settings),
-      ]
-    )
+    await self._set_clear()
+    await self._set_readtype(settings)
+    await self._set_integration_time(settings, delay_time, integration_time)
 
-    await self._send_commands(commands)
+    if not cuvette:
+      await self._set_plate_position(settings)
+      await self._set_strip(settings)
+      await self._set_carriage_speed(settings)
+
+    await self._set_shake(settings)
+    await self._set_flashes_per_well(settings)
+    await self._set_pmt(settings)
+    await self._set_wavelengths(settings)
+    await self._set_filter(settings)
+    await self._set_calibrate(settings)
+    await self._set_read_stage(settings)
+    await self._set_mode(settings)
+    await self._set_order(settings)
+    await self._set_tag(settings)
+    await self._set_nvram(settings)
+
     await self._read_now()
     await self._wait_for_idle()
     return await self._transfer_data(settings)

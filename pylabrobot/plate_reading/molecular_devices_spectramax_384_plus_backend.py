@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List
 
 from .molecular_devices_backend import MolecularDevicesBackend, MolecularDevicesSettings
 
@@ -6,18 +6,18 @@ from .molecular_devices_backend import MolecularDevicesBackend, MolecularDevices
 class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
   """Backend for Molecular Devices SpectraMax 384 Plus plate readers."""
 
-  def __init__(self, port: str, res_term_char: bytes = b">") -> None:
-    super().__init__(port, res_term_char)
+  def __init__(self, port: str) -> None:
+    super().__init__(port)
 
-  def _get_readtype_command(self, settings: MolecularDevicesSettings) -> Tuple[str, int]:
-    """Get the READTYPE command and the expected number of response fields."""
+  async def _set_readtype(self, settings: MolecularDevicesSettings) -> None:
+    """Set the READTYPE command and the expected number of response fields."""
     cmd = f"!READTYPE {'CUV' if settings.cuvette else 'PLA'}"
-    return (cmd, 1)
+    await self.send_command(cmd, num_res_fields=1)
 
-  def _get_nvram_commands(self, settings):
-    return [None]
+  async def _set_nvram(self, settings: MolecularDevicesSettings) -> None:
+    pass
 
-  def _get_tag_command(self, settings):
+  async def _set_tag(self, settings: MolecularDevicesSettings) -> None:
     pass
 
   async def read_fluorescence(self, *args, **kwargs) -> List[List[float]]:
