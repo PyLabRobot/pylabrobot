@@ -2326,7 +2326,6 @@ class LiquidHandler(Resource, Machine):
     )
     drop_kwargs = {k: v for k, v in backend_kwargs.items() if k not in extra}
 
-    print("moving to", to)
     await self.drop_resource(
       destination=to,
       offset=destination_offset,
