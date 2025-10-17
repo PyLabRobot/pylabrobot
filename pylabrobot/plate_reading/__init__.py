@@ -5,7 +5,8 @@ from .byonoy import (
   byonoy_absorbance96_base_and_reader,
   byonoy_absorbance_adapter,
 )
-from .clario_star_backend import CLARIOStarBackend
+from .chatterbox import PlateReaderChatterboxBackend
+from .clario_star_backend import CLARIOstarBackend
 from .image_reader import ImageReader
 from .imager import Imager
 from .plate_reader import PlateReader

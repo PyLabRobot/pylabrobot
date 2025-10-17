@@ -59,6 +59,7 @@ class SingleChannelAspiration:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,14 @@ class SingleChannelDispense:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
+  mix: Optional[Mix]
+
+
+@dataclass(frozen=True)
+class Mix:
+  volume: float
+  repetitions: int
+  flow_rate: float
 
 
 @dataclass(frozen=True)
@@ -83,6 +92,7 @@ class MultiHeadAspirationPlate:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
@@ -95,6 +105,7 @@ class MultiHeadDispensePlate:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
@@ -107,6 +118,7 @@ class MultiHeadAspirationContainer:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 @dataclass(frozen=True)
@@ -119,6 +131,7 @@ class MultiHeadDispenseContainer:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
+  mix: Optional[Mix]
 
 
 class GripDirection(enum.Enum):

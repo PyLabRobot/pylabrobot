@@ -22,4 +22,4 @@ Examples:
    pumps/_pumps
    moving-channels-around
    tutorial_tip_inventory_consolidation
-
+   mixing

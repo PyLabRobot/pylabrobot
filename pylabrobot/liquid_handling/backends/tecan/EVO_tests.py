@@ -48,6 +48,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo.send_command.side_effect = send_command  # type: ignore[method-assign]
 
     self.deck = EVO150Deck()
+    self.evo.set_deck(self.deck)
 
     # setup
     self.evo.setup = unittest.mock.AsyncMock()  # type: ignore[method-assign]
@@ -143,6 +144,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       liquid_height=10,
       blow_out_air_volume=0,
       liquids=[(None, 100)],
+      mix=None,
     )
     await self.evo.aspirate([op], use_channels=[0])
     self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
@@ -284,6 +286,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       liquid_height=10,
       blow_out_air_volume=0,
       liquids=[(None, 100)],
+      mix=None,
     )
     await self.evo.dispense([op], use_channels=[0])
     self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
@@ -379,7 +382,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     )
     drop = ResourceDrop(
       resource=self.plate,
-      destination=self.plate_carrier[0].get_absolute_location(),
+      destination=self.plate_carrier[0].get_location_wrt(self.deck),
       destination_absolute_rotation=Rotation(0, 0, 0),
       offset=Coordinate.zero(),
       pickup_distance_from_top=13.2,

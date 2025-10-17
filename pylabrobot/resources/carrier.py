@@ -63,7 +63,7 @@ class Carrier(Resource, Generic[S]):
     reassign: bool = True,
     spot: Optional[int] = None,
   ):
-    if not isinstance(resource, ResourceHolder):
+    if not isinstance(resource, (ResourceHolder, Carrier)):
       raise TypeError(f"Invalid resource {resource}")
 
     # see if we have an index for the resource name (eg from deserialization or user specification),

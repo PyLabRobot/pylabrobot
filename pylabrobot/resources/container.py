@@ -69,6 +69,11 @@ class Container(Resource):
   def load_state(self, state: Dict[str, Any]):
     self.tracker.load_state(state)
 
+  def supports_compute_height_volume_functions(self) -> bool:
+    return (
+      self._compute_volume_from_height is not None and self._compute_height_from_volume is not None
+    )
+
   def compute_volume_from_height(self, height: float) -> float:
     """Compute the volume of liquid in a container from the height of the liquid relative to the
     bottom of the container."""

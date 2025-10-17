@@ -349,3 +349,36 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
       ),
     ),
   )
+
+
+def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
+  """Thermo Fisher Scientific cat. no.: 4309849, 4326270, 4343814 (with barcode), 4343370 (w/o barcode).
+
+  https://documents.thermofisher.com/TFS-Assets/LSG/manuals/cms_042831.pdf
+  """
+  diameter = 3.17
+  return Plate(
+    name=name,
+    size_x=127.8,
+    size_y=85.5,
+    size_z=9.70,
+    lid=None,
+    model=thermo_AB_384_wellplate_40uL_Vb_MicroAmp.__name__,
+    plate_type="non-skirted",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=24,
+      num_items_y=16,
+      dx=12.15 - diameter / 2,
+      dy=9 - diameter / 2,
+      dz=0.0,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=diameter,
+      size_y=diameter,
+      size_z=9.70 - 0.61,
+      bottom_type=WellBottomType.V,
+      material_z_thickness=0.61,
+      cross_section_type=CrossSectionType.CIRCLE,
+    ),
+  )

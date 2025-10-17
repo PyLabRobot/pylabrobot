@@ -6,9 +6,9 @@ import math
 import re
 import time
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple, Union, cast
+from typing import List, Literal, Optional, Tuple, Union
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources import Plate, Well
 
 try:
   import PySpin  # type: ignore
@@ -123,6 +123,8 @@ class Cytation5Backend(ImageReaderBackend):
     SIO_RTS_CTS_HS = 0x1 << 8
     await self.io.set_flowctrl(SIO_RTS_CTS_HS)
     await self.io.set_rts(True)
+
+    await self._abort()
 
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
@@ -562,7 +564,7 @@ class Cytation5Backend(ImageReaderBackend):
   async def stop_heating_or_cooling(self):
     return await self.send_command("g", "00000")
 
-  def _parse_body(self, body: bytes) -> List[List[float]]:
+  def _parse_body(self, body: bytes) -> List[List[Optional[float]]]:
     start_index = body.index(b"01,01")
     end_index = body.rindex(b"\r\n")
     num_rows = 8
@@ -583,7 +585,7 @@ class Cytation5Backend(ImageReaderBackend):
         value = float(group[2].decode())
         parsed_data[row_index][column_index] = value
 
-    return cast(List[List[float]], parsed_data)
+    return parsed_data
 
   async def set_plate(self, plate: Plate):
     # 08120112207434014351135308559127881422
@@ -638,14 +640,36 @@ class Cytation5Backend(ImageReaderBackend):
     self._plate = plate
     return resp
 
-  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
+  def _get_min_max_row_col(self, wells: List[Well], plate: Plate) -> Tuple[int, int, int, int]:
+    # check if all wells are in the same plate
+    plates = set(well.parent for well in wells)
+    if len(plates) != 1 or plates.pop() != plate:
+      raise ValueError("All wells must be in the specified plate")
+
+    # check if wells are in a grid
+    rows = sorted(set(well.get_row() for well in wells))
+    columns = sorted(set(well.get_column() for well in wells))
+    min_row, max_row, min_col, max_col = rows[0], rows[-1], columns[0], columns[-1]
+    if (
+      (len(rows) * len(columns) != len(wells))
+      or rows != list(range(min_row, max_row + 1))
+      or columns != list(range(min_col, max_col + 1))
+    ):
+      raise ValueError("Wells must be in a grid")
+
+    return min_row, max_row, min_col, max_col
+
+  async def read_absorbance(
+    self, plate: Plate, wells: List[Well], wavelength: int
+  ) -> List[List[Optional[float]]]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
     await self.set_plate(plate)
 
     wavelength_str = str(wavelength).zfill(4)
-    cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
+    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
+    cmd = f"004701{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000010600008{wavelength_str}1"
     checksum = str(sum(cmd.encode()) % 100).zfill(2)
     cmd = cmd + checksum + "\x03"
     await self.send_command("D", cmd)
@@ -659,8 +683,8 @@ class Cytation5Backend(ImageReaderBackend):
     return self._parse_body(body)
 
   async def read_luminescence(
-    self, plate: Plate, focal_height: float, integration_time: float = 1
-  ) -> List[List[float]]:
+    self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
+  ) -> List[List[Optional[float]]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
 
@@ -680,11 +704,9 @@ class Cytation5Backend(ImageReaderBackend):
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 
-    cmd = f"00840101010812000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
-    #                   ^^ end column
-    #                 ^^ end row
-    #               ^^ start column
-    #             ^^ start row
+    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
+
+    cmd = f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
     checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
     cmd = cmd + checksum
     await self.send_command("D", cmd)
@@ -692,17 +714,21 @@ class Cytation5Backend(ImageReaderBackend):
     resp = await self.send_command("O")
     assert resp == b"\x060000\x03"
 
-    body = await self._read_until(b"\x03", timeout=60 * 3)
+    # 2m10s of reading per 1 second of integration time
+    # allow 60 seconds flat
+    timeout = 60 + integration_time_seconds * (2 * 60 + 10)
+    body = await self._read_until(b"\x03", timeout=timeout)
     assert body is not None
     return self._parse_body(body)
 
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
     if not 250 <= excitation_wavelength <= 700:
@@ -717,8 +743,9 @@ class Cytation5Backend(ImageReaderBackend):
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
+    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
     cmd = (
-      f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
+      f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}0001200100001100100000135000100200200{excitation_wavelength_str}000"
       f"{emission_wavelength_str}000000000000000000210011"
     )
     checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
@@ -1198,6 +1225,8 @@ class Cytation5Backend(ImageReaderBackend):
 
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
+
+    await self.set_plate(plate)
 
     if not self._acquiring:
       self.start_acquisition()

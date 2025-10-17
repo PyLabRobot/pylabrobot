@@ -4,15 +4,15 @@ import hmac
 import logging
 import re
 import xml.etree.ElementTree as ET
+from abc import ABCMeta
 from base64 import b64decode
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
 
 from pylabrobot.io import Socket
+from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
-
-from .backend import ThermocyclerBackend
 
 
 def _generate_run_info_files(
@@ -203,7 +203,7 @@ def _gen_protocol_data(
   return data
 
 
-class ProflexBackend(ThermocyclerBackend):
+class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   """Backend for Proflex thermocycler."""
 
   def __init__(self, ip: str, port: int = 7000, shared_secret: bytes = b"f4ct0rymt55"):
@@ -401,8 +401,11 @@ class ProflexBackend(ThermocyclerBackend):
     elif self.bid == "13":
       self._num_blocks = 3
       self.num_temp_zones = 2
+    elif self.bid == "31":
+      self._num_blocks = 1
+      self.num_temp_zones = 1
     else:
-      raise NotImplementedError("Only BID 12 and 13 are supported")
+      raise NotImplementedError("Only BID 31, 12 and 13 are supported")
 
   async def is_block_running(self, block_id: int) -> bool:
     run_name = await self.get_run_name(block_id=block_id)
@@ -778,7 +781,7 @@ class ProflexBackend(ThermocyclerBackend):
     run_name = await self.get_run_name(block_id=block_id)
     if not progress:
       self.logger.info("Protocol completed")
-      return ProflexBackend.RunProgress(
+      return ThermoFisherThermocyclerBackend.RunProgress(
         running=False,
         stage="completed",
         elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
@@ -788,7 +791,7 @@ class ProflexBackend(ThermocyclerBackend):
     if progress["RunTitle"] == "-":
       await self._read_response(timeout=5)
       self.logger.info("Protocol completed")
-      return ProflexBackend.RunProgress(
+      return ThermoFisherThermocyclerBackend.RunProgress(
         running=False,
         stage="completed",
         elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
@@ -797,7 +800,7 @@ class ProflexBackend(ThermocyclerBackend):
 
     if progress["Stage"] == "POSTRun":
       self.logger.info("Protocol in POSTRun")
-      return ProflexBackend.RunProgress(
+      return ThermoFisherThermocyclerBackend.RunProgress(
         running=True,
         stage="POSTRun",
         elapsed_time=await self.get_elapsed_run_time_from_log(run_name=run_name),
@@ -820,7 +823,7 @@ class ProflexBackend(ThermocyclerBackend):
             break
           await asyncio.sleep(5)
         self.logger.info("Infinite hold")
-        return ProflexBackend.RunProgress(
+        return ThermoFisherThermocyclerBackend.RunProgress(
           running=False,
           stage="infinite_hold",
           elapsed_time=time_elapsed,
@@ -829,7 +832,7 @@ class ProflexBackend(ThermocyclerBackend):
 
     self.logger.info(f"Elapsed time: {time_elapsed}")
     self.logger.info(f"Remaining time: {remaining_time}")
-    return ProflexBackend.RunProgress(
+    return ThermoFisherThermocyclerBackend.RunProgress(
       running=True,
       stage=progress["Stage"],
       elapsed_time=time_elapsed,
@@ -851,12 +854,6 @@ class ProflexBackend(ThermocyclerBackend):
     for block_index in self.available_blocks:
       await self.set_block_idle_temp(temp=block_idle_temp, block_id=block_index)
       await self.set_cover_idle_temp(temp=cover_idle_temp, block_id=block_index)
-
-  async def open_lid(self):
-    raise NotImplementedError("Open lid command is not implemented for Proflex thermocycler")
-
-  async def close_lid(self):
-    raise NotImplementedError("Close lid command is not implemented for Proflex thermocycler")
 
   async def deactivate_lid(self, block_id: Optional[int] = None):
     assert block_id is not None, "block_id must be specified"

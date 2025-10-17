@@ -13,9 +13,9 @@ from pylabrobot.thermocycling.standard import (
 
 try:
   import serial.tools.list_ports
-  from opentrons.drivers.thermocycler import ThermocyclerDriverFactory
-  from opentrons.drivers.thermocycler.abstract import AbstractThermocyclerDriver
-  from opentrons.drivers.types import ThermocyclerLidStatus
+  from opentrons.drivers.thermocycler import ThermocyclerDriverFactory  # type: ignore
+  from opentrons.drivers.thermocycler.abstract import AbstractThermocyclerDriver  # type: ignore
+  from opentrons.drivers.types import ThermocyclerLidStatus  # type: ignore
 
   USE_OPENTRONS_DRIVER = True
   _import_error = None
@@ -274,7 +274,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
 
   async def get_device_info(self) -> dict:
     assert self._driver is not None
-    return await self._driver.get_device_info()
+    return await self._driver.get_device_info()  # type: ignore
 
   async def get_block_current_temperature(self) -> List[float]:
     assert self._driver is not None
@@ -304,7 +304,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     """Return True if the lid is open."""
     assert self._driver is not None
     lid_status = await self._driver.get_lid_status()
-    return lid_status == ThermocyclerLidStatus.OPEN
+    return lid_status == ThermocyclerLidStatus.OPEN  # type: ignore
 
   async def get_lid_status(self) -> LidStatus:
     assert self._driver is not None
