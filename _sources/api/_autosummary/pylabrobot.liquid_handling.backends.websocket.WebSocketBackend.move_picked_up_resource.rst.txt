@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.websocket.WebSocketBackend.move\_picked\_up\_resource
+==========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.websocket
+
+.. automethod:: WebSocketBackend.move_picked_up_resource
