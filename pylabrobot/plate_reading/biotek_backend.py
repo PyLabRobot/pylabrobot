@@ -72,7 +72,7 @@ def retry(func, *args, **kwargs):
       time.sleep(delay)
 
 
-def non_overlapping_rectangles(
+def _non_overlapping_rectangles(
   points: Iterable[Tuple[int, int]],
 ) -> List[Tuple[int, int, int, int]]:
   """Find non-overlapping rectangles that cover all given points.
@@ -613,7 +613,7 @@ class Cytation5Backend(ImageReaderBackend):
     return await self.send_command("g", "00000")
 
   def _parse_body(self, body: bytes) -> Dict[Tuple[int, int], float]:
-    start_index = body.index(b"01,01")
+    start_index = 22
     end_index = body.rindex(b"\r\n")
     num_rows = 8
     rows = body[start_index:end_index].split(b"\r\n,")[:num_rows]
@@ -636,7 +636,9 @@ class Cytation5Backend(ImageReaderBackend):
   def _data_dict_to_list(
     self, data: Dict[Tuple[int, int], float], plate: Plate
   ) -> List[List[Optional[float]]]:
-    result = [[None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)]
+    result: List[List[Optional[float]]] = [
+      [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
+    ]
     for (row, col), value in data.items():
       result[row][col] = value
     return result
@@ -701,7 +703,7 @@ class Cytation5Backend(ImageReaderBackend):
     plates = set(well.parent for well in wells)
     if len(plates) != 1 or plates.pop() != plate:
       raise ValueError("All wells must be in the specified plate")
-    return non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
+    return _non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
 
   async def read_absorbance(
     self, plate: Plate, wells: List[Well], wavelength: int
@@ -751,22 +753,23 @@ class Cytation5Backend(ImageReaderBackend):
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 
-    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
+    data: Dict[Tuple[int, int], float] = {}
+    for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
+      cmd = f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
+      checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
+      cmd = cmd + checksum
+      await self.send_command("D", cmd)
 
-    cmd = f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
-    checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
-    cmd = cmd + checksum
-    await self.send_command("D", cmd)
+      resp = await self.send_command("O")
+      assert resp == b"\x060000\x03"
 
-    resp = await self.send_command("O")
-    assert resp == b"\x060000\x03"
-
-    # 2m10s of reading per 1 second of integration time
-    # allow 60 seconds flat
-    timeout = 60 + integration_time_seconds * (2 * 60 + 10)
-    body = await self._read_until(b"\x03", timeout=timeout)
-    assert body is not None
-    return self._parse_body(body)
+      # 2m10s of reading per 1 second of integration time
+      # allow 60 seconds flat
+      timeout = 60 + integration_time_seconds * (2 * 60 + 10)
+      body = await self._read_until(b"\x03", timeout=timeout)
+      assert body is not None
+      data.update(self._parse_body(body))
+    return self._data_dict_to_list(data, plate)
 
   async def read_fluorescence(
     self,
@@ -790,21 +793,24 @@ class Cytation5Backend(ImageReaderBackend):
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
-    min_row, max_row, min_col, max_col = self._get_min_max_row_col(wells, plate)
-    cmd = (
-      f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}0001200100001100100000135000100200200{excitation_wavelength_str}000"
-      f"{emission_wavelength_str}000000000000000000210011"
-    )
-    checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
-    cmd = cmd + checksum + "\x03"
-    resp = await self.send_command("D", cmd)
 
-    resp = await self.send_command("O")
-    assert resp == b"\x060000\x03"
+    data: Dict[Tuple[int, int], float] = {}
+    for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
+      cmd = (
+        f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}0001200100001100100000135000100200200{excitation_wavelength_str}000"
+        f"{emission_wavelength_str}000000000000000000210011"
+      )
+      checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
+      cmd = cmd + checksum + "\x03"
+      resp = await self.send_command("D", cmd)
 
-    body = await self._read_until(b"\x03", timeout=60 * 2)
-    assert body is not None
-    return self._parse_body(body)
+      resp = await self.send_command("O")
+      assert resp == b"\x060000\x03"
+
+      body = await self._read_until(b"\x03", timeout=60 * 2)
+      assert body is not None
+      data.update(self._parse_body(body))
+    return self._data_dict_to_list(data, plate)
 
   async def _abort(self) -> None:
     await self.send_command("x", wait_for_response=False)
