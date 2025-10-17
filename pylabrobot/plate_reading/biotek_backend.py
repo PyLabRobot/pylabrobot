@@ -75,6 +75,26 @@ def retry(func, *args, **kwargs):
 def non_overlapping_rectangles(
   points: Iterable[Tuple[int, int]],
 ) -> List[Tuple[int, int, int, int]]:
+  """Find non-overlapping rectangles that cover all given points.
+
+  Example:
+    >>> points = [
+    >>>   (1, 1),
+    >>>   (2, 2), (2, 3), (2, 4),
+    >>>   (3, 2), (3, 3), (3, 4),
+    >>>   (4, 2), (4, 3), (4, 4), (4, 5),
+    >>>   (5, 2), (5, 3), (5, 4), (5, 5),
+    >>>   (6, 2), (6, 3), (6, 4), (6, 5),
+    >>>   (7, 2), (7, 3), (7, 4),
+    >>> ]
+    >>> non_overlapping_rectangles(points)
+    [
+      (1, 1, 1, 1),
+      (2, 2, 7, 4),
+      (4, 5, 6, 5),
+    ]
+  """
+
   pts = set(points)
   rects = []
 
@@ -676,12 +696,11 @@ class Cytation5Backend(ImageReaderBackend):
 
   def _get_min_max_row_col_tuples(
     self, wells: List[Well], plate: Plate
-  ) -> List[Tuple[int, int, int, int]]:
+  ) -> List[Tuple[int, int, int, int]]:  # min_row, min_col, max_row, max_col
     # check if all wells are in the same plate
     plates = set(well.parent for well in wells)
     if len(plates) != 1 or plates.pop() != plate:
       raise ValueError("All wells must be in the specified plate")
-
     return non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
 
   async def read_absorbance(
@@ -695,7 +714,7 @@ class Cytation5Backend(ImageReaderBackend):
     wavelength_str = str(wavelength).zfill(4)
     data: Dict[Tuple[int, int], float] = {}
 
-    for min_row, max_row, min_col, max_col in self._get_min_max_row_col_tuples(wells, plate):
+    for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
       cmd = f"004701{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000010600008{wavelength_str}1"
       checksum = str(sum(cmd.encode()) % 100).zfill(2)
       cmd = cmd + checksum + "\x03"
