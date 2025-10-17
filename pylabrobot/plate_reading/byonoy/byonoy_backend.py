@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from pylabrobot.io.hid import HID
 from pylabrobot.plate_reading.backend import PlateReaderBackend
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources import Plate, Well
 from pylabrobot.utils.list import reshape_2d
 
 
@@ -128,7 +128,9 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x1199, device_type=_ByonoyDevice.ABSORBANCE_96)
 
-  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(
+    self, plate: Plate, wells: List[Well], focal_height: float
+  ) -> List[List[Optional[float]]]:
     raise NotImplementedError("Absorbance plate reader does not support luminescence reading.")
 
   async def get_available_absorbance_wavelengths(self) -> List[float]:
@@ -145,7 +147,9 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     available_wavelengths = [w for w in available_wavelengths if w != 0]
     return available_wavelengths
 
-  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
+  async def read_absorbance(
+    self, plate: Plate, wells: List[Well], wavelength: int
+  ) -> List[List[Optional[float]]]:
     """Read the absorbance from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
 
@@ -216,10 +220,11 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells,
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     raise NotImplementedError("Absorbance plate reader does not support fluorescence reading.")
 
 
@@ -227,14 +232,14 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x119B, device_type=_ByonoyDevice.LUMINESCENCE_96)
 
-  async def read_absorbance(self, plate, wavelength):
+  async def read_absorbance(self, plate, wells, wavelength):
     raise NotImplementedError(
       "Luminescence plate reader does not support absorbance reading. Use ByonoyAbsorbance96Automate instead."
     )
 
   async def read_luminescence(
-    self, plate: Plate, focal_height: float, integration_time: float = 2
-  ) -> List[List[float]]:
+    self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 2
+  ) -> List[List[Optional[float]]]:
     """integration_time: in seconds, default 2 s"""
 
     await self.send_command(
@@ -303,8 +308,9 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells,
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     raise NotImplementedError("Fluorescence plate reader does not support fluorescence reading.")
