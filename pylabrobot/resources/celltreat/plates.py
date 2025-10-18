@@ -218,6 +218,7 @@ def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:
       dz=4.07,  # measured
       item_dx=9.0,  # standard
       item_dy=9.0,  # standard
+      cross_section_type=CrossSectionType.RECTANGLE,
       **well_kwargs,
     ),
   )
