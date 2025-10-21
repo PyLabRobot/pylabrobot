@@ -46,7 +46,9 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
 
     await self.io.stop()
 
-  def _assemble_command(self, report_id: int, payload_fmt: str, payload: list) -> bytes:
+  def _assemble_command(
+    self, report_id: int, payload_fmt: str, payload: list, routing_info: bytes
+  ) -> bytes:
     # based on `encode_hid_report` function
 
     # Encode the payload
@@ -56,15 +58,21 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
     header_fmt = "<H"
     binary_header = struct.pack(header_fmt, report_id)
     packet = binary_header + binary_payload
-    routing_info = b"\x00\x00"
     packet += b"\x00" * (62 - len(packet)) + routing_info  # pad to 64 bytes
 
-    return packet  # first zero byte is HID report ID (different from byonoy report_id)
+    return packet
 
   async def send_command(
-    self, report_id: int, payload_fmt: str, payload: list, wait_for_response: bool = True
+    self,
+    report_id: int,
+    payload_fmt: str,
+    payload: list,
+    wait_for_response: bool = True,
+    routing_info: bytes = b"\x00\x00",
   ) -> Optional[bytes]:
-    command = self._assemble_command(report_id, payload_fmt=payload_fmt, payload=payload)
+    command = self._assemble_command(
+      report_id, payload_fmt=payload_fmt, payload=payload, routing_info=routing_info
+    )
 
     await self.io.write(command)
     if not wait_for_response:
@@ -160,21 +168,21 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
         f"Available wavelengths: {available_wavelengths}"
       )
 
-    await self.send_command(
-      report_id=0x0010,  # SUPPORTED_REPORTS_IN
-      payload_fmt="<BB29H",
-      # "seq", "seq_len", "ids"
-      payload=[0, 0, *([0] * 29)],
-      wait_for_response=False,
-    )
+    # await self.send_command(
+    #   report_id=0x0010,  # SUPPORTED_REPORTS_IN
+    #   payload_fmt="<BB29H",
+    #   # "seq", "seq_len", "ids"
+    #   payload=[0, 0, *([0] * 29)],
+    #   wait_for_response=False,
+    # )
 
-    await self.send_command(
-      report_id=0x0200,  # DEVICE_DATA_READ_IN
-      payload_fmt="<HB52s",
-      # field_index", "flags", "data"
-      payload=[7, 0, b"\x00" * 52],
-      wait_for_response=False,
-    )
+    # await self.send_command(
+    #   report_id=0x0200,  # DEVICE_DATA_READ_IN
+    #   payload_fmt="<HB52s",
+    #   # field_index", "flags", "data"
+    #   payload=[7, 0, b"\x00" * 52],
+    #   wait_for_response=False,
+    # )
 
     await self.send_command(
       report_id=0x320,  # ABS_TRIGGER_MEASUREMENT_OUT
@@ -182,6 +190,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
       payload_fmt="<hhBB",
       payload=[wavelength, 0, 0, 0],  # 0, 1, 0
       wait_for_response=False,
+      routing_info=b"\x00\x40",
     )
     self._stop_background_pings()
 
