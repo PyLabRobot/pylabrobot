@@ -2,6 +2,69 @@
 
 from pylabrobot.resources.trough import Trough, TroughBottomType
 
+
+# # # # # # # # # # hamilton_1_trough_60ml_Vb # # # # # # # # # #
+
+def _compute_volume_from_height_Hamilton_1_trough_60ml_Vb(h: float):
+    """Function to compute volume of liquid in trough,
+    based on poylonmial fit of z-probed, empirical data.
+    """
+    if h > 63.1 * 1.05:  # Maximal measured height possible
+        raise ValueError(f"Height {h} is too large for Hamilton_1_trough_60ml_Vb")
+    a, b, c, d = -9.31148824e-2, 17.4143864, 2639.07733, -6103.77862
+    polynomial_fit_of_empirical_data = a * h**3 + b * h**2 + c * h + d
+    return round(polynomial_fit_of_empirical_data, 3)
+
+
+def _compute_height_from_volume_Hamilton_1_trough_60ml_Vb(
+    liquid_volume: float,
+):
+    """Function to compute height of liquid in trough,
+    based on poylonmial fit of z-probed, empirical data.
+    """
+    a, b, c, d = (
+        3.59536348e-16,
+        -2.59979679e-10,
+        0.000331809032,
+        2.70090777,
+    )
+    polynomial_fit_of_empirical_data = (
+        a * liquid_volume**3 + b * liquid_volume**2 + c * liquid_volume + d
+    )
+    return round(polynomial_fit_of_empirical_data, 3)
+
+
+# Calculation accuracy data:
+# input_volumes = [0, 2_000, 4_000, 6_000, 10_000, 15_000, 20_000,
+# 25_000, 30_000, 40_000, 50_000, 60_000]
+# calculated_heights = [2.7, 4.68, 5.99, 9.24, 18.69, 33.64, 47.84,
+# 61.54, 72.33, 88.55]
+
+
+def Hamilton_1_trough_60ml_Vb(name: str) -> Trough:
+    """Hamilton cat. no.: 56695-02
+    Trough 60ml, w lid, self standing, Black.
+    Internal dimensions:
+      - size_x=?.0,
+      - size_y=?.0,
+      - size_z=?.0,
+    Compatible with Trough_CAR_?? (??).
+    """
+    return Trough(
+        name=name,
+        size_x=19.0,
+        size_y=90.0,
+        size_z=65.5,
+        material_z_thickness=1.5,
+        through_base_to_container_base=1.2,
+        max_volume=60_000,  # units: ul
+        model=Hamilton_1_trough_60ml_Vb.__name__,
+        bottom_type=TroughBottomType.V,
+        compute_volume_from_height=_compute_volume_from_height_Hamilton_1_trough_60ml_Vb,
+        compute_height_from_volume=_compute_height_from_volume_Hamilton_1_trough_60ml_Vb,
+    )
+
+
 # # # # # # # # # # Hamilton_1_trough_200ml_Vb # # # # # # # # # #
 
 
