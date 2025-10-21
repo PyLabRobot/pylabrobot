@@ -169,21 +169,21 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
         f"Available wavelengths: {available_wavelengths}"
       )
 
-    # await self.send_command(
-    #   report_id=0x0010,  # SUPPORTED_REPORTS_IN
-    #   payload_fmt="<BB29H",
-    #   # "seq", "seq_len", "ids"
-    #   payload=[0, 0, *([0] * 29)],
-    #   wait_for_response=False,
-    # )
+    await self.send_command(
+      report_id=0x0010,  # SUPPORTED_REPORTS_IN
+      payload_fmt="<BB29H",
+      # "seq", "seq_len", "ids"
+      payload=[0, 0, *([0] * 29)],
+      wait_for_response=False,
+    )
 
-    # await self.send_command(
-    #   report_id=0x0200,  # DEVICE_DATA_READ_IN
-    #   payload_fmt="<HB52s",
-    #   # field_index", "flags", "data"
-    #   payload=[7, 0, b"\x00" * 52],
-    #   wait_for_response=False,
-    # )
+    await self.send_command(
+      report_id=0x0200,  # DEVICE_DATA_READ_IN
+      payload_fmt="<HB52s",
+      # field_index", "flags", "data"
+      payload=[7, 0, b"\x00" * 52],
+      wait_for_response=False,
+    )
 
     await self.send_command(
       report_id=0x320,  # ABS_TRIGGER_MEASUREMENT_OUT
