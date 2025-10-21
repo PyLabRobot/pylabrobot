@@ -200,7 +200,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     all_rows = []
     while True:
       if time.time() - t0 > 120:  # read for 2 minutes max. typical is 1m5s.
-        raise TimeoutError("Reading luminescence data timed out after 2 minutes.")
+        raise TimeoutError("Reading absorbance data timed out after 2 minutes.")
 
       chunk = await self.io.read(64, timeout=30)
       if len(chunk) == 0:
