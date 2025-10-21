@@ -147,6 +147,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
       payload_fmt="<30h",
       payload=[0] * 30,
       wait_for_response=True,
+      routing_info=b"\x80\x40",
     )
     assert available_wavelengths_r is not None, "Failed to get available wavelengths."
     # cut out the first 2 bytes, then read the next 2 bytes as an integer
