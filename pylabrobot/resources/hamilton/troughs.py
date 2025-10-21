@@ -135,7 +135,7 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
   """Hamilton cat. no.: 56694-01 (white/translucent), 56694-02 (black/conductive)
   Trough 60 mL, w lid, self standing (V-bottom).
   True maximal volume capacity ~80 mL.
-  Compatible with Trough_CAR_?? (??).
+  Compatible with Trough_CAR_?? (194057 <- not yet integrated into PLR!).
   """
   return Trough(
     name=name,
