@@ -186,7 +186,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     )
 
     await self.send_command(
-      report_id=0x320,  # ABS_TRIGGER_MEASUREMENT_OUT
+      report_id=0x0320,  # ABS_TRIGGER_MEASUREMENT_OUT
       # signal_wavelength_nm, reference_wavelength_nm, is_reference_measurement, flags
       payload_fmt="<hhBB",
       payload=[wavelength, 0, 0, 0],  # 0, 1, 0
@@ -208,7 +208,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
 
       report_id, *_ = struct.unpack("<H", chunk[:2])
 
-      if report_id == 0x0500:  # REP_LUM96_MEASUREMENT_IN
+      if report_id == 0x0500:  # ABS96_MEASUREMENT_IN
         (
           seq,
           seq_len,
