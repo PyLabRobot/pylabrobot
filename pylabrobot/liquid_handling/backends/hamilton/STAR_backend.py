@@ -76,6 +76,7 @@ from pylabrobot.resources.hamilton import (
 from pylabrobot.resources.hamilton.hamilton_decks import (
   STAR_SIZE_X,
   STARLET_SIZE_X,
+  HamiltonCoreGrippers,
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
@@ -5162,6 +5163,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
+  def _get_core_front_back(self):
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    back_channel_y_center = round(
+      (
+        core_grippers.get_location_wrt(self.deck).y
+        + core_grippers.back_channel_y_center
+        + self.core_adjustment.y
+      )
+      * 10
+    )
+    front_channel_y_center = round(
+      (
+        core_grippers.get_location_wrt(self.deck).y
+        + core_grippers.front_channel_y_center
+        + self.core_adjustment.y
+      )
+      * 10
+    )
+    return back_channel_y_center, front_channel_y_center
+
   @need_iswap_parked
   async def get_core(self, p1: int, p2: int):
     """Get CoRe gripper tool from wasteblock mount."""
@@ -5183,8 +5205,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Deck size {deck_size} not supported")
 
     channel_x_coord = round(xs + self.core_adjustment.x * 10)
-    back_channel_y_center = round(1250 + self.core_adjustment.y * 10)
-    front_channel_y_center = round(1070 + self.core_adjustment.y * 10)
+    back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     begin_z_coord = round(2350 + self.core_adjustment.z * 10)
     end_z_coord = round(2250 + self.core_adjustment.z * 10)
 
@@ -5220,8 +5241,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Deck size {deck_size} not supported")
 
     channel_x_coord = round(xs + self.core_adjustment.x * 10)
-    back_channel_y_center = round(1240 + self.core_adjustment.y * 10)
-    front_channel_y_center = round(1065 + self.core_adjustment.y * 10)
+    back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     begin_z_coord = round(2150 + self.core_adjustment.z * 10)
     end_z_coord = round(2050 + self.core_adjustment.z * 10)
 
