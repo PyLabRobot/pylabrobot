@@ -439,7 +439,9 @@ class HamiltonSTARDeck(HamiltonDeck):
     with_trash: bool = True,
     with_trash96: bool = True,
     with_teaching_rack: bool = True,
-    core_grippers: Optional[Literal["1000uL", "1000uL-5mL"]] = "1000uL-5mL",
+    core_grippers: Optional[
+      Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
+    ] = "1000uL-5mL-on-waste",
   ) -> None:
     """Create a new STAR(let) deck of the given size."""
 
@@ -503,14 +505,14 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
       )
 
-    if core_grippers == "1000uL":  # "at waste"
+    if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_at_waste(),
         location=Coordinate(x=x, y=105.550, z=205) - waste_block.location,
         # ignore_collision=True,
       )
-    elif core_grippers == "1000uL-5mL":  # "on waste"
+    elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
       x = 1337.5 if num_rails == STAR_NUM_RAILS else 797.5
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_5ml_on_waste(),
@@ -553,6 +555,9 @@ def STARLetDeck(
   with_trash: bool = True,
   with_trash96: bool = True,
   with_teaching_rack: bool = True,
+  core_grippers: Optional[
+    Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
+  ] = "1000uL-5mL-on-waste",
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck.
 
@@ -568,6 +573,7 @@ def STARLetDeck(
     with_trash=with_trash,
     with_trash96=with_trash96,
     with_teaching_rack=with_teaching_rack,
+    core_grippers=core_grippers,
   )
 
 
@@ -576,6 +582,9 @@ def STARDeck(
   with_trash: bool = True,
   with_trash96: bool = True,
   with_teaching_rack: bool = True,
+  core_grippers: Optional[
+    Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
+  ] = "1000uL-5mL-on-waste",
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck.
 
@@ -591,4 +600,5 @@ def STARDeck(
     with_trash=with_trash,
     with_trash96=with_trash96,
     with_teaching_rack=with_teaching_rack,
+    core_grippers=core_grippers,
   )
