@@ -1988,11 +1988,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ops[i].resource.get_absolute_location(z="cavity_bottom").z
       + liquid_heights[i]
       - surface_following_distance[i]
-      < minimum_height[i]
+      - minimum_height[i]
+      < -1e-6
       for i in range(n)
     ):
       raise ValueError(
-        f"automatic_surface_following would result in a surface_following_distance that goes below the minimum_height. "
+        f"surface_following_distance would result in a height that goes below the minimum_height. "
         f"Well bottom: {well_bottoms[i]}, surface_following_distance: {surface_following_distance[i]}, minimum_height: {minimum_height[i]}"
       )
 
