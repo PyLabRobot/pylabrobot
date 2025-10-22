@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import Optional, cast
+from typing import Literal, Optional, cast
 
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -167,7 +167,13 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     else:
       raise ValueError("Either rails or location must be provided.")
 
-    if not ignore_collision:
+    def should_check_collision(res: Resource) -> bool:
+      """Determine if collision detection should be performed for this resource."""
+      if isinstance(res, HamiltonCoreGrippers):
+        return False
+      return True
+
+    if not ignore_collision and should_check_collision(resource):
       if resource_location is not None:  # collision detection
         if (
           resource_location.x + resource.get_absolute_size_x()
@@ -262,7 +268,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     name_column_length = max(
       max_name_length + 4, 30
     )  # 4 per depth (by find_longest_child), 4 extra
-    type_column_length = max_type_length + 3 - 4
+    type_column_length = max_type_length + 1
     location_column_length = 30
 
     # Print header
@@ -349,6 +355,75 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     return summary_
 
 
+class HamiltonCoreGrippers(Resource):
+  def __init__(
+    self,
+    name: str,
+    back_channel_y_center: float,
+    front_channel_y_center: float,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    model,
+    rotation=None,
+    category="core_grippers",
+    barcode=None,
+  ):
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      rotation=rotation,
+      category=category,
+      model=model,
+      barcode=barcode,
+    )
+    self.back_channel_y_center = back_channel_y_center
+    self.front_channel_y_center = front_channel_y_center
+
+  def serialize(self):
+    return {
+      **super().serialize(),
+      "back_channel_y_center": self.back_channel_y_center,
+      "front_channel_y_center": self.front_channel_y_center,
+    }
+
+
+def hamilton_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
+  # inner hole diameter is 8.6mm
+  # distance from base of rack to outer base of containers: -7mm
+  # left outer edge of rack is 22.5mm
+  # front outer edge of rack is 9.5mm
+
+  return HamiltonCoreGrippers(
+    name="core_grippers",
+    size_x=45,  # from venus
+    size_y=45,  # from venus
+    size_z=24,  # from venus
+    back_channel_y_center=0,
+    front_channel_y_center=-26,
+    model=hamilton_core_gripper_1000ul_at_waste.__name__,
+  )
+
+
+def hamilton_core_gripper_1000ul_5ml_on_waste() -> HamiltonCoreGrippers:
+  # distance from base of rack to outer base of containers: 0mm
+  # inner hole diameter is 8.6mm
+  # left outer edge of rack is 19.5mm
+  # front outer edge of rack is 39.5mm
+
+  return HamiltonCoreGrippers(
+    name="core_grippers",
+    size_x=39,  # from venus
+    size_y=61,  # from venus
+    size_z=24,  # from venus
+    back_channel_y_center=0,
+    front_channel_y_center=-18,
+    model=hamilton_core_gripper_1000ul_5ml_on_waste.__name__,
+  )
+
+
 class HamiltonSTARDeck(HamiltonDeck):
   """Base class for a Hamilton STAR(let) deck."""
 
@@ -364,8 +439,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     with_trash: bool = True,
     with_trash96: bool = True,
     with_teaching_rack: bool = True,
-    no_trash: Optional[bool] = None,
-    no_teaching_rack: Optional[bool] = None,
+    core_grippers: Optional[Literal["1000uL", "1000uL-5mL"]] = "1000uL-5mL",
   ) -> None:
     """Create a new STAR(let) deck of the given size."""
 
@@ -378,13 +452,6 @@ class HamiltonSTARDeck(HamiltonDeck):
       category=category,
       origin=origin,
     )
-
-    if no_trash is not None:
-      raise NotImplementedError("no_trash is deprecated. Use with_trash=False instead.")
-    if no_teaching_rack is not None:
-      raise NotImplementedError(
-        "no_teaching_rack is deprecated. Use with_teaching_rack=False instead."
-      )
 
     # assign trash area
     if with_trash:
@@ -436,10 +503,26 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
       )
 
+    if core_grippers == "1000uL":  # "at waste"
+      x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
+      waste_block.assign_child_resource(
+        hamilton_core_gripper_1000ul_at_waste(),
+        location=Coordinate(x=x, y=105.550, z=205) - waste_block.location,
+        # ignore_collision=True,
+      )
+    elif core_grippers == "1000uL-5mL":  # "on waste"
+      x = 1337.5 if num_rails == STAR_NUM_RAILS else 797.5
+      waste_block.assign_child_resource(
+        hamilton_core_gripper_1000ul_5ml_on_waste(),
+        location=Coordinate(x=x, y=125, z=205) - waste_block.location,
+        # ignore_collision=True,
+      )
+
   def serialize(self) -> dict:
     return {
       **super().serialize(),
       "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
+      "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }
 
   def rails_to_location(self, rails: int) -> Coordinate:
