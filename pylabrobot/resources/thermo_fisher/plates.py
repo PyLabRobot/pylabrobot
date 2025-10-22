@@ -384,7 +384,7 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
   )
 
 
-# # # # # # # # # # Thermo_Nunc_OmniTray_165218 # # # # # # # # # #
+# # # # # # # # # # thermo_nunc_1_wellplate_90000uL_Fb_omnitray # # # # # # # # # #
 
 
 def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
@@ -392,7 +392,7 @@ def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
   https://assets.fishersci.com/TFS-Assets/LSG/manuals/D03023.pdf
 
   - Brand: Thermo Scientific / Nunc
-  - Part no.: 165218 (OmniTray, single-well)
+  - Part no.: 165218, 140156, 242811, 264728
   """
 
   return Plate(
