@@ -387,33 +387,35 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
 # # # # # # # # # # Thermo_Nunc_OmniTray_165218 # # # # # # # # # #
 
 
-def Thermo_Nunc_OmniTray_165218(name: str) -> Plate:
+def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
   """
+  https://assets.fishersci.com/TFS-Assets/LSG/manuals/D03023.pdf
+
   - Brand: Thermo Scientific / Nunc
   - Part no.: 165218 (OmniTray, single-well)
   """
 
   return Plate(
     name=name,
-    size_x=127.76,
-    size_y=85.47,
-    size_z=14.5,
+    size_x=127.76,  # from spec
+    size_y=85.47,  # from spec
+    size_z=14.5,  # from spec
     lid=None,  # TODO: define a matching Lid if you use one with this tray
-    model="Thermo_Nunc_OmniTray_165218",
+    model=thermo_nunc_1_wellplate_90000uL_Fb_omnitray.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,
       num_items_y=1,
-      dx=2.03,
-      dy=2.08,
-      dz=2.5,
+      dx=(127.76 - 123.7) / 2,  # from spec
+      dy=(85.47 - 81.3) / 2,  # from spec
+      dz=14.5 - 11.7 - 2.5,  # from spec: plate_z - well_z - material_z_thickness
       item_dx=9.0,
       item_dy=9.0,
-      size_x=123.7,
-      size_y=81.3,
-      size_z=11.7,
+      size_x=123.7,  # from spec
+      size_y=81.3,  # from spec
+      size_z=11.7,  # from spec
       bottom_type=WellBottomType.FLAT,
-      material_z_thickness=0.5,  # arbitrarily made
+      material_z_thickness=2.5,  # from spec
       cross_section_type=CrossSectionType.RECTANGLE,
       # compute_volume_from_height=None,
       # compute_height_from_volume=None,
