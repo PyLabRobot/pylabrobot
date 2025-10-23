@@ -78,7 +78,7 @@ class HamiltonLiquidClass:
         ValueError: If the correction curve data is invalid or non-numeric.
     """
     if not self.curve:
-        return target_volume
+      return target_volume
 
     return interpolate_1d(target_volume, self.curve, mode="extrapolate")
 

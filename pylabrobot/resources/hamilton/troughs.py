@@ -5,7 +5,6 @@ import warnings
 from pylabrobot.resources.trough import Trough, TroughBottomType
 from pylabrobot.utils.interpolation import interpolate_1d
 
-
 # --------------------------------------------------------------------------- #
 # Hamilton 1-trough 60 mL (V-bottom)
 # --------------------------------------------------------------------------- #

@@ -2,7 +2,6 @@
 
 from typing import Dict, Literal
 
-
 InterpolationBoundsHandling = Literal["error", "clip", "extrapolate"]
 InterpolationMethod = Literal["linear", "cubic", "spline"]
 
