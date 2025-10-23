@@ -47,6 +47,7 @@ class PickupTipRack:
 class DropTipRack:
   resource: Union[TipRack, Trash]
   offset: Coordinate
+  tips: Sequence[Optional[Tip]]
 
 
 @dataclass(frozen=True)
