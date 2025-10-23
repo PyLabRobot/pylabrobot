@@ -2,11 +2,11 @@ Cookbook
 ========
 
 The PyLabRobot Cookbook is a curated collection of concise, modular code 
-examples that demonstrate practical solutions to common lab automation 
-challenges.
+examples, called recipes, that demonstrate practical solutions to common lab  
+automation challenges.
 Each recipe is short, focused, and reusable - designed to help 
 you apply specific PyLabRobot features in real-world contexts.
-Rather than full experimental protocols, these examples aim to inspire, 
+Rather than full experimental protocols, these recipes aim to inspire, 
 teach, and accelerate your own automation workflows.
 
 ------------------------------------------
