@@ -65,9 +65,11 @@ class PlateReader(ResourceHolder, Machine):
       raise NoPlateError("There is no plate in the plate reader.")
     return cast(Plate, self.children[0])
 
+  @need_setup_finished
   async def open(self, **backend_kwargs) -> None:
     await self.backend.open(**backend_kwargs)
 
+  @need_setup_finished
   async def close(self, **backend_kwargs) -> None:
     plate = self.get_plate() if len(self.children) > 0 else None
     await self.backend.close(plate=plate, **backend_kwargs)
