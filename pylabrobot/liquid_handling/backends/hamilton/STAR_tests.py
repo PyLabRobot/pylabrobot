@@ -936,7 +936,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "C0ZRid0003xs03479xd0yj2102zj1876zi000zy0500yo0885th2800te2800"
         ),
         _any_write_and_read_command_call(
-          "C0ZSid0004xs07975xd0ya1240yb1065tp2150tz2050th2800te2800"
+          "C0ZSid0004xs07975xd0ya1250yb1070tp2150tz2050th2800te2800"
         ),
       ]
     )
