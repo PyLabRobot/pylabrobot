@@ -14,14 +14,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath(".."))
-
+# Allow importing local Sphinx extensions (e.g., pylabrobot_cards)
+sys.path.append(os.path.abspath("./_exts"))
 
 # -- Project information -----------------------------------------------------
 
 project = "PyLabRobot"
 copyright = "2025, PyLabRobot"
 author = "The PyLabRobot authors"
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -31,6 +31,7 @@ author = "The PyLabRobot authors"
 extensions = [
   "sphinx.ext.napoleon",
   "sphinx.ext.autodoc",
+  "pylabrobot_cards",  # NEW: PLR cards (plrcard/plrcardgrid + compat)
   "sphinx.ext.autosummary",
   "sphinx.ext.autosectionlabel",
   "sphinx.ext.intersphinx",
@@ -82,9 +83,23 @@ html_theme = "pydata_sphinx_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = [
   "_static",
-  "resources/library/img"
-  ]
+  "resources/library/img",
+  "cookbook/img"
+]
 html_extra_path = ["resources/library/img"]
+
+# --- PLR cards assets (CSS/JS) ---
+# Ensure lists exist, then append our assets without clobbering existing values.
+html_css_files = list(globals().get("html_css_files", []))
+if "plr_cards.css" not in html_css_files:
+  html_css_files.append("plr_cards.css")  # served from _static/plr_cards.css
+
+html_js_files = list(globals().get("html_js_files", []))
+if "plr_cards.js" not in html_js_files:
+  html_js_files.append("plr_cards.js")    # served from _static/plr_cards.js
+
+# NOTE: templates_path already includes "_templates", which is where
+#       plr_card_grid.html should live.
 
 html_theme_options = {
   "show_nav_level": 1,
@@ -128,7 +143,6 @@ html_context = {
 }
 
 html_logo = "_static/logo.png"
-
 
 autodoc_default_flags = ["members"]
 autosummary_generate = True
@@ -177,8 +191,6 @@ if tags.has("no-api"):
   exclude_patterns.append("api/**")
   suppress_warnings.append("toc.excluded")
 
-suppress_warnings.append(
-  "autosectionlabel.*"
-)
+suppress_warnings.append("autosectionlabel.*")
 
 html_favicon = "_static/favicon.ico"

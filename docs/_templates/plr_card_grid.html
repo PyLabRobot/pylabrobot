@@ -1,0 +1,39 @@
+{# plr_card_grid.html — standalone snippet, no layout inheritance #}
+
+<div class="plr-card-filter">
+  <div class="plr-tag-buttons plr-filter-menu">
+    <div class="plr-filter-btn active" data-tag="All">All</div>
+    <div class="plr-filter-btn" data-tag="ResourceMovement">Resource Movement</div>
+    <div class="plr-filter-btn" data-tag="PlateAdapter">PlateAdapter</div>
+    <div class="plr-filter-btn" data-tag="STAR">STAR</div>
+  </div>
+</div>
+
+<div class="plr-card-grid">
+  {% for card in cards %}
+    <div class="plr-card"
+         data-tags="{{ card.tags | join(' ') }}"
+         data-title="{{ card.header | lower }}"
+         data-desc="{{ card.card_description | default('') | lower }}">
+      <a href="{{ card.link }}">
+        <div class="plr-card-content">
+          <div class="plr-card-text">
+            <h4>{{ card.header }}</h4>
+            {% if card.desc %}
+              <p>{{ card.desc }}</p>
+            {% endif %}
+          </div>
+          <div class="plr-card-image">
+            {% if card.image_url %}
+              <img src="{{ card.image_url }}"
+                   alt="{{ card.header }}"
+                   {% if card.image_hover_url %}
+                     data-hover="{{ card.image_hover_url }}"
+                   {% endif %}>
+            {% endif %}
+          </div>
+        </div>
+      </a>
+    </div>
+  {% endfor %}
+</div>
