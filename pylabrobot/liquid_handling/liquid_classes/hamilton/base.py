@@ -1,5 +1,7 @@
 from typing import Any, Dict
 
+from pylabrobot.utils.interpolation import interpolate_1d
+
 
 class HamiltonLiquidClass:
   """A liquid class like used in VENUS / Venus on Vantage."""
@@ -47,44 +49,38 @@ class HamiltonLiquidClass:
     self.dispense_stop_back_volume = dispense_stop_back_volume
 
   def compute_corrected_volume(self, target_volume: float) -> float:
-    """Compute corrected volume using the correction curve.
+    """Compute the piston displacement volume needed to achieve a desired liquid volume.
 
-    Uses the correction curve data point if an exact match is
-    available. If the volume is bigger or smaller than the
-    min/max key, the min/max key will be used. Otherwise, linear
-    interpolation between the two nearest data points is used. If
-    no correction curve available, the initial volume will be returned.
+    This method determines how far the pipette piston must move (i.e., the commanded
+    internal volume) to aspirate or dispense a specified *target liquid volume*.
+    Because factors such as air compressibility, liquid viscosity, and tip geometry
+    affect the relationship between piston displacement and actual transferred volume,
+    Hamilton liquid classes use an empirically derived **correction curve**.
+
+    The correction curve maps *nominal liquid volumes* (target) to the corresponding
+    *piston displacement volumes* required to achieve them. If the requested
+    `target_volume` exactly matches a calibration point, its mapped value is used.
+    Otherwise, the function performs **piecewise linear interpolation** between the
+    two nearest calibration points. For values outside the calibration range,
+    the nearest segment is linearly extrapolated.
+
+    This interpolation is performed using
+    :func:`pylabrobot.utils.interpolation.interpolate_1d`.
 
     Args:
-      Target volume that needs to be pipetted.
+        target_volume: The liquid volume to be aspirated or dispensed (in µL).
 
     Returns:
-      Volume that should actually be pipetted to reach target volume.
+        The corrected piston displacement volume (in µL) that the pipette mechanism
+        must execute to achieve the desired liquid transfer.
+
+    Raises:
+        ValueError: If the correction curve data is invalid or non-numeric.
     """
+    if not self.curve:
+        return target_volume
 
-    targets = sorted(self.curve.keys())
-
-    if len(targets) == 0:
-      return target_volume
-
-    if target_volume in self.curve:
-      return self.curve[target_volume]
-
-    # use min non-zero value, so second index (if len(targets)>0,
-    # then 0 was automatically added at initialization).
-    if target_volume < targets[1]:  # smaller than min
-      return self.curve[targets[1]] / targets[1] * target_volume
-    if target_volume > targets[-1]:  # larger than max
-      return self.curve[targets[-1]] / targets[-1] * target_volume
-
-    # interpolate between two nearest points.
-    for pt, t in zip(targets[:-1], targets[1:]):
-      if pt < target_volume < t:
-        return (self.curve[t] - self.curve[pt]) / (t - pt) * (target_volume - t) + self.curve[
-          t
-        ]  # (y = slope * (x-x1) + y1)
-
-    assert False, "Should never reach this point. Please file an issue."
+    return interpolate_1d(target_volume, self.curve, mode="extrapolate")
 
   def serialize(self) -> Dict[str, Any]:
     """Serialize the liquid class to a dictionary."""
