@@ -9,7 +9,7 @@ from pylabrobot.resources.carrier import (
 def Tube_CAR_24_A00(name: str) -> TubeCarrier:
   """Hamilton cat. no.: 173400
   Hamilton name: 'SMP_CAR_24_A00'.
-  'Sample' carrier for 24 tubes sizes 14.5x60 – 18x120mm.
+  'Sample' carrier for 24 tubes sizes 14.5x60 - 18x120mm.
   1 track(T) wide.
   """
   return TubeCarrier(
@@ -50,4 +50,29 @@ def Tube_CAR_32_A00(name: str) -> TubeCarrier:
       name_prefix=name,
     ),
     model="Tube_CAR_32_A00",
+  )
+
+
+def hamilton_tube_carrier_12_b00(name: str) -> TubeCarrier:
+  """Hamilton cat. no.: 182045
+  Hamilton name: 'SMP_CAR_12_B00'.
+  'Sample' carrier for 12 50mL falcon tubes (Cor_Falcon_tube_50mL_Vb).
+  2 track(T) wide.
+  """
+  return TubeCarrier(
+    name=name,
+    size_x=45,  # 2 tracks
+    size_y=497.0,  # standard
+    size_z=92.0,  # caliper
+    sites=create_homogeneous_resources(
+      klass=ResourceHolder,
+      locations=[
+        Coordinate(26.05 - 29 / 2, 41.74 - 29 / 2 + i * 36.5, 18.9)
+        for i in range(12)  # SMP_CAR_12_A00 in venus, verified with caliper, custom z
+      ],
+      resource_size_x=29.0,
+      resource_size_y=29.0,
+      name_prefix=name,
+    ),
+    model=hamilton_tube_carrier_12_b00.__name__,
   )
