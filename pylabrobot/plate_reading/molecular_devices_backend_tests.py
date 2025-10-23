@@ -1,4 +1,3 @@
-import asyncio
 import math
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
