@@ -34,6 +34,7 @@ class PlateReader(ResourceHolder, Machine):
     backend: PlateReaderBackend,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    child_location: Coordinate = Coordinate.zero(),
   ) -> None:
     ResourceHolder.__init__(
       self,
@@ -43,6 +44,7 @@ class PlateReader(ResourceHolder, Machine):
       size_z=size_z,
       category=category,
       model=model,
+      child_location=child_location,
     )
     Machine.__init__(self, backend=backend)
     self.backend: PlateReaderBackend = backend  # fix type
@@ -138,3 +140,6 @@ class PlateReader(ResourceHolder, Machine):
       focal_height=focal_height,
       **backend_kwargs,
     )
+
+  def serialize(self) -> dict:
+    return {**Resource.serialize(self), **Machine.serialize(self)}
