@@ -125,8 +125,10 @@ def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
     model="MFX_CAR_P3_base",
   )
 
+
 # Deprecated names for backwards compatibility
 # TODO: Remove >2026-02
+
 
 def MFX_CAR_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
   """Deprecated alias for `hamilton_mfx_carrier_L5_base`."""

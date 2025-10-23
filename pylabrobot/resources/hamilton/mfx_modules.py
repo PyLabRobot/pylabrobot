@@ -88,6 +88,7 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
 # Deprecated names for backwards compatibility
 # TODO: Remove >2026-02
 
+
 def Hamilton_MFX_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:
   """Deprecated alias for `hamilton_mfx_plateholder_DWP_metal_tapped`."""
   warnings.warn(
