@@ -3084,8 +3084,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     grip_strength: int = 15,
     z_speed: float = 50.0,
     y_gripping_speed: float = 5.0,
-    channel_1: int = 6,
-    channel_2: int = 7,
+    front_channel: int = 7,
   ):
     """Pick up resource with CoRe gripper tool
     Low level component of :meth:`move_resource`
@@ -3100,8 +3099,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
       z_speed: Z speed [mm/s]. Must be between 0.4 and 128.7. Default 50.0.
       y_gripping_speed: Y gripping speed [mm/s]. Must be between 0 and 370.0. Default 5.0.
-      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 6.
-      channel_2: Channel 2. Must be between 0 and self._num_channels - 1. Default 7.
+      front_channel: Channel 1. Must be between 1 and self._num_channels - 1. Default 7.
     """
 
     # Get center of source plate. Also gripping height and plate width.
@@ -3110,7 +3108,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     grip_width = resource.get_absolute_size_y()  # grip width is y size of resource
 
     if self.core_parked:
-      await self.get_core(p1=channel_1, p2=channel_2)
+      await self.pick_up_core_gripper_tools(front_channel=front_channel)
 
     await self.core_get_plate(
       x_position=round(center.x * 10),
@@ -3212,8 +3210,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     pickup: ResourcePickup,
     use_arm: Literal["iswap", "core"] = "iswap",
-    channel_1: int = 6,
-    channel_2: int = 7,
+    core_front_channel: int = 7,
     iswap_grip_strength: int = 4,
     core_grip_strength: int = 15,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
@@ -3227,6 +3224,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
     iswap_fold_up_sequence_at_the_end_of_process: bool = False,
+    # deprecated
+    channel_1: Optional[int] = None,
+    channel_2: Optional[int] = None,
   ):
     if use_arm == "iswap":
       assert (
@@ -3312,14 +3312,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if use_unsafe_hotel:
         raise ValueError("Cannot use iswap hotel mode with core grippers")
 
+      if channel_1 is not None or channel_2 is not None:
+        warnings.warn(
+          "The channel_1 and channel_2 parameters are deprecated and will be removed in future versions. "
+          "Please use the core_front_channel parameter instead.",
+          DeprecationWarning,
+        )
+        assert (
+          channel_1 is not None and channel_2 is not None
+        ), "Both channel_1 and channel_2 must be provided"
+        assert channel_1 + 1 == channel_2, "channel_2 must be channel_1 + 1"
+        core_front_channel = (
+          channel_2 - 1
+        )  # core_front_channel is the first channel of the gripper tool
+
       await self.core_pick_up_resource(
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
         offset=pickup.offset,
         minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         minimum_z_position_at_the_command_end=self._iswap_traversal_height,
-        channel_1=channel_1,
-        channel_2=channel_2,
+        front_channel=core_front_channel,
         grip_strength=core_grip_strength,
       )
     else:
@@ -5164,7 +5177,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _get_core_front_back(self):
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    back_channel_y_center = round(
+    back_channel_y_center = int(
       (
         core_grippers.get_location_wrt(self.deck).y
         + core_grippers.back_channel_y_center
@@ -5172,7 +5185,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
       * 10
     )
-    front_channel_y_center = round(
+    front_channel_y_center = int(
       (
         core_grippers.get_location_wrt(self.deck).y
         + core_grippers.front_channel_y_center
@@ -5182,27 +5195,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     return back_channel_y_center, front_channel_y_center
 
-  @need_iswap_parked
+  def _get_core_x(self) -> int:
+    """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    return round((core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10)
+
   async def get_core(self, p1: int, p2: int):
+    warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
+    assert p1 + 1 == p2, "p2 must be p1 + 1"
+    return await self.pick_up_core_gripper_tools(front_channel=p2 - 1)  # p1 here is 1-indexed
+
+  @need_iswap_parked
+  async def pick_up_core_gripper_tools(self, front_channel: int):
     """Get CoRe gripper tool from wasteblock mount."""
 
-    if not 0 <= p1 < self.num_channels:
-      raise ValueError(f"channel_1 must be between 0 and {self.num_channels - 1}")
-    if not 0 <= p2 < self.num_channels:
-      raise ValueError(f"channel_2 must be between 0 and {self.num_channels - 1}")
+    if not 0 < front_channel < self.num_channels:
+      raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
+    back_channel = front_channel - 1
 
-    # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
-    # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
-    # a resource on the robot deck and use deck.get_resource().get_location_wrt(self.deck).
-    deck_size = self.deck.get_absolute_size_x()
-    if deck_size == STARLET_SIZE_X:
-      xs = 7975  # 1360-797.5 = 562.5 (distance to right edge of deck)
-    elif deck_size == STAR_SIZE_X:
-      xs = 13375  # 1900-1337.5 = 562.5 (distance to right edge of deck)
-    else:
-      raise ValueError(f"Deck size {deck_size} not supported")
+    xs = self._get_core_x()
 
-    channel_x_coord = round(xs + self.core_adjustment.x * 10)
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     begin_z_coord = round(2350 + self.core_adjustment.z * 10)
     end_z_coord = round(2250 + self.core_adjustment.z * 10)
@@ -5210,12 +5223,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=f"{channel_x_coord:05}",
+      xs=f"{xs:05}",
       xd="0",
       ya=f"{back_channel_y_center:04}",
       yb=f"{front_channel_y_center:04}",
-      pa=f"{p1+1:02}",
-      pb=f"{p2+1:02}",
+      pa=f"{back_channel+1:02}",  # star is 1-indexed
+      pb=f"{front_channel+1:02}",  # star is 1-indexed
       tp=f"{begin_z_coord:04}",
       tz=f"{end_z_coord:04}",
       th=round(self._iswap_traversal_height * 10),
@@ -5224,8 +5237,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._core_parked = False
     return command_output
 
-  @need_iswap_parked
   async def put_core(self):
+    raise NotImplementedError("Deprecated. Use return_core_gripper_tools instead.")
+
+  @need_iswap_parked
+  async def return_core_gripper_tools(self):
     """Put CoRe gripper tool at wasteblock mount."""
 
     assert self.deck is not None, "must have deck defined to access CoRe grippers"
@@ -5358,7 +5374,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     if return_tool:
-      await self.put_core()
+      await self.return_core_gripper_tools()
 
     return command_output
 

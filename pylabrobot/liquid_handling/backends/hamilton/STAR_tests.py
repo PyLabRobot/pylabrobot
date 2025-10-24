@@ -920,8 +920,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       pickup_distance_from_top=13 - 3.33,
       use_arm="core",
       # kwargs specific to pickup and drop
-      channel_1=6,
-      channel_2=7,
+      core_front_channel=7,
       return_core_gripper=True,
     )
     self.STAR._write_and_read_command.assert_has_calls(
