@@ -3224,6 +3224,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
     iswap_fold_up_sequence_at_the_end_of_process: bool = False,
+    # deprecated
+    channel_1: Optional[int] = None,
+    channel_2: Optional[int] = None,
   ):
     if use_arm == "iswap":
       assert (
@@ -3308,6 +3311,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     elif use_arm == "core":
       if use_unsafe_hotel:
         raise ValueError("Cannot use iswap hotel mode with core grippers")
+
+      if channel_1 is not None or channel_2 is not None:
+        warnings.warn(
+          "The channel_1 and channel_2 parameters are deprecated and will be removed in future versions. "
+          "Please use the core_front_channel parameter instead.",
+          DeprecationWarning,
+        )
+        assert (
+          channel_1 is not None and channel_2 is not None
+        ), "Both channel_1 and channel_2 must be provided"
+        assert channel_1 + 1 == channel_2, "channel_2 must be channel_1 + 1"
+        core_front_channel = (
+          channel_2 - 1
+        )  # core_front_channel is the first channel of the gripper tool
 
       await self.core_pick_up_resource(
         resource=pickup.resource,
