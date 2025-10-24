@@ -111,6 +111,7 @@ class BioShake(HeaterShakerBackend):
         # Wait for each line with a timeout
         response = await asyncio.wait_for(self.io.readline(), timeout=2)
         decoded = response.decode("ascii", errors="ignore").strip()
+        await asyncio.sleep(0.1)
 
         if decoded:
           # Stop when the final message arrives
@@ -125,7 +126,7 @@ class BioShake(HeaterShakerBackend):
     # Initialize the BioShake into home position
     await self._send_command(cmd="shakeGoHome", delay=5)
 
-  async def shake(self, speed: float, duration: Optional[float] = None, accel: Optional[int] = 0):
+  async def shake(self, speed: int, duration: Optional[float] = None, accel: int = 0):
     # Check if speed is an integer
     if isinstance(speed, float):
       if speed.is_integer():
@@ -176,7 +177,7 @@ class BioShake(HeaterShakerBackend):
       set_duration_cmd = f"shakeOnWithRuntime{duration}"
       await self._send_command(cmd=set_duration_cmd, delay=0.2)
 
-  async def stop_shaking(self, decel: Optional[int] = 0):
+  async def stop_shaking(self, decel: int = 0):
     # Check if decel is an integer
     if isinstance(decel, float):
       if decel.is_integer():
