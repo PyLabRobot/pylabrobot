@@ -5186,7 +5186,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    return round(core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10
+    return round((core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10)
 
   async def get_core(self, p1: int, p2: int):
     raise NotImplementedError("Deprecated. Use pick_up_core_gripper_tools instead.")
