@@ -3101,7 +3101,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_speed: Z speed [mm/s]. Must be between 0.4 and 128.7. Default 50.0.
       y_gripping_speed: Y gripping speed [mm/s]. Must be between 0 and 370.0. Default 5.0.
       channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 7.
-      channel_2: Channel 2. Must be between 1 and self._num_channels. Default 8.
+      channel_2: Channel 2. Must be between 0 and self._num_channels - 1. Default 8.
     """
 
     # Get center of source plate. Also gripping height and plate width.
@@ -3548,7 +3548,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Check existence of resource with CoRe gripper tool
     a "Get plate using CO-RE gripper" + error handling
     Which channels are used for resource check is dependent on which channels have been used for
-    `STARBackend.get_core(p1: int, p2: int)` which is a prerequisite for this check function.
+    `STARBackend.get_core(p1: int, p2: int)` (channel indices are 0-based) which is a prerequisite
+    for this check function.
 
     Args:
       location: Location to check for resource
@@ -5187,8 +5188,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if not 0 <= p1 < self.num_channels:
       raise ValueError(f"channel_1 must be between 0 and {self.num_channels - 1}")
-    if not 1 <= p2 <= self.num_channels:
-      raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
+    if not 0 <= p2 < self.num_channels:
+      raise ValueError(f"channel_2 must be between 0 and {self.num_channels - 1}")
 
     # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
     # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
@@ -5213,8 +5214,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       xd="0",
       ya=f"{back_channel_y_center:04}",
       yb=f"{front_channel_y_center:04}",
-      pa=f"{p1:02}",
-      pb=f"{p2:02}",
+      pa=STARBackend.channel_id(p1),
+      pb=STARBackend.channel_id(p2),
       tp=f"{begin_z_coord:04}",
       tz=f"{end_z_coord:04}",
       th=round(self._iswap_traversal_height * 10),
