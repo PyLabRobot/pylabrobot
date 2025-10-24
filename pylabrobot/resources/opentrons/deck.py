@@ -50,7 +50,7 @@ class OTDeck(Deck):
     to create a dummy resource to represent the container of the actual trash area.
     """
 
-    trash_container = Resource(
+    trash_container = Trash(
       name="trash_container",
       size_x=172.86,
       size_y=165.86,

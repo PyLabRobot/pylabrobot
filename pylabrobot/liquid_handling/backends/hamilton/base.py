@@ -473,15 +473,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       raise ValueError(f"Tip {tip} is not a HamiltonTip.")
     return tip
 
-  async def get_ttti(self, tips: List[HamiltonTip]) -> List[int]:
-    """Get tip type table index for a list of tips.
-
-    Ensure that for all non-None tips, they have the same tip type, and return the tip type table
-    index for that tip type.
-    """
-
-    return [await self.get_or_assign_tip_type_index(tip) for tip in tips]
-
   async def send_raw_command(
     self,
     command: str,

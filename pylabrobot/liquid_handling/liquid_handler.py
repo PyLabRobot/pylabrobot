@@ -147,9 +147,6 @@ class LiquidHandler(Resource, Machine):
     self.backend: LiquidHandlerBackend = backend  # fix type
 
     self.deck = deck
-    # register callbacks for sending resource assignment/unassignment to backend
-    self.deck.register_did_assign_resource_callback(self._send_assigned_resource_to_backend)
-    self.deck.register_did_unassign_resource_callback(self._send_unassigned_resource_to_backend)
 
     self.head: Dict[int, TipTracker] = {}
     self.head96: Dict[int, TipTracker] = {}
@@ -179,10 +176,6 @@ class LiquidHandler(Resource, Machine):
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
     self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
-
-    self._send_assigned_resource_to_backend(self.deck)
-    for resource in self.deck.children:
-      self._send_assigned_resource_to_backend(resource)
 
     self._resource_pickup = None
 
@@ -238,16 +231,6 @@ class LiquidHandler(Resource, Machine):
     t = threading.Thread(target=callback, args=args, kwargs=kwargs)
     t.start()
     t.join()
-
-  def _send_assigned_resource_to_backend(self, resource: Resource):
-    """This method is called when a resource is assigned to the deck, and passes this information
-    to the backend."""
-    self._run_async_in_thread(self.backend.assigned_resource_callback, resource)
-
-  def _send_unassigned_resource_to_backend(self, resource: Resource):
-    """This method is called when a resource is unassigned from the deck, and passes this
-    information to the backend."""
-    self._run_async_in_thread(self.backend.unassigned_resource_callback, resource.name)
 
   def summary(self):
     """Prints a string summary of the deck layout."""
@@ -1379,6 +1362,62 @@ class LiquidHandler(Resource, Machine):
       yield
     finally:
       self._default_use_channels = None
+
+  @contextlib.asynccontextmanager
+  async def use_tips(
+    self,
+    tip_spots: List[TipSpot],
+    channels: Optional[List[int]] = None,
+    discard: bool = True,
+  ):
+    """Temporarily pick up tips from the specified tip spots on the specified channels.
+
+    This is a convenience method that picks up tips from `tip_spots` on `channels` when entering
+    the context, and discards them when exiting the context. When passing `discard=False`, the tips
+    will be returned instead of discarded.
+
+    Examples:
+      Use tips from A1 to H1 on channels 0 to 7, then discard:
+
+      >>> with lh.use_tips(tip_rack["A1":"H1"], channels=list(range(8))):
+      ...   await lh.aspirate(plate["A1":"H1"], vols=[50]*8)
+      ...   await lh.dispense(plate["A1":"H1"], vols=[50]*8)
+
+      This is equivalent to:
+
+      >>> await lh.pick_up_tips(tip_rack["A1":"H1"], use_channels=list(range(8)))
+      >>> await lh.aspirate(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
+      >>> await lh.dispense(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
+      >>> await lh.discard_tips(use_channels=list(range(8)))
+
+      Use tips from A1 to H1 on channels 0 to 7, but return them instead of discarding:
+
+      >>> with lh.use_tips(tip_rack["A1":"H1"], channels=list(range(8)), discard=False):
+      ...   await lh.aspirate(plate["A1":"H1"], vols=[50]*8)
+      ...   await lh.dispense(plate["A1":"H1"], vols=[50]*8)
+
+      This is equivalent to:
+
+      >>> await lh.pick_up_tips(tip_rack["A1":"H1"], use_channels=list(range(8)))
+      >>> await lh.aspirate(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
+      >>> await lh.dispense(plate["A1":"H1"], vols=[50]*8, use_channels=list(range(8)))
+      >>> await lh.return_tips(use_channels=list(range(8)))
+    """
+
+    if channels is None:
+      channels = list(range(len(tip_spots)))
+
+    if len(tip_spots) != len(channels):
+      raise ValueError("Number of tip spots and channels must match.")
+
+    await self.pick_up_tips(tip_spots, use_channels=channels)
+    try:
+      yield
+    finally:
+      if discard:
+        await self.discard_tips(use_channels=channels)
+      else:
+        await self.return_tips(use_channels=channels)
 
   async def pick_up_tips96(
     self,
