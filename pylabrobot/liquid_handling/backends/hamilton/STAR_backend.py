@@ -3084,8 +3084,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     grip_strength: int = 15,
     z_speed: float = 50.0,
     y_gripping_speed: float = 5.0,
-    channel_1: int = 7,
-    channel_2: int = 8,
+    channel_1: int = 6,
+    channel_2: int = 7,
   ):
     """Pick up resource with CoRe gripper tool
     Low level component of :meth:`move_resource`
@@ -3100,8 +3100,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
       z_speed: Z speed [mm/s]. Must be between 0.4 and 128.7. Default 50.0.
       y_gripping_speed: Y gripping speed [mm/s]. Must be between 0 and 370.0. Default 5.0.
-      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 7.
-      channel_2: Channel 2. Must be between 0 and self._num_channels - 1. Default 8.
+      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 6.
+      channel_2: Channel 2. Must be between 0 and self._num_channels - 1. Default 7.
     """
 
     # Get center of source plate. Also gripping height and plate width.
@@ -3212,8 +3212,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     pickup: ResourcePickup,
     use_arm: Literal["iswap", "core"] = "iswap",
-    channel_1: int = 7,
-    channel_2: int = 8,
+    channel_1: int = 6,
+    channel_2: int = 7,
     iswap_grip_strength: int = 4,
     core_grip_strength: int = 15,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
