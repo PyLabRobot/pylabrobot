@@ -5187,7 +5187,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def get_core(self, p1: int, p2: int):
     warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
     assert p1 + 1 == p2, "p2 must be p1 + 1"
-    return await self.pick_up_core_gripper_tools(front_channel=p2)
+    return await self.pick_up_core_gripper_tools(front_channel=p2 - 1)  # p1 here is 1-indexed
 
   @need_iswap_parked
   async def pick_up_core_gripper_tools(self, front_channel: int):
