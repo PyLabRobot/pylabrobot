@@ -5193,7 +5193,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
       * 10
     )
-    assert back_channel_y_center > front_channel_y_center, "back_channel_y_center must be greater than front_channel_y_center"
+    assert (
+      back_channel_y_center > front_channel_y_center
+    ), "back_channel_y_center must be greater than front_channel_y_center"
     assert front_channel_y_center > 60, "front_channel_y_center must be less than 6mm (60 [0.1mm])"
     return back_channel_y_center, front_channel_y_center
 
