@@ -3110,7 +3110,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     grip_width = resource.get_absolute_size_y()  # grip width is y size of resource
 
     if self.core_parked:
-      await self.get_core(p1=channel_1, p2=channel_2)
+      await self.pick_up_core_gripper_tools(p1=channel_1, p2=channel_2)
 
     await self.core_get_plate(
       x_position=round(center.x * 10),
@@ -5163,7 +5163,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _get_core_front_back(self):
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    back_channel_y_center = round(
+    back_channel_y_center = int(
       (
         core_grippers.get_location_wrt(self.deck).y
         + core_grippers.back_channel_y_center
@@ -5171,7 +5171,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
       * 10
     )
-    front_channel_y_center = round(
+    front_channel_y_center = int(
       (
         core_grippers.get_location_wrt(self.deck).y
         + core_grippers.front_channel_y_center
@@ -5181,8 +5181,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     return back_channel_y_center, front_channel_y_center
 
-  @need_iswap_parked
+  def get_core_x(self) -> int:
+    """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    return round(core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10
+
   async def get_core(self, p1: int, p2: int):
+    raise NotImplementedError("Deprecated. Use pick_up_core_gripper_tools instead.")
+
+  @need_iswap_parked
+  async def pick_up_core_gripper_tools(self, p1: int, p2: int):
     """Get CoRe gripper tool from wasteblock mount."""
 
     if not 0 <= p1 < self.num_channels:
@@ -5190,18 +5199,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not 1 <= p2 <= self.num_channels:
       raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
 
-    # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
-    # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
-    # a resource on the robot deck and use deck.get_resource().get_location_wrt(self.deck).
-    deck_size = self.deck.get_absolute_size_x()
-    if deck_size == STARLET_SIZE_X:
-      xs = 7975  # 1360-797.5 = 562.5 (distance to right edge of deck)
-    elif deck_size == STAR_SIZE_X:
-      xs = 13375  # 1900-1337.5 = 562.5 (distance to right edge of deck)
-    else:
-      raise ValueError(f"Deck size {deck_size} not supported")
+    xs = self.get_core_x()
 
-    channel_x_coord = round(xs + self.core_adjustment.x * 10)
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     begin_z_coord = round(2350 + self.core_adjustment.z * 10)
     end_z_coord = round(2250 + self.core_adjustment.z * 10)
@@ -5209,7 +5208,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=f"{channel_x_coord:05}",
+      xs=f"{xs:05}",
       xd="0",
       ya=f"{back_channel_y_center:04}",
       yb=f"{front_channel_y_center:04}",
@@ -5223,8 +5222,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._core_parked = False
     return command_output
 
-  @need_iswap_parked
   async def put_core(self):
+    raise NotImplementedError("Deprecated. Use return_core_gripper_tools instead.")
+
+  @need_iswap_parked
+  async def return_core_gripper_tools(self):
     """Put CoRe gripper tool at wasteblock mount."""
 
     assert self.deck is not None, "must have deck defined to access CoRe grippers"
@@ -5357,7 +5359,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     if return_tool:
-      await self.put_core()
+      await self.return_core_gripper_tools()
 
     return command_output
 
