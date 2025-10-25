@@ -51,6 +51,7 @@ Sometimes called "sample carriers" in Hamilton jargon.
 | - | - | - |
 | 'Tube_CAR_24_A00'<br>Part no.: 173400<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/173400) <br>Carries 24 "sample" tubes with 14.5–18 mm outer diameter, 60–120 mm high. Occupies one track. | ![](img/hamilton/Tube_CAR_24_A00.png) | `Tube_CAR_24_A00` |
 | 'Tube_CAR_32_A00'<br>Part no.: 173410<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/173410) <br>Carries 32 "sample" tubes with 11–14 mm outer diameter, 60–120 mm high. Occupies one track. | ![](img/hamilton/Tube_CAR_32_A00.png.avif) | `Tube_CAR_32_A00` |
+| 'hamilton_tube_carrier_12_b00'<br>Part no.: 182045<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/50-ml-falcon-tube-carrier) <br>Carries 12 "sample" tubes with 30 mm outer diameter, 115 mm high. Occupies two tracks. | ![](img/hamilton/hamilton_tube_carrier_12_b00.jpg) | `hamilton_tube_carrier_12_b00` |
 
 ### Trough carriers
 
@@ -60,7 +61,14 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 | - | - | - |
 | 'Trough_CAR_4R200_A00'<br>Part no.: 185436 (same as 96890-01?)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/96890-01) <br>Trough carrier for 4x 200ml troughs. 2 tracks(T) wide. | ![](img/hamilton/Trough_CAR_4R200_A00.png) | `Trough_CAR_4R200_A00` |
 
-## Labware
+
+## Plate Adapters
+
+| Description | Image | PLR definition |
+| - | - | - |
+| 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | ![](img/hamilton/Hamilton_96_adapter_188182.png) | `Hamilton_96_adapter_188182` |
+
+## Consumables
 
 ### TipRacks
 
@@ -85,10 +93,5 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 
 | Description | Image | PLR definition |
 | - | - | - |
-| 'Hamilton_1_trough_200ml_Vb'<br>Part no.: 56695-02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/56695-02) <br>Trough 200ml, w lid, self standing, Black. <br>Compatible with Trough_CAR_4R200_A00 (185436). | ![](img/hamilton/Hamilton_1_trough_200ml_Vb.jpg) | `Hamilton_1_trough_200ml_Vb` |
-
-## Adapters
-
-| Description | Image | PLR definition |
-| - | - | - |
-| 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | ![](img/hamilton/Hamilton_96_adapter_188182.png) | `Hamilton_96_adapter_188182` |
+| 'Hamilton_1_trough_60ml_Vb'<br>Part no.:  56694-01 (white/translucent), 56694-02 (black/conductive)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/56694-02) <br>Trough 200ml, w lid, self standing, Black. <br>Compatible with Trough_CAR_4R200_A00 (185436). | ![](img/hamilton/hamilton_1_trough_60mL_Vb_56694-01.png) | `hamilton_1_trough_60ml_Vb` |
+| 'Hamilton_1_trough_200ml_Vb'<br>Part no.: 56695-01 (white/translucent), 56695-02 (black/conductive)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/56695-02) <br>Trough 200ml, w lid, self standing, Black. <br>Compatible with Trough_CAR_4R200_A00 (185436). | ![](img/hamilton/hamilton_1_trough_200ml_Vb.jpg) | `hamilton_1_trough_200ml_Vb` |
