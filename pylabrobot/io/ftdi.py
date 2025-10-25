@@ -137,7 +137,7 @@ class FTDI(IOBase):
     serial = self._dev.driver.list_devices()[self._dev.device_index][2]  # type: ignore
     logger.log(LOG_LEVEL_IO, "[%s] get_serial %s", self._device_id, serial)
     capturer.record(FTDICommand(device_id=self._device_id, action="get_serial", data=str(serial)))
-    return serial
+    return serial  # type: ignore
 
   async def stop(self):
     self.dev.close()
