@@ -9,5 +9,5 @@ class Agilent5300Backend(AgilentFABackend):
   def __init__(self, host: str, port=3000):
     super().__init__(host, port)
 
-  def tray_out(self, tray_number: int):
+  async def tray_out(self, tray_number: int):
     raise NotImplementedError("Automated tray operation is not supported on 5300")
