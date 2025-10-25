@@ -148,7 +148,7 @@ class AgilentFABackend(FragmentAnalyzerBackend, metaclass=ABCMeta):
 
   async def run_method(self, method_name: str, nonblocking=False):
     """Run a specified Fragment Analyzer method.
-    for seperation methods,
+    for separation methods,
     method file must be located in [parent directory of Fragment Analyzer.exe]/Methods/[capillary length]/.
     for conditioning methods,
     method file must be located in [parent directory of Fragment Analyzer.exe]/Methods/
@@ -160,7 +160,7 @@ class AgilentFABackend(FragmentAnalyzerBackend, metaclass=ABCMeta):
 
   async def get_ladder_file(self, method_name: str, ladder_file_name: str):
     """Run a specified Fragment Analyzer method and save ladder file to [parent directory of Fragment Analyzer.exe]/Ladders/
-    for seperation methods,
+    for separation methods,
     method file must be located in [parent directory of Fragment Analyzer.exe]/Methods/[capillary length]/.
     for conditioning methods,
     method file must be located in [parent directory of Fragment Analyzer.exe]/Methods/
