@@ -19,4 +19,4 @@ uv.lock
 
 pylabrobot/liquid_handling/backends/hamilton/nimbus/firmware_dlls
 .cursor
-dev/
+nimbus-dev/

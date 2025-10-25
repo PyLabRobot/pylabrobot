@@ -76,6 +76,7 @@ class TCP(IOBase):
     self._last_error = None
     self._reconnect_attempts = 0
 
+
     # unique id in the logs
     self._unique_id = f"[{self._host}:{self._port}]"
 
@@ -171,10 +172,11 @@ class TCP(IOBase):
       self._last_error = e
       raise
 
-  async def read(self, timeout: Optional[int] = None) -> bytes:
+  async def read(self, num_bytes: int = None, timeout: Optional[int] = None) -> bytes:
     """Read data from the TCP server.
 
     Args:
+      num_bytes: Maximum number of bytes to read. If None, use buffer_size.
       timeout: The timeout for reading from the server in seconds. If `None`, use the default
         timeout (specified by the `read_timeout` attribute).
     """
@@ -184,13 +186,16 @@ class TCP(IOBase):
     if timeout is None:
       timeout = self.read_timeout
 
+    if num_bytes is None:
+      num_bytes = self.buffer_size
+
     def read_or_timeout():
       # Set socket timeout
       self.socket.settimeout(timeout)
 
       try:
         # Read data from socket
-        data = self.socket.recv(self.buffer_size)
+        data = self.socket.recv(num_bytes)
         if not data:
           raise ConnectionError("Connection closed by server")
 
@@ -318,6 +323,8 @@ class TCP(IOBase):
       self._connection_state = "connected"
       self._last_error = None
       logger.info("Connected to TCP server %s:%d", self._host, self._port)
+
+
     except Exception as e:
       self._connection_state = "disconnected"
       self._last_error = e
@@ -331,16 +338,19 @@ class TCP(IOBase):
 
     logging.warning("Closing connection to TCP server.")
 
-    if self._executor is not None:
-      await asyncio.get_running_loop().run_in_executor(
-        self._executor,
-        lambda: self.socket.close()
-      )
-    self.socket = None
+    # Close socket immediately
+    if self.socket is not None:
+      try:
+        self.socket.close()
+      except Exception as e:
+        logger.warning("Error closing socket: %s", e)
+      self.socket = None
+
     self._connection_state = "disconnected"
 
+    # Shutdown executor without waiting
     if self._executor is not None:
-      self._executor.shutdown(wait=True)
+      self._executor.shutdown(wait=False)  # Don't wait for pending tasks
       self._executor = None
 
   @property
@@ -357,6 +367,7 @@ class TCP(IOBase):
   def last_error(self) -> Optional[Exception]:
     """Get the last connection error."""
     return self._last_error
+
 
   def serialize(self) -> dict:
     """Serialize the backend to a dictionary."""
