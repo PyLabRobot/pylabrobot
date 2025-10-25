@@ -139,7 +139,7 @@ def _load_vspin_calibrations(device_id: str) -> Optional[int]:
   if not os.path.exists(_vspin_bucket_calibrations_path):
     return None
   with open(_vspin_bucket_calibrations_path, "r") as f:
-    return json.load(f).get(device_id)
+    return json.load(f).get(device_id)  # type: ignore
 
 
 def _save_vspin_calibrations(device_id, remainder: int):
@@ -154,7 +154,7 @@ def _save_vspin_calibrations(device_id, remainder: int):
     json.dump(data, f)
 
 
-FULL_ROTATION = 8000
+FULL_ROTATION: int = 8000
 
 
 class VSpinBackend(CentrifugeBackend):
@@ -312,7 +312,7 @@ class VSpinBackend(CentrifugeBackend):
         "Bucket 1 position not set. Please set it using `set_bucket_1_position_to_current` method."
       )
     home_position = await self.get_home_position()
-    bucket_1_position = (home_position - self._bucket_1_remainder) % FULL_ROTATION
+    bucket_1_position = (home_position - self.bucket_1_remainder) % FULL_ROTATION
     return bucket_1_position
 
   async def stop(self):
@@ -345,7 +345,7 @@ class VSpinBackend(CentrifugeBackend):
     resp = await self.get_status()
     return int.from_bytes(resp[1:5], byteorder="little")
 
-  async def get_home_position(self):
+  async def get_home_position(self) -> int:
     resp = await self.get_status()
     return int.from_bytes(resp[9:13], byteorder="little")
 
