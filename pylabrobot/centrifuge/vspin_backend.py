@@ -143,7 +143,6 @@ def _load_vspin_calibrations(device_id: str) -> Optional[int]:
 
 
 def _save_vspin_calibrations(device_id, remainder: int):
-  print("Saving VSpin calibration")
   if os.path.exists(_vspin_bucket_calibrations_path):
     with open(_vspin_bucket_calibrations_path, "r") as f:
       data = json.load(f)
@@ -153,7 +152,6 @@ def _save_vspin_calibrations(device_id, remainder: int):
   os.makedirs(os.path.dirname(_vspin_bucket_calibrations_path), exist_ok=True)
   with open(_vspin_bucket_calibrations_path, "w") as f:
     json.dump(data, f)
-  print("done", _vspin_bucket_calibrations_path)
 
 
 FULL_ROTATION = 8000
