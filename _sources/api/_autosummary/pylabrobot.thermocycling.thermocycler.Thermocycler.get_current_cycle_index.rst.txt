@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.get\_current\_cycle\_index
+=============================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.get_current_cycle_index

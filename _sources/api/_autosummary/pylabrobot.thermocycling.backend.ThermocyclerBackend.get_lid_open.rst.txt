@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.backend.ThermocyclerBackend.get\_lid\_open
+===================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.backend
+
+.. automethod:: ThermocyclerBackend.get_lid_open

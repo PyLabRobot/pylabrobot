@@ -1,0 +1,77 @@
+﻿pylabrobot.plate\_reading.imager.Imager
+=======================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. autoclass:: Imager
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Imager.name
+      ~Imager.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Imager.__init__
+      ~Imager.assign_child_resource
+      ~Imager.at
+      ~Imager.capture
+      ~Imager.center
+      ~Imager.centers
+      ~Imager.copy
+      ~Imager.deregister_did_assign_resource_callback
+      ~Imager.deregister_did_unassign_resource_callback
+      ~Imager.deregister_state_update_callback
+      ~Imager.deregister_will_assign_resource_callback
+      ~Imager.deregister_will_unassign_resource_callback
+      ~Imager.deserialize
+      ~Imager.get_absolute_location
+      ~Imager.get_absolute_rotation
+      ~Imager.get_absolute_size_x
+      ~Imager.get_absolute_size_y
+      ~Imager.get_absolute_size_z
+      ~Imager.get_all_children
+      ~Imager.get_anchor
+      ~Imager.get_highest_known_point
+      ~Imager.get_location_wrt
+      ~Imager.get_plate
+      ~Imager.get_resource
+      ~Imager.get_root
+      ~Imager.get_size_x
+      ~Imager.get_size_y
+      ~Imager.get_size_z
+      ~Imager.is_in_subtree_of
+      ~Imager.load_all_state
+      ~Imager.load_from_json_file
+      ~Imager.load_state
+      ~Imager.load_state_from_file
+      ~Imager.register_did_assign_resource_callback
+      ~Imager.register_did_unassign_resource_callback
+      ~Imager.register_state_update_callback
+      ~Imager.register_will_assign_resource_callback
+      ~Imager.register_will_unassign_resource_callback
+      ~Imager.rotate
+      ~Imager.rotated
+      ~Imager.save
+      ~Imager.save_state_to_file
+      ~Imager.serialize
+      ~Imager.serialize_all_state
+      ~Imager.serialize_state
+      ~Imager.setup
+      ~Imager.stop
+      ~Imager.unassign
+      ~Imager.unassign_child_resource
+   
+   
