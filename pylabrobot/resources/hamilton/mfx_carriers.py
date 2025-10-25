@@ -1,3 +1,4 @@
+import warnings
 from typing import Dict
 
 from pylabrobot.resources.carrier import (
@@ -7,8 +8,9 @@ from pylabrobot.resources.carrier import (
 )
 
 
-def MFX_CAR_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+def hamilton_mfx_carrier_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
   """Hamilton cat. no.: 188039
+  Hamilton name: 'MFX_CAR_L5_base'
   Labware carrier base for up to 5 Multiflex Modules
   """
   locations = [
@@ -122,3 +124,17 @@ def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
     sites=sites,
     model="MFX_CAR_P3_base",
   )
+
+
+# Deprecated names for backwards compatibility
+# TODO: Remove >2026-02
+
+
+def MFX_CAR_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+  """Deprecated alias for `hamilton_mfx_carrier_L5_base`."""
+  warnings.warn(
+    "MFX_CAR_L5_base is deprecated. Use 'hamilton_mfx_carrier_L5_base' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_mfx_carrier_L5_base(name, modules)
