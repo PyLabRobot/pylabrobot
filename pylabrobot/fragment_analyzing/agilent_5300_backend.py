@@ -1,8 +1,9 @@
 from .agilent_backend import AgilentFABackend
 
+
 class Agilent5300Backend(AgilentFABackend):
   """Backend for the Agilent 5300 Fragment Analyzer.
-    Requires patched Fragment Analyzer.exe (located in this directory) and enabling TCP automation in Fragment Analyzer.ini
+  Requires patched Fragment Analyzer.exe (located in this directory) and enabling TCP automation in Fragment Analyzer.ini
   """
 
   def __init__(self, host: str, port=3000):

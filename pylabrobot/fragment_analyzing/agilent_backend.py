@@ -1,10 +1,9 @@
-import asyncio
-from typing import Dict, List, Tuple, Type
-
-from pylabrobot.io import Socket
-from pylabrobot.fragment_analyzing.backend import FragmentAnalyzerBackend
 from abc import ABCMeta
 from dataclasses import dataclass
+from typing import Dict, List, Tuple, Type
+
+from pylabrobot.fragment_analyzing.backend import FragmentAnalyzerBackend
+from pylabrobot.io import Socket
 
 
 class FragmentAnalyzerError(Exception):
@@ -56,6 +55,7 @@ class AgilentFASolutionLevels:
   conditioningSolution: float = 0
   waste: float = 0
 
+
 @dataclass
 class AgilentFASensorData:
   voltage: float
@@ -63,8 +63,7 @@ class AgilentFASensorData:
   pressure: float
 
 
-
-class AgilentFABackend(FragmentAnalyzerBackend,metaclass=ABCMeta):
+class AgilentFABackend(FragmentAnalyzerBackend, metaclass=ABCMeta):
   """Backend for Agilent Fragment Analyzer. This backend connects to the server where the OEM software is running"""
 
   def __init__(self, host: str, port: int = 3000):
@@ -74,7 +73,6 @@ class AgilentFABackend(FragmentAnalyzerBackend,metaclass=ABCMeta):
 
   async def setup(self):
     await self.io.setup()
-
 
   async def stop(self):
     await self.io.stop()
@@ -94,15 +92,14 @@ class AgilentFABackend(FragmentAnalyzerBackend,metaclass=ABCMeta):
     return response
 
   async def send_command(self, command: str, timeout: int = 60, read_once=True) -> str:
-    """ Send a command and get a single line response. """
+    """Send a command and get a single line response."""
     await self.io.write(command)
     return await self._read_res(timeout, read_once=read_once)
-
 
   async def send_command_and_await_completion(
     self, command: str, expected_response: str, timeout: int = 120
   ) -> List[str]:
-    """ Send a command and wait for an initial response and a completion response. """
+    """Send a command and wait for an initial response and a completion response."""
     await self.io.write(command)
 
     responses = []
@@ -135,34 +132,34 @@ class AgilentFABackend(FragmentAnalyzerBackend,metaclass=ABCMeta):
       raise ValueError("Tray number must be between 1 and 5.")
 
     command = "OUT" if tray_number == 5 else f"OUT{tray_number}"
-    expected_response = f"*OUT"
+    expected_response = "*OUT"
 
     await self.send_command_and_await_completion(command, expected_response)
 
   async def store_capillary(self):
-    ''' Move the Capillary Storage Solution tray to the capillary array. '''
+    """Move the Capillary Storage Solution tray to the capillary array."""
     await self.send_command_and_await_completion("STORE", "*STORE")
 
   async def set_plate_name(self, plate_name: str):
-    '''set name of the plate used in result file naming '''
+    """set name of the plate used in result file naming"""
     response = await self.send_command(f"TRAY {plate_name}")
     if "*TRAY" not in response:
       raise FragmentAnalyzerError(f"Failed to set tray name. Response: {response}")
 
   async def run_method(self, method_name: str, nonblocking=False):
-    """ Run a specified Fragment Analyzer method.
+    """Run a specified Fragment Analyzer method.
     for seperation methods,
     method file must be located in [parent directory of Fragment Analyzer.exe]/Methods/[capillary length]/.
     for conditioning methods,
     method file must be located in [parent directory of Fragment Analyzer.exe]/Methods/
     """
     if nonblocking:
-      await self.send_command(f"RUN {method_name}",read_once=False, timeout=10)
+      await self.send_command(f"RUN {method_name}", read_once=False, timeout=10)
     else:
       await self.send_command_and_await_completion(f"RUN {method_name}", "*RUN", timeout=7200)
 
   async def get_ladder_file(self, method_name: str, ladder_file_name: str):
-    """ Run a specified Fragment Analyzer method and save ladder file to [parent directory of Fragment Analyzer.exe]/Ladders/
+    """Run a specified Fragment Analyzer method and save ladder file to [parent directory of Fragment Analyzer.exe]/Ladders/
     for seperation methods,
     method file must be located in [parent directory of Fragment Analyzer.exe]/Methods/[capillary length]/.
     for conditioning methods,
@@ -172,26 +169,24 @@ class AgilentFABackend(FragmentAnalyzerBackend,metaclass=ABCMeta):
     await self.send_command_and_await_completion(command, "*CAL", timeout=7200)
 
   async def set_ladder_file(self, ladder_file: str):
-    """ Set the ladder file for next run. File must be located in [parent directory of Fragment Analyzer.exe]/Ladders/
-    """
+    """Set the ladder file for next run. File must be located in [parent directory of Fragment Analyzer.exe]/Ladders/"""
     response = await self.send_command(f"LAD-FILE {ladder_file}")
     if "*LAD-FILE" not in response.upper():
       raise FragmentAnalyzerError(f"Failed to set ladder file. Response: {response}")
 
   async def get_solution_levels(self) -> AgilentFASolutionLevels:
-    response = await self.send_command('SOLUTIONS')
+    response = await self.send_command("SOLUTIONS")
     if "*SOLUTIONS" not in response.upper():
       raise FragmentAnalyzerError(f"Failed to get solution levels. Response: {response}")
-    levels = response.split(':')[1].strip().split(',')
+    levels = response.split(":")[1].strip().split(",")
     return AgilentFASolutionLevels(*[float(level) for level in levels])
 
   async def get_sensor_data(self) -> AgilentFASensorData:
-    response = await self.send_command('VCP')
+    response = await self.send_command("VCP")
     if "*VCP" not in response.upper():
       raise FragmentAnalyzerError(f"Failed to get sensor data. Response: {response}")
-    data = response.split(':')[1].strip().split(',')
+    data = response.split(":")[1].strip().split(",")
     return AgilentFASensorData(*[float(value) for value in data])
-
 
   async def abort(self):
     await self.send_command_and_await_completion("ABORT", "*ABORT")

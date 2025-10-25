@@ -189,13 +189,14 @@ class TestAgilentFAErrorParsing(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(FragmentAnalyzerOtherError):
       self.backend._parse_error("!10")
     with self.assertRaises(FragmentAnalyzerError):
-      self.backend._parse_error("!999") # Unknown error
+      self.backend._parse_error("!999")  # Unknown error
 
   def test_no_error(self):
     try:
       self.backend._parse_error("*OK")
     except FragmentAnalyzerError:
       self.fail("FragmentAnalyzerError raised for a valid OK response")
+
 
 if __name__ == "__main__":
   unittest.main()
