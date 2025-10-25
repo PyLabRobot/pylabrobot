@@ -287,8 +287,6 @@ class VSpinBackend(CentrifugeBackend):
 
     await self.send(b"\xaa\x01\x0e\x0f")
 
-    # self._bucket_1_position = (await self.get_position()) + self.calibration_offset
-
   @property
   def bucket_1_remainder(self) -> int:
     if self._bucket_1_remainder is None:
