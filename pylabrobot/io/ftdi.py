@@ -133,6 +133,12 @@ class FTDI(IOBase):
     )
     return stat.value
 
+  async def get_serial(self) -> str:
+    serial = self._dev.driver.list_devices()[self._dev.device_index][2]  # type: ignore
+    logger.log(LOG_LEVEL_IO, "[%s] get_serial %s", self._device_id, serial)
+    capturer.record(FTDICommand(device_id=self._device_id, action="get_serial", data=str(serial)))
+    return serial
+
   async def stop(self):
     self.dev.close()
     if self._executor is not None:
@@ -283,6 +289,18 @@ class FTDIValidator(FTDI):
         f"Next line is {next_command}, expected FTDI poll_modem_status {self._device_id}"
       )
     return int(next_command.data)
+
+  async def get_serial(self) -> str:
+    next_command = FTDICommand(**self.cr.next_command())
+    if not (
+      next_command.module == "ftdi"
+      and next_command.device_id == self._device_id
+      and next_command.action == "get_serial"
+    ):
+      raise ValidationError(
+        f"Next line is {next_command}, expected FTDI get_serial {self._device_id}"
+      )
+    return next_command.data
 
   async def write(self, data: bytes):
     next_command = FTDICommand(**self.cr.next_command())
