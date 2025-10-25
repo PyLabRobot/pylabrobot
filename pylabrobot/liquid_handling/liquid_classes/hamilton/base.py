@@ -68,19 +68,19 @@ class HamiltonLiquidClass:
     :func:`pylabrobot.utils.interpolation.interpolate_1d`.
 
     Args:
-        target_volume: The liquid volume to be aspirated or dispensed (in µL).
+      target_volume: The liquid volume to be aspirated or dispensed (in µL).
 
     Returns:
-        The corrected piston displacement volume (in µL) that the pipette mechanism
-        must execute to achieve the desired liquid transfer.
+      The corrected piston displacement volume (in µL) that the pipette mechanism
+      must execute to achieve the desired liquid transfer.
 
     Raises:
-        ValueError: If the correction curve data is invalid or non-numeric.
+      ValueError: If the correction curve data is invalid or non-numeric.
     """
-    if not self.curve:
+    if self.curve is None:
       return target_volume
 
-    return interpolate_1d(target_volume, self.curve, mode="extrapolate")
+    return interpolate_1d(target_volume, self.curve, bounds_handling="extrapolate")
 
   def serialize(self) -> Dict[str, Any]:
     """Serialize the liquid class to a dictionary."""

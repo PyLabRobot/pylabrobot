@@ -3,7 +3,7 @@
 from typing import Dict, Literal
 
 InterpolationBoundsHandling = Literal["error", "clip", "extrapolate"]
-InterpolationMethod = Literal["linear", "cubic", "spline"]
+InterpolationMethod = Literal["linear"]  # future: "cubic", "spline"
 
 
 def interpolate_1d(
@@ -21,34 +21,28 @@ def interpolate_1d(
   supported in the future.
 
   Args:
-      x: The input value to interpolate.
-      data: A dictionary mapping known x-values to corresponding y-values. The keys
-          must form a monotonically increasing sequence.
-      bounds_handling: Defines how to handle x-values outside the calibration range:
-          - "error": Raise ValueError (strict physical bounds; default)
-          - "clip":  Return the nearest boundary value
-          - "extrapolate": Extend linearly using the first or last segment slope
-      method: Interpolation method to use:
-          - "linear": Piecewise linear interpolation (default)
-          - "cubic": Cubic interpolation (not yet implemented)
-          - "spline": Spline interpolation (not yet implemented)
+    x: The input value to interpolate.
+    data: A dictionary mapping known x-values to corresponding y-values. The keys must form a monotonically increasing sequence.
+    bounds_handling: Defines how to handle x-values outside the calibration range:
+      - "error": Raise ValueError (strict physical bounds; default)
+      - "clip":  Return the nearest boundary value
+      - "extrapolate": Extend linearly using the first or last segment slope
+    method: Interpolation method to use:
+      - "linear": Piecewise linear interpolation (default)
+      - "cubic": Cubic interpolation (not yet implemented)
+      - "spline": Spline interpolation (not yet implemented)
 
   Returns:
-      The interpolated or extrapolated y-value.
+    The interpolated or extrapolated y-value.
 
   Raises:
-      ValueError: If the calibration data is empty or x is out of range and
-          bounds_handling="error".
-      NotImplementedError: If the requested interpolation method is not implemented.
+    ValueError: If the calibration data is empty or x is out of range and bounds_handling="error".
   """
-  if not data:
+  if len(data) == 0:
     raise ValueError("Interpolation data is empty.")
 
   if method != "linear":
-    raise NotImplementedError(
-      f"Interpolation method '{method}' is not yet implemented. "
-      "Only 'linear' is currently supported."
-    )
+    raise ValueError(f"Interpolation method '{method}' is not valid.")
 
   xs = sorted(data.keys())
   ys = [data[k] for k in xs]
@@ -87,4 +81,4 @@ def interpolate_1d(
       return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 
   # --- Fallback (should never occur) --------------------------------------- #
-  return ys[-1]
+  raise RuntimeError("Interpolation failed due to an unexpected error.")

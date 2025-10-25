@@ -9,32 +9,33 @@ from pylabrobot.utils.interpolation import interpolate_1d
 # Hamilton 1-trough 60 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_HAMILTON_1_TROUGH_60ML_VB_LINEAR_CAL = {
-  "measurements": {
-    0.0: 0.0,
-    2.2: 500.0,
-    3.5: 1_000.0,
-    4.0: 1_500.0,
-    4.7: 2_000.0,
-    5.2: 2_500.0,
-    5.6: 3_000.0,
-    6.0: 3_500.0,
-    6.3: 4_000.0,
-    6.7: 4_500.0,
-    6.8: 5_000.0,
-    7.2: 5_500.0,
-    7.5: 6_000.0,
-    8.3: 7_000.0,
-    9.0: 8_000.0,
-    9.8: 9_000.0,
-    10.4: 10_000.0,
-    18.0: 20_000.0,
-    25.3: 30_000.0,
-    35.6: 45_000.0,
-    45.7: 60_000.0,
-    52.13: 70_000.0,
-    58.5: 80_000.0,
-  }
+_hamilton_1_trough_60ml_Vb_height_to_volume_measurements = {
+  0.0: 0.0,
+  2.2: 500.0,
+  3.5: 1_000.0,
+  4.0: 1_500.0,
+  4.7: 2_000.0,
+  5.2: 2_500.0,
+  5.6: 3_000.0,
+  6.0: 3_500.0,
+  6.3: 4_000.0,
+  6.7: 4_500.0,
+  6.8: 5_000.0,
+  7.2: 5_500.0,
+  7.5: 6_000.0,
+  8.3: 7_000.0,
+  9.0: 8_000.0,
+  9.8: 9_000.0,
+  10.4: 10_000.0,
+  18.0: 20_000.0,
+  25.3: 30_000.0,
+  35.6: 45_000.0,
+  45.7: 60_000.0,
+  52.13: 70_000.0,
+  58.5: 80_000.0,
+}
+_hamilton_1_trough_60ml_Vb_volume_to_height_measurements = {
+  v: k for k, v in _hamilton_1_trough_60ml_Vb_height_to_volume_measurements.items()
 }
 
 
@@ -48,8 +49,9 @@ def _compute_volume_from_height_hamilton_1_trough_60ml_Vb(h: float) -> float:
   if h > 65.5 * 1.05:
     raise ValueError(f"Height {h} is too large for Hamilton_1_trough_60ml_Vb.")
 
-  cal = _HAMILTON_1_TROUGH_60ML_VB_LINEAR_CAL["measurements"]
-  vol_ul = interpolate_1d(h, cal, mode="error")
+  vol_ul = interpolate_1d(
+    h, _hamilton_1_trough_60ml_Vb_height_to_volume_measurements, bounds_handling="error"
+  )
   return round(max(0.0, vol_ul), 3)
 
 
@@ -61,9 +63,9 @@ def _compute_height_from_volume_hamilton_1_trough_60ml_Vb(volume_ul: float) -> f
   if volume_ul < 0:
     raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
 
-  cal = _HAMILTON_1_TROUGH_60ML_VB_LINEAR_CAL["measurements"]
-  inv_cal = {v: k for k, v in cal.items()}  # volume→height
-  h_mm = interpolate_1d(volume_ul, inv_cal, mode="error")
+  h_mm = interpolate_1d(
+    volume_ul, _hamilton_1_trough_60ml_Vb_volume_to_height_measurements, bounds_handling="error"
+  )
   return round(max(0.0, h_mm), 3)
 
 
@@ -92,19 +94,20 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
 # Hamilton 1-trough 200 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_HAMILTON_1_TROUGH_200ML_VB_LINEAR_CAL = {
-  "measurements": {
-    0.0: 0.0,
-    5.8: 6_000.0,
-    7.4: 10_000.0,
-    10.1: 20_000.0,
-    18.5: 50_000.0,
-    32.9: 100_000.0,
-    47.8: 150_000.0,
-    61.7: 200_000.0,
-    72.6: 240_000.0,
-    88.4: 300_000.0,
-  }
+_hamilton_1_trough_200ml_Vb_height_to_volume_measurements = {
+  0.0: 0.0,
+  5.8: 6_000.0,
+  7.4: 10_000.0,
+  10.1: 20_000.0,
+  18.5: 50_000.0,
+  32.9: 100_000.0,
+  47.8: 150_000.0,
+  61.7: 200_000.0,
+  72.6: 240_000.0,
+  88.4: 300_000.0,
+}
+_hamilton_1_trough_200ml_Vb_volume_to_height_measurements = {
+  v: k for k, v in _hamilton_1_trough_200ml_Vb_height_to_volume_measurements.items()
 }
 
 
@@ -118,8 +121,9 @@ def _compute_volume_from_height_hamilton_1_trough_200ml_Vb(h: float) -> float:
   if h > 95 * 1.05:
     raise ValueError(f"Height {h} is too large for Hamilton_1_trough_200ml_Vb.")
 
-  cal = _HAMILTON_1_TROUGH_200ML_VB_LINEAR_CAL["measurements"]
-  vol_ul = interpolate_1d(h, cal, mode="error")
+  vol_ul = interpolate_1d(
+    h, _hamilton_1_trough_200ml_Vb_height_to_volume_measurements, bounds_handling="error"
+  )
   return round(max(0.0, vol_ul), 3)
 
 
@@ -131,9 +135,9 @@ def _compute_height_from_volume_hamilton_1_trough_200ml_Vb(volume_ul: float) -> 
   if volume_ul < 0:
     raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
 
-  cal = _HAMILTON_1_TROUGH_200ML_VB_LINEAR_CAL["measurements"]
-  inv_cal = {v: k for k, v in cal.items()}  # volume→height
-  h_mm = interpolate_1d(volume_ul, inv_cal, mode="error")
+  h_mm = interpolate_1d(
+    volume_ul, _hamilton_1_trough_200ml_Vb_volume_to_height_measurements, bounds_handling="error"
+  )
   return round(max(0.0, h_mm), 3)
 
 
