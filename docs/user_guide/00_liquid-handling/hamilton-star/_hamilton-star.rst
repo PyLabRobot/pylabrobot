@@ -17,3 +17,4 @@ Tools for working with Hamilton-STAR specific functions.
    hardware/index
    hamilton-liquid-classes
    core-grippers
+   surface-following
