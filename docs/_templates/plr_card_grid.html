@@ -25,11 +25,17 @@
           </div>
           <div class="plr-card-image">
             {% if card.image_url %}
-              <img src="{{ card.image_url }}"
-                   alt="{{ card.header }}"
-                   {% if card.image_hover_url %}
-                     data-hover="{{ card.image_hover_url }}"
-                   {% endif %}>
+              {% if card.image_hover_url and card.image_hover_url.endswith('.mp4') %}
+                <video src="{{ card.image_hover_url }}" muted loop preload="none"
+                       class="plr-hover-video"></video>
+                <img src="{{ card.image_url }}" alt="{{ card.header }}">
+              {% else %}
+                <img src="{{ card.image_url }}"
+                     alt="{{ card.header }}"
+                     {% if card.image_hover_url %}
+                       data-hover="{{ card.image_hover_url }}"
+                     {% endif %}>
+              {% endif %}
             {% endif %}
           </div>
         </div>

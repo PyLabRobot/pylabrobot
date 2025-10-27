@@ -20,7 +20,6 @@
       var title = (card.getAttribute("data-title") || "").toLowerCase();
       var desc = (card.getAttribute("data-desc") || "").toLowerCase();
 
-      // Tag logic: show if card has *all* active tags
       var tagOk = activeTags.length === 0 || activeTags.every(t => tags.includes(t));
       var textOk = !q || title.includes(q) || desc.includes(q);
 
@@ -47,13 +46,10 @@
     var tag = btn.getAttribute("data-tag");
 
     if (tag === "All") {
-      // Reset all
       $all(".plr-filter-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
     } else {
-      // Toggle active state
       btn.classList.toggle("active");
-      // If any tag active, deactivate “All”
       var allBtn = $(".plr-filter-btn[data-tag='All']");
       if (allBtn) {
         if ($all(".plr-filter-btn.active").some(b => b.getAttribute("data-tag") !== "All"))
@@ -78,39 +74,62 @@
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) {}
   }
 
-  /* -------------------- HOVER IMAGE SWAP -------------------- */
+  /* -------------------- HOVER IMAGE OR VIDEO -------------------- */
 
   function setupDelegatedImageHover() {
     var grid = $(".plr-card-grid");
     if (!grid) return;
 
+    // preload hover GIFs
     $all(".plr-card-image img[data-hover]").forEach(function (img) {
       var h = img.getAttribute("data-hover");
-      if (h) { var pre = new Image(); pre.src = h; }
+      if (h && h.endsWith(".gif")) {
+        var pre = new Image(); pre.src = h;
+      }
       if (!img.getAttribute("data-src-original")) {
         img.setAttribute("data-src-original", img.getAttribute("src") || "");
       }
     });
 
     grid.addEventListener("pointerenter", function (e) {
-      var img = e.target.closest(".plr-card-image img");
+      var wrapper = e.target.closest(".plr-card-image");
+      if (!wrapper) return;
+
+      var img = $("img", wrapper);
+      var video = $("video.plr-hover-video", wrapper);
+
+      if (video) {
+        video.style.display = "block";
+        video.play().catch(() => {});
+        if (img) img.style.opacity = "0";
+        return;
+      }
+
       if (!img) return;
       var hoverSrc = img.getAttribute("data-hover");
-      if (!hoverSrc) return;
-      if (!img.getAttribute("data-src-original")) {
-        img.setAttribute("data-src-original", img.getAttribute("src") || "");
-      }
-      if (img.getAttribute("src") !== hoverSrc) {
+      if (hoverSrc && img.getAttribute("src") !== hoverSrc) {
         img.setAttribute("src", hoverSrc);
       }
     }, true);
 
     grid.addEventListener("pointerleave", function (e) {
-      var img = e.target.closest(".plr-card-image img");
+      var wrapper = e.target.closest(".plr-card-image");
+      if (!wrapper) return;
+
+      var img = $("img", wrapper);
+      var video = $("video.plr-hover-video", wrapper);
+
+      if (video) {
+        video.pause();
+        video.currentTime = 0;
+        video.style.display = "none";
+        if (img) img.style.opacity = "1";
+        return;
+      }
+
       if (!img) return;
       var original = img.getAttribute("data-src-original");
-      if (!original) return;
-      if (img.getAttribute("src") !== original) {
+      if (original && img.getAttribute("src") !== original) {
         img.setAttribute("src", original);
       }
     }, true);

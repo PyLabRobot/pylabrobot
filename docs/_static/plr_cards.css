@@ -142,7 +142,7 @@
   display: block;
 }
 
-/* ==== Image ==== */
+/* ==== Image & Video ==== */
 
 .plr-card-image {
   flex: 0 0 320px;
@@ -153,8 +153,8 @@
   transition: transform 0.35s ease, box-shadow 0.35s ease;
 }
 
-/* Force repaint on hover image switch */
-.plr-card-image img {
+.plr-card-image img,
+.plr-card-image video {
   position: relative;
   z-index: 2;
   display: block;
@@ -167,6 +167,12 @@
   isolation: isolate;
   contain: paint;
   backface-visibility: hidden;
+}
+
+.plr-card-image video {
+  display: none;
+  position: absolute;
+  inset: 0;
 }
 
 /* Image visual feedback */
