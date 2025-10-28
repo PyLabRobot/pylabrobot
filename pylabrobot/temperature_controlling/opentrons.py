@@ -23,7 +23,7 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
     opentrons_id: str,
     child_location: Coordinate = Coordinate.zero(),
     child: Optional[ItemizedResource] = None,
-    port: Optional[str] = None,
+    backend: Optional[OpentronsTemperatureModuleBackend] = None
   ):
     """Create a new Opentrons temperature module v2.
 
@@ -37,7 +37,7 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
         temperature controller module.
     """
 
-    backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id, port=port)
+    backend = backend or OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
 
     super().__init__(
       name=name,
