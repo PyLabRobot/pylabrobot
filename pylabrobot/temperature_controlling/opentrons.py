@@ -23,6 +23,7 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
     opentrons_id: str,
     child_location: Coordinate = Coordinate.zero(),
     child: Optional[ItemizedResource] = None,
+    port: Optional[str] = None,
   ):
     """Create a new Opentrons temperature module v2.
 
@@ -30,9 +31,13 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
       name: Name of the temperature module.
       opentrons_id: Opentrons ID of the temperature module. Get it from
         `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
+        If USE_OT is False, this can be any identifier.
+      port: Serial port for USB communication. Required when USE_OT is False.
       child: Optional child resource like a tube rack or well plate to use on the
         temperature controller module.
     """
+
+    backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id, port=port)
 
     super().__init__(
       name=name,
@@ -40,12 +45,11 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
       size_y=89.2,
       size_z=84.0,  # height without any aluminum block
       child_location=child_location,
-      backend=OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id),
+      backend=backend,
       category="temperature_controller",
       model="temperatureModuleV2",  # Must match OT moduleModel in list_connected_modules()
     )
 
-    self.backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
     self.child = child
 
     if child is not None:
