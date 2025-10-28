@@ -6,13 +6,17 @@ In PyLabRobot, a {class}`pylabrobot.resources.resource.Resource` is a piece of l
 
 While you can instantiate a `Resource` directly, several subclasses of methods exist to provide additional functionality and model specific resource attributes. For example, a {class}`pylabrobot.resources.plate.Plate` has methods for easily accessing {class}`pylabrobot.resources.well.Well`s.
 
-The relation between resources is modelled by a tree, specifically an [_arborescence_](<https://en.wikipedia.org/wiki/Arborescence_(graph_theory)>) (a directed, rooted tree). The location of a resource in the tree is a Cartesian coordinate and always relative to the bottom front left corner of its immediate parent. The absolute location can be computed using {meth}`~pylabrobot.resources.resource.Resource.get_absolute_location`. The x-axis is left (smaller) and right (larger); the y-axis is front (small) and back (larger); the z-axis is down (smaller) and up (higher). Each resource has `children` and `parent` attributes that allow you to navigate the tree.
+The relation between resources is modelled by a tree, specifically an [_arborescence_](<https://en.wikipedia.org/wiki/Arborescence_(graph_theory)>) (a directed, rooted tree). The location of a resource in the tree is a Cartesian coordinate and always relative to the bottom front left corner of its immediate parent. The absolute location, the location of the resource wrt the root of the tree it is in, can be computed using {meth}`~pylabrobot.resources.resource.Resource.get_absolute_location`. The location wrt any resource between a given one and the root can be computed using {meth}`~pylabrobot.resources.resource.Resource.get_location_wrt`. The x-axis is left (smaller) and right (larger); the y-axis is front (small) and back (larger); the z-axis is down (smaller) and up (higher). Each resource has `children` and `parent` attributes that allow you to navigate the tree.
 
 {class}`pylabrobot.machines.machine.Machine` is a special type of resource that represents a physical machine, such as a liquid handling robot ({class}`pylabrobot.liquid_handling.liquid_handler.LiquidHandler`) or a plate reader ({class}`pylabrobot.plate_reading.plate_reader.PlateReader`). Machines have a `backend` attribute linking to the backend that is responsible for converting PyLabRobot commands into commands that a specific machine can understand. Other than that, Machines, including {class}`pylabrobot.liquid_handling.liquid_handler.LiquidHandler`, are just like any other Resource.
 
 ## Defining a simple resource
 
-The simplest way to define a resource is to subclass {class}`pylabrobot.resources.resource.Resource` and define the `name` and `size_x`, `size_y` and `size_z` attributes. Here's an example of a simple resource:
+The simplest way to define a resource is to subclass {class}`pylabrobot.resources.resource.Resource` and define the `name` and `size_x`, `size_y` and `size_z` attributes.
+
+The size attributes are in millimeters and define the dimensions of the resource as a cuboid. This the complete outer bounding box of the resource. The `name` attribute is a unique identifier for the resource, and it can be used to reference the resource in protocols and programs.
+
+Here's an example of a simple resource:
 
 ```python
 from pylabrobot.resources import Resource

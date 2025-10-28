@@ -114,7 +114,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
     However, in our discussions, it became evident that the term "labware" has different meanings to different stakeholders
     (e.g., "A plate is clearly labware, but is a liquid handler or a plate reader labware?").
     As a result, PLR avoids the ambiguous term "labware".</p>
-    <p><u>Every physical item (describable via its <code>item_x</code>, <code>item_y</code>, <code>item_z</code>) is a "resource"</u>.</p>
+    <p><u>Every physical item (describable by its physical dimensions <code>size_x</code>, <code>size_y</code>, <code>size_z</code>) is a `Resource`</u>.</p>
 </details>
 
 <hr>
@@ -152,7 +152,7 @@ If you cannot find something, please contribute what you are looking for!
     </ul>
     <p>As a result, many automation software systems believe that it is impossible to reuse resource definitions.
     In contrast, PyLabRobot is convinced that carefully created resource definitions combined with smart automation can be reused most of the time.</p>
-    <p>PLR is actively addressing these resource resuse constraints in numerous ways:</p>
+    <p>PLR is actively addressing these resource reuse constraints in numerous ways:</p>
     <ul>
         <li>Development of self-correcting machine backend methods.</li>
         <li>Using Coordinate Measurement Machine-based generation of resource "ground truths" (e.g., via liquid handler-based resource probing or 3D scanning).</li>
@@ -167,21 +167,24 @@ If you cannot find something, please contribute what you are looking for!
 :caption: Resource Library
 
 library/agenbio
+library/agilent
 library/alpaqua
 library/azenta
+library/bioer
 library/biorad
 library/boekel
 library/celltreat
 library/cellvis
-library/corning_axygen
-library/corning_costar
+library/corning
 library/eppendorf
 library/falcon
 library/hamilton
 library/nest
 library/opentrons
+library/perkin_elmer
 library/porvair
 library/revvity
+library/sergi
 library/thermo_fisher
 library/vwr
 ```

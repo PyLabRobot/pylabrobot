@@ -1,8 +1,15 @@
 import asyncio
 
+# Make pylibftdi scan the Hamilton HEPA Fan VID:PID
+# appears as ID 0856:ac11 B&B Electronics Model USOPTL4
+from pylibftdi import driver
+
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import FanBackend
+
+driver.USB_VID_LIST.append(0x0856)  # i.e. 2134
+driver.USB_PID_LIST.append(0xAC11)  # i.e. 44049
 
 
 class HamiltonHepaFanBackend(FanBackend):
@@ -15,13 +22,13 @@ class HamiltonHepaFanBackend(FanBackend):
     self.io = FTDI(device_id=device_id)
 
   async def setup(self):
-    self.io.setup()
-    self.io.set_baudrate(9600)
-    self.io.set_line_property(8, 0, 0)  # 8N1
-    self.io.set_latency_timer(16)
-    self.io.set_flowctrl(512)
-    self.io.set_dtr(True)
-    self.io.set_rts(True)
+    await self.io.setup()
+    await self.io.set_baudrate(9600)
+    await self.io.set_line_property(8, 0, 0)  # 8N1
+    await self.io.set_latency_timer(16)
+    await self.io.set_flowctrl(512)
+    await self.io.set_dtr(True)
+    await self.io.set_rts(True)
 
     await self.send(b"\x55\xc1\x01\x02\x23\x4b")
     await self.send(b"\x55\xc1\x01\x08\x08\x6a")
@@ -135,7 +142,7 @@ class HamiltonHepaFanBackend(FanBackend):
       "55c10111f78c",
       "55c10111f982",
       "55c10111fc87",
-      "5c10111fe85",
+      "55c10111fe85",
     ]
 
     await self.send(bytes.fromhex(speed_array[intensity]))  # set speed

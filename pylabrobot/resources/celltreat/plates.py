@@ -21,8 +21,10 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
 
   Same as 229590 (229590 is sold with lids)
 
+  229195, 229196
+
   - Material: Polystyrene
-  - Tissue culture treated: No
+  - Tissue culture treated: No (229591 and 229590) / Yes (229195, 229196)
   """
   # WELL_UBOTTOM_HEIGHT = 2.81 # absolute height of cylindrical segment, measured
   # WELL_DIAMETER = 6.69 # measured
@@ -146,4 +148,77 @@ def CellTreat_96_wellplate_U(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError(
     "This plate is the same as CellTreat_96_wellplate_350ul_Ub. This "
     "function will be removed in the future."
+  )
+
+
+def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:
+  """
+  CellTreat cat. no.: 229195, 229196
+
+  - Material: Polystyrene
+  - Tissue culture treated: Yes (229195, 229196)
+
+  https://www.celltreat.com/wp-content/uploads/96-Well-Plate.pdf
+  """
+
+  well_kwargs = {
+    "size_x": 6.96,
+    "size_y": 6.96,
+    "size_z": 10.04,
+    "bottom_type": WellBottomType.FLAT,
+    "material_z_thickness": 1.75,
+    "cross_section_type": CrossSectionType.CIRCLE,
+    "max_volume": 300,
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.61,
+    size_y=85.24,
+    size_z=14.30,  # without lid
+    lid=None,
+    model=CellTreat_96_wellplate_350ul_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.83,  # measured
+      dy=7.67,  # measured
+      dz=4.05,  # calibrated manually
+      item_dx=9,
+      item_dy=9,
+      **well_kwargs,
+    ),
+  )
+
+
+def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:
+  """Part number: 229562 (not sterile), 229566 (sterile)"""
+  well_kwargs = {
+    "size_x": 8.24,  # measured
+    "size_y": 70.9,  # measured
+    "size_z": 26.83,  # measured
+    "bottom_type": WellBottomType.V,
+    "material_z_thickness": 31.1 - 26.83 - 4.07,  # measured
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.76,  # standard
+    size_y=85.48,  # standard
+    size_z=31.1,  # measured
+    lid=None,
+    model=CellTreat_12_troughplate_15000ul_Vb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=1,
+      dx=9.83,  # measured
+      dy=7.07,  # measured
+      dz=4.07,  # measured
+      item_dx=9.0,  # standard
+      item_dy=9.0,  # standard
+      cross_section_type=CrossSectionType.RECTANGLE,
+      **well_kwargs,
+    ),
   )

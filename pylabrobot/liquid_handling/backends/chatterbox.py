@@ -18,7 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Tip
 
 
 class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
@@ -57,12 +57,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   @property
   def num_channels(self) -> int:
     return self._num_channels
-
-  async def assigned_resource_callback(self, resource: Resource):
-    print(f"Resource {resource.name} was assigned to the liquid handler.")
-
-  async def unassigned_resource_callback(self, name: str):
-    print(f"Resource {name} was unassigned from the liquid handler.")
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
     print("Picking up tips:")
@@ -236,3 +230,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def drop_resource(self, drop: ResourceDrop):
     print(f"Dropping resource: {drop}")
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    return True

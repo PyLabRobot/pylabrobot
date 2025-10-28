@@ -160,6 +160,9 @@ class CarrierTests(unittest.TestCase):
   def test_capacity(self):
     self.assertEqual(self.tip_car.capacity, 5)
 
+  def test_len(self):
+    self.assertEqual(len(self.tip_car), 5)
+
   def test_assignment(self):
     self.tip_car[0] = self.A
     self.tip_car[1] = self.B
@@ -218,6 +221,7 @@ class CarrierTests(unittest.TestCase):
         "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
         "category": "tip_carrier",
         "model": None,
+        "barcode": None,
         "parent_name": None,
         "children": [
           {
@@ -238,6 +242,7 @@ class CarrierTests(unittest.TestCase):
             "children": [],
             "parent_name": "tip_car",
             "model": None,
+            "barcode": None,
           },
           {
             "name": "tip_car-1",
@@ -257,6 +262,7 @@ class CarrierTests(unittest.TestCase):
             "children": [],
             "parent_name": "tip_car",
             "model": None,
+            "barcode": None,
           },
           {
             "name": "tip_car-2",
@@ -276,6 +282,7 @@ class CarrierTests(unittest.TestCase):
             "children": [],
             "parent_name": "tip_car",
             "model": None,
+            "barcode": None,
           },
           {
             "name": "tip_car-3",
@@ -295,6 +302,7 @@ class CarrierTests(unittest.TestCase):
             "children": [],
             "parent_name": "tip_car",
             "model": None,
+            "barcode": None,
           },
           {
             "name": "tip_car-4",
@@ -314,6 +322,7 @@ class CarrierTests(unittest.TestCase):
             "children": [],
             "parent_name": "tip_car",
             "model": None,
+            "barcode": None,
           },
         ],
       },

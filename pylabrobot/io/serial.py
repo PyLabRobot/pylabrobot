@@ -1,4 +1,6 @@
+import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import IOBase
 from typing import Optional, cast
@@ -9,8 +11,9 @@ try:
   import serial
 
   HAS_SERIAL = True
-except ImportError:
+except ImportError as e:
   HAS_SERIAL = False
+  _SERIAL_IMPORT_ERROR = e
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
@@ -39,6 +42,7 @@ class Serial(IOBase):
     stopbits: int = 1,  # serial.STOPBITS_ONE,
     write_timeout=1,
     timeout=1,
+    rtscts: bool = False,
   ):
     self._port = port
     self.baudrate = baudrate
@@ -46,8 +50,10 @@ class Serial(IOBase):
     self.parity = parity
     self.stopbits = stopbits
     self._ser: Optional[serial.Serial] = None
+    self._executor: Optional[ThreadPoolExecutor] = None
     self.write_timeout = write_timeout
     self.timeout = timeout
+    self.rtscts = rtscts
 
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new Serial object while capture or validation is active")
@@ -57,8 +63,13 @@ class Serial(IOBase):
     return self._port
 
   async def setup(self):
-    try:
-      self._ser = serial.Serial(
+    if not HAS_SERIAL:
+      raise RuntimeError(f"pyserial not installed. Import error: {_SERIAL_IMPORT_ERROR}")
+    loop = asyncio.get_running_loop()
+    self._executor = ThreadPoolExecutor(max_workers=1)
+
+    def _open_serial() -> serial.Serial:
+      return serial.Serial(
         port=self._port,
         baudrate=self.baudrate,
         bytesize=self.bytesize,
@@ -66,26 +77,45 @@ class Serial(IOBase):
         stopbits=self.stopbits,
         write_timeout=self.write_timeout,
         timeout=self.timeout,
+        rtscts=self.rtscts,
       )
+
+    try:
+      self._ser = await loop.run_in_executor(self._executor, _open_serial)
     except serial.SerialException as e:
       logger.error("Could not connect to device, is it in use by a different notebook/process?")
+      if self._executor is not None:
+        self._executor.shutdown(wait=True)
+        self._executor = None
       raise e
 
   async def stop(self):
     if self._ser is not None and self._ser.is_open:
-      self._ser.close()
+      loop = asyncio.get_running_loop()
+      if self._executor is None:
+        raise RuntimeError("Call setup() first.")
+      await loop.run_in_executor(self._executor, self._ser.close)
+    if self._executor is not None:
+      self._executor.shutdown(wait=True)
+      self._executor = None
 
   async def write(self, data: bytes):
     assert self._ser is not None, "forgot to call setup?"
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+    await loop.run_in_executor(self._executor, self._ser.write, data)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="write", data=data.decode("unicode_escape"))
     )
-    self._ser.write(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
     assert self._ser is not None, "forgot to call setup?"
-    data = self._ser.read(num_bytes)
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+    data = await loop.run_in_executor(self._executor, self._ser.read, num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="read", data=data.decode("unicode_escape"))
@@ -94,7 +124,10 @@ class Serial(IOBase):
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     assert self._ser is not None, "forgot to call setup?"
-    data = self._ser.readline()
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+    data = await loop.run_in_executor(self._executor, self._ser.readline)
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
     capturer.record(
       SerialCommand(device_id=self._port, action="readline", data=data.decode("unicode_escape"))
@@ -102,22 +135,36 @@ class Serial(IOBase):
     return cast(bytes, data)
 
   async def send_break(self, duration: float):
-    assert self._ser is not None, "forgot to call setup?"
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+
+    def _send_break(ser, duration: float) -> None:
+      """Send a break condition for the specified duration."""
+      assert ser is not None, "forgot to call setup?"
+      ser.send_break(duration=duration)
+
+    await loop.run_in_executor(self._executor, lambda: _send_break(self._ser, duration=duration))
     logger.log(LOG_LEVEL_IO, "[%s] send_break %s", self._port, duration)
     capturer.record(SerialCommand(device_id=self._port, action="send_break", data=str(duration)))
-    self._ser.send_break(duration=duration)
 
   async def reset_input_buffer(self):
     assert self._ser is not None, "forgot to call setup?"
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+    await loop.run_in_executor(self._executor, self._ser.reset_input_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_input_buffer", self._port)
     capturer.record(SerialCommand(device_id=self._port, action="reset_input_buffer", data=""))
-    self._ser.reset_input_buffer()
 
   async def reset_output_buffer(self):
     assert self._ser is not None, "forgot to call setup?"
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+    await loop.run_in_executor(self._executor, self._ser.reset_output_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
     capturer.record(SerialCommand(device_id=self._port, action="reset_output_buffer", data=""))
-    self._ser.reset_output_buffer()
 
   def serialize(self):
     return {
@@ -128,6 +175,7 @@ class Serial(IOBase):
       "stopbits": self.stopbits,
       "write_timeout": self.write_timeout,
       "timeout": self.timeout,
+      "rtscts": self.rtscts,
     }
 
   @classmethod
@@ -140,6 +188,7 @@ class Serial(IOBase):
       stopbits=data["stopbits"],
       write_timeout=data["write_timeout"],
       timeout=data["timeout"],
+      rtscts=data["rtscts"],
     )
 
 
@@ -154,6 +203,7 @@ class SerialValidator(Serial):
     stopbits: int = 1,  # serial.STOPBITS_ONE,
     write_timeout=1,
     timeout=1,
+    rtscts: bool = False,
   ):
     super().__init__(
       port=port,
@@ -163,6 +213,7 @@ class SerialValidator(Serial):
       stopbits=stopbits,
       write_timeout=write_timeout,
       timeout=timeout,
+      rtscts=rtscts,
     )
     self.cr = cr
 

@@ -23,7 +23,9 @@ class Tip:
   fitting_depth: float
 
   def __post_init__(self):
-    self.tracker = VolumeTracker(max_volume=self.maximal_volume)
+    # TODO: use the name
+    # https://github.com/PyLabRobot/pylabrobot/issues/653
+    self.tracker = VolumeTracker(thing="tip_tracker", max_volume=self.maximal_volume)
 
   def serialize(self) -> dict:
     return {
@@ -33,6 +35,9 @@ class Tip:
       "maximal_volume": self.maximal_volume,
       "fitting_depth": self.fitting_depth,
     }
+
+  def __hash__(self):
+    return hash(repr(self))
 
 
 TipCreator = Callable[[], Tip]

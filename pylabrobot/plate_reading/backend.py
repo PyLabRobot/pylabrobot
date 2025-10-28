@@ -8,11 +8,12 @@ from pylabrobot.plate_reading.standard import (
   Exposure,
   FocalPosition,
   Gain,
-  Image,
   ImagingMode,
+  ImagingResult,
   Objective,
 )
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.well import Well
 
 
 class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
@@ -36,12 +37,16 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     """Close the plate reader. Also known as plate in."""
 
   @abstractmethod
-  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(
+    self, plate: Plate, wells: List[Well], focal_height: float
+  ) -> List[List[Optional[float]]]:
     """Read the luminescence from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
 
   @abstractmethod
-  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
+  async def read_absorbance(
+    self, plate: Plate, wells: List[Well], wavelength: int
+  ) -> List[List[Optional[float]]]:
     """Read the absorbance from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
 
@@ -49,10 +54,11 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     """Read the fluorescence from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
 
@@ -69,7 +75,7 @@ class ImagerBackend(MachineBackend, metaclass=ABCMeta):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
-  ) -> List[Image]:
+  ) -> ImagingResult:
     """Capture an image of the plate in the specified mode."""
 
 

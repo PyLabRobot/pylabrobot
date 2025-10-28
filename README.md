@@ -31,11 +31,11 @@ Here's a quick example showing how to move 100uL of liquid from well A1 to A2 us
 
 ```python
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import STAR
+from pylabrobot.liquid_handling.backends import STARBackend
 from pylabrobot.resources import Deck
 
 deck = Deck.load_from_json_file("hamilton-layout.json")
-lh = LiquidHandler(backend=STAR(), deck=deck)
+lh = LiquidHandler(backend=STARBackend(), deck=deck)
 await lh.setup()
 
 await lh.pick_up_tips(lh.deck.get_resource("tip_rack")["A1"])
@@ -47,9 +47,9 @@ await lh.return_tips()
 To run the same protocol on an **Opentrons**, use the following:
 
 ```python
-from pylabrobot.liquid_handling.backends import OpentronsBackend
+from pylabrobot.liquid_handling.backends import OpentronsOT2Backend
 deck = Deck.load_from_json_file("opentrons-layout.json")
-lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
+lh = LiquidHandler(backend=OpentronsOT2Backend(host="x.x.x.x"), deck=deck)
 ```
 
 Or **Tecan** (also works on any operating system!):
@@ -69,9 +69,9 @@ We also provide a browser-based Visualizer which can visualize the state of the 
 Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
 
 ```python
-from pylabrobot.plate_reading import PlateReader, ClarioStar
+from pylabrobot.plate_reading import PlateReader, CLARIOstarBackend
 
-pr = PlateReader(name="plate reader", backend=ClarioStar(), size_x=1, size_y=1, size_z=1)
+pr = PlateReader(name="plate reader", backend=CLARIOstarBackend(), size_x=1, size_y=1, size_z=1)
 await pr.setup()
 
 # Use in combination with a liquid handler
@@ -149,16 +149,40 @@ await fan.setup()
 await fan.turn_on(intensity=100, duration=60)
 ```
 
+### Thermocyclers ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/thermocycling/thermocycling.html))
+
+Running a thermocycler with a simple protocol:
+
+```python
+await tc.run_pcr_profile(
+  denaturation_temp=98.0,
+  denaturation_time=10.0,
+  annealing_temp=55.0,
+  annealing_time=30.0,
+  extension_temp=72.0,
+  extension_time=60.0,
+  num_cycles=2,
+  block_max_volume=25.0,
+  lid_temperature=105.0,
+  pre_denaturation_temp=95.0,
+  pre_denaturation_time=180.0,
+  final_extension_temp=72.0,
+  final_extension_time=300.0,
+  storage_temp=4.0,
+  storage_time=600.0,
+)
+```
+
 ## Resources
 
 ### Documentation
 
 [docs.pylabrobot.org](https://docs.pylabrobot.org)
 
-- [Installation](https://docs.pylabrobot.org/installation.html)
-- [Getting Started](https://docs.pylabrobot.org/basic.html)
-- [Contributing](CONTRIBUTING.md)
-- [API Reference](https://docs.pylabrobot.org/pylabrobot.html)
+- [Installation](https://docs.pylabrobot.org/user_guide/_getting-started/installation.html)
+- [Getting Started](https://docs.pylabrobot.org/user_guide/index.html)
+- [Contributing](https://docs.pylabrobot.org/contributor_guide/index.html)
+- [API Reference](https://docs.pylabrobot.org/api/pylabrobot.html)
 
 ### Support
 

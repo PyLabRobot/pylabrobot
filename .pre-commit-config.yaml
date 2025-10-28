@@ -7,3 +7,9 @@ repos:
         language: system
         files: ^pylabrobot/.*$
 
+  - repo: https://github.com/crate-ci/typos
+    rev: v1
+    hooks:
+      - id: typos
+        files: ^pylabrobot/.*$
+        args: ["--force-exclude"]

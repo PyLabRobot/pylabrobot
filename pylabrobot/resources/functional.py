@@ -4,7 +4,7 @@ import logging
 import os
 import random
 from collections import deque
-from typing import AsyncGenerator, Deque, List, Optional
+from typing import Deque, List, Optional
 
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
@@ -62,37 +62,67 @@ class linear_tip_spot_generator:
   def set_index(self, index: int):
     self._tip_spot_idx = index
 
+  def get_num_tips_left(self) -> int:
+    """Returns the number of tips left to be sampled. Raises an error if repeat is True."""
+    if self.repeat:
+      raise RuntimeError("Cannot get number of tips left when repeat is True.")
+    return len(self.tip_spots) - self._tip_spot_idx
 
-async def randomized_tip_spot_generator(
-  tip_spots: List[TipSpot],
-  K: int,
-  cache_file_path: Optional[str] = None,
-) -> AsyncGenerator[TipSpot, None]:
-  """Randomized tip spot generator with disk caching. Don't return tip spots that have been
-  sampled in the last K samples."""
+  async def get(self, n: int) -> List[TipSpot]:
+    """Get the next n tip spots."""
+    assert 0 <= n <= self.get_num_tips_left()
+    return [await self.__anext__() for _ in range(n)]
 
-  recently_sampled: Deque[str] = deque(maxlen=K)
 
-  if cache_file_path is not None and os.path.exists(cache_file_path):
-    with open(cache_file_path, "r", encoding="utf-8") as f:
-      data = json.load(f)
-      recently_sampled = deque(data["recently_sampled"], maxlen=K)
-      logger.info(
-        "loaded recently sampled tip spots from disk: %s",
-        recently_sampled,
-      )
+class randomized_tip_spot_generator:
+  def __init__(
+    self,
+    tip_spots: List[TipSpot],
+    K: int,
+    cache_file_path: Optional[str] = None,
+  ):
+    """Randomized tip spot generator with disk caching. Don't return tip spots that have been
+    sampled in the last K samples."""
 
-  while True:
-    available_tips = [ts for ts in tip_spots if ts.name not in recently_sampled]
+    self.tip_spots = tip_spots
+    self.cache_file_path = cache_file_path
 
-    if not available_tips:
-      raise RuntimeError("All tips have been used recently, resetting list.")
+    self.recently_sampled: Deque[str] = deque(maxlen=K)
 
-    chosen_tip_spot = random.choice(available_tips)
-    recently_sampled.append(chosen_tip_spot.name)
+    if self.cache_file_path is not None and os.path.exists(self.cache_file_path):
+      with open(self.cache_file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        self.recently_sampled = deque(data["recently_sampled"], maxlen=K)
+        logger.info(
+          "loaded recently sampled tip spots from disk: %s",
+          self.recently_sampled,
+        )
 
-    if cache_file_path is not None:
-      with open(cache_file_path, "w", encoding="utf-8") as f:
-        json.dump({"recently_sampled": list(recently_sampled)}, f)
+    atexit.register(self.save_state)
 
-    yield chosen_tip_spot
+  def save_state(self):
+    if self.cache_file_path is not None:
+      with open(self.cache_file_path, "w", encoding="utf-8") as f:
+        json.dump({"recently_sampled": list(self.recently_sampled)}, f)
+
+  async def __anext__(self) -> TipSpot:
+    while True:
+      available_tips = [ts for ts in self.tip_spots if ts.name not in self.recently_sampled]
+
+      if not available_tips:
+        raise RuntimeError("All tips have been used recently. No tips available.")
+
+      chosen_tip_spot = random.choice(available_tips)
+      self.recently_sampled.append(chosen_tip_spot.name)
+
+      self.save_state()
+
+      return chosen_tip_spot
+
+  def __aiter__(self):
+    return self
+
+  async def get(self, n: int) -> List[TipSpot]:
+    """Get the next n tip spots."""
+    assert 0 <= n
+    return [await self.__anext__() for _ in range(n)]

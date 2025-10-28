@@ -18,6 +18,11 @@ class ShakerBackend(MachineBackend, metaclass=ABCMeta):
   async def stop_shaking(self):
     """Stop shaking"""
 
+  @property
+  @abstractmethod
+  def supports_locking(self) -> bool:
+    """Check if the shaker supports locking the plate"""
+
   @abstractmethod
   async def lock_plate(self):
     """Lock the plate"""

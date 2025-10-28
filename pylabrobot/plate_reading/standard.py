@@ -1,7 +1,19 @@
 import enum
-from typing import List, Literal, Union
+import sys
+from dataclasses import dataclass
+from typing import Awaitable, Callable, List, Literal, Union
 
-Image = List[List[float]]
+if sys.version_info >= (3, 10):
+  from typing import TypeAlias
+else:
+  from typing_extensions import TypeAlias
+
+try:
+  import numpy.typing as npt  # type: ignore
+
+  Image: TypeAlias = npt.NDArray
+except ImportError:
+  Image: TypeAlias = object  # type: ignore
 
 
 class Objective(enum.Enum):
@@ -89,6 +101,30 @@ class NoPlateError(Exception):
   pass
 
 
-Exposure = Union[float, Literal["auto"]]
-FocalPosition = Union[float, Literal["auto"]]
-Gain = Union[float, Literal["auto"]]
+@dataclass
+class AutoExposure:
+  evaluate_exposure: Callable[[Image], Awaitable[Literal["higher", "lower", "good"]]]
+  max_rounds: int
+  low: float
+  high: float
+
+
+@dataclass
+class AutoFocus:
+  evaluate_focus: Callable[[Image], float]
+  timeout: float
+  low: float
+  high: float
+  tolerance: float = 0.001  # 1 micron
+
+
+Exposure = Union[float, Literal["machine-auto"]]
+FocalPosition = Union[float, Literal["machine-auto"]]
+Gain = Union[float, Literal["machine-auto"]]
+
+
+@dataclass
+class ImagingResult:
+  images: List[Image]
+  exposure_time: float
+  focal_height: float

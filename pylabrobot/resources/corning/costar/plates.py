@@ -80,16 +80,6 @@ def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
   )
 
 
-# Previous names in PLR:
-def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
-  raise NotImplementedError("deprecated. use Cor_Cos_6_wellplate_16800ul_Fb instead")
-
-
-def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-  # https://github.com/PyLabRobot/pylabrobot/issues/313
-  raise NotImplementedError("deprecated. use Cor_Cos_6_wellplate_16800ul_Fb instead")
-
-
 # # # # # # # # # # Cor_12_wellplate_6900ul_Fb # # # # # # # # # #
 
 
@@ -144,11 +134,6 @@ def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
   )
 
 
-# Previous names in PLR:
-def Cor_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError("deprecated. use Cor_Cos_12_wellplate_6900ul_Fb instead")
-
-
 # # # # # # # # # # Cor_24_wellplate_3470ul_Fb # # # # # # # # # #
 
 
@@ -199,11 +184,6 @@ def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       **well_kwargs,
     ),
   )
-
-
-# Previous names in PLR:
-def Cor_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError("deprecated. use Cor_Cos_24_wellplate_3470ul_Fb instead")
 
 
 # # # # # # # # # # Cor_Cos_48_wellplate_1620ul_Fb # # # # # # # # # #
@@ -260,8 +240,3 @@ def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
       **well_kwargs,
     ),
   )
-
-
-# Previous names in PLR:
-def Cor_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError("deprecated. use Cor_Cos_48_wellplate_1620ul_Fb instead")

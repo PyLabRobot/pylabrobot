@@ -9,7 +9,7 @@ This document describes best practices for writing methods that are agnostic to 
 It is recommended to keep the layout of the deck separate from the protocol. This allows you to easily change the layout of the deck without having to change the protocol.
 
 ```py
-from pylabrobot.liquid_handling import LiquidHandler, STAR
+from pylabrobot.liquid_handling import LiquidHandler, STARBackend
 from pylabrobot.resources import Deck, TipRack, Plate
 
 # Write a method that creates a deck and defines its layout.
@@ -23,7 +23,7 @@ def make_deck() -> Deck:
 
 # Instantiate the liquid handler using a deck and backend.
 deck = make_deck()
-backend = STAR()
+backend = STARBackend()
 lh = LiquidHandler(backend=backend, deck=deck)
 
 # Get references to the resources you need. Use type hinting for autocompletion.
@@ -38,9 +38,9 @@ lh.pick_up_tip(tip_rack["A1"])
 
 Strictness checking is a feature that allows you to specify how strictly you want the {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` to enforce the protocol. The following levels are available:
 
-- {attr}`STRICT <pylabrobot.liquid_handling.strictness.Strictness.IGNORE>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will raise an exception if you are doing something that is not legal on the robot.
+- {attr}`STRICT <pylabrobot.liquid_handling.strictness.Strictness.STRICT>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will raise an exception if you are doing something that is not legal on the robot.
 - {attr}`WARN <pylabrobot.liquid_handling.strictness.Strictness.WARN>`: The default. The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will warn you if you are doing something that is not recommended, but will not stop you from doing it.
-- {attr}`IGNORE <pylabrobot.liquid_handling.strictness.Strictness.STRICT>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will silently log on the debug level if you are doing something that is not legal on the robot.
+- {attr}`IGNORE <pylabrobot.liquid_handling.strictness.Strictness.IGNORE>`: The {class}`LiquidHandler <pylabrobot.liquid_handling.liquid_handler.LiquidHandler>` will silently log on the debug level if you are doing something that is not legal on the robot.
 
 You can set the strictness level for the entire protocol using {func}`pylabrobot.liquid_handling.strictness.set_strictness`.
 

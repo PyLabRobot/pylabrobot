@@ -5,21 +5,58 @@ Liquid level detection (LLD) is a feature that allows the Hamilton STAR(let) to 
 To use LLD, you need to specify the LLD mode when calling the `aspirate` or `dispense` methods. Here is how you can use pressure or capacative LLD with the `aspirate` :
 
 ```python
-await lh.aspirate([tube], vols=[300], lld_mode=[STAR.LLDMode.GAMMA])
+await lh.aspirate([tube], vols=[300], lld_mode=[STARBackend.LLDMode.GAMMA])
 ```
 
 The `lld_mode` parameter can be one of the following:
 
-- `STAR.LLDMode.OFF`: default, no LLD
-- `STAR.LLDMode.GAMMA`: capacative LLD
-- `STAR.LLDMode.PRESSURE`: pressure LLD
-- `STAR.LLDMode.DUAL`: both capacative and pressure LLD
-- `STAR.LLDMode.Z_TOUCH_OFF`: find the bottom of the container
+- `STARBackend.LLDMode.OFF`: default, no LLD
+- `STARBackend.LLDMode.GAMMA`: capacative LLD (cLLD)
+- `STARBackend.LLDMode.PRESSURE`: pressure LLD (pLLD)
+- `STARBackend.LLDMode.DUAL`: both capacative and pressure LLD
+- `STARBackend.LLDMode.Z_TOUCH_OFF`: find the bottom of the container
 
 The `lld_mode` parameter is a list, so you can specify a different LLD mode for each channel.
 
 ```{note}
-The `lld_mode` parameter is only avilable when using the `STAR` backend.
+The `lld_mode` parameter is only available when using the `STAR` backend.
+```
+
+## Going into or out of the liquid
+
+You can use the `immersion_depth` backend kwarg to move the tip with respect to the found liquid surface. A positive value means to go deeper into the liquid, a negative value means to go above the liquid.
+
+Going 1mm below the liquid for aspiration:
+
+```python
+await lh.aspirate(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  immersion_depth=[1])
+```
+
+Going 1mm above the liquid for dispens:
+
+```python
+await lh.dispense(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  immersion_depth=[-1])
+```
+
+## Moving with liquid surface (liquid following)
+
+Through another backend kwarg, `surface_following_distance`, you can move with the liquid:
+
+```python
+await lh.aspirate(
+  [tube],
+  vols=[300],
+  lld_mode=[STARBackend.LLDMode.GAMMA],
+  surface_following_distance=[10],  # 10mm
+)
 ```
 
 ## Catching errors
@@ -35,7 +72,7 @@ from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources.errors import TooLittleLiquidError
 channel = 0
 try:
-  await lh.aspirate([tube], vols=[300], lld_mode=[STAR.LLDMode.GAMMA], use_channels=[channel])
+  await lh.aspirate([tube], vols=[300], lld_mode=[STARBackend.LLDMode.GAMMA], use_channels=[channel])
 except ChannelizedError as e:
   if isinstance(e.errors[channel], TooLittleLiquidError):
     print("Too little liquid in tube")

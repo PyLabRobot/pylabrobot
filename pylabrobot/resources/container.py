@@ -41,7 +41,7 @@ class Container(Resource):
     )
     self._material_z_thickness = material_z_thickness
     self.max_volume = max_volume or (size_x * size_y * size_z)
-    self.tracker = VolumeTracker(max_volume=self.max_volume)
+    self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
 
@@ -68,6 +68,11 @@ class Container(Resource):
 
   def load_state(self, state: Dict[str, Any]):
     self.tracker.load_state(state)
+
+  def supports_compute_height_volume_functions(self) -> bool:
+    return (
+      self._compute_volume_from_height is not None and self._compute_height_from_volume is not None
+    )
 
   def compute_volume_from_height(self, height: float) -> float:
     """Compute the volume of liquid in a container from the height of the liquid relative to the

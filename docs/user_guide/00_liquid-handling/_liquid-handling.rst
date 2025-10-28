@@ -1,7 +1,7 @@
 Liquid Handling
 ===============
 
-Everything that that touches a liquid directly.
+Everything that touches a liquid directly.
 Examples:
 - Liquid handlers
 - Pumps
@@ -21,4 +21,5 @@ Examples:
    tecan-evo/_tecan-evo
    pumps/_pumps
    moving-channels-around
-
+   tutorial_tip_inventory_consolidation
+   mixing

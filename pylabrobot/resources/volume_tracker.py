@@ -67,6 +67,7 @@ class VolumeTracker:
 
   def __init__(
     self,
+    thing: str,
     max_volume: float,
     liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
     pending_liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
@@ -74,8 +75,9 @@ class VolumeTracker:
   ) -> None:
     self._is_disabled = False
     self._is_cross_contamination_tracking_disabled = False
-    self.max_volume = max_volume
 
+    self.thing = thing
+    self.max_volume = max_volume
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
     self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
 
@@ -121,19 +123,20 @@ class VolumeTracker:
   def remove_liquid(self, volume: float) -> List[Tuple[Optional["Liquid"], float]]:
     """Remove liquid from the container. Top to bottom."""
 
-    if volume > self.get_used_volume():
+    available_volume = self.get_used_volume()
+    if volume > available_volume and abs(volume - available_volume) > 1e-6:
       raise TooLittleLiquidError(
-        f"Container has too little liquid: {volume}uL > {self.get_used_volume()}uL."
+        f"Container {self.thing} has too little liquid: {volume}uL > {available_volume}uL."
       )
 
     removed_liquids = []
     removed_volume = 0.0
-    while removed_volume < volume:
+    while abs(removed_volume - volume) > 1e-6 and removed_volume < volume:
       liquid, liquid_volume = self.pending_liquids.pop()
       removed_volume += liquid_volume
 
       # If we have more liquid than we need, put the excess back.
-      if removed_volume > volume:
+      if removed_volume > volume and abs(removed_volume - volume) > 1e-6:
         self.pending_liquids.append((liquid, removed_volume - volume))
         removed_liquids.append((liquid, liquid_volume - (removed_volume - volume)))
       else:
@@ -149,7 +152,7 @@ class VolumeTracker:
 
     if volume > self.get_free_volume():
       raise TooLittleVolumeError(
-        f"Container has too little volume: {volume}uL > {self.get_free_volume()}uL."
+        f"Container {self.thing} has too little volume: {volume}uL > {self.get_free_volume()}uL."
       )
 
     # Update the liquid history tracker if needed
@@ -203,7 +206,7 @@ class VolumeTracker:
 
   def commit(self) -> None:
     """Commit the pending operations."""
-    assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
+    assert not self.is_disabled, f"Volume tracker {self.thing} is disabled. Call `enable()`."
 
     self.liquids = copy.deepcopy(self.pending_liquids)
 

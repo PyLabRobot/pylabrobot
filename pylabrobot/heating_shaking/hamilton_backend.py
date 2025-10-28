@@ -1,4 +1,5 @@
 import abc
+import time
 import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
@@ -60,6 +61,10 @@ class HamiltonHeaterShakerBox(HamiltonHeaterShakerInterface):
 class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   """Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box"""
 
+  @property
+  def supports_active_cooling(self) -> bool:
+    return False
+
   def __init__(self, index: int, interface: HamiltonHeaterShakerInterface) -> None:
     """
     Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
@@ -76,6 +81,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
     await self._initialize_lock()
+    await self._initialize_shaker_drive()
 
   async def stop(self):
     pass
@@ -95,6 +101,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     speed: float = 800,
     direction: Literal[0, 1] = 0,
     acceleration: int = 1_000,
+    timeout: Optional[float] = 30,
   ):
     """
     if the plate is not locked, it will be locked.
@@ -111,10 +118,13 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
+    now = time.time()
     while True:
       await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
       if await self.get_is_shaking():
         break
+      if timeout is not None and time.time() - now > timeout:
+        raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):
     await self._stop_shaking()
@@ -127,6 +137,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def _move_plate_lock(self, position: PlateLockPosition):
     return await self.interface.send_hhs_command(index=self.index, command="LP", lp=position.value)
 
+  @property
+  def supports_locking(self) -> bool:
+    return True
+
   async def lock_plate(self):
     await self._move_plate_lock(PlateLockPosition.LOCKED)
 
@@ -136,6 +150,10 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def _initialize_lock(self):
     """Firmware command initialize lock."""
     return await self.interface.send_hhs_command(index=self.index, command="LI")
+
+  async def _initialize_shaker_drive(self):
+    """Initialize the shaker drive, homing to absolute position 0"""
+    return await self.interface.send_hhs_command(index=self.index, command="SI")
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """Firmware command for starting shaking."""

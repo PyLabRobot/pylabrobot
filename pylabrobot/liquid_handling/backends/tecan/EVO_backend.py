@@ -45,6 +45,7 @@ from pylabrobot.resources import (
   TecanPlateCarrier,
   TecanTip,
   TecanTipRack,
+  Tip,
   TipSpot,
   Trash,
 )
@@ -210,6 +211,11 @@ class EVOBackend(TecanLiquidHandler):
     self._roma_connected: Optional[bool] = None
     self._pnp_connected: Optional[bool] = None
     self._mca_connected: Optional[bool] = None
+
+    self._z_traversal_height = 210  # mm, the default value for SHZ command
+    self._z_roma_traversal_height = (
+      68.7  # mm, is what was used to develop this but possibly too low
+    )
 
   @property
   def num_channels(self) -> int:
@@ -411,7 +417,7 @@ class EVOBackend(TecanLiquidHandler):
       await self.liha.set_search_z_start(z_positions["start"])
       await self.liha.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
       await self.liha.set_search_submerge(sbl)
-      shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels
+      shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels  # TODO: max?
       await self.liha.set_z_travel_height(shz)
       await self.liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
       await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
@@ -458,7 +464,7 @@ class EVOBackend(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height(z if z else self._z_range for z in z_positions["travel"])
+    await self.liha.set_z_travel_height([z if z else self._z_range for z in z_positions["travel"]])
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
@@ -548,7 +554,7 @@ class EVOBackend(TecanLiquidHandler):
     )
 
     # TODO check channel positions match resource positions for z-axis
-    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_hight=0)
+    await self.liha._drop_disposable_tip(self._bin_use_channels(use_channels), discard_height=0)
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("MCA not implemented yet")
@@ -570,7 +576,7 @@ class EVOBackend(TecanLiquidHandler):
 
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(
-      pickup.resource, pickup.resource.get_absolute_location(), z_range
+      pickup.resource, pickup.resource.get_location_wrt(self.deck), z_range
     )
     h = int(pickup.resource.get_absolute_size_y() * 10)
 
@@ -603,7 +609,9 @@ class EVOBackend(TecanLiquidHandler):
     """Drop a resource like a plate or a lid using the integrated robotic arm."""
 
     z_range = await self.roma.report_z_param(5)
-    x, y, z = self._roma_positions(drop.resource, drop.resource.get_absolute_location(), z_range)
+    x, y, z = self._roma_positions(
+      drop.resource, drop.resource.get_location_wrt(self.deck), z_range
+    )
     xt, yt, zt = self._roma_positions(drop.resource, drop.destination, z_range)
 
     # move to target
@@ -629,6 +637,11 @@ class EVOBackend(TecanLiquidHandler):
     await self.roma.action_move_vector_coordinate_position()
     await self.roma.set_fast_speed_y(3500, 1000)
     await self.roma.set_fast_speed_r(2000, 600)
+
+  def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
+    if not isinstance(tip, TecanTip):
+      return False
+    return True
 
   def _first_valid(self, lst: List[Optional[T]]) -> Tuple[Optional[T], int]:
     """Returns first item in list that is not None"""
@@ -671,7 +684,7 @@ class EVOBackend(TecanLiquidHandler):
       return int(self._z_range - z + z_off * 10 + tip_length)  # TODO: verify z formula
 
     for i, (op, channel) in enumerate(zip(ops, use_channels)):
-      location = ops[i].resource.get_absolute_location() + op.resource.center()
+      location = ops[i].resource.get_location_wrt(self.deck) + op.resource.center()
       x_positions[channel] = int((location.x - 100 + op.offset.x) * 10)
       y_positions[channel] = int((346.5 - location.y + op.offset.y) * 10)  # TODO: verify
 
@@ -680,17 +693,17 @@ class EVOBackend(TecanLiquidHandler):
         raise ValueError(f"Operation is not supported by resource {par}.")
       # TODO: calculate defaults when z-attribs are not specified
       tip_length = int(ops[i].tip.total_tip_length * 10)
-      z_positions["travel"][channel] = get_z_position(
-        par.z_travel, par.get_absolute_location().z + op.offset.z, tip_length
-      )
+      # z travel seems to only be used for aspiration and dispense right now
+      if isinstance(op, (SingleChannelAspiration, SingleChannelDispense)):
+        z_positions["travel"][channel] = round(self._z_traversal_height * 10)
       z_positions["start"][channel] = get_z_position(
-        par.z_start, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_start, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
       z_positions["dispense"][channel] = get_z_position(
-        par.z_dispense, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_dispense, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
       z_positions["max"][channel] = get_z_position(
-        par.z_max, par.get_absolute_location().z + op.offset.z, tip_length
+        par.z_max, par.get_location_wrt(self.deck).z + op.offset.z, tip_length
       )
 
     return x_positions, y_positions, z_positions
@@ -707,7 +720,7 @@ class EVOBackend(TecanLiquidHandler):
       airgap: `lag` for leading airgap, `tag` for trailing airgap.
 
     Returns:
-      pvl: position_valve_logial
+      pvl: position_valve_logical
       sep: set_end_speed_plunger
       ppr: move_plunger_relative
     """
@@ -721,11 +734,13 @@ class EVOBackend(TecanLiquidHandler):
       assert tlc is not None
       pvl[channel] = 0
       if airgap == "lag":
-        sep[channel] = int(tlc.aspirate_lag_speed * 12)  # 6? TODO: verify step unit
-        ppr[channel] = int(tlc.aspirate_lag_volume * 6)  # 3?
+        sep[channel] = int(
+          tlc.aspirate_lag_speed * 6
+        )  # 6? TODO: verify step unit (half step per second)
+        ppr[channel] = int(tlc.aspirate_lag_volume * 3)  # 3? (Relative position in full steps)
       elif airgap == "tag":
-        sep[channel] = int(tlc.aspirate_tag_speed * 12)  # 6?
-        ppr[channel] = int(tlc.aspirate_tag_volume * 6)  # 3?
+        sep[channel] = int(tlc.aspirate_tag_speed * 6)  # 6?
+        ppr[channel] = int(tlc.aspirate_tag_volume * 3)  # 3?
 
     return pvl, sep, ppr
 
@@ -791,10 +806,11 @@ class EVOBackend(TecanLiquidHandler):
       tlc = tecan_liquid_classes[i]
       z = zadd[channel]
       assert tlc is not None and z is not None
-      sep[channel] = int(tlc.aspirate_speed * 12)  # 6?
-      ssz[channel] = round(z * tlc.aspirate_speed / ops[i].volume)
+      flow_rate = ops[i].flow_rate or tlc.aspirate_speed
+      sep[channel] = int(flow_rate * 6)  # 6?
+      ssz[channel] = round(z * flow_rate / ops[i].volume)
       volume = tlc.compute_corrected_volume(ops[i].volume)
-      mtr[channel] = round(volume * 6)  # 3?
+      mtr[channel] = round(volume * 3)  # 3?  # Relative position in full steps
       ssz_r[channel] = int(tlc.aspirate_retract_speed * 10)
 
     return ssz, sep, stz, mtr, ssz_r
@@ -827,15 +843,16 @@ class EVOBackend(TecanLiquidHandler):
     for i, channel in enumerate(use_channels):
       tlc = tecan_liquid_classes[i]
       assert tlc is not None
-      sep[channel] = int(tlc.dispense_speed * 12)  # 6?
-      spp[channel] = int(tlc.dispense_breakoff * 12)  # 6?
+      flow_rate = ops[i].flow_rate or tlc.dispense_speed
+      sep[channel] = int(flow_rate * 6)  # 6?
+      spp[channel] = int(tlc.dispense_breakoff * 6)  # 6? half step per second
       stz[channel] = 0
       volume = (
         tlc.compute_corrected_volume(ops[i].volume)
         + tlc.aspirate_lag_volume
         + tlc.aspirate_tag_volume
       )
-      mtr[channel] = -round(volume * 6)  # 3?
+      mtr[channel] = -round(volume * 3)  # 3?
 
     return sep, spp, stz, mtr
 
@@ -844,27 +861,28 @@ class EVOBackend(TecanLiquidHandler):
   ) -> Tuple[int, int, Dict[str, int]]:
     """Creates x, y, and z positions used by RoMa ops."""
 
-    par = resource.parent
-    if par is None:
+    parent = resource.parent  # PlateHolder
+    if parent is None:
       raise ValueError(f"Operation is not supported by resource {resource}.")
-    par = par.parent
-    if not isinstance(par, TecanPlateCarrier):
-      raise ValueError(f"Operation is not supported by resource {par}.")
+    parent = parent.parent  # PlateCarrier
+    # TODO: this is probably the current plate carrier, not the destination.
+    # Also, we should just support any coordinate as the destination.
+    if not isinstance(parent, TecanPlateCarrier):
+      raise ValueError(f"Operation is not supported by resource {parent}.")
 
     if (
-      par.roma_x is None
-      or par.roma_y is None
-      or par.roma_z_safe is None
-      or par.roma_z_travel is None
-      or par.roma_z_end is None
+      parent.roma_x is None
+      or parent.roma_y is None
+      or parent.roma_z_safe is None
+      or parent.roma_z_end is None
     ):
-      raise ValueError(f"Operation is not supported by resource {par}.")
-    x_position = int((offset.x - 100) * 10 + par.roma_x)
-    y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + par.roma_y)
+      raise ValueError(f"Operation is not supported by resource {parent}.")
+    x_position = int((offset.x - 100) * 10 + parent.roma_x)
+    y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + parent.roma_y)
     z_positions = {
-      "safe": z_range - int(par.roma_z_safe),
-      "travel": z_range - int(par.roma_z_travel - offset.z * 10),
-      "end": z_range - int(par.roma_z_end - offset.z * 10),
+      "safe": z_range - int(parent.roma_z_safe),
+      "travel": int(self._z_roma_traversal_height * 10),
+      "end": z_range - int(parent.roma_z_end - offset.z * 10),
     }
 
     return x_position, y_position, z_positions
@@ -927,8 +945,20 @@ class LiHa(EVOArm):
   async def report_z_param(self, param: int) -> List[int]:
     """Report current parameters for z-axis.
 
-    Args:
-      param: 0 - current position, 5 - actual machine range
+    Param:
+    0   Report current position in 1/10 mm.
+    1   Report acceleration in 1/10 mm/s².
+    2   Report fast speed in 1/10 mm/s.
+    3   Report initialization speed in 1/10 mm.
+    4   Report initialization offset in 1/10 mm.
+    5   Report actual machine range in 1/10 mm.
+    6   Report deviation in encoder increments.
+    7   Report every time 0.
+    8   Report scale adjust factor.
+    9   Report slow speed in 1/10 mm/s.
+    10  Report axis scale factor.
+    11  Report target position in 1/10 mm.
+    12  Report travel position in 1/10 mm.
     """
 
     resp: List[int] = (
@@ -948,7 +978,7 @@ class LiHa(EVOArm):
     """Position absolute for all LiHa axes.
 
     Args:
-      x: aboslute x position in 1/10 mm, must be in allowed machine range
+      x: absolute x position in 1/10 mm, must be in allowed machine range
       y: absolute y position in 1/10 mm, must be in allowed machine range
       ys: absolute y spacing in 1/10 mm, must be between 90 and 380
       z: absolute z position in 1/10 mm for each channel, must be in
@@ -1151,23 +1181,25 @@ class LiHa(EVOArm):
 
   async def discard_disposable_tip_high(self, tips):
     """Drops tips
-    Discards at the Z-axes initialization hight
+    Discards at the Z-axes initialization height
     Args:
       tips: binary coded tip select
     """
 
     await self.backend.send_command(module=self.module, command="ADT", params=[tips])
 
-  async def _drop_disposable_tip(self, tips, discard_hight):
+  async def _drop_disposable_tip(self, tips, discard_height):
     """Drops tips
     Discards at a variable Z-axis initialization height
 
     Args:
       tips: binary coded tip select
-      discard_hight: binary. 0 above tip rack, 1 in tip rack
+      discard_height: binary. 0 above tip rack, 1 in tip rack
     """
 
-    await self.backend.send_command(module=self.module, command="AST", params=[tips, discard_hight])
+    await self.backend.send_command(
+      module=self.module, command="AST", params=[tips, discard_height]
+    )
 
 
 class Mca(EVOArm):
@@ -1279,11 +1311,11 @@ class RoMa(EVOArm):
 
     Args:
       v: vector to be defined, must be between 1 and 100
-      x: aboslute x position in 1/10 mm
-      y: aboslute y position in 1/10 mm
-      z: aboslute z position in 1/10 mm
-      r: aboslute r position in 1/10 mm
-      g: aboslute g position in 1/10 mm
+      x: absolute x position in 1/10 mm
+      y: absolute y position in 1/10 mm
+      z: absolute z position in 1/10 mm
+      r: absolute r position in 1/10 mm
+      g: absolute g position in 1/10 mm
       speed: speed select, 0 - slow, 1 - fast
       tw: target window class, set with STW
 

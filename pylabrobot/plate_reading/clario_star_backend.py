@@ -6,6 +6,16 @@ import sys
 import time
 from typing import List, Optional, Union
 
+from pylabrobot.resources.well import Well
+
+try:
+  from pylibftdi import driver
+
+  HAS_PYLIBFTDI = True
+except ImportError as e:
+  HAS_PYLIBFTDI = False
+  _FTDI_IMPORT_ERROR = e
+
 from pylabrobot import utils
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
@@ -19,8 +29,15 @@ else:
 
 logger = logging.getLogger("pylabrobot")
 
+# Make pylibftdi scan the CLARIOstar VID:PID
+# appears as ID 0403:bb68 Future Technology Devices International Limited CLARIOstar
 
-class CLARIOStarBackend(PlateReaderBackend):
+if HAS_PYLIBFTDI:
+  driver.USB_VID_LIST.append(0x0403)  # i.e. 1027
+  driver.USB_PID_LIST.append(0xBB68)  # i.e. 47976
+
+
+class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
@@ -29,9 +46,9 @@ class CLARIOStarBackend(PlateReaderBackend):
 
   async def setup(self):
     await self.io.setup()
-    self.io.set_baudrate(125000)
-    self.io.set_line_property(8, 0, 0)  # 8N1
-    self.io.set_latency_timer(2)
+    await self.io.set_baudrate(125000)
+    await self.io.set_line_property(8, 0, 0)  # 8N1
+    await self.io.set_latency_timer(2)
 
     await self.initialize()
     await self.request_eeprom_data()
@@ -39,8 +56,8 @@ class CLARIOStarBackend(PlateReaderBackend):
   async def stop(self):
     await self.io.stop()
 
-  def get_stat(self):
-    stat = self.io.poll_modem_status()
+  async def get_stat(self):
+    stat = await self.io.poll_modem_status()
     return hex(stat)
 
   async def read_resp(self, timeout=20) -> bytes:
@@ -240,8 +257,13 @@ class CLARIOStarBackend(PlateReaderBackend):
   async def _get_measurement_values(self):
     return await self.send(b"\x02\x00\x0f\x0c\x05\x02\x00\x00\x00\x00\x00\x00")
 
-  async def read_luminescence(self, plate: Plate, focal_height: float = 13) -> List[List[float]]:
+  async def read_luminescence(
+    self, plate: Plate, wells: List[Well], focal_height: float = 13
+  ) -> List[List[Optional[float]]]:
     """Read luminescence values from the plate reader."""
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
+
     await self._mp_and_focus_height_value()
 
     await self._run_luminescence(focal_height=focal_height)
@@ -265,16 +287,19 @@ class CLARIOStarBackend(PlateReaderBackend):
     ints = [struct.unpack(">i", bytes(int_data))[0] for int_data in int_bytes]
 
     # for backend conformity, convert to float, and reshape to 2d array
-    floats = [[float(int_) for int_ in ints[i : i + 12]] for i in range(0, len(ints), 12)]
+    floats: List[List[Optional[float]]] = [
+      [float(int_) for int_ in ints[i : i + 12]] for i in range(0, len(ints), 12)
+    ]
 
     return floats
 
   async def read_absorbance(
     self,
     plate: Plate,
+    wells: List[Well],
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     """Read absorbance values from the device.
 
     Args:
@@ -285,6 +310,9 @@ class CLARIOStarBackend(PlateReaderBackend):
     Returns:
       A 2d array of absorbance values, as transmission percentage (values between 0 and 100).
     """
+
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
 
     await self._mp_and_focus_height_value()
 
@@ -319,14 +347,14 @@ class CLARIOStarBackend(PlateReaderBackend):
     for rr in reference_reading:
       real_reference_reading.append((rr - r0) / r100)
 
-    transmittance = []
+    transmittance: List[Optional[float]] = []
     for rcr, rrr in zip(real_chromatic_reading, real_reference_reading):
       transmittance.append(rcr / rrr * 100)
 
     if report == "OD":
-      od = []
+      od: List[Optional[float]] = []
       for t in transmittance:
-        od.append(math.log10(100 / t))
+        od.append(math.log10(100 / t) if t is not None else None)
       return utils.reshape_2d(od, (8, 12))
 
     if report == "transmittance":
@@ -335,10 +363,11 @@ class CLARIOStarBackend(PlateReaderBackend):
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     raise NotImplementedError("Not implemented yet")
 
 
@@ -349,3 +378,10 @@ class CLARIOStarBackend(PlateReaderBackend):
 class CLARIOStar:
   def __init__(self, *args, **kwargs):
     raise RuntimeError("`CLARIOStar` is deprecated. Please use `CLARIOStarBackend` instead.")
+
+
+class CLARIOStarBackend:
+  def __init__(self, *args, **kwargs):
+    raise RuntimeError(
+      "`CLARIOStarBackend` (capital 'S') is deprecated. Please use `CLARIOstarBackend` instead."
+    )

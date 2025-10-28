@@ -12,7 +12,7 @@ class TestVolumeTracker(unittest.TestCase):
   """Test for the tip volume tracker"""
 
   def test_init(self):
-    tracker = VolumeTracker(max_volume=100)
+    tracker = VolumeTracker(thing="test", max_volume=100)
     self.assertEqual(tracker.get_free_volume(), 100)
     self.assertEqual(tracker.get_used_volume(), 0)
 
@@ -21,7 +21,7 @@ class TestVolumeTracker(unittest.TestCase):
     self.assertEqual(tracker.get_used_volume(), 20)
 
   def test_add_liquid(self):
-    tracker = VolumeTracker(max_volume=100)
+    tracker = VolumeTracker(thing="test", max_volume=100)
 
     tracker.add_liquid(liquid=None, volume=20)
     self.assertEqual(tracker.get_used_volume(), 20)
@@ -35,7 +35,7 @@ class TestVolumeTracker(unittest.TestCase):
       tracker.add_liquid(liquid=None, volume=100)
 
   def test_remove_liquid(self):
-    tracker = VolumeTracker(max_volume=100)
+    tracker = VolumeTracker(thing="test", max_volume=100)
     tracker.add_liquid(liquid=None, volume=60)
     tracker.commit()
 
@@ -48,7 +48,7 @@ class TestVolumeTracker(unittest.TestCase):
       tracker.remove_liquid(volume=100)
 
   def test_get_liquids(self):
-    tracker = VolumeTracker(max_volume=200)
+    tracker = VolumeTracker(thing="test", max_volume=200)
     tracker.add_liquid(liquid=None, volume=60)
     tracker.add_liquid(liquid=Liquid.WATER, volume=60)
     tracker.commit()

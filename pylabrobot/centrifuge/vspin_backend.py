@@ -1,6 +1,9 @@
 import asyncio
+import json
 import logging
+import os
 import time
+import warnings
 from typing import Optional, Union
 
 from pylabrobot.io.ftdi import FTDI
@@ -47,7 +50,7 @@ class Access2Backend(LoaderBackend):
     logger.debug("[loader] setup")
 
     await self.io.setup()
-    self.io.set_baudrate(115384)
+    await self.io.set_baudrate(115384)
 
     status = await self.get_status()
     if not status.startswith(bytes.fromhex("1105")):
@@ -125,28 +128,60 @@ class Access2Backend(LoaderBackend):
     # await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
 
+_vspin_bucket_calibrations_path = os.path.join(
+  os.path.expanduser("~"),
+  ".pylabrobot",
+  "vspin_bucket_calibrations.json",
+)
+
+
+def _load_vspin_calibrations(device_id: str) -> Optional[int]:
+  if not os.path.exists(_vspin_bucket_calibrations_path):
+    return None
+  with open(_vspin_bucket_calibrations_path, "r") as f:
+    return json.load(f).get(device_id)  # type: ignore
+
+
+def _save_vspin_calibrations(device_id, remainder: int):
+  if os.path.exists(_vspin_bucket_calibrations_path):
+    with open(_vspin_bucket_calibrations_path, "r") as f:
+      data = json.load(f)
+  else:
+    data = {}
+  data[device_id] = remainder
+  os.makedirs(os.path.dirname(_vspin_bucket_calibrations_path), exist_ok=True)
+  with open(_vspin_bucket_calibrations_path, "w") as f:
+    json.dump(data, f)
+
+
+FULL_ROTATION: int = 8000
+
+
 class VSpinBackend(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
-  def __init__(self, calibration_offset: int, device_id: Optional[str] = None):
+  def __init__(self, device_id: str):
     """
     Args:
-      device_id: The libftdi id for the centrifuge. Find using
-        `python3 -m pylibftdi.examples.list_devices`
-      calibration_offset: The number of steps after the home (setup) position to reach the bucket.
-        To find this value, start with an arbitrary value, call `setup()` and then `get_position()`.
-        Then, move to the bucket by manually pushing it and call `get_position()` again. The
-        difference between the two values is the calibration offset. The reason we need an offset /
-        relative distance is the setup position will change between runs.
+      device_id: The libftdi id for the centrifuge. Find using `python -m pylibftdi.examples.list_devices`
     """
     self.io = FTDI(device_id=device_id)
-    self.calibration_offset = calibration_offset
-    self.homing_position = 0
+    # TODO: can device_id be loaded?
+    self.device_id = device_id
+    self._bucket_1_remainder: Optional[int] = None
+    if device_id is not None:
+      self._bucket_1_remainder = _load_vspin_calibrations(device_id)
+    if self._bucket_1_remainder is None:
+      warnings.warn(
+        f"No calibration found for VSpin with device id {device_id}. "
+        "Please set the bucket 1 position using `set_bucket_1_position_to_current` method after setup.",
+        UserWarning,
+      )
 
   async def setup(self):
     await self.io.setup()
-    # TODO: add functionality where if robot has been intialized before nothing needs to happen
+    # TODO: add functionality where if robot has been initialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
       await self.send(bytes.fromhex("aa002101ff21"))
@@ -157,9 +192,9 @@ class VSpinBackend(CentrifugeBackend):
     await self.send(bytes.fromhex("aa002103ff23"))
     await self.send(bytes.fromhex("aaff1a142d"))
 
-    self.io.set_baudrate(57600)
-    self.io.set_rts(True)
-    self.io.set_dtr(True)
+    await self.io.set_baudrate(57600)
+    await self.io.set_rts(True)
+    await self.io.set_dtr(True)
 
     await self.send(bytes.fromhex("aa01121f32"))
     for _ in range(8):
@@ -200,7 +235,7 @@ class VSpinBackend(CentrifugeBackend):
 
     await self.send(bytes.fromhex("aa010b0c"))
     await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    new_position = (self.homing_position + 8000).to_bytes(4, byteorder="little")
+    new_position = (0).to_bytes(4, byteorder="little")  # arbitrary
     await self.send(bytes.fromhex("aa01d497") + new_position + bytes.fromhex("c3f52800d71a000049"))
 
     resp = 0x08
@@ -211,7 +246,31 @@ class VSpinBackend(CentrifugeBackend):
 
     await self.lock_door()
 
-    self._bucket_1_position = (await self.get_position()) + self.calibration_offset
+  @property
+  def bucket_1_remainder(self) -> int:
+    if self._bucket_1_remainder is None:
+      raise RuntimeError(
+        "Bucket 1 position not set. Please set it using `set_bucket_1_position_to_current` method."
+      )
+    return self._bucket_1_remainder
+
+  async def set_bucket_1_position_to_current(self) -> None:
+    """Set the current position as bucket 1 position and save calibration."""
+    current_position = await self.get_position()
+    device_id = await self.io.get_serial()
+    remainder = await self.get_home_position() - current_position
+    self._bucket_1_remainder = current_position % FULL_ROTATION
+    _save_vspin_calibrations(device_id, remainder)
+
+  async def get_bucket_1_position(self) -> int:
+    """Get the bucket 1 position based on calibration."""
+    if self._bucket_1_remainder is None:
+      raise RuntimeError(
+        "Bucket 1 position not set. Please set it using `set_bucket_1_position_to_current` method."
+      )
+    home_position = await self.get_home_position()
+    bucket_1_position = (home_position - self.bucket_1_remainder) % FULL_ROTATION
+    return bucket_1_position
 
   async def stop(self):
     await self.configure_and_initialize()
@@ -282,10 +341,10 @@ class VSpinBackend(CentrifugeBackend):
 
   async def set_configuration_data(self):
     """Set the device configuration data."""
-    self.io.set_latency_timer(16)
-    self.io.set_line_property(bits=8, stopbits=1, parity=0)
-    self.io.set_flowctrl(0)
-    self.io.set_baudrate(19200)
+    await self.io.set_latency_timer(16)
+    await self.io.set_line_property(bits=8, stopbits=1, parity=0)
+    await self.io.set_flowctrl(0)
+    await self.io.set_baudrate(19200)
 
   async def initialize(self):
     await self.io.write(b"\x00" * 20)
@@ -319,11 +378,10 @@ class VSpinBackend(CentrifugeBackend):
     await self.send(bytes.fromhex("aa022600062e"))
 
   async def go_to_bucket1(self):
-    await self.go_to_position(self._bucket_1_position)
+    await self.go_to_position(await self.get_bucket_1_position())
 
   async def go_to_bucket2(self):
-    half_rotation = 4000
-    await self.go_to_position(self._bucket_1_position + half_rotation)
+    await self.go_to_position(await self.get_bucket_1_position() + FULL_ROTATION // 2)
 
   async def rotate_distance(self, distance):
     current_position = await self.get_position()

@@ -28,7 +28,7 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
     size_y=85.48,
     size_z=44.24,
     lid=Cor_Axy_24_wellplate_10mL_Vb_Lid(name + "_lid") if with_lid else None,
-    model="Axy_24_DW_10ML",
+    model=Cor_Axy_24_wellplate_10mL_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=6,
@@ -41,6 +41,7 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
       size_x=17.0,
       size_y=17.0,
       size_z=42,
+      material_z_thickness=1.46,
       bottom_type=WellBottomType.V,
       compute_volume_from_height=_compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb,
       cross_section_type=CrossSectionType.RECTANGLE,
@@ -57,11 +58,4 @@ def _compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb(h: float):
     raise ValueError(f"Height {h} is too large for Cos_96_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
     x=17, y=17, h_pyramid=5, h_cube=37, liquid_height=h
-  )
-
-
-#: Axy_24_DW_10ML
-def Axy_24_DW_10ML(name: str, with_lid: bool = False):
-  return NotImplementedError(
-    "Axy_24_DW_10ML definition is deprecated. Use " "Cor_Axy_24_wellplate_10mL_Vb instead."
   )

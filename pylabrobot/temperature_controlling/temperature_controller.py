@@ -36,24 +36,39 @@ class TemperatureController(ResourceHolder, Machine):
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 
-  async def set_temperature(self, temperature: float):
+  async def set_temperature(self, temperature: float, passive: bool = False):
     """Set the temperature of the temperature controller.
 
     Args:
       temperature: Temperature in Celsius.
+      passive: If ``True`` and cooling is required, allow the device to cool
+        down naturally without calling ``set_temperature`` on the backend.
+        This can be used for backends that do not support active cooling or to
+        explicitly disable active cooling when it is available.
     """
+    current = await self.backend.get_current_temperature()
+
     self.target_temperature = temperature
+
+    if temperature < current:
+      if passive:  # if passive, we do nothing and return early.
+        return
+
+      # If we have to cool but the backend does not support active cooling,
+      # and we are not passive cooling, raise an error.
+      if not self.backend.supports_active_cooling:
+        raise ValueError(
+          "Backend does not support active cooling. Use passive=True to allow "
+          "passive cooling or set a higher temperature."
+        )
+
     return await self.backend.set_temperature(temperature)
 
   async def get_temperature(self) -> float:
-    """Get the current temperature of the temperature controller.
-
-    Returns:
-      Temperature in Celsius.
-    """
+    """Get the current temperature of the temperature controller in Celsius."""
     return await self.backend.get_current_temperature()
 
-  async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5):
+  async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5) -> None:
     """Wait for the temperature to reach the target temperature. The target temperature must be
     set by `set_temperature()`.
 
@@ -77,6 +92,11 @@ class TemperatureController(ResourceHolder, Machine):
     """
     self.target_temperature = None
     return await self.backend.deactivate()
+
+  async def stop(self):
+    """Stop the temperature controller and close the backend connection."""
+    await self.deactivate()
+    await super().stop()
 
   def serialize(self) -> dict:
     return {

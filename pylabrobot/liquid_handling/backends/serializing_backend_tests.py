@@ -6,11 +6,11 @@ from pylabrobot.liquid_handling.backends.serializing_backend import (
 )
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
-  STF,
   TIP_CAR_480_A00,
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
   STARLetDeck,
+  hamilton_96_tiprack_300uL_filter,
   no_tip_tracking,
   no_volume_tracking,
 )
@@ -27,7 +27,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[0] = self.tip_rack = STF(name="tip_rack_01")
+    self.tip_car[0] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -105,6 +105,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "liquid_height": None,
             "blow_out_air_volume": None,
             "liquids": [[None, 10]],
+            "mix": None,
           }
         ],
         "use_channels": [0],
@@ -133,6 +134,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "liquid_height": None,
             "blow_out_air_volume": None,
             "liquids": [[None, 10]],
+            "mix": None,
           }
         ],
         "use_channels": [0],
@@ -219,7 +221,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_move(self):
     to = Coordinate(600, 200, 200)
     await self.lh.move_plate(self.plate, to=to)
-    self.assertEqual(len(self.backend.sent_commands), 4)  # move + resource unassign + assign
+    self.assertEqual(len(self.backend.sent_commands), 2)  # pickup and drop
     self.assertEqual(
       self.backend.get_first_data_for_command("pick_up_resource"),
       {

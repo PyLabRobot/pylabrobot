@@ -1,121 +1,80 @@
-from typing import cast
-
-from pylabrobot.resources.opentrons.load import (
-  load_shared_opentrons_resource,
-)
+from pylabrobot.resources.opentrons.load import load_ot_tip_rack
 from pylabrobot.resources.tip_rack import TipRack
 
 
-def eppendorf_96_tiprack_1000ul_eptips(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(
-      definition="eppendorf_96_tiprack_1000ul_eptips",
-      name=name,
-      version=1,
-    ),
+def eppendorf_96_tiprack_1000ul_eptips(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="eppendorf_96_tiprack_1000ul_eptips", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def tipone_96_tiprack_200ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(definition="tipone_96_tiprack_200ul", name=name, version=1),
+def tipone_96_tiprack_200ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="tipone_96_tiprack_200ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_tiprack_300ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(definition="opentrons_96_tiprack_300ul", name=name, version=1),
+def opentrons_96_tiprack_300ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_tiprack_300ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_tiprack_10ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(definition="opentrons_96_tiprack_10ul", name=name, version=1),
+def opentrons_96_tiprack_10ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_tiprack_10ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_filtertiprack_10ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_filtertiprack_10ul",
-      name=name,
-      version=1,
-    ),
+def opentrons_96_filtertiprack_10ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_filtertiprack_10ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def geb_96_tiprack_10ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(definition="geb_96_tiprack_10ul", name=name, version=1),
+def geb_96_tiprack_10ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="geb_96_tiprack_10ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_filtertiprack_200ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_filtertiprack_200ul",
-      name=name,
-      version=1,
-    ),
+def opentrons_96_filtertiprack_200ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_filtertiprack_200ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def eppendorf_96_tiprack_10ul_eptips(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(
-      definition="eppendorf_96_tiprack_10ul_eptips",
-      name=name,
-      version=1,
-    ),
+def eppendorf_96_tiprack_10ul_eptips(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="eppendorf_96_tiprack_10ul_eptips", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_tiprack_1000ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(definition="opentrons_96_tiprack_1000ul", name=name, version=1),
+def opentrons_96_tiprack_1000ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_tiprack_1000ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_tiprack_20ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(definition="opentrons_96_tiprack_20ul", name=name, version=1),
+def opentrons_96_tiprack_20ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_tiprack_20ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_filtertiprack_1000ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_filtertiprack_1000ul",
-      name=name,
-      version=1,
-    ),
+def opentrons_96_filtertiprack_1000ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_filtertiprack_1000ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def opentrons_96_filtertiprack_20ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_filtertiprack_20ul",
-      name=name,
-      version=1,
-    ),
+def opentrons_96_filtertiprack_20ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="opentrons_96_filtertiprack_20ul", plr_resource_name=name, with_tips=with_tips
   )
 
 
-def geb_96_tiprack_1000ul(name: str) -> TipRack:
-  return cast(
-    TipRack,
-    load_shared_opentrons_resource(definition="geb_96_tiprack_1000ul", name=name, version=1),
+def geb_96_tiprack_1000ul(name: str, with_tips=True) -> TipRack:
+  return load_ot_tip_rack(
+    ot_name="geb_96_tiprack_1000ul", plr_resource_name=name, with_tips=with_tips
   )
