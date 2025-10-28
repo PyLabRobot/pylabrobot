@@ -4,11 +4,14 @@ import enum
 import functools
 import logging
 import re
+import sys
 import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
+  Any,
   Callable,
+  Coroutine,
   Dict,
   List,
   Literal,
@@ -19,6 +22,11 @@ from typing import (
   Union,
   cast,
 )
+
+if sys.version_info < (3, 10):
+  from typing_extensions import Concatenate, ParamSpec
+else:
+  from typing import Concatenate, ParamSpec
 
 from pylabrobot import audio
 from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
@@ -87,23 +95,26 @@ T = TypeVar("T")
 
 logger = logging.getLogger("pylabrobot")
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
-def need_iswap_parked(method: Callable):
+
+def need_iswap_parked(
+  method: Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]],
+) -> Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]]:
   """Ensure that the iSWAP is in parked position before running command.
 
   If the iSWAP is not parked, it get's parked before running the command.
   """
 
   @functools.wraps(method)
-  async def wrapper(self: "STAR", *args, **kwargs):
+  async def wrapper(self: "STARBackend", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
         minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
 
-    result = await method(self, *args, **kwargs)
-
-    return result
+    return await method(self, *args, **kwargs)
 
   return wrapper
 
@@ -1716,7 +1727,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dosing_drive_speed_during_2nd_section_search: Optional[List[float]] = None,
     z_drive_speed_during_2nd_section_search: Optional[List[float]] = None,
     cup_upper_edge: Optional[List[float]] = None,
-    ratio_liquid_rise_to_tip_deep_in: Optional[List[float]] = None,
+    ratio_liquid_rise_to_tip_deep_in: Optional[List[int]] = None,
     immersion_depth_2nd_section: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
@@ -1760,7 +1771,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dp_lld_sensitivity: The sensitivity of the DP LLD.
       aspirate_position_above_z_touch_off: If the LLD mode is Z_TOUCH_OFF, this is the height above the bottom of the well (presumably) to aspirate from.
       detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if the LLD mode is DUAL.
-      swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 3 and 1600. Default 100.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after mix.
       mix_position_from_liquid_surface: The height to aspirate from for mix (LLD or absolute terms).
       mix_surface_following_distance: The distance to follow the liquid surface for mix.
@@ -2127,7 +2138,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         position.
       gamma_lld_sensitivity: The gamma LLD sensitivity. (1 = high, 4 = low)
       dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The settling time.
       mix_position_from_liquid_surface: The height to move above the liquid surface for
         mix.
@@ -2390,7 +2401,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
         min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-        side_touch_off_distance=side_touch_off_distance,
+        side_touch_off_distance=round(side_touch_off_distance * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -3011,7 +3022,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      minimum_height=minimum_height or round(position.z * 10),
+      minimum_height=round((minimum_height or position.z) * 10),
       second_section_height=round(second_section_height * 10),
       second_section_ratio=round(second_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
