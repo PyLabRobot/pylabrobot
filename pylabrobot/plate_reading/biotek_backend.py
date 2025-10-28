@@ -172,8 +172,6 @@ class Cytation5Backend(ImageReaderBackend):
     await self.io.set_flowctrl(SIO_RTS_CTS_HS)
     await self.io.set_rts(True)
 
-    await self._abort()
-
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
       self._version = await self.get_firmware_version()

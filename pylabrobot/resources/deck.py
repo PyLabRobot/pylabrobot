@@ -82,6 +82,8 @@ class Deck(Resource):
     Raises:
       ResourceNotFoundError: If the resource is not found.
     """
+    if name == self.name:
+      return self
     if not self.has_resource(name):
       raise ResourceNotFoundError(f"Resource '{name}' not found")
     return self._resources[name]
