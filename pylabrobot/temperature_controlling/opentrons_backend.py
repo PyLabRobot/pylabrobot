@@ -90,12 +90,11 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
       tmp_message = f"M104 S{temperature}\r\n"
       await self.serial.write(tmp_message.encode('utf-8'))
       # Read response (should be "ok\r\nok\r\n")
-      response = await self.serial.readline()
+      response1 = await self.serial.readline()
+      response2 = await self.serial.readline()
       # Verify we got the expected response
-      if b"ok" not in response:
-        response2 = await self.serial.readline()
-        if b"ok" not in response2:
-          raise RuntimeError(f"Unexpected response from device: {response} {response2}")
+      if b"ok" not in response1 or b"ok" not in response2:
+        raise RuntimeError(f"Unexpected response from device: {response1} {response2}")
 
   async def deactivate(self):
     if USE_OT:
@@ -107,12 +106,11 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
       # Send M18\r\n command
       await self.serial.write(b"M18\r\n")
       # Read response (should be "ok\r\nok\r\n")
-      response = await self.serial.readline()
+      response1 = await self.serial.readline()
+      response2 = await self.serial.readline()
       # Verify we got the expected response
-      if b"ok" not in response:
-        response2 = await self.serial.readline()
-        if b"ok" not in response2:
-          raise RuntimeError(f"Unexpected response from device: {response} {response2}")
+      if b"ok" not in response1 or b"ok" not in response2:
+        raise RuntimeError(f"Unexpected response from device: {response1} {response2}")
 
   async def get_current_temperature(self) -> float:
     if USE_OT:
@@ -131,9 +129,12 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
       response = await self.serial.readline()
       # Verify we got the expected response
       if b"C" in response:
+        # Read response (should be "ok\r\nok\r\n")
+        response1 = await self.serial.readline()
         response2 = await self.serial.readline()
-        if b"ok" not in response2:
-          response3 = await self.serial.readline()
-          if b"ok" not in response3:
-            raise RuntimeError(f"Unexpected response from device: {response2} {response3}")
+        # Verify we got the expected response
+        if b"ok" not in response1 or b"ok" not in response2:
+          raise RuntimeError(f"Unexpected response from device: {response1} {response2}")
         return float(response.strip().split(b"C:")[-1])
+      else:
+        raise ValueError(f"Unexpected response from device: {response}")
