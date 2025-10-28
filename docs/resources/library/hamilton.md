@@ -41,7 +41,7 @@ See [MFX Carrier documentation](/resources/carrier/mfx-carrier/mfx_carrier).
 | 'MFX_TIP_module'<br>Part no.: 188160 or 188040<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188040) <br>Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack) | ![](img/hamilton/MFX_TIP_module_188040.jpg) | `MFX_TIP_module` |
 | 'MFX_DWP_rackbased_module'<br>Part no.: 188229?<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188229) (<-non-functional link?) <br>MFX DWP module rack-based | ![](img/hamilton/MFX_DWP_RB_module_188229_.jpg) | `MFX_DWP_rackbased_module` |
 | 'MFX_DWP_module_flat'<br>Part no.: 6601988-01<br>manufacturer website unknown | ![](img/hamilton/MFX_DWP_module_flat.jpg) | `MFX_DWP_module_flat` |
-| 'Hamilton_MFX_plateholder_DWP_metal_tapped'<br>Part no.: 188042 <br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/188042)<br>Carries a single ANSI/SLAS footprint DWP, a Matrix or Micronics tube rack, or a Nunc reagent reservoir. Occupies one MFX site.| ![](img/hamilton/Hamilton_MFX_plateholder_DWP_metal_tapped.png) | `Hamilton_MFX_plateholder_DWP_metal_tapped` |
+| 'Hamilton_MFX_plateholder_DWP_metal_tapped'<br>Part no.: 188042 <br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/188042)<br>Carries a single ANSI/SLAS footprint DWP, a Matrix or Micronics tube rack, or a Nunc reagent reservoir. Occupies one MFX site.| ![](img/hamilton/hamilton_MFX_plateholder_DWP_metal_tapped.png) | `Hamilton_MFX_plateholder_DWP_metal_tapped` |
 
 ### Tube carriers
 
@@ -66,7 +66,7 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 
 | Description | Image | PLR definition |
 | - | - | - |
-| 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | ![](img/hamilton/Hamilton_96_adapter_188182.png) | `Hamilton_96_adapter_188182` |
+| 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | ![](img/hamilton/hamilton_96_adapter_188182.png) | `Hamilton_96_adapter_188182` |
 
 ## Consumables
 
