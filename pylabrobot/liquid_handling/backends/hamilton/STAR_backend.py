@@ -5242,7 +5242,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return command_output
 
   async def put_core(self):
-    raise NotImplementedError("Deprecated. Use return_core_gripper_tools instead.")
+    warnings.warn("Deprecated. Use return_core_gripper_tools instead.", DeprecationWarning)
+    return await self.return_core_gripper_tools()
 
   @need_iswap_parked
   async def return_core_gripper_tools(self):
