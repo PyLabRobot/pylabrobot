@@ -1,6 +1,8 @@
-# Custom (3D Printed Parts, Generated, etc.)
+# GrindBio
 
-The Hamilton deck is customizable and can accept custom deckware through 3D printing. The parts are listed by type below.
+GrindBio created a 3D printed part for one of the Hamilton modules (cat.-no. 188042). The purpose of the part is to lower the module to better accommodate deepwell plates on top of magnet blocks. The lower height also accommodates taller labware.
+
+You can find find 3D printed parts under `resources/diy`.
 
 ### MFX modules
 | Description | Image | PLR definition |
