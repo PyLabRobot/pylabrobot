@@ -428,6 +428,16 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         return identifier
     raise ValueError(f"Item {item} not found in resource.")
 
+  def get_child_column(self, item: T) -> int:
+    """Get the column of the item."""
+    identifier = self.get_child_identifier(item)
+    return int(identifier[1:]) - 1  # convert to 0-indexed
+
+  def get_child_row(self, item: T) -> int:
+    """Get the row of the item."""
+    identifier = self.get_child_identifier(item)
+    return LETTERS.index(identifier[0])  # convert to 0-indexed
+
   def get_all_items(self) -> List[T]:
     """Get all items in the resource. Items are in a 1D list, starting from the top left and going
     down, then right."""

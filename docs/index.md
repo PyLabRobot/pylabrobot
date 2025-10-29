@@ -52,6 +52,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://byonoy.com
 ```
 
+```{image} /img/supported_by/logo_nugget.png
+:alt: Nugget
+:class: company
+:target: https://www.nuggetscientific.com
+```
+
 ## Used by
 
 ```{image} /img/used_by/logo_mit.jpg

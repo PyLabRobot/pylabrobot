@@ -6,6 +6,8 @@ import sys
 import time
 from typing import List, Optional, Union
 
+from pylabrobot.resources.well import Well
+
 try:
   from pylibftdi import driver
 
@@ -255,8 +257,13 @@ class CLARIOstarBackend(PlateReaderBackend):
   async def _get_measurement_values(self):
     return await self.send(b"\x02\x00\x0f\x0c\x05\x02\x00\x00\x00\x00\x00\x00")
 
-  async def read_luminescence(self, plate: Plate, focal_height: float = 13) -> List[List[float]]:
+  async def read_luminescence(
+    self, plate: Plate, wells: List[Well], focal_height: float = 13
+  ) -> List[List[Optional[float]]]:
     """Read luminescence values from the plate reader."""
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
+
     await self._mp_and_focus_height_value()
 
     await self._run_luminescence(focal_height=focal_height)
@@ -280,16 +287,19 @@ class CLARIOstarBackend(PlateReaderBackend):
     ints = [struct.unpack(">i", bytes(int_data))[0] for int_data in int_bytes]
 
     # for backend conformity, convert to float, and reshape to 2d array
-    floats = [[float(int_) for int_ in ints[i : i + 12]] for i in range(0, len(ints), 12)]
+    floats: List[List[Optional[float]]] = [
+      [float(int_) for int_ in ints[i : i + 12]] for i in range(0, len(ints), 12)
+    ]
 
     return floats
 
   async def read_absorbance(
     self,
     plate: Plate,
+    wells: List[Well],
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     """Read absorbance values from the device.
 
     Args:
@@ -300,6 +310,9 @@ class CLARIOstarBackend(PlateReaderBackend):
     Returns:
       A 2d array of absorbance values, as transmission percentage (values between 0 and 100).
     """
+
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
 
     await self._mp_and_focus_height_value()
 
@@ -334,14 +347,14 @@ class CLARIOstarBackend(PlateReaderBackend):
     for rr in reference_reading:
       real_reference_reading.append((rr - r0) / r100)
 
-    transmittance = []
+    transmittance: List[Optional[float]] = []
     for rcr, rrr in zip(real_chromatic_reading, real_reference_reading):
       transmittance.append(rcr / rrr * 100)
 
     if report == "OD":
-      od = []
+      od: List[Optional[float]] = []
       for t in transmittance:
-        od.append(math.log10(100 / t))
+        od.append(math.log10(100 / t) if t is not None else None)
       return utils.reshape_2d(od, (8, 12))
 
     if report == "transmittance":
@@ -350,10 +363,11 @@ class CLARIOstarBackend(PlateReaderBackend):
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[List[Optional[float]]]:
     raise NotImplementedError("Not implemented yet")
 
 

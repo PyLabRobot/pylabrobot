@@ -5,6 +5,8 @@ import urllib.request
 from typing import Dict, List, cast
 
 from pylabrobot.resources import Coordinate, Tip, TipRack, TipSpot
+from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.tube_rack import TubeRack
 
 
 def _download_file(url: str, local_path: str) -> bytes:
@@ -14,7 +16,7 @@ def _download_file(url: str, local_path: str) -> bytes:
     return data  # type: ignore
 
 
-def _download_ot_tip_rack_file(ot_name: str, force_download: bool):
+def _download_ot_resource_file(ot_name: str, force_download: bool):
   """Download an Opentrons tip rack definition file from GitHub.
 
   Args:
@@ -38,15 +40,11 @@ def load_ot_tip_rack(
 ) -> TipRack:
   """Convert an Opentrons tip rack definition file to a PyLabRobot TipRack resource."""
 
-  data = _download_ot_tip_rack_file(ot_name=ot_name, force_download=force_download)
+  data = _download_ot_resource_file(ot_name=ot_name, force_download=force_download)
 
   display_category = data["metadata"]["displayCategory"]
   if not display_category == "tipRack":
-    raise ValueError("We can only load Opentrons tip racks in PyLabRobot.")
-
-  size_x = data["dimensions"]["xDimension"]
-  size_y = data["dimensions"]["yDimension"]
-  size_z = data["dimensions"]["zDimension"]
+    raise ValueError("Not a tip rack definition file.")
 
   items = data["ordering"]
   wells: List[TipSpot] = []
@@ -58,12 +56,6 @@ def load_ot_tip_rack(
       assert well_data["shape"] == "circular", "We assume all tip racks are circular."
       diameter = well_data["diameter"]
       well_size_x = well_size_y = round(diameter / math.sqrt(2), 3)
-
-      location = Coordinate(
-        x=well_data["x"] - well_size_x / 2,
-        y=well_data["y"] - well_size_y / 2,
-        z=well_data["z"],
-      )
 
       # closure
       def make_tip() -> Tip:
@@ -80,7 +72,11 @@ def load_ot_tip_rack(
         size_y=well_size_y,
         make_tip=make_tip,
       )
-      tip_spot.location = location
+      tip_spot.location = Coordinate(
+        x=well_data["x"] - well_size_x / 2,
+        y=well_data["y"] - well_size_y / 2,
+        z=well_data["z"],
+      )
       wells.append(tip_spot)
 
   ordering = data["ordering"]
@@ -89,9 +85,9 @@ def load_ot_tip_rack(
 
   tr = TipRack(
     name=plr_resource_name,
-    size_x=size_x,
-    size_y=size_y,
-    size_z=size_z,
+    size_x=data["dimensions"]["xDimension"],
+    size_y=data["dimensions"]["yDimension"],
+    size_z=data["dimensions"]["zDimension"],
     ordered_items=cast(Dict[str, TipSpot], ordered_items),
     model=data["metadata"]["displayName"],
   )
@@ -100,3 +96,53 @@ def load_ot_tip_rack(
   else:
     tr.empty()
   return tr
+
+
+def load_ot_tube_rack(
+  ot_name: str, plr_resource_name: str, force_download: bool = False
+) -> TubeRack:
+  """Convert an Opentrons tube rack definition file to a PyLabRobot TubeRack resource."""
+
+  data = _download_ot_resource_file(ot_name=ot_name, force_download=force_download)
+
+  display_category = data["metadata"]["displayCategory"]
+  if display_category not in {"tubeRack", "aluminumBlock"}:
+    raise ValueError("Not a tube rack definition file.")
+
+  items = data["ordering"]
+  wells: List[ResourceHolder] = []
+
+  for column in items:
+    for item in column:
+      well_data = data["wells"][item]
+
+      assert well_data["shape"] == "circular", "We assume all tip racks are circular."
+      diameter = well_data["diameter"]
+      well_size_x = well_size_y = round(diameter / math.sqrt(2), 3)
+      well_size_z = well_data["depth"]
+
+      resource_holder = ResourceHolder(
+        name=item,
+        size_x=well_size_x,
+        size_y=well_size_y,
+        size_z=well_size_z,
+      )
+      resource_holder.location = Coordinate(
+        x=well_data["x"] - well_size_x / 2,
+        y=well_data["y"] - well_size_y / 2,
+        z=well_data["z"],
+      )
+      wells.append(resource_holder)
+
+  ordering = data["ordering"]
+  flattened_ordering = [item for sublist in ordering for item in sublist]
+  ordered_items = dict(zip(flattened_ordering, wells))
+
+  return TubeRack(
+    name=plr_resource_name,
+    size_x=data["dimensions"]["xDimension"],
+    size_y=data["dimensions"]["yDimension"],
+    size_z=data["dimensions"]["zDimension"],
+    ordered_items=cast(Dict[str, ResourceHolder], ordered_items),
+    model=data["metadata"]["displayName"],
+  )

@@ -485,7 +485,7 @@ class VantageBackend(HamiltonLiquidHandler):
     x_positions, y_positions, tip_pattern = self._ops_to_fw_positions(ops, use_channels)
 
     tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
-    ttti = await self.get_ttti(tips)
+    ttti = [await self.get_or_assign_tip_type_index(tip) for tip in tips]
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)

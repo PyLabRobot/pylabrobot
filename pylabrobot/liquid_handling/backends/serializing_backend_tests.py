@@ -221,7 +221,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_move(self):
     to = Coordinate(600, 200, 200)
     await self.lh.move_plate(self.plate, to=to)
-    self.assertEqual(len(self.backend.sent_commands), 4)  # move + resource unassign + assign
+    self.assertEqual(len(self.backend.sent_commands), 2)  # pickup and drop
     self.assertEqual(
       self.backend.get_first_data_for_command("pick_up_resource"),
       {
