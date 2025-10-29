@@ -257,7 +257,8 @@ class HamiltonTCPBase(TCP):
             req_addr=Address(2, self._client_id, 65535),  # C# DLL: 2:{client_id}:65535
             res_addr=Address(0, 0, 0),                     # C# DLL: 0:0:0
             seq=seq,
-            harp_action=0x03  # DLL uses 0x03, device still responds
+            harp_action_code=3,  # COMMAND_REQUEST
+            harp_response_required=False  # DLL uses 0x03 (no response flag)
         )
 
         logger.info(f"[REGISTER] Sending registration packet:")
@@ -303,7 +304,8 @@ class HamiltonTCPBase(TCP):
             req_addr=Address(0, 0, 0),
             res_addr=Address(0, 0, 0),
             seq=seq,
-            harp_action=0x13  # Request with response
+            harp_action_code=3,  # COMMAND_REQUEST
+            harp_response_required=True  # Request with response
         )
 
         logger.info(f"[DISCOVER_ROOT] Sending root object discovery:")
@@ -424,20 +426,21 @@ class HamiltonTCPBase(TCP):
         # Read response (timeout handled by TCP layer)
         response_message = await self._read_one_message()
 
-        # Parse response using parsed message
-        parsed_response = command.parse_response_from_message(response_message)
+        # Parse response with type dispatch
+        from .messages import ResponseParser, ErrorResponse
 
-        # Check for errors
-        if 'error_code' in parsed_response and parsed_response['error_code'] != 0:
-            error = HamiltonError(
-                error_code=parsed_response['error_code'],
-                error_message=parsed_response.get('error_message', 'Unknown error'),
-                interface_id=parsed_response.get('interface_id', 0),
-                action_id=parsed_response.get('action_id', 0)
+        parser = ResponseParser()
+        hoi_response = parser.parse(response_message)
+
+        # Handle errors
+        if isinstance(hoi_response, ErrorResponse):
+            logger.error(f"Hamilton error {hoi_response.error_code}: {hoi_response.error_message}")
+            raise RuntimeError(
+                f"Hamilton error {hoi_response.error_code}: {hoi_response.error_message}"
             )
-            raise error
 
-        return parsed_response
+        # Let command interpret success response
+        return command.interpret_response(hoi_response)
 
     async def stop(self):
         """Stop the backend and close connection."""

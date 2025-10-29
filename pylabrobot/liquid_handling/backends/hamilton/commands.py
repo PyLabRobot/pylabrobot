@@ -125,36 +125,29 @@ class HamiltonCommand:
                 self._add_param_to_message(msg, type_id, value)
 
         # Build final packet
-        return msg.build(source, sequence, response_required)
+        return msg.build(source, sequence, harp_response_required=response_required)
 
     def _add_param_to_message(self, msg: CommandMessage, type_id: int, value):
         """Helper to add parsed parameter to CommandMessage."""
-        from .hoi_params import (
-            TYPE_I8, TYPE_I16, TYPE_I32, TYPE_I64,
-            TYPE_U8, TYPE_U16, TYPE_U32, TYPE_U64,
-            TYPE_F32, TYPE_F64, TYPE_STRING, TYPE_BOOL,
-            TYPE_I8_ARRAY, TYPE_I16_ARRAY, TYPE_I32_ARRAY, TYPE_I64_ARRAY,
-            TYPE_U8_ARRAY, TYPE_U16_ARRAY, TYPE_U32_ARRAY, TYPE_U64_ARRAY,
-            TYPE_F32_ARRAY, TYPE_F64_ARRAY, TYPE_STRING_ARRAY, TYPE_BOOL_ARRAY
-        )
+        from .protocol import HamiltonDataType
 
         # Map type_id to CommandMessage method
         type_map = {
-            TYPE_I8: msg.add_i8,
-            TYPE_I16: msg.add_i16,
-            TYPE_I32: msg.add_i32,
-            TYPE_I64: msg.add_i64,
-            TYPE_U8: msg.add_u8,
-            TYPE_U16: msg.add_u16,
-            TYPE_U32: msg.add_u32,
-            TYPE_U64: msg.add_u64,
-            TYPE_F32: msg.add_f32,
-            TYPE_F64: msg.add_f64,
-            TYPE_STRING: msg.add_string,
-            TYPE_BOOL: msg.add_bool,
-            TYPE_I32_ARRAY: msg.add_i32_array,
-            TYPE_U32_ARRAY: msg.add_u32_array,
-            TYPE_STRING_ARRAY: msg.add_string_array,
+            HamiltonDataType.I8: msg.add_i8,
+            HamiltonDataType.I16: msg.add_i16,
+            HamiltonDataType.I32: msg.add_i32,
+            HamiltonDataType.I64: msg.add_i64,
+            HamiltonDataType.U8: msg.add_u8,
+            HamiltonDataType.U16: msg.add_u16,
+            HamiltonDataType.U32: msg.add_u32,
+            HamiltonDataType.U64: msg.add_u64,
+            HamiltonDataType.F32: msg.add_f32,
+            HamiltonDataType.F64: msg.add_f64,
+            HamiltonDataType.STRING: msg.add_string,
+            HamiltonDataType.BOOL: msg.add_bool,
+            HamiltonDataType.I32_ARRAY: msg.add_i32_array,
+            HamiltonDataType.U32_ARRAY: msg.add_u32_array,
+            HamiltonDataType.STRING_ARRAY: msg.add_string_array,
         }
 
         if type_id in type_map:
@@ -162,8 +155,22 @@ class HamiltonCommand:
         else:
             raise ValueError(f"Unsupported type_id in command: {type_id}")
 
+    def interpret_response(self, response: 'SuccessResponse') -> dict:
+        """Interpret success response using typed response object.
+
+        This is the new interface used by the backend. Default implementation
+        delegates to parse_response_parameters for backwards compatibility.
+
+        Args:
+            response: Typed SuccessResponse from ResponseParser
+
+        Returns:
+            Dictionary with parsed response data
+        """
+        return self.parse_response_parameters(response.raw_params)
+
     def parse_response_from_message(self, message: CommandResponse) -> dict:
-        """Parse response from CommandResponse.
+        """Parse response from CommandResponse (legacy interface).
 
         Args:
             message: Parsed CommandResponse from messages.py

@@ -22,34 +22,11 @@ from __future__ import annotations
 import struct
 from typing import Any
 
+from .protocol import HamiltonDataType
 from .wire import Wire
 
 
-# Hamilton type IDs (from official ParameterTypes enumeration)
-TYPE_I8 = 1
-TYPE_I16 = 2
-TYPE_I32 = 3
-TYPE_U8 = 4
-TYPE_U16 = 5
-TYPE_U32 = 6
-TYPE_STRING = 15
-TYPE_U8_ARRAY = 22
-TYPE_BOOL = 23
-TYPE_I8_ARRAY = 24
-TYPE_I16_ARRAY = 25
-TYPE_U16_ARRAY = 26
-TYPE_I32_ARRAY = 27
-TYPE_U32_ARRAY = 28
-TYPE_BOOL_ARRAY = 29
-TYPE_STRING_ARRAY = 34
-TYPE_I64 = 36
-TYPE_U64 = 37
-TYPE_I64_ARRAY = 38
-TYPE_U64_ARRAY = 39
-TYPE_F32 = 40
-TYPE_F64 = 41
-TYPE_F32_ARRAY = 42
-TYPE_F64_ARRAY = 43
+
 
 
 class HoiParams:
@@ -83,64 +60,64 @@ class HoiParams:
     def i8(self, value: int) -> 'HoiParams':
         """Add signed 8-bit integer parameter."""
         data = Wire.write().i8(value).finish()
-        return self._add_fragment(TYPE_I8, data)
+        return self._add_fragment(HamiltonDataType.I8, data)
 
     def i16(self, value: int) -> 'HoiParams':
         """Add signed 16-bit integer parameter."""
         data = Wire.write().i16(value).finish()
-        return self._add_fragment(TYPE_I16, data)
+        return self._add_fragment(HamiltonDataType.I16, data)
 
     def i32(self, value: int) -> 'HoiParams':
         """Add signed 32-bit integer parameter."""
         data = Wire.write().i32(value).finish()
-        return self._add_fragment(TYPE_I32, data)
+        return self._add_fragment(HamiltonDataType.I32, data)
 
     def i64(self, value: int) -> 'HoiParams':
         """Add signed 64-bit integer parameter."""
         data = Wire.write().i64(value).finish()
-        return self._add_fragment(TYPE_I64, data)
+        return self._add_fragment(HamiltonDataType.I64, data)
 
     def u8(self, value: int) -> 'HoiParams':
         """Add unsigned 8-bit integer parameter."""
         data = Wire.write().u8(value).finish()
-        return self._add_fragment(TYPE_U8, data)
+        return self._add_fragment(HamiltonDataType.U8, data)
 
     def u16(self, value: int) -> 'HoiParams':
         """Add unsigned 16-bit integer parameter."""
         data = Wire.write().u16(value).finish()
-        return self._add_fragment(TYPE_U16, data)
+        return self._add_fragment(HamiltonDataType.U16, data)
 
     def u32(self, value: int) -> 'HoiParams':
         """Add unsigned 32-bit integer parameter."""
         data = Wire.write().u32(value).finish()
-        return self._add_fragment(TYPE_U32, data)
+        return self._add_fragment(HamiltonDataType.U32, data)
 
     def u64(self, value: int) -> 'HoiParams':
         """Add unsigned 64-bit integer parameter."""
         data = Wire.write().u64(value).finish()
-        return self._add_fragment(TYPE_U64, data)
+        return self._add_fragment(HamiltonDataType.U64, data)
 
     # Floating-point types
     def f32(self, value: float) -> 'HoiParams':
         """Add 32-bit float parameter."""
         data = Wire.write().f32(value).finish()
-        return self._add_fragment(TYPE_F32, data)
+        return self._add_fragment(HamiltonDataType.F32, data)
 
     def f64(self, value: float) -> 'HoiParams':
         """Add 64-bit double parameter."""
         data = Wire.write().f64(value).finish()
-        return self._add_fragment(TYPE_F64, data)
+        return self._add_fragment(HamiltonDataType.F64, data)
 
     # String and bool
     def string(self, value: str) -> 'HoiParams':
         """Add null-terminated string parameter."""
         data = Wire.write().string(value).finish()
-        return self._add_fragment(TYPE_STRING, data)
+        return self._add_fragment(HamiltonDataType.STRING, data)
 
     def bool(self, value: bool) -> 'HoiParams':
         """Add boolean parameter."""
         data = Wire.write().u8(1 if value else 0).finish()
-        return self._add_fragment(TYPE_BOOL, data)
+        return self._add_fragment(HamiltonDataType.BOOL, data)
 
     # Array types
     def i8_array(self, values: list[int]) -> 'HoiParams':
@@ -151,77 +128,77 @@ class HoiParams:
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.i8(val)
-        return self._add_fragment(TYPE_I8_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.I8_ARRAY, writer.finish())
 
     def i16_array(self, values: list[int]) -> 'HoiParams':
         """Add array of signed 16-bit integers."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.i16(val)
-        return self._add_fragment(TYPE_I16_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.I16_ARRAY, writer.finish())
 
     def i32_array(self, values: list[int]) -> 'HoiParams':
         """Add array of signed 32-bit integers."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.i32(val)
-        return self._add_fragment(TYPE_I32_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.I32_ARRAY, writer.finish())
 
     def i64_array(self, values: list[int]) -> 'HoiParams':
         """Add array of signed 64-bit integers."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.i64(val)
-        return self._add_fragment(TYPE_I64_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.I64_ARRAY, writer.finish())
 
     def u8_array(self, values: list[int]) -> 'HoiParams':
         """Add array of unsigned 8-bit integers."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.u8(val)
-        return self._add_fragment(TYPE_U8_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.U8_ARRAY, writer.finish())
 
     def u16_array(self, values: list[int]) -> 'HoiParams':
         """Add array of unsigned 16-bit integers."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.u16(val)
-        return self._add_fragment(TYPE_U16_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.U16_ARRAY, writer.finish())
 
     def u32_array(self, values: list[int]) -> 'HoiParams':
         """Add array of unsigned 32-bit integers."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.u32(val)
-        return self._add_fragment(TYPE_U32_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.U32_ARRAY, writer.finish())
 
     def u64_array(self, values: list[int]) -> 'HoiParams':
         """Add array of unsigned 64-bit integers."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.u64(val)
-        return self._add_fragment(TYPE_U64_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.U64_ARRAY, writer.finish())
 
     def f32_array(self, values: list[float]) -> 'HoiParams':
         """Add array of 32-bit floats."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.f32(val)
-        return self._add_fragment(TYPE_F32_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.F32_ARRAY, writer.finish())
 
     def f64_array(self, values: list[float]) -> 'HoiParams':
         """Add array of 64-bit doubles."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.f64(val)
-        return self._add_fragment(TYPE_F64_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.F64_ARRAY, writer.finish())
 
     def bool_array(self, values: list[bool]) -> 'HoiParams':
         """Add array of booleans (stored as u8: 0 or 1)."""
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.u8(1 if val else 0)
-        return self._add_fragment(TYPE_BOOL_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.BOOL_ARRAY, writer.finish())
 
     def string_array(self, values: list[str]) -> 'HoiParams':
         """Add array of null-terminated strings.
@@ -231,7 +208,7 @@ class HoiParams:
         writer = Wire.write().u32(len(values))
         for val in values:
             writer.string(val)
-        return self._add_fragment(TYPE_STRING_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.STRING_ARRAY, writer.finish())
 
     def build(self) -> bytes:
         """Return concatenated DataFragments."""
@@ -291,17 +268,17 @@ class HoiParamsParser:
 
         # Dispatch table for scalar types
         scalar_parsers = {
-            TYPE_I8: reader.i8,
-            TYPE_I16: reader.i16,
-            TYPE_I32: reader.i32,
-            TYPE_I64: reader.i64,
-            TYPE_U8: reader.u8,
-            TYPE_U16: reader.u16,
-            TYPE_U32: reader.u32,
-            TYPE_U64: reader.u64,
-            TYPE_F32: reader.f32,
-            TYPE_F64: reader.f64,
-            TYPE_STRING: reader.string,
+            HamiltonDataType.I8: reader.i8,
+            HamiltonDataType.I16: reader.i16,
+            HamiltonDataType.I32: reader.i32,
+            HamiltonDataType.I64: reader.i64,
+            HamiltonDataType.U8: reader.u8,
+            HamiltonDataType.U16: reader.u16,
+            HamiltonDataType.U32: reader.u32,
+            HamiltonDataType.U64: reader.u64,
+            HamiltonDataType.F32: reader.f32,
+            HamiltonDataType.F64: reader.f64,
+            HamiltonDataType.STRING: reader.string,
         }
 
         # Check scalar types first
@@ -309,22 +286,22 @@ class HoiParamsParser:
             return scalar_parsers[type_id]()
 
         # Special case: bool
-        if type_id == TYPE_BOOL:
+        if type_id == HamiltonDataType.BOOL:
             return reader.u8() == 1
 
         # Dispatch table for array element parsers
         array_element_parsers = {
-            TYPE_I8_ARRAY: reader.i8,
-            TYPE_I16_ARRAY: reader.i16,
-            TYPE_I32_ARRAY: reader.i32,
-            TYPE_I64_ARRAY: reader.i64,
-            TYPE_U8_ARRAY: reader.u8,
-            TYPE_U16_ARRAY: reader.u16,
-            TYPE_U32_ARRAY: reader.u32,
-            TYPE_U64_ARRAY: reader.u64,
-            TYPE_F32_ARRAY: reader.f32,
-            TYPE_F64_ARRAY: reader.f64,
-            TYPE_STRING_ARRAY: reader.string,
+            HamiltonDataType.I8_ARRAY: reader.i8,
+            HamiltonDataType.I16_ARRAY: reader.i16,
+            HamiltonDataType.I32_ARRAY: reader.i32,
+            HamiltonDataType.I64_ARRAY: reader.i64,
+            HamiltonDataType.U8_ARRAY: reader.u8,
+            HamiltonDataType.U16_ARRAY: reader.u16,
+            HamiltonDataType.U32_ARRAY: reader.u32,
+            HamiltonDataType.U64_ARRAY: reader.u64,
+            HamiltonDataType.F32_ARRAY: reader.f32,
+            HamiltonDataType.F64_ARRAY: reader.f64,
+            HamiltonDataType.STRING_ARRAY: reader.string,
         }
 
         # Handle arrays
@@ -333,7 +310,7 @@ class HoiParamsParser:
             return [array_element_parsers[type_id]() for _ in range(count)]
 
         # Special case: bool array
-        if type_id == TYPE_BOOL_ARRAY:
+        if type_id == HamiltonDataType.BOOL_ARRAY:
             count = reader.u32()
             return [reader.u8() == 1 for _ in range(count)]
 

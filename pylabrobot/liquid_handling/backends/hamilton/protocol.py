@@ -120,6 +120,48 @@ class RegistrationOptionType(IntEnum):
     HARP_PROTOCOL_RESPONSE = 6        # PRIMARY: Contains object ID lists (most commonly used)
 
 
+class HamiltonDataType(IntEnum):
+    """Hamilton parameter data types for wire encoding in DataFragments.
+
+    These constants represent the type identifiers used in Hamilton DataFragments
+    for HOI2 command parameters. Each type ID corresponds to a specific data format
+    and encoding scheme used on the wire.
+
+    From Hamilton.Components.TransportLayer.Protocols.Parameter.ParameterTypes.
+    """
+    # Scalar integer types
+    I8 = 1
+    I16 = 2
+    I32 = 3
+    U8 = 4
+    U16 = 5
+    U32 = 6
+    I64 = 36
+    U64 = 37
+
+    # Floating-point types
+    F32 = 40
+    F64 = 41
+
+    # String and boolean
+    STRING = 15
+    BOOL = 23
+
+    # Array types
+    U8_ARRAY = 22
+    I8_ARRAY = 24
+    I16_ARRAY = 25
+    U16_ARRAY = 26
+    I32_ARRAY = 27
+    U32_ARRAY = 28
+    BOOL_ARRAY = 29
+    STRING_ARRAY = 34
+    I64_ARRAY = 38
+    U64_ARRAY = 39
+    F32_ARRAY = 42
+    F64_ARRAY = 43
+
+
 class HoiRequestId(IntEnum):
     """Request types for HarpProtocolRequest (byte 3 in command_data).
 

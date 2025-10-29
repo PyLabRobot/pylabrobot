@@ -117,9 +117,19 @@ class HarpPacket:
     dst: Address
     seq: int
     protocol: int  # 2=HOI, 3=Registration
-    action: int
+    action_code: int  # Base action code (0-15)
     payload: bytes
     options: bytes = b''
+    response_required: bool = True  # Controls bit 4 of action byte
+
+    @property
+    def action(self) -> int:
+        """Compute action byte from action_code and response_required flag.
+
+        Returns:
+            Action byte with bit 4 set if response required
+        """
+        return self.action_code | (0x10 if self.response_required else 0x00)
 
     def pack(self) -> bytes:
         """Serialize HARP packet."""
@@ -134,7 +144,7 @@ class HarpPacket:
                 .u8(self.seq)
                 .u8(0)  # reserved
                 .u8(self.protocol)
-                .u8(self.action)
+                .u8(self.action)  # Uses computed property
                 .u16(msg_len)
                 .u16(len(self.options))
                 .bytes(self.options)
@@ -155,7 +165,7 @@ class HarpPacket:
         seq = r.u8()
         reserved = r.u8()
         protocol = r.u8()
-        action = r.u8()
+        action_byte = r.u8()
         msg_len = r.u16()
         opts_len = r.u16()
 
@@ -164,14 +174,19 @@ class HarpPacket:
         reserved2 = r.u8()
         payload = r.remaining()
 
+        # Decompose action byte into action_code and response_required flag
+        action_code = action_byte & 0x0F
+        response_required = bool(action_byte & 0x10)
+
         return cls(
             src=src,
             dst=dst,
             seq=seq,
             protocol=protocol,
-            action=action,
+            action_code=action_code,
             payload=payload,
-            options=options
+            options=options,
+            response_required=response_required
         )
 
 
@@ -190,9 +205,19 @@ class HoiPacket:
     Note: params must be DataFragment-wrapped (use HoiParams to build).
     """
     interface_id: int
-    action: int
+    action_code: int  # Base action code (0-15)
     action_id: int
     params: bytes  # Already DataFragment-wrapped via HoiParams
+    response_required: bool = False  # Controls bit 4 of action byte
+
+    @property
+    def action(self) -> int:
+        """Compute action byte from action_code and response_required flag.
+
+        Returns:
+            Action byte with bit 4 set if response required
+        """
+        return self.action_code | (0x10 if self.response_required else 0x00)
 
     def pack(self) -> bytes:
         """Serialize HOI packet."""
@@ -200,9 +225,9 @@ class HoiPacket:
 
         return (Wire.write()
                 .u8(self.interface_id)
-                .u8(self.action)
+                .u8(self.action)  # Uses computed property
                 .u16(self.action_id)
-                .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
+                .u8(0)  # version byte - always 0 for HOI packets (not 0x30!)
                 .u8(num_fragments)
                 .bytes(self.params)
                 .finish())
@@ -213,17 +238,22 @@ class HoiPacket:
         r = Wire.read(data)
 
         interface_id = r.u8()
-        action = r.u8()
+        action_byte = r.u8()
         action_id = r.u16()
         major, minor = r.version_byte()
         num_fragments = r.u8()
         params = r.remaining()
 
+        # Decompose action byte into action_code and response_required flag
+        action_code = action_byte & 0x0F
+        response_required = bool(action_byte & 0x10)
+
         return cls(
             interface_id=interface_id,
-            action=action,
+            action_code=action_code,
             action_id=action_id,
-            params=params
+            params=params,
+            response_required=response_required
         )
 
     @staticmethod

@@ -159,36 +159,38 @@ class CommandMessage:
         self.params.string_array(values)
         return self
 
-    def build(self, src: Address, seq: int, response_required: bool = True) -> bytes:
+    def build(self, src: Address, seq: int,
+              harp_response_required: bool = True,
+              hoi_response_required: bool = False) -> bytes:
         """Build complete IP[HARP[HOI]] packet.
 
         Args:
             src: Source address (client address)
             seq: Sequence number for this request
-            response_required: Whether to request a response (default True)
+            harp_response_required: Set bit 4 in HARP action byte (default True)
+            hoi_response_required: Set bit 4 in HOI action byte (default False)
 
         Returns:
             Complete packet bytes ready to send over TCP
         """
-        # Determine action byte: lower 4 bits = action code, bit 4 = response required
-        action_byte = self.action_code | (0x10 if response_required else 0x00)
-
-        # Build HOI packet with DataFragment-wrapped parameters
+        # Build HOI - it handles its own action byte construction
         hoi = HoiPacket(
             interface_id=self.interface_id,
-            action=action_byte,
+            action_code=self.action_code,
             action_id=self.method_id,
-            params=self.params.build()
+            params=self.params.build(),
+            response_required=hoi_response_required
         )
 
-        # Wrap in HARP packet
+        # Build HARP - it handles its own action byte construction
         harp = HarpPacket(
             src=src,
             dst=self.dest,
             seq=seq,
             protocol=self.harp_protocol,
-            action=action_byte,
-            payload=hoi.pack()
+            action_code=self.action_code,
+            payload=hoi.pack(),
+            response_required=harp_response_required
         )
 
         # Wrap in IP packet
@@ -265,7 +267,8 @@ class RegistrationMessage:
         req_addr: Address,
         res_addr: Address,
         seq: int,
-        harp_action: int = 0x13  # Default: request with response
+        harp_action_code: int = 3,  # Default: COMMAND_REQUEST
+        harp_response_required: bool = True  # Default: request with response
     ) -> bytes:
         """Build complete IP[HARP[Registration]] packet.
 
@@ -274,7 +277,8 @@ class RegistrationMessage:
             req_addr: Request address (for registration context)
             res_addr: Response address (for registration context)
             seq: Sequence number for this request
-            harp_action: HARP action code (default 0x13=request with response)
+            harp_action_code: HARP action code (default 3=COMMAND_REQUEST)
+            harp_response_required: Whether response required (default True)
 
         Returns:
             Complete packet bytes ready to send over TCP
@@ -294,8 +298,9 @@ class RegistrationMessage:
             dst=self.dest,
             seq=seq,
             protocol=self.harp_protocol,
-            action=harp_action,
-            payload=reg.pack()
+            action_code=harp_action_code,
+            payload=reg.pack(),
+            response_required=harp_response_required
         )
 
         # Wrap in IP packet
@@ -530,4 +535,113 @@ class CommandResponse:
     def hoi_params(self) -> bytes:
         """Get HOI parameters (DataFragment-wrapped)."""
         return self.hoi.params
+
+
+# ============================================================================
+# TYPED HOI RESPONSE CLASSES - For response dispatch
+# ============================================================================
+
+
+@dataclass
+class HoiResponse:
+    """Base class for typed HOI responses with action-based dispatch.
+
+    Provides type-safe access to response data with proper error handling.
+    """
+    action: int  # Hoi2Action enum value
+    interface_id: int
+    action_id: int
+    raw_params: bytes
+    response_required: bool  # Extracted from bit 4 of action byte
+
+
+@dataclass
+class SuccessResponse(HoiResponse):
+    """Successful HOI response (action 0x01 or 0x04)."""
+    pass
+
+
+@dataclass
+class ErrorResponse(HoiResponse):
+    """Error HOI response (action 0x02, 0x05, or 0x0a).
+
+    Contains parsed error details from the response.
+    """
+    error_code: int
+    error_message: str
+
+
+class ResponseParser:
+    """Parse CommandResponse into typed HoiResponse objects.
+
+    Provides action-based dispatch with automatic error detection.
+
+    Example:
+        parser = ResponseParser()
+        response = parser.parse(command_response)
+        if isinstance(response, ErrorResponse):
+            raise RuntimeError(f"Error {response.error_code}: {response.error_message}")
+    """
+
+    def parse(self, cmd_response: CommandResponse) -> HoiResponse:
+        """Parse CommandResponse and dispatch based on HOI action code.
+
+        Args:
+            cmd_response: Parsed CommandResponse from network
+
+        Returns:
+            Typed HoiResponse (SuccessResponse or ErrorResponse)
+
+        Raises:
+            ValueError: If action code is unexpected
+        """
+        from .protocol import Hoi2Action
+
+        # Get action code (lower 4 bits)
+        action = Hoi2Action(cmd_response.hoi.action_code)
+
+        # Dispatch based on action type
+        if action in (Hoi2Action.STATUS_EXCEPTION,
+                      Hoi2Action.COMMAND_EXCEPTION,
+                      Hoi2Action.INVALID_ACTION_RESPONSE):
+            return self._parse_error(cmd_response, action)
+        elif action in (Hoi2Action.STATUS_RESPONSE,
+                        Hoi2Action.COMMAND_RESPONSE):
+            return SuccessResponse(
+                action=action,
+                interface_id=cmd_response.hoi.interface_id,
+                action_id=cmd_response.hoi.action_id,
+                raw_params=cmd_response.hoi.params,
+                response_required=cmd_response.hoi.response_required
+            )
+        else:
+            raise ValueError(f"Unexpected HOI action: {action} (0x{action:02x})")
+
+    def _parse_error(self, cmd_response: CommandResponse, action: int) -> ErrorResponse:
+        """Parse error response.
+
+        Error responses may have custom formats that don't follow standard
+        DataFragment encoding. Return the raw payload as hex for debugging.
+
+        Args:
+            cmd_response: Raw command response
+            action: HOI action code
+
+        Returns:
+            ErrorResponse with error details
+        """
+        # Error responses don't follow standard DataFragment format
+        # Just return the raw data as hex for inspection
+        error_code = action  # Use action code as error code
+        error_message = f"Error response (action={action:#x}): {cmd_response.hoi.params.hex()}"
+
+        return ErrorResponse(
+            action=action,
+            interface_id=cmd_response.hoi.interface_id,
+            action_id=cmd_response.hoi.action_id,
+            raw_params=cmd_response.hoi.params,
+            response_required=cmd_response.hoi.response_required,
+            error_code=error_code,
+            error_message=error_message
+        )
 
