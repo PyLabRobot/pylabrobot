@@ -11,5 +11,6 @@ Various utilities for the pylabrobot package.
   :recursive:
 
     file_parsing
+    interpolation
     list
     positions
