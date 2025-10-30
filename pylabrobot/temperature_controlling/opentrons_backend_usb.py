@@ -56,7 +56,7 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
       response2 = await self.serial.readline()
       # Verify we got the expected response
       if b"ok" not in response1 or b"ok" not in response2:
-        raise RuntimeError(f"Unexpected response from device: {response1} {response2}")
+        raise RuntimeError(f"Unexpected response from device: {response1.decode(encoding="utf-8")} {response2.decode(encoding="utf-8")}")
 
   async def deactivate(self):
       # Send M18 command over serial to stop holding temperature
@@ -69,7 +69,7 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
       response2 = await self.serial.readline()
       # Verify we got the expected response
       if b"ok" not in response1 or b"ok" not in response2:
-        raise RuntimeError(f"Unexpected response from device: {response1} {response2}")
+        raise RuntimeError(f"Unexpected response from device: {response1.decode(encoding="utf-8")} {response2.decode(encoding="utf-8")}")
 
   async def get_current_temperature(self) -> float:
       # Send M105 command over serial to query temperature
@@ -86,7 +86,7 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
         response2 = await self.serial.readline()
         # Verify we got the expected response
         if b"ok" not in response1 or b"ok" not in response2:
-          raise RuntimeError(f"Unexpected response from device: {response1} {response2}")
+          raise RuntimeError(f"Unexpected response from device: {response1.decode(encoding="utf-8")} {response2.decode(encoding="utf-8")}")
         return float(response.strip().split(b"C:")[-1])
       else:
-        raise ValueError(f"Unexpected response from device: {response}")
+        raise ValueError(f"Unexpected response from device: {response.decode(encoding="utf-8")}")
