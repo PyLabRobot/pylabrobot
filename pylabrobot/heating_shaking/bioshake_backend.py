@@ -1,5 +1,4 @@
 import asyncio
-from typing import Optional
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
@@ -144,7 +143,7 @@ class BioShake(HeaterShakerBackend):
 
     assert (
       min_speed <= speed <= max_speed
-    ), f"Speed {speed} RPM is out of range. Allowed range is {min_speed}-{max_speed} RPM"
+    ), f"Speed {speed} RPM is out of range. Allowed range is {min_speed}{max_speed} RPM"
 
     # Set the speed of the shaker
     set_speed_cmd = f"setShakeTargetSpeed{speed}"
