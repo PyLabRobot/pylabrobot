@@ -1,16 +1,11 @@
-import sys
-from typing import Optional, cast
+from typing import Optional
 
 from pylabrobot.temperature_controlling.backend import (
   TemperatureControllerBackend,
 )
 
-# Import serial for USB communication when USE_OT is False
-try:
-  from pylabrobot.io.serial import Serial
-  HAS_SERIAL = True
-except ImportError:
-  HAS_SERIAL = False
+# Import serial for USB communication
+from pylabrobot.io.serial import Serial
 
 
 class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
@@ -32,11 +27,6 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
 
     self.port = port
     self.serial: Optional["Serial"] = None
-
-    if not HAS_SERIAL:
-      raise RuntimeError(
-        "Serial connection not working. Perhaps pyserial is not installed. "
-      )
 
   async def setup(self):
       # Setup serial communication for USB
