@@ -3,6 +3,7 @@ from typing import Optional
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
+from pylabrobot.machines.backend import MachineBackend
 
 try:
   import serial
@@ -76,7 +77,7 @@ class BioShake(HeaterShakerBackend):
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
   async def setup(self, skip_home: bool = False):
-    await super().setup()
+    await MachineBackend.setup(self)
     await self.io.setup()
     if not skip_home:
       # Reset first before homing it to ensure the device is ready for run
@@ -87,7 +88,7 @@ class BioShake(HeaterShakerBackend):
       await self.home()
 
   async def stop(self):
-    await super().stop()
+    await MachineBackend.stop(self)
     await self.io.stop()
 
   async def reset(self):
@@ -113,7 +114,7 @@ class BioShake(HeaterShakerBackend):
         decoded = response.decode("ascii", errors="ignore").strip()
         await asyncio.sleep(0.1)
 
-        if decoded:
+        if len(decoded) > 0:
           # Stop when the final message arrives
           if "Initialization complete" in decoded:
             break
@@ -126,15 +127,16 @@ class BioShake(HeaterShakerBackend):
     # Initialize the BioShake into home position
     await self._send_command(cmd="shakeGoHome", delay=5)
 
-  async def shake(self, speed: int, accel: int = 0):
+  async def shake(self, speed: float, acceleration: int = 0):
     # Check if speed is an integer
     if isinstance(speed, float):
-      if speed.is_integer():
-        speed = int(speed)
-      else:
+      if not speed.is_integer():
         raise ValueError(f"Speed must be a whole number, not {speed}")
-    elif not isinstance(speed, int):
-      raise TypeError(f"Speed must be an integer, not {type(speed).__name__}")
+      speed = int(speed)
+    if not isinstance(speed, int):
+      raise TypeError(
+        f"Speed must be an integer or a whole number float, not {type(speed).__name__}"
+      )
 
     # Get the min and max speed of the device to assert speed
     min_speed = int(float(await self._send_command(cmd="getShakeMinRpm", delay=0.2)))
@@ -142,57 +144,59 @@ class BioShake(HeaterShakerBackend):
 
     assert (
       min_speed <= speed <= max_speed
-    ), f"Speed {speed} RPM is out of range. Allowed range is {min_speed}–{max_speed} RPM"
+    ), f"Speed {speed} RPM is out of range. Allowed range is {min_speed}-{max_speed} RPM"
 
     # Set the speed of the shaker
     set_speed_cmd = f"setShakeTargetSpeed{speed}"
     await self._send_command(cmd=set_speed_cmd)
 
     # Check if accel is an integer
-    if isinstance(accel, float):
-      if accel.is_integer():
-        accel = int(accel)
-      else:
-        raise ValueError(f"Acceleration must be a whole number, not {accel}")
-    elif not isinstance(accel, int):
-      raise TypeError(f"Acceleration must be an integer, not {type(accel).__name__}")
+    if isinstance(acceleration, float):
+      if not acceleration.is_integer():  # type: ignore[attr-defined] # mypy is retarded
+        raise ValueError(f"Acceleration must be a whole number, not {acceleration}")
+      acceleration = int(acceleration)
+    if not isinstance(acceleration, int):
+      raise TypeError(
+        f"Acceleration must be an integer or a whole number float, not {type(acceleration).__name__}"
+      )
 
-    # Get the min and max accel of the device to asset accel
+    # Get the min and max acceleration of the device to check bounds
     min_accel = int(float(await self._send_command(cmd="getShakeAccelerationMin", delay=0.2)))
     max_accel = int(float(await self._send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
     assert (
-      min_accel <= accel <= max_accel
-    ), f"Acceleration {accel} seconds is out of range. Allowed range is {min_accel}-{max_accel} seconds"
+      min_accel <= acceleration <= max_accel
+    ), f"Acceleration {acceleration} seconds is out of range. Allowed range is {min_accel}-{max_accel} seconds"
 
     # Set the acceleration of the shaker
-    set_accel_cmd = f"setShakeAcceleration{accel}"
+    set_accel_cmd = f"setShakeAcceleration{acceleration}"
     await self._send_command(cmd=set_accel_cmd, delay=0.2)
 
     # Send the command to start shaking, either with or without duration
 
     await self._send_command(cmd="shakeOn", delay=0.2)
 
-  async def stop_shaking(self, decel: int = 0):
+  async def stop_shaking(self, deceleration: int = 0):
     # Check if decel is an integer
-    if isinstance(decel, float):
-      if decel.is_integer():
-        decel = int(decel)
-      else:
-        raise ValueError(f"Deceleration must be a whole number, not {decel}")
-    elif not isinstance(decel, int):
-      raise TypeError(f"Deceleration must be an integer, not {type(decel).__name__}")
+    if isinstance(deceleration, float):
+      if not deceleration.is_integer():  # type: ignore[attr-defined] # mypy is retarded
+        raise ValueError(f"Deceleration must be a whole number, not {deceleration}")
+      deceleration = int(deceleration)
+    if not isinstance(deceleration, int):
+      raise TypeError(
+        f"Deceleration must be an integer or a whole number float, not {type(deceleration).__name__}"
+      )
 
     # Get the min and max decel of the device to asset decel
     min_decel = int(float(await self._send_command(cmd="getShakeAccelerationMin", delay=0.2)))
     max_decel = int(float(await self._send_command(cmd="getShakeAccelerationMax", delay=0.2)))
 
     assert (
-      min_decel <= decel <= max_decel
-    ), f"Deceleration {decel} seconds is out of range. Allowed range is {min_decel}-{max_decel} seconds"
+      min_decel <= deceleration <= max_decel
+    ), f"Deceleration {deceleration} seconds is out of range. Allowed range is {min_decel}-{max_decel} seconds"
 
     # Set the deceleration of the shaker
-    set_decel_cmd = f"setShakeAcceleration{decel}"
+    set_decel_cmd = f"setShakeAcceleration{deceleration}"
     await self._send_command(cmd=set_decel_cmd, delay=0.2)
 
     # stop shaking
@@ -225,12 +229,13 @@ class BioShake(HeaterShakerBackend):
 
     # Check if temperature is an integer
     if isinstance(temperature, float):
-      if temperature.is_integer():
-        temperature = int(temperature)
-      else:
+      if not temperature.is_integer():
         raise ValueError(f"Temperature must be a whole number, not {temperature} (1/10 C)")
-    elif not isinstance(temperature, int):
-      raise TypeError(f"Temperature must be an integer, not {type(Temperature).__name__} (1/10 C)")
+      temperature = int(temperature)
+    if not isinstance(temperature, int):
+      raise TypeError(
+        f"Temperature must be an integer or a whole number float, not {type(temperature).__name__} (1/10 C)"
+      )
 
     set_temp_cmd = f"setTempTarget{temperature}"
     await self._send_command(cmd=set_temp_cmd, delay=0.2)
