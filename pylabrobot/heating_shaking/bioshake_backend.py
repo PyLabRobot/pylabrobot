@@ -126,7 +126,7 @@ class BioShake(HeaterShakerBackend):
     # Initialize the BioShake into home position
     await self._send_command(cmd="shakeGoHome", delay=5)
 
-  async def shake(self, speed: int, duration: Optional[float] = None, accel: int = 0):
+  async def shake(self, speed: int, accel: int = 0):
     # Check if speed is an integer
     if isinstance(speed, float):
       if speed.is_integer():
@@ -171,11 +171,7 @@ class BioShake(HeaterShakerBackend):
 
     # Send the command to start shaking, either with or without duration
 
-    if duration is None:
-      await self._send_command(cmd="shakeOn", delay=0.2)
-    else:
-      set_duration_cmd = f"shakeOnWithRuntime{duration}"
-      await self._send_command(cmd=set_duration_cmd, delay=0.2)
+    await self._send_command(cmd="shakeOn", delay=0.2)
 
   async def stop_shaking(self, decel: int = 0):
     # Check if decel is an integer
@@ -201,10 +197,6 @@ class BioShake(HeaterShakerBackend):
 
     # stop shaking
     await self._send_command(cmd="shakeOff", delay=0.2)
-
-  async def get_remaining_time(self) -> float:
-    response = await self._send_command(cmd="getShakeRemainingTime", delay=0.2)
-    return float(response)  # Return the remaining time in seconds if duration was set
 
   @property
   def supports_locking(self) -> bool:
