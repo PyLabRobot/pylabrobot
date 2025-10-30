@@ -6,7 +6,7 @@ from io import IOBase
 from typing import Optional, cast
 
 try:
-  from pylibftdi import Device, LibraryMissingError
+  from pylibftdi import Device, FtdiError, LibraryMissingError
 
   HAS_PYLIBFTDI = True
 except ImportError as e:
@@ -52,7 +52,12 @@ class FTDI(IOBase):
     return self._dev
 
   async def setup(self):
-    self.dev.open()
+    try:
+      self.dev.open()
+    except FtdiError as e:
+      raise RuntimeError(
+        f"Failed to open FTDI device: {e}. Is the device connected? Is it in use by another process? Try restarting the kernel."
+      ) from e
     self._executor = ThreadPoolExecutor(max_workers=1)
 
   async def set_baudrate(self, baudrate: int):
