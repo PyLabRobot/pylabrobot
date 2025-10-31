@@ -23,13 +23,13 @@ teach, and accelerate your own automation workflows.
 
 .. plrcard::
    :header: Move plate to Alpaqua magnet using CORE grippers
-   :card_description: Learn about...<br>
-    • Resource movement using CORE grippers<br>
-    • Resource position check using grippers<br>
-    • PLR autocorrection of plate placement onto PlateAdapter/magnet
-   :image: _static/cookbook_img/recipe_01_core_move_static.png
-   :image_hover: _static/cookbook_img/recipe_01_core_move.mp4
-   :link: recipes/star_movement_plate_to_alpaqua_core.html
+   :card_description: Learn about...<br><ul>
+      <li>Resource movement using CORE grippers</li>
+      <li>Resource position check using grippers</li>
+      <li>PLR autocorrection of plate placement onto PlateAdapter/magnet</li></ul>
+   :image: /cookbook/assets/star_movement_plate_to_alpaqua_core/preview.jpg
+   :image_hover: /cookbook/assets/star_movement_plate_to_alpaqua_core/animation.mp4
+   :link: star_movement_plate_to_alpaqua_core.html
    :tags: ResourceMovement PlateAdapter HamiltonSTAR
 
 .. plrcardgrid::
@@ -43,4 +43,4 @@ teach, and accelerate your own automation workflows.
    :maxdepth: 2
    :hidden:
 
-   recipes/star_movement_plate_to_alpaqua_core
+   star_movement_plate_to_alpaqua_core

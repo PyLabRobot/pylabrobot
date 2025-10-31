@@ -11,6 +11,7 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
+import shutil
 import sys
 
 sys.path.insert(0, os.path.abspath(".."))
@@ -193,3 +194,22 @@ if tags.has("no-api"):
 suppress_warnings.append("autosectionlabel.*")
 
 html_favicon = "_static/favicon.ico"
+
+def copy_cookbook_assets(app, exception):
+  if exception:
+    return
+  src = os.path.join(app.srcdir, "cookbook", "assets")
+  dst = os.path.join(app.outdir, "cookbook", "assets")
+  if not os.path.exists(src):
+    return
+  os.makedirs(dst, exist_ok=True)
+  for root, _, files in os.walk(src):
+    for f in files:
+      s = os.path.join(root, f)
+      r = os.path.relpath(s, src)
+      d = os.path.join(dst, r)
+      os.makedirs(os.path.dirname(d), exist_ok=True)
+      shutil.copy2(s, d)
+
+def setup(app):
+  app.connect("build-finished", copy_cookbook_assets)

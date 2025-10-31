@@ -17,28 +17,29 @@ It is assumed you are already familiar with the general contributor workflow as 
 
 ## 2. Adding a Recipe Card to the Cookbook Page
 
-Once your recipe notebook is ready and committed to `docs/cookbook/recipes/`, you must add an entry to the `pylabrobot/docs/cookbook/index.rst` file so that the recipe shows up on the website.
+Once your recipe notebook is ready and committed to `docs/cookbook/`, you must add an entry to the `pylabrobot/docs/cookbook/index.rst` file so that the recipe shows up on the website.
 Add something like the following:
 
 ```rst
 .. plrcard::
    :header: Move plate to Alpaqua magnet using CORE grippers
-   :card_description: Learn about…<br>
-   • Resource movement using CORE grippers<br>
-   • Resource position check using grippers<br>
-   • PLR autocorrection of plate placement onto PlateAdapter/magnet
-   :image: _static/cookbook_img/recipe_01_core_move_static.png
-   :image_hover: _static/cookbook_img/recipe_01_core_move.mp4
-   :link: recipes/star_movement_plate_to_alpaqua_core.html
+   :card_description: Learn about…<br><ul>
+      <li>Resource movement using CORE grippers</li>
+      <li>Resource position check using grippers</li>
+      <li>PLR autocorrection of plate placement onto PlateAdapter/magnet</li>
+      </ul>
+   :image: cookbook/assets/star_movement_plate_to_alpaqua_core/preview.png
+   :image_hover: cookbook/assets/star_movement_plate_to_alpaqua_core/animation.mp4
+   :link: star_movement_plate_to_alpaqua_core.html
    :tags: ResourceMovement PlateAdapter HamiltonSTAR
 ```
 
 <details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
-    <summary style="font-weight: bold; cursor: pointer;"><code>plrcard</code> Legend </summary>
-    <hr>
-    <p> <code>:image:</code> is the static preview shown in the Cookbook grid.</p>
-    <p> <code>:image_hover:</code> is the dynamic image or video displayed when hovering over the card.</p>
-    <p>  Both paths are relative to the docs/ folder.</p>
+   <summary style="font-weight: bold; cursor: pointer;"><code>plrcard</code> Legend </summary>
+   <hr>
+   <p> <code>:image:</code> is the static preview shown in the Cookbook grid.</p>
+   <p> <code>:image_hover:</code> is the dynamic image or video displayed when hovering over the card.</p>
+   <p>  Both paths are relative to the docs/ folder.</p>
 </details>
 
 <p></p>
@@ -61,19 +62,19 @@ Replace `star_movement_plate_to_alpaqua_core` with your recipe’s base name.
 ### 2.1 Add Preview Images or Hover Videos
 
 Each recipe card displays a **static image** and an optional **hover image** (which may be an animated GIF or MP4 video).  
-These preview files live in: `pylabrobot/docs/_static/cookbook_img/`
+These preview files live in: `pylabrobot/docs/cookbook/assets/`
 
 Follow these conventions:
 
-- Name the files descriptively, such as:
-  - `recipe_01_core_move_static.png`
-  - `recipe_01_core_move.gif` or `recipe_01_core_move.mp4`
+- Name the files like this:
+  - `preview.png`
+  - `animation.gif` or `animation.mp4`
 - Keep filenames lowercase and avoid spaces.
-- Use PNG or JPG for static images.
+- Use JPG for static images.
 - Use GIF (short animations) or MP4 (hover videos) for dynamic previews.
-- Keep files optimized: < 1 MB per static image, < 5 MB per hover file.
+- Keep files optimized: < 100 kb per static image, < 5 MB per hover file.
 
-When you commit, ensure both static and hover assets are included under `_static/cookbook_img/` in your PR.
+When you commit, ensure both static and hover assets are included under `cookbook/assets/` in your PR.
 
 <hr>
 
@@ -91,7 +92,7 @@ If your recipe introduces a **new tag** (for example, `MagneticSeparation`), fol
 2. Open `pylabrobot/docs/_templates/plr_card_grid.html` and add a new filter button, for example:
 
    ```html
-   <div class="plr-filter-btn" data-tag="MagneticSeparation"> Magnetic Separation </div>
+   <div class="plr-filter-btn" data-tag="MagneticSeparation">Magnetic Separation</div>
 
 This ensures your new tag appears as a filterable button on the Cookbook cards grid.
 
@@ -156,6 +157,3 @@ visit the community forum at [discuss.pylabrobot.org](https://discuss.pylabrobot
 
 Thank you for helping expand the PyLabRobot Cookbook - concise, self-contained, and well-documented recipes are invaluable for both human developers and AI systems.  
 They illustrate how to write complete, reproducible automation protocols and form the foundation for AI-assisted protocol generation.
-
-Happy coding and documenting!<p></p>
-— The PyLabRobot Team
