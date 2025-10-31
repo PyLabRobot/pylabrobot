@@ -117,6 +117,281 @@ FIRMWARE_ERROR_MAP: Dict[int, str] = {
 }
 
 
+class InhecoIncubatorShakerStack:
+  """Interface for INHECO Incubator Shaker stack machines.
+
+  Handles:
+    - USB/serial connection setup via VID/PID
+    - DIP switch ID verification
+    - Message framing, CRC generation
+    - Complete async read/write of firmware responses
+    - Binary-safe parsing and error mapping
+  """
+
+  def __init__(
+    self,
+    dip_switch_id: int = 2,
+    port: Optional[str] = None,
+    id_vendor: str = "0403",
+    id_product: str = "6001",
+    read_timeout: float = 2.0,
+  ):
+    self.dip_switch_id = dip_switch_id
+    self.port_hint = port
+    self.id_vendor = id_vendor
+    self.id_product = id_product
+    self.read_timeout = read_timeout
+
+    self.io: Optional[Serial] = None
+    self.port: Optional[str] = None
+
+    # optional logging hook
+    self.logger = logging.getLogger("pylabrobot.inheco.stack")
+
+  # === Setup and teardown ===
+
+  async def setup(self):
+    """Discover INHECO device via VID:PID and verify DIP switch ID."""
+    matching_ports = [
+      p.device for p in serial.tools.list_ports.comports()
+      if f"{self.id_vendor}:{self.id_product}" in (p.hwid or "")
+    ]
+
+    if not matching_ports:
+      raise RuntimeError(
+        f"No INHECO devices found (VID={self.id_vendor}, PID={self.id_product})."
+      )
+
+    # --- Port selection ---
+    if self.port_hint:
+      candidate = self.port_hint
+      if candidate not in matching_ports:
+        raise RuntimeError(
+          f"Specified port {candidate} not found among INHECO devices "
+          f"(VID={self.id_vendor}, PID={self.id_product})."
+        )
+    elif len(matching_ports) == 1:
+      candidate = matching_ports[0]
+    else:
+      raise RuntimeError(
+        f"Multiple INHECO devices detected with VID:PID {self.id_vendor}:{self.id_product}. "
+        "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
+      )
+
+    self.port = candidate
+
+    # --- Establish serial connection ---
+    self.io = Serial(
+      port=self.port,
+      baudrate=19200,
+      bytesize=serial.EIGHTBITS,
+      parity=serial.PARITY_NONE,
+      stopbits=serial.STOPBITS_ONE,
+      timeout=0,
+      write_timeout=1,
+    )
+    await self.io.setup()
+
+    # --- Verify DIP switch ID via RTS ---
+    probe = self._build_message("RTS", stack_index=0)
+    await self.write(probe)
+    resp = await self._read_full_response(timeout=1.0)
+
+    expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
+    if not resp or expected_hdr not in resp:
+      raise RuntimeError(
+        f"Connected device on {self.port} did not respond with expected DIP switch ID "
+        f"({self.dip_switch_id}). RTS handshake failed."
+      )
+
+    self._log(logging.INFO, f"Connected to INHECO device at {self.port} (DIP={self.dip_switch_id})")
+
+  async def stop(self):
+    """Close serial connection."""
+    if self.io:
+      await self.io.stop()
+      self.io = None
+
+  # === Logging utility ===
+
+  def _log(self, level: int, msg: str, direction: Optional[str] = None):
+    if direction:
+      self.logger.log(level, f"[{direction}] {msg}")
+    else:
+      self.logger.log(level, msg)
+
+  # === Low-level I/O ===
+
+  async def write(self, data: bytes) -> None:
+    """Write binary data to the serial device."""
+    self._log(logging.DEBUG, f"→ {data.hex(' ')}")
+    await self.io.write(data)
+
+  async def _read_full_response(self, timeout: float) -> bytes:
+    """Read a complete INHECO response frame asynchronously."""
+    if not self.io:
+      raise RuntimeError("Serial port not open.")
+
+    loop = asyncio.get_event_loop()
+    start = loop.time()
+    buf = bytearray()
+    expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
+
+    def has_complete_tail(b: bytearray) -> bool:
+      # Valid frame ends with: [hdr][0x20-0x2F][0x60]
+      return len(b) >= 3 and b[-1] == 0x60 and b[-3] == expected_hdr and 0x20 <= b[-2] <= 0x2F
+
+    while True:
+      chunk = await self.io.read(16)
+      if chunk:
+        buf.extend(chunk)
+        self._log(logging.DEBUG, chunk.hex(" "), direction="←")
+        if has_complete_tail(buf):
+          return bytes(buf)
+
+      if loop.time() - start > timeout:
+        raise TimeoutError(f"Timed out waiting for complete response (so far: {buf.hex(' ')})")
+
+      await asyncio.sleep(0.005)
+
+  # === Encoding / Decoding ===
+
+  def _crc8_legacy(self, data: bytearray) -> int:
+    """Compute legacy CRC-8 used by INHECO devices."""
+    crc = 0xA1
+    for byte in data:
+      d = byte
+      for _ in range(8):
+        if (d ^ crc) & 1:
+          crc ^= 0x18
+          crc >>= 1
+          crc |= 0x80
+        else:
+          crc >>= 1
+        d >>= 1
+    return crc & 0xFF
+
+  def _build_message(self, command: str, stack_index: int = 0) -> bytes:
+    """Construct a full binary message with header and CRC."""
+    if not (0 <= stack_index <= 5):
+      raise ValueError("stack_index must be between 0 and 5")
+    cmd = f"T0{stack_index}{command}".encode("ascii")
+    length = len(cmd) + 3
+    address = (0x30 + self.dip_switch_id) & 0xFF
+    proto = (0xC0 + len(cmd)) & 0xFF
+    message = bytearray([length, address, proto]) + cmd
+    crc = self._crc8_legacy(message)
+    return bytes(message + bytearray([crc]))
+
+  def _is_report_command(self, command: str) -> bool:
+    """Return True if command is a 'Report' type (starts with 'R')."""
+    return command and command[0].upper() == "R"
+
+  # === Response parsing ===
+
+  def _parse_response_binary_safe(self, resp: bytes) -> dict:
+    """Parse INHECO response frames safely (binary & multi-segment)."""
+    if len(resp) < 3:
+      raise ValueError("Incomplete response")
+
+    expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
+
+    # Trim any leading junk before first valid header
+    try:
+      start_idx = resp.index(bytes([expected_hdr]))
+      frame = resp[start_idx:]
+    except ValueError:
+      return {
+        "device": None,
+        "error_code": None,
+        "ok": False,
+        "data": "",
+        "raw_data": resp,
+      }
+
+    # Validate tail
+    if len(frame) < 3 or frame[-1] != 0x60:
+      return {
+        "device": expected_hdr - 0xB0,
+        "error_code": None,
+        "ok": False,
+        "data": "",
+        "raw_data": frame,
+      }
+
+    err_byte = frame[-2]
+    err_code = err_byte - 0x20 if 0x20 <= err_byte <= 0x2F else None
+
+    # Extract data between headers
+    data_blocks = []
+    i = 1  # start after first header
+    while i < len(frame) - 3:
+      try:
+        next_hdr = frame.index(bytes([expected_hdr]), i)
+      except ValueError:
+        next_hdr = len(frame) - 3
+      if next_hdr > i:
+        data_blocks.append(frame[i:next_hdr])
+      i = next_hdr + 1
+      if next_hdr >= len(frame) - 3:
+        break
+
+    raw_data = b"".join(data_blocks)
+    try:
+      ascii_data = raw_data.decode("ascii").strip("\x00")
+    except UnicodeDecodeError:
+      ascii_data = raw_data.hex()
+
+    return {
+      "device": expected_hdr - 0xB0,
+      "error_code": err_code,
+      "ok": (err_code == 0),
+      "data": ascii_data,
+      "raw_data": raw_data,
+    }
+
+  def _is_error_tail(self, resp: bytes) -> bool:
+    """Return True if the response ends in an explicit firmware error tail."""
+    expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
+    return len(resp) >= 3 and resp.endswith(bytes([expected_hdr, 0x28, 0x60]))
+
+  # === Command Layer ===
+
+  async def send_command(
+    self,
+    command: str,
+    delay: float = 0.2,
+    read_timeout: Optional[float] = None,
+    stack_index: int = 0,
+  ) -> str:
+    """Send a framed command and return parsed response or raise InhecoError."""
+    msg = self._build_message(command, stack_index=stack_index)
+    self._log(logging.DEBUG, f"SEND: {msg.hex(' ')}")
+    await self.write(msg)
+    await asyncio.sleep(delay)
+
+    response = await self._read_full_response(timeout=read_timeout or self.read_timeout)
+    if not response:
+      raise TimeoutError(f"No response from device for command: {command}")
+
+    if self._is_error_tail(response):
+      tail_err = response[-2] - 0x20
+      code = f"E{tail_err:02d}"
+      message = FIRMWARE_ERROR_MAP.get(tail_err, "Unknown firmware error")
+      raise InhecoError(command, code, message)
+
+    parsed = self._parse_response_binary_safe(response)
+    if not parsed["ok"]:
+      code = f"E{parsed.get('error_code', 0):02d}"
+      message = FIRMWARE_ERROR_MAP.get(parsed.get("error_code", 0), "Unknown firmware error")
+      raise InhecoError(command, code, message)
+
+    return parsed["data"]
+
+
+
+
+
 class InhecoIncubatorShakerBackend:
   """
   Asynchronous backend for controlling an INHECO Incubator/Shaker via USB-VCP.
