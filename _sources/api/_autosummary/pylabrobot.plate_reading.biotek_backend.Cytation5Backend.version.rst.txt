@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.biotek\_backend.Cytation5Backend.version
+==================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.biotek_backend
+
+.. autoproperty:: Cytation5Backend.version

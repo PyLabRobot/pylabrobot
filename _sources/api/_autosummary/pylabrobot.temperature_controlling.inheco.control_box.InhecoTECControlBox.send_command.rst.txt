@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.inheco.control\_box.InhecoTECControlBox.send\_command
+=========================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.control_box
+
+.. automethod:: InhecoTECControlBox.send_command

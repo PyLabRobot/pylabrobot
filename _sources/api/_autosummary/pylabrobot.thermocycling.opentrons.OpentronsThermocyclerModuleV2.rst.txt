@@ -1,0 +1,101 @@
+﻿pylabrobot.thermocycling.opentrons.OpentronsThermocyclerModuleV2
+================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons
+
+.. autoclass:: OpentronsThermocyclerModuleV2
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsThermocyclerModuleV2.name
+      ~OpentronsThermocyclerModuleV2.resource
+      ~OpentronsThermocyclerModuleV2.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsThermocyclerModuleV2.__init__
+      ~OpentronsThermocyclerModuleV2.assign_child_resource
+      ~OpentronsThermocyclerModuleV2.at
+      ~OpentronsThermocyclerModuleV2.center
+      ~OpentronsThermocyclerModuleV2.centers
+      ~OpentronsThermocyclerModuleV2.close_lid
+      ~OpentronsThermocyclerModuleV2.copy
+      ~OpentronsThermocyclerModuleV2.deactivate_block
+      ~OpentronsThermocyclerModuleV2.deactivate_lid
+      ~OpentronsThermocyclerModuleV2.deregister_did_assign_resource_callback
+      ~OpentronsThermocyclerModuleV2.deregister_did_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV2.deregister_state_update_callback
+      ~OpentronsThermocyclerModuleV2.deregister_will_assign_resource_callback
+      ~OpentronsThermocyclerModuleV2.deregister_will_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV2.deserialize
+      ~OpentronsThermocyclerModuleV2.get_absolute_location
+      ~OpentronsThermocyclerModuleV2.get_absolute_rotation
+      ~OpentronsThermocyclerModuleV2.get_absolute_size_x
+      ~OpentronsThermocyclerModuleV2.get_absolute_size_y
+      ~OpentronsThermocyclerModuleV2.get_absolute_size_z
+      ~OpentronsThermocyclerModuleV2.get_all_children
+      ~OpentronsThermocyclerModuleV2.get_anchor
+      ~OpentronsThermocyclerModuleV2.get_block_current_temperature
+      ~OpentronsThermocyclerModuleV2.get_block_status
+      ~OpentronsThermocyclerModuleV2.get_block_target_temperature
+      ~OpentronsThermocyclerModuleV2.get_current_cycle_index
+      ~OpentronsThermocyclerModuleV2.get_current_step_index
+      ~OpentronsThermocyclerModuleV2.get_default_child_location
+      ~OpentronsThermocyclerModuleV2.get_highest_known_point
+      ~OpentronsThermocyclerModuleV2.get_hold_time
+      ~OpentronsThermocyclerModuleV2.get_lid_current_temperature
+      ~OpentronsThermocyclerModuleV2.get_lid_open
+      ~OpentronsThermocyclerModuleV2.get_lid_status
+      ~OpentronsThermocyclerModuleV2.get_lid_target_temperature
+      ~OpentronsThermocyclerModuleV2.get_location_wrt
+      ~OpentronsThermocyclerModuleV2.get_resource
+      ~OpentronsThermocyclerModuleV2.get_root
+      ~OpentronsThermocyclerModuleV2.get_size_x
+      ~OpentronsThermocyclerModuleV2.get_size_y
+      ~OpentronsThermocyclerModuleV2.get_size_z
+      ~OpentronsThermocyclerModuleV2.get_total_cycle_count
+      ~OpentronsThermocyclerModuleV2.get_total_step_count
+      ~OpentronsThermocyclerModuleV2.is_in_subtree_of
+      ~OpentronsThermocyclerModuleV2.is_profile_running
+      ~OpentronsThermocyclerModuleV2.load_all_state
+      ~OpentronsThermocyclerModuleV2.load_from_json_file
+      ~OpentronsThermocyclerModuleV2.load_state
+      ~OpentronsThermocyclerModuleV2.load_state_from_file
+      ~OpentronsThermocyclerModuleV2.open_lid
+      ~OpentronsThermocyclerModuleV2.register_did_assign_resource_callback
+      ~OpentronsThermocyclerModuleV2.register_did_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV2.register_state_update_callback
+      ~OpentronsThermocyclerModuleV2.register_will_assign_resource_callback
+      ~OpentronsThermocyclerModuleV2.register_will_unassign_resource_callback
+      ~OpentronsThermocyclerModuleV2.rotate
+      ~OpentronsThermocyclerModuleV2.rotated
+      ~OpentronsThermocyclerModuleV2.run_pcr_profile
+      ~OpentronsThermocyclerModuleV2.run_protocol
+      ~OpentronsThermocyclerModuleV2.save
+      ~OpentronsThermocyclerModuleV2.save_state_to_file
+      ~OpentronsThermocyclerModuleV2.serialize
+      ~OpentronsThermocyclerModuleV2.serialize_all_state
+      ~OpentronsThermocyclerModuleV2.serialize_state
+      ~OpentronsThermocyclerModuleV2.set_block_temperature
+      ~OpentronsThermocyclerModuleV2.set_lid_temperature
+      ~OpentronsThermocyclerModuleV2.setup
+      ~OpentronsThermocyclerModuleV2.stop
+      ~OpentronsThermocyclerModuleV2.unassign
+      ~OpentronsThermocyclerModuleV2.unassign_child_resource
+      ~OpentronsThermocyclerModuleV2.wait_for_block
+      ~OpentronsThermocyclerModuleV2.wait_for_lid
+      ~OpentronsThermocyclerModuleV2.wait_for_profile_completion
+   
+   

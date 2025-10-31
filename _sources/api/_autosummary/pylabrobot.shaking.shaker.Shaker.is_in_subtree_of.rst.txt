@@ -1,0 +1,6 @@
+pylabrobot.shaking.shaker.Shaker.is\_in\_subtree\_of
+====================================================
+
+.. currentmodule:: pylabrobot.shaking.shaker
+
+.. automethod:: Shaker.is_in_subtree_of

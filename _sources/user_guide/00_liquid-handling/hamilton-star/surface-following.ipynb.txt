@@ -1,0 +1,203 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "c9fc088b",
+   "metadata": {},
+   "source": [
+    "# Surface following\n",
+    "\n",
+    "Surface following is a feature on Hamilton liquid handling robots that makes the pipette tip follow the surface of a liquid when aspirating (going down) or dispensing (going up).\n",
+    "\n",
+    "When using automatic surface following, the robot will automatically move the Z position of the pipette tip based on a user specified value. The amount of surface following required can be computed by subtracting the liquid level before and after each aspiration or dispense. PyLabRobot can do this automatically when the height<>volume functions for the given containers are defined. You can also specify the liquid surface following distance manually.\n",
+    "\n",
+    "It is useful to start the surface following only at the liquid level, so it is recommended to use [liquid level detection](./star_lld) with the surface following feature. (See below). VENUS also supports this.\n",
+    "\n",
+    "In PLR, when we have LLD + automatic surface following, we can go beyond VENUS by computing the surface following amount based on the precise location of liquid inside the container. This is necessary because the surface following amount is not only a function of the volume of liquid aspirated or dispensed, but also of the location of liquid inside the container (see below). By doing liquid level detection first to get the precise liquid level, we can use that to compute the surface following amount based on the requested volume _and_ location of liquid inside the container.\n",
+    "\n",
+    "![](./img/surface_following/surface_following_distance.svg)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c2ab15af",
+   "metadata": {},
+   "source": [
+    "## Dummy setup"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "d3f86a7d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.liquid_handling import LiquidHandler\n",
+    "from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import STARBackend\n",
+    "from pylabrobot.resources.hamilton import STARDeck\n",
+    "\n",
+    "backend = STARBackend()\n",
+    "lh = LiquidHandler(backend=backend, deck=STARDeck())\n",
+    "\n",
+    "await lh.setup()\n",
+    "\n",
+    "from pylabrobot.resources import TIP_CAR_480_A00, hamilton_96_tiprack_1000uL_filter\n",
+    "tip_car = TIP_CAR_480_A00(\"tip_car\")\n",
+    "tip_car[0] = tr0 = hamilton_96_tiprack_1000uL_filter(\"tr0\")\n",
+    "lh.deck.assign_child_resource(tip_car, rails=2)\n",
+    "\n",
+    "from pylabrobot.resources import PLT_CAR_L5AC_A00, CellTreat_96_wellplate_350ul_Ub\n",
+    "plt_car = PLT_CAR_L5AC_A00(\"plt_car\")\n",
+    "plt_car[0] = plate = CellTreat_96_wellplate_350ul_Ub(\"plate\")\n",
+    "lh.deck.assign_child_resource(plt_car, rails=14)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4645e4f2",
+   "metadata": {},
+   "source": [
+    "## Automatic surface following\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "5e9d4e1a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "wells = plate[\"A1:H1\"]\n",
+    "vols = [50] * len(wells)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "aebdc554",
+   "metadata": {},
+   "source": [
+    "You can probe the liquid height first using liquid level detection, and then use automatic surface following for subsequent aspirations and dispenses as follows:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "d4858585",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "async with lh.use_tips(tr0[\"A1:H1\"], discard=False):\n",
+    "  await lh.aspirate(\n",
+    "    wells,\n",
+    "    vols,\n",
+    "\n",
+    "    # Probe the liquid height before aspirating.\n",
+    "    probe_liquid_height=True,\n",
+    "\n",
+    "    # Automatically adjust the following distance based on the probed liquid height.\n",
+    "    auto_surface_following_distance=True,\n",
+    "  )\n",
+    "\n",
+    "  await lh.dispense(\n",
+    "    wells,\n",
+    "    vols,\n",
+    "    probe_liquid_height=True,\n",
+    "    auto_surface_following_distance=True,\n",
+    "  )"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0b3ac98c",
+   "metadata": {},
+   "source": [
+    "You can also pass the liquid height directly to the aspiration and dispense methods, and still use automatic surface following:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "ffde0c4c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "async with lh.use_tips(tr0[\"A1:H1\"], discard=False):\n",
+    "  await lh.aspirate(\n",
+    "    wells,\n",
+    "    vols,\n",
+    "    liquid_height=[10] * len(wells),  # in mm above the bottom of the well\n",
+    "    auto_surface_following_distance=True,\n",
+    "  )\n",
+    "\n",
+    "  await lh.dispense(\n",
+    "    wells,\n",
+    "    vols,\n",
+    "    liquid_height=[10] * len(wells),  # in mm above the bottom of the well\n",
+    "    auto_surface_following_distance=True,\n",
+    "  )"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "3f58b88c",
+   "metadata": {},
+   "source": [
+    "## Manual surface following"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "aee70228",
+   "metadata": {},
+   "source": [
+    "To manually specify the surface following amount, you can use the `surface_following_distance` backend kwarg of the aspiration and dispense methods. For example, to aspirate 100 µL with a surface following amount of 2 mm above the detected liquid height:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "e3e205b7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "async with lh.use_tips(tr0[\"A1:H1\"], discard=False):\n",
+    "  await lh.aspirate(\n",
+    "    wells,\n",
+    "    vols,\n",
+    "    probe_liquid_height=True,\n",
+    "    surface_following_distance=[2] * len(wells),  # mm down from liquid_height\n",
+    "  )\n",
+    "\n",
+    "  await lh.dispense(\n",
+    "    wells,\n",
+    "    vols,\n",
+    "    probe_liquid_height=True,\n",
+    "    surface_following_distance=[2] * len(wells),  # mm up from liquid_height\n",
+    "  )"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.15"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
