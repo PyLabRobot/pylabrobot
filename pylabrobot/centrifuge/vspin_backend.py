@@ -226,8 +226,10 @@ class VSpinBackend(CentrifugeBackend):
 
     resp = 0x89
     while resp == 0x89:
+      stat = await self._get_positions()
       resp = stat[0]
 
+    # --- almost the same as go to position ---
     await self.send(bytes.fromhex("aa0117021a"))
     await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
     await self.send(bytes.fromhex("aa0117041c"))
@@ -236,10 +238,14 @@ class VSpinBackend(CentrifugeBackend):
     await self.send(bytes.fromhex("aa010b0c"))
     await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
     new_position = (0).to_bytes(4, byteorder="little")  # arbitrary
+    # rpm = 600,
+    # acceleration = 75.09289617486338
     await self.send(bytes.fromhex("aa01d497") + new_position + bytes.fromhex("c3f52800d71a000049"))
+    # -----------------------------------------
 
     resp = 0x08
     while resp != 0x09:
+      stat = await self._get_positions()
       resp = stat[0]
 
     await self.send(bytes.fromhex("aa0117021a"))
@@ -276,33 +282,60 @@ class VSpinBackend(CentrifugeBackend):
     await self.configure_and_initialize()
     await self.io.stop()
 
-  async def get_status(self):
+  async def _get_positions(self):
     """Returns 14 bytes
 
     Example:
       11 22 25 00 00 4f 00 00 18 e0 05 00 00 a4
 
       - First byte (index 0):
-        - 11 = idle
-        - 13 = unknown
-        - 08 = spinning
-        - 09 = also spinning but different
-        - 19 = unknown
+        - 11 = 0b0001011 = idle
+        - 13 = 0b0001101 = unknown
+        - 08 = 0b0001000 = spinning
+        - 09 = 0b0001001 = also spinning but different
+        - 19 = 0b0010011 = unknown
+        - 88 = 0b1011000 = unknown
+        - 89 = 0b1011001 = unknown
       - 2nd to 5th byte (index 1-4) = Position
       - 10th to 13th byte (index 9-12) = Homing Position
       - Last byte (index 13) = checksum
     """
+    resp = await self.send(bytes.fromhex("aa010e0f"))
     if len(resp) == 0:
       raise IOError("Empty status from centrifuge")
     return resp
 
   async def get_position(self):
-    resp = await self.get_status()
+    resp = await self._get_positions()
     return int.from_bytes(resp[1:5], byteorder="little")
 
   async def get_home_position(self):
-    resp = await self.get_status()
+    resp = await self._get_positions()
     return int.from_bytes(resp[9:13], byteorder="little")
+
+  async def _get_status(self):
+    """
+    examples:
+    - 0080d0015
+    - 0080f0015
+    """
+
+    resp = await self.send(bytes.fromhex("aa020e10"))
+    if len(resp) == 0:
+      raise IOError("Empty status from centrifuge")
+    return resp
+
+  async def get_bucket_locked(self) -> bool:
+    resp = await self._get_status()
+    return resp[2] & 0b0001 != 0
+
+  async def get_door_open(self) -> bool:
+    resp = await self._get_status()
+    return resp[2] & 0b0010 != 0
+
+  async def get_door_locked(self) -> bool:
+    resp = await self._get_status()
+    return resp[2] & 0b0100 == 0
 
   # Centrifuge communication: read_resp, send
 
@@ -328,8 +361,8 @@ class VSpinBackend(CentrifugeBackend):
     logger.debug("Read %s", data.hex())
     return data
 
-  async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    written = await self.io.write(bytes(cmd))  # TODO: why decode? .decode("latin-1")
+  async def send(self, cmd: bytes, read_timeout=0.2) -> bytes:
+    written = await self.io.write(bytes(cmd))
 
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
@@ -356,26 +389,31 @@ class VSpinBackend(CentrifugeBackend):
   # Centrifuge operations
 
   async def open_door(self):
-    await self.send(bytes.fromhex("aa022600072f"))
+    # used to be:                  aa022600072f
+    await self.send(bytes.fromhex("aa022600062e"))  # same as unlock door
+
     # we can't tell when the door is fully open, so we just wait a bit
     await asyncio.sleep(4)
 
   async def close_door(self):
-    await self.send(bytes.fromhex("aa022600052d"))
+    # used to be:                  aa022600052d
+    await self.send(bytes.fromhex("aa022600042c"))  # same as unlock door
     # we can't tell when the door is fully closed, so we just wait a bit
     await asyncio.sleep(2)
 
   async def lock_door(self):
-    await self.send(bytes.fromhex("aa0226000129"))
+    # used to be                   aa0226000129
+    await self.send(bytes.fromhex("aa0226000028"))
 
   async def unlock_door(self):
-    await self.send(bytes.fromhex("aa022600052d"))
+    # used to be                   aa022600052d
+    await self.send(bytes.fromhex("aa022600042c"))  # same as close door
 
   async def lock_bucket(self):
     await self.send(bytes.fromhex("aa022600072f"))
 
   async def unlock_bucket(self):
-    await self.send(bytes.fromhex("aa022600062e"))
+    await self.send(bytes.fromhex("aa022600062e"))  # same as open door
 
   async def go_to_bucket1(self):
     await self.go_to_position(await self.get_bucket_1_position())
@@ -396,9 +434,7 @@ class VSpinBackend(CentrifugeBackend):
     sum_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += sum_byte.to_bytes(1, byteorder="little")
     await self.send(bytes.fromhex("aa0226000028"))
-    await self.send(bytes.fromhex("aa020e10"))
     await self.send(bytes.fromhex("aa0117021a"))
-    await self.send(bytes.fromhex("aa010e0f"))
     await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
     await self.send(bytes.fromhex("aa0117041c"))
     await self.send(bytes.fromhex("aa01170119"))
@@ -408,8 +444,59 @@ class VSpinBackend(CentrifugeBackend):
 
     await asyncio.sleep(2)
 
+    # TODO: needs a loop to confirm position reached
+
     await self.send(bytes.fromhex("aa0117021a"))
     await self.open_door()
+
+  async def _go_to_position(
+    self,
+    position: int,
+    acceleration: float,
+    rpm: int,
+  ) -> None:
+    """Internal method to go to a position with specified acceleration and rpm.
+    This method is used both by `start_spin_cycle` and `go_to_position`.
+    `go_to_position` is used by `go_to_bucket1` and `go_to_bucket2`.
+    """
+
+    if position > 2**32 - 1:
+      raise NotImplementedError(
+        "We don't know what happens if the position exceeds 2^32-1. "
+        "Please report this issue on discuss.pylabrobot.org."
+      )
+    position_b = position.to_bytes(4, byteorder="little")
+
+    # 2 - encode the rpm
+    rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
+
+    # 3 - encode the acceleration
+    acceleration_b = int(9.15 * 100 * acceleration).to_bytes(2, byteorder="little")
+
+    byte_string = (
+      bytes.fromhex("aa01d497") + position_b + rpm_b + acceleration_b + bytes.fromhex("0000")
+    )
+    last_byte = (sum(byte_string) - 0xAA) & 0xFF
+    byte_string += last_byte.to_bytes(1, byteorder="little")
+    print(
+      f"position: {position}, RPM: {rpm}, Acceleration: {acceleration}, byte_string: {byte_string.hex()}"
+    )
+
+    await self.send(bytes.fromhex("aa0226000028"))
+    await self.send(bytes.fromhex("aa0117021a"))
+    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self.send(bytes.fromhex("aa0117041c"))
+    await self.send(bytes.fromhex("aa01170119"))
+    await self.send(bytes.fromhex("aa010b0c"))
+    await self.send(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+
+    # spin:      aa01e60500640000000000fd00803e01000c
+    # go to pos: aa01e6c800b00496000f004b00a00f050007
+
+    await self.send(byte_string)
+
+    # after spin
+    # aa0117021a
 
   async def start_spin_cycle(
     self,
@@ -423,8 +510,8 @@ class VSpinBackend(CentrifugeBackend):
     Args:
       g: relative centrifugal force, also known as g-force
       duration: time in seconds spent at speed (g)
-      acceleration: 1-100% of total acceleration
-      deceleration: 1-100% of total deceleration
+      acceleration: 0-1 of total acceleration
+      deceleration: 0-1 of total deceleration
 
     Examples:
       Spin with 1000 g-force (close to 3000rpm) for 5 minutes at 100% acceleration
@@ -449,59 +536,37 @@ class VSpinBackend(CentrifugeBackend):
 
     # compute the distance traveled during the acceleration period
     # distance = 1/2 * v^2 / a. area under 0 to t (triangle). t = a/v_max
-    # 12903.2 is 100% acceleration
+    # 12903.2 ticks/s^2 is 100% acceleration
     acceleration_ticks_per_second2 = 12903.2 * acceleration
-    speed_per_second = rpm / 60
-    distance_during_acceleration = (speed_per_second * speed_per_second / acceleration) // 2
+    rounds_per_second = rpm / 60
+    ticks_per_second = rounds_per_second * 8000
+    distance_during_acceleration = int(0.5 * (ticks_per_second**2) / acceleration_ticks_per_second2)
 
     # compute the distance traveled at speed
-    distance_at_speed = speed_per_second * duration
+    distance_at_speed = ticks_per_second * duration
 
     current_position = await self.get_position()
     final_position = current_position + distance_during_acceleration + distance_at_speed
-    if final_position > 2**32 - 1:
-      raise NotImplementedError(
-        "We don't know what happens if the position exceeds 2^32-1. "
-        "Please report this issue on discuss.pylabrobot.org."
-      )
-    position = final_position.to_bytes(4, byteorder="little")
 
-    # 2 - encode the rpm
-    rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
-
-    # 3 - encode the acceleration
-    acc = int(9.15 * 10 * acceleration).to_bytes(2, byteorder="little")
-
-    byte_string = bytes.fromhex("aa01d497") + position + rpm_b + acc + bytes.fromhex("0000")
-    last_byte = (sum(byte_string) - 0xAA) & 0xFF
-    byte_string += last_byte.to_bytes(1, byteorder="little")
-    print(
-      f"Final position: {final_position}, RPM: {rpm}, Acceleration: {acceleration}, current position: {current_position}, duration: {duration}, byte_string: {byte_string.hex()}"
+    await self._go_to_position(
+      position=int(final_position),
+      acceleration=acceleration,
+      rpm=rpm,
     )
 
-    await self.send(bytes.fromhex("aa0226000028"))
-    # await self.send(bytes.fromhex("aa020e10"))
-    await self.send(bytes.fromhex("aa0117021a"))
-    # await self.send(bytes.fromhex("aa010e0f"))
-    await self.send(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self.send(bytes.fromhex("aa0117041c"))
-    await self.send(bytes.fromhex("aa01170119"))
-    await self.send(bytes.fromhex("aa010b0c"))
-    # await self.send(bytes.fromhex("aa010e0f"))
-    await self.send(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
-    await self.send(byte_string)
-
-    status_resp = await self.get_status()
+    status_resp = await self._get_positions()
     status = status_resp[0]
     while status == 0x08:
       await asyncio.sleep(1)
-      status_resp = await self.get_status()
+      status_resp = await self._get_positions()
       status = status_resp[0]
 
     await self.send(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
     # aa0194b600000000dc02000029: decel at 80
     # aa0194b6000000000a03000058: decel at 85
-    decc = int(9.15 * 10 * deceleration).to_bytes(2, byteorder="little")
+    # aa0194b61283000012010000f3: used in setup (30%)
+    # decel must be between 0.0 and 1.0
+    decc = int(9.15 * 100 * deceleration).to_bytes(2, byteorder="little")
     decel_command = bytes.fromhex("aa0194b600000000") + decc + bytes.fromhex("0000")
     decel_command += ((sum(decel_command) - 0xAA) & 0xFF).to_bytes(1, byteorder="little")
     await self.send(decel_command)
