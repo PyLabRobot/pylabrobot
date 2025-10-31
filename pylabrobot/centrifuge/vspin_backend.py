@@ -137,6 +137,11 @@ _vspin_bucket_calibrations_path = os.path.join(
 
 def _load_vspin_calibrations(device_id: str) -> Optional[int]:
   if not os.path.exists(_vspin_bucket_calibrations_path):
+    warnings.warn(
+      f"No calibration found for VSpin with device id {device_id}. "
+      "Please set the bucket 1 position using `set_bucket_1_position_to_current` method after setup.",
+      UserWarning,
+    )
     return None
   with open(_vspin_bucket_calibrations_path, "r") as f:
     return json.load(f).get(device_id)  # type: ignore
@@ -161,23 +166,17 @@ class VSpinBackend(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
-  def __init__(self, device_id: str):
+  def __init__(self, device_id: Optional[str] = None):
     """
     Args:
       device_id: The libftdi id for the centrifuge. Find using `python -m pylibftdi.examples.list_devices`
     """
     self.io = FTDI(device_id=device_id)
-    # TODO: can device_id be loaded?
-    self.device_id = device_id
     self._bucket_1_remainder: Optional[int] = None
+    # only attempt loading calibration if device_id is not None
+    # if it is None, we will load it after setup when we can query the device id from the io
     if device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
-    if self._bucket_1_remainder is None:
-      warnings.warn(
-        f"No calibration found for VSpin with device id {device_id}. "
-        "Please set the bucket 1 position using `set_bucket_1_position_to_current` method after setup.",
-        UserWarning,
-      )
 
   async def setup(self):
     await self.io.setup()
@@ -251,6 +250,11 @@ class VSpinBackend(CentrifugeBackend):
     await self.send(bytes.fromhex("aa0117021a"))
 
     await self.lock_door()
+
+    # If we have not set the calibration yet, load it now.
+    if self._bucket_1_remainder is None:
+      device_id = await self.io.get_serial()
+      self._bucket_1_remainder = _load_vspin_calibrations(device_id)
 
   @property
   def bucket_1_remainder(self) -> int:
