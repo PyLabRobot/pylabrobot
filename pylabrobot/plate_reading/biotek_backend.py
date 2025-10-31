@@ -247,7 +247,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     if self.cam is None:
       raise RuntimeError(
-        "No camera found. Make sure the camera is connected and the serial " "number is correct."
+        "No camera found. Make sure the camera is connected and the serial number is correct."
       )
 
     # -- Initialize camera --
@@ -271,7 +271,7 @@ class Cytation5Backend(ImageReaderBackend):
     ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
     if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
       raise RuntimeError(
-        "unable to configure TriggerSelector " "(can't read or write TriggerSelector)"
+        "unable to configure TriggerSelector (can't read or write TriggerSelector)"
       )
     ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
     if not PySpin.IsReadable(ptr_frame_start):
@@ -680,13 +680,13 @@ class Cytation5Backend(ImageReaderBackend):
     cmd = (
       f"{rows:02}"
       f"{columns:02}"
-      f"{int(top_left_well_center_y*100):05}"
-      f"{int(bottom_right_well_center_y*100):05}"
-      f"{int(top_left_well_center.x*100):05}"
-      f"{int(bottom_right_well_center.x*100):05}"
-      f"{int(plate_size_y*100):05}"
-      f"{int(plate_size_x*100):05}"
-      f"{int(plate_size_z*100):04}"
+      f"{int(top_left_well_center_y * 100):05}"
+      f"{int(bottom_right_well_center_y * 100):05}"
+      f"{int(top_left_well_center.x * 100):05}"
+      f"{int(bottom_right_well_center.x * 100):05}"
+      f"{int(plate_size_y * 100):05}"
+      f"{int(plate_size_x * 100):05}"
+      f"{int(plate_size_z * 100):04}"
       "\x03"
     )
 
@@ -715,7 +715,7 @@ class Cytation5Backend(ImageReaderBackend):
     data: Dict[Tuple[int, int], float] = {}
 
     for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
-      cmd = f"004701{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000010600008{wavelength_str}1"
+      cmd = f"004701{min_row + 1:02}{min_col + 1:02}{max_row + 1:02}{max_col + 1:02}000120010000110010000010600008{wavelength_str}1"
       checksum = str(sum(cmd.encode()) % 100).zfill(2)
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
@@ -737,7 +737,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     await self.set_plate(plate)
 
-    cmd = f"3{14220 + int(1000*focal_height)}\x03"
+    cmd = f"3{14220 + int(1000 * focal_height)}\x03"
     await self.send_command("t", cmd)
 
     integration_time_seconds = int(integration_time)
@@ -745,15 +745,15 @@ class Cytation5Backend(ImageReaderBackend):
     integration_time_milliseconds = integration_time - int(integration_time)
     # TODO: I don't know if the multiple of 0.2 is a firmware requirement, but it's what gen5.exe requires.
     # round because of floating point precision issues
-    assert (
-      round(integration_time_milliseconds * 10) % 2 == 0
-    ), "Integration time milliseconds must be a multiple of 0.2"
+    assert round(integration_time_milliseconds * 10) % 2 == 0, (
+      "Integration time milliseconds must be a multiple of 0.2"
+    )
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 
     data: Dict[Tuple[int, int], float] = {}
     for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
-      cmd = f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
+      cmd = f"008401{min_row + 1:02}{min_col + 1:02}{max_row + 1:02}{max_col + 1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
       checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
       cmd = cmd + checksum
       await self.send_command("D", cmd)
@@ -786,7 +786,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     await self.set_plate(plate)
 
-    cmd = f"{614220 + int(1000*focal_height)}\x03"
+    cmd = f"{614220 + int(1000 * focal_height)}\x03"
     await self.send_command("t", cmd)
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
@@ -795,7 +795,7 @@ class Cytation5Backend(ImageReaderBackend):
     data: Dict[Tuple[int, int], float] = {}
     for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
       cmd = (
-        f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}0001200100001100100000135000100200200{excitation_wavelength_str}000"
+        f"008401{min_row + 1:02}{min_col + 1:02}{max_row + 1:02}{max_col + 1:02}0001200100001100100000135000100200200{excitation_wavelength_str}000"
         f"{emission_wavelength_str}000000000000000000210011"
       )
       checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
