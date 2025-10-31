@@ -21,9 +21,11 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
     self,
     name: str,
     opentrons_id: str,
-    child_location: Coordinate = Coordinate(0, 0, 80.1), # dimensional drawing from OT (x and y are not changed wrt parent)
+    child_location: Coordinate = Coordinate(
+      0, 0, 80.1
+    ),  # dimensional drawing from OT (x and y are not changed wrt parent)
     child: Optional[ItemizedResource] = None,
-    backend: Optional[OpentronsTemperatureModuleBackend] = None
+    backend: Optional[OpentronsTemperatureModuleBackend] = None,
   ):
     """Create a new Opentrons temperature module v2.
 
