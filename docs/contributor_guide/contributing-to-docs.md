@@ -1,4 +1,4 @@
-# Contributing to docs
+# Contributing to Docs
 
 This document provides guidelines for contributing to the documentation.
 

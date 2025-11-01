@@ -155,6 +155,14 @@ user_guide/index
 ```
 
 ```{toctree}
+:maxdepth: 0
+:caption: Cookbook
+:hidden:
+
+ Cookbook <cookbook/index>
+```
+
+```{toctree}
 :maxdepth: 2
 :caption: Development
 :hidden:
@@ -175,6 +183,7 @@ api/pylabrobot
 
 Community <https://discuss.pylabrobot.org/>
 ```
+
 
 ## Citing
 

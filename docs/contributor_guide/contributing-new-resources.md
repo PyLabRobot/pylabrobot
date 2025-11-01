@@ -1,4 +1,4 @@
-# Contributing new resources
+# Contributing New Resources
 
 PyLabRobot ships with a growing library of resource definitions for common labware.
 If you define a new resource it helps the community when you contribute it back.
