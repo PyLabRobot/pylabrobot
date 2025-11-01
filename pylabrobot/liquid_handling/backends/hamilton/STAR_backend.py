@@ -1996,9 +1996,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
 
     # check if the surface_following_distance would fall below the minimum height
+    # if lld is enabled, we expect to find liquid above the well bottom so we don't need to raise an error
     if any(
-      well_bottoms[i] + liquid_heights[i] - surface_following_distance[i] - minimum_height[i]
-      < -1e-6
+      (
+        well_bottoms[i] + liquid_heights[i] - surface_following_distance[i] - minimum_height[i]
+        < -1e-6
+      )
+      and lld_mode[i] == STARBackend.LLDMode.OFF
       for i in range(n)
     ):
       raise ValueError(
@@ -4904,7 +4908,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
-      read_timeout=max(120, self.read_timeout),
+      read_timeout=max(300, self.read_timeout),
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
       xp=[f"{xp:05}" for xp in x_positions],
@@ -5138,7 +5142,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
-      read_timeout=max(120, self.read_timeout),
+      read_timeout=max(300, self.read_timeout),
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],
