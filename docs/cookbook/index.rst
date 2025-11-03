@@ -17,8 +17,6 @@ teach, and accelerate your own automation workflows.
 
      <div class="row">
 
-     <div class="plr-card-grid">
-
 .. Add recipe cards below this line
 
 .. plrcard::
