@@ -32,6 +32,8 @@ def _compute_height_from_volume_agilent_96_wellplate_150uL_Vb(
 def agilent_96_wellplate_150uL_Ub(name: str) -> Plate:
   """
   Part number: 5042-8502
+
+  https://www.agilent.com/cs/library/datasheets/public/ds-well-plate-specifications-5994-6035en-agilent.pdf
   """
 
   diameter = 6.4  # from spec
