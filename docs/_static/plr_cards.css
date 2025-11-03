@@ -154,7 +154,7 @@
 /* ==== Image & Video ==== */
 
 .plr-card-image {
-  max-width: 400px;
+  max-width: 320px;
   overflow: hidden;
   position: relative;
   border-left: 1px solid var(--pst-color-border, #e0e0e0);
@@ -168,8 +168,8 @@
   z-index: 2;
   display: block;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+
+  object-fit: cover;
   border-radius: 0;
   transition: transform 0.35s ease, filter 0.3s ease, opacity 0.25s ease-in-out;
   will-change: transform, filter, opacity;

@@ -23,7 +23,7 @@ Add something like the following:
 ```rst
 .. plrcard::
    :header: Move plate to Alpaqua magnet using CORE grippers
-   :card_description: Learn about…<br><ul>
+   :card_description: <ul>
       <li>Resource movement using CORE grippers</li>
       <li>Resource position check using grippers</li>
       <li>PLR autocorrection of plate placement onto PlateAdapter/magnet</li>
