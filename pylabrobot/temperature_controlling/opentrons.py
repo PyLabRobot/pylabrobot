@@ -5,6 +5,9 @@ from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.temperature_controlling.opentrons_backend import (
   OpentronsTemperatureModuleBackend,
 )
+from pylabrobot.temperature_controlling.opentrons_backend_usb import (
+  OpentronsTemperatureModuleUSBBackend,
+)
 from pylabrobot.temperature_controlling.temperature_controller import (
   TemperatureController,
 )
@@ -20,26 +23,34 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
   def __init__(
     self,
     name: str,
-    opentrons_id: str,
+    opentrons_id: Optional[str] = None,
+    serial_port: Optional[str] = None,
     child_location: Coordinate = Coordinate(
       0, 0, 80.1
     ),  # dimensional drawing from OT (x and y are not changed wrt parent)
     child: Optional[ItemizedResource] = None,
-    backend: Optional[OpentronsTemperatureModuleBackend] = None,
   ):
     """Create a new Opentrons temperature module v2.
 
     Args:
       name: Name of the temperature module.
       opentrons_id: Opentrons ID of the temperature module. Get it from
-        `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
-        If USE_OT is False, this can be any identifier.
-      port: Serial port for USB communication. Required when USE_OT is False.
+        `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`. Exactly one of `opentrons_id` or `serial_port` must be provided.
+      serial_port: Serial port for USB communication. Exactly one of `opentrons_id` or `serial_port` must be provided.
       child: Optional child resource like a tube rack or well plate to use on the
         temperature controller module.
     """
 
-    backend = backend or OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
+    if opentrons_id is None and serial_port is None:
+      raise ValueError("Exactly one of `opentrons_id` or `serial_port` must be provided.")
+    if opentrons_id is not None and serial_port is not None:
+      raise ValueError("Exactly one of `opentrons_id` or `serial_port` must be provided.")
+
+    if serial_port is not None:
+      backend = OpentronsTemperatureModuleUSBBackend(port=serial_port)
+    else:
+      assert opentrons_id is not None
+      backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
 
     super().__init__(
       name=name,
