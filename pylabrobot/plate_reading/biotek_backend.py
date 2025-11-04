@@ -865,8 +865,8 @@ class Cytation5Backend(ImageReaderBackend):
     await self._shaking_started.wait()
 
   async def stop_shaking(self) -> None:
-    await self._abort()
     if self._shaking:
+      await self._abort()
       self._shaking = False
     if self._shaking_task is not None:
       self._shaking_task.cancel()

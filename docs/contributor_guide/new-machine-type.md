@@ -1,4 +1,4 @@
-# Contributing a new type of machine to PLR
+# Contributing a New Type of Machine to PLR
 
 PyLabRobot supports a number of different types of machines. They can be found [here](/user_guide/machines).
 

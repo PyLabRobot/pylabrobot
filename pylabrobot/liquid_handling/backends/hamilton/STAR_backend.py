@@ -48,6 +48,7 @@ from pylabrobot.liquid_handling.standard import (
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  PipettingOp,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
@@ -1180,6 +1181,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
+    self._setup_done = False
+
   @property
   def unsafe(self) -> "UnSafe":
     """Actions that have a higher risk of damaging the robot. Use with care!"""
@@ -1452,7 +1455,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # the core grippers.
     self._core_parked = True
 
+    self._setup_done = True
+
+  async def stop(self):
+    await super().stop()
+    self._setup_done = False
+
+  @property
+  def setup_done(self) -> bool:
+    return self._setup_done
+
   # ============== LiquidHandlerBackend methods ==============
+
+  def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
+    """Check if a position is reachable by a channel (center-based)."""
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(f"Channel {channel_idx} is out of range for this robot.")
+
+    # frontmost channel can go to y=6, every channel after that is about 8.9 mm further back
+    min_y_pos = 6 + 8.9 * (self.num_channels - channel_idx - 1)
+    if position.y < min_y_pos:
+      return False
+
+    # backmost channel can go to y=601.6, every channel before that is about 8.9 mm further forward
+    max_y_pos = 601.6 - 8.9 * channel_idx
+    if position.y > max_y_pos:
+      return False
+
+    return True
+
+  def ensure_can_reach_position(
+    self, use_channels: List[int], ops: Sequence[PipettingOp], op_name: str
+  ):
+    locs = [(op.resource.get_location_wrt(self.deck, y="c") + op.offset) for op in ops]
+    cant_reach = [
+      channel_idx
+      for channel_idx, loc in zip(use_channels, locs)
+      if not self.can_reach_position(channel_idx, loc)
+    ]
+    if len(cant_reach) > 0:
+      raise ValueError(
+        f"Channels {cant_reach} cannot reach their target positions in '{op_name}' operation.\n"
+        "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
+        "Try the operation with different channels or a different target position (i.e. different labware placement)."
+      )
 
   async def pick_up_tips(
     self,
@@ -1464,6 +1510,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pickup_method: Optional[TipPickupMethod] = None,
   ):
     """Pick up tips from a resource."""
+
+    self.ensure_can_reach_position(use_channels, ops, "pick_up_tips")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
@@ -1537,6 +1585,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         tip spots is `DROP`, and everything else is `PLACE_SHIFT`. Note that `DROP` is only the
         default if *all* tips are being dropped to a tip spot.
     """
+
+    self.ensure_can_reach_position(use_channels, ops, "drop_tips")
 
     if drop_method is None:
       if any(not isinstance(op.resource, TipSpot) for op in ops):
@@ -1811,6 +1861,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         DeprecationWarning,
       )
     # # # delete # # #
+
+    self.ensure_can_reach_position(use_channels, ops, "aspirate")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
@@ -2168,6 +2220,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
       auto_surface_following_distance: automatically compute the surface following distance based on the container height<->volume functions. Requires liquid height to be specified or `probe_liquid_height=True`.
     """
+
+    self.ensure_can_reach_position(use_channels, ops, "dispense")
 
     n = len(ops)
 
