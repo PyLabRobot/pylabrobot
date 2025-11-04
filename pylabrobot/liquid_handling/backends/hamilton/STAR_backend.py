@@ -1485,7 +1485,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return True
 
   def ensure_can_reach_position(
-    self, use_channels: List[int], ops: List[PipettingOp], op_name: str
+    self, use_channels: List[int], ops: Sequence[PipettingOp], op_name: str
   ):
     locs = [(op.resource.get_location_wrt(self.deck, y="c") + op.offset) for op in ops]
     cant_reach = [
