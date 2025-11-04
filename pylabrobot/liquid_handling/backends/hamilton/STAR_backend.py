@@ -1477,8 +1477,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if position.y < min_y_pos:
       return False
 
-    # backmost channel can go to y=635, every channel before that is about 8.9 mm further forward
-    max_y_pos = 635 - 8.9 * channel_idx
+    # backmost channel can go to y=601.6, every channel before that is about 8.9 mm further forward
+    max_y_pos = 601.6 - 8.9 * channel_idx
     if position.y > max_y_pos:
       return False
 
