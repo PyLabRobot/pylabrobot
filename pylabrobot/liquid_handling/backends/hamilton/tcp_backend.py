@@ -6,18 +6,27 @@ It handles connection management, message routing, and the introspection API.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import struct
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from pylabrobot.io.tcp import TCP
-from pylabrobot.liquid_handling.backends.hamilton.protocol import HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.protocol import (
+    HamiltonProtocol,
+    RegistrationActionCode,
+    HoiRequestId,
+    RegistrationOptionType,
+)
 from pylabrobot.liquid_handling.backends.hamilton.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.messages import (
-    InitMessage, InitResponse, CommandResponse, RegistrationResponse
+    CommandResponse,
+    ErrorResponse,
+    InitMessage,
+    InitResponse,
+    RegistrationMessage,
+    RegistrationResponse,
+    ResponseParser,
 )
 from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
 
@@ -45,7 +54,6 @@ class ErrorParser:
             raise ValueError("Error response too short")
 
         # Parse error structure (simplified)
-        from .wire import Wire
         error_code = Wire.read(data).u32()
         error_message = data[4:].decode('utf-8', errors='replace')
 
@@ -57,7 +65,7 @@ class ErrorParser:
         )
 
 
-class HamiltonTCPBase(TCP):
+class TCPBackend(TCP):
     """Base backend for all Hamilton TCP instruments.
 
     This class provides:
@@ -129,8 +137,6 @@ class HamiltonTCPBase(TCP):
             TimeoutError: If no message received within timeout
             ValueError: If protocol type is unknown
         """
-        from .messages import RegistrationResponse, CommandResponse
-
         # Read packet size (2 bytes, little-endian)
         size_data = await self.read_exact(2)
         packet_size = Wire.read(size_data).u16()
@@ -200,8 +206,6 @@ class HamiltonTCPBase(TCP):
         """
         logger.info("Initializing Hamilton connection...")
 
-        from .messages import InitMessage, InitResponse
-
         # Build Protocol 7 ConnectionPacket using new InitMessage
         packet = InitMessage(timeout=30).build()
 
@@ -237,9 +241,6 @@ class HamiltonTCPBase(TCP):
     async def _register_client(self):
         """Register client using Protocol 3."""
         logger.info("Registering Hamilton client...")
-
-        from .protocol import RegistrationActionCode
-        from .messages import RegistrationMessage, RegistrationResponse
 
         # Registration service address (DLL uses 0:0:65534, Piglet comment confirms)
         registration_service = Address(0, 0, 65534)
@@ -281,9 +282,6 @@ class HamiltonTCPBase(TCP):
     async def _discover_root(self):
         """Discover root objects via Protocol 3 HARP_PROTOCOL_REQUEST"""
         logger.info("Discovering Hamilton root objects...")
-
-        from .protocol import RegistrationActionCode, HoiRequestId, RegistrationOptionType
-        from .messages import RegistrationMessage, RegistrationResponse
 
         registration_service = Address(0, 0, 65534)
 
@@ -341,8 +339,6 @@ class HamiltonTCPBase(TCP):
         Returns:
             List of discovered object addresses
         """
-        from .protocol import RegistrationOptionType
-
         objects = []
         options_data = response.registration.options
 
@@ -427,8 +423,6 @@ class HamiltonTCPBase(TCP):
         response_message = await self._read_one_message()
 
         # Parse response with type dispatch
-        from .messages import ResponseParser, ErrorResponse
-
         parser = ResponseParser()
         hoi_response = parser.parse(response_message)
 

@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from .protocol import HamiltonProtocol
-from .packets import Address
-from .messages import CommandMessage, CommandResponse
-from .hoi_params import HoiParams, HoiParamsParser
+from pylabrobot.liquid_handling.backends.hamilton.protocol import HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.packets import Address
+from pylabrobot.liquid_handling.backends.hamilton.messages import CommandMessage, CommandResponse, HoiParams, HoiParamsParser
 
 
 class HamiltonCommand:
@@ -103,7 +102,8 @@ class HamiltonCommand:
         # Build parameters using command-specific logic
         params = self.build_parameters()
 
-        # Create CommandMessage and add parameters
+        # Create CommandMessage and set parameters directly
+        # This avoids wasteful serialization/parsing round-trip
         msg = CommandMessage(
             dest=self.dest,
             interface_id=self.interface_id,
@@ -112,54 +112,16 @@ class HamiltonCommand:
             harp_protocol=self.harp_protocol,
             ip_protocol=self.ip_protocol
         )
-
-        # Transfer all parameters from HoiParams to CommandMessage
-        # We do this by getting the built bytes and creating a new HoiParams from them
-        params_bytes = params.build()
-        if params_bytes:
-            # Parse back to get individual params and add them to message
-            parser = HoiParamsParser(params_bytes)
-            while parser.has_remaining():
-                type_id, value = parser.parse_next()
-                # Add each parameter to the message based on type_id
-                self._add_param_to_message(msg, type_id, value)
+        msg.set_params(params)
 
         # Build final packet
         return msg.build(source, sequence, harp_response_required=response_required)
-
-    def _add_param_to_message(self, msg: CommandMessage, type_id: int, value):
-        """Helper to add parsed parameter to CommandMessage."""
-        from .protocol import HamiltonDataType
-
-        # Map type_id to CommandMessage method
-        type_map = {
-            HamiltonDataType.I8: msg.add_i8,
-            HamiltonDataType.I16: msg.add_i16,
-            HamiltonDataType.I32: msg.add_i32,
-            HamiltonDataType.I64: msg.add_i64,
-            HamiltonDataType.U8: msg.add_u8,
-            HamiltonDataType.U16: msg.add_u16,
-            HamiltonDataType.U32: msg.add_u32,
-            HamiltonDataType.U64: msg.add_u64,
-            HamiltonDataType.F32: msg.add_f32,
-            HamiltonDataType.F64: msg.add_f64,
-            HamiltonDataType.STRING: msg.add_string,
-            HamiltonDataType.BOOL: msg.add_bool,
-            HamiltonDataType.I32_ARRAY: msg.add_i32_array,
-            HamiltonDataType.U32_ARRAY: msg.add_u32_array,
-            HamiltonDataType.STRING_ARRAY: msg.add_string_array,
-        }
-
-        if type_id in type_map:
-            type_map[type_id](value)
-        else:
-            raise ValueError(f"Unsupported type_id in command: {type_id}")
 
     def interpret_response(self, response: 'SuccessResponse') -> dict:
         """Interpret success response using typed response object.
 
         This is the new interface used by the backend. Default implementation
-        delegates to parse_response_parameters for backwards compatibility.
+        directly calls parse_response_parameters for efficiency.
 
         Args:
             response: Typed SuccessResponse from ResponseParser

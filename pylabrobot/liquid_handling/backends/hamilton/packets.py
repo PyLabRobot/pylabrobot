@@ -16,7 +16,7 @@ import struct
 from dataclasses import dataclass
 from typing import Optional
 
-from .wire import Wire
+from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
 
 
 # Hamilton protocol version

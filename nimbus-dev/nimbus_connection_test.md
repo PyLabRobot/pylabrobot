@@ -180,7 +180,7 @@ HoiParams().i32(100).build()
 
 ### Basic Connection
 ```python
-backend = HamiltonTCPBase(host="192.168.100.100", port=2000)
+backend = TCPBackend(host="192.168.100.100", port=2000)
 await backend.setup()
 # backend.client_address is now set, root objects discovered
 await backend.stop()
