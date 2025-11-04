@@ -9,15 +9,15 @@ def Eppendorf_DNA_LoBind_1_5ml_Vb(name: str, model="Eppendorf_DNA_LoBind_1_5ml_V
   - bottom_type=TubeBottomType.V
   - snap-cap lid
   """
-  diameter = 10.33 # measured
+  diameter = 10.33  # measured
   return Tube(
     name=name,
     size_x=diameter,
     size_y=diameter,
-    size_z=39.5, # measured
+    size_z=39.5,  # measured
     model="Eppendorf_DNA_LoBind_1_5ml_Vb",
     max_volume=1_400,
-    material_z_thickness=0.8, # measured
+    material_z_thickness=0.8,  # measured
   )
 
 
@@ -37,13 +37,13 @@ def Eppendorf_DNA_LoBind_2ml_Ub(name: str) -> Tube:
   - bottom_type=TubeBottomType.U
   - snap-cap lid
   """
-  diameter = 10.33 # measured
+  diameter = 10.33  # measured
   return Tube(
     name=name,
     size_x=diameter,
     size_y=diameter,
-    size_z=41, # measured
+    size_z=41,  # measured
     model="Eppendorf_DNA_LoBind_2ml_Ub",
     max_volume=2000,  # units: ul
-    material_z_thickness=0.8, # measured
+    material_z_thickness=0.8,  # measured
   )
