@@ -14,10 +14,7 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
   def supports_active_cooling(self) -> bool:
     return True
 
-  def __init__(
-    self,
-    port: Optional[str] = None,
-  ):
+  def __init__(self, port: str):
     """Create a new Opentrons temperature module backend.
 
     Args:
@@ -29,8 +26,6 @@ class OpentronsTemperatureModuleUSBBackend(TemperatureControllerBackend):
 
   async def setup(self):
     # Setup serial communication for USB
-    if self.port is None:
-      raise RuntimeError("Serial port must be specified when USE_OT is False.")
     self.serial = Serial(port=self.port, baudrate=115200, timeout=3)
     await self.serial.setup()
 
