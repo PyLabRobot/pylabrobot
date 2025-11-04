@@ -13,11 +13,3 @@ build/lib
 myenv
 env/*
 .venv
-
-# uv files
-uv.lock
-
-pylabrobot/liquid_handling/backends/hamilton/nimbus/firmware_dlls
-.cursor
-nimbus-dev/
-hamilton-protocol-docs-v2/
