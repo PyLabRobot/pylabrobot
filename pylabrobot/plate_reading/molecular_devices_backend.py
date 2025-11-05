@@ -425,7 +425,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   async def _transfer_data(
     self, settings: MolecularDevicesSettings
-  ) -> "MolecularDevicesDataCollection":
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     """Transfer data from the plate reader. For kinetic/spectrum reads, this will transfer data for each
     reading and combine them into a single collection.
     """
@@ -438,26 +438,32 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
         if settings.kinetic_settings
         else settings.spectrum_settings.num_steps
       )
-      all_reads: List["MolecularDevicesData"] = []
-      collection: Optional["MolecularDevicesDataCollection"] = None
-
+      all_reads = []
       for _ in range(num_readings):
         res = await self.send_command("!TRANSFER")
         data_str = res[1]
-        parsed_data_collection = self._parse_data(data_str)
+        read_data = self._parse_data(data_str, settings)
+        all_reads.append(read_data)
 
-        if collection is None:
-          collection = parsed_data_collection
-        all_reads.extend(parsed_data_collection.reads)
+      if settings.read_type == ReadType.SPECTRUM:
+        # Combine data for spectrum reads
+        combined_spectrum = {}
+        for read_data in all_reads:
+          for key, value in read_data.items():
+              combined_spectrum[key] = {
+                "data": value["data"],
+                "temp": value["temp"],
+                "time": value["time"],
+              }
+        return [combined_spectrum] # Return as a list with one element
+      return all_reads # For KINETIC
 
-      collection.reads = all_reads
-      return collection
-
+    # For ENDPOINT
     res = await self.send_command("!TRANSFER")
     data_str = res[1]
-    return self._parse_data(data_str)
+    return [self._parse_data(data_str, settings)]
 
-  def _parse_data(self, data_str: str) -> "MolecularDevicesDataCollection":
+  def _parse_data(self, data_str: str, settings: MolecularDevicesSettings) -> Dict[Tuple[int, int], Dict]:
     lines = re.split(r"\r\n|\n", data_str.strip())
     lines = [line.strip() for line in lines if line.strip()]
 
@@ -465,34 +471,16 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     header_parts = lines[0].split("\t")
     measurement_time = float(header_parts[0])
     temperature = float(header_parts[1])
-    container_type = header_parts[2]
 
     # 2. Parse wavelengths
-    absorbance_wavelengths = []
-    excitation_wavelengths = []
-    emission_wavelengths = []
     line_idx = 1
     while line_idx < len(lines):
       line = lines[line_idx]
-      if line.startswith("L:") and line_idx == 1:
-        parts = line.split("\t")
-        for part in parts[1:]:
-          if part.strip():
-            absorbance_wavelengths.append(int(part.strip()))
-      elif line.startswith("exL:"):
-        parts = line.split("\t")
-        for part in parts[1:]:
-          if part.strip() and part.strip().isdigit():
-            excitation_wavelengths.append(int(part.strip()))
-      elif line.startswith("emL:"):
-        parts = line.split("\t")
-        for part in parts[1:]:
-          if part.strip():
-            emission_wavelengths.append(int(part.strip()))
-      elif line.startswith("L:") and line_idx > 1:
+      if line.startswith("L:") and line_idx > 1:
         # Data section started
         break
       line_idx += 1
+
     data_collection = []
     cur_read_wavelengths = []
     # 3. Parse data
@@ -533,67 +521,29 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
           data_rows.append(row)
       data_collection_transposed.append(data_rows)
 
-    if absorbance_wavelengths:
-      reads = []
-      for i, data_rows in enumerate(data_collection_transposed):
+    timepoint_data = {}
+    read_mode = settings.read_mode
+    for i, data_rows in enumerate(data_collection_transposed):
+      key = None
+      if read_mode == ReadMode.ABS:
         wl = int(cur_read_wavelengths[i][0])
-        reads.append(
-          MolecularDevicesDataAbsorbance(
-            measurement_time=measurement_time,
-            temperature=temperature,
-            data=data_rows,
-            absorbance_wavelength=wl,
-            path_lengths=None,
-          )
-        )
-      return MolecularDevicesDataCollectionAbsorbance(
-        container_type=container_type,
-        reads=reads,
-        all_absorbance_wavelengths=absorbance_wavelengths,
-        data_ordering="row-major",
-      )
-
-    elif excitation_wavelengths and emission_wavelengths:
-      reads = []
-      for i, data_rows in enumerate(data_collection_transposed):
+        key = (wl, 0)
+      elif read_mode == ReadMode.FLU or read_mode == ReadMode.POLAR or read_mode == ReadMode.TIME:
         ex_wl = int(cur_read_wavelengths[i][0])
         em_wl = int(cur_read_wavelengths[i][1])
-        reads.append(
-          MolecularDevicesDataFluorescence(
-            measurement_time=measurement_time,
-            temperature=temperature,
-            data=data_rows,
-            excitation_wavelength=ex_wl,
-            emission_wavelength=em_wl,
-          )
-        )
-      return MolecularDevicesDataCollectionFluorescence(
-        container_type=container_type,
-        reads=reads,
-        all_excitation_wavelengths=excitation_wavelengths,
-        all_emission_wavelengths=emission_wavelengths,
-        data_ordering="row-major",
-      )
-    elif emission_wavelengths:
-      reads = []
-      for i, data_rows in enumerate(data_collection_transposed):
+        key = (ex_wl, em_wl)
+      elif read_mode == ReadMode.LUM:
         em_wl = int(cur_read_wavelengths[i][1])
-        reads.append(
-          MolecularDevicesDataLuminescence(
-            measurement_time=measurement_time,
-            temperature=temperature,
-            data=data_rows,
-            emission_wavelength=em_wl,
-          )
-        )
-      return MolecularDevicesDataCollectionLuminescence(
-        container_type=container_type,
-        reads=reads,
-        all_emission_wavelengths=emission_wavelengths,
-        data_ordering="row-major",
-      )
-    # Default to generic MolecularDevicesData if no specific wavelengths found
-    raise ValueError("Unable to determine data type from response.")
+        key = (0, em_wl)
+
+      if key:
+        timepoint_data[key] = {
+          "data": data_rows,
+          "temp": temperature,
+          "time": measurement_time,
+        }
+
+    return timepoint_data
 
   async def _set_clear(self) -> None:
     await self.send_command("!CLEAR DATA")
@@ -816,7 +766,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> MolecularDevicesDataCollection:
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.ABS,
@@ -934,7 +884,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> MolecularDevicesDataCollection:
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.LUM,
@@ -995,7 +945,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> MolecularDevicesDataCollection:
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.POLAR,
@@ -1060,7 +1010,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> MolecularDevicesDataCollection:
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.TIME,

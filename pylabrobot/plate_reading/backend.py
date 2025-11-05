@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.plate_reading.standard import (
@@ -39,16 +39,24 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float
-  ) -> List[List[Optional[float]]]:
-    """Read the luminescence from the plate reader. This should return a list of lists, where the
-    outer list is the columns of the plate and the inner list is the rows of the plate."""
+  ) -> List[Dict[Tuple[int, int], Dict]]:
+    """Read the luminescence from the plate reader.
+
+    Returns:
+      A list of dictionaries, one for each timepoint. Each dictionary has a key (0, 0)
+      and a value containing the data, temperature, and time.
+    """
 
   @abstractmethod
   async def read_absorbance(
     self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[List[Optional[float]]]:
-    """Read the absorbance from the plate reader. This should return a list of lists, where the
-    outer list is the columns of the plate and the inner list is the rows of the plate."""
+  ) -> List[Dict[Tuple[int, int], Dict]]:
+    """Read the absorbance from the plate reader.
+
+    Returns:
+      A list of dictionaries, one for each timepoint. Each dictionary has a key (wavelength, 0)
+      and a value containing the data, temperature, and time.
+    """
 
   @abstractmethod
   async def read_fluorescence(
@@ -58,9 +66,14 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[Optional[float]]]:
-    """Read the fluorescence from the plate reader. This should return a list of lists, where the
-    outer list is the columns of the plate and the inner list is the rows of the plate."""
+  ) -> List[Dict[Tuple[int, int], Dict]]:
+    """Read the fluorescence from the plate reader.
+
+    Returns:
+      A list of dictionaries, one for each timepoint. Each dictionary has a key
+      (excitation_wavelength, emission_wavelength) and a value containing the data, temperature,
+      and time.
+    """
 
 
 class ImagerBackend(MachineBackend, metaclass=ABCMeta):

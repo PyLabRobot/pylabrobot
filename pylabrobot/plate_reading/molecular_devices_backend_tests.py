@@ -688,17 +688,26 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     1:\t0.1\t0.2
     2:\t0.3\t0.4
     """
-    result = self.backend._parse_data(data_str)
-    self.assertIsInstance(result, MolecularDevicesDataCollectionAbsorbance)
-    self.assertEqual(result.container_type, "96-well")
-    self.assertEqual(result.all_absorbance_wavelengths, [260])
-    self.assertEqual(len(result.reads), 1)
-    read = result.reads[0]
-    self.assertIsInstance(read, MolecularDevicesDataAbsorbance)
-    self.assertEqual(read.measurement_time, 12345.6)
-    self.assertEqual(read.temperature, 25.1)
-    self.assertEqual(read.absorbance_wavelength, 260)
-    self.assertEqual(read.data, [[0.1, 0.3], [0.2, 0.4]])
+    settings = MolecularDevicesSettings(
+      plate=MagicMock(),
+      read_mode=ReadMode.ABS,
+      read_type=ReadType.ENDPOINT,
+      read_order=ReadOrder.COLUMN,
+      calibrate=Calibrate.ON,
+      shake_settings=None,
+      carriage_speed=CarriageSpeed.NORMAL,
+      speed_read=False,
+      kinetic_settings=None,
+      spectrum_settings=None,
+    )
+    result = self.backend._parse_data(data_str, settings)
+    self.assertIsInstance(result, dict)
+    self.assertEqual(len(result), 1)
+    self.assertIn((260, 0), result)
+    read = result[(260, 0)]
+    self.assertEqual(read["time"], 12345.6)
+    self.assertEqual(read["temp"], 25.1)
+    self.assertEqual(read["data"], [[0.1, 0.3], [0.2, 0.4]])
 
   def test_parse_absorbance_multiple_wavelengths(self):
     data_str = """
@@ -711,16 +720,27 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     1:\t0.5\t0.6
     2:\t0.7\t0.8
     """
-    result = self.backend._parse_data(data_str)
-    self.assertIsInstance(result, MolecularDevicesDataCollectionAbsorbance)
-    self.assertEqual(result.all_absorbance_wavelengths, [260, 280])
-    self.assertEqual(len(result.reads), 2)
-    read1 = result.reads[0]
-    self.assertEqual(read1.absorbance_wavelength, 260)
-    self.assertEqual(read1.data, [[0.1, 0.3], [0.2, 0.4]])
-    read2 = result.reads[1]
-    self.assertEqual(read2.absorbance_wavelength, 280)
-    self.assertEqual(read2.data, [[0.5, 0.7], [0.6, 0.8]])
+    settings = MolecularDevicesSettings(
+      plate=MagicMock(),
+      read_mode=ReadMode.ABS,
+      read_type=ReadType.ENDPOINT,
+      read_order=ReadOrder.COLUMN,
+      calibrate=Calibrate.ON,
+      shake_settings=None,
+      carriage_speed=CarriageSpeed.NORMAL,
+      speed_read=False,
+      kinetic_settings=None,
+      spectrum_settings=None,
+    )
+    result = self.backend._parse_data(data_str, settings)
+    self.assertIsInstance(result, dict)
+    self.assertEqual(len(result), 2)
+    self.assertIn((260, 0), result)
+    read1 = result[(260, 0)]
+    self.assertEqual(read1["data"], [[0.1, 0.3], [0.2, 0.4]])
+    self.assertIn((280, 0), result)
+    read2 = result[(280, 0)]
+    self.assertEqual(read2["data"], [[0.5, 0.7], [0.6, 0.8]])
 
   def test_parse_fluorescence(self):
     data_str = """
@@ -731,16 +751,26 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     1:\t100\t200
     2:\t300\t400
     """
-    result = self.backend._parse_data(data_str)
-    self.assertIsInstance(result, MolecularDevicesDataCollectionFluorescence)
-    self.assertEqual(result.all_excitation_wavelengths, [485])
-    self.assertEqual(result.all_emission_wavelengths, [520])
-    self.assertEqual(len(result.reads), 1)
-    read = result.reads[0]
-    self.assertIsInstance(read, MolecularDevicesDataFluorescence)
-    self.assertEqual(read.excitation_wavelength, 485)
-    self.assertEqual(read.emission_wavelength, 520)
-    self.assertEqual(read.data, [[100.0, 300.0], [200.0, 400.0]])
+    settings = MolecularDevicesSettings(
+      plate=MagicMock(),
+      read_mode=ReadMode.FLU,
+      read_type=ReadType.ENDPOINT,
+      read_order=ReadOrder.COLUMN,
+      calibrate=Calibrate.ON,
+      shake_settings=None,
+      carriage_speed=CarriageSpeed.NORMAL,
+      speed_read=False,
+      kinetic_settings=None,
+      spectrum_settings=None,
+    )
+    result = self.backend._parse_data(data_str, settings)
+    self.assertIsInstance(result, dict)
+    self.assertEqual(len(result), 1)
+    self.assertIn((485, 520), result)
+    read = result[(485, 520)]
+    self.assertEqual(read["time"], 12345.6)
+    self.assertEqual(read["temp"], 25.1)
+    self.assertEqual(read["data"], [[100.0, 300.0], [200.0, 400.0]])
 
   def test_parse_luminescence(self):
     data_str = """
@@ -750,14 +780,26 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     1:\t1000\t2000
     2:\t3000\t4000
     """
-    result = self.backend._parse_data(data_str)
-    self.assertIsInstance(result, MolecularDevicesDataCollectionLuminescence)
-    self.assertEqual(result.all_emission_wavelengths, [590])
-    self.assertEqual(len(result.reads), 1)
-    read = result.reads[0]
-    self.assertIsInstance(read, MolecularDevicesDataLuminescence)
-    self.assertEqual(read.emission_wavelength, 590)
-    self.assertEqual(read.data, [[1000.0, 3000.0], [2000.0, 4000.0]])
+    settings = MolecularDevicesSettings(
+      plate=MagicMock(),
+      read_mode=ReadMode.LUM,
+      read_type=ReadType.ENDPOINT,
+      read_order=ReadOrder.COLUMN,
+      calibrate=Calibrate.ON,
+      shake_settings=None,
+      carriage_speed=CarriageSpeed.NORMAL,
+      speed_read=False,
+      kinetic_settings=None,
+      spectrum_settings=None,
+    )
+    result = self.backend._parse_data(data_str, settings)
+    self.assertIsInstance(result, dict)
+    self.assertEqual(len(result), 1)
+    self.assertIn((0, 590), result)
+    read = result[(0, 590)]
+    self.assertEqual(read["time"], 12345.6)
+    self.assertEqual(read["temp"], 25.1)
+    self.assertEqual(read["data"], [[1000.0, 3000.0], [2000.0, 4000.0]])
 
   def test_parse_data_with_sat_and_nan(self):
     data_str = """
@@ -767,10 +809,22 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     1:\t0.1\t#SAT
     2:\t0.3\t-
     """
-    result = self.backend._parse_data(data_str)
-    read = result.reads[0]
-    self.assertEqual(read.data[1][0], float("inf"))
-    self.assertTrue(math.isnan(read.data[1][1]))
+    settings = MolecularDevicesSettings(
+      plate=MagicMock(),
+      read_mode=ReadMode.ABS,
+      read_type=ReadType.ENDPOINT,
+      read_order=ReadOrder.COLUMN,
+      calibrate=Calibrate.ON,
+      shake_settings=None,
+      carriage_speed=CarriageSpeed.NORMAL,
+      speed_read=False,
+      kinetic_settings=None,
+      spectrum_settings=None,
+    )
+    result = self.backend._parse_data(data_str, settings)
+    read = result[(260, 0)]
+    self.assertEqual(read["data"][1][0], float("inf"))
+    self.assertTrue(math.isnan(read["data"][1][1]))
 
   async def test_parse_kinetic_absorbance(self):
     # Mock the send_command to return two different data blocks
@@ -812,11 +866,63 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     )
 
     result = await self.backend._transfer_data(settings)
-    self.assertEqual(len(result.reads), 2)
-    self.assertEqual(result.reads[0].data, [[0.1, 0.3], [0.2, 0.4]])
-    self.assertEqual(result.reads[1].data, [[0.15, 0.35], [0.25, 0.45]])
-    self.assertEqual(result.reads[0].measurement_time, 12345.6)
-    self.assertEqual(result.reads[1].measurement_time, 12355.6)
+    self.assertEqual(len(result), 2)
+    self.assertEqual(result[0][(260, 0)]["data"], [[0.1, 0.3], [0.2, 0.4]])
+    self.assertEqual(result[1][(260, 0)]["data"], [[0.15, 0.35], [0.25, 0.45]])
+    self.assertEqual(result[0][(260, 0)]["time"], 12345.6)
+    self.assertEqual(result[1][(260, 0)]["time"], 12355.6)
+
+  async def test_parse_spectrum_absorbance(self):
+    # Mock the send_command to return two different data blocks for two wavelengths
+    def data_generator():
+      yield [
+        "OK",
+        """
+    12345.6\t25.1\t96-well
+    L:\t260
+    L:\t260
+    1:\t0.1\t0.2
+    2:\t0.3\t0.4
+    """,
+      ]
+      yield [
+        "OK",
+        """
+    12355.6\t25.2\t96-well
+    L:\t270
+    L:\t270
+    1:\t0.15\t0.25
+    2:\t0.35\t0.45
+    """,
+      ]
+
+    self.backend.send_command = AsyncMock(side_effect=data_generator())
+
+    settings = MolecularDevicesSettings(
+      plate=MagicMock(),
+      read_mode=ReadMode.ABS,
+      read_type=ReadType.SPECTRUM,
+      spectrum_settings=SpectrumSettings(start_wavelength=260, step=10, num_steps=2),
+      read_order=ReadOrder.COLUMN,
+      calibrate=Calibrate.ON,
+      shake_settings=None,
+      carriage_speed=CarriageSpeed.NORMAL,
+      speed_read=False,
+      kinetic_settings=None,
+    )
+
+    result = await self.backend._transfer_data(settings)
+    self.assertEqual(len(result), 1)  # Should return a list with one dict
+    combined_data = result[0]
+    self.assertEqual(len(combined_data), 2)  # Two wavelengths
+
+    self.assertIn((260, 0), combined_data)
+    self.assertEqual(combined_data[(260, 0)]["data"], [[[0.1, 0.3], [0.2, 0.4]]])
+    self.assertEqual(combined_data[(260, 0)]["time"], 12345.6)
+
+    self.assertIn((270, 0), combined_data)
+    self.assertEqual(combined_data[(270, 0)]["data"], [[[0.15, 0.35], [0.25, 0.45]]])
+    self.assertEqual(combined_data[(270, 0)]["time"], 12355.6)
 
 
 class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
