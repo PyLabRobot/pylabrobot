@@ -7,12 +7,6 @@ from pylabrobot.plate_reading.molecular_devices_backend import (
   CarriageSpeed,
   KineticSettings,
   MolecularDevicesBackend,
-  MolecularDevicesDataAbsorbance,
-  MolecularDevicesDataCollectionAbsorbance,
-  MolecularDevicesDataCollectionFluorescence,
-  MolecularDevicesDataCollectionLuminescence,
-  MolecularDevicesDataFluorescence,
-  MolecularDevicesDataLuminescence,
   MolecularDevicesError,
   MolecularDevicesSettings,
   MolecularDevicesUnrecognizedCommandError,
@@ -27,6 +21,10 @@ from pylabrobot.resources.agenbio.plates import AGenBio_96_wellplate_Ub_2200ul
 
 
 class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
+  backend: MolecularDevicesBackend
+  mock_serial: MagicMock
+  send_command_mock: AsyncMock
+
   def setUp(self):
     self.mock_serial = MagicMock()
     self.mock_serial.setup = AsyncMock()
@@ -37,20 +35,25 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     with patch("pylabrobot.io.serial.Serial", return_value=self.mock_serial):
       self.backend = MolecularDevicesBackend(port="COM1")
       self.backend.io = self.mock_serial
-      self.backend.send_command = AsyncMock()
+      self.send_command_mock = patch.object(
+        self.backend, "send_command", new_callable=AsyncMock
+      ).start()
+    self.addCleanup(patch.stopall)
 
   async def test_setup_stop(self):
     # un-mock send_command for this test
-    self.backend.send_command = AsyncMock(wraps=self.backend.send_command)
-    await self.backend.setup()
-    self.mock_serial.setup.assert_called_once()
-    self.backend.send_command.assert_called_with("!")
-    await self.backend.stop()
-    self.mock_serial.stop.assert_called_once()
+    with patch.object(
+      self.backend, "send_command", wraps=self.backend.send_command
+    ) as wrapped_send_command:
+      await self.backend.setup()
+      self.mock_serial.setup.assert_called_once()
+      wrapped_send_command.assert_called_with("!")
+      await self.backend.stop()
+      self.mock_serial.stop.assert_called_once()
 
   async def test_set_clear(self):
     await self.backend._set_clear()
-    self.backend.send_command.assert_called_once_with("!CLEAR DATA")
+    self.send_command_mock.assert_called_once_with("!CLEAR DATA")
 
   async def test_set_mode(self):
     settings = MolecularDevicesSettings(
@@ -66,24 +69,24 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_mode(settings)
-    self.backend.send_command.assert_called_once_with("!MODE ENDPOINT")
+    self.send_command_mock.assert_called_once_with("!MODE ENDPOINT")
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.read_type = ReadType.KINETIC
     settings.kinetic_settings = KineticSettings(interval=10, num_readings=5)
     await self.backend._set_mode(settings)
-    self.backend.send_command.assert_called_once_with("!MODE KINETIC 10 5")
+    self.send_command_mock.assert_called_once_with("!MODE KINETIC 10 5")
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.read_type = ReadType.SPECTRUM
     settings.spectrum_settings = SpectrumSettings(start_wavelength=200, step=10, num_steps=50)
     await self.backend._set_mode(settings)
-    self.backend.send_command.assert_called_once_with("!MODE SPECTRUM 200 10 50")
+    self.send_command_mock.assert_called_once_with("!MODE SPECTRUM 200 10 50")
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.spectrum_settings.excitation_emission_type = "EXSPECTRUM"
     await self.backend._set_mode(settings)
-    self.backend.send_command.assert_called_once_with("!MODE EXSPECTRUM 200 10 50")
+    self.send_command_mock.assert_called_once_with("!MODE EXSPECTRUM 200 10 50")
 
   async def test_set_wavelengths(self):
     settings = MolecularDevicesSettings(
@@ -100,27 +103,25 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_wavelengths(settings)
-    self.backend.send_command.assert_called_once_with("!WAVELENGTH 500 F600")
+    self.send_command_mock.assert_called_once_with("!WAVELENGTH 500 F600")
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.path_check = True
     await self.backend._set_wavelengths(settings)
-    self.backend.send_command.assert_called_once_with("!WAVELENGTH 500 F600 900 998")
+    self.send_command_mock.assert_called_once_with("!WAVELENGTH 500 F600 900 998")
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.FLU
     settings.excitation_wavelengths = [485]
     settings.emission_wavelengths = [520]
     await self.backend._set_wavelengths(settings)
-    self.backend.send_command.assert_has_calls(
-      [call("!EXWAVELENGTH 485"), call("!EMWAVELENGTH 520")]
-    )
+    self.send_command_mock.assert_has_calls([call("!EXWAVELENGTH 485"), call("!EMWAVELENGTH 520")])
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.LUM
     settings.emission_wavelengths = [590]
     await self.backend._set_wavelengths(settings)
-    self.backend.send_command.assert_called_once_with("!EMWAVELENGTH 590")
+    self.send_command_mock.assert_called_once_with("!EMWAVELENGTH 590")
 
   async def test_set_plate_position(self):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
@@ -137,7 +138,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_plate_position(settings)
-    self.backend.send_command.assert_has_calls(
+    self.send_command_mock.assert_has_calls(
       [call("!XPOS 13.380 9.000 12"), call("!YPOS 12.240 9.000 8")]
     )
 
@@ -156,7 +157,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_strip(settings)
-    self.backend.send_command.assert_called_once_with("!STRIP 1 12")
+    self.send_command_mock.assert_called_once_with("!STRIP 1 12")
 
   async def test_set_shake(self):
     settings = MolecularDevicesSettings(
@@ -172,18 +173,18 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_shake(settings)
-    self.backend.send_command.assert_called_once_with("!SHAKE OFF")
+    self.send_command_mock.assert_called_once_with("!SHAKE OFF")
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.shake_settings = ShakeSettings(before_read=True, before_read_duration=5)
     await self.backend._set_shake(settings)
-    self.backend.send_command.assert_has_calls([call("!SHAKE ON"), call("!SHAKE 5 0 0 0 0")])
+    self.send_command_mock.assert_has_calls([call("!SHAKE ON"), call("!SHAKE 5 0 0 0 0")])
 
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.reset_mock()
     settings.shake_settings = ShakeSettings(between_reads=True, between_reads_duration=3)
     settings.kinetic_settings = KineticSettings(interval=10, num_readings=5)
     await self.backend._set_shake(settings)
-    self.backend.send_command.assert_has_calls([call("!SHAKE ON"), call("!SHAKE 0 10 7 3 0")])
+    self.send_command_mock.assert_has_calls([call("!SHAKE ON"), call("!SHAKE 0 10 7 3 0")])
 
   async def test_set_carriage_speed(self):
     settings = MolecularDevicesSettings(
@@ -199,11 +200,11 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_carriage_speed(settings)
-    self.backend.send_command.assert_called_once_with("!CSPEED 8")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!CSPEED 8")
+    self.send_command_mock.reset_mock()
     settings.carriage_speed = CarriageSpeed.SLOW
     await self.backend._set_carriage_speed(settings)
-    self.backend.send_command.assert_called_once_with("!CSPEED 1")
+    self.send_command_mock.assert_called_once_with("!CSPEED 1")
 
   async def test_set_read_stage(self):
     settings = MolecularDevicesSettings(
@@ -219,15 +220,15 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_read_stage(settings)
-    self.backend.send_command.assert_called_once_with("!READSTAGE TOP")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!READSTAGE TOP")
+    self.send_command_mock.reset_mock()
     settings.read_from_bottom = True
     await self.backend._set_read_stage(settings)
-    self.backend.send_command.assert_called_once_with("!READSTAGE BOT")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!READSTAGE BOT")
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.ABS
     await self.backend._set_read_stage(settings)
-    self.backend.send_command.assert_not_called()
+    self.send_command_mock.assert_not_called()
 
   async def test_set_flashes_per_well(self):
     settings = MolecularDevicesSettings(
@@ -244,11 +245,11 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_flashes_per_well(settings)
-    self.backend.send_command.assert_called_once_with("!FPW 10")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!FPW 10")
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.ABS
     await self.backend._set_flashes_per_well(settings)
-    self.backend.send_command.assert_not_called()
+    self.send_command_mock.assert_not_called()
 
   async def test_set_pmt(self):
     settings = MolecularDevicesSettings(
@@ -265,19 +266,19 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_pmt(settings)
-    self.backend.send_command.assert_called_once_with("!AUTOPMT ON")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!AUTOPMT ON")
+    self.send_command_mock.reset_mock()
     settings.pmt_gain = PmtGain.HIGH
     await self.backend._set_pmt(settings)
-    self.backend.send_command.assert_has_calls([call("!AUTOPMT OFF"), call("!PMT HIGH")])
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_has_calls([call("!AUTOPMT OFF"), call("!PMT HIGH")])
+    self.send_command_mock.reset_mock()
     settings.pmt_gain = 9
     await self.backend._set_pmt(settings)
-    self.backend.send_command.assert_has_calls([call("!AUTOPMT OFF"), call("!PMT 9")])
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_has_calls([call("!AUTOPMT OFF"), call("!PMT 9")])
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.ABS
     await self.backend._set_pmt(settings)
-    self.backend.send_command.assert_not_called()
+    self.send_command_mock.assert_not_called()
 
   async def test_set_filter(self):
     settings = MolecularDevicesSettings(
@@ -294,16 +295,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_filter(settings)
-    self.backend.send_command.assert_has_calls([call("!AUTOFILTER OFF"), call("!EMFILTER 8 9")])
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_has_calls([call("!AUTOFILTER OFF"), call("!EMFILTER 8 9")])
+    self.send_command_mock.reset_mock()
     settings.cutoff_filters = []
     await self.backend._set_filter(settings)
-    self.backend.send_command.assert_called_once_with("!AUTOFILTER ON")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!AUTOFILTER ON")
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.ABS
     settings.cutoff_filters = [515, 530]
     await self.backend._set_filter(settings)
-    self.backend.send_command.assert_called_once_with("!AUTOFILTER ON")
+    self.send_command_mock.assert_called_once_with("!AUTOFILTER ON")
 
   async def test_set_calibrate(self):
     settings = MolecularDevicesSettings(
@@ -319,11 +320,11 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_calibrate(settings)
-    self.backend.send_command.assert_called_once_with("!CALIBRATE ON")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!CALIBRATE ON")
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.FLU
     await self.backend._set_calibrate(settings)
-    self.backend.send_command.assert_called_once_with("!PMTCAL ON")
+    self.send_command_mock.assert_called_once_with("!PMTCAL ON")
 
   async def test_set_order(self):
     settings = MolecularDevicesSettings(
@@ -339,11 +340,11 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_order(settings)
-    self.backend.send_command.assert_called_once_with("!ORDER COLUMN")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!ORDER COLUMN")
+    self.send_command_mock.reset_mock()
     settings.read_order = ReadOrder.WAVELENGTH
     await self.backend._set_order(settings)
-    self.backend.send_command.assert_called_once_with("!ORDER WAVELENGTH")
+    self.send_command_mock.assert_called_once_with("!ORDER WAVELENGTH")
 
   async def test_set_speed(self):
     settings = MolecularDevicesSettings(
@@ -359,15 +360,15 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_speed(settings)
-    self.backend.send_command.assert_called_once_with("!SPEED ON")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!SPEED ON")
+    self.send_command_mock.reset_mock()
     settings.speed_read = False
     await self.backend._set_speed(settings)
-    self.backend.send_command.assert_called_once_with("!SPEED OFF")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!SPEED OFF")
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.FLU
     await self.backend._set_speed(settings)
-    self.backend.send_command.assert_not_called()
+    self.send_command_mock.assert_not_called()
 
   async def test_set_integration_time(self):
     settings = MolecularDevicesSettings(
@@ -383,11 +384,11 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_integration_time(settings, 10, 100)
-    self.backend.send_command.assert_has_calls([call("!COUNTTIMEDELAY 10"), call("!COUNTTIME 0.1")])
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_has_calls([call("!COUNTTIMEDELAY 10"), call("!COUNTTIME 0.1")])
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.ABS
     await self.backend._set_integration_time(settings, 10, 100)
-    self.backend.send_command.assert_not_called()
+    self.send_command_mock.assert_not_called()
 
   async def test_set_nvram_polar(self):
     settings = MolecularDevicesSettings(
@@ -404,7 +405,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       settling_time=5,
     )
     await self.backend._set_nvram(settings)
-    self.backend.send_command.assert_called_once_with("!NVRAM FPSETTLETIME 5")
+    self.send_command_mock.assert_called_once_with("!NVRAM FPSETTLETIME 5")
 
   async def test_set_nvram_other(self):
     settings = MolecularDevicesSettings(
@@ -421,11 +422,11 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       settling_time=10,
     )
     await self.backend._set_nvram(settings)
-    self.backend.send_command.assert_called_once_with("!NVRAM CARCOL 100")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!NVRAM CARCOL 100")
+    self.send_command_mock.reset_mock()
     settings.settling_time = 110
     await self.backend._set_nvram(settings)
-    self.backend.send_command.assert_called_once_with("!NVRAM CARCOL 110")
+    self.send_command_mock.assert_called_once_with("!NVRAM CARCOL 110")
 
   async def test_set_tag(self):
     settings = MolecularDevicesSettings(
@@ -441,16 +442,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     await self.backend._set_tag(settings)
-    self.backend.send_command.assert_called_once_with("!TAG ON")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!TAG ON")
+    self.send_command_mock.reset_mock()
     settings.read_type = ReadType.ENDPOINT
     await self.backend._set_tag(settings)
-    self.backend.send_command.assert_called_once_with("!TAG OFF")
-    self.backend.send_command.reset_mock()
+    self.send_command_mock.assert_called_once_with("!TAG OFF")
+    self.send_command_mock.reset_mock()
     settings.read_mode = ReadMode.ABS
     settings.read_type = ReadType.KINETIC
     await self.backend._set_tag(settings)
-    self.backend.send_command.assert_called_once_with("!TAG OFF")
+    self.send_command_mock.assert_called_once_with("!TAG OFF")
 
   @patch(
     "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._wait_for_idle",
@@ -469,7 +470,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     await self.backend.read_absorbance(plate, [500])
 
-    commands = [c.args[0] for c in self.backend.send_command.call_args_list]
+    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
     self.assertIn("!CLEAR DATA", commands)
     self.assertIn("!STRIP 1 12", commands)
     self.assertIn("!CSPEED 8", commands)
@@ -481,7 +482,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIn("!SPEED OFF", commands)
 
     readtype_call = next(
-      c for c in self.backend.send_command.call_args_list if c.args[0] == "!READTYPE ABSPLA"
+      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE ABSPLA"
     )
     self.assertEqual(readtype_call.kwargs, {"num_res_fields": 2})
 
@@ -506,7 +507,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     await self.backend.read_fluorescence(plate, [485], [520], [515])
 
-    commands = [c.args[0] for c in self.backend.send_command.call_args_list]
+    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
     self.assertIn("!CLEAR DATA", commands)
     self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
     self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
@@ -525,7 +526,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIn("!READSTAGE TOP", commands)
 
     readtype_call = next(
-      c for c in self.backend.send_command.call_args_list if c.args[0] == "!READTYPE FLU"
+      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE FLU"
     )
     self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
 
@@ -550,7 +551,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     await self.backend.read_luminescence(plate, [590])
 
-    commands = [c.args[0] for c in self.backend.send_command.call_args_list]
+    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
     self.assertIn("!CLEAR DATA", commands)
     self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
     self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
@@ -564,7 +565,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIn("!READSTAGE TOP", commands)
 
     readtype_call = next(
-      c for c in self.backend.send_command.call_args_list if c.args[0] == "!READTYPE LUM"
+      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE LUM"
     )
     self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
 
@@ -594,7 +595,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     await self.backend.read_fluorescence_polarization(plate, [485], [520], [515])
 
-    commands = [c.args[0] for c in self.backend.send_command.call_args_list]
+    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
     self.assertIn("!CLEAR DATA", commands)
     self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
     self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
@@ -613,7 +614,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIn("!READSTAGE TOP", commands)
 
     readtype_call = next(
-      c for c in self.backend.send_command.call_args_list if c.args[0] == "!READTYPE POLAR"
+      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE POLAR"
     )
     self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
 
@@ -642,10 +643,10 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
   ):
     plate = AGenBio_96_wellplate_Ub_2200ul("test_plate")
     await self.backend.read_time_resolved_fluorescence(
-        plate, [485], [520], [515], delay_time=10, integration_time=100
-      )
+      plate, [485], [520], [515], delay_time=10, integration_time=100
+    )
 
-    commands = [c.args[0] for c in self.backend.send_command.call_args_list]
+    commands = [c.args[0] for c in self.send_command_mock.call_args_list]
     self.assertIn("!CLEAR DATA", commands)
     self.assertTrue(any(cmd.startswith("!XPOS") for cmd in commands))
     self.assertTrue(any(cmd.startswith("!YPOS") for cmd in commands))
@@ -666,7 +667,7 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIn("!READSTAGE TOP", commands)
 
     readtype_call = next(
-      c for c in self.backend.send_command.call_args_list if c.args[0] == "!READTYPE TIME 0 250"
+      c for c in self.send_command_mock.call_args_list if c.args[0] == "!READTYPE TIME 0 250"
     )
     self.assertEqual(readtype_call.kwargs, {"num_res_fields": 1})
 
@@ -676,17 +677,22 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
 
 
 class TestDataParsing(unittest.IsolatedAsyncioTestCase):
+  send_command_mock: AsyncMock
+
   def setUp(self):
     with patch("pylabrobot.io.serial.Serial", return_value=MagicMock()):
       self.backend = MolecularDevicesBackend(port="COM1")
+      self.send_command_mock = patch.object(
+        self.backend, "send_command", new_callable=AsyncMock
+      ).start()
 
   def test_parse_absorbance_single_wavelength(self):
     data_str = """
-    12345.6\t25.1\t96-well
-    L:\t260
-    L:\t260
-    1:\t0.1\t0.2
-    2:\t0.3\t0.4
+    12345.6	25.1	96-well
+    L:	260
+    L:	260
+    1:	0.1	0.2
+    2:	0.3	0.4
     """
     settings = MolecularDevicesSettings(
       plate=MagicMock(),
@@ -850,7 +856,7 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     """,
       ]
 
-    self.backend.send_command = AsyncMock(side_effect=data_generator())
+    self.send_command_mock.side_effect = data_generator()
 
     settings = MolecularDevicesSettings(
       plate=MagicMock(),
@@ -896,7 +902,7 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     """,
       ]
 
-    self.backend.send_command = AsyncMock(side_effect=data_generator())
+    self.send_command_mock.side_effect = data_generator()
 
     settings = MolecularDevicesSettings(
       plate=MagicMock(),
@@ -917,11 +923,11 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(combined_data), 2)  # Two wavelengths
 
     self.assertIn((260, 0), combined_data)
-    self.assertEqual(combined_data[(260, 0)]["data"], [[[0.1, 0.3], [0.2, 0.4]]])
+    self.assertEqual(combined_data[(260, 0)]["data"], [[0.1, 0.3], [0.2, 0.4]])
     self.assertEqual(combined_data[(260, 0)]["time"], 12345.6)
 
     self.assertIn((270, 0), combined_data)
-    self.assertEqual(combined_data[(270, 0)]["data"], [[[0.15, 0.35], [0.25, 0.45]]])
+    self.assertEqual(combined_data[(270, 0)]["data"], [[0.15, 0.35], [0.25, 0.45]])
     self.assertEqual(combined_data[(270, 0)]["time"], 12355.6)
 
 
@@ -967,7 +973,7 @@ class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
     # Test an empty response from the device
     self.mock_serial.readline.return_value = b""  # Simulate no response
     with self.assertRaisesRegex(TimeoutError, "Timeout waiting for response to command: !TEST"):
-      await self.backend.send_command("!TEST", timeout=0.01)  # Short timeout for test
+      await self.backend.send_command("!TEST", timeout=1)  # Short timeout for test
 
   async def test_parse_basic_errors_warning_response(self):
     # Test a response containing a warning

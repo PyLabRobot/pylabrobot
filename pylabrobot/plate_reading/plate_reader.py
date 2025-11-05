@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, cast
+from typing import Dict, List, Optional, Tuple, cast
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -75,11 +75,15 @@ class PlateReader(ResourceHolder, Machine):
   @need_setup_finished
   async def read_luminescence(
     self, focal_height: float, wells: Optional[List[Well]] = None, **backend_kwargs
-  ) -> List[List[Optional[float]]]:
-    """Read the luminescence from the plate.
+  ) -> List[Dict[Tuple[int, int], Dict]]:
+    """Read the luminescence from the plate reader.
 
     Args:
       focal_height: The focal height to read the luminescence at, in micrometers.
+
+    Returns:
+      A list of dictionaries, one for each timepoint. Each dictionary has a key (0, 0)
+      and a value containing the data, temperature, and time.
     """
 
     return await self.backend.read_luminescence(
@@ -92,11 +96,15 @@ class PlateReader(ResourceHolder, Machine):
   @need_setup_finished
   async def read_absorbance(
     self, wavelength: int, wells: Optional[List[Well]] = None, **backend_kwargs
-  ) -> List[List[Optional[float]]]:
-    """Read the absorbance from the plate in OD, unless otherwise specified by the backend.
+  ) -> List[Dict[Tuple[int, int], Dict]]:
+    """Read the absorbance from the plate reader.
 
     Args:
       wavelength: The wavelength to read the absorbance at, in nanometers.
+
+    Returns:
+      A list of dictionaries, one for each timepoint. Each dictionary has a key (wavelength, 0)
+      and a value containing the data, temperature, and time.
     """
 
     return await self.backend.read_absorbance(
@@ -114,13 +122,18 @@ class PlateReader(ResourceHolder, Machine):
     focal_height: float,
     wells: Optional[List[Well]] = None,
     **backend_kwargs,
-  ) -> List[List[Optional[float]]]:
-    """
+  ) -> List[Dict[Tuple[int, int], Dict]]:
+    """Read the fluorescence from the plate reader.
 
     Args:
       excitation_wavelength: The excitation wavelength to read the fluorescence at, in nanometers.
       emission_wavelength: The emission wavelength to read the fluorescence at, in nanometers.
       focal_height: The focal height to read the fluorescence at, in micrometers.
+
+    Returns:
+      A list of dictionaries, one for each timepoint. Each dictionary has a key
+      (excitation_wavelength, emission_wavelength) and a value containing the data, temperature,
+      and time.
     """
 
     if excitation_wavelength > emission_wavelength:

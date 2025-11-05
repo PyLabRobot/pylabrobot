@@ -246,72 +246,6 @@ class MolecularDevicesSettings:
   settling_time: int = 0
 
 
-@dataclass
-class MolecularDevicesData:
-  """Data from a Molecular Devices plate reader."""
-
-  measurement_time: float
-  temperature: float
-  data: List[List[float]]
-
-
-@dataclass
-class MolecularDevicesDataAbsorbance(MolecularDevicesData):
-  """Absorbance data from a Molecular Devices plate reader."""
-
-  absorbance_wavelength: int
-  path_lengths: Optional[List[List[float]]] = None
-
-
-@dataclass
-class MolecularDevicesDataFluorescence(MolecularDevicesData):
-  """Fluorescence data from a Molecular Devices plate reader."""
-
-  excitation_wavelength: int
-  emission_wavelength: int
-
-
-@dataclass
-class MolecularDevicesDataLuminescence(MolecularDevicesData):
-  """Luminescence data from a Molecular Devices plate reader."""
-
-  emission_wavelength: int
-
-
-@dataclass
-class MolecularDevicesDataCollection:
-  """A collection of MolecularDevicesData objects from multiple reads."""
-
-  container_type: str
-  reads: List["MolecularDevicesData"]
-  data_ordering: str
-
-
-@dataclass
-class MolecularDevicesDataCollectionAbsorbance(MolecularDevicesDataCollection):
-  """A collection of MolecularDevicesDataAbsorbance objects from multiple reads."""
-
-  reads: List["MolecularDevicesDataAbsorbance"]
-  all_absorbance_wavelengths: List[int]
-
-
-@dataclass
-class MolecularDevicesDataCollectionFluorescence(MolecularDevicesDataCollection):
-  """A collection of MolecularDevicesDataFluorescence objects from multiple reads."""
-
-  reads: List["MolecularDevicesDataFluorescence"]
-  all_excitation_wavelengths: List[int]
-  all_emission_wavelengths: List[int]
-
-
-@dataclass
-class MolecularDevicesDataCollectionLuminescence(MolecularDevicesDataCollection):
-  """A collection of MolecularDevicesDataLuminescence objects from multiple reads."""
-
-  reads: List["MolecularDevicesDataLuminescence"]
-  all_emission_wavelengths: List[int]
-
-
 class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
   """Backend for Molecular Devices plate readers."""
 
@@ -411,8 +345,9 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       raise ValueError("Temperature must be between 0 and 45°C.")
     await self.send_command(f"!TEMP {temperature}")
 
-  async def get_firmware_version(self) -> str:
-    return await self.send_command("!OPTION")
+  async def get_firmware_version(self) -> List[str]:
+    res = await self.send_command("!OPTION")
+    return res[1].split()
 
   async def start_shake(self) -> None:
     await self.send_command("!SHAKE NOW")
@@ -433,11 +368,13 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     if (settings.read_type == ReadType.KINETIC and settings.kinetic_settings) or (
       settings.read_type == ReadType.SPECTRUM and settings.spectrum_settings
     ):
-      num_readings = (
-        settings.kinetic_settings.num_readings
-        if settings.kinetic_settings
-        else settings.spectrum_settings.num_steps
-      )
+      if settings.kinetic_settings:
+        num_readings = settings.kinetic_settings.num_readings
+      elif settings.spectrum_settings:
+        num_readings = settings.spectrum_settings.num_steps
+      else:
+        raise ValueError("Kinetic or Spectrum settings must be provided for this read type.")
+
       all_reads = []
       for _ in range(num_readings):
         res = await self.send_command("!TRANSFER")
@@ -450,20 +387,22 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
         combined_spectrum = {}
         for read_data in all_reads:
           for key, value in read_data.items():
-              combined_spectrum[key] = {
-                "data": value["data"],
-                "temp": value["temp"],
-                "time": value["time"],
-              }
-        return [combined_spectrum] # Return as a list with one element
-      return all_reads # For KINETIC
+            combined_spectrum[key] = {
+              "data": value["data"],
+              "temp": value["temp"],
+              "time": value["time"],
+            }
+        return [combined_spectrum]  # Return as a list with one element
+      return all_reads  # For KINETIC
 
     # For ENDPOINT
     res = await self.send_command("!TRANSFER")
     data_str = res[1]
     return [self._parse_data(data_str, settings)]
 
-  def _parse_data(self, data_str: str, settings: MolecularDevicesSettings) -> Dict[Tuple[int, int], Dict]:
+  def _parse_data(
+    self, data_str: str, settings: MolecularDevicesSettings
+  ) -> Dict[Tuple[int, int], Dict]:
     lines = re.split(r"\r\n|\n", data_str.strip())
     lines = [line.strip() for line in lines if line.strip()]
 
@@ -484,7 +423,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     data_collection = []
     cur_read_wavelengths = []
     # 3. Parse data
-    data_columns = []
+    data_columns: List[List[float]] = []
     # The data section starts at line_idx
     for i in range(line_idx, len(lines)):
       line = lines[i]
@@ -586,10 +525,14 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     if num_cols < 2 or num_rows < 2:
       raise ValueError("Plate must have at least 2 rows and 2 columns to calculate well spacing.")
     top_left_well = plate.get_item(0)
+    if top_left_well.location is None:
+      raise ValueError("Top left well location is not set.")
     top_left_well_center = top_left_well.location + top_left_well.get_anchor(x="c", y="c")
     loc_A1 = plate.get_item("A1").location
     loc_A2 = plate.get_item("A2").location
     loc_B1 = plate.get_item("B1").location
+    if loc_A1 is None or loc_A2 is None or loc_B1 is None:
+      raise ValueError("Well locations for A1, A2, or B1 are not set.")
     dx = loc_A2.x - loc_A1.x
     dy = loc_A1.y - loc_B1.y
 
@@ -750,7 +693,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
         break
       await asyncio.sleep(1)
 
-  async def read_absorbance(
+  async def read_absorbance(  # type: ignore[override]
     self,
     plate: Plate,
     wavelengths: List[Union[int, Tuple[int, bool]]],
@@ -803,7 +746,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
-  async def read_fluorescence(
+  async def read_fluorescence(  # type: ignore[override]
     self,
     plate: Plate,
     excitation_wavelengths: List[int],
@@ -822,7 +765,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> MolecularDevicesDataCollection:
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     """use  _get_cutoff_filter_index_from_wavelength for cutoff_filters"""
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -867,7 +810,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     await self._wait_for_idle(timeout=timeout)
     return await self._transfer_data(settings)
 
-  async def read_luminescence(
+  async def read_luminescence(  # type: ignore[override]
     self,
     plate: Plate,
     emission_wavelengths: List[int],

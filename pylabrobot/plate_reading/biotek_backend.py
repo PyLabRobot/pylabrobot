@@ -614,7 +614,7 @@ class Cytation5Backend(ImageReaderBackend):
 
   def _parse_body(self, body: bytes) -> List[List[Optional[float]]]:
     assert self._plate is not None, "Plate must be set before reading data"
-    plate=self._plate
+    plate = self._plate
     start_index = 22
     end_index = body.rindex(b"\r\n")
     num_rows = plate.num_items_y
@@ -635,8 +635,8 @@ class Cytation5Backend(ImageReaderBackend):
     result: List[List[Optional[float]]] = [
       [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
     ]
-    for (row, col), value in parsed_data.items():
-        result[row][col] = value
+    for (row_idx, col_idx), value in parsed_data.items():
+      result[row_idx][col_idx] = value
     return result
 
   async def set_plate(self, plate: Plate):

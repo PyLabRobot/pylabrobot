@@ -1,5 +1,5 @@
-from typing import Dict, List, Optional, Tuple
 import time
+from typing import Dict, List, Optional, Tuple
 
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
@@ -71,7 +71,9 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
         masked[r][c] = result[r][c]
     return masked
 
-  def _format_data(self, data: List[List[Optional[float]]], key: Tuple[int, int]) -> List[Dict[Tuple[int, int], Dict]]:
+  def _format_data(
+    self, data: List[List[Optional[float]]], key: Tuple[int, int]
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     return [
       {
         key: {
