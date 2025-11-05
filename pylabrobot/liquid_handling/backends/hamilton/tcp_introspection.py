@@ -196,40 +196,10 @@ class MethodInfo:
     call_type: int
     method_id: int
     name: str
-    parameter_name: Optional[str] = None  # Raw parameter types string (backwards compatibility)
-    return_name: Optional[str] = None     # Raw return types string (backwards compatibility)
-    parameter_types: list[int] = field(default_factory=list)  # Decoded parameter type IDs
+    parameter_types: list[int] = field(default_factory=list)  # Decoded parameter type IDs (Argument category)
     parameter_labels: list[str] = field(default_factory=list)  # Parameter names (if available)
-    return_types: list[int] = field(default_factory=list)      # Decoded return type IDs
+    return_types: list[int] = field(default_factory=list)      # Decoded return type IDs (ReturnElement/ReturnValue category)
     return_labels: list[str] = field(default_factory=list)      # Return names (if available)
-
-    def __post_init__(self):
-        """Initialize parameter_types and return_types if not provided."""
-        # If parameter_types is empty but parameter_name exists, decode from string
-        # (parameter_name is the raw type IDs string from Hamilton)
-        if not self.parameter_types and self.parameter_name:
-            # Decode bytes to type IDs (like piglet does: .as_bytes().to_vec())
-            self.parameter_types = [ord(c) for c in self.parameter_name]
-            
-            # Categorize and split into parameters vs returns
-            # This is a fallback for backwards compatibility
-            all_type_ids = self.parameter_types.copy()
-            parameter_types: list[int] = []
-            return_types: list[int] = []
-            
-            for type_id in all_type_ids:
-                category = get_introspection_type_category(type_id)
-                if category == "Argument":
-                    parameter_types.append(type_id)
-                elif category in ("ReturnElement", "ReturnValue"):
-                    return_types.append(type_id)
-                else:
-                    # Unknown types default to parameters
-                    parameter_types.append(type_id)
-            
-            self.parameter_types = parameter_types
-            if not self.return_types:
-                self.return_types = return_types
 
     def get_signature_string(self) -> str:
         """Get method signature as a readable string."""
@@ -433,8 +403,6 @@ class GetMethodCommand(HamiltonCommand):
             'call_type': call_type,
             'method_id': method_id,
             'name': name,
-            'parameter_name': parameter_types_str,  # Keep for backwards compatibility
-            'return_name': parameter_labels_str,      # Keep for backwards compatibility (all labels)
             'parameter_types': parameter_types,      # Decoded type IDs (Argument category only)
             'parameter_labels': parameter_labels,    # Parameter names only
             'return_types': return_types,           # Decoded type IDs (ReturnElement/ReturnValue only)
@@ -656,8 +624,6 @@ class HamiltonIntrospection:
             call_type=response['call_type'],
             method_id=response['method_id'],
             name=response['name'],
-            parameter_name=response.get('parameter_name'),
-            return_name=response.get('return_name'),
             parameter_types=response.get('parameter_types', []),
             parameter_labels=response.get('parameter_labels', []),
             return_types=response.get('return_types', []),
