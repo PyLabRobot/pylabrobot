@@ -4,11 +4,14 @@ import enum
 import functools
 import logging
 import re
+import sys
 import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
+  Any,
   Callable,
+  Coroutine,
   Dict,
   List,
   Literal,
@@ -19,6 +22,11 @@ from typing import (
   Union,
   cast,
 )
+
+if sys.version_info < (3, 10):
+  from typing_extensions import Concatenate, ParamSpec
+else:
+  from typing import Concatenate, ParamSpec
 
 from pylabrobot import audio
 from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
@@ -40,6 +48,7 @@ from pylabrobot.liquid_handling.standard import (
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  PipettingOp,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
@@ -76,6 +85,7 @@ from pylabrobot.resources.hamilton import (
 from pylabrobot.resources.hamilton.hamilton_decks import (
   STAR_SIZE_X,
   STARLET_SIZE_X,
+  HamiltonCoreGrippers,
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
@@ -86,23 +96,26 @@ T = TypeVar("T")
 
 logger = logging.getLogger("pylabrobot")
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
-def need_iswap_parked(method: Callable):
+
+def need_iswap_parked(
+  method: Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]],
+) -> Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]]:
   """Ensure that the iSWAP is in parked position before running command.
 
   If the iSWAP is not parked, it get's parked before running the command.
   """
 
   @functools.wraps(method)
-  async def wrapper(self: "STAR", *args, **kwargs):
+  async def wrapper(self: "STARBackend", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
         minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
 
-    result = await method(self, *args, **kwargs)
-
-    return result
+    return await method(self, *args, **kwargs)
 
   return wrapper
 
@@ -1168,6 +1181,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
+    self._setup_done = False
+
   @property
   def unsafe(self) -> "UnSafe":
     """Actions that have a higher risk of damaging the robot. Use with care!"""
@@ -1440,7 +1455,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # the core grippers.
     self._core_parked = True
 
+    self._setup_done = True
+
+  async def stop(self):
+    await super().stop()
+    self._setup_done = False
+
+  @property
+  def setup_done(self) -> bool:
+    return self._setup_done
+
   # ============== LiquidHandlerBackend methods ==============
+
+  def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
+    """Check if a position is reachable by a channel (center-based)."""
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(f"Channel {channel_idx} is out of range for this robot.")
+
+    # frontmost channel can go to y=6, every channel after that is about 8.9 mm further back
+    min_y_pos = 6 + 8.9 * (self.num_channels - channel_idx - 1)
+    if position.y < min_y_pos:
+      return False
+
+    # backmost channel can go to y=601.6, every channel before that is about 8.9 mm further forward
+    max_y_pos = 601.6 - 8.9 * channel_idx
+    if position.y > max_y_pos:
+      return False
+
+    return True
+
+  def ensure_can_reach_position(
+    self, use_channels: List[int], ops: Sequence[PipettingOp], op_name: str
+  ):
+    locs = [(op.resource.get_location_wrt(self.deck, y="c") + op.offset) for op in ops]
+    cant_reach = [
+      channel_idx
+      for channel_idx, loc in zip(use_channels, locs)
+      if not self.can_reach_position(channel_idx, loc)
+    ]
+    if len(cant_reach) > 0:
+      raise ValueError(
+        f"Channels {cant_reach} cannot reach their target positions in '{op_name}' operation.\n"
+        "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
+        "Try the operation with different channels or a different target position (i.e. different labware placement)."
+      )
 
   async def pick_up_tips(
     self,
@@ -1452,6 +1510,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pickup_method: Optional[TipPickupMethod] = None,
   ):
     """Pick up tips from a resource."""
+
+    self.ensure_can_reach_position(use_channels, ops, "pick_up_tips")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
@@ -1525,6 +1585,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         tip spots is `DROP`, and everything else is `PLACE_SHIFT`. Note that `DROP` is only the
         default if *all* tips are being dropped to a tip spot.
     """
+
+    self.ensure_can_reach_position(use_channels, ops, "drop_tips")
 
     if drop_method is None:
       if any(not isinstance(op.resource, TipSpot) for op in ops):
@@ -1715,7 +1777,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dosing_drive_speed_during_2nd_section_search: Optional[List[float]] = None,
     z_drive_speed_during_2nd_section_search: Optional[List[float]] = None,
     cup_upper_edge: Optional[List[float]] = None,
-    ratio_liquid_rise_to_tip_deep_in: Optional[List[float]] = None,
+    ratio_liquid_rise_to_tip_deep_in: Optional[List[int]] = None,
     immersion_depth_2nd_section: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
@@ -1759,7 +1821,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dp_lld_sensitivity: The sensitivity of the DP LLD.
       aspirate_position_above_z_touch_off: If the LLD mode is Z_TOUCH_OFF, this is the height above the bottom of the well (presumably) to aspirate from.
       detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if the LLD mode is DUAL.
-      swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 3 and 1600. Default 100.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after mix.
       mix_position_from_liquid_surface: The height to aspirate from for mix (LLD or absolute terms).
       mix_surface_following_distance: The distance to follow the liquid surface for mix.
@@ -1799,6 +1861,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         DeprecationWarning,
       )
     # # # delete # # #
+
+    self.ensure_can_reach_position(use_channels, ops, "aspirate")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
@@ -1984,16 +2048,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
 
     # check if the surface_following_distance would fall below the minimum height
+    # if lld is enabled, we expect to find liquid above the well bottom so we don't need to raise an error
     if any(
-      ops[i].resource.get_absolute_location(z="cavity_bottom").z
-      + liquid_heights[i]
-      - surface_following_distance[i]
-      < minimum_height[i]
+      (
+        well_bottoms[i] + liquid_heights[i] - surface_following_distance[i] - minimum_height[i]
+        < -1e-6
+      )
+      and lld_mode[i] == STARBackend.LLDMode.OFF
       for i in range(n)
     ):
       raise ValueError(
-        f"automatic_surface_following would result in a surface_following_distance that goes below the minimum_height. "
-        f"Well bottom: {well_bottoms[i]}, surface_following_distance: {surface_following_distance[i]}, minimum_height: {minimum_height[i]}"
+        f"surface_following_distance would result in a height that goes below the minimum_height. "
+        f"Well bottom: {well_bottoms}, liquid height: {liquid_heights}, surface_following_distance: {surface_following_distance}, minimum_height: {minimum_height}"
       )
 
     try:
@@ -2128,7 +2194,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         position.
       gamma_lld_sensitivity: The gamma LLD sensitivity. (1 = high, 4 = low)
       dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The settling time.
       mix_position_from_liquid_surface: The height to move above the liquid surface for
         mix.
@@ -2154,6 +2220,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
       auto_surface_following_distance: automatically compute the surface following distance based on the container height<->volume functions. Requires liquid height to be specified or `probe_liquid_height=True`.
     """
+
+    self.ensure_can_reach_position(use_channels, ops, "dispense")
 
     n = len(ops)
 
@@ -2391,7 +2459,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
         min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-        side_touch_off_distance=side_touch_off_distance,
+        side_touch_off_distance=round(side_touch_off_distance * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -2403,11 +2471,41 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def pick_up_tips96(
     self,
     pickup: PickupTipRack,
-    tip_pickup_method: int = 0,
+    tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
-    """Pick up tips using the 96 head."""
+    """Pick up tips using the 96 head.
+
+    `tip_pickup_method` can be one of the following:
+        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mouting tips.
+        - "from_waste":
+            1. it actually moves the plunger all the way up
+            2. mounts tips
+            3. moves up like 10mm
+            4. moves plunger all the way down
+            5. moves to traversal height (tips out of rack)
+        - "full_blowout":
+            1. it actually moves the plunger all the way up
+            2. mounts tips
+            3. moves to traversal height (tips out of rack)
+
+    Args:
+      pickup: The standard `PickupTipRack` operation.
+      tip_pickup_method: The method to use for picking up tips. One of "from_rack", "from_waste", "full_blowout".
+      minimum_height_command_end: The minimum height to move to at the end of the command.
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to at the beginning of the command.
+    """
+
+    if isinstance(tip_pickup_method, int):
+      warnings.warn(
+        "tip_pickup_method as int is deprecated and will be removed in the future. Use string literals instead.",
+        DeprecationWarning,
+      )
+      tip_pickup_method = {0: "from_rack", 1: "from_waste", 2: "full_blowout"}[tip_pickup_method]
+
+    if tip_pickup_method not in {"from_rack", "from_waste", "full_blowout"}:
+      raise ValueError(f"Invalid tip_pickup_method: '{tip_pickup_method}'.")
 
     assert self.core96_head_installed, "96 head must be installed"
 
@@ -2448,7 +2546,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         x_direction=0 if pickup_position.x >= 0 else 1,
         y_position=round(pickup_position.y * 10),
         tip_type_idx=ttti,
-        tip_pickup_method=tip_pickup_method,
+        tip_pickup_method={
+          "from_rack": 0,
+          "from_waste": 1,
+          "full_blowout": 2,
+        }[tip_pickup_method],
         z_deposit_position=round(pickup_position.z * 10),
         minimum_traverse_height_at_beginning_of_a_command=round(
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
@@ -3012,7 +3114,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      minimum_height=minimum_height or round(position.z * 10),
+      minimum_height=round((minimum_height or position.z) * 10),
       second_section_height=round(second_section_height * 10),
       second_section_ratio=round(second_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
@@ -3085,8 +3187,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     grip_strength: int = 15,
     z_speed: float = 50.0,
     y_gripping_speed: float = 5.0,
-    channel_1: int = 7,
-    channel_2: int = 8,
+    front_channel: int = 7,
   ):
     """Pick up resource with CoRe gripper tool
     Low level component of :meth:`move_resource`
@@ -3101,8 +3202,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
       z_speed: Z speed [mm/s]. Must be between 0.4 and 128.7. Default 50.0.
       y_gripping_speed: Y gripping speed [mm/s]. Must be between 0 and 370.0. Default 5.0.
-      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 7.
-      channel_2: Channel 2. Must be between 1 and self._num_channels. Default 8.
+      front_channel: Channel 1. Must be between 1 and self._num_channels - 1. Default 7.
     """
 
     # Get center of source plate. Also gripping height and plate width.
@@ -3111,7 +3211,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     grip_width = resource.get_absolute_size_y()  # grip width is y size of resource
 
     if self.core_parked:
-      await self.get_core(p1=channel_1, p2=channel_2)
+      await self.pick_up_core_gripper_tools(front_channel=front_channel)
 
     await self.core_get_plate(
       x_position=round(center.x * 10),
@@ -3213,8 +3313,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     pickup: ResourcePickup,
     use_arm: Literal["iswap", "core"] = "iswap",
-    channel_1: int = 7,
-    channel_2: int = 8,
+    core_front_channel: int = 7,
     iswap_grip_strength: int = 4,
     core_grip_strength: int = 15,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
@@ -3228,6 +3327,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
     iswap_fold_up_sequence_at_the_end_of_process: bool = False,
+    # deprecated
+    channel_1: Optional[int] = None,
+    channel_2: Optional[int] = None,
   ):
     if use_arm == "iswap":
       assert (
@@ -3313,14 +3415,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if use_unsafe_hotel:
         raise ValueError("Cannot use iswap hotel mode with core grippers")
 
+      if channel_1 is not None or channel_2 is not None:
+        warnings.warn(
+          "The channel_1 and channel_2 parameters are deprecated and will be removed in future versions. "
+          "Please use the core_front_channel parameter instead.",
+          DeprecationWarning,
+        )
+        assert (
+          channel_1 is not None and channel_2 is not None
+        ), "Both channel_1 and channel_2 must be provided"
+        assert channel_1 + 1 == channel_2, "channel_2 must be channel_1 + 1"
+        core_front_channel = (
+          channel_2 - 1
+        )  # core_front_channel is the first channel of the gripper tool
+
       await self.core_pick_up_resource(
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
         offset=pickup.offset,
         minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         minimum_z_position_at_the_command_end=self._iswap_traversal_height,
-        channel_1=channel_1,
-        channel_2=channel_2,
+        front_channel=core_front_channel,
         grip_strength=core_grip_strength,
       )
     else:
@@ -3549,7 +3664,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Check existence of resource with CoRe gripper tool
     a "Get plate using CO-RE gripper" + error handling
     Which channels are used for resource check is dependent on which channels have been used for
-    `STARBackend.get_core(p1: int, p2: int)` which is a prerequisite for this check function.
+    `STARBackend.get_core(p1: int, p2: int)` (channel indices are 0-based) which is a prerequisite
+    for this check function.
 
     Args:
       location: Location to check for resource
@@ -4880,7 +4996,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
-      read_timeout=max(120, self.read_timeout),
+      read_timeout=max(300, self.read_timeout),
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
       xp=[f"{xp:05}" for xp in x_positions],
@@ -5114,7 +5230,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
-      read_timeout=max(120, self.read_timeout),
+      read_timeout=max(300, self.read_timeout),
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],
@@ -5161,41 +5277,65 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
-  @need_iswap_parked
+  def _get_core_front_back(self):
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    back_channel_y_center = int(
+      (
+        core_grippers.get_location_wrt(self.deck).y
+        + core_grippers.back_channel_y_center
+        + self.core_adjustment.y
+      )
+      * 10
+    )
+    front_channel_y_center = int(
+      (
+        core_grippers.get_location_wrt(self.deck).y
+        + core_grippers.front_channel_y_center
+        + self.core_adjustment.y
+      )
+      * 10
+    )
+    assert (
+      back_channel_y_center > front_channel_y_center
+    ), "back_channel_y_center must be greater than front_channel_y_center"
+    assert front_channel_y_center > 60, "front_channel_y_center must be less than 6mm (60 [0.1mm])"
+    return back_channel_y_center, front_channel_y_center
+
+  def _get_core_x(self) -> int:
+    """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
+    core_grippers = self.deck.get_resource("core_grippers")
+    assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
+    return round((core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10)
+
   async def get_core(self, p1: int, p2: int):
+    warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
+    assert p1 + 1 == p2, "p2 must be p1 + 1"
+    return await self.pick_up_core_gripper_tools(front_channel=p2 - 1)  # p1 here is 1-indexed
+
+  @need_iswap_parked
+  async def pick_up_core_gripper_tools(self, front_channel: int):
     """Get CoRe gripper tool from wasteblock mount."""
 
-    if not 0 <= p1 < self.num_channels:
-      raise ValueError(f"channel_1 must be between 0 and {self.num_channels - 1}")
-    if not 1 <= p2 <= self.num_channels:
-      raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
+    if not 0 < front_channel < self.num_channels:
+      raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
+    back_channel = front_channel - 1
 
-    # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
-    # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
-    # a resource on the robot deck and use deck.get_resource().get_location_wrt(self.deck).
-    deck_size = self.deck.get_absolute_size_x()
-    if deck_size == STARLET_SIZE_X:
-      xs = 7975  # 1360-797.5 = 562.5 (distance to right edge of deck)
-    elif deck_size == STAR_SIZE_X:
-      xs = 13375  # 1900-1337.5 = 562.5 (distance to right edge of deck)
-    else:
-      raise ValueError(f"Deck size {deck_size} not supported")
+    xs = self._get_core_x()
 
-    channel_x_coord = round(xs + self.core_adjustment.x * 10)
-    back_channel_y_center = round(1250 + self.core_adjustment.y * 10)
-    front_channel_y_center = round(1070 + self.core_adjustment.y * 10)
+    back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     begin_z_coord = round(2350 + self.core_adjustment.z * 10)
     end_z_coord = round(2250 + self.core_adjustment.z * 10)
 
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=f"{channel_x_coord:05}",
+      xs=f"{xs:05}",
       xd="0",
       ya=f"{back_channel_y_center:04}",
       yb=f"{front_channel_y_center:04}",
-      pa=f"{p1:02}",
-      pb=f"{p2:02}",
+      pa=f"{back_channel+1:02}",  # star is 1-indexed
+      pb=f"{front_channel+1:02}",  # star is 1-indexed
       tp=f"{begin_z_coord:04}",
       tz=f"{end_z_coord:04}",
       th=round(self._iswap_traversal_height * 10),
@@ -5204,8 +5344,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._core_parked = False
     return command_output
 
-  @need_iswap_parked
   async def put_core(self):
+    warnings.warn("Deprecated. Use return_core_gripper_tools instead.", DeprecationWarning)
+    return await self.return_core_gripper_tools()
+
+  @need_iswap_parked
+  async def return_core_gripper_tools(self):
     """Put CoRe gripper tool at wasteblock mount."""
 
     assert self.deck is not None, "must have deck defined to access CoRe grippers"
@@ -5219,8 +5363,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"Deck size {deck_size} not supported")
 
     channel_x_coord = round(xs + self.core_adjustment.x * 10)
-    back_channel_y_center = round(1240 + self.core_adjustment.y * 10)
-    front_channel_y_center = round(1065 + self.core_adjustment.y * 10)
+    back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     begin_z_coord = round(2150 + self.core_adjustment.z * 10)
     end_z_coord = round(2050 + self.core_adjustment.z * 10)
 
@@ -5339,7 +5482,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     if return_tool:
-      await self.put_core()
+      await self.return_core_gripper_tools()
 
     return command_output
 

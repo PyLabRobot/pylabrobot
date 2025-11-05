@@ -172,8 +172,6 @@ class Cytation5Backend(ImageReaderBackend):
     await self.io.set_flowctrl(SIO_RTS_CTS_HS)
     await self.io.set_rts(True)
 
-    await self._abort()
-
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
       self._version = await self.get_firmware_version()
@@ -929,8 +927,8 @@ class Cytation5Backend(ImageReaderBackend):
     await self._shaking_started.wait()
 
   async def stop_shaking(self) -> None:
-    await self._abort()
     if self._shaking:
+      await self._abort()
       self._shaking = False
     if self._shaking_task is not None:
       self._shaking_task.cancel()

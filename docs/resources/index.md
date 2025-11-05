@@ -187,4 +187,5 @@ library/revvity
 library/sergi
 library/thermo_fisher
 library/vwr
+library/diy/index
 ```
