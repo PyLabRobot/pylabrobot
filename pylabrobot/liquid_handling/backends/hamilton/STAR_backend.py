@@ -4301,6 +4301,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # TODO: parse res
     return await self.send_command(module="C0", command="RI")
 
+  async def request_device_serial_number(self) -> str:
+    """Request device serial number"""
+    return (await self.send_command("C0", "RI", fmt="si####sn&&&&sn&&&&"))["sn"]  # type: ignore
+
   async def request_download_date(self):
     """Request download date"""
 
