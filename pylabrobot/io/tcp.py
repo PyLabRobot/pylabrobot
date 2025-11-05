@@ -73,7 +73,7 @@ class TCP(IOBase):
 
     # Connection state tracking
     self._connection_state = "disconnected"
-    self._last_error = None
+    self._last_error: Optional[Exception] = None
     self._reconnect_attempts = 0
 
 
@@ -102,7 +102,7 @@ class TCP(IOBase):
         if self.socket is not None:
           try:
             self.socket.close()
-          except:
+          except Exception:
             pass
           self.socket = None
 
@@ -172,7 +172,7 @@ class TCP(IOBase):
       self._last_error = e
       raise
 
-  async def read(self, num_bytes: int = None, timeout: Optional[int] = None) -> bytes:
+  async def read(self, num_bytes: Optional[int] = None, timeout: Optional[int] = None) -> bytes:
     """Read data from the TCP server.
 
     Args:
@@ -191,6 +191,8 @@ class TCP(IOBase):
 
     def read_or_timeout():
       # Set socket timeout
+      if self.socket is None:
+        raise RuntimeError("Socket not initialized")
       self.socket.settimeout(timeout)
 
       try:
@@ -216,7 +218,8 @@ class TCP(IOBase):
         raise TimeoutError("Timeout while reading.")
       finally:
         # Reset socket to blocking mode
-        self.socket.settimeout(None)
+        if self.socket is not None:
+          self.socket.settimeout(None)
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self.socket is None:
@@ -225,7 +228,7 @@ class TCP(IOBase):
     try:
       data = await loop.run_in_executor(self._executor, read_or_timeout)
       self._connection_state = "connected"
-      return data
+      return data  # type: ignore[no-any-return]
     except (ConnectionError, socket.error) as e:
       self._connection_state = "disconnected"
       self._last_error = e
@@ -425,7 +428,7 @@ class TCPValidator(TCP):
       align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  async def read(self, timeout: Optional[int] = None) -> bytes:
+  async def read(self, num_bytes: Optional[int] = None, timeout: Optional[int] = None) -> bytes:
     """Validate read command and return captured data."""
     next_command = TCPCommand(**self.cr.next_command())
     if not (

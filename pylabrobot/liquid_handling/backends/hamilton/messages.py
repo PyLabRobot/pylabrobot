@@ -34,13 +34,11 @@ Example:
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from pylabrobot.liquid_handling.backends.hamilton.packets import (
     Address,
-    ConnectionPacket,
     HarpPacket,
     HoiPacket,
     IpPacket,
@@ -92,7 +90,7 @@ class HoiParams:
                     .u8(type_id)
                     .u8(0)  # flags (always 0)
                     .u16(len(data))
-                    .bytes(data)
+                    .raw_bytes(data)
                     .finish())
         self._fragments.append(fragment)
         return self
@@ -155,7 +153,7 @@ class HoiParams:
         data = Wire.write().string(value).finish()
         return self._add_fragment(HamiltonDataType.STRING, data)
 
-    def bool(self, value: bool) -> 'HoiParams':
+    def bool_value(self, value: bool) -> 'HoiParams':
         """Add boolean parameter."""
         data = Wire.write().u8(1 if value else 0).finish()
         return self._add_fragment(HamiltonDataType.BOOL, data)
@@ -285,7 +283,7 @@ class HoiParamsParser:
         # Parse DataFragment header
         reader = Wire.read(self._data[self._offset:])
         type_id = reader.u8()
-        flags = reader.u8()
+        _flags = reader.u8()  # Read but unused
         length = reader.u16()
 
         data_start = self._offset + 4
@@ -323,8 +321,13 @@ class HoiParamsParser:
         }
 
         # Check scalar types first
-        if type_id in scalar_parsers:
-            return scalar_parsers[type_id]()
+        # Cast int to HamiltonDataType enum for dict lookup
+        try:
+            data_type = HamiltonDataType(type_id)
+            if data_type in scalar_parsers:
+                return scalar_parsers[data_type]()
+        except ValueError:
+            pass  # Not a valid enum value, continue to other checks
 
         # Special case: bool
         if type_id == HamiltonDataType.BOOL:
@@ -346,9 +349,14 @@ class HoiParamsParser:
         }
 
         # Handle arrays
-        if type_id in array_element_parsers:
-            count = reader.u32()
-            return [array_element_parsers[type_id]() for _ in range(count)]
+        # Cast int to HamiltonDataType enum for dict lookup
+        try:
+            data_type = HamiltonDataType(type_id)
+            if data_type in array_element_parsers:
+                count = reader.u32()
+                return [array_element_parsers[data_type]() for _ in range(count)]
+        except ValueError:
+            pass  # Not a valid enum value, continue to other checks
 
         # Special case: bool array
         if type_id == HamiltonDataType.BOOL_ARRAY:
@@ -476,7 +484,7 @@ class CommandMessage:
 
     def add_bool(self, value: bool) -> 'CommandMessage':
         """Add boolean parameter."""
-        self.params.bool(value)
+        self.params.bool_value(value)
         return self
 
     def add_i32_array(self, values: list[int]) -> 'CommandMessage':
@@ -608,7 +616,7 @@ class RegistrationMessage:
         # Registration option format: [option_id:1][length:1][data...]
         # For HARP_PROTOCOL_REQUEST (option 5): data is [protocol:1][request_id:1]
         data = Wire.write().u8(protocol).u8(request_id).finish()
-        option = Wire.write().u8(option_type).u8(len(data)).bytes(data).finish()
+        option = Wire.write().u8(option_type).u8(len(data)).raw_bytes(data).finish()
         self.options.extend(option)
         return self
 
@@ -735,7 +743,7 @@ class InitMessage:
                 .u8(self.ip_protocol)
                 .u8(self.protocol_version)
                 .u16(0)  # options_length
-                .bytes(params)
+                .raw_bytes(params)
                 .finish())
 
 
@@ -769,27 +777,27 @@ class InitResponse:
         parser = Wire.read(data[6:])
 
         # Parse frame
-        version = parser.u8()
-        message_id = parser.u8()
-        count = parser.u8()
-        unknown = parser.u8()
+        _version = parser.u8()  # Read but unused
+        _message_id = parser.u8()  # Read but unused
+        _count = parser.u8()  # Read but unused
+        _unknown = parser.u8()  # Read but unused
 
         # Parse parameter 1 (client_id)
-        param1_id = parser.u8()
-        param1_type = parser.u8()
-        param1_reserved = parser.u16()
+        _param1_id = parser.u8()  # Read but unused
+        _param1_type = parser.u8()  # Read but unused
+        _param1_reserved = parser.u16()  # Read but unused
         client_id = parser.u16()
 
         # Parse parameter 2 (connection_type)
-        param2_id = parser.u8()
-        param2_type = parser.u8()
-        param2_reserved = parser.u16()
+        _param2_id = parser.u8()  # Read but unused
+        _param2_type = parser.u8()  # Read but unused
+        _param2_reserved = parser.u16()  # Read but unused
         connection_type = parser.u16()
 
         # Parse parameter 4 (timeout)
-        param4_id = parser.u8()
-        param4_type = parser.u8()
-        param4_reserved = parser.u16()
+        _param4_id = parser.u8()  # Read but unused
+        _param4_type = parser.u8()  # Read but unused
+        _param4_reserved = parser.u16()  # Read but unused
         timeout = parser.u16()
 
         return cls(

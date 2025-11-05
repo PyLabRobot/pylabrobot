@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import struct
 from io import BytesIO
-from typing import Optional
 
 
 class Writer:
@@ -56,7 +55,7 @@ class Writer:
     def u64(self, value: int) -> 'Writer':
         """Write unsigned 64-bit integer (little-endian)."""
         if not 0 <= value <= 18446744073709551615:
-            raise ValueError(f"u64 value out of range")
+            raise ValueError("u64 value out of range")
         self._buffer.write(struct.pack('<Q', value))
         return self
 
@@ -77,14 +76,14 @@ class Writer:
     def i32(self, value: int) -> 'Writer':
         """Write signed 32-bit integer (little-endian)."""
         if not -2147483648 <= value <= 2147483647:
-            raise ValueError(f"i32 value out of range")
+            raise ValueError("i32 value out of range")
         self._buffer.write(struct.pack('<i', value))
         return self
 
     def i64(self, value: int) -> 'Writer':
         """Write signed 64-bit integer (little-endian)."""
         if not -9223372036854775808 <= value <= 9223372036854775807:
-            raise ValueError(f"i64 value out of range")
+            raise ValueError("i64 value out of range")
         self._buffer.write(struct.pack('<q', value))
         return self
 
@@ -104,7 +103,7 @@ class Writer:
         self._buffer.write(b'\x00')
         return self
 
-    def bytes(self, value: bytes) -> 'Writer':
+    def raw_bytes(self, value: bytes) -> 'Writer':
         """Write raw bytes."""
         self._buffer.write(value)
         return self
@@ -146,7 +145,7 @@ class Reader:
         """Read unsigned 8-bit integer."""
         if self._offset + 1 > len(self._data):
             raise ValueError(f"Not enough data for u8 at offset {self._offset}")
-        value = struct.unpack('<B', self._data[self._offset:self._offset+1])[0]
+        value: int = struct.unpack('<B', self._data[self._offset:self._offset+1])[0]  # type: ignore[assignment]
         self._offset += 1
         return value
 
@@ -154,7 +153,7 @@ class Reader:
         """Read unsigned 16-bit integer (little-endian)."""
         if self._offset + 2 > len(self._data):
             raise ValueError(f"Not enough data for u16 at offset {self._offset}")
-        value = struct.unpack('<H', self._data[self._offset:self._offset+2])[0]
+        value: int = struct.unpack('<H', self._data[self._offset:self._offset+2])[0]  # type: ignore[assignment]
         self._offset += 2
         return value
 
@@ -162,7 +161,7 @@ class Reader:
         """Read unsigned 32-bit integer (little-endian)."""
         if self._offset + 4 > len(self._data):
             raise ValueError(f"Not enough data for u32 at offset {self._offset}")
-        value = struct.unpack('<I', self._data[self._offset:self._offset+4])[0]
+        value: int = struct.unpack('<I', self._data[self._offset:self._offset+4])[0]  # type: ignore[assignment]
         self._offset += 4
         return value
 
@@ -170,7 +169,7 @@ class Reader:
         """Read unsigned 64-bit integer (little-endian)."""
         if self._offset + 8 > len(self._data):
             raise ValueError(f"Not enough data for u64 at offset {self._offset}")
-        value = struct.unpack('<Q', self._data[self._offset:self._offset+8])[0]
+        value: int = struct.unpack('<Q', self._data[self._offset:self._offset+8])[0]  # type: ignore[assignment]
         self._offset += 8
         return value
 
@@ -178,7 +177,7 @@ class Reader:
         """Read signed 8-bit integer."""
         if self._offset + 1 > len(self._data):
             raise ValueError(f"Not enough data for i8 at offset {self._offset}")
-        value = struct.unpack('<b', self._data[self._offset:self._offset+1])[0]
+        value: int = struct.unpack('<b', self._data[self._offset:self._offset+1])[0]  # type: ignore[assignment]
         self._offset += 1
         return value
 
@@ -186,7 +185,7 @@ class Reader:
         """Read signed 16-bit integer (little-endian)."""
         if self._offset + 2 > len(self._data):
             raise ValueError(f"Not enough data for i16 at offset {self._offset}")
-        value = struct.unpack('<h', self._data[self._offset:self._offset+2])[0]
+        value: int = struct.unpack('<h', self._data[self._offset:self._offset+2])[0]  # type: ignore[assignment]
         self._offset += 2
         return value
 
@@ -194,7 +193,7 @@ class Reader:
         """Read signed 32-bit integer (little-endian)."""
         if self._offset + 4 > len(self._data):
             raise ValueError(f"Not enough data for i32 at offset {self._offset}")
-        value = struct.unpack('<i', self._data[self._offset:self._offset+4])[0]
+        value: int = struct.unpack('<i', self._data[self._offset:self._offset+4])[0]  # type: ignore[assignment]
         self._offset += 4
         return value
 
@@ -202,7 +201,7 @@ class Reader:
         """Read signed 64-bit integer (little-endian)."""
         if self._offset + 8 > len(self._data):
             raise ValueError(f"Not enough data for i64 at offset {self._offset}")
-        value = struct.unpack('<q', self._data[self._offset:self._offset+8])[0]
+        value: int = struct.unpack('<q', self._data[self._offset:self._offset+8])[0]  # type: ignore[assignment]
         self._offset += 8
         return value
 
@@ -210,7 +209,7 @@ class Reader:
         """Read 32-bit float (little-endian)."""
         if self._offset + 4 > len(self._data):
             raise ValueError(f"Not enough data for f32 at offset {self._offset}")
-        value = struct.unpack('<f', self._data[self._offset:self._offset+4])[0]
+        value: float = struct.unpack('<f', self._data[self._offset:self._offset+4])[0]  # type: ignore[assignment]
         self._offset += 4
         return value
 
@@ -218,7 +217,7 @@ class Reader:
         """Read 64-bit double (little-endian)."""
         if self._offset + 8 > len(self._data):
             raise ValueError(f"Not enough data for f64 at offset {self._offset}")
-        value = struct.unpack('<d', self._data[self._offset:self._offset+8])[0]
+        value: float = struct.unpack('<d', self._data[self._offset:self._offset+8])[0]  # type: ignore[assignment]
         self._offset += 8
         return value
 
@@ -235,7 +234,7 @@ class Reader:
 
         return string_bytes.decode('utf-8')
 
-    def bytes(self, n: int) -> bytes:
+    def raw_bytes(self, n: int) -> bytes:
         """Read n raw bytes."""
         if self._offset + n > len(self._data):
             raise ValueError(f"Not enough data for {n} bytes at offset {self._offset}")

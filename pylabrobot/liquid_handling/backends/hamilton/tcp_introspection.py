@@ -8,7 +8,7 @@ objects, methods, interfaces, enums, and structs at runtime.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.protocol import HamiltonProtocol, HamiltonDataType
@@ -51,6 +51,131 @@ def resolve_type_ids(type_ids: List[int]) -> List[str]:
 
 
 # ============================================================================
+# INTROSPECTION TYPE MAPPING
+# ============================================================================
+# Introspection type IDs are separate from HamiltonDataType wire encoding types.
+# These are used for method signature display/metadata, not binary encoding.
+
+# Type ID ranges for categorization:
+# - Argument types: Method parameters (input)
+# - ReturnElement types: Multiple return values (struct fields)
+# - ReturnValue types: Single return value
+
+_INTROSPECTION_TYPE_NAMES: dict[int, str] = {
+    # Argument types (1-8, 33, 41, 45, 49, 53, 61, 66, 82, 102)
+    1: "i8",
+    2: "u8",
+    3: "i16",
+    4: "u16",
+    5: "i32",
+    6: "u32",
+    7: "str",
+    8: "bytes",
+    33: "bool",
+    41: "List[i16]",
+    45: "List[u16]",
+    49: "List[i32]",
+    53: "List[u32]",
+    61: "List[struct]",  # Complex type, needs source_id + struct_id
+    66: "List[bool]",
+    82: "List[enum]",  # Complex type, needs source_id + enum_id
+    102: "f32",
+
+    # ReturnElement types (18-24, 35, 43, 47, 51, 55, 68, 76)
+    18: "u8",
+    19: "i16",
+    20: "u16",
+    21: "i32",
+    22: "u32",
+    23: "str",
+    24: "bytes",
+    35: "bool",
+    43: "List[i16]",
+    47: "List[u16]",
+    51: "List[i32]",
+    55: "List[u32]",
+    68: "List[bool]",
+    76: "List[str]",
+
+    # ReturnValue types (25-32, 36, 44, 48, 52, 56, 69, 81, 85, 104, 105)
+    25: "i8",
+    26: "u8",
+    27: "i16",
+    28: "u16",
+    29: "i32",
+    30: "u32",
+    31: "str",
+    32: "bytes",
+    36: "bool",
+    44: "List[i16]",
+    48: "List[u16]",
+    52: "List[i32]",
+    56: "List[u32]",
+    69: "List[bool]",
+    81: "enum",  # Complex type, needs source_id + enum_id
+    85: "enum",  # Complex type, needs source_id + enum_id
+    104: "f32",
+    105: "f32",
+
+    # Complex types (60, 64, 78) - these need source_id + id
+    60: "struct",  # ReturnValue, needs source_id + struct_id
+    64: "struct",  # ReturnValue, needs source_id + struct_id
+    78: "enum",    # Argument, needs source_id + enum_id
+}
+
+# Type ID sets for categorization
+_ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 61, 66, 82, 102}
+_RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 68, 76}
+_RETURN_VALUE_TYPE_IDS = {25, 26, 27, 28, 29, 30, 31, 32, 36, 44, 48, 52, 56, 69, 81, 85, 104, 105}
+_COMPLEX_TYPE_IDS = {60, 61, 64, 78, 81, 82, 85}  # Types that need additional bytes
+
+
+def get_introspection_type_category(type_id: int) -> str:
+    """Get category for introspection type ID.
+
+    Args:
+        type_id: Introspection type ID
+
+    Returns:
+        Category: "Argument", "ReturnElement", "ReturnValue", or "Unknown"
+    """
+    if type_id in _ARGUMENT_TYPE_IDS:
+        return "Argument"
+    elif type_id in _RETURN_ELEMENT_TYPE_IDS:
+        return "ReturnElement"
+    elif type_id in _RETURN_VALUE_TYPE_IDS:
+        return "ReturnValue"
+    else:
+        return "Unknown"
+
+
+def resolve_introspection_type_name(type_id: int) -> str:
+    """Resolve introspection type ID to readable name.
+
+    Args:
+        type_id: Introspection type ID
+
+    Returns:
+        Human-readable type name
+    """
+    return _INTROSPECTION_TYPE_NAMES.get(type_id, f"UNKNOWN_TYPE_{type_id}")
+
+
+def is_complex_introspection_type(type_id: int) -> bool:
+    """Check if introspection type is complex (needs additional bytes).
+
+    Complex types require 3 bytes total: type_id, source_id, struct_id/enum_id
+
+    Args:
+        type_id: Introspection type ID
+
+    Returns:
+        True if type is complex
+    """
+    return type_id in _COMPLEX_TYPE_IDS
+
+
+# ============================================================================
 # DATA STRUCTURES
 # ============================================================================
 
@@ -71,13 +196,84 @@ class MethodInfo:
     call_type: int
     method_id: int
     name: str
-    parameter_name: Optional[str] = None  # Parameter name (string)
-    return_name: Optional[str] = None     # Return name (string)
+    parameter_name: Optional[str] = None  # Raw parameter types string (backwards compatibility)
+    return_name: Optional[str] = None     # Raw return types string (backwards compatibility)
+    parameter_types: list[int] = field(default_factory=list)  # Decoded parameter type IDs
+    parameter_labels: list[str] = field(default_factory=list)  # Parameter names (if available)
+    return_types: list[int] = field(default_factory=list)      # Decoded return type IDs
+    return_labels: list[str] = field(default_factory=list)      # Return names (if available)
+
+    def __post_init__(self):
+        """Initialize parameter_types and return_types if not provided."""
+        # If parameter_types is empty but parameter_name exists, decode from string
+        # (parameter_name is the raw type IDs string from Hamilton)
+        if not self.parameter_types and self.parameter_name:
+            # Decode bytes to type IDs (like piglet does: .as_bytes().to_vec())
+            self.parameter_types = [ord(c) for c in self.parameter_name]
+            
+            # Categorize and split into parameters vs returns
+            # This is a fallback for backwards compatibility
+            all_type_ids = self.parameter_types.copy()
+            parameter_types: list[int] = []
+            return_types: list[int] = []
+            
+            for type_id in all_type_ids:
+                category = get_introspection_type_category(type_id)
+                if category == "Argument":
+                    parameter_types.append(type_id)
+                elif category in ("ReturnElement", "ReturnValue"):
+                    return_types.append(type_id)
+                else:
+                    # Unknown types default to parameters
+                    parameter_types.append(type_id)
+            
+            self.parameter_types = parameter_types
+            if not self.return_types:
+                self.return_types = return_types
 
     def get_signature_string(self) -> str:
         """Get method signature as a readable string."""
-        param_str = self.parameter_name if self.parameter_name else "void"
-        return_str = self.return_name if self.return_name else "void"
+        # Decode parameter types to readable names
+        if self.parameter_types:
+            param_type_names = [resolve_introspection_type_name(tid) for tid in self.parameter_types]
+
+            # If we have labels, use them; otherwise just show types
+            if self.parameter_labels and len(self.parameter_labels) == len(param_type_names):
+                # Format as "param1: type1, param2: type2"
+                params = [f"{label}: {type_name}" for label, type_name in zip(self.parameter_labels, param_type_names)]
+                param_str = ", ".join(params)
+            else:
+                # Just show types
+                param_str = ", ".join(param_type_names)
+        else:
+            param_str = "void"
+
+        # Decode return types to readable names
+        if self.return_types:
+            return_type_names = [resolve_introspection_type_name(tid) for tid in self.return_types]
+            return_categories = [get_introspection_type_category(tid) for tid in self.return_types]
+
+            # Format return based on category
+            if any(cat == "ReturnElement" for cat in return_categories):
+                # Multiple return values → struct format
+                if self.return_labels and len(self.return_labels) == len(return_type_names):
+                    # Format as "{ label1: type1, label2: type2 }"
+                    returns = [f"{label}: {type_name}" for label, type_name in zip(self.return_labels, return_type_names)]
+                    return_str = f"{{ {', '.join(returns)} }}"
+                else:
+                    # Just show types
+                    return_str = f"{{ {', '.join(return_type_names)} }}"
+            elif len(return_type_names) == 1:
+                # Single return value
+                if self.return_labels and len(self.return_labels) == 1:
+                    return_str = f"{self.return_labels[0]}: {return_type_names[0]}"
+                else:
+                    return_str = return_type_names[0]
+            else:
+                return_str = "void"
+        else:
+            return_str = "void"
+
         return f"{self.name}({param_str}) -> {return_str}"
 
 
@@ -184,25 +380,65 @@ class GetMethodCommand(HamiltonCommand):
         _, method_id = parser.parse_next()
         _, name = parser.parse_next()
 
-        # The remaining fragments are STRINGs, not u8_arrays
-        # First STRING after method name is parameter name (if any)
-        # Second STRING is return name (if any)
-        parameter_name = None
-        return_name = None
+        # The remaining fragments are STRING types containing type IDs as bytes
+        # Hamilton sends ONE combined list where type IDs encode category (Argument/ReturnElement/ReturnValue)
+        # First STRING after method name is parameter_types (each byte is a type ID - can be Argument or Return)
+        # Second STRING (if present) is parameter_labels (comma-separated names - includes both params and returns)
+        parameter_types_str = None
+        parameter_labels_str = None
 
         if parser.has_remaining():
-            _, parameter_name = parser.parse_next()
+            _, parameter_types_str = parser.parse_next()
 
         if parser.has_remaining():
-            _, return_name = parser.parse_next()
+            _, parameter_labels_str = parser.parse_next()
+
+        # Decode string bytes to type IDs (like piglet does: .as_bytes().to_vec())
+        all_type_ids: list[int] = []
+        if parameter_types_str:
+            all_type_ids = [ord(c) for c in parameter_types_str]
+
+        # Parse all labels (comma-separated - includes both parameters and returns)
+        all_labels: list[str] = []
+        if parameter_labels_str:
+            all_labels = [label.strip() for label in parameter_labels_str.split(',') if label.strip()]
+
+        # Categorize by type ID ranges (like piglet does)
+        # Split into arguments vs returns based on type ID category
+        parameter_types: list[int] = []
+        parameter_labels: list[str] = []
+        return_types: list[int] = []
+        return_labels: list[str] = []
+
+        for i, type_id in enumerate(all_type_ids):
+            category = get_introspection_type_category(type_id)
+            label = all_labels[i] if i < len(all_labels) else None
+
+            if category == "Argument":
+                parameter_types.append(type_id)
+                if label:
+                    parameter_labels.append(label)
+            elif category in ("ReturnElement", "ReturnValue"):
+                return_types.append(type_id)
+                if label:
+                    return_labels.append(label)
+            # Unknown types - could be parameters or returns, default to parameters
+            else:
+                parameter_types.append(type_id)
+                if label:
+                    parameter_labels.append(label)
 
         return {
             'interface_id': interface_id,
             'call_type': call_type,
             'method_id': method_id,
             'name': name,
-            'parameter_name': parameter_name,  # String name, not type ID
-            'return_name': return_name,       # String name, not type ID
+            'parameter_name': parameter_types_str,  # Keep for backwards compatibility
+            'return_name': parameter_labels_str,      # Keep for backwards compatibility (all labels)
+            'parameter_types': parameter_types,      # Decoded type IDs (Argument category only)
+            'parameter_labels': parameter_labels,    # Parameter names only
+            'return_types': return_types,           # Decoded type IDs (ReturnElement/ReturnValue only)
+            'return_labels': return_labels,          # Return names only
         }
 
 
@@ -421,7 +657,11 @@ class HamiltonIntrospection:
             method_id=response['method_id'],
             name=response['name'],
             parameter_name=response.get('parameter_name'),
-            return_name=response.get('return_name')
+            return_name=response.get('return_name'),
+            parameter_types=response.get('parameter_types', []),
+            parameter_labels=response.get('parameter_labels', []),
+            return_types=response.get('return_types', []),
+            return_labels=response.get('return_labels', [])
         )
 
     async def get_subobject_address(self, address: Address, subobject_index: int) -> Address:
@@ -437,7 +677,9 @@ class HamiltonIntrospection:
         command = GetSubobjectAddressCommand(address, subobject_index)
         response = await self.backend.send_command(command)
 
-        return response['address']
+        # Type: ignore needed because response dict is typed as dict[str, Any]
+        # but we know 'address' key contains Address object
+        return response['address']  # type: ignore[no-any-return, return-value]
 
     async def get_interfaces(self, address: Address) -> List[InterfaceInfo]:
         """Get available interfaces.
@@ -540,7 +782,8 @@ class HamiltonIntrospection:
         try:
             # Get root object info
             root_info = await self.get_object(root_address)
-            hierarchy['info'] = root_info
+            # Type: ignore needed because hierarchy is Dict[str, Any] for flexibility
+            hierarchy['info'] = root_info  # type: ignore[assignment]
 
             # Discover subobjects
             subobjects = {}
@@ -551,15 +794,18 @@ class HamiltonIntrospection:
                 except Exception as e:
                     logger.warning(f"Failed to discover subobject {i}: {e}")
 
-            hierarchy['subobjects'] = subobjects
+            # Type: ignore needed because hierarchy is Dict[str, Any] for flexibility
+            hierarchy['subobjects'] = subobjects  # type: ignore[assignment]
 
             # Discover methods
             methods = await self.get_all_methods(root_address)
-            hierarchy['methods'] = methods
+            # Type: ignore needed because hierarchy is Dict[str, Any] for flexibility
+            hierarchy['methods'] = methods  # type: ignore[assignment]
 
         except Exception as e:
             logger.error(f"Failed to discover hierarchy for {root_address}: {e}")
-            hierarchy['error'] = str(e)
+            # Type: ignore needed because hierarchy is Dict[str, Any] for flexibility
+            hierarchy['error'] = str(e)  # type: ignore[assignment]
 
         return hierarchy
 

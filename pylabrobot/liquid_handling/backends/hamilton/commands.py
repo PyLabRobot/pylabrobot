@@ -10,7 +10,7 @@ from typing import Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.protocol import HamiltonProtocol
 from pylabrobot.liquid_handling.backends.hamilton.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.messages import CommandMessage, CommandResponse, HoiParams, HoiParamsParser
+from pylabrobot.liquid_handling.backends.hamilton.messages import CommandMessage, CommandResponse, HoiParams, SuccessResponse
 
 
 class HamiltonCommand:
@@ -43,9 +43,9 @@ class HamiltonCommand:
     """
 
     # Class-level attributes that subclasses must override
-    protocol: HamiltonProtocol = None
-    interface_id: int = None
-    command_id: int = None
+    protocol: Optional[HamiltonProtocol] = None
+    interface_id: Optional[int] = None
+    command_id: Optional[int] = None
 
     # Action configuration (can be overridden by subclasses)
     action_code: int = 3  # Default: COMMAND_REQUEST
@@ -98,6 +98,12 @@ class HamiltonCommand:
 
         if source is None:
             raise ValueError("Source address not set - backend should set this before building")
+
+        # Ensure required attributes are set (they should be by subclasses)
+        if self.interface_id is None:
+            raise ValueError(f"{self.__class__.__name__} must define interface_id")
+        if self.command_id is None:
+            raise ValueError(f"{self.__class__.__name__} must define command_id")
 
         # Build parameters using command-specific logic
         params = self.build_parameters()

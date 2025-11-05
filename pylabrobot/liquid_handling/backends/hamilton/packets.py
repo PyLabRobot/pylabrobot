@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from typing import Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
 
@@ -71,15 +70,15 @@ class IpPacket:
                 .u8(self.protocol)
                 .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
                 .u16(len(self.options))
-                .bytes(self.options)
-                .bytes(self.payload)
+                .raw_bytes(self.options)
+                .raw_bytes(self.payload)
                 .finish())
 
     @classmethod
     def unpack(cls, data: bytes) -> 'IpPacket':
         """Deserialize IP packet."""
         r = Wire.read(data)
-        size = r.u16()
+        _size = r.u16()  # Read but unused
         protocol = r.u8()
         major, minor = r.version_byte()
 
@@ -89,7 +88,7 @@ class IpPacket:
             pass
 
         opts_len = r.u16()
-        options = r.bytes(opts_len) if opts_len > 0 else b''
+        options = r.raw_bytes(opts_len) if opts_len > 0 else b''
         payload = r.remaining()
 
         return cls(protocol=protocol, payload=payload, options=options)
@@ -139,18 +138,18 @@ class HarpPacket:
         msg_len = 20 + len(self.options) + 1 + 1 + len(self.payload)
 
         return (Wire.write()
-                .bytes(self.src.pack())
-                .bytes(self.dst.pack())
+                .raw_bytes(self.src.pack())
+                .raw_bytes(self.dst.pack())
                 .u8(self.seq)
                 .u8(0)  # reserved
                 .u8(self.protocol)
                 .u8(self.action)  # Uses computed property
                 .u16(msg_len)
                 .u16(len(self.options))
-                .bytes(self.options)
+                .raw_bytes(self.options)
                 .u8(0)  # version byte - C# DLL uses 0, not 3.0
                 .u8(0)  # reserved2
-                .bytes(self.payload)
+                .raw_bytes(self.payload)
                 .finish())
 
     @classmethod
@@ -159,19 +158,19 @@ class HarpPacket:
         r = Wire.read(data)
 
         # Parse addresses
-        src = Address.unpack(r.bytes(6))
-        dst = Address.unpack(r.bytes(6))
+        src = Address.unpack(r.raw_bytes(6))
+        dst = Address.unpack(r.raw_bytes(6))
 
         seq = r.u8()
-        reserved = r.u8()
+        _reserved = r.u8()  # Read but unused
         protocol = r.u8()
         action_byte = r.u8()
-        msg_len = r.u16()
+        _msg_len = r.u16()  # Read but unused
         opts_len = r.u16()
 
-        options = r.bytes(opts_len) if opts_len > 0 else b''
-        version = r.u8()  # version byte (C# DLL uses 0)
-        reserved2 = r.u8()
+        options = r.raw_bytes(opts_len) if opts_len > 0 else b''
+        _version = r.u8()  # version byte (C# DLL uses 0) - Read but unused
+        _reserved2 = r.u8()  # Read but unused
         payload = r.remaining()
 
         # Decompose action byte into action_code and response_required flag
@@ -229,7 +228,7 @@ class HoiPacket:
                 .u16(self.action_id)
                 .u8(0)  # version byte - always 0 for HOI packets (not 0x30!)
                 .u8(num_fragments)
-                .bytes(self.params)
+                .raw_bytes(self.params)
                 .finish())
 
     @classmethod
@@ -241,7 +240,7 @@ class HoiPacket:
         action_byte = r.u8()
         action_id = r.u16()
         major, minor = r.version_byte()
-        num_fragments = r.u8()
+        _num_fragments = r.u8()  # Read but unused
         params = r.remaining()
 
         # Decompose action byte into action_code and response_required flag
@@ -309,10 +308,10 @@ class RegistrationPacket:
                 .u16(self.response_code)
                 .u8(0)  # version byte - DLL uses 0.0, not 3.0
                 .u8(0)  # reserved
-                .bytes(self.req_address.pack())
-                .bytes(self.res_address.pack())
+                .raw_bytes(self.req_address.pack())
+                .raw_bytes(self.res_address.pack())
                 .u16(len(self.options))
-                .bytes(self.options)
+                .raw_bytes(self.options)
                 .finish())
 
     @classmethod
@@ -322,12 +321,12 @@ class RegistrationPacket:
 
         action_code = r.u16()
         response_code = r.u16()
-        version = r.u8()  # version byte (DLL uses 0, not packed 3.0)
-        reserved = r.u8()
-        req_address = Address.unpack(r.bytes(6))
-        res_address = Address.unpack(r.bytes(6))
+        _version = r.u8()  # version byte (DLL uses 0, not packed 3.0) - Read but unused
+        _reserved = r.u8()  # Read but unused
+        req_address = Address.unpack(r.raw_bytes(6))
+        res_address = Address.unpack(r.raw_bytes(6))
         opts_len = r.u16()
-        options = r.bytes(opts_len) if opts_len > 0 else b''
+        options = r.raw_bytes(opts_len) if opts_len > 0 else b''
 
         return cls(
             action_code=action_code,
@@ -367,7 +366,7 @@ class ConnectionPacket:
                 .u8(7)  # INITIALIZATION protocol
                 .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
                 .u16(0)  # options_length
-                .bytes(self.params)
+                .raw_bytes(self.params)
                 .finish())
 
     @classmethod

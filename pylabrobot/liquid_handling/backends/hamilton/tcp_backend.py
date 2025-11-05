@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from pylabrobot.io.tcp import TCP
 from pylabrobot.liquid_handling.backends.hamilton.protocol import (
-    HamiltonProtocol,
     RegistrationActionCode,
     HoiRequestId,
     RegistrationOptionType,
@@ -27,6 +26,7 @@ from pylabrobot.liquid_handling.backends.hamilton.messages import (
     RegistrationMessage,
     RegistrationResponse,
     ResponseParser,
+    SuccessResponse,
 )
 from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
 
@@ -114,7 +114,7 @@ class TCPBackend(TCP):
         self._client_id: Optional[int] = None
         self.client_address: Optional[Address] = None
         self._sequence_numbers: Dict[Address, int] = {}
-        self._discovered_objects: Dict[str, Address] = {}
+        self._discovered_objects: Dict[str, list[Address]] = {}
 
         # Instrument-specific addresses (set by subclasses)
         self._instrument_addresses: Dict[str, Address] = {}
@@ -209,7 +209,7 @@ class TCPBackend(TCP):
         # Build Protocol 7 ConnectionPacket using new InitMessage
         packet = InitMessage(timeout=30).build()
 
-        logger.info(f"[INIT] Sending Protocol 7 initialization packet:")
+        logger.info("[INIT] Sending Protocol 7 initialization packet:")
         logger.info(f"[INIT]   Length: {len(packet)} bytes")
         logger.info(f"[INIT]   Hex: {packet.hex(' ')}")
 
@@ -225,7 +225,7 @@ class TCPBackend(TCP):
         payload_data = await self.read_exact(packet_size)
         response_bytes = size_data + payload_data
 
-        logger.info(f"[INIT] Received response:")
+        logger.info("[INIT] Received response:")
         logger.info(f"[INIT]   Length: {len(response_bytes)} bytes")
         logger.info(f"[INIT]   Hex: {response_bytes.hex(' ')}")
 
@@ -251,6 +251,10 @@ class TCPBackend(TCP):
             action_code=RegistrationActionCode.REGISTRATION_REQUEST
         )
 
+        # Ensure client is initialized
+        if self.client_address is None or self._client_id is None:
+            raise RuntimeError("Client not initialized - call _initialize_connection() first")
+
         # Build and send registration packet
         seq = self._allocate_sequence_number(registration_service)
         packet = reg_msg.build(
@@ -262,7 +266,7 @@ class TCPBackend(TCP):
             harp_response_required=False  # DLL uses 0x03 (no response flag)
         )
 
-        logger.info(f"[REGISTER] Sending registration packet:")
+        logger.info("[REGISTER] Sending registration packet:")
         logger.info(f"[REGISTER]   Length: {len(packet)} bytes, Seq: {seq}")
         logger.info(f"[REGISTER]   Hex: {packet.hex(' ')}")
         logger.info(f"[REGISTER]   Src: {self.client_address}, Dst: {registration_service}")
@@ -273,7 +277,7 @@ class TCPBackend(TCP):
         # Read response
         response = await self._read_one_message()
 
-        logger.info(f"[REGISTER] Received response:")
+        logger.info("[REGISTER] Received response:")
         logger.info(f"[REGISTER]   Length: {len(response.raw_bytes)} bytes")
         logger.debug(f"[REGISTER]   Hex: {response.raw_bytes.hex(' ')}")
 
@@ -296,6 +300,10 @@ class TCPBackend(TCP):
             request_id=HoiRequestId.ROOT_OBJECT_OBJECT_ID
         )
 
+        # Ensure client is initialized
+        if self.client_address is None or self._client_id is None:
+            raise RuntimeError("Client not initialized - call _initialize_connection() first")
+
         seq = self._allocate_sequence_number(registration_service)
         packet = root_msg.build(
             src=self.client_address,
@@ -306,7 +314,7 @@ class TCPBackend(TCP):
             harp_response_required=True  # Request with response
         )
 
-        logger.info(f"[DISCOVER_ROOT] Sending root object discovery:")
+        logger.info("[DISCOVER_ROOT] Sending root object discovery:")
         logger.info(f"[DISCOVER_ROOT]   Length: {len(packet)} bytes, Seq: {seq}")
         logger.info(f"[DISCOVER_ROOT]   Hex: {packet.hex(' ')}")
 
@@ -339,7 +347,7 @@ class TCPBackend(TCP):
         Returns:
             List of discovered object addresses
         """
-        objects = []
+        objects: list[Address] = []
         options_data = response.registration.options
 
         if not options_data:
@@ -367,7 +375,7 @@ class TCPBackend(TCP):
             else:
                 logger.warning(f"Unknown registration option ID: {option_id}, skipping {length} bytes")
                 # Skip unknown option data
-                reader.bytes(length)
+                reader.raw_bytes(length)
 
         return objects
 
@@ -434,6 +442,9 @@ class TCPBackend(TCP):
             )
 
         # Let command interpret success response
+        # Type narrowing: we know it's SuccessResponse after ErrorResponse check
+        if not isinstance(hoi_response, SuccessResponse):
+            raise RuntimeError(f"Unexpected response type: {type(hoi_response)}")
         return command.interpret_response(hoi_response)
 
     async def stop(self):
