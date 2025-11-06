@@ -650,9 +650,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_aspirate_dispense96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(self.plate, volume=10)
-    self.lh.backend.dispense96 = unittest.mock.AsyncMock()  # type: ignore
-    await self.lh.dispense96(self.plate, volume=10)
-    self.lh.backend.dispense96.assert_called_with(
+    self.lh.backend.dispense96 = unittest.mock.create_autospec(self.lh.backend.dispense96)  # type: ignore
+    await self.lh.dispense96(self.plate, 10)
+    self.lh.backend.dispense96.assert_called_with(  # type: ignore
       dispense=MultiHeadDispensePlate(
         wells=self.plate.get_all_items(),
         offset=Coordinate.zero(),

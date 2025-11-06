@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import threading
+import unittest.mock
 import warnings
 from typing import (
   Any,
@@ -289,6 +290,10 @@ class LiquidHandler(Resource, Machine):
     Returns:
       The set of arguments that need to be removed from `backend_kwargs` before passing to `method`.
     """
+
+    # if method is an AsyncMock, skip the checks
+    if isinstance(method, unittest.mock.AsyncMock):
+      return set()
 
     default_args = default.union({"self"})
 
