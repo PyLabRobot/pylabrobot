@@ -1542,7 +1542,7 @@ class LiquidHandler(Resource, Machine):
       if not self.head96[i].has_tip:
         continue
       tip = self.head96[i].get_tip()
-      if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
+      if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume and does_volume_tracking():
         error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
         raise RuntimeError(error)
       if isinstance(resource, TipRack):
@@ -1939,10 +1939,8 @@ class LiquidHandler(Resource, Machine):
 
         # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
         # during the aspiration command
-        liquids: List[Tuple[Optional[Liquid], float]]
         if tip.tracker.is_disabled or not does_volume_tracking():
           liquids = [(None, volume)]
-          all_liquids.append(liquids)
         else:
           liquids = tip.tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
