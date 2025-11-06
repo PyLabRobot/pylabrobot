@@ -4,6 +4,7 @@ from .hamilton_decks import (
   STARDeck,
   STARLetDeck,
 )
+from .nimbus_decks import NimbusDeck
 from .mfx_carriers import *
 from .mfx_modules import *
 from .plate_adapters import *

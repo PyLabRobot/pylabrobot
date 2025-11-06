@@ -349,18 +349,55 @@ class HoiParamsParser:
         }
 
         # Handle arrays
+        # Arrays don't have a count prefix - count is derived from DataFragment length
+        # Calculate element size based on type
+        element_sizes = {
+            HamiltonDataType.I8_ARRAY: 1,
+            HamiltonDataType.I16_ARRAY: 2,
+            HamiltonDataType.I32_ARRAY: 4,
+            HamiltonDataType.I64_ARRAY: 8,
+            HamiltonDataType.U8_ARRAY: 1,
+            HamiltonDataType.U16_ARRAY: 2,
+            HamiltonDataType.U32_ARRAY: 4,
+            HamiltonDataType.U64_ARRAY: 8,
+            HamiltonDataType.F32_ARRAY: 4,
+            HamiltonDataType.F64_ARRAY: 8,
+            HamiltonDataType.STRING_ARRAY: None,  # Variable length, handled separately
+        }
+
         # Cast int to HamiltonDataType enum for dict lookup
         try:
             data_type = HamiltonDataType(type_id)
             if data_type in array_element_parsers:
-                count = reader.u32()
-                return [array_element_parsers[data_type]() for _ in range(count)]
+                element_size = element_sizes.get(data_type)
+                if element_size is not None:
+                    # Fixed-size elements: calculate count from data length
+                    count = len(data) // element_size
+                    return [array_element_parsers[data_type]() for _ in range(count)]
+                elif data_type == HamiltonDataType.STRING_ARRAY:
+                    # String arrays: null-terminated strings concatenated, no count prefix
+                    # Parse by splitting on null bytes
+                    strings = []
+                    current_string = bytearray()
+                    for byte in data:
+                        if byte == 0:
+                            if current_string:
+                                strings.append(current_string.decode('utf-8', errors='replace'))
+                                current_string = bytearray()
+                        else:
+                            current_string.append(byte)
+                    # Handle case where last string doesn't end with null (shouldn't happen, but be safe)
+                    if current_string:
+                        strings.append(current_string.decode('utf-8', errors='replace'))
+                    return strings
         except ValueError:
-            pass  # Not a valid enum value, continue to other checks
+            # Not a valid enum value, continue to other checks
+            # This shouldn't happen for valid Hamilton types, but we continue anyway
+            pass
 
-        # Special case: bool array
+        # Special case: bool array (1 byte per element)
         if type_id == HamiltonDataType.BOOL_ARRAY:
-            count = reader.u32()
+            count = len(data) // 1  # Each bool is 1 byte
             return [reader.u8() == 1 for _ in range(count)]
 
         # Unknown type
