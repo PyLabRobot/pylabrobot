@@ -6,8 +6,11 @@ instruments via TCP communication using the Hamilton protocol.
 
 from __future__ import annotations
 
+import enum
 import logging
 from typing import List, Optional
+
+from pylabrobot.resources.coordinate import Coordinate
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.commands import HamiltonCommand
@@ -39,8 +42,72 @@ from pylabrobot.liquid_handling.standard import (
     SingleChannelDispense,
 )
 from pylabrobot.resources import Tip
+from pylabrobot.resources.container import Container
+from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# TIP TYPE ENUM
+# ============================================================================
+
+
+class NimbusTipType(enum.IntEnum):
+    """Hamilton Nimbus tip type enumeration.
+
+    Maps tip type names to their integer values used in Hamilton protocol commands.
+    """
+
+    STANDARD_300UL = 0  # "300ul Standard Volume Tip"
+    STANDARD_300UL_FILTER = 1  # "300ul Standard Volume Tip with filter"
+    LOW_VOLUME_10UL = 2  # "10ul Low Volume Tip"
+    LOW_VOLUME_10UL_FILTER = 3  # "10ul Low Volume Tip with filter"
+    HIGH_VOLUME_1000UL = 4  # "1000ul High Volume Tip"
+    HIGH_VOLUME_1000UL_FILTER = 5  # "1000ul High Volume Tip with filter"
+    TIP_50UL = 22  # "50ul Tip"
+    TIP_50UL_FILTER = 23  # "50ul Tip with filter"
+    SLIM_CORE_300UL = 36  # "SLIM CO-RE Tip 300ul"
+
+
+def _get_tip_type_from_tip(tip: Tip) -> int: # TODO: Map these to Hamilton Tip Rack Resources rather than inferring from tip characteristics
+    """Map Tip object characteristics to Hamilton tip type integer.
+
+    Args:
+        tip: Tip object with volume and filter information.
+
+    Returns:
+        Hamilton tip type integer value.
+
+    Raises:
+        ValueError: If tip characteristics don't match any known tip type.
+    """
+    # Match based on volume and filter
+    if tip.maximal_volume <= 15:  # 10ul tip
+        if tip.has_filter:
+            return NimbusTipType.LOW_VOLUME_10UL_FILTER
+        else:
+            return NimbusTipType.LOW_VOLUME_10UL
+    elif tip.maximal_volume <= 60:  # 50ul tip
+        if tip.has_filter:
+            return NimbusTipType.TIP_50UL_FILTER
+        else:
+            return NimbusTipType.TIP_50UL
+    elif tip.maximal_volume <= 500:  # 300ul tip (increased threshold to catch 360µL filtered tips)
+        if tip.has_filter:
+            return NimbusTipType.STANDARD_300UL_FILTER
+        else:
+            return NimbusTipType.STANDARD_300UL
+    elif tip.maximal_volume <= 1100:  # 1000ul tip
+        if tip.has_filter:
+            return NimbusTipType.HIGH_VOLUME_1000UL_FILTER
+        else:
+            return NimbusTipType.HIGH_VOLUME_1000UL
+    else:
+        raise ValueError(
+            f"Cannot determine tip type for tip with volume {tip.maximal_volume}µL "
+            f"and filter={tip.has_filter}. No matching Hamilton tip type found."
+        )
 
 
 # ============================================================================
@@ -119,6 +186,60 @@ class PreInitializeSmart(HamiltonCommand):
         return {"success": True}
 
 
+class InitializeSmartRoll(HamiltonCommand):
+    """Initialize smart roll command (NimbusCore at 1:1:48896, interface_id=1, command_id=29)."""
+
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 29
+
+    def __init__(
+        self,
+        dest: Address,
+        x_positions: List[int],
+        y_positions: List[int],
+        z_start_positions: List[int],
+        z_stop_positions: List[int],
+        z_final_positions: List[int],
+        roll_distances: List[int],
+    ):
+        """Initialize InitializeSmartRoll command.
+
+        Args:
+            dest: Destination address (NimbusCore)
+            x_positions: X positions in 0.01mm units
+            y_positions: Y positions in 0.01mm units
+            z_start_positions: Z start positions in 0.01mm units
+            z_stop_positions: Z stop positions in 0.01mm units
+            z_final_positions: Z final positions in 0.01mm units
+            roll_distances: Roll distances in 0.01mm units
+        """
+        super().__init__(dest)
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.z_final_positions = z_final_positions
+        self.roll_distances = roll_distances
+
+    def build_parameters(self) -> HoiParams:
+        """Build parameters for InitializeSmartRoll command."""
+        return (
+            HoiParams()
+            .i32_array(self.x_positions)
+            .i32_array(self.y_positions)
+            .i32_array(self.z_start_positions)
+            .i32_array(self.z_stop_positions)
+            .i32_array(self.z_final_positions)
+            .i32_array(self.roll_distances)
+        )
+
+    @classmethod
+    def parse_response_parameters(cls, data: bytes) -> dict:
+        """Parse InitializeSmartRoll response (void return)."""
+        return {"success": True}
+
+
 class IsTipPresent(HamiltonCommand):
     """Check tip presence (Pipette at 1:1:257, interface_id=1, command_id=16)."""
 
@@ -164,6 +285,50 @@ class GetChannelConfiguration_1(HamiltonCommand):
         return {"channels": channels, "channel_types": channel_types}
 
 
+class SetChannelConfiguration(HamiltonCommand):
+    """Set channel configuration (Pipette at 1:1:257, interface_id=1, command_id=67)."""
+
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 67
+
+    def __init__(
+        self,
+        dest: Address,
+        channel: int,
+        indexes: List[int],
+        enables: List[bool],
+    ):
+        """Initialize SetChannelConfiguration command.
+
+        Args:
+            dest: Destination address (Pipette)
+            channel: Channel number (1-based)
+            indexes: List of configuration indexes (e.g., [1, 3, 4])
+            1: Tip Recognition, 2: Aspirate and clot monitoring pLLD,
+            3: Aspirate monitoring with cLLD, 4: Clot monitoring with cLLD
+            enables: List of enable flags (e.g., [True, False, False, False])
+        """
+        super().__init__(dest)
+        self.channel = channel
+        self.indexes = indexes
+        self.enables = enables
+
+    def build_parameters(self) -> HoiParams:
+        """Build parameters for SetChannelConfiguration command."""
+        return (
+            HoiParams()
+            .u16(self.channel)
+            .i16_array(self.indexes)
+            .bool_array(self.enables)
+        )
+
+    @classmethod
+    def parse_response_parameters(cls, data: bytes) -> dict:
+        """Parse SetChannelConfiguration response (void return)."""
+        return {"success": True}
+
+
 class Park(HamiltonCommand):
     """Park command (Pipette at 1:1:257, interface_id=1, command_id=21)."""
 
@@ -178,6 +343,188 @@ class Park(HamiltonCommand):
     @classmethod
     def parse_response_parameters(cls, data: bytes) -> dict:
         """Parse Park response."""
+        return {"success": True}
+
+
+class PickupTips(HamiltonCommand):
+    """Pick up tips command (Pipette at 1:1:257, interface_id=1, command_id=4)."""
+
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 4
+
+    def __init__(
+        self,
+        dest: Address,
+        tips_used: List[int],
+        x_positions: List[int],
+        y_positions: List[int],
+        traverse_height: int,
+        z_start_positions: List[int],
+        z_stop_positions: List[int],
+        tip_types: List[int],
+    ):
+        """Initialize PickupTips command.
+
+        Args:
+            dest: Destination address (Pipette)
+            tips_used: Tip pattern (1 for active channels, 0 for inactive)
+            x_positions: X positions in 0.01mm units
+            y_positions: Y positions in 0.01mm units
+            traverse_height: Traverse height in 0.01mm units
+            z_start_positions: Z start positions in 0.01mm units
+            z_stop_positions: Z stop positions in 0.01mm units
+            tip_types: Tip type integers for each channel
+        """
+        super().__init__(dest)
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.tip_types = tip_types
+
+    def build_parameters(self) -> HoiParams:
+        """Build parameters for PickupTips command."""
+        return (
+            HoiParams()
+            .u16_array(self.tips_used)
+            .i32_array(self.x_positions)
+            .i32_array(self.y_positions)
+            .i32(self.traverse_height)
+            .i32_array(self.z_start_positions)
+            .i32_array(self.z_stop_positions)
+            .u16_array(self.tip_types)
+        )
+
+    @classmethod
+    def parse_response_parameters(cls, data: bytes) -> dict:
+        """Parse PickupTips response (void return)."""
+        return {"success": True}
+
+
+class DropTips(HamiltonCommand):
+    """Drop tips command (Pipette at 1:1:257, interface_id=1, command_id=5)."""
+
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 5
+
+    def __init__(
+        self,
+        dest: Address,
+        tips_used: List[int],
+        x_positions: List[int],
+        y_positions: List[int],
+        traverse_height: int,
+        z_start_positions: List[int],
+        z_stop_positions: List[int],
+        z_final_positions: List[int],
+        default_waste: bool,
+    ):
+        """Initialize DropTips command.
+
+        Args:
+            dest: Destination address (Pipette)
+            tips_used: Tip pattern (1 for active channels, 0 for inactive)
+            x_positions: X positions in 0.01mm units
+            y_positions: Y positions in 0.01mm units
+            traverse_height: Traverse height in 0.01mm units
+            z_start_positions: Z start positions in 0.01mm units
+            z_stop_positions: Z stop positions in 0.01mm units
+            z_final_positions: Z final positions in 0.01mm units
+            default_waste: If True, drop to default waste (positions may be ignored)
+        """
+        super().__init__(dest)
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.z_final_positions = z_final_positions
+        self.default_waste = default_waste
+
+    def build_parameters(self) -> HoiParams:
+        """Build parameters for DropTips command."""
+        return (
+            HoiParams()
+            .u16_array(self.tips_used)
+            .i32_array(self.x_positions)
+            .i32_array(self.y_positions)
+            .i32(self.traverse_height)
+            .i32_array(self.z_start_positions)
+            .i32_array(self.z_stop_positions)
+            .i32_array(self.z_final_positions)
+            .bool_value(self.default_waste)
+        )
+
+    @classmethod
+    def parse_response_parameters(cls, data: bytes) -> dict:
+        """Parse DropTips response (void return)."""
+        return {"success": True}
+
+
+class DropTipsRoll(HamiltonCommand):
+    """Drop tips with roll command (Pipette at 1:1:257, interface_id=1, command_id=82)."""
+
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 82
+
+    def __init__(
+        self,
+        dest: Address,
+        tips_used: List[int],
+        x_positions: List[int],
+        y_positions: List[int],
+        traverse_height: int,
+        z_start_positions: List[int],
+        z_stop_positions: List[int],
+        z_final_positions: List[int],
+        roll_distances: List[int],
+    ):
+        """Initialize DropTipsRoll command.
+
+        Args:
+            dest: Destination address (Pipette)
+            tips_used: Tip pattern (1 for active channels, 0 for inactive)
+            x_positions: X positions in 0.01mm units
+            y_positions: Y positions in 0.01mm units
+            traverse_height: Traverse height in 0.01mm units
+            z_start_positions: Z start positions in 0.01mm units
+            z_stop_positions: Z stop positions in 0.01mm units
+            z_final_positions: Z final positions in 0.01mm units
+            roll_distances: Roll distance for each channel in 0.01mm units
+        """
+        super().__init__(dest)
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.z_final_positions = z_final_positions
+        self.roll_distances = roll_distances
+
+    def build_parameters(self) -> HoiParams:
+        """Build parameters for DropTipsRoll command."""
+        return (
+            HoiParams()
+            .u16_array(self.tips_used)
+            .i32_array(self.x_positions)
+            .i32_array(self.y_positions)
+            .i32(self.traverse_height)
+            .i32_array(self.z_start_positions)
+            .i32_array(self.z_stop_positions)
+            .i32_array(self.z_final_positions)
+            .i32_array(self.roll_distances)
+        )
+
+    @classmethod
+    def parse_response_parameters(cls, data: bytes) -> dict:
+        """Parse DropTipsRoll response (void return)."""
         return {"success": True}
 
 
@@ -244,13 +591,13 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         1. Establishes TCP connection and performs protocol initialization
         2. Detects if door lock exists
         3. Locks door if available
-        4. Pre-initializes pipette
+        4. Queries channel configuration to get num_channels
         5. Queries tip presence
-        6. Queries channel configuration to get num_channels
-        7. Optionally unlocks door after pre-initialization
+        6. Initializes NimbusCore with InitializeSmartRoll using waste positions
+        7. Optionally unlocks door after initialization
 
         Args:
-            unlock_door: If True, unlock door after pre-initialization (default: False)
+            unlock_door: If True, unlock door after initialization (default: False)
         """
         # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
         await TCPBackend.setup(self)
@@ -271,6 +618,23 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
                 "NimbusCore root object not discovered. Cannot proceed with setup."
             )
 
+        # Query channel configuration to get num_channels (use discovered address only)
+        try:
+            config = await self.send_command(GetChannelConfiguration_1(self._nimbus_core_address))
+            self._num_channels = config["channels"]
+            logger.info(f"Channel configuration: {config['channels']} channels")
+        except Exception as e:
+            logger.error(f"Failed to query channel configuration: {e}")
+            raise
+
+        # Query tip presence (use discovered address only)
+        try:
+            tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+            tip_present = tip_status.get("tip_present", [])
+            logger.info(f"Tip presence: {tip_present}")
+        except Exception as e:
+            logger.warning(f"Failed to query tip presence: {e}")
+
         # Lock door if available (optional - no error if not found)
         if self._door_lock_address is not None:
             try:
@@ -284,29 +648,79 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
             except Exception as e:
                 logger.warning(f"Failed to lock door: {e}")
 
-        # Pre-initialize pipette (use discovered address only)
+        # Set channel configuration for each channel (required before InitializeSmartRoll)
         try:
-            await self.send_command(PreInitializeSmart(self._pipette_address))
-            logger.info("Pipette pre-initialized successfully")
+            # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
+            # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
+            for channel in range(1, self._num_channels + 1):
+                await self.send_command(
+                    SetChannelConfiguration(
+                        dest=self._pipette_address,
+                        channel=channel,
+                        indexes=[1, 3, 4],
+                        enables=[True, False, False, False],
+                    )
+                )
+            logger.info(f"Channel configuration set for {self._num_channels} channels")
         except Exception as e:
-            logger.error(f"Failed to pre-initialize pipette: {e}")
+            logger.error(f"Failed to set channel configuration: {e}")
             raise
 
-        # Query tip presence (use discovered address only)
+        # Initialize NimbusCore with InitializeSmartRoll using waste positions
         try:
-            tip_status = await self.send_command(IsTipPresent(self._pipette_address))
-            tip_present = tip_status.get("tip_present", [])
-            logger.info(f"Tip presence: {tip_present}")
-        except Exception as e:
-            logger.warning(f"Failed to query tip presence: {e}")
+            # Get waste positions for all channels (similar to drop_tips)
+            x_positions_mm: List[float] = []
+            y_positions_mm: List[float] = []
+            z_positions_mm: List[float] = []
 
-        # Query channel configuration to get num_channels (use discovered address only)
-        try:
-            config = await self.send_command(GetChannelConfiguration_1(self._nimbus_core_address))
-            self._num_channels = config["channels"]
-            logger.info(f"Channel configuration: {config['channels']} channels")
+            for channel_idx in range(self._num_channels):
+                # Get waste position from deck based on channel index
+                # Waste positions are named default_long_1, default_long_2, etc.
+                waste_pos_name = f"default_long_{channel_idx + 1}"
+                try:
+                    waste_pos = self._deck.get_resource(waste_pos_name)
+                    abs_location = waste_pos.get_absolute_location()
+                    # Convert to Hamilton coordinates (returns in mm)
+                    hamilton_coord = self._deck.to_hamilton_coordinate(abs_location)
+                    x_positions_mm.append(hamilton_coord.x)
+                    y_positions_mm.append(hamilton_coord.y)
+                    z_positions_mm.append(hamilton_coord.z)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to get waste position {waste_pos_name} for channel {channel_idx}: {e}"
+                    )
+
+            # Use absolute Z positions (from log: zStart=146.0mm, zStop=131.39mm, zFinal=146.0mm)
+            # These are absolute positions, not relative to waste position
+            # TODO: This should probably not be hardcoded for different possible deck configurations.
+            z_start_absolute_mm = 146.0  # traverse height
+            z_stop_absolute_mm = 131.39
+            z_final_absolute_mm = 146.0  # traverse height
+            roll_distance_mm = 9.0
+
+            # Convert positions to 0.01mm units (multiply by 100)
+            x_positions = [int(round(x * 100)) for x in x_positions_mm]
+            y_positions = [int(round(y * 100)) for y in y_positions_mm]
+            # Use absolute Z positions (same for all channels)
+            z_start_positions = [int(round(z_start_absolute_mm * 100))] * self._num_channels
+            z_stop_positions = [int(round(z_stop_absolute_mm * 100))] * self._num_channels
+            z_final_positions = [int(round(z_final_absolute_mm * 100))] * self._num_channels
+            roll_distances = [int(round(roll_distance_mm * 100))] * self._num_channels
+
+            await self.send_command(
+                InitializeSmartRoll(
+                    dest=self._nimbus_core_address,
+                    x_positions=x_positions,
+                    y_positions=y_positions,
+                    z_start_positions=z_start_positions,
+                    z_stop_positions=z_stop_positions,
+                    z_final_positions=z_final_positions,
+                    roll_distances=roll_distances,
+                )
+            )
+            logger.info("NimbusCore initialized with InitializeSmartRoll successfully")
         except Exception as e:
-            logger.error(f"Failed to query channel configuration: {e}")
+            logger.error(f"Failed to initialize NimbusCore with InitializeSmartRoll: {e}")
             raise
 
         # Unlock door if requested (optional - no error if not found)
@@ -461,13 +875,448 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
 
     # ============== Abstract methods from LiquidHandlerBackend ==============
 
-    async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
-        """Pick up tips from the specified resource."""
-        raise NotImplementedError("pick_up_tips not yet implemented")
+    async def pick_up_tips(
+        self,
+        ops: List[Pickup],
+        use_channels: List[int],
+        traverse_height: float = 146.0,  # TODO: Access deck z_max property properly instead of hardcoded literal
+        z_start_offset: Optional[float] = None,
+        z_stop_offset: Optional[float] = None,
+    ):
+        """Pick up tips from the specified resource.
 
-    async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
-        """Drop tips from the specified resource."""
-        raise NotImplementedError("drop_tips not yet implemented")
+        Z positions and traverse height are calculated from the resource locations and tip
+        properties if not explicitly provided:
+        - traverse_height: Uses deck z_max if not provided
+        - z_start_offset: Calculated as max(resource Z) + max(tip total_tip_length)
+        - z_stop_offset: Calculated as max(resource Z) + max(tip total_tip_length - tip fitting_depth)
+
+        Args:
+            ops: List of Pickup operations, one per channel
+            use_channels: List of channel indices to use
+            traverse_height: Traverse height in mm (optional, defaults to deck z_max)
+            z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
+            z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
+
+        Raises:
+            RuntimeError: If pipette address or deck is not set
+            ValueError: If deck is not a NimbusDeck and traverse_height is not provided
+        """
+        if self._pipette_address is None:
+            raise RuntimeError(
+                "Pipette address not discovered. Call setup() first."
+            )
+        if self._deck is None:
+            raise RuntimeError("Deck must be set before pick_up_tips")
+
+        # Validate we have a NimbusDeck for coordinate conversion
+        from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
+        if not isinstance(self._deck, NimbusDeck):
+            raise RuntimeError(
+                "Deck must be a NimbusDeck for coordinate conversion"
+            )
+
+        # Extract coordinates and tip types for each operation
+        x_positions_mm: List[float] = []
+        y_positions_mm: List[float] = []
+        z_positions_mm: List[float] = []
+        tip_types: List[int] = []
+
+        for op in ops:
+            # Get absolute location from resource
+            abs_location = op.resource.get_absolute_location()
+            # Add offset
+            final_location = Coordinate(
+                x=abs_location.x + op.offset.x,
+                y=abs_location.y + op.offset.y,
+                z=abs_location.z + op.offset.z,
+            )
+            # Convert to Hamilton coordinates (returns in mm)
+            hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
+
+            x_positions_mm.append(hamilton_coord.x)
+            y_positions_mm.append(hamilton_coord.y)
+            z_positions_mm.append(hamilton_coord.z)
+
+            # Get tip type from tip object
+            tip_type = _get_tip_type_from_tip(op.tip)
+            tip_types.append(tip_type)
+
+        # Build tip pattern array (1 for active channels, 0 for inactive)
+        # Array length should match num_channels
+        tips_used = [0] * self.num_channels
+        for channel_idx in use_channels:
+            if channel_idx >= self.num_channels:
+                raise ValueError(
+                    f"Channel index {channel_idx} exceeds num_channels {self.num_channels}"
+                )
+            tips_used[channel_idx] = 1
+
+        # Convert positions to 0.01mm units (multiply by 100)
+        x_positions = [int(round(x * 100)) for x in x_positions_mm]
+        y_positions = [int(round(y * 100)) for y in y_positions_mm]
+
+        # Calculate Z positions from resource locations and tip properties
+        # Similar to STAR backend: z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
+        max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
+        max_total_tip_length = max(op.tip.total_tip_length for op in ops)
+        max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
+
+        # Calculate absolute Z positions in Hamilton coordinates
+        # z_start: resource Z + total tip length (where tip pickup starts)
+        # z_stop: resource Z + (tip length - fitting depth) (where tip pickup stops)
+        z_start_absolute_mm = max_z_hamilton + max_total_tip_length
+        z_stop_absolute_mm = max_z_hamilton + max_tip_length
+
+        # Traverse height: use provided value (defaults to 146.0 mm from function signature)
+        traverse_height_mm = traverse_height
+
+        # Allow override of Z positions if explicitly provided
+        if z_start_offset is not None:
+            z_start_absolute_mm = z_start_offset
+        if z_stop_offset is not None:
+            z_stop_absolute_mm = z_stop_offset
+
+        # Convert to 0.01mm units
+        traverse_height_units = int(round(traverse_height_mm * 100))
+
+        # For Z positions, use absolute positions (same for all channels)
+        z_start_positions = [
+            int(round(z_start_absolute_mm * 100))
+        ] * len(ops)  # Absolute Z start position
+        z_stop_positions = [
+            int(round(z_stop_absolute_mm * 100))
+        ] * len(ops)  # Absolute Z stop position
+
+        # Ensure arrays match num_channels length (pad with 0s for inactive channels)
+        # We need to map use_channels to the correct positions
+        x_positions_full = [0] * self.num_channels
+        y_positions_full = [0] * self.num_channels
+        z_start_positions_full = [0] * self.num_channels
+        z_stop_positions_full = [0] * self.num_channels
+        tip_types_full = [0] * self.num_channels
+
+        for i, channel_idx in enumerate(use_channels):
+            x_positions_full[channel_idx] = x_positions[i]
+            y_positions_full[channel_idx] = y_positions[i]
+            z_start_positions_full[channel_idx] = z_start_positions[i]
+            z_stop_positions_full[channel_idx] = z_stop_positions[i]
+            tip_types_full[channel_idx] = tip_types[i]
+
+        # Create and send command
+        command = PickupTips(
+            dest=self._pipette_address,
+            tips_used=tips_used,
+            x_positions=x_positions_full,
+            y_positions=y_positions_full,
+            traverse_height=traverse_height_units,
+            z_start_positions=z_start_positions_full,
+            z_stop_positions=z_stop_positions_full,
+            tip_types=tip_types_full,
+        )
+
+        # Check tip presence before picking up tips
+        try:
+            tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+            tip_present = tip_status.get("tip_present", [])
+            # Check if any channels we're trying to use already have tips
+            channels_with_tips = [
+                i for i, present in enumerate(tip_present)
+                if i in use_channels and present != 0
+            ]
+            if channels_with_tips:
+                raise RuntimeError(
+                    f"Cannot pick up tips: channels {channels_with_tips} already have tips mounted. "
+                    f"Drop existing tips first."
+                )
+        except Exception as e:
+            # If tip presence check fails, log warning but continue
+            logger.warning(f"Could not check tip presence before pickup: {e}")
+
+        # Log parameters for debugging
+        logger.info(f"PickupTips parameters:")
+        logger.info(f"  tips_used: {tips_used}")
+        logger.info(f"  x_positions: {x_positions_full}")
+        logger.info(f"  y_positions: {y_positions_full}")
+        logger.info(f"  traverse_height: {traverse_height_units}")
+        logger.info(f"  z_start_positions: {z_start_positions_full}")
+        logger.info(f"  z_stop_positions: {z_stop_positions_full}")
+        logger.info(f"  tip_types: {tip_types_full}")
+        logger.info(f"  num_channels: {self.num_channels}")
+
+        try:
+            await self.send_command(command)
+            logger.info(f"Picked up tips on channels {use_channels}")
+        except Exception as e:
+            logger.error(f"Failed to pick up tips: {e}")
+            logger.error(f"Parameters sent: tips_used={tips_used}, "
+                        f"x_positions={x_positions_full}, y_positions={y_positions_full}, "
+                        f"traverse_height={traverse_height_units}, "
+                        f"z_start_positions={z_start_positions_full}, "
+                        f"z_stop_positions={z_stop_positions_full}, tip_types={tip_types_full}")
+            raise
+
+    async def drop_tips(
+        self,
+        ops: List[Drop],
+        use_channels: List[int],
+        default_waste: bool = False,
+        traverse_height: float = 146.0,  # TODO: Access deck z_max property properly instead of hardcoded literal
+        z_start_offset: Optional[float] = None,
+        z_stop_offset: Optional[float] = None,
+        z_final_offset: Optional[float] = None,
+        roll_distance: Optional[float] = None,
+    ):
+        """Drop tips to the specified resource.
+
+        Auto-detects waste positions and uses appropriate command:
+        - If resource is a waste position (Trash with category="waste_position"), uses DropTipsRoll
+        - Otherwise, uses DropTips command
+
+        Z positions are calculated from resource locations if not explicitly provided:
+        - traverse_height: Defaults to 146.0 mm (deck z_max)
+        - z_start_offset: Calculated from resources (for waste: 135.39 mm, for regular: resource Z + offset)
+        - z_stop_offset: Calculated from resources (for waste: 131.39 mm, for regular: resource Z + offset)
+        - z_final_offset: Calculated from resources (defaults to traverse_height)
+        - roll_distance: Defaults to 9.0 mm for waste positions
+
+        Args:
+            ops: List of Drop operations, one per channel
+            use_channels: List of channel indices to use
+            default_waste: For DropTips command, if True, drop to default waste (positions may be ignored)
+            traverse_height: Traverse height in mm (optional, defaults to 146.0 mm)
+            z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
+            z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
+            z_final_offset: Z final position in mm (absolute, optional, calculated from resources)
+            roll_distance: Roll distance in mm (optional, defaults to 9.0 mm for waste positions)
+
+        Raises:
+            RuntimeError: If pipette address or deck is not set
+            ValueError: If operations mix waste and regular resources
+        """
+        if self._pipette_address is None:
+            raise RuntimeError(
+                "Pipette address not discovered. Call setup() first."
+            )
+        if self._deck is None:
+            raise RuntimeError("Deck must be set before drop_tips")
+
+        # Validate we have a NimbusDeck for coordinate conversion
+        from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
+        if not isinstance(self._deck, NimbusDeck):
+            raise RuntimeError(
+                "Deck must be a NimbusDeck for coordinate conversion"
+            )
+
+        # Check if resources are waste positions (Trash objects with category="waste_position")
+        from pylabrobot.resources.trash import Trash
+        is_waste_positions = [
+            isinstance(op.resource, Trash) and getattr(op.resource, "category", None) == "waste_position"
+            for op in ops
+        ]
+
+        # Check if all operations are waste positions or all are regular
+        all_waste = all(is_waste_positions)
+        all_regular = not any(is_waste_positions)
+
+        if not (all_waste or all_regular):
+            raise ValueError(
+                "Cannot mix waste positions and regular resources in a single drop_tips call. "
+                "All operations must be either waste positions or regular resources."
+            )
+
+        # Extract coordinates for each operation
+        x_positions_mm: List[float] = []
+        y_positions_mm: List[float] = []
+        z_positions_mm: List[float] = []
+
+        for i, op in enumerate(ops):
+            channel_idx = use_channels[i]
+
+            if all_waste:
+                # Get waste position from deck based on channel index
+                # Waste positions are named default_long_1, default_long_2, etc.
+                # Map channel index to waste position (1-indexed)
+                waste_pos_name = f"default_long_{channel_idx + 1}"
+                try:
+                    waste_pos = self._deck.get_resource(waste_pos_name)
+                    abs_location = waste_pos.get_absolute_location()
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to get waste position {waste_pos_name} for channel {channel_idx}: {e}"
+                    )
+            else:
+                # Get absolute location from resource
+                abs_location = op.resource.get_absolute_location()
+
+            # Add offset
+            final_location = Coordinate(
+                x=abs_location.x + op.offset.x,
+                y=abs_location.y + op.offset.y,
+                z=abs_location.z + op.offset.z,
+            )
+            # Convert to Hamilton coordinates (returns in mm)
+            hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
+
+            x_positions_mm.append(hamilton_coord.x)
+            y_positions_mm.append(hamilton_coord.y)
+            z_positions_mm.append(hamilton_coord.z)
+
+        # Build tip pattern array (1 for active channels, 0 for inactive)
+        tips_used = [0] * self.num_channels
+        for channel_idx in use_channels:
+            if channel_idx >= self.num_channels:
+                raise ValueError(
+                    f"Channel index {channel_idx} exceeds num_channels {self.num_channels}"
+                )
+            tips_used[channel_idx] = 1
+
+        # Convert positions to 0.01mm units (multiply by 100)
+        x_positions = [int(round(x * 100)) for x in x_positions_mm]
+        y_positions = [int(round(y * 100)) for y in y_positions_mm]
+
+        # Calculate Z positions from resource locations
+        max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
+
+        # Traverse height: use provided value (defaults to 146.0 mm from function signature)
+        traverse_height_mm = traverse_height
+
+        # Convert to 0.01mm units
+        traverse_height_units = int(round(traverse_height_mm * 100))
+
+        if all_waste:
+            # Use DropTipsRoll for waste positions
+            # Z positions are absolute, calculated from waste position coordinates
+            # From log: zStart = waste Z + 4.0mm, zStop = waste Z, zFinal = traverse_height
+            waste_z_hamilton = max_z_hamilton  # Waste position Z in Hamilton coordinates
+
+            if z_start_offset is None:
+                # Calculate from waste position: start above waste position
+                z_start_absolute_mm = waste_z_hamilton + 4.0  # Start 4mm above waste position
+            else:
+                z_start_absolute_mm = z_start_offset
+
+            if z_stop_offset is None:
+                # Calculate from waste position: stop at waste position
+                z_stop_absolute_mm = waste_z_hamilton  # Stop at waste position
+            else:
+                z_stop_absolute_mm = z_stop_offset
+
+            if z_final_offset is None:
+                z_final_offset_mm = traverse_height_mm  # Use traverse height as final position
+            else:
+                z_final_offset_mm = z_final_offset
+
+            if roll_distance is None:
+                roll_distance_mm = 9.0  # Default roll distance from log
+            else:
+                roll_distance_mm = roll_distance
+
+            # Use absolute Z positions (same for all channels)
+            z_start_positions = [
+                int(round(z_start_absolute_mm * 100))
+            ] * len(ops)  # Absolute Z start position
+            z_stop_positions = [
+                int(round(z_stop_absolute_mm * 100))
+            ] * len(ops)  # Absolute Z stop position
+            z_final_positions = [
+                int(round(z_final_offset_mm * 100))
+            ] * len(ops)  # Absolute Z final position
+            roll_distances = [int(round(roll_distance_mm * 100))] * len(ops)
+
+            # Ensure arrays match num_channels length
+            x_positions_full = [0] * self.num_channels
+            y_positions_full = [0] * self.num_channels
+            z_start_positions_full = [0] * self.num_channels
+            z_stop_positions_full = [0] * self.num_channels
+            z_final_positions_full = [0] * self.num_channels
+            roll_distances_full = [0] * self.num_channels
+
+            for i, channel_idx in enumerate(use_channels):
+                x_positions_full[channel_idx] = x_positions[i]
+                y_positions_full[channel_idx] = y_positions[i]
+                z_start_positions_full[channel_idx] = z_start_positions[i]
+                z_stop_positions_full[channel_idx] = z_stop_positions[i]
+                z_final_positions_full[channel_idx] = z_final_positions[i]
+                roll_distances_full[channel_idx] = roll_distances[i]
+
+            # Create and send DropTipsRoll command
+            command = DropTipsRoll(
+                dest=self._pipette_address,
+                tips_used=tips_used,
+                x_positions=x_positions_full,
+                y_positions=y_positions_full,
+                traverse_height=traverse_height_units,
+                z_start_positions=z_start_positions_full,
+                z_stop_positions=z_stop_positions_full,
+                z_final_positions=z_final_positions_full,
+                roll_distances=roll_distances_full,
+            )
+        else:
+            # Use DropTips for regular resources
+            # Z positions are absolute, not relative to resource position
+            # Calculate from resource locations if not provided
+            if z_start_offset is None:
+                # TODO: Calculate from resources properly (resource Z + offset)
+                z_start_absolute_mm = max_z_hamilton + 10.0  # Placeholder: resource Z + safety margin
+            else:
+                z_start_absolute_mm = z_start_offset
+
+            if z_stop_offset is None:
+                # TODO: Calculate from resources properly (resource Z + offset)
+                z_stop_absolute_mm = max_z_hamilton  # Placeholder: resource Z
+            else:
+                z_stop_absolute_mm = z_stop_offset
+
+            if z_final_offset is None:
+                z_final_offset_mm = traverse_height_mm  # Use traverse height as final position
+            else:
+                z_final_offset_mm = z_final_offset
+
+            # Use absolute Z positions (same for all channels)
+            z_start_positions = [
+                int(round(z_start_absolute_mm * 100))
+            ] * len(ops)  # Absolute Z start position
+            z_stop_positions = [
+                int(round(z_stop_absolute_mm * 100))
+            ] * len(ops)  # Absolute Z stop position
+            z_final_positions = [
+                int(round(z_final_offset_mm * 100))
+            ] * len(ops)  # Absolute Z final position
+
+            # Ensure arrays match num_channels length
+            x_positions_full = [0] * self.num_channels
+            y_positions_full = [0] * self.num_channels
+            z_start_positions_full = [0] * self.num_channels
+            z_stop_positions_full = [0] * self.num_channels
+            z_final_positions_full = [0] * self.num_channels
+
+            for i, channel_idx in enumerate(use_channels):
+                x_positions_full[channel_idx] = x_positions[i]
+                y_positions_full[channel_idx] = y_positions[i]
+                z_start_positions_full[channel_idx] = z_start_positions[i]
+                z_stop_positions_full[channel_idx] = z_stop_positions[i]
+                z_final_positions_full[channel_idx] = z_final_positions[i]
+
+            # Create and send DropTips command
+            command = DropTips(
+                dest=self._pipette_address,
+                tips_used=tips_used,
+                x_positions=x_positions_full,
+                y_positions=y_positions_full,
+                traverse_height=traverse_height_units,
+                z_start_positions=z_start_positions_full,
+                z_stop_positions=z_stop_positions_full,
+                z_final_positions=z_final_positions_full,
+                default_waste=default_waste,
+            )
+
+        try:
+            await self.send_command(command)
+            logger.info(f"Dropped tips on channels {use_channels}")
+        except Exception as e:
+            logger.error(f"Failed to drop tips: {e}")
+            raise
 
     async def aspirate(
         self, ops: List[SingleChannelAspiration], use_channels: List[int]
@@ -514,6 +1363,26 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         raise NotImplementedError("drop_resource not yet implemented")
 
     def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
-        """Check if the tip can be picked up by the specified channel."""
-        raise NotImplementedError("can_pick_up_tip not yet implemented")
+        """Check if the tip can be picked up by the specified channel.
+
+        Args:
+            channel_idx: Channel index (0-based)
+            tip: Tip object to check
+
+        Returns:
+            True if the tip can be picked up, False otherwise
+        """
+        # Only Hamilton tips are supported
+        if not isinstance(tip, HamiltonTip):
+            return False
+
+        # XL tips are not supported on Nimbus
+        if tip.tip_size in {TipSize.XL}:
+            return False
+
+        # Check if channel index is valid
+        if self._num_channels is not None and channel_idx >= self._num_channels:
+            return False
+
+        return True
 

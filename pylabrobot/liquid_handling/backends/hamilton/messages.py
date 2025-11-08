@@ -81,14 +81,19 @@ class HoiParams:
     def __init__(self):
         self._fragments: list[bytes] = []
 
-    def _add_fragment(self, type_id: int, data: bytes) -> 'HoiParams':
+    def _add_fragment(self, type_id: int, data: bytes, flags: int = 0) -> 'HoiParams':
         """Add a DataFragment with the given type_id and data.
 
         Creates: [type_id:1][flags:1][length:2][data:n]
+
+        Args:
+            type_id: Data type ID
+            data: Fragment data bytes
+            flags: Fragment flags (default: 0, but BOOL_ARRAY uses 0x01)
         """
         fragment = (Wire.write()
                     .u8(type_id)
-                    .u8(0)  # flags (always 0)
+                    .u8(flags)
                     .u16(len(data))
                     .raw_bytes(data)
                     .finish())
@@ -162,82 +167,114 @@ class HoiParams:
     def i8_array(self, values: list[int]) -> 'HoiParams':
         """Add array of signed 8-bit integers.
 
-        Format: [count:4][element0][element1]...
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
         """
-        writer = Wire.write().u32(len(values))
+        writer = Wire.write()
         for val in values:
             writer.i8(val)
         return self._add_fragment(HamiltonDataType.I8_ARRAY, writer.finish())
 
     def i16_array(self, values: list[int]) -> 'HoiParams':
-        """Add array of signed 16-bit integers."""
-        writer = Wire.write().u32(len(values))
+        """Add array of signed 16-bit integers.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.i16(val)
         return self._add_fragment(HamiltonDataType.I16_ARRAY, writer.finish())
 
     def i32_array(self, values: list[int]) -> 'HoiParams':
-        """Add array of signed 32-bit integers."""
-        writer = Wire.write().u32(len(values))
+        """Add array of signed 32-bit integers.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.i32(val)
         return self._add_fragment(HamiltonDataType.I32_ARRAY, writer.finish())
 
     def i64_array(self, values: list[int]) -> 'HoiParams':
-        """Add array of signed 64-bit integers."""
-        writer = Wire.write().u32(len(values))
+        """Add array of signed 64-bit integers.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.i64(val)
         return self._add_fragment(HamiltonDataType.I64_ARRAY, writer.finish())
 
     def u8_array(self, values: list[int]) -> 'HoiParams':
-        """Add array of unsigned 8-bit integers."""
-        writer = Wire.write().u32(len(values))
+        """Add array of unsigned 8-bit integers.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.u8(val)
         return self._add_fragment(HamiltonDataType.U8_ARRAY, writer.finish())
 
     def u16_array(self, values: list[int]) -> 'HoiParams':
-        """Add array of unsigned 16-bit integers."""
-        writer = Wire.write().u32(len(values))
+        """Add array of unsigned 16-bit integers.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.u16(val)
         return self._add_fragment(HamiltonDataType.U16_ARRAY, writer.finish())
 
     def u32_array(self, values: list[int]) -> 'HoiParams':
-        """Add array of unsigned 32-bit integers."""
-        writer = Wire.write().u32(len(values))
+        """Add array of unsigned 32-bit integers.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.u32(val)
         return self._add_fragment(HamiltonDataType.U32_ARRAY, writer.finish())
 
     def u64_array(self, values: list[int]) -> 'HoiParams':
-        """Add array of unsigned 64-bit integers."""
-        writer = Wire.write().u32(len(values))
+        """Add array of unsigned 64-bit integers.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.u64(val)
         return self._add_fragment(HamiltonDataType.U64_ARRAY, writer.finish())
 
     def f32_array(self, values: list[float]) -> 'HoiParams':
-        """Add array of 32-bit floats."""
-        writer = Wire.write().u32(len(values))
+        """Add array of 32-bit floats.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.f32(val)
         return self._add_fragment(HamiltonDataType.F32_ARRAY, writer.finish())
 
     def f64_array(self, values: list[float]) -> 'HoiParams':
-        """Add array of 64-bit doubles."""
-        writer = Wire.write().u32(len(values))
+        """Add array of 64-bit doubles.
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+        """
+        writer = Wire.write()
         for val in values:
             writer.f64(val)
         return self._add_fragment(HamiltonDataType.F64_ARRAY, writer.finish())
 
     def bool_array(self, values: list[bool]) -> 'HoiParams':
-        """Add array of booleans (stored as u8: 0 or 1)."""
-        writer = Wire.write().u32(len(values))
+        """Add array of booleans (stored as u8: 0 or 1).
+
+        Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
+
+        Note: BOOL_ARRAY uses flags=0x01 in the DataFragment header (unlike other types which use 0x00).
+        """
+        writer = Wire.write()
         for val in values:
             writer.u8(1 if val else 0)
-        return self._add_fragment(HamiltonDataType.BOOL_ARRAY, writer.finish())
+        return self._add_fragment(HamiltonDataType.BOOL_ARRAY, writer.finish(), flags=0x01)
 
     def string_array(self, values: list[str]) -> 'HoiParams':
         """Add array of null-terminated strings.
