@@ -610,13 +610,14 @@ class Cytation5Backend(ImageReaderBackend):
   async def stop_heating_or_cooling(self):
     return await self.send_command("g", "00000")
 
-  def _parse_body(self, body: bytes) -> Dict[Tuple[int, int], float]:
+  def _parse_body(self, body: bytes) -> List[List[Optional[float]]]:
+    assert self._plate is not None, "Plate must be set before reading data"
+    plate = self._plate
     start_index = 22
     end_index = body.rindex(b"\r\n")
-    num_rows = 8
+    num_rows = plate.num_items_y
     rows = body[start_index:end_index].split(b"\r\n,")[:num_rows]
 
-    assert self._plate is not None, "Plate must be set before reading data"
     parsed_data: Dict[Tuple[int, int], float] = {}
     for row in rows:
       values = row.split(b",")
@@ -629,16 +630,11 @@ class Cytation5Backend(ImageReaderBackend):
         value = float(group[2].decode())
         parsed_data[(row_index, column_index)] = value
 
-    return parsed_data
-
-  def _data_dict_to_list(
-    self, data: Dict[Tuple[int, int], float], plate: Plate
-  ) -> List[List[Optional[float]]]:
     result: List[List[Optional[float]]] = [
       [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
     ]
-    for (row, col), value in data.items():
-      result[row][col] = value
+    for (row_idx, col_idx), value in parsed_data.items():
+      result[row_idx][col_idx] = value
     return result
 
   async def set_plate(self, plate: Plate):
@@ -703,16 +699,16 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("All wells must be in the specified plate")
     return _non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
 
-  async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[List[Optional[float]]]:
+  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
     await self.set_plate(plate)
 
     wavelength_str = str(wavelength).zfill(4)
-    data: Dict[Tuple[int, int], float] = {}
+    all_data: List[List[Optional[float]]] = [
+      [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
+    ]
 
     for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
       cmd = f"004701{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000010600008{wavelength_str}1"
@@ -725,13 +721,32 @@ class Cytation5Backend(ImageReaderBackend):
 
       # read data
       body = await self._read_until(b"\x03", timeout=60 * 3)
-      assert resp is not None
-      data.update(self._parse_body(body))
-    return self._data_dict_to_list(data, plate)
+      assert body is not None
+      parsed_data = self._parse_body(body)
+      # Merge data
+      for r in range(plate.num_items_y):
+        for c in range(plate.num_items_x):
+          if parsed_data[r][c] is not None:
+            all_data[r][c] = parsed_data[r][c]
+
+    # Get current temperature
+    try:
+      temp = await self.get_current_temperature()
+    except TimeoutError:
+      temp = float("nan")
+
+    return [
+      {
+        "wavelength": wavelength,
+        "data": all_data,
+        "temperature": temp,
+        "time": time.time(),
+      }
+    ]
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
-  ) -> List[List[Optional[float]]]:
+  ) -> List[Dict]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
 
@@ -751,7 +766,9 @@ class Cytation5Backend(ImageReaderBackend):
     integration_time_seconds_s = str(integration_time_seconds * 5).zfill(2)
     integration_time_milliseconds_s = str(int(float(integration_time_milliseconds * 50))).zfill(2)
 
-    data: Dict[Tuple[int, int], float] = {}
+    all_data: List[List[Optional[float]]] = [
+      [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
+    ]
     for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
       cmd = f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}000120010000110010000012300{integration_time_seconds_s}{integration_time_milliseconds_s}200200-001000-003000000000000000000013510"  # 0812
       checksum = str((sum(cmd.encode()) + 8) % 100).zfill(2)  # don't know why +8
@@ -766,8 +783,26 @@ class Cytation5Backend(ImageReaderBackend):
       timeout = 60 + integration_time_seconds * (2 * 60 + 10)
       body = await self._read_until(b"\x03", timeout=timeout)
       assert body is not None
-      data.update(self._parse_body(body))
-    return self._data_dict_to_list(data, plate)
+      parsed_data = self._parse_body(body)
+      # Merge data
+      for r in range(plate.num_items_y):
+        for c in range(plate.num_items_x):
+          if parsed_data[r][c] is not None:
+            all_data[r][c] = parsed_data[r][c]
+
+    # Get current temperature
+    try:
+      temp = await self.get_current_temperature()
+    except TimeoutError:
+      temp = float("nan")
+
+    return [
+      {
+        "data": all_data,
+        "temperature": temp,
+        "time": time.time(),
+      }
+    ]
 
   async def read_fluorescence(
     self,
@@ -776,7 +811,7 @@ class Cytation5Backend(ImageReaderBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[Optional[float]]]:
+  ) -> List[Dict]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
     if not 250 <= excitation_wavelength <= 700:
@@ -792,7 +827,9 @@ class Cytation5Backend(ImageReaderBackend):
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
 
-    data: Dict[Tuple[int, int], float] = {}
+    all_data: List[List[Optional[float]]] = [
+      [None for _ in range(plate.num_items_x)] for _ in range(plate.num_items_y)
+    ]
     for min_row, min_col, max_row, max_col in self._get_min_max_row_col_tuples(wells, plate):
       cmd = (
         f"008401{min_row+1:02}{min_col+1:02}{max_row+1:02}{max_col+1:02}0001200100001100100000135000100200200{excitation_wavelength_str}000"
@@ -807,8 +844,28 @@ class Cytation5Backend(ImageReaderBackend):
 
       body = await self._read_until(b"\x03", timeout=60 * 2)
       assert body is not None
-      data.update(self._parse_body(body))
-    return self._data_dict_to_list(data, plate)
+      parsed_data = self._parse_body(body)
+      # Merge data
+      for r in range(plate.num_items_y):
+        for c in range(plate.num_items_x):
+          if parsed_data[r][c] is not None:
+            all_data[r][c] = parsed_data[r][c]
+
+    # Get current temperature
+    try:
+      temp = await self.get_current_temperature()
+    except TimeoutError:
+      temp = float("nan")
+
+    return [
+      {
+        "ex_wavelength": excitation_wavelength,
+        "em_wavelength": emission_wavelength,
+        "data": all_data,
+        "temperature": temp,
+        "time": time.time(),
+      }
+    ]
 
   async def _abort(self) -> None:
     await self.send_command("x", wait_for_response=False)
