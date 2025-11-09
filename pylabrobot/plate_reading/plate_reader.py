@@ -74,10 +74,13 @@ class PlateReader(ResourceHolder, Machine):
     plate = self.get_plate() if len(self.children) > 0 else None
     await self.backend.close(plate=plate, **backend_kwargs)
 
-
   @need_setup_finished
   async def read_luminescence(
-    self, focal_height: float, wells: Optional[List[Well]] = None, use_new_return_type: bool = False, **backend_kwargs
+    self,
+    focal_height: float,
+    wells: Optional[List[Well]] = None,
+    use_new_return_type: bool = False,
+    **backend_kwargs,
   ) -> List[Dict]:
     """Read the luminescence from the plate reader.
 
@@ -104,12 +107,16 @@ class PlateReader(ResourceHolder, Machine):
         "The return type of read_luminescence will change in a future version. Please set "
         "use_new_return_type=True to use the new return type."
       )
-      return result[0]["data"]
+      return result[0]["data"]  # type: ignore[no-any-return]
     return result
 
   @need_setup_finished
   async def read_absorbance(
-    self, wavelength: int, wells: Optional[List[Well]] = None, use_new_return_type: bool = False, **backend_kwargs
+    self,
+    wavelength: int,
+    wells: Optional[List[Well]] = None,
+    use_new_return_type: bool = False,
+    **backend_kwargs,
   ) -> List[Dict]:
     """Read the absorbance from the plate reader.
 
@@ -137,7 +144,7 @@ class PlateReader(ResourceHolder, Machine):
         "The return type of read_absorbance will change in a future version. Please set "
         "use_new_return_type=True to use the new return type."
       )
-      return result[0]["data"]
+      return result[0]["data"]  # type: ignore[no-any-return]
     return result
 
   @need_setup_finished
@@ -186,5 +193,5 @@ class PlateReader(ResourceHolder, Machine):
         "The return type of read_fluorescence will change in a future version. Please set "
         "use_new_return_type=True to use the new return type."
       )
-      return result[0]["data"]
+      return result[0]["data"]  # type: ignore[no-any-return]
     return result
