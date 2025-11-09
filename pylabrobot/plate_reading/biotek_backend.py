@@ -701,7 +701,7 @@ class Cytation5Backend(ImageReaderBackend):
 
   async def read_absorbance(
     self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
@@ -739,17 +739,16 @@ class Cytation5Backend(ImageReaderBackend):
 
     return [
       {
-        (wavelength, 0): {
-          "data": all_data,
-          "temp": temp,
-          "time": time.time(),
-        }
+        "wavelength": wavelength,
+        "data": all_data,
+        "temperature": temp,
+        "time": time.time(),
       }
     ]
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 1
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
 
@@ -801,11 +800,9 @@ class Cytation5Backend(ImageReaderBackend):
 
     return [
       {
-        (0, 0): {  # Luminescence does not have excitation/emission wavelength in the same way
-          "data": all_data,
-          "temp": temp,
-          "time": time.time(),
-        }
+        "data": all_data,
+        "temperature": temp,
+        "time": time.time(),
       }
     ]
 
@@ -816,7 +813,7 @@ class Cytation5Backend(ImageReaderBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
     if not 250 <= excitation_wavelength <= 700:
@@ -864,11 +861,11 @@ class Cytation5Backend(ImageReaderBackend):
 
     return [
       {
-        (excitation_wavelength, emission_wavelength): {
-          "data": all_data,
-          "temp": temp,
-          "time": time.time(),
-        }
+        "ex_wavelength": excitation_wavelength,
+        "em_wavelength": emission_wavelength,
+        "data": all_data,
+        "temperature": temp,
+        "time": time.time(),
       }
     ]
 

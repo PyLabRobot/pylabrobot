@@ -77,15 +77,17 @@ class PlateReader(ResourceHolder, Machine):
   @need_setup_finished
   async def read_luminescence(
     self, focal_height: float, wells: Optional[List[Well]] = None, **backend_kwargs
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read the luminescence from the plate reader.
 
     Args:
       focal_height: The focal height to read the luminescence at, in micrometers.
 
     Returns:
-      A list of dictionaries, one for each timepoint. Each dictionary has a key (0, 0)
-      and a value containing the data, temperature, and time.
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
     """
 
     return await self.backend.read_luminescence(
@@ -98,15 +100,18 @@ class PlateReader(ResourceHolder, Machine):
   @need_setup_finished
   async def read_absorbance(
     self, wavelength: int, wells: Optional[List[Well]] = None, **backend_kwargs
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read the absorbance from the plate reader.
 
     Args:
       wavelength: The wavelength to read the absorbance at, in nanometers.
 
     Returns:
-      A list of dictionaries, one for each timepoint. Each dictionary has a key (wavelength, 0)
-      and a value containing the data, temperature, and time.
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "wavelength": int,
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
     """
 
     return await self.backend.read_absorbance(
@@ -124,7 +129,7 @@ class PlateReader(ResourceHolder, Machine):
     focal_height: float,
     wells: Optional[List[Well]] = None,
     **backend_kwargs,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read the fluorescence from the plate reader.
 
     Args:
@@ -133,9 +138,12 @@ class PlateReader(ResourceHolder, Machine):
       focal_height: The focal height to read the fluorescence at, in micrometers.
 
     Returns:
-      A list of dictionaries, one for each timepoint. Each dictionary has a key
-      (excitation_wavelength, emission_wavelength) and a value containing the data, temperature,
-      and time.
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "ex_wavelength": int,
+        "em_wavelength": int,
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
     """
 
     if excitation_wavelength > emission_wavelength:

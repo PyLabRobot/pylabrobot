@@ -71,34 +71,35 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
         masked[r][c] = result[r][c]
     return masked
 
-  def _format_data(
-    self, data: List[List[Optional[float]]], key: Tuple[int, int]
-  ) -> List[Dict[Tuple[int, int], Dict]]:
-    return [
-      {
-        key: {
-          "data": data,
-          "temp": float("nan"),
-          "time": time.time(),
-        }
-      }
-    ]
-
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     print(f"Reading luminescence at focal height {focal_height}.")
     result = self._mask_result(self.dummy_luminescence, wells, plate)
     self._print_plate_reading_wells(result)
-    return self._format_data(result, (0, 0))
+    return [
+      {
+        "time": time.time(),
+        "temperature": float("nan"),
+        "data": result,
+        "em_wavelength": 0,
+      }
+    ]
 
   async def read_absorbance(
     self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     print(f"Reading absorbance at wavelength {wavelength}.")
     result = self._mask_result(self.dummy_absorbance, wells, plate)
     self._print_plate_reading_wells(result)
-    return self._format_data(result, (wavelength, 0))
+    return [
+      {
+        "time": time.time(),
+        "temperature": float("nan"),
+        "data": result,
+        "wavelength": wavelength,
+      }
+    ]
 
   async def read_fluorescence(
     self,
@@ -107,10 +108,18 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     print(
       f"Reading fluorescence at excitation wavelength {excitation_wavelength}, emission wavelength {emission_wavelength}, and focal height {focal_height}."
     )
     result = self._mask_result(self.dummy_fluorescence, wells, plate)
     self._print_plate_reading_wells(result)
-    return self._format_data(result, (excitation_wavelength, emission_wavelength))
+    return [
+      {
+        "time": time.time(),
+        "temperature": float("nan"),
+        "data": result,
+        "ex_wavelength": excitation_wavelength,
+        "em_wavelength": emission_wavelength,
+      }
+    ]

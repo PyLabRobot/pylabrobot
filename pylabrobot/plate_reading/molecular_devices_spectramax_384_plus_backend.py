@@ -52,7 +52,7 @@ class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     raise NotImplementedError("Fluorescence reading is not supported.")
 
   async def read_luminescence(  # type: ignore[override]
@@ -72,7 +72,7 @@ class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     raise NotImplementedError("Luminescence reading is not supported.")
 
   async def read_fluorescence_polarization(
@@ -94,7 +94,7 @@ class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     raise NotImplementedError("Fluorescence polarization reading is not supported.")
 
   async def read_time_resolved_fluorescence(
@@ -118,5 +118,5 @@ class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     raise NotImplementedError("Time-resolved fluorescence reading is not supported.")

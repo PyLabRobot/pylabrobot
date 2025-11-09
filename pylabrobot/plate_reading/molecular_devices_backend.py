@@ -360,7 +360,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   async def _transfer_data(
     self, settings: MolecularDevicesSettings
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Transfer data from the plate reader. For kinetic/spectrum reads, this will transfer data for each
     reading and combine them into a single collection.
     """
@@ -380,29 +380,17 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
         res = await self.send_command("!TRANSFER")
         data_str = res[1]
         read_data = self._parse_data(data_str, settings)
-        all_reads.append(read_data)
-
-      if settings.read_type == ReadType.SPECTRUM:
-        # Combine data for spectrum reads
-        combined_spectrum = {}
-        for read_data in all_reads:
-          for key, value in read_data.items():
-            combined_spectrum[key] = {
-              "data": value["data"],
-              "temp": value["temp"],
-              "time": value["time"],
-            }
-        return [combined_spectrum]  # Return as a list with one element
-      return all_reads  # For KINETIC
+        all_reads.extend(read_data) # Unpack the list
+      return all_reads
 
     # For ENDPOINT
     res = await self.send_command("!TRANSFER")
     data_str = res[1]
-    return [self._parse_data(data_str, settings)]
+    return self._parse_data(data_str, settings)
 
   def _parse_data(
     self, data_str: str, settings: MolecularDevicesSettings
-  ) -> Dict[Tuple[int, int], Dict]:
+  ) -> List[Dict]:
     lines = re.split(r"\r\n|\n", data_str.strip())
     lines = [line.strip() for line in lines if line.strip()]
 
@@ -460,29 +448,28 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
           data_rows.append(row)
       data_collection_transposed.append(data_rows)
 
-    timepoint_data = {}
+    measurements = []
     read_mode = settings.read_mode
     for i, data_rows in enumerate(data_collection_transposed):
-      key = None
+      measurement = {
+        "data": data_rows,
+        "temperature": temperature,
+        "time": measurement_time,
+      }
       if read_mode == ReadMode.ABS:
         wl = int(cur_read_wavelengths[i][0])
-        key = (wl, 0)
+        measurement["wavelength"] = wl
       elif read_mode == ReadMode.FLU or read_mode == ReadMode.POLAR or read_mode == ReadMode.TIME:
         ex_wl = int(cur_read_wavelengths[i][0])
         em_wl = int(cur_read_wavelengths[i][1])
-        key = (ex_wl, em_wl)
+        measurement["ex_wavelength"] = ex_wl
+        measurement["em_wavelength"] = em_wl
       elif read_mode == ReadMode.LUM:
         em_wl = int(cur_read_wavelengths[i][1])
-        key = (0, em_wl)
+        measurement["em_wavelength"] = em_wl
+      measurements.append(measurement)
 
-      if key:
-        timepoint_data[key] = {
-          "data": data_rows,
-          "temp": temperature,
-          "time": measurement_time,
-        }
-
-    return timepoint_data
+    return measurements
 
   async def _set_clear(self) -> None:
     await self.send_command("!CLEAR DATA")
@@ -709,7 +696,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.ABS,
@@ -765,7 +752,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """use  _get_cutoff_filter_index_from_wavelength for cutoff_filters"""
     settings = MolecularDevicesSettings(
       plate=plate,
@@ -827,7 +814,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.LUM,
@@ -888,7 +875,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.POLAR,
@@ -953,7 +940,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     cuvette: bool = False,
     settling_time: int = 0,
     timeout: int = 600,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     settings = MolecularDevicesSettings(
       plate=plate,
       read_mode=ReadMode.TIME,

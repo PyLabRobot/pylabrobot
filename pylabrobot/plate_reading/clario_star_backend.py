@@ -259,7 +259,7 @@ class CLARIOstarBackend(PlateReaderBackend):
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float = 13
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read luminescence values from the plate reader."""
     if wells != plate.get_all_items():
       raise NotImplementedError("Only full plate reads are supported for now.")
@@ -293,11 +293,9 @@ class CLARIOstarBackend(PlateReaderBackend):
 
     return [
       {
-        (0, 0): {
-          "data": floats,
-          "temp": float("nan"),  # Temperature not available
-          "time": time.time(),
-        }
+        "data": floats,
+        "temperature": float("nan"),  # Temperature not available
+        "time": time.time(),
       }
     ]
 
@@ -307,7 +305,7 @@ class CLARIOstarBackend(PlateReaderBackend):
     wells: List[Well],
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read absorbance values from the device.
 
     Args:
@@ -373,11 +371,10 @@ class CLARIOstarBackend(PlateReaderBackend):
 
     return [
       {
-        (wavelength, 0): {
-          "data": data,
-          "temp": float("nan"),  # Temperature not available
-          "time": time.time(),
-        }
+        "wavelength": wavelength,
+        "data": data,
+        "temperature": float("nan"),  # Temperature not available
+        "time": time.time(),
       }
     ]
 

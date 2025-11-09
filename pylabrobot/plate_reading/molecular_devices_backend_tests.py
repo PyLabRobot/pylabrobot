@@ -706,13 +706,14 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
       kinetic_settings=None,
       spectrum_settings=None,
     )
+
     result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, dict)
+    self.assertIsInstance(result, list)
     self.assertEqual(len(result), 1)
-    self.assertIn((260, 0), result)
-    read = result[(260, 0)]
+    read = result[0]
+    self.assertEqual(read["wavelength"], 260)
     self.assertEqual(read["time"], 12345.6)
-    self.assertEqual(read["temp"], 25.1)
+    self.assertEqual(read["temperature"], 25.1)
     self.assertEqual(read["data"], [[0.1, 0.3], [0.2, 0.4]])
 
   def test_parse_absorbance_multiple_wavelengths(self):
@@ -739,14 +740,12 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, dict)
+    self.assertIsInstance(result, list)
     self.assertEqual(len(result), 2)
-    self.assertIn((260, 0), result)
-    read1 = result[(260, 0)]
-    self.assertEqual(read1["data"], [[0.1, 0.3], [0.2, 0.4]])
-    self.assertIn((280, 0), result)
-    read2 = result[(280, 0)]
-    self.assertEqual(read2["data"], [[0.5, 0.7], [0.6, 0.8]])
+    self.assertEqual(result[0]["wavelength"], 260)
+    self.assertEqual(result[0]["data"], [[0.1, 0.3], [0.2, 0.4]])
+    self.assertEqual(result[1]["wavelength"], 280)
+    self.assertEqual(result[1]["data"], [[0.5, 0.7], [0.6, 0.8]])
 
   def test_parse_fluorescence(self):
     data_str = """
@@ -770,12 +769,13 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, dict)
+    self.assertIsInstance(result, list)
     self.assertEqual(len(result), 1)
-    self.assertIn((485, 520), result)
-    read = result[(485, 520)]
+    read = result[0]
+    self.assertEqual(read["ex_wavelength"], 485)
+    self.assertEqual(read["em_wavelength"], 520)
     self.assertEqual(read["time"], 12345.6)
-    self.assertEqual(read["temp"], 25.1)
+    self.assertEqual(read["temperature"], 25.1)
     self.assertEqual(read["data"], [[100.0, 300.0], [200.0, 400.0]])
 
   def test_parse_luminescence(self):
@@ -799,12 +799,12 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     result = self.backend._parse_data(data_str, settings)
-    self.assertIsInstance(result, dict)
+    self.assertIsInstance(result, list)
     self.assertEqual(len(result), 1)
-    self.assertIn((0, 590), result)
-    read = result[(0, 590)]
+    read = result[0]
+    self.assertEqual(read["em_wavelength"], 590)
     self.assertEqual(read["time"], 12345.6)
-    self.assertEqual(read["temp"], 25.1)
+    self.assertEqual(read["temperature"], 25.1)
     self.assertEqual(read["data"], [[1000.0, 3000.0], [2000.0, 4000.0]])
 
   def test_parse_data_with_sat_and_nan(self):
@@ -828,7 +828,9 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
       spectrum_settings=None,
     )
     result = self.backend._parse_data(data_str, settings)
-    read = result[(260, 0)]
+    self.assertIsInstance(result, list)
+    self.assertEqual(len(result), 1)
+    read = result[0]
     self.assertEqual(read["data"][1][0], float("inf"))
     self.assertTrue(math.isnan(read["data"][1][1]))
 
@@ -873,10 +875,12 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
 
     result = await self.backend._transfer_data(settings)
     self.assertEqual(len(result), 2)
-    self.assertEqual(result[0][(260, 0)]["data"], [[0.1, 0.3], [0.2, 0.4]])
-    self.assertEqual(result[1][(260, 0)]["data"], [[0.15, 0.35], [0.25, 0.45]])
-    self.assertEqual(result[0][(260, 0)]["time"], 12345.6)
-    self.assertEqual(result[1][(260, 0)]["time"], 12355.6)
+    self.assertEqual(result[0]["wavelength"], 260)
+    self.assertEqual(result[0]["data"], [[0.1, 0.3], [0.2, 0.4]])
+    self.assertEqual(result[0]["time"], 12345.6)
+    self.assertEqual(result[1]["wavelength"], 260)
+    self.assertEqual(result[1]["data"], [[0.15, 0.35], [0.25, 0.45]])
+    self.assertEqual(result[1]["time"], 12355.6)
 
   async def test_parse_spectrum_absorbance(self):
     # Mock the send_command to return two different data blocks for two wavelengths
@@ -918,17 +922,15 @@ class TestDataParsing(unittest.IsolatedAsyncioTestCase):
     )
 
     result = await self.backend._transfer_data(settings)
-    self.assertEqual(len(result), 1)  # Should return a list with one dict
-    combined_data = result[0]
-    self.assertEqual(len(combined_data), 2)  # Two wavelengths
+    self.assertEqual(len(result), 2)
 
-    self.assertIn((260, 0), combined_data)
-    self.assertEqual(combined_data[(260, 0)]["data"], [[0.1, 0.3], [0.2, 0.4]])
-    self.assertEqual(combined_data[(260, 0)]["time"], 12345.6)
+    self.assertEqual(result[0]["wavelength"], 260)
+    self.assertEqual(result[0]["data"], [[0.1, 0.3], [0.2, 0.4]])
+    self.assertEqual(result[0]["time"], 12345.6)
 
-    self.assertIn((270, 0), combined_data)
-    self.assertEqual(combined_data[(270, 0)]["data"], [[0.15, 0.35], [0.25, 0.45]])
-    self.assertEqual(combined_data[(270, 0)]["time"], 12355.6)
+    self.assertEqual(result[1]["wavelength"], 270)
+    self.assertEqual(result[1]["data"], [[0.15, 0.35], [0.25, 0.45]])
+    self.assertEqual(result[1]["time"], 12355.6)
 
 
 class TestErrorHandling(unittest.IsolatedAsyncioTestCase):

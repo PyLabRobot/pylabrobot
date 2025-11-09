@@ -39,23 +39,28 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read the luminescence from the plate reader.
 
     Returns:
-      A list of dictionaries, one for each timepoint. Each dictionary has a key (0, 0)
-      and a value containing the data, temperature, and time.
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
     """
 
   @abstractmethod
   async def read_absorbance(
     self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read the absorbance from the plate reader.
 
     Returns:
-      A list of dictionaries, one for each timepoint. Each dictionary has a key (wavelength, 0)
-      and a value containing the data, temperature, and time.
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "wavelength": int,
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
     """
 
   @abstractmethod
@@ -66,13 +71,16 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[Dict[Tuple[int, int], Dict]]:
+  ) -> List[Dict]:
     """Read the fluorescence from the plate reader.
 
     Returns:
-      A list of dictionaries, one for each timepoint. Each dictionary has a key
-      (excitation_wavelength, emission_wavelength) and a value containing the data, temperature,
-      and time.
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "ex_wavelength": int,
+        "em_wavelength": int,
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
     """
 
 
