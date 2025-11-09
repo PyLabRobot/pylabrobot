@@ -8306,7 +8306,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         detection_drop=detection_drop,
         post_detection_trajectory=post_detection_trajectory,
         post_detection_dist=post_detection_dist,
-        move_channels_to_save_pos_after=False,
       )
     except STARFirmwareError:
       await self.move_all_channels_in_z_safety()
