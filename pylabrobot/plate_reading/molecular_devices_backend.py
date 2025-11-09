@@ -358,9 +358,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
   async def _read_now(self) -> None:
     await self.send_command("!READ")
 
-  async def _transfer_data(
-    self, settings: MolecularDevicesSettings
-  ) -> List[Dict]:
+  async def _transfer_data(self, settings: MolecularDevicesSettings) -> List[Dict]:
     """Transfer data from the plate reader. For kinetic/spectrum reads, this will transfer data for each
     reading and combine them into a single collection.
     """
@@ -380,7 +378,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
         res = await self.send_command("!TRANSFER")
         data_str = res[1]
         read_data = self._parse_data(data_str, settings)
-        all_reads.extend(read_data) # Unpack the list
+        all_reads.extend(read_data)  # Unpack the list
       return all_reads
 
     # For ENDPOINT
@@ -388,9 +386,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     data_str = res[1]
     return self._parse_data(data_str, settings)
 
-  def _parse_data(
-    self, data_str: str, settings: MolecularDevicesSettings
-  ) -> List[Dict]:
+  def _parse_data(self, data_str: str, settings: MolecularDevicesSettings) -> List[Dict]:
     lines = re.split(r"\r\n|\n", data_str.strip())
     lines = [line.strip() for line in lines if line.strip()]
 

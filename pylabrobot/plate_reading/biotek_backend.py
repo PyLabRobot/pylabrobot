@@ -699,9 +699,7 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("All wells must be in the specified plate")
     return _non_overlapping_rectangles((well.get_row(), well.get_column()) for well in wells)
 
-  async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[Dict]:
+  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 

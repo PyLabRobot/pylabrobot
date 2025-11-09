@@ -184,7 +184,6 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
         0.0707,
         0.1649,
       ],
-
       [0.1255, 0.0742, 0.0747, 0.0694, 0.1004, 0.09, 0.0659, 0.0858, 0.0876, 0.0815, 0.098, 0.1329],
       [0.1427, 0.1174, 0.0684, 0.0657, 0.0732, 0.067, 0.0602, 0.079, 0.0667, 0.1103, 0.129, 0.1316],
     ]
@@ -203,7 +202,6 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_read_luminescence_partial(self):
     self.backend.io.read.side_effect = _byte_iter(
       # plate
-
       "\x06"
       + "\x03"
       # focal height
@@ -333,7 +331,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
           "em_wavelength": 528,
           "data": expected_data,
           "temperature": 23.6,
-          "time": 12345.6789
+          "time": 12345.6789,
         }
-      ]
+      ],
     )

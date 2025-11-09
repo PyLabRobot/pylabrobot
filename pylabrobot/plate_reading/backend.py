@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.plate_reading.standard import (
@@ -50,9 +50,7 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     """
 
   @abstractmethod
-  async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[Dict]:
+  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     """Read the absorbance from the plate reader.
 
     Returns:

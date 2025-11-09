@@ -1,5 +1,5 @@
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
@@ -86,9 +86,7 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
       }
     ]
 
-  async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
-  ) -> List[Dict]:
+  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     print(f"Reading absorbance at wavelength {wavelength}.")
     result = self._mask_result(self.dummy_absorbance, wells, plate)
     self._print_plate_reading_wells(result)
