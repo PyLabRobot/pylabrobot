@@ -5294,7 +5294,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + core_grippers.back_channel_y_center
         + self.core_adjustment.y
       )
-      * 10
     )
     front_channel_y_center = int(
       (
@@ -5302,19 +5301,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + core_grippers.front_channel_y_center
         + self.core_adjustment.y
       )
-      * 10
     )
     assert (
       back_channel_y_center > front_channel_y_center
     ), "back_channel_y_center must be greater than front_channel_y_center"
-    assert front_channel_y_center > 60, "front_channel_y_center must be less than 6mm (60 [0.1mm])"
+    assert front_channel_y_center > 6, "front_channel_y_center must be less than 6mm"
     return back_channel_y_center, front_channel_y_center
 
   def _get_core_x(self) -> int:
     """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    return round((core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10)
+    return round(core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x)
 
   async def get_core(self, p1: int, p2: int):
     warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
@@ -5322,30 +5320,34 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.pick_up_core_gripper_tools(front_channel=p2 - 1)  # p1 here is 1-indexed
 
   @need_iswap_parked
-  async def pick_up_core_gripper_tools(self, front_channel: int):
+  async def pick_up_core_gripper_tools(self, front_channel: int, front_offset: Coordinate = Coordinate.zero(), back_offset: Coordinate = Coordinate.zero()):
     """Get CoRe gripper tool from wasteblock mount."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
     back_channel = front_channel - 1
+    
+    assert front_offset.x == back_offset.x, "front_offset.x and back_offset.x must be the same"
 
-    xs = self._get_core_x()
+    xs = self._get_core_x() + front_offset.x
 
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    begin_z_coord = round(2350 + self.core_adjustment.z * 10)
-    end_z_coord = round(2250 + self.core_adjustment.z * 10)
+    back_channel_y_center += back_offset.y
+    front_channel_y_center += front_offset.y
+    begin_z_coord = round(235.0 + self.core_adjustment.z)
+    end_z_coord = round(225.0 + self.core_adjustment.z )
 
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=f"{xs:05}",
+      xs=f"{round(xs * 10):05}",
       xd="0",
-      ya=f"{back_channel_y_center:04}",
-      yb=f"{front_channel_y_center:04}",
+      ya=f"{round(back_channel_y_center * 10):04}",
+      yb=f"{round(front_channel_y_center * 10):04}",
       pa=f"{back_channel+1:02}",  # star is 1-indexed
       pb=f"{front_channel+1:02}",  # star is 1-indexed
-      tp=f"{begin_z_coord:04}",
-      tz=f"{end_z_coord:04}",
+      tp=f"{round(begin_z_coord * 10):04}",
+      tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
       tt="14",
     )
@@ -5357,7 +5359,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.return_core_gripper_tools()
 
   @need_iswap_parked
-  async def return_core_gripper_tools(self):
+  async def return_core_gripper_tools(self, front_offset: Coordinate = Coordinate.zero(), back_offset: Coordinate = Coordinate.zero()):
     """Put CoRe gripper tool at wasteblock mount."""
 
     assert self.deck is not None, "must have deck defined to access CoRe grippers"
@@ -5370,20 +5372,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
 
-    channel_x_coord = round(xs + self.core_adjustment.x * 10)
+    channel_x_coord = round(xs + self.core_adjustment.x)
+    assert back_offset.x == front_offset.x, "back_offset.x and front_offset.x must be the same"
+
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    begin_z_coord = round(2150 + self.core_adjustment.z * 10)
-    end_z_coord = round(2050 + self.core_adjustment.z * 10)
+    back_channel_y_center += back_offset.y
+    front_channel_y_center += front_offset.y
+
+    begin_z_coord = round(215.0 + self.core_adjustment.z)
+    end_z_coord = round(205.0 + self.core_adjustment.z)
 
     command_output = await self.send_command(
       module="C0",
       command="ZS",
       xs=f"{channel_x_coord:05}",
       xd="0",
-      ya=f"{back_channel_y_center:04}",
-      yb=f"{front_channel_y_center:04}",
-      tp=f"{begin_z_coord:04}",
-      tz=f"{end_z_coord:04}",
+      ya=f"{round(back_channel_y_center * 10):04}",
+      yb=f"{round(front_channel_y_center * 10):04}",
+      tp=f"{round(begin_z_coord * 10):04}",
+      tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
       te=round(self._iswap_traversal_height * 10),
     )

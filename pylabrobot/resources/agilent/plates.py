@@ -92,7 +92,7 @@ def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
       num_items_x=12,
       num_items_y=8,
       dx=14.4 - diameter / 2,  # from spec
-      dy=11.2 - diameter / 2,  # from spec
+      dy=11.2 - diameter / 2 + 1.5,  # from spec
       dz=15.9 - 14.0 - 0.88,  # spec - spec - measured manually
       item_dx=9.0,  # standard
       item_dy=9.0,  # standard
