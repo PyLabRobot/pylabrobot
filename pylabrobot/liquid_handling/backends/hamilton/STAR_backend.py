@@ -82,11 +82,7 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import (
-  STAR_SIZE_X,
-  STARLET_SIZE_X,
-  HamiltonCoreGrippers,
-)
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
@@ -5312,7 +5308,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    return round(core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x)
+    return core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x
 
   async def get_core(self, p1: int, p2: int):
     warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
@@ -5397,6 +5393,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(215.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(205.0 + self.core_adjustment.z + z_offset)
 
+    print(xs)
     command_output = await self.send_command(
       module="C0",
       command="ZS",
