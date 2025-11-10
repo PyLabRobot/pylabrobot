@@ -5393,7 +5393,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     begin_z_coord = round(215.0 + self.core_adjustment.z + z_offset)
     end_z_coord = round(205.0 + self.core_adjustment.z + z_offset)
 
-    print(xs)
     command_output = await self.send_command(
       module="C0",
       command="ZS",
