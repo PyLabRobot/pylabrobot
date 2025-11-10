@@ -231,10 +231,6 @@ async def aspirate():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquids = cast(
-        List[Tuple[Optional[Liquid], float]],
-        deserialize(sc["liquids"]),
-      )
       mix = Mix(**sc["mix"]) if sc.get("mix") is not None else None
       aspirations.append(
         SingleChannelAspiration(
@@ -245,7 +241,6 @@ async def aspirate():
           flow_rate=flow_rate,
           liquid_height=liquid_height,
           blow_out_air_volume=blow_out_air_volume,
-          liquids=liquids,
           mix=mix,
         )
       )
@@ -289,10 +284,6 @@ async def dispense():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquids = cast(
-        List[Tuple[Optional[Liquid], float]],
-        deserialize(sc["liquids"]),
-      )
       mix = Mix(**sc["mix"]) if sc.get("mix") is not None else None
       dispenses.append(
         SingleChannelDispense(
@@ -303,7 +294,6 @@ async def dispense():
           flow_rate=flow_rate,
           liquid_height=liquid_height,
           blow_out_air_volume=blow_out_air_volume,
-          liquids=liquids,
           mix=mix,
         )
       )

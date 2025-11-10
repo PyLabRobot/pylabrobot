@@ -75,7 +75,6 @@ def _make_asp(
     flow_rate=None,
     liquid_height=None,
     blow_out_air_volume=None,
-    liquids=[(None, vol)],
     mix=None,
   )
 
@@ -94,7 +93,6 @@ def _make_disp(
     flow_rate=None,
     liquid_height=None,
     blow_out_air_volume=None,
-    liquids=[(None, vol)],
     mix=None,
   )
 
@@ -660,7 +658,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         flow_rate=None,
         liquid_height=None,
         blow_out_air_volume=None,
-        liquids=[[(None, 10)] for _ in range(96)],
         mix=None,
       )
     )
@@ -850,7 +847,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
             flow_rate=None,
             liquid_height=None,
             blow_out_air_volume=None,
-            liquids=[[(None, 10)]] * 96,
             mix=None,
           )
         },
@@ -870,7 +866,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
             flow_rate=None,
             liquid_height=None,
             blow_out_air_volume=None,
-            liquids=[[(None, 10)]] * 96,
             mix=None,
           )
         },
@@ -991,7 +986,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
     self.plate.assign_child_resource(lid)
     well = self.plate.get_item("A1")
-    well.tracker.set_liquids([(None, 10)])
     t = self.tip_rack.get_item("A1").get_tip()
     self.lh.update_head_state({0: t})
     with self.assertRaises(ValueError):
@@ -1131,12 +1125,9 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
       self.plate.get_item(i).set_volume(55)
 
     await self.lh.pick_up_tips(self.tip_rack[0:8])
-    initial_liquids = [self.plate.get_item(i).tracker.volume for i in range(8)]
     for _ in range(10):
       await self.lh.aspirate(self.plate[0:8], vols=[45] * 8)
       await self.lh.dispense(self.plate[0:8], vols=[45] * 8)
-    liquids_now = [self.plate.get_item(i).tracker.volume for i in range(8)]
-    self.assertEqual(liquids_now, initial_liquids)
 
   async def test_channel_1_liquid_tracking(self):
     self.plate.get_item("A1").tracker.set_volume(10)

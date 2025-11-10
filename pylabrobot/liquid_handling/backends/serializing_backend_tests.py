@@ -104,7 +104,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "flow_rate": None,
             "liquid_height": None,
             "blow_out_air_volume": None,
-            "liquids": [[None, 10]],
             "mix": None,
           }
         ],
@@ -133,7 +132,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "flow_rate": None,
             "liquid_height": None,
             "blow_out_air_volume": None,
-            "liquids": [[None, 10]],
             "mix": None,
           }
         ],
@@ -187,7 +185,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": None,
-          "liquids": [[[None, 10]]] * 96,  # tuple, list of liquids per well, list of wells
           "tips": [serialize(tip) for tip in tips],
         }
       },
@@ -212,7 +209,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": None,
-          "liquids": [[[None, 10.0]]] * 96,  # tuple, list of liquids per well, list of wells
           "tips": [serialize(tip) for tip in tips],
         }
       },

@@ -918,14 +918,6 @@ class LiquidHandler(Resource, Machine):
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
-    # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    for r, vol in zip(resources, vols):
-      if r.tracker.is_disabled or not does_volume_tracking():
-        liquids.append([(None, vol)])
-      else:
-        liquids.append([(None, vol)])
-
     # create operations
     aspirations = [
       SingleChannelAspiration(
@@ -936,10 +928,9 @@ class LiquidHandler(Resource, Machine):
         liquid_height=lh,
         tip=t,
         blow_out_air_volume=bav,
-        liquids=lvs,
         mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs, m in zip(
+      for r, v, o, fr, lh, t, bav, m in zip(
         resources,
         vols,
         offsets,
@@ -947,7 +938,6 @@ class LiquidHandler(Resource, Machine):
         liquid_height,
         tips,
         blow_out_air_volume,
-        liquids,
         mix or [None] * len(use_channels),  # type: ignore
       )
     ]
@@ -1139,13 +1129,6 @@ class LiquidHandler(Resource, Machine):
           f"Length of {n} must match length of use_channels: {len(p)} != {len(use_channels)}"
         )
 
-    # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    if does_volume_tracking():
-      channels = [self.head[channel] for channel in use_channels]
-      liquids = [[(None, vol)] for c, vol in zip(channels, vols)]
-    else:
-      liquids = [[(None, vol)] for vol in vols]
-
     # create operations
     dispenses = [
       SingleChannelDispense(
@@ -1155,11 +1138,10 @@ class LiquidHandler(Resource, Machine):
         flow_rate=fr,
         liquid_height=lh,
         tip=t,
-        liquids=lvs,
         blow_out_air_volume=bav,
         mix=m,
       )
-      for r, v, o, fr, lh, t, bav, lvs, m in zip(
+      for r, v, o, fr, lh, t, bav, m in zip(
         resources,
         vols,
         offsets,
@@ -1167,7 +1149,6 @@ class LiquidHandler(Resource, Machine):
         liquid_height,
         tips,
         blow_out_air_volume,
-        liquids,
         mix or [None] * len(use_channels),  # type: ignore
       )
     ]
@@ -1683,7 +1664,6 @@ class LiquidHandler(Resource, Machine):
       del backend_kwargs[extra]
 
     tips = [channel.get_tip() if channel.has_tip else None for channel in self.head96.values()]
-    all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
 
     # Convert everything to floats to handle exotic number types
@@ -1723,7 +1703,6 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
     else:  # multiple containers
@@ -1752,7 +1731,6 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
 
@@ -1829,7 +1807,6 @@ class LiquidHandler(Resource, Machine):
       del backend_kwargs[extra]
 
     tips = [channel.get_tip() if channel.has_tip else None for channel in self.head96.values()]
-    all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]
 
     # Convert everything to floats to handle exotic number types
@@ -1870,7 +1847,6 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
     else:
@@ -1901,7 +1877,6 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
 
