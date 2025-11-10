@@ -5304,7 +5304,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert front_channel_y_center > 6, "front_channel_y_center must be less than 6mm"
     return back_channel_y_center, front_channel_y_center
 
-  def _get_core_x(self) -> int:
+  def _get_core_x(self) -> float:
     """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
