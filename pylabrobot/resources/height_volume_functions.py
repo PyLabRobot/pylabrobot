@@ -510,8 +510,6 @@ def calculate_liquid_volume_container_1segment_round_vbottom(
   return liquid_volume
 
 
-
-
 ### Example of usage using a lambda function:
 # def Rectangular_Reservoir(name: str) -> Plate:
 #   """ An 8 well reservoir with a 30mL volume. """
