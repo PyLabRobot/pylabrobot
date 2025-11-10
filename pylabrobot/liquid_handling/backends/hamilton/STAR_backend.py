@@ -5320,22 +5320,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.pick_up_core_gripper_tools(front_channel=p2 - 1)  # p1 here is 1-indexed
 
   @need_iswap_parked
-  async def pick_up_core_gripper_tools(self, front_channel: int, front_offset: Coordinate = Coordinate.zero(), back_offset: Coordinate = Coordinate.zero()):
+  async def pick_up_core_gripper_tools(
+    self,
+    front_channel: int,
+    front_offset: Coordinate = Coordinate.zero(),
+    back_offset: Coordinate = Coordinate.zero(),
+  ):
     """Get CoRe gripper tool from wasteblock mount."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
     back_channel = front_channel - 1
-    
-    assert front_offset.x == back_offset.x, "front_offset.x and back_offset.x must be the same"
 
+    assert front_offset.x == back_offset.x, "front_offset.x and back_offset.x must be the same"
     xs = self._get_core_x() + front_offset.x
 
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     back_channel_y_center += back_offset.y
     front_channel_y_center += front_offset.y
     begin_z_coord = round(235.0 + self.core_adjustment.z)
-    end_z_coord = round(225.0 + self.core_adjustment.z )
+    end_z_coord = round(225.0 + self.core_adjustment.z)
 
     command_output = await self.send_command(
       module="C0",
@@ -5359,21 +5363,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.return_core_gripper_tools()
 
   @need_iswap_parked
-  async def return_core_gripper_tools(self, front_offset: Coordinate = Coordinate.zero(), back_offset: Coordinate = Coordinate.zero()):
+  async def return_core_gripper_tools(
+    self, front_offset: Coordinate = Coordinate.zero(), back_offset: Coordinate = Coordinate.zero()
+  ):
     """Put CoRe gripper tool at wasteblock mount."""
 
     assert self.deck is not None, "must have deck defined to access CoRe grippers"
 
-    deck_size = self.deck.get_absolute_size_x()
-    if deck_size == STARLET_SIZE_X:
-      xs = 7975
-    elif deck_size == STAR_SIZE_X:
-      xs = 13375
-    else:
-      raise ValueError(f"Deck size {deck_size} not supported")
-
-    channel_x_coord = round(xs + self.core_adjustment.x)
     assert back_offset.x == front_offset.x, "back_offset.x and front_offset.x must be the same"
+    xs = self._get_core_x() + front_offset.x
 
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
     back_channel_y_center += back_offset.y
@@ -5385,7 +5383,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     command_output = await self.send_command(
       module="C0",
       command="ZS",
-      xs=f"{channel_x_coord:05}",
+      xs=f"{round(xs * 10):05}",
       xd="0",
       ya=f"{round(back_channel_y_center * 10):04}",
       yb=f"{round(front_channel_y_center * 10):04}",
