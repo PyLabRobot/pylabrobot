@@ -139,7 +139,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     """Test that the state_updated method sends the correct event."""
     plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
     self.r.assign_child_resource(plate, location=Coordinate(0, 0, 0))
-    plate.set_well_volumes(500)
+    plate.set_well_volumes([500] * 96)
     time.sleep(0.1)
     self.vis.send_command.assert_called()  # type: ignore[attr-defined]
     call_args = self.vis.send_command.call_args[1]  # type: ignore[attr-defined]
