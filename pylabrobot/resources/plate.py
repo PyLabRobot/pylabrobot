@@ -170,7 +170,7 @@ class Plate(ItemizedResource["Well"]):
 
   def set_well_volumes(
     self,
-    volume: Union[float, int],
+    volumes: List[float],
   ) -> None:
     """Fill all wells in the plate with a given volume.
 
@@ -178,7 +178,12 @@ class Plate(ItemizedResource["Well"]):
       volume: The volume to fill each well with, in uL.
     """
 
-    for well in self.get_all_items():
+    if not len(volumes) == self.num_items:
+      raise ValueError(
+        f"Length of volumes ({len(volumes)}) does not match number of wells ({self.num_items})."
+      )
+
+    for well, volume in zip(self.get_all_items(), volumes):
       well.set_volume(volume)
 
   def disable_volume_trackers(self) -> None:
