@@ -456,7 +456,7 @@ def calculate_liquid_height_container_1segment_round_vbottom(
     check your labware definition and/or that you are using the right labware."""
     )
 
-  scale_factor = (liquid_volume / max_volume) ** (1 / 3)
+  scale_factor: float = (liquid_volume / max_volume) ** (1 / 3)
   liquid_height = scale_factor * h_pyramid
   return liquid_height
 
