@@ -124,7 +124,7 @@ class VolumeTracker:
     """Remove liquid from the container. Top to bottom."""
 
     available_volume = self.get_used_volume()
-    if abs(volume - available_volume) > 1e-6:
+    if (volume - available_volume) > 1e-6:
       raise TooLittleLiquidError(
         f"Container {self.thing} has too little liquid: {volume}uL > {available_volume}uL."
       )
@@ -136,7 +136,7 @@ class VolumeTracker:
       removed_volume += liquid_volume
 
       # If we have more liquid than we need, put the excess back.
-      if removed_volume > volume and abs(removed_volume - volume) > 1e-6:
+      if removed_volume > volume:
         self.pending_liquids.append((liquid, removed_volume - volume))
         removed_liquids.append((liquid, liquid_volume - (removed_volume - volume)))
       else:
@@ -150,7 +150,7 @@ class VolumeTracker:
   def add_liquid(self, liquid: Optional["Liquid"], volume: float) -> None:
     """Add liquid to the container."""
 
-    if abs(volume - self.get_free_volume()) > 1e-6:
+    if (volume - self.get_free_volume()) > 1e-6:
       raise TooLittleVolumeError(
         f"Container {self.thing} has too little volume: {volume}uL > {self.get_free_volume()}uL."
       )
@@ -188,7 +188,7 @@ class VolumeTracker:
   def get_liquids(self, top_volume: float) -> List[Tuple[Optional[Liquid], float]]:
     """Get the liquids in the top `top_volume` uL"""
 
-    if abs(top_volume - self.get_used_volume()) > 1e-6:
+    if (top_volume - self.get_used_volume()) > 1e-6:
       raise TooLittleLiquidError(f"Tracker only has {self.get_used_volume()}uL")
 
     liquids = []
