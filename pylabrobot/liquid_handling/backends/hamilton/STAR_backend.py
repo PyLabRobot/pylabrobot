@@ -5344,8 +5344,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if front_offset is not None:
       front_channel_y_center += front_offset.y
 
-    begin_z_coord = round(235.0 + self.core_adjustment.z)
-    end_z_coord = round(225.0 + self.core_adjustment.z)
+    if front_offset is not None and back_offset is not None and front_offset.z != back_offset.z:
+      raise ValueError("front_offset.z and back_offset.z must be the same")
+    z_offset = 0 if front_offset is None else front_offset.z
+    begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
+    end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
     command_output = await self.send_command(
       module="C0",
@@ -5388,8 +5391,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if front_offset is not None:
       front_channel_y_center += front_offset.y
 
-    begin_z_coord = round(215.0 + self.core_adjustment.z)
-    end_z_coord = round(205.0 + self.core_adjustment.z)
+    if front_offset is not None and back_offset is not None and back_offset.z != front_offset.z:
+      raise ValueError("back_offset.z and front_offset.z must be the same")
+    z_offset = 0 if front_offset is None else front_offset.z
+    begin_z_coord = round(215.0 + self.core_adjustment.z + z_offset)
+    end_z_coord = round(205.0 + self.core_adjustment.z + z_offset)
 
     command_output = await self.send_command(
       module="C0",
