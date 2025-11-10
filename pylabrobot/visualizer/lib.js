@@ -710,7 +710,7 @@ class Container extends Resource {
     super(resourceData, parent);
     const { max_volume } = resourceData;
     this.maxVolume = max_volume;
-    this.volume = resourceData.volume || [];
+    this.volume = resourceData.volume || 0;
   }
 
   static colorForVolume(volume, maxVolume) {
