@@ -1,3 +1,5 @@
+import warnings
+
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_container_1segment_round_vbottom,
   calculate_liquid_volume_container_1segment_round_vbottom,
@@ -98,3 +100,12 @@ def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
     ),
     plate_type="skirted",
   )
+
+
+def agilent_96_wellplate_150uL_Ub(name: str) -> Plate:
+  """Deprecated for agilent_96_wellplate_150uL_Vb. Use that one instead."""
+  warnings.warn(
+    "agilent_96_wellplate_150uL_Ub is deprecated. Use agilent_96_wellplate_150uL_Vb instead.",
+    DeprecationWarning,
+  )
+  return agilent_96_wellplate_150uL_Vb(name)
