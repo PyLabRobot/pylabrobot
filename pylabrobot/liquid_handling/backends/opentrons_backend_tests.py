@@ -156,7 +156,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     mock_aspirate.side_effect = assert_parameters
 
     await self.test_tip_pick_up()
-    self.plate.get_well("A1").tracker.set_liquids([(None, 10)])
+    self.plate.get_well("A1").tracker.set_volume(10)
     await self.lh.aspirate(self.plate["A1"], vols=[10])
 
   @patch("ot_api.lh.dispense_in_place")

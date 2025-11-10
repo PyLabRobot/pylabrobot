@@ -53,15 +53,24 @@ class Tube(Container):
   def serialize(self) -> dict:
     return {**super().serialize(), "max_volume": self.max_volume}
 
+  def set_volume(self, volume: float):
+    """Set the volume in the tube.
+
+    (wraps :meth:`~.VolumeTracker.set_volume`)
+
+    Example:
+      Set the volume in a tube to 10 uL:
+
+      >>> tube.set_volume(10)
+    """
+
+    self.tracker.set_volume(volume)
+
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """Set the liquids in the tube.
 
-    (wraps :meth:`~.VolumeTracker.set_liquids`)
-
-    Example:
-      Set the liquids in a tube to 10 uL of water:
-
-      >>> tube.set_liquids([(Liquid.WATER, 10)])
+    .. deprecated:: 0.1.0
+        Use `set_volume` instead. This method will be removed in a future version.
     """
 
     self.tracker.set_liquids(liquids)

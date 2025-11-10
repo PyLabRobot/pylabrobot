@@ -52,8 +52,8 @@ class TestWell(unittest.TestCase):
       max_volume=10,
       model="model",
     )
-    well.set_liquids([(None, 10)])
-    self.assertEqual(well.tracker.liquids, [(None, 10)])
+    well.set_volume(10)
+    self.assertEqual(well.tracker.volume, 10)
     self.assertEqual(well.tracker.get_used_volume(), 10)
 
   def test_get_index_in_plate(self):

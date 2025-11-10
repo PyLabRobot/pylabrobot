@@ -55,7 +55,6 @@ from pylabrobot.resources import (
   Trash,
   VolumeTracker,
   Well,
-  does_cross_contamination_tracking,
   does_tip_tracking,
   does_volume_tracking,
 )
@@ -91,21 +90,6 @@ TipPresenceProbingMethod = Callable[
   [List[TipSpot], Optional[List[int]]],
   Awaitable[Dict[str, bool]],
 ]
-
-
-def check_contaminated(liquid_history_tip, liquid_history_well):
-  """Helper function used to check if adding a liquid to the container
-  would result in cross contamination"""
-  return not liquid_history_tip.issubset(liquid_history_well) and len(liquid_history_tip) > 0
-
-
-def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
-  """Helper function used to check if it is possible to update the
-  liquid_history of src based on contents of dst"""
-  return (
-    not src_tracker.is_cross_contamination_tracking_disabled
-    and not dest_tracker.is_cross_contamination_tracking_disabled
-  )
 
 
 class BlowOutVolumeError(Exception):
@@ -940,7 +924,7 @@ class LiquidHandler(Resource, Machine):
       if r.tracker.is_disabled or not does_volume_tracking():
         liquids.append([(None, vol)])
       else:
-        liquids.append(r.tracker.get_liquids(top_volume=vol))
+        liquids.append([(None, vol)])
 
     # create operations
     aspirations = [
@@ -973,20 +957,7 @@ class LiquidHandler(Resource, Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.remove_liquid(op.volume)
-
-        # Cross contamination check
-        if does_cross_contamination_tracking():
-          if check_contaminated(
-            op.tip.tracker.liquid_history,
-            op.resource.tracker.liquid_history,
-          ):
-            raise CrossContaminationError(
-              f"Attempting to aspirate {next(reversed(op.liquids))[0]} with a tip contaminated "
-              f"with {op.tip.tracker.liquid_history}."
-            )
-
-        for liquid, volume in reversed(op.liquids):
-          op.tip.tracker.add_liquid(liquid=liquid, volume=volume)
+        op.tip.tracker.add_liquid(volume=op.volume)
 
     extras = self._check_args(
       self.backend.aspirate,
@@ -1171,7 +1142,7 @@ class LiquidHandler(Resource, Machine):
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     if does_volume_tracking():
       channels = [self.head[channel] for channel in use_channels]
-      liquids = [c.get_tip().tracker.get_liquids(top_volume=vol) for c, vol in zip(channels, vols)]
+      liquids = [[(None, vol)] for c, vol in zip(channels, vols)]
     else:
       liquids = [[(None, vol)] for vol in vols]
 
@@ -1205,12 +1176,7 @@ class LiquidHandler(Resource, Machine):
     for op in dispenses:
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
-          # Update the liquid history of the tip to reflect new liquid
-          if check_updatable(op.tip.tracker, op.resource.tracker):
-            op.tip.tracker.liquid_history.update(op.resource.tracker.liquid_history)
-
-          for liquid, volume in op.liquids:
-            op.resource.tracker.add_liquid(liquid=liquid, volume=volume)
+          op.resource.tracker.add_liquid(volume=op.volume)
         op.tip.tracker.remove_liquid(op.volume)
 
     # fix the backend kwargs
@@ -1745,18 +1711,9 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        # superfluous to have append in two places but the type checker is very angry and does not
-        # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-        liquids: List[Tuple[Optional[Liquid], float]]
-        if container.tracker.is_disabled or not does_volume_tracking():
-          liquids = [(None, volume)]
-          all_liquids.append(liquids)
-        else:
-          liquids = container.tracker.remove_liquid(volume=volume)  # type: ignore
-          all_liquids.append(liquids)
-
-        for liquid, vol in reversed(liquids):
-          tip.tracker.add_liquid(liquid=liquid, volume=vol)
+        if not container.tracker.is_disabled and does_volume_tracking():
+          container.tracker.remove_liquid(volume=volume)
+        tip.tracker.add_liquid(volume=volume)
 
       aspiration = MultiHeadAspirationContainer(
         container=container,
@@ -1766,7 +1723,7 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
     else:  # multiple containers
@@ -1783,18 +1740,9 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        # superfluous to have append in two places but the type checker is very angry and does not
-        # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-        if well.tracker.is_disabled or not does_volume_tracking():
-          liquids = [(None, volume)]
-          all_liquids.append(liquids)
-        else:
-          # tracker is enabled: update tracker liquid history
-          liquids = well.tracker.remove_liquid(volume=volume)  # type: ignore
-          all_liquids.append(liquids)
-
-        for liquid, vol in reversed(liquids):
-          tip.tracker.add_liquid(liquid=liquid, volume=vol)
+        if not well.tracker.is_disabled and does_volume_tracking():
+          well.tracker.remove_liquid(volume=volume)
+        tip.tracker.add_liquid(volume=volume)
 
       aspiration = MultiHeadAspirationPlate(
         wells=cast(List[Well], containers),
@@ -1804,7 +1752,7 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
 
@@ -1909,13 +1857,10 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        liquids = tip.tracker.remove_liquid(volume=volume)
-        reversed_liquids = list(reversed(liquids))
-        all_liquids.append(reversed_liquids)
+        tip.tracker.remove_liquid(volume=volume)
 
         if not container.tracker.is_disabled and does_volume_tracking():
-          for liquid, vol in reversed(reversed_liquids):
-            container.tracker.add_liquid(liquid=liquid, volume=vol)
+          container.tracker.add_liquid(volume=volume)
 
       dispense = MultiHeadDispenseContainer(
         container=container,
@@ -1925,7 +1870,7 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
+        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
     else:
@@ -1942,18 +1887,11 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
-        # during the aspiration command
-        if tip.tracker.is_disabled or not does_volume_tracking():
-          liquids = [(None, volume)]
-        else:
-          liquids = tip.tracker.remove_liquid(volume=volume)
-        reversed_liquids = list(reversed(liquids))
-        all_liquids.append(reversed_liquids)
+        if not tip.tracker.is_disabled and does_volume_tracking():
+          tip.tracker.remove_liquid(volume=volume)
 
         if not well.tracker.is_disabled and does_volume_tracking():
-          for liquid, vol in reversed_liquids:
-            well.tracker.add_liquid(liquid=liquid, volume=vol)
+          well.tracker.add_liquid(volume=volume)
 
       dispense = MultiHeadDispensePlate(
         wells=cast(List[Well], containers),
@@ -1963,7 +1901,7 @@ class LiquidHandler(Resource, Machine):
         tips=tips,
         liquid_height=liquid_height,
         blow_out_air_volume=blow_out_air_volume,
-        liquids=all_liquids,
+        liquids=[[(None, volume)]] * 96,
         mix=mix,
       )
 

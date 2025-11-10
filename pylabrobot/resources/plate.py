@@ -168,48 +168,18 @@ class Plate(ItemizedResource["Well"]):
   def has_lid(self) -> bool:
     return self.lid is not None
 
-  def set_well_liquids(
+  def set_well_volumes(
     self,
-    liquids: Union[
-      List[List[Tuple[Optional["Liquid"], Union[int, float]]]],
-      List[Tuple[Optional["Liquid"], Union[int, float]]],
-      Tuple[Optional["Liquid"], Union[int, float]],
-    ],
+    volume: Union[float, int],
   ) -> None:
-    """Update the liquid in the volume tracker for each well in the plate.
+    """Fill all wells in the plate with a given volume.
 
     Args:
-      liquids: A list of liquids, one for each well in the plate. The list can be a list of lists,
-        where each inner list contains the liquids for each well in a column. If a single tuple is
-        given, the volume is assumed to be the same for all wells. Liquids are in uL.
-
-    Raises:
-      ValueError: If the number of liquids does not match the number of wells in the plate.
-
-    Example:
-      Set the volume of each well in a 96-well plate to 10 uL.
-
-      >>> plate = Plate("plate", 127.76, 85.48, 14.5, num_items_x=12, num_items_y=8)
-      >>> plate.set_well_liquids((Liquid.WATER, 10))
+      volume: The volume to fill each well with, in uL.
     """
 
-    if isinstance(liquids, tuple):
-      liquids = [liquids] * self.num_items
-    elif isinstance(liquids, list) and all(isinstance(column, list) for column in liquids):
-      # mypy doesn't know that all() checks the type
-      liquids = cast(List[List[Tuple[Optional["Liquid"], float]]], liquids)
-      liquids = [list(column) for column in zip(*liquids)]  # transpose the list of lists
-      liquids = [volume for column in liquids for volume in column]  # flatten the list of lists
-
-    if len(liquids) != self.num_items:
-      raise ValueError(
-        f"Number of liquids ({len(liquids)}) does not match number of wells "
-        f"({self.num_items}) in plate '{self.name}'."
-      )
-
-    for i, (liquid, volume) in enumerate(liquids):
-      well = self.get_well(i)
-      well.tracker.set_liquids([(liquid, volume)])  # type: ignore
+    for well in self.get_all_items():
+      well.set_volume(volume)
 
   def disable_volume_trackers(self) -> None:
     """Disable volume tracking for all wells in the plate."""

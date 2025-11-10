@@ -30,7 +30,7 @@ def build_layout() -> HamiltonDeck:
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-  plate.get_item("A1").tracker.set_liquids([(None, 400)])
+  plate.get_item("A1").tracker.set_volume(400)
 
   deck = STARLetDeck()
   deck.assign_child_resource(tip_car, rails=1)
