@@ -1263,7 +1263,7 @@ class LiquidHandler(Resource, Machine):
     if error is not None:
       raise error
 
-  async def transfer(
+  async def experimental_transfer(
     self,
     source_resources: Sequence[Container],
     dest_resources: Sequence[Container],
@@ -1326,7 +1326,7 @@ class LiquidHandler(Resource, Machine):
       else:
         await self.discard_tips()
 
-  async def distribute(
+  async def experimental_distribute(
     self,
     operations: Dict[Container, List[Tuple[Union[Container, List[Container]], float]]],
     tip_spots: Union[List[TipSpot], AsyncIterator[TipSpot]],

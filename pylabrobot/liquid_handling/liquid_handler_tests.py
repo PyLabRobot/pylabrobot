@@ -663,7 +663,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # Simple transfer
     self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10)
+    await self.lh.experimental_transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10)
 
     self.assertEqual(
       self.get_first_command("aspirate"),
@@ -691,7 +691,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # Transfer to multiple wells
     self.plate.get_item("A1").tracker.set_liquids([(None, 80)])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80)
+    await self.lh.experimental_transfer(
+      self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80
+    )
     self.assertEqual(
       self.get_first_command("aspirate"),
       {
@@ -728,7 +730,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # Transfer with ratios
     self.plate.get_item("A1").tracker.set_liquids([(None, 60)])
-    await self.lh.transfer(
+    await self.lh.experimental_transfer(
       self.plate.get_well("A1"),
       self.plate["B1:C1"],
       source_vol=60,
@@ -770,7 +772,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # Transfer with target_vols
     vols: List[float] = [3, 1, 4, 1, 5, 9, 6, 2]
     self.plate.get_item("A1").tracker.set_liquids([(None, sum(vols))])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols)
+    await self.lh.experimental_transfer(
+      self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols
+    )
     self.assertEqual(
       self.get_first_command("aspirate"),
       {
@@ -806,7 +810,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # target_vols and source_vol specified
     with self.assertRaises(TypeError):
-      await self.lh.transfer(
+      await self.lh.experimental_transfer(
         self.plate.get_well("A1"),
         self.plate["A1:H1"],
         source_vol=100,
@@ -815,7 +819,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # target_vols and ratios specified
     with self.assertRaises(TypeError):
-      await self.lh.transfer(
+      await self.lh.experimental_transfer(
         self.plate.get_well("A1"),
         self.plate["A1:H1"],
         ratios=[1] * 8,
