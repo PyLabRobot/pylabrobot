@@ -710,7 +710,7 @@ class Container extends Resource {
     super(resourceData, parent);
     const { max_volume } = resourceData;
     this.maxVolume = max_volume;
-    this.liquids = resourceData.liquids || [];
+    this.volume = resourceData.volume || [];
   }
 
   static colorForVolume(volume, maxVolume) {
@@ -718,30 +718,22 @@ class Container extends Resource {
   }
 
   getVolume() {
-    return this.liquids.reduce((acc, liquid) => acc + liquid.volume, 0);
+    return this.volume;
   }
 
-  setLiquids(liquids) {
-    this.liquids = liquids;
+  setVolume(volume) {
+    this.volume = volume;
     this.update();
   }
 
   setState(state) {
-    let liquids = [];
-    for (let i = 0; i < state.liquids.length; i++) {
-      const liquid = state.liquids[i];
-      liquids.push({
-        name: liquid[0],
-        volume: liquid[1],
-      });
-    }
-    this.setLiquids(liquids);
+    this.setVolume(state.volume);
   }
 
   serializeState() {
     return {
-      liquids: this.liquids,
-      pending_liquids: this.liquids,
+      volume: this.volume,
+      pending_volume: this.volume,
     };
   }
 
