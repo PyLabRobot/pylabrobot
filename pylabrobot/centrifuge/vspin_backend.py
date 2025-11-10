@@ -175,7 +175,7 @@ class VSpinBackend(CentrifugeBackend):
     if self._bucket_1_remainder is None:
       warnings.warn(
         f"No calibration found for VSpin with device id {device_id}. "
-        "Please set the bucket 1 position using `set_bucket_1_position_to_current` method after setup.",
+        "Please set the bucket 1 position using `VSpinBackend.set_bucket_1_position_to_current` method after setup.",
         UserWarning,
       )
 
@@ -291,7 +291,7 @@ class VSpinBackend(CentrifugeBackend):
   def bucket_1_remainder(self) -> int:
     if self._bucket_1_remainder is None:
       raise RuntimeError(
-        "Bucket 1 position not set. Please set it using `set_bucket_1_position_to_current` method."
+        "Bucket 1 position not set. Please set it using `VSpinBackend.set_bucket_1_position_to_current` method."
       )
     return self._bucket_1_remainder
 
@@ -307,7 +307,7 @@ class VSpinBackend(CentrifugeBackend):
     """Get the bucket 1 position based on calibration."""
     if self._bucket_1_remainder is None:
       raise RuntimeError(
-        "Bucket 1 position not set. Please set it using `set_bucket_1_position_to_current` method."
+        "Bucket 1 position not set. Please set it using `VSpinBackend.set_bucket_1_position_to_current` method."
       )
     home_position = await self.get_home_position()
     bucket_1_position = (home_position - self.bucket_1_remainder) % FULL_ROTATION
