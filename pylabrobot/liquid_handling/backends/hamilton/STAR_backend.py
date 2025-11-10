@@ -5323,8 +5323,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def pick_up_core_gripper_tools(
     self,
     front_channel: int,
-    front_offset: Coordinate = Coordinate.zero(),
-    back_offset: Coordinate = Coordinate.zero(),
+    front_offset: Optional[Coordinate] = None,
+    back_offset: Optional[Coordinate] = None,
   ):
     """Get CoRe gripper tool from wasteblock mount."""
 
@@ -5332,12 +5332,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
     back_channel = front_channel - 1
 
-    assert front_offset.x == back_offset.x, "front_offset.x and back_offset.x must be the same"
-    xs = self._get_core_x() + front_offset.x
+    # Only enforce x equality if both offsets are explicitly provided.
+    if front_offset is not None and back_offset is not None and front_offset.x != back_offset.x:
+      raise ValueError("front_offset.x and back_offset.x must be the same")
+
+    xs = self._get_core_x() + (front_offset.x if front_offset is not None else 0)
 
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    back_channel_y_center += back_offset.y
-    front_channel_y_center += front_offset.y
+    if back_offset is not None:
+      back_channel_y_center += back_offset.y
+    if front_offset is not None:
+      front_channel_y_center += front_offset.y
+
     begin_z_coord = round(235.0 + self.core_adjustment.z)
     end_z_coord = round(225.0 + self.core_adjustment.z)
 
@@ -5364,18 +5370,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   @need_iswap_parked
   async def return_core_gripper_tools(
-    self, front_offset: Coordinate = Coordinate.zero(), back_offset: Coordinate = Coordinate.zero()
+    self,
+    front_offset: Optional[Coordinate] = None,
+    back_offset: Optional[Coordinate] = None,
   ):
     """Put CoRe gripper tool at wasteblock mount."""
 
-    assert self.deck is not None, "must have deck defined to access CoRe grippers"
+    # Only enforce x equality if both offsets are explicitly provided.
+    if front_offset is not None and back_offset is not None and back_offset.x != front_offset.x:
+      raise ValueError("back_offset.x and front_offset.x must be the same")
 
-    assert back_offset.x == front_offset.x, "back_offset.x and front_offset.x must be the same"
-    xs = self._get_core_x() + front_offset.x
+    xs = self._get_core_x() + (front_offset.x if front_offset is not None else 0)
 
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    back_channel_y_center += back_offset.y
-    front_channel_y_center += front_offset.y
+    if back_offset is not None:
+      back_channel_y_center += back_offset.y
+    if front_offset is not None:
+      front_channel_y_center += front_offset.y
 
     begin_z_coord = round(215.0 + self.core_adjustment.z)
     end_z_coord = round(205.0 + self.core_adjustment.z)
