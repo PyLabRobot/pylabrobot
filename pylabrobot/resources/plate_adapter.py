@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import List, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
@@ -68,12 +69,12 @@ class PlateAdapter(Resource):
     dz: float,
     adapter_hole_size_x: float,
     adapter_hole_size_y: float,
-    adapter_hole_size_z: float,
     adapter_hole_dx: float = 9.0,
     adapter_hole_dy: float = 9.0,
     plate_z_offset: float = 0.0,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    adapter_hole_size_z=None,
   ):
     super().__init__(
       name=name,
@@ -84,17 +85,56 @@ class PlateAdapter(Resource):
       model=model,
     )
 
+    if adapter_hole_size_z is not None:
+      warnings.warn(
+        "adapter_hole_size_z is deprecated and will be removed in a future release. "
+        "Please use the new Resource system instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+
     self._child_resource: Optional[Resource] = None
     self.dx = dx
     self.dy = dy
     self.dz = dz
     self.adapter_hole_size_x = adapter_hole_size_x
     self.adapter_hole_size_y = adapter_hole_size_y
-    self.adapter_hole_size_z = adapter_hole_size_z
     self.adapter_hole_size_z = self.get_absolute_size_z() - self.dz
     self.adapter_hole_dx = adapter_hole_dx
     self.adapter_hole_dy = adapter_hole_dy
     self.plate_z_offset = plate_z_offset
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "dx": self.dx,
+      "dy": self.dy,
+      "dz": self.dz,
+      "adapter_hole_size_x": self.adapter_hole_size_x,
+      "adapter_hole_size_y": self.adapter_hole_size_y,
+      "adapter_hole_dx": self.adapter_hole_dx,
+      "adapter_hole_dy": self.adapter_hole_dy,
+      "plate_z_offset": self.plate_z_offset,
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> PlateAdapter:
+    return cls(
+      name=data["name"],
+      size_x=data["size_x"],
+      size_y=data["size_y"],
+      size_z=data["size_z"],
+      dx=data["dx"],
+      dy=data["dy"],
+      dz=data["dz"],
+      adapter_hole_size_x=data["adapter_hole_size_x"],
+      adapter_hole_size_y=data["adapter_hole_size_y"],
+      adapter_hole_dx=data["adapter_hole_dx"],
+      adapter_hole_dy=data["adapter_hole_dy"],
+      plate_z_offset=data["plate_z_offset"],
+      category=data.get("category"),
+      model=data.get("model"),
+    )
 
   def compute_plate_location(self, resource: Plate) -> Coordinate:
     """Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to
