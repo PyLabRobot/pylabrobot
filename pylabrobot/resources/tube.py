@@ -1,3 +1,4 @@
+import warnings
 from typing import Callable, List, Optional, Tuple
 
 from pylabrobot.resources.container import Container
@@ -69,8 +70,12 @@ class Tube(Container):
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """Set the liquids in the tube.
 
-    .. deprecated:: 0.1.0
-        Use `set_volume` instead. This method will be removed in a future version.
+    Deprecated: use `set_volume` instead. This method will be removed in a future version.
     """
+
+    warnings.warn(
+      "`set_liquids` is deprecated and will be removed in a future version. Use `set_volume` instead.",
+      DeprecationWarning,
+    )
 
     self.tracker.set_liquids(liquids)
