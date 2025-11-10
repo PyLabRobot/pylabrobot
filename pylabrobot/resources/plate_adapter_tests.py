@@ -1,7 +1,6 @@
 import unittest
-from typing import cast
 
-from pylabrobot.resources import Coordinate, PlateAdapter
+from pylabrobot.resources import PlateAdapter
 
 _adapter = PlateAdapter(
   name="adapter",
