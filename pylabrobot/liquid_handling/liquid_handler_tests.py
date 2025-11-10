@@ -20,7 +20,6 @@ from pylabrobot.resources import (
   Cor_96_wellplate_360ul_Fb,
   Deck,
   Lid,
-  Liquid,
   Plate,
   ResourceNotFoundError,
   ResourceStack,
@@ -31,7 +30,6 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.errors import (
-  CrossContaminationError,
   HasTipError,
   NoTipError,
 )

@@ -1,5 +1,4 @@
 import contextlib
-import copy
 import sys
 import warnings
 from typing import Callable, List, Optional, Tuple
@@ -8,8 +7,7 @@ from pylabrobot.resources.errors import (
   TooLittleLiquidError,
   TooLittleVolumeError,
 )
-from pylabrobot.resources.liquid import Liquid  # Keep Liquid for backward compatibility for now
-from pylabrobot.serializer import deserialize, serialize
+from pylabrobot.resources.liquid import Liquid
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False  # type: ignore

@@ -1,3 +1,6 @@
+import warnings
+
+
 class ResourceNotFoundError(Exception):
   pass
 
@@ -21,6 +24,12 @@ class NoTipError(Exception):
 class CrossContaminationError(Exception):
   """Raised when attempting to aspirate from a well with a tip that has touched a
   different liquid."""
+
+  def __init__(self, *args, **kwargs):
+    warnings.warn(
+      "Cross contamination tracking is deprecated and will be removed in a future version. ",
+      DeprecationWarning,
+    )
 
 
 class ResourceDefinitionIncompleteError(Exception):

@@ -10,13 +10,11 @@ from typing import (
   Sequence,
   Tuple,
   Union,
-  cast,
 )
 
 from pylabrobot.resources.resource_holder import get_child_location
 
 from .itemized_resource import ItemizedResource
-from .liquid import Liquid
 from .resource import Coordinate, Resource
 
 if TYPE_CHECKING:

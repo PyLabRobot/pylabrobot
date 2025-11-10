@@ -5,7 +5,7 @@ import asyncio
 import json
 import os
 import threading
-from typing import Any, Coroutine, List, Optional, Tuple, cast
+from typing import Any, Coroutine, List, Optional, cast
 
 import werkzeug
 from flask import (
@@ -31,7 +31,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.resources import Coordinate, Deck, Liquid, Tip
+from pylabrobot.resources import Coordinate, Deck, Tip
 from pylabrobot.serializer import deserialize
 
 lh_api = Blueprint("liquid handling", __name__)

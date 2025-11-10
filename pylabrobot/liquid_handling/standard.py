@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Sequence, Union
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 
 if TYPE_CHECKING:

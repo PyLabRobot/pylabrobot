@@ -53,13 +53,11 @@ from pylabrobot.resources import (
   TipSpot,
   TipTracker,
   Trash,
-  VolumeTracker,
   Well,
   does_tip_tracking,
   does_volume_tracking,
 )
-from pylabrobot.resources.errors import CrossContaminationError, HasTipError
-from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.errors import HasTipError
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.tilting.tilter import Tilter
