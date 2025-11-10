@@ -3647,6 +3647,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
     )
 
+  async def move_channel_x_relative(self, channel: int, distance: float):
+    """Move a channel in the x direction by a relative amount."""
+    current_x = await self.request_x_pos_channel_n(channel)
+    await self.move_channel_x(channel, current_x + distance)
+
+  async def move_channel_y_relative(self, channel: int, distance: float):
+    """Move a channel in the y direction by a relative amount."""
+    current_y = await self.request_y_pos_channel_n(channel)
+    await self.move_channel_y(channel, current_y + distance)
+
+  async def move_channel_z_relative(self, channel: int, distance: float):
+    """Move a channel in the z direction by a relative amount."""
+    current_z = await self.request_z_pos_channel_n(channel)
+    await self.move_channel_z(channel, current_z + distance)
+
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if not isinstance(tip, HamiltonTip):
       return False
