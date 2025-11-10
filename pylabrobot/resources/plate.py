@@ -10,8 +10,10 @@ from typing import (
   Sequence,
   Tuple,
   Union,
+  cast,
 )
 
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.resource_holder import get_child_location
 
 from .itemized_resource import ItemizedResource
@@ -183,6 +185,25 @@ class Plate(ItemizedResource["Well"]):
 
     for well, volume in zip(self.get_all_items(), volumes):
       well.set_volume(volume)
+
+  def set_well_liquids(
+    self,
+    liquids: Union[
+      List[List[Tuple[Optional["Liquid"], Union[int, float]]]],
+      List[Tuple[Optional["Liquid"], Union[int, float]]],
+      Tuple[Optional["Liquid"], Union[int, float]],
+    ],
+  ):
+    """Deprecated: Use `set_well_volumes` instead."""
+    if isinstance(liquids, tuple):
+      liquids = [liquids] * self.num_items
+    elif isinstance(liquids, list) and all(isinstance(column, list) for column in liquids):
+      # mypy doesn't know that all() checks the type
+      liquids = cast(List[List[Tuple[Optional["Liquid"], float]]], liquids)
+      liquids = [list(column) for column in zip(*liquids)]  # transpose the list of lists
+      liquids = [volume for column in liquids for volume in column]  # flatten the list of lists
+
+    self.set_well_volumes([volume for _, volume in liquids])  # type: ignore
 
   def disable_volume_trackers(self) -> None:
     """Disable volume tracking for all wells in the plate."""
