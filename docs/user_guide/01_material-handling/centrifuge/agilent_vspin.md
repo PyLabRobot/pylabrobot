@@ -4,8 +4,8 @@ The VSpin centrifuge is controlled by the {class}`~pylabrobot.centrifuge.vspin_b
 
 ```python
 from pylabrobot.centrifuge import Centrifuge, VSpinBackend
-await cf.setup()
 cf = Centrifuge(name = "centrifuge", backend = VSpinBackend(device_id="YOUR_FTDI_ID_HERE"), size_x= 1, size_y=1, size_z=1)
+await cf.setup()
 ```
 
 You need to calibrate the bucket 1 position for every vspin. You can do that by opening the door (`cf.open_door()`), manually rotating the buckets to align bucket 1 with the door, and then setting bucket 1 position to the current position with `cf.backend.set_bucket_1_position_to_current()`. This will save the calibration for the current centrifuge to disk (based on the usb serial number).

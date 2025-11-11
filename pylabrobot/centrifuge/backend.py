@@ -33,10 +33,6 @@ class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def rotate_distance(self, distance) -> None:
-    pass
-
-  @abstractmethod
   async def lock_bucket(self) -> None:
     pass
 

@@ -96,10 +96,6 @@ class Centrifuge(Machine, Resource):
     await self.backend.go_to_bucket2()
     self._at_bucket = self.bucket2
 
-  async def rotate_distance(self, distance) -> None:
-    await self.backend.rotate_distance(distance=distance)
-    self._at_bucket = None
-
   async def start_spin_cycle(self, g: float, duration: float, acceleration: float) -> None:
     await self.backend.start_spin_cycle(
       g=g,
