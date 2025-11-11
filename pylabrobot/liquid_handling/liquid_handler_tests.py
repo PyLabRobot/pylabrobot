@@ -1,6 +1,7 @@
 import itertools
 import tempfile
 import unittest
+import unittest.mock
 from typing import Any, Dict, List, Optional, Union, cast
 
 import pytest
@@ -647,15 +648,23 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.return_tips()
 
   async def test_aspirate_dispense96(self):
-    self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(self.plate, volume=10)
-    for i in range(96):
-      self.assertTrue(self.lh.head96[i].has_tip)
-      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
-    await self.lh.dispense96(self.plate, volume=10)
-    for i in range(96):
-      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
+    self.lh.backend.dispense96 = unittest.mock.create_autospec(self.lh.backend.dispense96)  # type: ignore
+    await self.lh.dispense96(self.plate, 10)
+    self.lh.backend.dispense96.assert_called_with(  # type: ignore
+      dispense=MultiHeadDispensePlate(
+        wells=self.plate.get_all_items(),
+        offset=Coordinate.zero(),
+        tips=[self.lh.head96[i].get_tip() for i in range(96)],
+        volume=10,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        liquids=[[(None, 10)] for _ in range(96)],
+        mix=None,
+      )
+    )
 
   async def test_transfer(self):
     t = self.tip_rack.get_item("A1").get_tip()
