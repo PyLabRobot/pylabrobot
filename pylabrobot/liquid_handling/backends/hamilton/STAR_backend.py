@@ -4,11 +4,14 @@ import enum
 import functools
 import logging
 import re
+import sys
 import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
+  Any,
   Callable,
+  Coroutine,
   Dict,
   List,
   Literal,
@@ -19,6 +22,11 @@ from typing import (
   Union,
   cast,
 )
+
+if sys.version_info < (3, 10):
+  from typing_extensions import Concatenate, ParamSpec
+else:
+  from typing import Concatenate, ParamSpec
 
 from pylabrobot import audio
 from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInterface
@@ -40,6 +48,7 @@ from pylabrobot.liquid_handling.standard import (
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  PipettingOp,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
@@ -73,11 +82,7 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import (
-  STAR_SIZE_X,
-  STARLET_SIZE_X,
-  HamiltonCoreGrippers,
-)
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
@@ -87,23 +92,26 @@ T = TypeVar("T")
 
 logger = logging.getLogger("pylabrobot")
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
-def need_iswap_parked(method: Callable):
+
+def need_iswap_parked(
+  method: Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]],
+) -> Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]]:
   """Ensure that the iSWAP is in parked position before running command.
 
   If the iSWAP is not parked, it get's parked before running the command.
   """
 
   @functools.wraps(method)
-  async def wrapper(self: "STAR", *args, **kwargs):
+  async def wrapper(self: "STARBackend", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
         minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
 
-    result = await method(self, *args, **kwargs)
-
-    return result
+    return await method(self, *args, **kwargs)
 
   return wrapper
 
@@ -1169,6 +1177,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
+    self._setup_done = False
+
   @property
   def unsafe(self) -> "UnSafe":
     """Actions that have a higher risk of damaging the robot. Use with care!"""
@@ -1441,7 +1451,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # the core grippers.
     self._core_parked = True
 
+    self._setup_done = True
+
+  async def stop(self):
+    await super().stop()
+    self._setup_done = False
+
+  @property
+  def setup_done(self) -> bool:
+    return self._setup_done
+
   # ============== LiquidHandlerBackend methods ==============
+
+  def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
+    """Check if a position is reachable by a channel (center-based)."""
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(f"Channel {channel_idx} is out of range for this robot.")
+
+    # frontmost channel can go to y=6, every channel after that is about 8.9 mm further back
+    min_y_pos = 6 + 8.9 * (self.num_channels - channel_idx - 1)
+    if position.y < min_y_pos:
+      return False
+
+    # backmost channel can go to y=601.6, every channel before that is about 8.9 mm further forward
+    max_y_pos = 601.6 - 8.9 * channel_idx
+    if position.y > max_y_pos:
+      return False
+
+    return True
+
+  def ensure_can_reach_position(
+    self, use_channels: List[int], ops: Sequence[PipettingOp], op_name: str
+  ):
+    locs = [(op.resource.get_location_wrt(self.deck, y="c") + op.offset) for op in ops]
+    cant_reach = [
+      channel_idx
+      for channel_idx, loc in zip(use_channels, locs)
+      if not self.can_reach_position(channel_idx, loc)
+    ]
+    if len(cant_reach) > 0:
+      raise ValueError(
+        f"Channels {cant_reach} cannot reach their target positions in '{op_name}' operation.\n"
+        "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
+        "Try the operation with different channels or a different target position (i.e. different labware placement)."
+      )
 
   async def pick_up_tips(
     self,
@@ -1453,6 +1506,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     pickup_method: Optional[TipPickupMethod] = None,
   ):
     """Pick up tips from a resource."""
+
+    self.ensure_can_reach_position(use_channels, ops, "pick_up_tips")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
@@ -1526,6 +1581,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         tip spots is `DROP`, and everything else is `PLACE_SHIFT`. Note that `DROP` is only the
         default if *all* tips are being dropped to a tip spot.
     """
+
+    self.ensure_can_reach_position(use_channels, ops, "drop_tips")
 
     if drop_method is None:
       if any(not isinstance(op.resource, TipSpot) for op in ops):
@@ -1658,9 +1715,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # detect liquid heights
     current_absolute_liquid_heights = await asyncio.gather(
       *[
-        self.clld_probe_z_height_using_channel(
+        self.move_z_drive_to_liquid_surface_using_clld(
           channel_idx=channel,
-          move_channels_to_save_pos_after=False,
           lowest_immers_pos=container.get_absolute_location("c", "c", "cavity_bottom").z
           + tip.total_tip_length
           - tip.fitting_depth,
@@ -1672,6 +1728,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         for channel, container, tip in zip(use_channels, containers, tips)
       ]
     )
+
+    liquid_levels: List[int] = (await self.request_pip_height_last_lld())["lh"]  # type: ignore
+    current_absolute_liquid_heights = [
+      float(liquid_levels[channel_idx] / 10) for channel_idx in use_channels
+    ]
 
     relative_to_well = [
       current_absolute_liquid_heights[i]
@@ -1716,7 +1777,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dosing_drive_speed_during_2nd_section_search: Optional[List[float]] = None,
     z_drive_speed_during_2nd_section_search: Optional[List[float]] = None,
     cup_upper_edge: Optional[List[float]] = None,
-    ratio_liquid_rise_to_tip_deep_in: Optional[List[float]] = None,
+    ratio_liquid_rise_to_tip_deep_in: Optional[List[int]] = None,
     immersion_depth_2nd_section: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
@@ -1760,7 +1821,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dp_lld_sensitivity: The sensitivity of the DP LLD.
       aspirate_position_above_z_touch_off: If the LLD mode is Z_TOUCH_OFF, this is the height above the bottom of the well (presumably) to aspirate from.
       detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if the LLD mode is DUAL.
-      swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 3 and 1600. Default 100.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after mix.
       mix_position_from_liquid_surface: The height to aspirate from for mix (LLD or absolute terms).
       mix_surface_following_distance: The distance to follow the liquid surface for mix.
@@ -1800,6 +1861,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         DeprecationWarning,
       )
     # # # delete # # #
+
+    self.ensure_can_reach_position(use_channels, ops, "aspirate")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
@@ -1985,9 +2048,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
 
     # check if the surface_following_distance would fall below the minimum height
+    # if lld is enabled, we expect to find liquid above the well bottom so we don't need to raise an error
     if any(
-      well_bottoms[i] + liquid_heights[i] - surface_following_distance[i] - minimum_height[i]
-      < -1e-6
+      (
+        well_bottoms[i] + liquid_heights[i] - surface_following_distance[i] - minimum_height[i]
+        < -1e-6
+      )
+      and lld_mode[i] == STARBackend.LLDMode.OFF
       for i in range(n)
     ):
       raise ValueError(
@@ -2127,7 +2194,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         position.
       gamma_lld_sensitivity: The gamma LLD sensitivity. (1 = high, 4 = low)
       dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
-      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The settling time.
       mix_position_from_liquid_surface: The height to move above the liquid surface for
         mix.
@@ -2153,6 +2220,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
       auto_surface_following_distance: automatically compute the surface following distance based on the container height<->volume functions. Requires liquid height to be specified or `probe_liquid_height=True`.
     """
+
+    self.ensure_can_reach_position(use_channels, ops, "dispense")
 
     n = len(ops)
 
@@ -2390,7 +2459,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
         min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-        side_touch_off_distance=side_touch_off_distance,
+        side_touch_off_distance=round(side_touch_off_distance * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -2402,11 +2471,41 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def pick_up_tips96(
     self,
     pickup: PickupTipRack,
-    tip_pickup_method: int = 0,
+    tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
-    """Pick up tips using the 96 head."""
+    """Pick up tips using the 96 head.
+
+    `tip_pickup_method` can be one of the following:
+        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mouting tips.
+        - "from_waste":
+            1. it actually moves the plunger all the way up
+            2. mounts tips
+            3. moves up like 10mm
+            4. moves plunger all the way down
+            5. moves to traversal height (tips out of rack)
+        - "full_blowout":
+            1. it actually moves the plunger all the way up
+            2. mounts tips
+            3. moves to traversal height (tips out of rack)
+
+    Args:
+      pickup: The standard `PickupTipRack` operation.
+      tip_pickup_method: The method to use for picking up tips. One of "from_rack", "from_waste", "full_blowout".
+      minimum_height_command_end: The minimum height to move to at the end of the command.
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to at the beginning of the command.
+    """
+
+    if isinstance(tip_pickup_method, int):
+      warnings.warn(
+        "tip_pickup_method as int is deprecated and will be removed in the future. Use string literals instead.",
+        DeprecationWarning,
+      )
+      tip_pickup_method = {0: "from_rack", 1: "from_waste", 2: "full_blowout"}[tip_pickup_method]
+
+    if tip_pickup_method not in {"from_rack", "from_waste", "full_blowout"}:
+      raise ValueError(f"Invalid tip_pickup_method: '{tip_pickup_method}'.")
 
     assert self.core96_head_installed, "96 head must be installed"
 
@@ -2447,7 +2546,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         x_direction=0 if pickup_position.x >= 0 else 1,
         y_position=round(pickup_position.y * 10),
         tip_type_idx=ttti,
-        tip_pickup_method=tip_pickup_method,
+        tip_pickup_method={
+          "from_rack": 0,
+          "from_waste": 1,
+          "full_blowout": 2,
+        }[tip_pickup_method],
         z_deposit_position=round(pickup_position.z * 10),
         minimum_traverse_height_at_beginning_of_a_command=round(
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
@@ -3011,7 +3114,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      minimum_height=minimum_height or round(position.z * 10),
+      minimum_height=round((minimum_height or position.z) * 10),
       second_section_height=round(second_section_height * 10),
       second_section_ratio=round(second_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
@@ -3539,6 +3642,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.position_single_pipetting_channel_in_z_direction(
       pipetting_channel_index=channel + 1, z_position=round(z * 10)
     )
+
+  async def move_channel_x_relative(self, channel: int, distance: float):
+    """Move a channel in the x direction by a relative amount."""
+    current_x = await self.request_x_pos_channel_n(channel)
+    await self.move_channel_x(channel, current_x + distance)
+
+  async def move_channel_y_relative(self, channel: int, distance: float):
+    """Move a channel in the y direction by a relative amount."""
+    current_y = await self.request_y_pos_channel_n(channel)
+    await self.move_channel_y(channel, current_y + distance)
+
+  async def move_channel_z_relative(self, channel: int, distance: float):
+    """Move a channel in the z direction by a relative amount."""
+    current_z = await self.request_z_pos_channel_n(channel)
+    await self.move_channel_z(channel, current_z + distance)
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     if not isinstance(tip, HamiltonTip):
@@ -4197,6 +4315,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # TODO: parse res
     return await self.send_command(module="C0", command="RI")
+
+  async def request_device_serial_number(self) -> str:
+    """Request device serial number"""
+    return (await self.send_command("C0", "RI", fmt="si####sn&&&&sn&&&&"))["sn"]  # type: ignore
 
   async def request_download_date(self):
     """Request download date"""
@@ -4893,7 +5015,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
-      read_timeout=max(120, self.read_timeout),
+      read_timeout=max(300, self.read_timeout),
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
       xp=[f"{xp:05}" for xp in x_positions],
@@ -5127,7 +5249,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
-      read_timeout=max(120, self.read_timeout),
+      read_timeout=max(300, self.read_timeout),
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],
@@ -5183,7 +5305,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + core_grippers.back_channel_y_center
         + self.core_adjustment.y
       )
-      * 10
     )
     front_channel_y_center = int(
       (
@@ -5191,19 +5312,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + core_grippers.front_channel_y_center
         + self.core_adjustment.y
       )
-      * 10
     )
     assert (
       back_channel_y_center > front_channel_y_center
     ), "back_channel_y_center must be greater than front_channel_y_center"
-    assert front_channel_y_center > 60, "front_channel_y_center must be less than 6mm (60 [0.1mm])"
+    assert front_channel_y_center > 6, "front_channel_y_center must be less than 6mm"
     return back_channel_y_center, front_channel_y_center
 
-  def _get_core_x(self) -> int:
+  def _get_core_x(self) -> float:
     """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    return round((core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10)
+    return core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x
 
   async def get_core(self, p1: int, p2: int):
     warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
@@ -5211,30 +5331,47 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.pick_up_core_gripper_tools(front_channel=p2 - 1)  # p1 here is 1-indexed
 
   @need_iswap_parked
-  async def pick_up_core_gripper_tools(self, front_channel: int):
+  async def pick_up_core_gripper_tools(
+    self,
+    front_channel: int,
+    front_offset: Optional[Coordinate] = None,
+    back_offset: Optional[Coordinate] = None,
+  ):
     """Get CoRe gripper tool from wasteblock mount."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
     back_channel = front_channel - 1
 
-    xs = self._get_core_x()
+    # Only enforce x equality if both offsets are explicitly provided.
+    if front_offset is not None and back_offset is not None and front_offset.x != back_offset.x:
+      raise ValueError("front_offset.x and back_offset.x must be the same")
+
+    xs = self._get_core_x() + (front_offset.x if front_offset is not None else 0)
 
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    begin_z_coord = round(2350 + self.core_adjustment.z * 10)
-    end_z_coord = round(2250 + self.core_adjustment.z * 10)
+    if back_offset is not None:
+      back_channel_y_center += back_offset.y
+    if front_offset is not None:
+      front_channel_y_center += front_offset.y
+
+    if front_offset is not None and back_offset is not None and front_offset.z != back_offset.z:
+      raise ValueError("front_offset.z and back_offset.z must be the same")
+    z_offset = 0 if front_offset is None else front_offset.z
+    begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
+    end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=f"{xs:05}",
+      xs=f"{round(xs * 10):05}",
       xd="0",
-      ya=f"{back_channel_y_center:04}",
-      yb=f"{front_channel_y_center:04}",
+      ya=f"{round(back_channel_y_center * 10):04}",
+      yb=f"{round(front_channel_y_center * 10):04}",
       pa=f"{back_channel+1:02}",  # star is 1-indexed
       pb=f"{front_channel+1:02}",  # star is 1-indexed
-      tp=f"{begin_z_coord:04}",
-      tz=f"{end_z_coord:04}",
+      tp=f"{round(begin_z_coord * 10):04}",
+      tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
       tt="14",
     )
@@ -5242,36 +5379,44 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return command_output
 
   async def put_core(self):
-    raise NotImplementedError("Deprecated. Use return_core_gripper_tools instead.")
+    warnings.warn("Deprecated. Use return_core_gripper_tools instead.", DeprecationWarning)
+    return await self.return_core_gripper_tools()
 
   @need_iswap_parked
-  async def return_core_gripper_tools(self):
+  async def return_core_gripper_tools(
+    self,
+    front_offset: Optional[Coordinate] = None,
+    back_offset: Optional[Coordinate] = None,
+  ):
     """Put CoRe gripper tool at wasteblock mount."""
 
-    assert self.deck is not None, "must have deck defined to access CoRe grippers"
+    # Only enforce x equality if both offsets are explicitly provided.
+    if front_offset is not None and back_offset is not None and back_offset.x != front_offset.x:
+      raise ValueError("back_offset.x and front_offset.x must be the same")
 
-    deck_size = self.deck.get_absolute_size_x()
-    if deck_size == STARLET_SIZE_X:
-      xs = 7975
-    elif deck_size == STAR_SIZE_X:
-      xs = 13375
-    else:
-      raise ValueError(f"Deck size {deck_size} not supported")
+    xs = self._get_core_x() + (front_offset.x if front_offset is not None else 0)
 
-    channel_x_coord = round(xs + self.core_adjustment.x * 10)
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    begin_z_coord = round(2150 + self.core_adjustment.z * 10)
-    end_z_coord = round(2050 + self.core_adjustment.z * 10)
+    if back_offset is not None:
+      back_channel_y_center += back_offset.y
+    if front_offset is not None:
+      front_channel_y_center += front_offset.y
+
+    if front_offset is not None and back_offset is not None and back_offset.z != front_offset.z:
+      raise ValueError("back_offset.z and front_offset.z must be the same")
+    z_offset = 0 if front_offset is None else front_offset.z
+    begin_z_coord = round(215.0 + self.core_adjustment.z + z_offset)
+    end_z_coord = round(205.0 + self.core_adjustment.z + z_offset)
 
     command_output = await self.send_command(
       module="C0",
       command="ZS",
-      xs=f"{channel_x_coord:05}",
+      xs=f"{round(xs * 10):05}",
       xd="0",
-      ya=f"{back_channel_y_center:04}",
-      yb=f"{front_channel_y_center:04}",
-      tp=f"{begin_z_coord:04}",
-      tz=f"{end_z_coord:04}",
+      ya=f"{round(back_channel_y_center * 10):04}",
+      yb=f"{round(front_channel_y_center * 10):04}",
+      tp=f"{round(begin_z_coord * 10):04}",
+      tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
       te=round(self._iswap_traversal_height * 10),
     )
@@ -8090,7 +8235,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return material_y_pos
 
-  async def clld_probe_z_height_using_channel(
+  async def move_z_drive_to_liquid_surface_using_clld(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm
@@ -8101,28 +8246,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     detection_drop: int = 2,
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
-    move_channels_to_save_pos_after: bool = False,
-  ) -> float:
-    """Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
-    using the channels 'capacitive Liquid Level Detection' (cLLD) capabilities.
-    N.B.: this means only conductive materials can be probed!
-
-    Args:
-      channel_idx: The index of the channel to use for probing. Backmost channel = 0.
-      lowest_immers_pos: The lowest immersion position in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
-      start_pos_lld_search: The start position for z-touch search in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
-      channel_speed: The speed of channel movement in mm/sec.
-      channel_acceleration: The acceleration of the channel in mm/sec**2.
-      detection_edge: The edge steepness at capacitive LLD detection.
-      detection_drop: The offset after capacitive LLD edge detection.
-      post_detection_trajectory (0, 1): Movement of the channel up (1) or down (0) after contacting the surface.
-      post_detection_dist: Distance to move into the trajectory after detection in mm.
-      move_channels_to_save_pos_after: Flag to move channels to a safe position after operation.
-
-    Returns:
-      The detected Z-height in mm.
-    """
-
+  ):
     lowest_immers_pos_increments = STARBackend.mm_to_z_drive_increment(lowest_immers_pos)
     start_pos_search_increments = STARBackend.mm_to_z_drive_increment(start_pos_search)
     channel_speed_increments = STARBackend.mm_to_z_drive_increment(channel_speed)
@@ -8158,18 +8282,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f" and {STARBackend.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
     )
 
+    await self.send_command(
+      module=STARBackend.channel_id(channel_idx),
+      command="ZL",
+      zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
+      zc=f"{start_pos_search_increments:05}",  # Start position of LLD search [increment]
+      zl=f"{channel_speed_increments:05}",  # Speed of channel movement
+      zr=f"{channel_acceleration_thousand_increments:03}",  # Acceleration [1000 increment/second^2]
+      gt=f"{detection_edge:04}",  # Edge steepness at capacitive LLD detection
+      gl=f"{detection_drop:04}",  # Offset after capacitive LLD edge detection
+      zj=post_detection_trajectory,  # Movement of the channel after contacting surface
+      zi=f"{post_detection_dist_increments:04}",  # Distance to move up after detection [increment]
+    )
+
+  async def clld_probe_z_height_using_channel(
+    self,
+    channel_idx: int,  # 0-based indexing of channels!
+    lowest_immers_pos: float = 99.98,  # mm
+    start_pos_search: float = 330.0,  # mm
+    channel_speed: float = 10.0,  # mm
+    channel_acceleration: float = 800.0,  # mm/sec**2
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: float = 2.0,  # mm
+    move_channels_to_save_pos_after: bool = False,
+  ) -> float:
+    """Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
+    using the channels 'capacitive Liquid Level Detection' (cLLD) capabilities.
+    N.B.: this means only conductive materials can be probed!
+
+    Args:
+      channel_idx: The index of the channel to use for probing. Backmost channel = 0.
+      lowest_immers_pos: The lowest immersion position in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
+      start_pos_lld_search: The start position for z-touch search in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
+      channel_speed: The speed of channel movement in mm/sec.
+      channel_acceleration: The acceleration of the channel in mm/sec**2.
+      detection_edge: The edge steepness at capacitive LLD detection.
+      detection_drop: The offset after capacitive LLD edge detection.
+      post_detection_trajectory (0, 1): Movement of the channel up (1) or down (0) after contacting the surface.
+      post_detection_dist: Distance to move into the trajectory after detection in mm.
+      move_channels_to_save_pos_after: Flag to move channels to a safe position after operation.
+
+    Returns:
+      The detected Z-height in mm.
+    """
+
     try:
-      await self.send_command(
-        module=STARBackend.channel_id(channel_idx),
-        command="ZL",
-        zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
-        zc=f"{start_pos_search_increments:05}",  # Start position of LLD search [increment]
-        zl=f"{channel_speed_increments:05}",  # Speed of channel movement
-        zr=f"{channel_acceleration_thousand_increments:03}",  # Acceleration [1000 increment/second^2]
-        gt=f"{detection_edge:04}",  # Edge steepness at capacitive LLD detection
-        gl=f"{detection_drop:04}",  # Offset after capacitive LLD edge detection
-        zj=post_detection_trajectory,  # Movement of the channel after contacting surface
-        zi=f"{post_detection_dist_increments:04}",  # Distance to move up after detection [increment]
+      await self.move_z_drive_to_liquid_surface_using_clld(
+        channel_idx=channel_idx,
+        lowest_immers_pos=lowest_immers_pos,
+        start_pos_search=start_pos_search,
+        channel_speed=channel_speed,
+        channel_acceleration=channel_acceleration,
+        detection_edge=detection_edge,
+        detection_drop=detection_drop,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_dist=post_detection_dist,
       )
     except STARFirmwareError:
       await self.move_all_channels_in_z_safety()

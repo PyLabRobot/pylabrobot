@@ -208,11 +208,11 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
         "dispense": {
           "well_names": [well.name for well in self.plate.get_all_items()],
           "offset": serialize(Coordinate.zero()),
-          "volume": 10,
+          "volume": 10.0,
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": None,
-          "liquids": [[[None, 10]]] * 96,  # tuple, list of liquids per well, list of wells
+          "liquids": [[[None, 10.0]]] * 96,  # tuple, list of liquids per well, list of wells
           "tips": [serialize(tip) for tip in tips],
         }
       },
