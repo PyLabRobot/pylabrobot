@@ -1,3 +1,4 @@
+import warnings
 from typing import Optional, Tuple
 
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
@@ -88,19 +89,34 @@ class Centrifuge(Machine, Resource):
   async def lock_bucket(self) -> None:
     await self.backend.lock_bucket()
 
-  async def go_to_bucket1(self) -> None:
-    await self.backend.go_to_bucket1()
+  async def go_to_bucket1(self, **backend_kwargs) -> None:
+    await self.backend.go_to_bucket1(**backend_kwargs)
     self._at_bucket = self.bucket1
 
-  async def go_to_bucket2(self) -> None:
-    await self.backend.go_to_bucket2()
+  async def go_to_bucket2(self, **backend_kwargs) -> None:
+    await self.backend.go_to_bucket2(**backend_kwargs)
     self._at_bucket = self.bucket2
 
-  async def start_spin_cycle(self, g: float, duration: float, acceleration: float) -> None:
+  async def start_spin_cycle(self, g: float, duration: float) -> None:
+    """Deprecated: use `spin` instead."""
+    warnings.warn(
+      "`start_spin_cycle` is deprecated and will be removed in a future version. Use `spin` instead.",
+      DeprecationWarning,
+    )
+    await self.spin(g=g, duration=duration)
+
+  async def spin(self, g: float, duration: float, **backend_kwargs) -> None:
+    """Starts a spin cycle.
+
+    Args:
+      g: The g-force to spin at.
+      duration: The duration of the spin in seconds.
+      acceleration: The acceleration as a fraction of maximum acceleration (0-1).
+    """
     await self.backend.start_spin_cycle(
       g=g,
       duration=duration,
-      acceleration=acceleration,
+      **backend_kwargs,
     )
     self._at_bucket = None
 

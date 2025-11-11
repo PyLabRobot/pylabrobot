@@ -1,12 +1,11 @@
 import asyncio
 import ctypes
-import datetime
 import json
 import logging
 import os
 import time
 import warnings
-from typing import Optional, Union
+from typing import Optional
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -314,9 +313,9 @@ class VSpinBackend(CentrifugeBackend):
       11 22 25 00 00 4f 00 00 18 e0 05 00 00 a4
                                              ^^ checksum
                                  ^^ ^^ ^^ ^^ home position
-                              ^^ ?
+                              ^^ ? (probably binary status objects)
                         ^^ ^^ tachometer
-                     ^^ ?
+                     ^^ ? (probably binary status objects)
          ^^ ^^ ^^ ^^ current position
       ^^
       - First byte (index 0):
@@ -493,54 +492,12 @@ class VSpinBackend(CentrifugeBackend):
       await asyncio.sleep(0.1)
     await self.open_door()
 
-  async def _go_to_position(
-    self,
-    position: int,
-    acceleration: float,
-    rpm: int,
-  ) -> None:
-    """Internal method to go to a position with specified acceleration and rpm.
-    This method is used both by `start_spin_cycle` and `go_to_position`.
-    `go_to_position` is used by `go_to_bucket1` and `go_to_bucket2`.
-    """
-
-    if position > 2**32 - 1:
-      # this is almost 3 hours of spinning at 3000 rpm (max speed),
-      # so we assume nobody will ever hit this.
-      raise NotImplementedError(
-        "We don't know what happens if the destination position exceeds 2^32-1. "
-        "Please report this issue on discuss.pylabrobot.org."
-      )
-    position_b = position.to_bytes(4, byteorder="little")
-
-    # 2 - encode the rpm
-    rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
-
-    # 3 - encode the acceleration
-    acceleration_b = int(9.15 * 100 * acceleration).to_bytes(4, byteorder="little")
-
-    byte_string = bytes.fromhex("aa01d497") + position_b + rpm_b + acceleration_b
-    last_byte = (sum(byte_string) - 0xAA) & 0xFF
-    byte_string += last_byte.to_bytes(1, byteorder="little")
-    print(
-      f"position: {position}, RPM: {rpm}, Acceleration: {acceleration}, byte_string: {byte_string.hex()}"
-    )
-
-    await self._send_command(bytes.fromhex("aa0226000028"))
-    await self._send_command(bytes.fromhex("aa0117021a"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self._send_command(bytes.fromhex("aa0117041c"))
-    await self._send_command(bytes.fromhex("aa01170119"))
-    await self._send_command(bytes.fromhex("aa010b0c"))
-    await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
-
-    # spin:      aa01e60500640000000000fd00803e01000c
-    # go to pos: aa01e6c800b00496000f004b00a00f050007
-
-    await self._send_command(byte_string)
-
-    # after spin
-    # aa0117021a
+  @staticmethod
+  def g_to_rpm(g: float) -> int:
+    # https://en.wikipedia.org/wiki/Centrifugation#Mathematical_formula
+    r = 10
+    rpm = int((g / (1.118 * 10**-5 * r)) ** 0.5)
+    return rpm
 
   async def start_spin_cycle(
     self,
@@ -556,31 +513,26 @@ class VSpinBackend(CentrifugeBackend):
       duration: time in seconds spent at speed (g)
       acceleration: 0-1 of total acceleration
       deceleration: 0-1 of total deceleration
-
-    Examples:
-      Spin with 1000 g-force (close to 3000rpm) for 5 minutes at 100% acceleration
-
-      >>> cf.start_spin_cycle(g = 1000, duration = 300, acceleration = .8, deceleration = .8)
     """
 
     if acceleration <= 0 or acceleration > 1:
       raise ValueError("Acceleration must be within 0-1.")
+    if deceleration <= 0 or deceleration > 1:
+      raise ValueError("Deceleration must be within 0-1.")
     if g < 1 or g > 1000:
       raise ValueError("G-force must be within 1-1000")
     if duration < 1:
       raise ValueError("Spin time must be at least 1 second")
 
-    if self.get_door_open():
+    if await self.get_door_open():
       await self.close_door()
-    if not self.get_door_locked():
+    if not await self.get_door_locked():
       await self.lock_door()
-    if self.get_bucket_locked():
+    if await self.get_bucket_locked():
       await self.unlock_bucket()
 
     # 1 - compute the final position
-    # g to rpm: https://en.wikipedia.org/wiki/Centrifugation#Mathematical_formula
-    r = 10
-    rpm = int((g / (1.118 * 10**-5 * r)) ** 0.5)
+    rpm = VSpinBackend.g_to_rpm(g)
 
     # compute the distance traveled during the acceleration period
     # distance = 1/2 * v^2 / a. area under 0 to t (triangle). t = a/v_max
@@ -594,22 +546,40 @@ class VSpinBackend(CentrifugeBackend):
     distance_at_speed = ticks_per_second * duration
 
     current_position = await self.get_position()
-    final_position = current_position + distance_during_acceleration + distance_at_speed
+    final_position = int(current_position + distance_during_acceleration + distance_at_speed)
 
-    await self._go_to_position(
-      position=int(final_position),
-      acceleration=acceleration,
-      rpm=rpm,
-    )
+    if final_position > 2**32 - 1:
+      # this is almost 3 hours of spinning at 3000 rpm (max speed),
+      # so we assume nobody will ever hit this.
+      raise NotImplementedError(
+        "We don't know what happens if the destination position exceeds 2^32-1. "
+        "Please report this issue on discuss.pylabrobot.org."
+      )
 
-    self._status = []
+    # 2 - send "go to position" command with computed final position and rpm
+    position_b = final_position.to_bytes(4, byteorder="little")
+    rpm_b = int(rpm * 4473.925).to_bytes(4, byteorder="little")
+    acceleration_b = int(9.15 * 100 * acceleration).to_bytes(4, byteorder="little")
 
-    # wait for acceleration to the set rpm
+    byte_string = bytes.fromhex("aa01d497") + position_b + rpm_b + acceleration_b
+    checksum = (sum(byte_string) - 0xAA) & 0xFF
+    byte_string += checksum.to_bytes(1, byteorder="little")
+
+    await self._send_command(bytes.fromhex("aa0226000028"))
+    await self._send_command(bytes.fromhex("aa0117021a"))
+    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+    await self._send_command(bytes.fromhex("aa0117041c"))
+    await self._send_command(bytes.fromhex("aa01170119"))
+    await self._send_command(bytes.fromhex("aa010b0c"))
+    await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
+
+    await self._send_command(byte_string)
+
+    # 3 - wait for acceleration to the set rpm
     while await self.get_tachometer() < rpm * 0.95:
-      self._status.append(await self._get_positions_and_tachometer())
       await asyncio.sleep(0.1)
 
-    # once the speed is reached, compute the position at which to start deceleration
+    # 4 - once the speed is reached, compute the position at which to start deceleration
     # this is different than computed above, because above we assumed constant acceleration from 0 to rpm.
     # however, in reality there is jerk and the acceleration is not constant, so we have to adjust as we go.
     # this is what the vendor software does too.
@@ -617,14 +587,13 @@ class VSpinBackend(CentrifugeBackend):
 
     # then wait until we reach that position
     while await self.get_position() < decel_start_position:
-      self._status.append(await self._get_positions_and_tachometer())
       await asyncio.sleep(0.1)
 
+    # 5 - send deceleration command
     await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
     # aa0194b600000000dc02000029: decel at 80
     # aa0194b6000000000a03000058: decel at 85
     # aa0194b61283000012010000f3: used in setup (30%)
-    # decel must be between 0.0 and 1.0
     decc = int(9.15 * 100 * deceleration).to_bytes(2, byteorder="little")
     decel_command = bytes.fromhex("aa0194b600000000") + decc + bytes.fromhex("0000")
     decel_command += ((sum(decel_command) - 0xAA) & 0xFF).to_bytes(1, byteorder="little")
@@ -632,7 +601,7 @@ class VSpinBackend(CentrifugeBackend):
 
     await asyncio.sleep(2)
 
-    # reset position back to 0ish
+    # 6 - reset position back to 0ish
     # this part is needed because otherwise calling go_to_position will not work after
     await self._send_command(bytes.fromhex("aa0117021a"))
     await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
