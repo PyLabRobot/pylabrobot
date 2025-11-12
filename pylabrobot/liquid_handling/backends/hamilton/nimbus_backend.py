@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pylabrobot.resources.coordinate import Coordinate
 
@@ -42,8 +42,9 @@ from pylabrobot.liquid_handling.standard import (
     SingleChannelDispense,
 )
 from pylabrobot.resources import Tip
-from pylabrobot.resources.container import Container
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
+from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
+from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +239,26 @@ class InitializeSmartRoll(HamiltonCommand):
     def parse_response_parameters(cls, data: bytes) -> dict:
         """Parse InitializeSmartRoll response (void return)."""
         return {"success": True}
+
+
+class IsInitialized(HamiltonCommand):
+    """Check if instrument is initialized (NimbusCore at 1:1:48896, interface_id=1, command_id=14)."""
+
+    protocol = HamiltonProtocol.OBJECT_DISCOVERY
+    interface_id = 1
+    command_id = 14
+    action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
+
+    def build_parameters(self) -> HoiParams:
+        """Build parameters for IsInitialized command."""
+        return HoiParams()
+
+    @classmethod
+    def parse_response_parameters(cls, data: bytes) -> dict:
+        """Parse IsInitialized response."""
+        parser = HoiParamsParser(data)
+        _, initialized = parser.parse_next()
+        return {"initialized": bool(initialized)}
 
 
 class IsTipPresent(HamiltonCommand):
@@ -583,18 +604,21 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         self._pipette_address: Optional[Address] = None
         self._door_lock_address: Optional[Address] = None
         self._nimbus_core_address: Optional[Address] = None
+        self._is_initialized: Optional[bool] = None
+        self._tips_present: Optional[List[int]] = None
 
-    async def setup(self, unlock_door: bool = False):
+    async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
         """Set up the Nimbus backend.
 
         This method:
         1. Establishes TCP connection and performs protocol initialization
-        2. Detects if door lock exists
-        3. Locks door if available
-        4. Queries channel configuration to get num_channels
-        5. Queries tip presence
-        6. Initializes NimbusCore with InitializeSmartRoll using waste positions
-        7. Optionally unlocks door after initialization
+        2. Discovers instrument objects
+        3. Queries channel configuration to get num_channels
+        4. Queries tip presence
+        5. Queries initialization status
+        6. Locks door if available
+        7. Conditionally initializes NimbusCore with InitializeSmartRoll (only if not initialized)
+        8. Optionally unlocks door after initialization
 
         Args:
             unlock_door: If True, unlock door after initialization (default: False)
@@ -631,11 +655,22 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         try:
             tip_status = await self.send_command(IsTipPresent(self._pipette_address))
             tip_present = tip_status.get("tip_present", [])
+            self._tips_present = tip_present
             logger.info(f"Tip presence: {tip_present}")
         except Exception as e:
             logger.warning(f"Failed to query tip presence: {e}")
 
+        # Query initialization status (use discovered address only)
+        try:
+            init_status = await self.send_command(IsInitialized(self._nimbus_core_address))
+            self._is_initialized = init_status.get("initialized", False)
+            logger.info(f"Instrument initialized: {self._is_initialized}")
+        except Exception as e:
+            logger.error(f"Failed to query initialization status: {e}")
+            raise
+
         # Lock door if available (optional - no error if not found)
+        # This happens before initialization
         if self._door_lock_address is not None:
             try:
                 if not await self.is_door_locked():
@@ -648,80 +683,61 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
             except Exception as e:
                 logger.warning(f"Failed to lock door: {e}")
 
-        # Set channel configuration for each channel (required before InitializeSmartRoll)
-        try:
-            # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
-            # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
-            for channel in range(1, self._num_channels + 1):
+        # Conditional initialization - only if not already initialized
+        if not self._is_initialized or force_initialize:
+            # Set channel configuration for each channel (required before InitializeSmartRoll)
+            try:
+                # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
+                # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
+                for channel in range(1, self._num_channels + 1):
+                    await self.send_command(
+                        SetChannelConfiguration(
+                            dest=self._pipette_address,
+                            channel=channel,
+                            indexes=[1, 3, 4],
+                            enables=[True, False, False, False],
+                        )
+                    )
+                logger.info(f"Channel configuration set for {self._num_channels} channels")
+            except Exception as e:
+                logger.error(f"Failed to set channel configuration: {e}")
+                raise
+
+            # Initialize NimbusCore with InitializeSmartRoll using waste positions
+            try:
+                # Build waste position parameters using helper method
+                # Use all channels (0 to num_channels-1) for setup
+                all_channels = list(range(self._num_channels))
+                traverse_height = 146.0  # TODO: Access deck z_max property properly instead of hardcoded literal
+
+                # Use same logic as DropTipsRoll: z_start = waste_z + 4.0mm, z_stop = waste_z, z_final = traverse_height
+                waste_params = self._build_waste_position_params(
+                    use_channels=all_channels,
+                    traverse_height=traverse_height,
+                    z_start_offset=None,  # Will be calculated as waste_z + 4.0mm
+                    z_stop_offset=None,   # Will be calculated as waste_z
+                    z_final_offset=None,  # Will default to traverse_height
+                    roll_distance=None,   # Will default to 9.0mm
+                )
+
                 await self.send_command(
-                    SetChannelConfiguration(
-                        dest=self._pipette_address,
-                        channel=channel,
-                        indexes=[1, 3, 4],
-                        enables=[True, False, False, False],
+                    InitializeSmartRoll(
+                        dest=self._nimbus_core_address,
+                        x_positions=waste_params["x_positions"],
+                        y_positions=waste_params["y_positions"],
+                        z_start_positions=waste_params["z_start_positions"],
+                        z_stop_positions=waste_params["z_stop_positions"],
+                        z_final_positions=waste_params["z_final_positions"],
+                        roll_distances=waste_params["roll_distances"],
                     )
                 )
-            logger.info(f"Channel configuration set for {self._num_channels} channels")
-        except Exception as e:
-            logger.error(f"Failed to set channel configuration: {e}")
-            raise
-
-        # Initialize NimbusCore with InitializeSmartRoll using waste positions
-        try:
-            # Get waste positions for all channels (similar to drop_tips)
-            x_positions_mm: List[float] = []
-            y_positions_mm: List[float] = []
-            z_positions_mm: List[float] = []
-
-            for channel_idx in range(self._num_channels):
-                # Get waste position from deck based on channel index
-                # Waste positions are named default_long_1, default_long_2, etc.
-                waste_pos_name = f"default_long_{channel_idx + 1}"
-                try:
-                    waste_pos = self._deck.get_resource(waste_pos_name)
-                    abs_location = waste_pos.get_absolute_location()
-                    # Convert to Hamilton coordinates (returns in mm)
-                    hamilton_coord = self._deck.to_hamilton_coordinate(abs_location)
-                    x_positions_mm.append(hamilton_coord.x)
-                    y_positions_mm.append(hamilton_coord.y)
-                    z_positions_mm.append(hamilton_coord.z)
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to get waste position {waste_pos_name} for channel {channel_idx}: {e}"
-                    )
-
-            # Use absolute Z positions (from log: zStart=146.0mm, zStop=131.39mm, zFinal=146.0mm)
-            # These are absolute positions, not relative to waste position
-            # TODO: This should probably not be hardcoded for different possible deck configurations.
-            z_start_absolute_mm = 146.0  # traverse height
-            z_stop_absolute_mm = 131.39
-            z_final_absolute_mm = 146.0  # traverse height
-            roll_distance_mm = 9.0
-
-            # Convert positions to 0.01mm units (multiply by 100)
-            x_positions = [int(round(x * 100)) for x in x_positions_mm]
-            y_positions = [int(round(y * 100)) for y in y_positions_mm]
-            # Use absolute Z positions (same for all channels)
-            z_start_positions = [int(round(z_start_absolute_mm * 100))] * self._num_channels
-            z_stop_positions = [int(round(z_stop_absolute_mm * 100))] * self._num_channels
-            z_final_positions = [int(round(z_final_absolute_mm * 100))] * self._num_channels
-            roll_distances = [int(round(roll_distance_mm * 100))] * self._num_channels
-
-            await self.send_command(
-                InitializeSmartRoll(
-                    dest=self._nimbus_core_address,
-                    x_positions=x_positions,
-                    y_positions=y_positions,
-                    z_start_positions=z_start_positions,
-                    z_stop_positions=z_stop_positions,
-                    z_final_positions=z_final_positions,
-                    roll_distances=roll_distances,
-                )
-            )
-            logger.info("NimbusCore initialized with InitializeSmartRoll successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize NimbusCore with InitializeSmartRoll: {e}")
-            raise
+                logger.info("NimbusCore initialized with InitializeSmartRoll successfully")
+                self._is_initialized = True
+            except Exception as e:
+                logger.error(f"Failed to initialize NimbusCore with InitializeSmartRoll: {e}")
+                raise
+        else:
+            logger.info("Instrument already initialized, skipping initialization")
 
         # Unlock door if requested (optional - no error if not found)
         if unlock_door and self._door_lock_address is not None:
@@ -873,6 +889,137 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         await TCPBackend.stop(self)
         self.setup_finished = False
 
+    def _build_waste_position_params(
+        self,
+        use_channels: List[int],
+        traverse_height: float,
+        z_start_offset: Optional[float] = None,
+        z_stop_offset: Optional[float] = None,
+        z_final_offset: Optional[float] = None,
+        roll_distance: Optional[float] = None,
+    ) -> dict:
+        """Build waste position parameters for InitializeSmartRoll or DropTipsRoll.
+
+        Args:
+            use_channels: List of channel indices to use
+            traverse_height: Traverse height in mm
+            z_start_offset: Z start position in mm (absolute, optional, calculated from waste position)
+            z_stop_offset: Z stop position in mm (absolute, optional, calculated from waste position)
+            z_final_offset: Z final position in mm (absolute, optional, defaults to traverse_height)
+            roll_distance: Roll distance in mm (optional, defaults to 9.0 mm)
+
+        Returns:
+            Dictionary with x_positions, y_positions, z_start_positions, z_stop_positions,
+            z_final_positions, roll_distances (all in 0.01mm units as lists matching num_channels)
+
+        Raises:
+            RuntimeError: If deck is not set or waste position not found
+        """
+        if self._deck is None:
+            raise RuntimeError("Deck must be set before building waste position parameters")
+
+        # Validate we have a NimbusDeck for coordinate conversion
+        if not isinstance(self._deck, NimbusDeck):
+            raise RuntimeError(
+                "Deck must be a NimbusDeck for coordinate conversion"
+            )
+
+        # Extract coordinates for each channel
+        x_positions_mm: List[float] = []
+        y_positions_mm: List[float] = []
+        z_positions_mm: List[float] = []
+
+        for channel_idx in use_channels:
+            # Get waste position from deck based on channel index
+            # Use waste_type attribute from deck to construct waste position name
+            if not hasattr(self._deck, 'waste_type') or self._deck.waste_type is None:
+                raise RuntimeError(
+                    f"Deck does not have waste_type attribute or waste_type is None. "
+                    f"Cannot determine waste position name for channel {channel_idx}."
+                )
+            waste_pos_name = f"{self._deck.waste_type}_{channel_idx + 1}"
+            try:
+                waste_pos = self._deck.get_resource(waste_pos_name)
+                abs_location = waste_pos.get_absolute_location()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to get waste position {waste_pos_name} for channel {channel_idx}: {e}"
+                )
+
+            # Convert to Hamilton coordinates (returns in mm)
+            hamilton_coord = self._deck.to_hamilton_coordinate(abs_location)
+
+            x_positions_mm.append(hamilton_coord.x)
+            y_positions_mm.append(hamilton_coord.y)
+            z_positions_mm.append(hamilton_coord.z)
+
+        # Convert positions to 0.01mm units (multiply by 100)
+        x_positions = [int(round(x * 100)) for x in x_positions_mm]
+        y_positions = [int(round(y * 100)) for y in y_positions_mm]
+
+        # Calculate Z positions from waste position coordinates
+        max_z_hamilton = max(z_positions_mm)  # Highest waste position Z in Hamilton coordinates
+        waste_z_hamilton = max_z_hamilton
+
+        if z_start_offset is None:
+            # Calculate from waste position: start above waste position
+            z_start_absolute_mm = waste_z_hamilton + 4.0  # Start 4mm above waste position
+        else:
+            z_start_absolute_mm = z_start_offset
+
+        if z_stop_offset is None:
+            # Calculate from waste position: stop at waste position
+            z_stop_absolute_mm = waste_z_hamilton  # Stop at waste position
+        else:
+            z_stop_absolute_mm = z_stop_offset
+
+        if z_final_offset is None:
+            z_final_offset_mm = traverse_height  # Use traverse height as final position
+        else:
+            z_final_offset_mm = z_final_offset
+
+        if roll_distance is None:
+            roll_distance_mm = 9.0  # Default roll distance from log
+        else:
+            roll_distance_mm = roll_distance
+
+        # Use absolute Z positions (same for all channels)
+        z_start_positions = [
+            int(round(z_start_absolute_mm * 100))
+        ] * len(use_channels)  # Absolute Z start position
+        z_stop_positions = [
+            int(round(z_stop_absolute_mm * 100))
+        ] * len(use_channels)  # Absolute Z stop position
+        z_final_positions = [
+            int(round(z_final_offset_mm * 100))
+        ] * len(use_channels)  # Absolute Z final position
+        roll_distances = [int(round(roll_distance_mm * 100))] * len(use_channels)
+
+        # Ensure arrays match num_channels length (with zeros for inactive channels)
+        x_positions_full = [0] * self.num_channels
+        y_positions_full = [0] * self.num_channels
+        z_start_positions_full = [0] * self.num_channels
+        z_stop_positions_full = [0] * self.num_channels
+        z_final_positions_full = [0] * self.num_channels
+        roll_distances_full = [0] * self.num_channels
+
+        for i, channel_idx in enumerate(use_channels):
+            x_positions_full[channel_idx] = x_positions[i]
+            y_positions_full[channel_idx] = y_positions[i]
+            z_start_positions_full[channel_idx] = z_start_positions[i]
+            z_stop_positions_full[channel_idx] = z_stop_positions[i]
+            z_final_positions_full[channel_idx] = z_final_positions[i]
+            roll_distances_full[channel_idx] = roll_distances[i]
+
+        return {
+            "x_positions": x_positions_full,
+            "y_positions": y_positions_full,
+            "z_start_positions": z_start_positions_full,
+            "z_stop_positions": z_stop_positions_full,
+            "z_final_positions": z_final_positions_full,
+            "roll_distances": roll_distances_full,
+        }
+
     # ============== Abstract methods from LiquidHandlerBackend ==============
 
     async def pick_up_tips(
@@ -910,7 +1057,6 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
             raise RuntimeError("Deck must be set before pick_up_tips")
 
         # Validate we have a NimbusDeck for coordinate conversion
-        from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
         if not isinstance(self._deck, NimbusDeck):
             raise RuntimeError(
                 "Deck must be a NimbusDeck for coordinate conversion"
@@ -1034,7 +1180,7 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
             logger.warning(f"Could not check tip presence before pickup: {e}")
 
         # Log parameters for debugging
-        logger.info(f"PickupTips parameters:")
+        logger.info("PickupTips parameters:")
         logger.info(f"  tips_used: {tips_used}")
         logger.info(f"  x_positions: {x_positions_full}")
         logger.info(f"  y_positions: {y_positions_full}")
@@ -1102,14 +1248,12 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
             raise RuntimeError("Deck must be set before drop_tips")
 
         # Validate we have a NimbusDeck for coordinate conversion
-        from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
         if not isinstance(self._deck, NimbusDeck):
             raise RuntimeError(
                 "Deck must be a NimbusDeck for coordinate conversion"
             )
 
         # Check if resources are waste positions (Trash objects with category="waste_position")
-        from pylabrobot.resources.trash import Trash
         is_waste_positions = [
             isinstance(op.resource, Trash) and getattr(op.resource, "category", None) == "waste_position"
             for op in ops
@@ -1125,43 +1269,6 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
                 "All operations must be either waste positions or regular resources."
             )
 
-        # Extract coordinates for each operation
-        x_positions_mm: List[float] = []
-        y_positions_mm: List[float] = []
-        z_positions_mm: List[float] = []
-
-        for i, op in enumerate(ops):
-            channel_idx = use_channels[i]
-
-            if all_waste:
-                # Get waste position from deck based on channel index
-                # Waste positions are named default_long_1, default_long_2, etc.
-                # Map channel index to waste position (1-indexed)
-                waste_pos_name = f"default_long_{channel_idx + 1}"
-                try:
-                    waste_pos = self._deck.get_resource(waste_pos_name)
-                    abs_location = waste_pos.get_absolute_location()
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to get waste position {waste_pos_name} for channel {channel_idx}: {e}"
-                    )
-            else:
-                # Get absolute location from resource
-                abs_location = op.resource.get_absolute_location()
-
-            # Add offset
-            final_location = Coordinate(
-                x=abs_location.x + op.offset.x,
-                y=abs_location.y + op.offset.y,
-                z=abs_location.z + op.offset.z,
-            )
-            # Convert to Hamilton coordinates (returns in mm)
-            hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
-
-            x_positions_mm.append(hamilton_coord.x)
-            y_positions_mm.append(hamilton_coord.y)
-            z_positions_mm.append(hamilton_coord.z)
-
         # Build tip pattern array (1 for active channels, 0 for inactive)
         tips_used = [0] * self.num_channels
         for channel_idx in use_channels:
@@ -1171,74 +1278,33 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
                 )
             tips_used[channel_idx] = 1
 
-        # Convert positions to 0.01mm units (multiply by 100)
-        x_positions = [int(round(x * 100)) for x in x_positions_mm]
-        y_positions = [int(round(y * 100)) for y in y_positions_mm]
-
-        # Calculate Z positions from resource locations
-        max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
-
         # Traverse height: use provided value (defaults to 146.0 mm from function signature)
         traverse_height_mm = traverse_height
 
         # Convert to 0.01mm units
         traverse_height_units = int(round(traverse_height_mm * 100))
 
+        # Type annotation for command variable (can be either DropTips or DropTipsRoll)
+        command: Union[DropTips, DropTipsRoll]
+
         if all_waste:
             # Use DropTipsRoll for waste positions
-            # Z positions are absolute, calculated from waste position coordinates
-            # From log: zStart = waste Z + 4.0mm, zStop = waste Z, zFinal = traverse_height
-            waste_z_hamilton = max_z_hamilton  # Waste position Z in Hamilton coordinates
+            # Build waste position parameters using helper method
+            waste_params = self._build_waste_position_params(
+                use_channels=use_channels,
+                traverse_height=traverse_height_mm,
+                z_start_offset=z_start_offset,
+                z_stop_offset=z_stop_offset,
+                z_final_offset=z_final_offset,
+                roll_distance=roll_distance,
+            )
 
-            if z_start_offset is None:
-                # Calculate from waste position: start above waste position
-                z_start_absolute_mm = waste_z_hamilton + 4.0  # Start 4mm above waste position
-            else:
-                z_start_absolute_mm = z_start_offset
-
-            if z_stop_offset is None:
-                # Calculate from waste position: stop at waste position
-                z_stop_absolute_mm = waste_z_hamilton  # Stop at waste position
-            else:
-                z_stop_absolute_mm = z_stop_offset
-
-            if z_final_offset is None:
-                z_final_offset_mm = traverse_height_mm  # Use traverse height as final position
-            else:
-                z_final_offset_mm = z_final_offset
-
-            if roll_distance is None:
-                roll_distance_mm = 9.0  # Default roll distance from log
-            else:
-                roll_distance_mm = roll_distance
-
-            # Use absolute Z positions (same for all channels)
-            z_start_positions = [
-                int(round(z_start_absolute_mm * 100))
-            ] * len(ops)  # Absolute Z start position
-            z_stop_positions = [
-                int(round(z_stop_absolute_mm * 100))
-            ] * len(ops)  # Absolute Z stop position
-            z_final_positions = [
-                int(round(z_final_offset_mm * 100))
-            ] * len(ops)  # Absolute Z final position
-            roll_distances = [int(round(roll_distance_mm * 100))] * len(ops)
-
-            # Ensure arrays match num_channels length
-            x_positions_full = [0] * self.num_channels
-            y_positions_full = [0] * self.num_channels
-            z_start_positions_full = [0] * self.num_channels
-            z_stop_positions_full = [0] * self.num_channels
-            z_final_positions_full = [0] * self.num_channels
-            roll_distances_full = [0] * self.num_channels
-
-            for i, channel_idx in enumerate(use_channels):
-                x_positions_full[channel_idx] = x_positions[i]
-                y_positions_full[channel_idx] = y_positions[i]
-                z_start_positions_full[channel_idx] = z_start_positions[i]
-                z_stop_positions_full[channel_idx] = z_stop_positions[i]
-                z_final_positions_full[channel_idx] = z_final_positions[i]
-                roll_distances_full[channel_idx] = roll_distances[i]
+            x_positions_full = waste_params["x_positions"]
+            y_positions_full = waste_params["y_positions"]
+            z_start_positions_full = waste_params["z_start_positions"]
+            z_stop_positions_full = waste_params["z_stop_positions"]
+            z_final_positions_full = waste_params["z_final_positions"]
+            roll_distances_full = waste_params["roll_distances"]
 
             # Create and send DropTipsRoll command
             command = DropTipsRoll(
@@ -1254,6 +1320,35 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
             )
         else:
             # Use DropTips for regular resources
+            # Extract coordinates for each operation
+            x_positions_mm: List[float] = []
+            y_positions_mm: List[float] = []
+            z_positions_mm: List[float] = []
+
+            for i, op in enumerate(ops):
+                # Get absolute location from resource
+                abs_location = op.resource.get_absolute_location()
+
+                # Add offset
+                final_location = Coordinate(
+                    x=abs_location.x + op.offset.x,
+                    y=abs_location.y + op.offset.y,
+                    z=abs_location.z + op.offset.z,
+                )
+                # Convert to Hamilton coordinates (returns in mm)
+                hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
+
+                x_positions_mm.append(hamilton_coord.x)
+                y_positions_mm.append(hamilton_coord.y)
+                z_positions_mm.append(hamilton_coord.z)
+
+            # Convert positions to 0.01mm units (multiply by 100)
+            x_positions = [int(round(x * 100)) for x in x_positions_mm]
+            y_positions = [int(round(y * 100)) for y in y_positions_mm]
+
+            # Calculate Z positions from resource locations
+            max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
+
             # Z positions are absolute, not relative to resource position
             # Calculate from resource locations if not provided
             if z_start_offset is None:

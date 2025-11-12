@@ -11,7 +11,6 @@ import re
 import warnings
 from typing import Any, Dict, List, Literal, Optional
 
-from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.resource import Resource
@@ -96,6 +95,9 @@ class NimbusDeck(HamiltonDeck):
         self._rail_start_x = rail_start_x
         self._rail_width = rail_width
         self._rail_y = rail_y
+
+        # Store waste type for waste position lookup
+        self.waste_type = waste_type
 
         # Create waste resources if specified
         if waste_type == "default_long":
