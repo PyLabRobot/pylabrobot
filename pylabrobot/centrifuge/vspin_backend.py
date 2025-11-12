@@ -331,16 +331,16 @@ class VSpinBackend(CentrifugeBackend):
     return VSpinBackend._StatusPositionTachometer.from_buffer_copy(resp)
 
   async def get_position(self) -> int:
-    return (await self._get_positions_and_tachometer()).current_position
+    return (await self._get_positions_and_tachometer()).current_position  # type: ignore
 
   async def get_tachometer(self) -> int:
     """current speed in rpm"""
     tack_to_rpm = -14.69320388  # R^2 = 0.9999 when spinning, but not specific at single-digit RPM
-    return (await self._get_positions_and_tachometer()).tachometer * tack_to_rpm
+    return (await self._get_positions_and_tachometer()).tachometer * tack_to_rpm  # type: ignore
 
   async def get_home_position(self) -> int:
     """changes during a run, but the bucket 1 position relative to it does not"""
-    return (await self._get_positions_and_tachometer()).home_position
+    return (await self._get_positions_and_tachometer()).home_position  # type: ignore
 
   async def _get_status(self):
     """
@@ -356,15 +356,15 @@ class VSpinBackend(CentrifugeBackend):
 
   async def get_bucket_locked(self) -> bool:
     resp = await self._get_status()
-    return resp[2] & 0b0001 != 0
+    return resp[2] & 0b0001 != 0  # type: ignore
 
   async def get_door_open(self) -> bool:
     resp = await self._get_status()
-    return resp[2] & 0b0010 != 0
+    return resp[2] & 0b0010 != 0  # type: ignore
 
   async def get_door_locked(self) -> bool:
     resp = await self._get_status()
-    return resp[2] & 0b0100 == 0
+    return resp[2] & 0b0100 == 0  # type: ignore
 
   # Centrifuge communication: read_resp, send
 
