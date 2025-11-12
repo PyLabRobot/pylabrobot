@@ -1,4 +1,5 @@
 import abc
+import time
 import warnings
 from enum import Enum
 from typing import Dict, Literal, Optional
@@ -100,6 +101,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     speed: float = 800,
     direction: Literal[0, 1] = 0,
     acceleration: int = 1_000,
+    timeout: Optional[float] = 30,
   ):
     """
     if the plate is not locked, it will be locked.
@@ -116,10 +118,13 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
+    now = time.time()
     while True:
       await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
       if await self.get_is_shaking():
         break
+      if timeout is not None and time.time() - now > timeout:
+        raise TimeoutError("Failed to start shaking within timeout")
 
   async def stop_shaking(self):
     await self._stop_shaking()

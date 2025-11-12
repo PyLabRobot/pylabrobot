@@ -3,7 +3,7 @@ import math
 import time
 from typing import Any, Awaitable, Callable, Coroutine, Dict, Literal, Optional, Tuple, Union, cast
 
-from pylabrobot.machines import Machine
+from pylabrobot.machines import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.plate_reading.standard import (
   AutoExposure,
@@ -29,7 +29,7 @@ except ImportError as e:
   _CV2_IMPORT_ERROR = e
 
 try:
-  import numpy as np
+  import numpy as np  # type: ignore
 except ImportError:
   np = None  # type: ignore[assignment]
 
@@ -209,6 +209,7 @@ class Imager(Resource, Machine):
     )
     return await local_capture(best_focal_height)
 
+  @need_setup_finished
   async def capture(
     self,
     well: Union[Well, Tuple[int, int]],

@@ -434,6 +434,33 @@ def calculate_liquid_height_container_1segment_round_fbottom(
   return liquid_height
 
 
+def calculate_liquid_height_container_1segment_round_vbottom(
+  d: float, h_pyramid: float, liquid_volume: float
+) -> float:
+  """Calculate the height of liquid in a container with a cylindrical pyramid (cone) shape.
+
+  Parameters:
+    d: The diameter of the base of the cone in mm.
+    h_pyramid: The height of the cone in mm.
+    liquid_volume: The volume of the liquid in the container in cubic millimeters.
+
+  Returns:
+    The height of the liquid in the container in mm.
+  """
+  r = d / 2
+  max_volume = (1 / 3) * math.pi * r**2 * h_pyramid
+
+  if liquid_volume > max_volume:
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definition and/or that you are using the right labware."""
+    )
+
+  scale_factor: float = (liquid_volume / max_volume) ** (1 / 3)
+  liquid_height = scale_factor * h_pyramid
+  return liquid_height
+
+
 def calculate_liquid_volume_container_1segment_round_fbottom(
   d: float, h_cylinder: float, liquid_height: float
 ) -> float:
@@ -456,6 +483,31 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
 
   cylinder_liquid_volume = math.pi * r**2 * liquid_height
   return cylinder_liquid_volume
+
+
+def calculate_liquid_volume_container_1segment_round_vbottom(
+  d: float, h_pyramid: float, liquid_height: float
+) -> float:
+  """Calculate the volume of liquid in a container with a cylindrical pyramid (cone) shape.
+
+  Parameters:
+    d: The diameter of the base of the cone in mm.
+    h_pyramid: The height of the cone in mm.
+    liquid_height: The height of the liquid in the container in mm.
+
+  Returns:
+    The volume of the liquid in cubic millimeters.
+  """
+  r = d / 2
+  if liquid_height > h_pyramid:
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definition and/or that you are using the right labware."""
+    )
+
+  scale_factor = liquid_height / h_pyramid
+  liquid_volume = (1 / 3) * math.pi * r**2 * h_pyramid * (scale_factor**3)
+  return liquid_volume
 
 
 ### Example of usage using a lambda function:

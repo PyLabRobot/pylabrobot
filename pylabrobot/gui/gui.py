@@ -201,7 +201,7 @@ def list_resources():
       "FourmlTF_P",
       "FivemlT",
       "FivemlT_P",
-      "hamilton_96_tiprack_1000ul_filter",
+      "hamilton_96_tiprack_1000uL_filter",
       "hamilton_96_tiprack_1000ul",
       "hamilton_96_tiprack_10ul_filter",
       "hamilton_96_tiprack_10ul",

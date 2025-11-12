@@ -4,7 +4,9 @@ import math
 import struct
 import sys
 import time
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
+
+from pylabrobot.resources.well import Well
 
 try:
   from pylibftdi import driver
@@ -255,8 +257,13 @@ class CLARIOstarBackend(PlateReaderBackend):
   async def _get_measurement_values(self):
     return await self.send(b"\x02\x00\x0f\x0c\x05\x02\x00\x00\x00\x00\x00\x00")
 
-  async def read_luminescence(self, plate: Plate, focal_height: float = 13) -> List[List[float]]:
+  async def read_luminescence(
+    self, plate: Plate, wells: List[Well], focal_height: float = 13
+  ) -> List[Dict]:
     """Read luminescence values from the plate reader."""
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
+
     await self._mp_and_focus_height_value()
 
     await self._run_luminescence(focal_height=focal_height)
@@ -280,16 +287,25 @@ class CLARIOstarBackend(PlateReaderBackend):
     ints = [struct.unpack(">i", bytes(int_data))[0] for int_data in int_bytes]
 
     # for backend conformity, convert to float, and reshape to 2d array
-    floats = [[float(int_) for int_ in ints[i : i + 12]] for i in range(0, len(ints), 12)]
+    floats: List[List[Optional[float]]] = utils.reshape_2d(
+      [float(i) for i in ints], (plate.num_items_y, plate.num_items_x)
+    )
 
-    return floats
+    return [
+      {
+        "data": floats,
+        "temperature": float("nan"),  # Temperature not available
+        "time": time.time(),
+      }
+    ]
 
   async def read_absorbance(
     self,
     plate: Plate,
+    wells: List[Well],
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
-  ) -> List[List[float]]:
+  ) -> List[Dict]:
     """Read absorbance values from the device.
 
     Args:
@@ -298,8 +314,12 @@ class CLARIOstarBackend(PlateReaderBackend):
         used interchangeably with "transmission" in the CLARIOStar software and documentation.
 
     Returns:
-      A 2d array of absorbance values, as transmission percentage (values between 0 and 100).
+      A list containing a single dictionary, where the key is (wavelength, 0) and the value is
+      another dictionary containing the data, temperature, and time.
     """
+
+    if wells != plate.get_all_items():
+      raise NotImplementedError("Only full plate reads are supported for now.")
 
     await self._mp_and_focus_height_value()
 
@@ -334,26 +354,38 @@ class CLARIOstarBackend(PlateReaderBackend):
     for rr in reference_reading:
       real_reference_reading.append((rr - r0) / r100)
 
-    transmittance = []
+    transmittance: List[Optional[float]] = []
     for rcr, rrr in zip(real_chromatic_reading, real_reference_reading):
       transmittance.append(rcr / rrr * 100)
 
+    data: List[List[Optional[float]]]
     if report == "OD":
-      od = []
+      od: List[Optional[float]] = []
       for t in transmittance:
-        od.append(math.log10(100 / t))
-      return utils.reshape_2d(od, (8, 12))
+        od.append(math.log10(100 / t) if t is not None and t > 0 else None)
+      data = utils.reshape_2d(od, (plate.num_items_y, plate.num_items_x))
+    elif report == "transmittance":
+      data = utils.reshape_2d(transmittance, (plate.num_items_y, plate.num_items_x))
+    else:
+      raise ValueError(f"Invalid report type: {report}")
 
-    if report == "transmittance":
-      return utils.reshape_2d(transmittance, (8, 12))
+    return [
+      {
+        "wavelength": wavelength,
+        "data": data,
+        "temperature": float("nan"),  # Temperature not available
+        "time": time.time(),
+      }
+    ]
 
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
+  ) -> List[Dict[Tuple[int, int], Dict]]:
     raise NotImplementedError("Not implemented yet")
 
 

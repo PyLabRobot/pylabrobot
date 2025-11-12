@@ -18,4 +18,5 @@ Company page: [Eppendorf Wikipedia](https://en.wikipedia.org/wiki/Eppendorf_(com
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| "Common eppendorf tube" 'Eppendorf_DNA_LoBind_1_5ml_Vb'<br>Part no.: 0030133374<br>[manufacturer website](https://www.fishersci.com/shop/products/dna-lobind-microcentrifuge-tubes/13698791) | ![](img/eppendorf/Eppendorf_DNA_LoBind_1_5ml_Vb.webp) | `Eppendorf_DNA_LoBind_1_5ml_Vb` |
+| "Common eppendorf tube"<br>Part no.: 022431021 (DNA), 022431081 (protein)<br>[manufacturer website](https://www.fishersci.com/shop/products/dna-lobind-microcentrifuge-tubes/13698791) | ![](img/eppendorf/Eppendorf_DNA_LoBind_1_5ml_Vb.webp) | `Eppendorf_DNA_LoBind_1_5ml_Vb` `Eppendorf_Protein_LoBind_1_5ml_Vb` |
+| "Common eppendorf tube"<br>Part no.: 022431048<br>[manufacturer website](https://www.fishersci.com/shop/products/dna-lobind-microcentrifuge-tubes/13698792) | ![](img/eppendorf/Eppendorf_DNA_LoBind_2ml_Ub.jpg) | `Eppendorf_DNA_LoBind_2ml_Ub`  |

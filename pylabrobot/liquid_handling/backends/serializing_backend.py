@@ -20,7 +20,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.resources import Resource, Tip
+from pylabrobot.resources import Tip
 from pylabrobot.serializer import serialize
 
 if sys.version_info >= (3, 8):
@@ -56,18 +56,6 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   def serialize(self) -> dict:
     return {**super().serialize(), "num_channels": self.num_channels}
-
-  async def assigned_resource_callback(self, resource: Resource):
-    await self.send_command(
-      command="resource_assigned",
-      data={
-        "resource": resource.serialize(),
-        "parent_name": (resource.parent.name if resource.parent else None),
-      },
-    )
-
-  async def unassigned_resource_callback(self, name: str):
-    await self.send_command(command="resource_unassigned", data={"resource_name": name})
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     serialized = [
@@ -108,6 +96,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "liquid_height": serialize(op.liquid_height),
         "blow_out_air_volume": serialize(op.blow_out_air_volume),
         "liquids": serialize(op.liquids),
+        "mix": serialize(op.mix),
       }
       for op in ops
     ]
@@ -127,6 +116,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "liquid_height": serialize(op.liquid_height),
         "blow_out_air_volume": serialize(op.blow_out_air_volume),
         "liquids": serialize(op.liquids),
+        "mix": serialize(op.mix),
       }
       for op in ops
     ]

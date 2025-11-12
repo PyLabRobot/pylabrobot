@@ -1,6 +1,7 @@
 import itertools
 import tempfile
 import unittest
+import unittest.mock
 from typing import Any, Dict, List, Optional, Union, cast
 
 import pytest
@@ -39,7 +40,6 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
-from pylabrobot.resources.opentrons.reservoirs import agilent_1_reservoir_290ml
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
   set_cross_contamination_tracking,
@@ -77,6 +77,7 @@ def _make_asp(
     liquid_height=None,
     blow_out_air_volume=None,
     liquids=[(None, vol)],
+    mix=None,
   )
 
 
@@ -95,6 +96,7 @@ def _make_disp(
     liquid_height=None,
     blow_out_air_volume=None,
     liquids=[(None, vol)],
+    mix=None,
   )
 
 
@@ -257,7 +259,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_lid(self):
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
-    plate.location = Coordinate(0, 0, 100)
+    self.deck.assign_child_resource(plate, location=Coordinate(0, 0, 100))
     lid_height = 10
     lid = Lid(
       name="lid",
@@ -266,7 +268,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       size_z=lid_height,
       nesting_z_height=lid_height,
     )
-    lid.location = Coordinate(100, 100, 200)
+    self.deck.assign_child_resource(lid, location=Coordinate(100, 100, 200))
 
     assert plate.get_absolute_location().x != lid.get_absolute_location().x
     assert plate.get_absolute_location().y != lid.get_absolute_location().y
@@ -646,15 +648,23 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.return_tips()
 
   async def test_aspirate_dispense96(self):
-    self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(self.plate, volume=10)
-    for i in range(96):
-      self.assertTrue(self.lh.head96[i].has_tip)
-      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
-    await self.lh.dispense96(self.plate, volume=10)
-    for i in range(96):
-      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
+    self.lh.backend.dispense96 = unittest.mock.create_autospec(self.lh.backend.dispense96)  # type: ignore
+    await self.lh.dispense96(self.plate, 10)
+    self.lh.backend.dispense96.assert_called_with(  # type: ignore
+      dispense=MultiHeadDispensePlate(
+        wells=self.plate.get_all_items(),
+        offset=Coordinate.zero(),
+        tips=[self.lh.head96[i].get_tip() for i in range(96)],
+        volume=10,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        liquids=[[(None, 10)] for _ in range(96)],
+        mix=None,
+      )
+    )
 
   async def test_transfer(self):
     t = self.tip_rack.get_item("A1").get_tip()
@@ -842,6 +852,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
             liquid_height=None,
             blow_out_air_volume=None,
             liquids=[[(None, 10)]] * 96,
+            mix=None,
           )
         },
       },
@@ -861,6 +872,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
             liquid_height=None,
             blow_out_air_volume=None,
             liquids=[[(None, 10)]] * 96,
+            mix=None,
           )
         },
       },
@@ -899,6 +911,19 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(NoTipError):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
     set_tip_tracking(enabled=False)
+
+  async def test_get_mounted_tips(self):
+    self.assertEqual(self.lh.get_mounted_tips(), [None] * 8)
+    await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1"])
+    mounted = self.lh.get_mounted_tips()
+    self.assertIsNotNone(self.tip_rack.get_item("A1").get_tip())
+    self.assertIsNotNone(self.tip_rack.get_item("B1").get_tip())
+    self.assertIsNotNone(self.tip_rack.get_item("C1").get_tip())
+    self.assertIsNone(mounted[3])
+    self.assertIsNone(mounted[4])
+    self.assertIsNone(mounted[5])
+    self.assertIsNone(mounted[6])
+    self.assertIsNone(mounted[7])
 
   async def test_tip_tracking_full_spot(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
@@ -1059,11 +1084,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(well_a2.tracker.liquids, [(None, 10)])
 
     set_volume_tracking(enabled=False)
-
-  async def test_aspirate_single_reservoir(self):
-    reagent_reservoir = agilent_1_reservoir_290ml(name="reservoir")
-    await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate96(reagent_reservoir.get_item("A1"), volume=100)
 
   async def test_pick_up_tips96_incomplete_rack(self):
     set_tip_tracking(enabled=True)

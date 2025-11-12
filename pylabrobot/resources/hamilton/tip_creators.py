@@ -15,11 +15,11 @@ class TipSize(enum.Enum):
   """Tip type. These correspond to the tip types in the FW documentation (see command TT)"""
 
   UNDEFINED = 0
-  LOW_VOLUME = 1
-  STANDARD_VOLUME = 2
-  HIGH_VOLUME = 3
-  CORE_384_HEAD_TIP = 4
-  XL = 5
+  LOW_VOLUME = 1  # i.e. tip_collar_size_z == 6 mm
+  STANDARD_VOLUME = 2  # i.e. tip_collar_size_z == 8 mm
+  HIGH_VOLUME = 3  # i.e. tip_collar_size_z == 10 mm
+  CORE_384_HEAD_TIP = 4  # TODO: identify tip_collar_size_z
+  XL = 5  # TODO: identify tip_collar_size_z
 
 
 class TipPickupMethod(enum.Enum):

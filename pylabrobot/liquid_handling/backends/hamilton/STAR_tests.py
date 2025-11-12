@@ -584,6 +584,11 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
+  async def test_tip_tracking_pick_up96(self):
+    set_tip_tracking(enabled=True)
+    await self.lh.pick_up_tips96(self.tip_rack)
+    set_tip_tracking(enabled=False)
+
   async def test_core_96_tip_drop(self):
     await self.lh.pick_up_tips96(self.tip_rack)  # pick up tips first
     self.STAR._write_and_read_command.reset_mock()
@@ -915,14 +920,13 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       pickup_distance_from_top=13 - 3.33,
       use_arm="core",
       # kwargs specific to pickup and drop
-      channel_1=7,
-      channel_2=8,
+      core_front_channel=7,
       return_core_gripper=True,
     )
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0ZTid0001xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2800tt14"
+          "C0ZTid0001xs07975xd0ya1250yb1070pa07pb08tp2350tz2250th2800tt14"
         ),
         _any_write_and_read_command_call(
           "C0ZPid0002xs03479xd0yj1142yv0050zj1876zy0500yo0885yg0825yw15" "th2800te2800"
@@ -931,7 +935,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "C0ZRid0003xs03479xd0yj2102zj1876zi000zy0500yo0885th2800te2800"
         ),
         _any_write_and_read_command_call(
-          "C0ZSid0004xs07975xd0ya1240yb1065tp2150tz2050th2800te2800"
+          "C0ZSid0004xs07975xd0ya1250yb1070tp2150tz2050th2800te2800"
         ),
       ]
     )

@@ -1,5 +1,5 @@
 import re
-from typing import Optional, cast
+from typing import Optional
 
 try:
   import serial
@@ -30,26 +30,21 @@ class HamiltonTiltModuleBackend(TilterBackend):
         f"pyserial is required for the Hamilton tilt module backend. Import error: {_SERIAL_IMPORT_ERROR}"
       )
 
-    self.setup_finished = False
     self.com_port = com_port
-    self.timeout = timeout
-    self.write_timeout = write_timeout
     self.io = Serial(
       port=self.com_port,
       baudrate=1200,
       bytesize=serial.EIGHTBITS,
       parity=serial.PARITY_EVEN,
       stopbits=serial.STOPBITS_ONE,
-      write_timeout=self.write_timeout,
-      timeout=self.timeout,
+      write_timeout=write_timeout,
+      timeout=timeout,
     )
 
   async def setup(self, initial_offset: int = 0):
     await self.io.setup()
     await self.tilt_initial_offset(initial_offset)
-    await self.send_command("SI")
-
-    self.setup_finished = True
+    await self.tilt_initialize()
 
   async def stop(self):
     await self.io.stop()
@@ -61,7 +56,9 @@ class HamiltonTiltModuleBackend(TilterBackend):
       parameter = ""
 
     await self.io.write(f"99{command}{parameter}\r\n".encode("utf-8"))
-    resp = (await self.io.read(128)).decode("utf-8")
+    resp = ""
+    while not resp.startswith("T1" + command):
+      resp = (await self.io.read(128)).decode("utf-8")
 
     # Check for error.
     error_matches = re.search("er[0-9]{2}", resp)
@@ -81,9 +78,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
       if err_code != 0:
         raise RuntimeError(f"Unexpected error code: {err_code}")
 
-    return cast(
-      str, resp
-    )  # must do stupid because mypy will not recognize that pyserial is typed..
+    return resp
 
   async def set_angle(self, angle: float):
     """Set the tilt module to rotate by a given angle."""

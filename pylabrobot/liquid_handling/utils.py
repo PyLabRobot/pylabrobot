@@ -5,7 +5,7 @@ from pylabrobot.resources.resource import Resource
 
 MIN_SPACING_BETWEEN_CHANNELS = 9
 # minimum spacing between the edge of the container and the center of channel
-MIN_SPACING_EDGE = 2
+MIN_SPACING_EDGE = 1
 
 
 def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):

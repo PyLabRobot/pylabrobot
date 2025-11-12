@@ -33,6 +33,8 @@ tr > td:nth-child(5) { width: 15%; }
 .badge-absorbance { background: #ffe6cc; }
 .badge-fluorescence { background: #e0ffcc; }
 .badge-luminescence { background: #e6e6ff; }
+.badge-time-resolved-fluo { background: #ddffdd; }
+.badge-fluo-polarization { background: #ddf2ffff; }
 </style>
 ```
 
@@ -85,7 +87,7 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|----------|-------------|--------|
 | Inheco | Thermoshake RM | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-classic.html) |
 | Inheco | Thermoshake | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake.html) |
-| Inheco | Thermoshake AC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-ac.html) |
+| Inheco | Thermoshake AC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/inheco.html) / [OEM](https://www.inheco.com/thermoshake-ac.html) |
 | Opentrons | Thermoshake | <span class="badge badge-heating">heating</span> | Full | [OEM](https://opentrons.com/products/heater-shaker-module) |
 | Hamilton | Heater Shaker | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/heating_shaking/hamilton.html) / [OEM](https://www.hamiltoncompany.com/temperature-control/hamilton-heater-shaker) |
 
@@ -128,7 +130,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | Features | PLR-Support | Links |
 |--------------|---------|----------|-------------|--------|
 | Opentrons | Temperature Module | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/temperature.html) / [OEM](https://opentrons.com/products/temperature-module-gen2) |
-| Inheco | CPAC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | WIP | [OEM](https://www.inheco.com/cpac.html) |
+| Inheco | CPAC | <span class="badge badge-heating">heating</span><span class="badge badge-cooling">active cooling</span> | Full | [OEM](https://www.inheco.com/cpac.html) |
 
 ### Tilting
 
@@ -149,7 +151,8 @@ tr > td:nth-child(5) { width: 15%; }
 | Agilent (BioTek) | Cytation 5 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/cytation5.html) / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-5-cell-imaging-multimode-reader-1623202) |
 | Byonoy | Absorbance 96 Automate | <span class="badge badge-absorbance">absorbance</span> | WIP | [OEM](https://byonoy.com/absorbance-96-automate/) |
 | Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | WIP | [OEM](https://byonoy.com/luminescence-96-automate/) |
-
+| Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM] (https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
+| Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM] (https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
 ### Flow Cytometers
 
 | Manufacturer | Machine | PLR-Support | Links |
@@ -174,10 +177,10 @@ tr > td:nth-child(5) { width: 15%; }
 
 Classifying lab automation equipment can be challenging.
 There are many reasons for this, including (but not limited to):
-- many machines have overlapping capabilities (the TFS Cytomat 2 C470 can be a fridge, heated chamber, oven, smart storage/plate hotel and shaker all in one machine!), 
+- many machines have overlapping capabilities (the TFS Cytomat 2 C470 can be a fridge, heated chamber, oven, smart storage/plate hotel and shaker all in one machine!),
 - different user groups require varying levels of software integration but tend to only refer to the capabilities they use in that moment (e.g. what is a shaker to one group might be a heater to another),
 - balancing naming/classification based on user intuition/historic legacy and first principles, (e.g. a thermocycler is just a speedy heater/cooler but scientists are used to the term thermocycler)
-- there is no widely accepted naming standard.  
+- there is no widely accepted naming standard.
 
 PyLabRobot does not solve these human classification issues.
 But to provide *some* structure PyLabRobot classifies machines into three purposefully broad categories:

@@ -42,19 +42,17 @@ class Visualizer:
   def __init__(
     self,
     resource: Resource,
-    ws_host: str = "127.0.0.1",
+    host: str = "127.0.0.1",
     ws_port: int = 2121,
-    fs_host: str = "127.0.0.1",
     fs_port: int = 1337,
     open_browser: bool = True,
   ):
     """Create a new Visualizer. Use :meth:`.setup` to start the visualization.
 
     Args:
-      ws_host: The hostname of the websocket server.
+      host: The hostname of the file and websocket server.
       ws_port: The port of the websocket server. If this port is in use, the port will be
         incremented until a free port is found.
-      fs_host: The hostname of the file server. This is where the visualization will be served.
       fs_port: The port of the file server. If this port is in use, the port will be incremented
         until a free port is found.
       open_browser: If `True`, the visualizer will open a browser window when it is started.
@@ -78,8 +76,9 @@ class Visualizer:
 
     register_state_update(resource)
 
+    self.host = host
+
     # file server attributes
-    self.fs_host = fs_host
     self.fs_port = fs_port
     self.open_browser = open_browser
 
@@ -87,7 +86,6 @@ class Visualizer:
     self._fst: Optional[threading.Thread] = None
 
     # websocket server attributes
-    self.ws_host = ws_host
     self.ws_port = ws_port
     self._id = 0
 
@@ -286,10 +284,8 @@ class Visualizer:
       self._stop_ = self.loop.create_future()
       while True:
         try:
-          async with websockets.legacy.server.serve(
-            self._socket_handler, self.ws_host, self.ws_port
-          ):
-            print(f"Websocket server started at http://{self.ws_host}:{self.ws_port}")
+          async with websockets.legacy.server.serve(self._socket_handler, self.host, self.ws_port):
+            print(f"Websocket server started at http://{self.host}:{self.ws_port}")
             lock.release()
             await self.stop_
             break
@@ -323,12 +319,7 @@ class Visualizer:
       )
 
     def start_server(lock):
-      ws_host, ws_port, fs_host, fs_port = (
-        self.ws_host,
-        self.ws_port,
-        self.fs_host,
-        self.fs_port,
-      )
+      ws_port, fs_port = self.ws_port, self.fs_port
 
       # try to start the server. If the port is in use, try with another port until it succeeds.
       class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -347,9 +338,7 @@ class Visualizer:
             with open(os.path.join(path, "index.html"), "r", encoding="utf-8") as f:
               content = f.read()
 
-            content = content.replace("{{ ws_host }}", ws_host)
             content = content.replace("{{ ws_port }}", str(ws_port))
-            content = content.replace("{{ fs_host }}", fs_host)
             content = content.replace("{{ fs_port }}", str(fs_port))
 
             self.send_response(200)
@@ -362,11 +351,11 @@ class Visualizer:
       while True:
         try:
           self._httpd = http.server.HTTPServer(
-            (self.fs_host, self.fs_port),
+            (self.host, self.fs_port),
             QuietSimpleHTTPRequestHandler,
           )
           print(
-            f"File server started at http://{self.fs_host}:{self.fs_port} . "
+            f"File server started at http://{self.host}:{self.fs_port} . "
             "Open this URL in your browser."
           )
           lock.release()
@@ -391,7 +380,7 @@ class Visualizer:
       time.sleep(0.001)
 
     if self.open_browser:
-      webbrowser.open(f"http://{self.fs_host}:{self.fs_port}")
+      webbrowser.open(f"http://{self.host}:{self.fs_port}")
 
   async def stop(self):
     """Stop the visualizer.

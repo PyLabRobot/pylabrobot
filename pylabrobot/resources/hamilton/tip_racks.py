@@ -25,7 +25,7 @@ from .tip_creators import (
 
 
 def hamilton_96_tiprack_10uL_filter(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235936 (CORE-II: conductive)
+  """Hamilton cat. no.: 235936 (sterile), 235901 (non-sterile)
   Hamilton name: 'LTF'
   Tip Rack with 96x 10ul Low Volume Tip with filter
   """
@@ -54,7 +54,7 @@ def hamilton_96_tiprack_10uL_filter(name: str, with_tips: bool = True) -> TipRac
 
 # TODO: identify cat number
 def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: ?
+  """Hamilton cat. no.: 235900 (non-sterile) 235935 (sterile)
   Hamilton name: 'LT'
   Tip Rack with 96x 10ul Low Volume Tip"""
   return TipRack(
@@ -84,8 +84,8 @@ def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> TipRack:
 
 
 def hamilton_96_tiprack_50uL_filter(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235979 (CORE-II: conductive)
-  Hamilton name: 'TIP_50ul'
+  """Hamilton cat. no.: 235948 (non-sterile), 235979 (sterile), 235829 (clear, non-sterile)
+  Hamilton name: 'TIP_50ul_w_filter'
   Tip Rack with 96x 50ul Tip"""
   return TipRack(
     name=name,
@@ -111,7 +111,7 @@ def hamilton_96_tiprack_50uL_filter(name: str, with_tips: bool = True) -> TipRac
 
 
 def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235978 (CORE-II: conductive)
+  """Hamilton cat. no.: 235966 (non-sterile) 235978 (sterile)
   Hamilton name: 'TIP_50ul'
   Tip Rack with 96x 50ul Tip no filter"""
   return TipRack(
@@ -138,7 +138,7 @@ def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> TipRack:
 
 
 def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> NestedTipRack:
-  """Hamilton cat. no.: 235983 (CORE-II:conductive), 235964 (CORE-II: clear)
+  """Hamilton cat. no.: 235947 (non-sterile), 235964 (clear, non-sterile), 235987 (sterile)
   Nested Tip Rack with 96x 50ul Tips
   No filter
   """
@@ -171,7 +171,7 @@ def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> NestedTip
 
 
 def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235938 (CORE-II: conductive), 235903 (CORE-I: conductive)
+  """Hamilton cat. no.: 235830 (clear, non-sterile), 235903 (non-sterile), 235938 (sterile)
   Hamilton name: 'STF'
   Tip Rack with 96x 300ul Standard Volume Tip with filter"""
   return TipRack(
@@ -198,7 +198,7 @@ def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRa
 
 
 def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235937 (CORE-II: conductive)
+  """Hamilton cat. no.: 235834 (clear, non-sterile), 235902 (non-sterile), 235937 (sterile)
   Hamilton name: 'ST'
   Tip Rack with 96x 300ul Standard Volume Tip"""
   return TipRack(
@@ -255,7 +255,7 @@ def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> 
 
 
 def hamilton_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235940 (CORE-II: conductive), 235905 (CORE-I: conductive)
+  """Hamilton cat. no.: 235820 (clear, non-sterile), 235905 (non-sterile), 235940 (sterile)
   Hamilton name: 'HTF'
   Tip Rack with 96x 1000ul High Volume Tip with filter
   """
@@ -283,7 +283,7 @@ def hamilton_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipR
 
 
 def hamilton_96_tiprack_1000uL(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235822 (CORE-II: clear tips)
+  """Hamilton cat. no.: 235822 (clear, non-sterile), 235904 (non-sterile), 235939 (sterile)
   Hamilton name: 'HT'
   Tip Rack with 96x 1000ul High Volume Tip"""
   return TipRack(
@@ -451,40 +451,40 @@ def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
 
 
 def LTF(name: str) -> TipRack:
-  raise NotImplementedError("LTF is deprecated. use hamilton_96_tiprack_10ul_filter instead")
+  raise NotImplementedError("LTF is deprecated. use hamilton_96_tiprack_10uL_filter instead")
 
 
 def LT(name: str) -> TipRack:
-  raise NotImplementedError("LT is deprecated. use hamilton_96_tiprack_10ul instead")
+  raise NotImplementedError("LT is deprecated. use hamilton_96_tiprack_10uL instead")
 
 
 def TIP_50ul_w_filter(name: str) -> TipRack:
   raise NotImplementedError(
-    "TIP_50ul_w_filter is deprecated. use hamilton_96_tiprack_50ul_filter instead"
+    "TIP_50ul_w_filter is deprecated. use hamilton_96_tiprack_50uL_filter instead"
   )
 
 
 def TIP_50ul(name: str) -> TipRack:
-  raise NotImplementedError("TIP_50ul is deprecated. use hamilton_96_tiprack_50ul instead")
+  raise NotImplementedError("TIP_50ul is deprecated. use hamilton_96_tiprack_50uL instead")
 
 
 def STF(name: str) -> TipRack:
-  raise NotImplementedError("STF is deprecated. use hamilton_96_tiprack_300ul_filter instead")
+  raise NotImplementedError("STF is deprecated. use hamilton_96_tiprack_300uL_filter instead")
 
 
 def ST(name: str) -> TipRack:
-  raise NotImplementedError("ST is deprecated. use hamilton_96_tiprack_300ul instead")
+  raise NotImplementedError("ST is deprecated. use hamilton_96_tiprack_300uL instead")
 
 
 def STF_Slim(name: str) -> TipRack:
   raise NotImplementedError(
-    "STF_Slim is deprecated. use hamilton_96_tiprack_300ul_filter_slim instead"
+    "STF_Slim is deprecated. use hamilton_96_tiprack_300uL_filter_slim instead"
   )
 
 
 def HTF(name: str) -> TipRack:
-  raise NotImplementedError("HTF is deprecated. use hamilton_96_tiprack_1000ul_filter instead")
+  raise NotImplementedError("HTF is deprecated. use hamilton_96_tiprack_1000uL_filter instead")
 
 
 def HT(name: str) -> TipRack:
-  raise NotImplementedError("HT is deprecated. use hamilton_96_tiprack_1000ul instead")
+  raise NotImplementedError("HT is deprecated. use hamilton_96_tiprack_1000uL instead")

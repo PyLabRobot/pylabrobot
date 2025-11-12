@@ -10988,7 +10988,7 @@ vantage_mapping[(300, False, True, True, Liquid.WATER, False, False)] = (
 # - To protect, the distance from Asp. to Disp. should be as short as possible( about 12slot),
 #   because MeOH could  drop out in a long way!
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
-# - sometimes it helpes using Filtertips
+# - sometimes it helps to use Filtertips
 #
 #
 #
@@ -11040,7 +11040,7 @@ vantage_mapping[(300, False, True, False, Liquid.METHANOL, True, False)] = (
 # - To protect, the distance from Asp. to Disp. should be as short as possible( about 12slot),
 #   because MeOH could  drop out in a long way!
 # - some droplets on tip after dispense are also with more air transport volume not avoidable
-# - sometimes it helpes using Filtertips
+# - sometimes it helps to use Filtertips
 #
 #
 #
