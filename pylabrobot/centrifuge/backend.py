@@ -41,7 +41,7 @@ class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def start_spin_cycle(self, g: float, duration: float, acceleration: float) -> None:
+  async def spin(self, g: float, duration: float, acceleration: float) -> None:
     pass
 
 

@@ -113,7 +113,7 @@ class Centrifuge(Machine, Resource):
       duration: The duration of the spin in seconds.
       acceleration: The acceleration as a fraction of maximum acceleration (0-1).
     """
-    await self.backend.start_spin_cycle(
+    await self.backend.spin(
       g=g,
       duration=duration,
       **backend_kwargs,

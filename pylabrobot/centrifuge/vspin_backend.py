@@ -495,7 +495,7 @@ class VSpinBackend(CentrifugeBackend):
     rpm = int((g / (1.118 * 10**-5 * r)) ** 0.5)
     return rpm
 
-  async def start_spin_cycle(
+  async def spin(
     self,
     g: float = 500,
     duration: float = 60,
