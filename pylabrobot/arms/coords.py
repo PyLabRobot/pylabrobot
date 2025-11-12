@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+from pylabrobot.resources import Coordinate, Rotation
+
 
 class ElbowOrientation(Enum):
   RIGHT = "right"
@@ -20,10 +22,6 @@ class JointCoords:
 
 @dataclass
 class CartesianCoords:
-  x: float
-  y: float
-  z: float
-  yaw: float
-  pitch: float
-  roll: float
+  location: Coordinate
+  rotation: Rotation
   orientation: Optional[ElbowOrientation] = None

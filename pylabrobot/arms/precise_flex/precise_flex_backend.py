@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from pylabrobot.arms.backend import ArmBackend
 from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
+from pylabrobot.resources import Coordinate, Rotation
+
+PreciseFlexModel = Literal["pf400", "pf3400"]
 
 
 class CoordsConverter(ABC):
@@ -55,7 +58,9 @@ class PreciseFlex400SpaceConverter(CoordsConverter):
       )
     orientation = ElbowOrientation(position[6])
     return CartesianCoords(
-      position[0], position[1], position[2], position[3], position[4], position[5], orientation
+      location=Coordinate(position[0], position[1], position[2]),
+      rotation=Rotation(position[5], position[4], position[3]),
+      orientation=orientation,
     )
 
   def convert_to_joints_array(
@@ -78,12 +83,12 @@ class PreciseFlex400SpaceConverter(CoordsConverter):
     """Convert a CartesianSpace object to a list of cartesian coordinates."""
     orientation_int = self._convert_orientation_enum_to_int(position.orientation)
     arr = (
-      position.x,
-      position.y,
-      position.z,
-      position.yaw,
-      position.pitch,
-      position.roll,
+      position.location.x,
+      position.location.y,
+      position.location.z,
+      position.rotation.yaw,
+      position.rotation.pitch,
+      position.rotation.roll,
       orientation_int,
     )
     return arr
@@ -118,7 +123,9 @@ class PreciseFlex3400SpaceConverter(CoordsConverter):
       )
     orientation = ElbowOrientation(position[6])
     return CartesianCoords(
-      position[0], position[1], position[2], position[3], position[4], position[5], orientation
+      location=Coordinate(position[0], position[1], position[2]),
+      rotation=Rotation(position[5], position[4], position[3]),
+      orientation=orientation,
     )
 
   def convert_to_joints_array(
@@ -141,12 +148,12 @@ class PreciseFlex3400SpaceConverter(CoordsConverter):
     """Convert a CartesianSpace object to a list of cartesian coordinates."""
     orientation_int = self._convert_orientation_enum_to_int(position.orientation)
     arr = (
-      position.x,
-      position.y,
-      position.z,
-      position.yaw,
-      position.pitch,
-      position.roll,
+      position.location.x,
+      position.location.y,
+      position.location.z,
+      position.rotation.yaw,
+      position.rotation.pitch,
+      position.rotation.roll,
       orientation_int,
     )
     return arr
@@ -164,7 +171,7 @@ class PreciseFlex3400SpaceConverter(CoordsConverter):
 
 class CoordsConverterFactory:
   @staticmethod
-  def create_coords_converter(model: str) -> CoordsConverter:
+  def create_coords_converter(model: PreciseFlexModel) -> CoordsConverter:
     """Factory method to create a CoordsConverter based on the robot model."""
     if model == "pf400":
       return PreciseFlex400SpaceConverter()
@@ -176,7 +183,7 @@ class CoordsConverterFactory:
 class PreciseFlexBackend(ArmBackend, ABC):
   """Backend for the PreciseFlex robotic arm  - Default to using Cartesian coordinates, some methods in Brook's TCS don't work with Joint coordinates."""
 
-  def __init__(self, model: str, host: str, port: int = 10100, timeout=20) -> None:
+  def __init__(self, model: PreciseFlexModel, host: str, port: int = 10100, timeout=20) -> None:
     super().__init__()
     self.api = PreciseFlexBackendApi(host=host, port=port, timeout=timeout)
     self.space_converter = CoordsConverterFactory.create_coords_converter(model)
@@ -280,10 +287,10 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
   async def approach(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Move the arm to a position above the specified coordinates by a certain distance."""
-    if type(position) == JointCoords:
+    if isinstance(position, JointCoords):
       joints = self.space_converter.convert_to_joints_array(position)
       await self._approach_j(joints, approach_height)
-    elif type(position) == CartesianCoords:
+    elif isinstance(position, CartesianCoords):
       xyz = self.space_converter.convert_to_cartesian_array(position)
       await self._approach_c(xyz[:-1], approach_height, xyz[-1])
     else:
@@ -291,9 +298,9 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
   async def pick_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
     """Pick a plate from the specified position."""
-    if type(position) == JointCoords:
+    if isinstance(position, JointCoords):
       raise ValueError("pick_plate only supports CartesianCoords for PreciseFlex.")
-    elif type(position) == CartesianCoords:
+    elif isinstance(position, CartesianCoords):
       xyz = self.space_converter.convert_to_cartesian_array(position)
       await self._pick_plate_c(xyz[:-1], approach_height, xyz[-1])
     else:
@@ -303,9 +310,9 @@ class PreciseFlexBackend(ArmBackend, ABC):
     self, position: Union[CartesianCoords, JointCoords], approach_height: float
   ):
     """Place a plate at the specified position."""
-    if type(position) == JointCoords:
+    if isinstance(position, JointCoords):
       raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
-    elif type(position) == CartesianCoords:
+    elif isinstance(position, CartesianCoords):
       xyz = self.space_converter.convert_to_cartesian_array(position)
       await self._place_plate_c(xyz[:-1], approach_height, xyz[-1])
     else:
@@ -313,10 +320,10 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
   async def move_to(self, position: Union[CartesianCoords, JointCoords]):
     """Move the arm to a specified position in 3D space."""
-    if type(position) == JointCoords:
+    if isinstance(position, JointCoords):
       joints = self.space_converter.convert_to_joints_array(position)
       await self._move_to_j(joints)
-    elif type(position) == CartesianCoords:
+    elif isinstance(position, CartesianCoords):
       xyz = self.space_converter.convert_to_cartesian_array(position)
       await self._move_to_c(xyz[:-1], xyz[-1])
     else:

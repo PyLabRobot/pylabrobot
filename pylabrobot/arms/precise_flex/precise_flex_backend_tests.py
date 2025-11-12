@@ -4,6 +4,7 @@ import pytest
 
 from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
+from pylabrobot.resources import Coordinate, Rotation
 
 
 @pytest.mark.hardware  # include/exclude via "pytest -m hardware"
@@ -21,17 +22,25 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   TEST_PARAMETER_ID = 17018
   TEST_SIGNAL_ID = 20064
 
-  SAFE_LOCATION_C = CartesianCoords(175, 0, 169.994, -0.001, 90, 180, ElbowOrientation.RIGHT)
+  SAFE_LOCATION_C = CartesianCoords(
+    location=Coordinate(175, 0, 169.994),
+    rotation=Rotation(180, 90, -0.001),
+    orientation=ElbowOrientation.RIGHT,
+  )
   SAFE_LOCATION_J = JointCoords(0, 170.003, 0, 180, -180, 75.486)
 
   TEST_LOCATION_J_LEFT = JointCoords(0, 169.932, 16.883, 230.942, -224.288, 75.662)
   TEST_LOCATION_C_LEFT = CartesianCoords(
-    328.426, -115.219, 169.932, 23.537, 90, 180, ElbowOrientation.LEFT
+    location=Coordinate(328.426, -115.219, 169.932),
+    rotation=Rotation(180, 90, 23.537),
+    orientation=ElbowOrientation.LEFT,
   )
 
   TEST_LOCATION_J_RIGHT = JointCoords(0, 169.968, -4.238, 117.915, -100.062, 75.668)
   TEST_LOCATION_C_RIGHT = CartesianCoords(
-    342.562, 280.484, 169.969, 13.612, 90, 180, ElbowOrientation.RIGHT
+    location=Coordinate(342.562, 280.484, 169.969),
+    rotation=Rotation(180, 90, 13.612),
+    orientation=ElbowOrientation.RIGHT,
   )
 
   async def asyncSetUp(self):
