@@ -34,6 +34,10 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.io.set_rts = unittest.mock.AsyncMock()
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
+    # Mock time.time() to control the timestamp in the results
+    self.mock_time = unittest.mock.patch("time.time", return_value=12345.6789).start()
+    self.addCleanup(self.mock_time.stop)
+
   async def test_setup(self):
     self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
     await self.backend.setup()
@@ -94,6 +98,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
         "0.0670,08,05,+0.0732,08,04,+0.0657,08,03,+0.0684,08,02,+0.1174,08,01,+0.1427\r\n228\x1a0"
         "41\x1a0000\x03"
       )
+      + "\x062360000\x03"  # Temperature call
     )
 
     plate = CellVis_96_wellplate_350uL_Fb(name="plate")
@@ -107,7 +112,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     )
     self.backend.io.write.assert_any_call(b"O")
 
-    assert resp == [
+    expected_data = [
       [
         0.1917,
         0.1225,
@@ -182,6 +187,17 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [0.1255, 0.0742, 0.0747, 0.0694, 0.1004, 0.09, 0.0659, 0.0858, 0.0876, 0.0815, 0.098, 0.1329],
       [0.1427, 0.1174, 0.0684, 0.0657, 0.0732, 0.067, 0.0602, 0.079, 0.0667, 0.1103, 0.129, 0.1316],
     ]
+    self.assertEqual(
+      resp,
+      [
+        {
+          "wavelength": 580,
+          "data": expected_data,
+          "temperature": 23.6,
+          "time": 12345.6789,
+        }
+      ],
+    )
 
   async def test_read_luminescence_partial(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -206,6 +222,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       + "0350000000000000010000000000000170000\x03"
       + "\x060000\x03"
       + "01,1,\r000:00:00.0,237,04,04,0000018\r\n,05,04,0000017\r\n,06,04,0000014\r\n237\x1a210\x1a0000\x03"
+      + "\x062360000\x03"  # Temperature call
     )
 
     plate = CellVis_96_wellplate_350uL_Fb(name="plate")
@@ -214,7 +231,6 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       focal_height=4.5, integration_time=0.4, plate=plate, wells=wells
     )
 
-    print(self.backend.io.write.mock_calls)
     self.backend.io.write.assert_any_call(b"D")
     self.backend.io.write.assert_any_call(
       b"008401010107010001200100001100100000123000020200200-001000-00300000000000000000001351086"
@@ -227,7 +243,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     )
     self.backend.io.write.assert_any_call(b"O")
 
-    assert resp == [
+    expected_data = [
       [3.0, None, None, None, None, None, None, None, None, None, None, None],
       [3.0, 43.0, 14.0, None, None, None, None, None, None, None, None, None],
       [5.0, 12.0, 14.0, None, None, None, None, None, None, None, None, None],
@@ -237,6 +253,16 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [0.0, 10.0, 9.0, None, None, None, None, None, None, None, None, None],
       [None, None, None, None, None, None, None, None, None, None, None, None],
     ]
+    self.assertEqual(
+      resp,
+      [
+        {
+          "data": expected_data,
+          "temperature": 23.6,
+          "time": 12345.6789,
+        }
+      ],
+    )
 
   async def test_read_fluorescence(self):
     self.backend.io.read.side_effect = _byte_iter(
@@ -266,6 +292,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
         ",0000607,08,10,0003002,08,09,0000900,08,08,0000697,08,07,0000542,08,06,0000688,08,05,0000"
         "622,08,04,0000555,08,03,0000542,08,02,0000742,08,01,0001118\r\n228\x1a091\x1a0000\x03"
       )
+      + "\x062360000\x03"  # Temperature call
     )
 
     plate = CellVis_96_wellplate_350uL_Fb(name="plate")
@@ -286,7 +313,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     )
     self.backend.io.write.assert_any_call(b"O")
 
-    assert resp == [
+    expected_data = [
       [427.0, 746.0, 598.0, 742.0, 1516.0, 704.0, 676.0, 734.0, 1126.0, 790.0, 531.0, 531.0],
       [462.0, 2187.0, 501.0, 465.0, 576.0, 484.0, 731.0, 891.0, 629.0, 618.0, 541.0, 2066.0],
       [728.0, 583.0, 472.0, 492.0, 501.0, 491.0, 580.0, 541.0, 556.0, 474.0, 532.0, 522.0],
@@ -296,3 +323,15 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [653.0, 783.0, 522.0, 536.0, 673.0, 858.0, 526.0, 627.0, 574.0, 1993.0, 712.0, 970.0],
       [1118.0, 742.0, 542.0, 555.0, 622.0, 688.0, 542.0, 697.0, 900.0, 3002.0, 607.0, 523.0],
     ]
+    self.assertEqual(
+      resp,
+      [
+        {
+          "ex_wavelength": 485,
+          "em_wavelength": 528,
+          "data": expected_data,
+          "temperature": 23.6,
+          "time": 12345.6789,
+        }
+      ],
+    )

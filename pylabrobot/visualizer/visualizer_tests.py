@@ -145,6 +145,6 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     call_args = self.vis.send_command.call_args[1]  # type: ignore[attr-defined]
     self.assertEqual(call_args["event"], "set_state")
     self.assertEqual(
-      call_args["data"]["plate_01_well_11_7"]["liquids"],
+      call_args["data"]["plate_01_well_H12"]["liquids"],
       [[None, 500]],
     )
