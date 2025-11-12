@@ -12,7 +12,6 @@ class CoordsConverter(ABC):
     self, position: tuple[float, float, float, float, float, float]
   ) -> JointCoords:
     """Convert a tuple of joint angles to a JointSpace object."""
-    ...
 
   @abstractmethod
   def convert_to_cartesian_space(
@@ -31,12 +30,10 @@ class CoordsConverter(ABC):
     self, position: CartesianCoords
   ) -> tuple[float, float, float, float, float, float, int]:
     """Convert a CartesianSpace object to a list of cartesian coordinates."""
-    ...
 
   @abstractmethod
   def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
     """Convert an ElbowOrientation enum to an integer."""
-    ...
 
 
 class PreciseFlex400SpaceConverter(CoordsConverter):
@@ -99,8 +96,7 @@ class PreciseFlex400SpaceConverter(CoordsConverter):
       return 1
     elif orientation == ElbowOrientation.RIGHT:
       return 2
-    else:
-      raise ValueError("Invalid ElbowOrientation value.")
+    raise ValueError("Invalid ElbowOrientation value.")
 
 
 class PreciseFlex3400SpaceConverter(CoordsConverter):
@@ -159,12 +155,11 @@ class PreciseFlex3400SpaceConverter(CoordsConverter):
     """Convert an ElbowOrientation enum to an integer."""
     if orientation is None:
       return 0
-    elif orientation == ElbowOrientation.RIGHT:
+    if orientation == ElbowOrientation.RIGHT:
       return 1
-    elif orientation == ElbowOrientation.LEFT:
+    if orientation == ElbowOrientation.LEFT:
       return 2
-    else:
-      raise ValueError("Invalid ElbowOrientation value.")
+    raise ValueError("Invalid ElbowOrientation value.")
 
 
 class CoordsConverterFactory:
@@ -173,10 +168,9 @@ class CoordsConverterFactory:
     """Factory method to create a CoordsConverter based on the robot model."""
     if model == "pf400":
       return PreciseFlex400SpaceConverter()
-    elif model == "pf3400":
+    if model == "pf3400":
       return PreciseFlex3400SpaceConverter()
-    else:
-      raise ValueError(f"Unsupported robot model: {model}")
+    raise ValueError(f"Unsupported robot model: {model}")
 
 
 class PreciseFlexBackend(ArmBackend, ABC):
@@ -224,10 +218,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def is_gripper_closed(self) -> bool:
     """Check if the gripper is currently closed."""
     ret_int = await self.api.is_fully_closed()
-    if ret_int == -1:
-      return True
-    else:
-      return False
+    return ret_int == -1
 
   async def halt(self):
     """Stop any ongoing movement of the arm."""
@@ -244,18 +235,16 @@ class PreciseFlexBackend(ArmBackend, ABC):
   def _convert_orientation_int_to_enum(self, orientation_int: int) -> Optional[ElbowOrientation]:
     if orientation_int == 1:
       return ElbowOrientation.LEFT
-    elif orientation_int == 2:
+    if orientation_int == 2:
       return ElbowOrientation.RIGHT
-    else:
-      return None
+    return None
 
   def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
     if orientation == ElbowOrientation.LEFT:
       return 1
-    elif orientation == ElbowOrientation.RIGHT:
+    if orientation == ElbowOrientation.RIGHT:
       return 2
-    else:
-      return 0
+    return 0
 
   async def home_all(self):
     """Homes all robots."""
