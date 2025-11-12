@@ -163,6 +163,13 @@ def _save_vspin_calibrations(device_id, remainder: int):
 FULL_ROTATION: int = 8000
 
 
+bucket_1_not_set_error = RuntimeError(
+  "Bucket 1 position not set. "
+  "Please rotate the bucket to bucket 1 using VSpinBackend.go_to_position and "
+  "then calling VSpinBackend.set_bucket_1_position_to_current."
+)
+
+
 class VSpinBackend(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
@@ -178,13 +185,6 @@ class VSpinBackend(CentrifugeBackend):
     # if it is None, we will load it after setup when we can query the device id from the io
     if device_id is not None:
       self._bucket_1_remainder = _load_vspin_calibrations(device_id)
-
-    if self._bucket_1_remainder is None:
-      warnings.warn(
-        f"No calibration found for VSpin with device id {device_id}. "
-        "Please set the bucket 1 position using `VSpinBackend.set_bucket_1_position_to_current` method after setup.",
-        UserWarning,
-      )
 
   async def setup(self):
     await self.io.setup()
@@ -267,9 +267,7 @@ class VSpinBackend(CentrifugeBackend):
   @property
   def bucket_1_remainder(self) -> int:
     if self._bucket_1_remainder is None:
-      raise RuntimeError(
-        "Bucket 1 position not set. Please set it using `VSpinBackend.set_bucket_1_position_to_current` method."
-      )
+      raise bucket_1_not_set_error
     return self._bucket_1_remainder
 
   async def set_bucket_1_position_to_current(self) -> None:
@@ -283,9 +281,7 @@ class VSpinBackend(CentrifugeBackend):
   async def get_bucket_1_position(self) -> int:
     """Get the bucket 1 position based on calibration."""
     if self._bucket_1_remainder is None:
-      raise RuntimeError(
-        "Bucket 1 position not set. Please set it using `VSpinBackend.set_bucket_1_position_to_current` method."
-      )
+      raise bucket_1_not_set_error
     home_position = await self.get_home_position()
     bucket_1_position = (home_position - self.bucket_1_remainder) % FULL_ROTATION
     return bucket_1_position
