@@ -1,7 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Literal, Optional, Union
 
-from pylabrobot.arms.backend import ArmBackend
+from pylabrobot.arms.backend import (
+  AccessPattern,
+  ArmBackend,
+  HorizontalAccess,
+  VerticalAccess,
+)
 from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
 from pylabrobot.arms.precise_flex.precise_flex_api import PreciseFlexBackendApi
 from pylabrobot.resources import Coordinate, Rotation
@@ -285,36 +290,127 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Get the robot's version."""
     return await self.api.get_version()
 
-  async def approach(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
-    """Move the arm to a position above the specified coordinates by a certain distance."""
+  async def approach(
+    self,
+    position: Union[CartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None
+  ):
+    """Move the arm to an approach position (offset from target).
+
+    Args:
+      position: Target position (CartesianCoords or JointCoords)
+      access: Access pattern defining how to approach the target.
+              Defaults to VerticalAccess() if not specified.
+
+    Example:
+      # Simple vertical approach (default)
+      await backend.approach(position)
+
+      # Horizontal hotel-style approach
+      await backend.approach(
+        position,
+        HorizontalAccess(
+          approach_distance_mm=50,
+          clearance_mm=50,
+          lift_height_mm=100
+        )
+      )
+    """
+    if access is None:
+      access = VerticalAccess()
+
     if isinstance(position, JointCoords):
       joints = self.space_converter.convert_to_joints_array(position)
-      await self._approach_j(joints, approach_height)
+      await self._approach_j(joints, access)
     elif isinstance(position, CartesianCoords):
       xyz = self.space_converter.convert_to_cartesian_array(position)
-      await self._approach_c(xyz[:-1], approach_height, xyz[-1])
+      await self._approach_c(xyz[:-1], xyz[-1], access)
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
-  async def pick_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
-    """Pick a plate from the specified position."""
+  async def pick_plate(
+      self,
+      position: Union[CartesianCoords, JointCoords],
+      access: Optional[AccessPattern] = None
+    ):
+    """Pick a plate from the specified position.
+
+    Args:
+      position: Target position for pickup (CartesianCoords only, JointCoords not supported)
+      access: How to access the location (VerticalAccess or HorizontalAccess).
+              Defaults to VerticalAccess() if not specified.
+
+    Raises:
+      ValueError: If position is not CartesianCoords
+
+    Example:
+      # Simple vertical pick (default)
+      await backend.pick_plate(position)
+
+      # Vertical pick with custom clearance
+      await backend.pick_plate(position, VerticalAccess(clearance_mm=150))
+
+      # Horizontal hotel-style pick
+      await backend.pick_plate(
+        position,
+        HorizontalAccess(
+          approach_distance_mm=50,
+          clearance_mm=50,
+          lift_height_mm=100
+        )
+      )
+    """
+    if access is None:
+      access = VerticalAccess()
+
     if isinstance(position, JointCoords):
       raise ValueError("pick_plate only supports CartesianCoords for PreciseFlex.")
     elif isinstance(position, CartesianCoords):
       xyz = self.space_converter.convert_to_cartesian_array(position)
-      await self._pick_plate_c(xyz[:-1], approach_height, xyz[-1])
+      await self._pick_plate_c(xyz[:-1], xyz[-1], access)
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
   async def place_plate(
-    self, position: Union[CartesianCoords, JointCoords], approach_height: float
+    self,
+    position: Union[CartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None
   ):
-    """Place a plate at the specified position."""
+    """Place a plate at the specified position.
+
+    Args:
+      position: Target position for placement (CartesianCoords only, JointCoords not supported)
+      access: How to access the location (VerticalAccess or HorizontalAccess).
+              Defaults to VerticalAccess() if not specified.
+
+    Raises:
+      ValueError: If position is not CartesianCoords
+
+    Example:
+      # Simple vertical place (default)
+      await backend.place_plate(position)
+
+      # Vertical place with custom clearance
+      await backend.place_plate(position, VerticalAccess(clearance_mm=150))
+
+      # Horizontal hotel-style place
+      await backend.place_plate(
+        position,
+        HorizontalAccess(
+          approach_distance_mm=50,
+          clearance_mm=50,
+          lift_height_mm=100
+        )
+      )
+    """
+    if access is None:
+      access = VerticalAccess()
+
     if isinstance(position, JointCoords):
       raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
     elif isinstance(position, CartesianCoords):
       xyz = self.space_converter.convert_to_cartesian_array(position)
-      await self._place_plate_c(xyz[:-1], approach_height, xyz[-1])
+      await self._place_plate_c(xyz[:-1], xyz[-1], access)
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
@@ -340,29 +436,38 @@ class PreciseFlexBackend(ArmBackend, ABC):
     return self.space_converter.convert_to_cartesian_space(position_c)
 
   async def _approach_j(
-    self, joint_position: tuple[float, float, float, float, float, float], approach_height: float
+    self, joint_position: tuple[float, float, float, float, float, float], access: AccessPattern
   ):
-    """Move the arm to a position above the specified coordinates by a certain distance."""
+    """Move the arm to a position above the specified coordinates.
+
+    The approach behavior depends on the access pattern:
+    - VerticalAccess: Approaches from above using approach_height_mm
+    - HorizontalAccess: Approaches from the side using approach_distance_mm
+    """
     await self.api.set_location_angles(self.location_index, *joint_position)
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self._set_grip_detail(access)
     await self.api.move_appro(self.location_index, self.profile_index)
 
   async def _pick_plate_j(
-    self, joint_position: tuple[float, float, float, float, float, float], approach_height: float
+    self,
+    joint_position: tuple[float, float, float, float, float, float],
+    access: AccessPattern
   ):
-    """Pick a plate from the specified position."""
+    """Pick a plate from the specified position using joint coordinates."""
     await self.api.set_location_angles(self.location_index, *joint_position)
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self._set_grip_detail(access)
     await self.api.pick_plate(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
 
   async def _place_plate_j(
-    self, joint_position: tuple[float, float, float, float, float, float], approach_height: float
+    self,
+    joint_position: tuple[float, float, float, float, float, float],
+    access: AccessPattern
   ):
-    """Place a plate at the specified position."""
+    """Place a plate at the specified position using joint coordinates."""
     await self.api.set_location_angles(self.location_index, *joint_position)
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self._set_grip_detail(access)
     await self.api.place_plate(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
@@ -378,24 +483,29 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def _approach_c(
     self,
     cartesian_position: tuple[float, float, float, float, float, float],
-    approach_height: float,
-    orientation: int = 0,
+    orientation: int,
+    access: AccessPattern
   ):
-    """Move the arm to a position above the specified coordinates by a certain distance."""
+    """Move the arm to a position above the specified coordinates.
+
+    The approach behavior depends on the access pattern:
+    - VerticalAccess: Approaches from above using approach_height_mm
+    - HorizontalAccess: Approaches from the side using approach_distance_mm
+    """
     await self.api.set_location_xyz(self.location_index, *cartesian_position)
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self._set_grip_detail(access)
     await self.api.set_location_config(self.location_index, orientation)
     await self.api.move_appro(self.location_index, self.profile_index)
 
   async def _pick_plate_c(
     self,
     cartesian_position: tuple[float, float, float, float, float, float],
-    approach_height: float,
-    orientation: int = 0,
+    orientation: int,
+    access: AccessPattern
   ):
-    """Pick a plate from the specified position."""
+    """Pick a plate from the specified position using Cartesian coordinates."""
     await self.api.set_location_xyz(self.location_index, *cartesian_position)
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self._set_grip_detail(access)
     await self.api.set_location_config(self.location_index, orientation)
     await self.api.pick_plate(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
@@ -404,12 +514,12 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def _place_plate_c(
     self,
     cartesian_position: tuple[float, float, float, float, float, float],
-    approach_height: float,
-    orientation: int = 0,
+    orientation: int,
+    access: AccessPattern
   ):
-    """Place a plate at the specified position."""
+    """Place a plate at the specified position using Cartesian coordinates."""
     await self.api.set_location_xyz(self.location_index, *cartesian_position)
-    await self.api.set_location_z_clearance(self.location_index, approach_height)
+    await self._set_grip_detail(access)
     await self.api.set_location_config(self.location_index, orientation)
     await self.api.place_plate(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
@@ -427,3 +537,34 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Get the current position of the arm in 3D space."""
     position = await self.api.where_c()
     return (*position[:6], self._convert_orientation_int_to_enum(position[6]))
+
+  async def _set_grip_detail(self, access: AccessPattern):
+    """Configure station type for pick/place operations based on access pattern.
+
+    Calls TCS set_station_type command to configure how the robot interprets
+    clearance values and performs approach/retract motions.
+
+    Args:
+      access: Access pattern (VerticalAccess or HorizontalAccess) defining
+              how to approach and retract from the location.
+    """
+    if isinstance(access, VerticalAccess):
+      # Vertical access: access_type=1, z_clearance is vertical distance
+      await self.api.set_station_type(
+        self.location_index,
+        1,  # access_type: 1 = vertical
+        0,  # location_type: 0 = normal single location
+        access.clearance_mm,  # z_clearance: vertical retract distance
+        0,  # z_above: not used for vertical access
+        access.gripper_offset_mm  # z_grasp_offset: added when holding plate
+      )
+    else:  # HorizontalAccess
+      # Horizontal access: access_type=0, z_clearance is horizontal distance
+      await self.api.set_station_type(
+        self.location_index,
+        0,  # access_type: 0 = horizontal
+        0,  # location_type: 0 = normal single location
+        access.clearance_mm,  # z_clearance: horizontal retract distance
+        access.lift_height_mm,  # z_above: vertical lift for horizontal access
+        access.gripper_offset_mm  # z_grasp_offset: added when holding plate
+      )
