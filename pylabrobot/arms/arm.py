@@ -1,6 +1,6 @@
-from typing import Union
+from typing import Optional, Union
 
-from pylabrobot.arms.backend import ArmBackend
+from pylabrobot.arms.backend import AccessPattern, ArmBackend
 from pylabrobot.arms.coords import CartesianCoords, JointCoords
 from pylabrobot.machines.machine import Machine
 
@@ -56,16 +56,44 @@ class Arm(Machine):
     """Move the arm to a predefined safe position."""
     return await self.backend.move_to_safe()
 
-  async def approach(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
-    """Move the arm to a position above the specified coordinates by a certain distance."""
-    return await self.backend.approach(position, approach_height)
+  async def approach(
+    self,
+    position: Union[CartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None
+  ):
+    """Move the arm to an approach position (offset from target).
 
-  async def pick_plate(self, position: Union[CartesianCoords, JointCoords], approach_height: float):
-    """Pick a plate from the specified position."""
-    return await self.backend.pick_plate(position, approach_height)
+    Args:
+      position: Target position (CartesianCoords or JointCoords)
+      access: Access pattern defining how to approach the target.
+              Defaults to VerticalAccess() if not specified.
+    """
+    return await self.backend.approach(position, access)
+
+  async def pick_plate(
+    self,
+    position: Union[CartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None
+  ):
+    """Pick a plate from the specified position.
+
+    Args:
+      position: Target position for pickup
+      access: Access pattern defining how to approach and retract.
+              Defaults to VerticalAccess() if not specified.
+    """
+    return await self.backend.pick_plate(position, access)
 
   async def place_plate(
-    self, position: Union[CartesianCoords, JointCoords], approach_height: float
+    self,
+    position: Union[CartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None
   ):
-    """Place a plate at the specified position."""
-    return await self.backend.place_plate(position, approach_height)
+    """Place a plate at the specified position.
+
+    Args:
+      position: Target position for placement
+      access: Access pattern defining how to approach and retract.
+              Defaults to VerticalAccess() if not specified.
+    """
+    return await self.backend.place_plate(position, access)
