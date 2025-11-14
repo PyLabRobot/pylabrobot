@@ -27,6 +27,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.barcode import Barcode
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -258,6 +259,31 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.maxDiff = None
 
     self.STAR._num_channels = 8
+
+  async def test_core_read_barcode_success(self):
+    """_star_core_read_barcode should send ZB and return a Barcode."""
+
+    self.STAR._write_and_read_command.return_value = (
+      "C0ZBid0001er00/00vl0008bb/08ABCDEFGH"
+    )
+
+    barcode = await self.STAR._star_core_read_barcode(slot_number=5)
+
+    # Check command format.
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "C0ZBid0001cp05zb2200th2750zy1287bd1ma0250 2100 0860 0200mr0mo000 000 000 000 000 000 000",
+        )
+      ]
+    )
+
+    # Check returned barcode object.
+    self.assertIsInstance(barcode, Barcode)
+    assert barcode is not None
+    self.assertEqual(barcode.data, "ABCDEFGH")
+    self.assertEqual(barcode.symbology, "code128")
+    self.assertEqual(barcode.position_on_resource, "front")
     self.STAR.core96_head_installed = True
     self.STAR.iswap_installed = True
     self.STAR.setup = unittest.mock.AsyncMock()

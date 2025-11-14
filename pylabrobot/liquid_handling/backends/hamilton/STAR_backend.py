@@ -86,6 +86,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
+from pylabrobot.resources.barcode import Barcode
 
 T = TypeVar("T")
 
@@ -5554,7 +5555,82 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return command_output
 
-  # TODO:(command:ZB)
+  async def _star_core_read_barcode(
+    self,
+    slot_number: int,
+    minimal_z_position: int = 2200,
+    traverse_height_at_beginning_of_a_command: int = 2750,
+    z_speed: int = 1287,
+  ):
+    """Read a 1D barcode using the CoRe gripper scanner.
+
+    Returns:
+      A Barcode if one is successfully read, otherwise None.
+    """
+
+    assert 1 <= slot_number <= 54, "slot_number must be between 1 and 54"
+    assert 0 <= minimal_z_position <= 3600, "minimal_z_position must be between 0 and 3600"
+    assert (
+      0 <= traverse_height_at_beginning_of_a_command <= 3600
+    ), "traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= z_speed <= 1287, "z_speed must be between 0 and 1287"
+
+    command_output = await self.send_command(
+      module="C0",
+      command="ZB",
+      cp=f"{slot_number:02}",
+      zb=f"{minimal_z_position:04}",
+      th=f"{traverse_height_at_beginning_of_a_command:04}",
+      zy=f"{z_speed:04}",
+      bd=1,
+      ma="0250 2100 0860 0200",
+      mr=0,
+      mo="000 000 000 000 000 000 000",
+    )
+
+    if command_output is None:
+      return None
+
+    resp = command_output.strip()
+    er_index = resp.find("er")
+    if er_index == -1:
+      return None
+
+    error_code = resp[er_index + 2 : er_index + 7]
+    if error_code != "00/00":
+      return None
+
+    vl_index = resp.find("vl", er_index + 7)
+    bb_index = resp.find("bb/", er_index + 7)
+
+    if vl_index == -1 or bb_index == -1 or bb_index < vl_index:
+      return None
+
+    vl_str = resp[vl_index + 2 : vl_index + 6]
+    try:
+      vl_len = int(vl_str)
+    except ValueError:
+      vl_len = 0
+
+    bb_len_str = resp[bb_index + 3 : bb_index + 5]
+    try:
+      bb_len = int(bb_len_str)
+    except ValueError:
+      bb_len = 0
+
+    barcode_str = resp[bb_index + 5 :].strip()
+
+    if vl_len == 0 or bb_len == 0:
+      return None
+
+    if len(barcode_str) > bb_len:
+      barcode_str = barcode_str[:bb_len]
+
+    return Barcode(
+      data=barcode_str,
+      symbology="code128",
+      position_on_resource="front",
+    )
 
   # -------------- 3.5.6 Adjustment & movement commands --------------
 
