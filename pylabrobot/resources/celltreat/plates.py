@@ -74,11 +74,6 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
 
 
 def CellTreat_96_wellplate_350ul_Ub_Lid(name: str) -> Lid:
-  """
-  CellTreat cat. no.: 229591
-  - Material: Polystyrene
-  - Tissue culture treated: No
-  """
   return Lid(
     name=name,
     size_x=127.762,
@@ -153,7 +148,18 @@ def CellTreat_96_wellplate_U(name: str, lid: Optional[Lid] = None) -> Plate:
   )
 
 
-def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:
+def CellTreat_96_wellplate_350ul_Fb_Lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.61,  # from spec
+    size_y=85.24,  # from spec
+    size_z=9.94,  # measured
+    nesting_z_height=8.94,  # from spec
+    model=CellTreat_96_wellplate_350ul_Fb_Lid.__name__,
+  )
+
+
+def CellTreat_96_wellplate_350ul_Fb(name: str, with_lid: bool = False) -> Plate:
   """
   CellTreat cat. no.: 229195, 229196
 
@@ -178,7 +184,7 @@ def CellTreat_96_wellplate_350ul_Fb(name: str) -> Plate:
     size_x=127.61,
     size_y=85.24,
     size_z=14.30,  # without lid
-    lid=None,
+    lid=CellTreat_96_wellplate_350ul_Fb_Lid(name + "_lid") if with_lid else None,
     model=CellTreat_96_wellplate_350ul_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
