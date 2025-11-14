@@ -293,6 +293,56 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(barcode.symbology, "code128")
     self.assertEqual(barcode.position_on_resource, "front")
 
+  async def test_core_read_barcode_raises_on_missing_error_section(self):
+    """Unexpected response without error section should raise ValueError."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001vl0008bb/08ABCDEFGH"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR._star_core_read_barcode(slot_number=5)
+
+  async def test_core_read_barcode_raises_on_unexpected_layout(self):
+    """Unexpected layout of vl / bb fields should raise ValueError."""
+
+    # Missing bb/ field.
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00vl0008"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR._star_core_read_barcode(slot_number=5)
+
+  async def test_core_read_barcode_raises_on_invalid_lengths(self):
+    """Non-integer vl / bb length fields should raise ValueError."""
+
+    # Invalid vl field.
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00vlXXXXbb/08ABCDEFGH"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR._star_core_read_barcode(slot_number=5)
+
+    # Invalid bb field.
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00vl0008bb/XXABCDEFGH"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR._star_core_read_barcode(slot_number=5)
+
+  async def test_core_read_barcode_nonzero_error_code_raises_firmware_error(self):
+    """Non-zero error code should be surfaced as STARFirmwareError."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er05/30vl0000bb/00"
+    )
+
+    with self.assertRaises(STARFirmwareError):
+      await self.STAR._star_core_read_barcode(slot_number=5)
+
   async def asyncTearDown(self):
     await self.lh.stop()
 

@@ -5594,29 +5594,33 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = command_output.strip()
     er_index = resp.find("er")
     if er_index == -1:
-      return None
+      # Unexpected format: no error section present.
+      raise ValueError(f"Unexpected CoRe barcode response (no error section): {resp}")
 
     error_code = resp[er_index + 2 : er_index + 7]
     if error_code != "00/00":
+      # Non-zero error code: raise a firmware error so the user sees it.
+      self.check_fw_string_error(resp)
       return None
 
     vl_index = resp.find("vl", er_index + 7)
     bb_index = resp.find("bb/", er_index + 7)
 
     if vl_index == -1 or bb_index == -1 or bb_index < vl_index:
-      return None
+      # Unexpected layout of length / barcode fields.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
 
     vl_str = resp[vl_index + 2 : vl_index + 6]
     try:
       vl_len = int(vl_str)
-    except ValueError:
-      vl_len = 0
+    except ValueError as e:
+      raise ValueError(f"Invalid CoRe barcode length field 'vl': {vl_str}") from e
 
     bb_len_str = resp[bb_index + 3 : bb_index + 5]
     try:
       bb_len = int(bb_len_str)
-    except ValueError:
-      bb_len = 0
+    except ValueError as e:
+      raise ValueError(f"Invalid CoRe barcode length field 'bb': {bb_len_str}") from e
 
     barcode_str = resp[bb_index + 5 :].strip()
 
