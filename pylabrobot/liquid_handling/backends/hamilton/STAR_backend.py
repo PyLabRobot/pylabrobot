@@ -70,6 +70,7 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
 )
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -86,7 +87,6 @@ from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.barcode import Barcode
 
 T = TypeVar("T")
 
