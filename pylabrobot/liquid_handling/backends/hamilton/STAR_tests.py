@@ -204,7 +204,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   """Test STAR backend for liquid handling."""
 
   async def asyncSetUp(self):
-    print("setup")
     self.STAR = STARBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
     self.STAR.io = unittest.mock.MagicMock()
