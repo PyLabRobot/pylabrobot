@@ -272,7 +272,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     """_star_core_read_barcode should send ZB and return a Barcode."""
 
     self.STAR._write_and_read_command.return_value = (  # type: ignore
-      "C0ZBid0001er00/00vl0008bb/08ABCDEFGH"
+      "C0ZBid0001er00/00bb/08ABCDEFGH"
     )
 
     barcode = await self.STAR._star_core_read_barcode(slot_number=5)
@@ -297,37 +297,26 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     """Unexpected response without error section should raise ValueError."""
 
     self.STAR._write_and_read_command.return_value = (  # type: ignore
-      "C0ZBid0001vl0008bb/08ABCDEFGH"
-    )
-
-    with self.assertRaises(ValueError):
-      await self.STAR._star_core_read_barcode(slot_number=5)
-
-  async def test_core_read_barcode_raises_on_unexpected_layout(self):
-    """Unexpected layout of vl / bb fields should raise ValueError."""
-
-    # Missing bb/ field.
-    self.STAR._write_and_read_command.return_value = (  # type: ignore
-      "C0ZBid0001er00/00vl0008"
+      "C0ZBid0001bb/08ABCDEFGH"
     )
 
     with self.assertRaises(ValueError):
       await self.STAR._star_core_read_barcode(slot_number=5)
 
   async def test_core_read_barcode_raises_on_invalid_lengths(self):
-    """Non-integer vl / bb length fields should raise ValueError."""
+    """Non-integer / inconsistent bb length fields should raise ValueError."""
 
-    # Invalid vl field.
+    # Invalid bb field (non-integer length).
     self.STAR._write_and_read_command.return_value = (  # type: ignore
-      "C0ZBid0001er00/00vlXXXXbb/08ABCDEFGH"
+      "C0ZBid0001er00/00bb/XXABCDEFGH"
     )
 
     with self.assertRaises(ValueError):
       await self.STAR._star_core_read_barcode(slot_number=5)
 
-    # Invalid bb field.
+    # Length > 0 but no data present.
     self.STAR._write_and_read_command.return_value = (  # type: ignore
-      "C0ZBid0001er00/00vl0008bb/XXABCDEFGH"
+      "C0ZBid0001er00/00bb/08"
     )
 
     with self.assertRaises(ValueError):
@@ -337,7 +326,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     """Non-zero error code should be surfaced as STARFirmwareError."""
 
     self.STAR._write_and_read_command.return_value = (  # type: ignore
-      "C0ZBid0001er05/30vl0000bb/00"
+      "C0ZBid0001er05/30bb/00"
     )
 
     with self.assertRaises(STARFirmwareError):

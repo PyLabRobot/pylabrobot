@@ -5599,18 +5599,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self.check_fw_string_error(resp)
 
-    vl_index = resp.find("vl", er_index + 7)
+    # Parse barcode section: firmware returns `bb/LL<barcode>` where LL is length (00..99).
     bb_index = resp.find("bb/", er_index + 7)
-
-    if vl_index == -1 or bb_index == -1 or bb_index < vl_index:
-      # Unexpected layout of length / barcode fields.
+    if bb_index == -1:
+      # Unexpected layout of barcode section.
       raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
 
-    vl_str = resp[vl_index + 2 : vl_index + 6]
-    try:
-      vl_len = int(vl_str)
-    except ValueError as e:
-      raise ValueError(f"Invalid CoRe barcode length field 'vl': {vl_str}") from e
+    if len(resp) < bb_index + 5:
+      # Need at least 'bb/LL'.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
 
     bb_len_str = resp[bb_index + 3 : bb_index + 5]
     try:
@@ -5620,9 +5617,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     barcode_str = resp[bb_index + 5 :].strip()
 
-    if vl_len == 0 or bb_len == 0:
+    # No barcode present: this is a valid "no data" case.
+    if bb_len == 0:
       return None
 
+    if not barcode_str:
+      # Length > 0 but no data present.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
+
+    # If the firmware returns more characters than declared, truncate to the declared length.
     if len(barcode_str) > bb_len:
       barcode_str = barcode_str[:bb_len]
 
