@@ -94,6 +94,8 @@ def CellTreat_6_wellplate_16300ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
   CellTreat cat. no.: 229105
   - Material: Polystyrene
   - Tissue culture treated: No
+
+  https://www.celltreat.com/wp-content/uploads/6-Well-Plate.pdf
   """
   UPPER_WELL_RADIUS = 17.75  # from plate specs/drawing
   LOWER_WELL_RADIUS = 17.35  # from plate specs/drawing
@@ -219,6 +221,52 @@ def CellTreat_12_troughplate_15000ul_Vb(name: str) -> Plate:
       item_dx=9.0,  # standard
       item_dy=9.0,  # standard
       cross_section_type=CrossSectionType.RECTANGLE,
+      **well_kwargs,
+    ),
+  )
+
+
+def CellTreat_24_wellplate_3300ul_Fb_Lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.61,  # from spec
+    size_y=85.24,  # from spec
+    size_z=9.94,  # measured
+    nesting_z_height=8.94,  # measured as height of plate "plateau"
+    model=CellTreat_24_wellplate_3300ul_Fb_Lid.__name__,
+  )
+
+
+def CellTreat_24_wellplate_3300ul_Fb(name: str, with_lid: bool = False) -> Plate:
+  """
+  CellTreat cat. no.: 229123, 229124
+  https://www.celltreat.com/wp-content/uploads/24-Well-Plate.pdf
+  """
+  well_kwargs = {
+    "size_x": 16.6,  # from spec
+    "size_y": 16.6,  # from spec
+    "size_z": 17.2,  # from spec
+    "bottom_type": WellBottomType.FLAT,
+    "material_z_thickness": 2.3,
+    "cross_section_type": CrossSectionType.CIRCLE,
+    "max_volume": 3300,
+  }
+  return Plate(
+    name=name,
+    size_x=128.02,  # from spec
+    size_y=85.74,  # from spec
+    size_z=20.2,  # from spec, without lid
+    lid=CellTreat_24_wellplate_3300ul_Fb_Lid(name + "_lid") if with_lid else None,
+    model=CellTreat_24_wellplate_3300ul_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=6,
+      num_items_y=4,
+      dx=16.01 - 15.7 / 2,  # from spec
+      dy=14.06 - 15.7 / 2,  # from spec
+      dz=20.2 - 17.2 - 2.3,  # from spec
+      item_dx=19.2,  # from spec
+      item_dy=19.2,  # from spec
       **well_kwargs,
     ),
   )
