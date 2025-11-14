@@ -5597,11 +5597,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # Unexpected format: no error section present.
       raise ValueError(f"Unexpected CoRe barcode response (no error section): {resp}")
 
-    error_code = resp[er_index + 2 : er_index + 7]
-    if error_code != "00/00":
-      # Non-zero error code: raise a firmware error so the user sees it.
-      self.check_fw_string_error(resp)
-      return None
+    self.check_fw_string_error(resp)
 
     vl_index = resp.find("vl", er_index + 7)
     bb_index = resp.find("bb/", er_index + 7)
