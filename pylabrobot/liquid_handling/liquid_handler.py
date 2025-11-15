@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import threading
+import unittest.mock
 import warnings
 from typing import (
   Any,
@@ -289,6 +290,10 @@ class LiquidHandler(Resource, Machine):
     Returns:
       The set of arguments that need to be removed from `backend_kwargs` before passing to `method`.
     """
+
+    # if method is an AsyncMock, skip the checks
+    if isinstance(method, unittest.mock.AsyncMock):
+      return set()
 
     default_args = default.union({"self"})
 
@@ -643,6 +648,7 @@ class LiquidHandler(Resource, Machine):
     self,
     use_channels: Optional[list[int]] = None,
     allow_nonzero_volume: bool = False,
+    offsets: Optional[List[Coordinate]] = None,
     **backend_kwargs,
   ):
     """Return all tips that are currently picked up to their original place.
@@ -689,6 +695,7 @@ class LiquidHandler(Resource, Machine):
       tip_spots=tip_spots,
       use_channels=channels,
       allow_nonzero_volume=allow_nonzero_volume,
+      offsets=offsets,
       **backend_kwargs,
     )
 
@@ -1542,7 +1549,7 @@ class LiquidHandler(Resource, Machine):
       if not self.head96[i].has_tip:
         continue
       tip = self.head96[i].get_tip()
-      if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
+      if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume and does_volume_tracking():
         error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
         raise RuntimeError(error)
       if isinstance(resource, TipRack):
@@ -1939,10 +1946,8 @@ class LiquidHandler(Resource, Machine):
 
         # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
         # during the aspiration command
-        liquids: List[Tuple[Optional[Liquid], float]]
         if tip.tracker.is_disabled or not does_volume_tracking():
           liquids = [(None, volume)]
-          all_liquids.append(liquids)
         else:
           liquids = tip.tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
