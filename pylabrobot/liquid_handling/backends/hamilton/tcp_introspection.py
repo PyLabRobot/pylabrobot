@@ -333,6 +333,7 @@ class GetMethodCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, method_index: int):
         super().__init__(object_address)
+        self.method_index = method_index
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -419,6 +420,7 @@ class GetSubobjectAddressCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, subobject_index: int):
         super().__init__(object_address)
+        self.subobject_index = subobject_index
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -487,6 +489,7 @@ class GetEnumsCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, target_interface_id: int):
         super().__init__(object_address)
+        self.target_interface_id = target_interface_id
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -532,6 +535,7 @@ class GetStructsCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, target_interface_id: int):
         super().__init__(object_address)
+        self.target_interface_id = target_interface_id
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:

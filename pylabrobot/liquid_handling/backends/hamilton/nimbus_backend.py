@@ -46,7 +46,6 @@ from pylabrobot.resources.container import Container
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.well import Well
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +251,12 @@ class InitializeSmartRoll(HamiltonCommand):
             roll_distances: Roll distances in 0.01mm units
         """
         super().__init__(dest)
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.z_final_positions = z_final_positions
+        self.roll_distances = roll_distances
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -362,6 +367,9 @@ class SetChannelConfiguration(HamiltonCommand):
             enables: List of enable flags (e.g., [True, False, False, False])
         """
         super().__init__(dest)
+        self.channel = channel
+        self.indexes = indexes
+        self.enables = enables
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -427,6 +435,13 @@ class PickupTips(HamiltonCommand):
             tip_types: Tip type integers for each channel
         """
         super().__init__(dest)
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.tip_types = tip_types
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -481,6 +496,14 @@ class DropTips(HamiltonCommand):
             default_waste: If True, drop to default waste (positions may be ignored)
         """
         super().__init__(dest)
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.z_final_positions = z_final_positions
+        self.default_waste = default_waste
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -536,6 +559,14 @@ class DropTipsRoll(HamiltonCommand):
             roll_distances: Roll distance for each channel in 0.01mm units
         """
         super().__init__(dest)
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.z_start_positions = z_start_positions
+        self.z_stop_positions = z_stop_positions
+        self.z_final_positions = z_final_positions
+        self.roll_distances = roll_distances
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -577,6 +608,7 @@ class EnableADC(HamiltonCommand):
             tips_used: Tip pattern (1 for active channels, 0 for inactive)
         """
         super().__init__(dest)
+        self.tips_used = tips_used
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -608,6 +640,7 @@ class DisableADC(HamiltonCommand):
             tips_used: Tip pattern (1 for active channels, 0 for inactive)
         """
         super().__init__(dest)
+        self.tips_used = tips_used
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -642,6 +675,8 @@ class GetChannelConfiguration(HamiltonCommand):
             indexes: List of configuration indexes (e.g., [2] for "Aspirate monitoring with cLLD")
         """
         super().__init__(dest)
+        self.channel = channel
+        self.indexes = indexes
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -746,6 +781,39 @@ class Aspirate(HamiltonCommand):
             recording_mode: Recording mode (u16)
         """
         super().__init__(dest)
+        self.aspirate_type = aspirate_type
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.liquid_seek_height = liquid_seek_height
+        self.liquid_surface_height = liquid_surface_height
+        self.submerge_depth = submerge_depth
+        self.follow_depth = follow_depth
+        self.z_min_position = z_min_position
+        self.clot_check_height = clot_check_height
+        self.z_final = z_final
+        self.liquid_exit_speed = liquid_exit_speed
+        self.blowout_volume = blowout_volume
+        self.prewet_volume = prewet_volume
+        self.aspirate_volume = aspirate_volume
+        self.transport_air_volume = transport_air_volume
+        self.aspirate_speed = aspirate_speed
+        self.settling_time = settling_time
+        self.mix_volume = mix_volume
+        self.mix_cycles = mix_cycles
+        self.mix_position = mix_position
+        self.mix_follow_distance = mix_follow_distance
+        self.mix_speed = mix_speed
+        self.tube_section_height = tube_section_height
+        self.tube_section_ratio = tube_section_ratio
+        self.lld_mode = lld_mode
+        self.capacitive_lld_sensitivity = capacitive_lld_sensitivity
+        self.pressure_lld_sensitivity = pressure_lld_sensitivity
+        self.lld_height_difference = lld_height_difference
+        self.tadm_enabled = tadm_enabled
+        self.limit_curve_index = limit_curve_index
+        self.recording_mode = recording_mode
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -876,6 +944,39 @@ class Dispense(HamiltonCommand):
             recording_mode: Recording mode (u16)
         """
         super().__init__(dest)
+        self.dispense_type = dispense_type
+        self.tips_used = tips_used
+        self.x_positions = x_positions
+        self.y_positions = y_positions
+        self.traverse_height = traverse_height
+        self.liquid_seek_height = liquid_seek_height
+        self.dispense_height = dispense_height
+        self.submerge_depth = submerge_depth
+        self.follow_depth = follow_depth
+        self.z_min_position = z_min_position
+        self.z_final = z_final
+        self.liquid_exit_speed = liquid_exit_speed
+        self.transport_air_volume = transport_air_volume
+        self.dispense_volume = dispense_volume
+        self.stop_back_volume = stop_back_volume
+        self.blowout_volume = blowout_volume
+        self.dispense_speed = dispense_speed
+        self.cutoff_speed = cutoff_speed
+        self.settling_time = settling_time
+        self.mix_volume = mix_volume
+        self.mix_cycles = mix_cycles
+        self.mix_position = mix_position
+        self.mix_follow_distance = mix_follow_distance
+        self.mix_speed = mix_speed
+        self.touch_off_distance = touch_off_distance
+        self.dispense_offset = dispense_offset
+        self.tube_section_height = tube_section_height
+        self.tube_section_ratio = tube_section_ratio
+        self.lld_mode = lld_mode
+        self.capacitive_lld_sensitivity = capacitive_lld_sensitivity
+        self.tadm_enabled = tadm_enabled
+        self.limit_curve_index = limit_curve_index
+        self.recording_mode = recording_mode
         self._assign_params()
 
     def build_parameters(self) -> HoiParams:
@@ -1986,7 +2087,11 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         # Extract volumes and speeds from operations
         volumes = [op.volume for op in ops]  # in µL
         # flow_rate should not be None - if it is, it's an error (no hardcoded fallback)
-        flow_rates = [op.flow_rate for op in ops]  # in µL/s
+        flow_rates: List[float] = []
+        for op in ops:
+            if op.flow_rate is None:
+                raise ValueError(f"flow_rate cannot be None for operation {op}")
+            flow_rates.append(op.flow_rate)
         blowout_volumes = [op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops]  # in µL, default 40
 
         # Extract mix parameters from op.mix if available
@@ -2002,11 +2107,15 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
                     mix_speeds_from_op.append(op.mix.flow_rate)
                 else:
                     # Default to aspirate speed (flow_rate) when mix speed not specified
+                    if op.flow_rate is None:
+                        raise ValueError(f"flow_rate cannot be None for operation {op}")
                     mix_speeds_from_op.append(op.flow_rate)
             else:
                 mix_volumes_from_op.append(0.0)
                 mix_cycles_from_op.append(0)
                 # Default to aspirate speed (flow_rate) when no mix operation
+                if op.flow_rate is None:
+                    raise ValueError(f"flow_rate cannot be None for operation {op}")
                 mix_speeds_from_op.append(op.flow_rate)
 
         # ========================================================================
@@ -2398,7 +2507,11 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         # Extract volumes and speeds from operations
         volumes = [op.volume for op in ops]  # in µL
         # flow_rate should not be None - if it is, it's an error (no hardcoded fallback)
-        flow_rates = [op.flow_rate for op in ops]  # in µL/s
+        flow_rates: List[float] = []
+        for op in ops:
+            if op.flow_rate is None:
+                raise ValueError(f"flow_rate cannot be None for operation {op}")
+            flow_rates.append(op.flow_rate)
         blowout_volumes = [op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops]  # in µL, default 40
 
         # Extract mix parameters from op.mix if available
@@ -2414,11 +2527,15 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
                     mix_speeds_from_op.append(op.mix.flow_rate)
                 else:
                     # Default to dispense speed (flow_rate) when mix speed not specified
+                    if op.flow_rate is None:
+                        raise ValueError(f"flow_rate cannot be None for operation {op}")
                     mix_speeds_from_op.append(op.flow_rate)
             else:
                 mix_volumes_from_op.append(0.0)
                 mix_cycles_from_op.append(0)
                 # Default to dispense speed (flow_rate) when no mix operation
+                if op.flow_rate is None:
+                    raise ValueError(f"flow_rate cannot be None for operation {op}")
                 mix_speeds_from_op.append(op.flow_rate)
 
         # ========================================================================

@@ -72,32 +72,43 @@ class HamiltonCommand:
         self.source_address: Optional[Address] = None
         self._log_params: dict = {}  # Initialize empty - will be populated by _assign_params() if called
 
-    def _assign_params(self, exclude: set = None):
-        """Auto-assign __init__ parameters to self attributes.
+    def _assign_params(self, exclude: Optional[set] = None):
+        """Build logging dict from __init__ parameters.
 
-        This method inspects the __init__ signature and automatically assigns
-        all parameters (except those in exclude) to self attributes. It also
-        builds and stores a params dict for logging purposes.
+        This method inspects the __init__ signature and builds a dict of
+        parameter values for logging purposes. Attributes should be explicitly
+        assigned in __init__ before calling this method.
 
         Args:
-            exclude: Set of parameter names to exclude from assignment.
+            exclude: Set of parameter names to exclude from logging.
                     Defaults to {'self', 'dest'}.
 
         Note:
             This method must be called from within __init__ after super().__init__()
-            to access the calling frame's local variables.
+            and after explicit attribute assignments to access the calling frame's
+            local variables.
         """
         exclude = exclude or {'self', 'dest'}
-        sig = inspect.signature(self.__init__)
-        frame = inspect.currentframe().f_back
+        # Use type(self).__init__ to avoid mypy error about accessing __init__ on instance
+        sig = inspect.signature(type(self).__init__)
+        current_frame = inspect.currentframe()
+        if current_frame is None:
+            # Frame inspection failed, return empty dict
+            self._log_params = {}
+            return
+        frame = current_frame.f_back
+        if frame is None:
+            # No calling frame, return empty dict
+            self._log_params = {}
+            return
 
-        # Build params dict while assigning
+        # Build params dict for logging (no assignments - attributes should be set explicitly)
         params = {}
+        frame_locals = frame.f_locals
         for param_name in sig.parameters:
             if param_name not in exclude:
-                if param_name in frame.f_locals:
-                    value = frame.f_locals[param_name]
-                    setattr(self, param_name, value)
+                if param_name in frame_locals:
+                    value = frame_locals[param_name]
                     params[param_name] = value
 
         # Store for logging
