@@ -15,6 +15,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
+from pylabrobot.serializer import serialize
 
 logger = logging.getLogger("pylabrobot")
 
@@ -274,29 +275,54 @@ class NimbusDeck(HamiltonDeck):
             y=plr_coord_abs.y - self.location.y,
             z=plr_coord_abs.z - self.location.z,
         )
-
+# TODO: There is probably a better way to not hardcode waste positions AND make serialization/de not terrible
     def serialize(self) -> dict:
         """Serialize this deck."""
         serialized = super().serialize()
-        # Override with_trash if waste block exists
-        # (data is encoded as child, but flag indicates presence)
-        # Check for waste block by name, consistent with STAR deck pattern
-        if self.has_resource("default_long_block"):
-            serialized["with_trash"] = True
+        # Remove with_trash and with_trash96 since NimbusDeck.__init__() doesn't accept them
+        # NimbusDeck uses waste_type instead to control waste block creation
+        serialized.pop("with_trash", None)
+        serialized.pop("with_trash96", None)
         return {
             **serialized,
-            "hamilton_origin": {
-                "x": self._hamilton_origin.x,
-                "y": self._hamilton_origin.y,
-                "z": self._hamilton_origin.z,
-            },
+            "hamilton_origin": serialize(self._hamilton_origin),
             "y_min": self._y_min,
             "y_max": self._y_max,
             "z_max": self._z_max,
             "rail_start_x": self._rail_start_x,
             "rail_width": self._rail_width,
             "rail_y": self._rail_y,
+            "waste_type": self.waste_type,
         }
+
+    @classmethod
+    def deserialize(cls, data: dict, allow_marshal: bool = False) -> "NimbusDeck":
+        """Deserialize a NimbusDeck from a dictionary.
+
+        Overrides parent deserialize to prevent waste block creation conflict.
+        Sets waste_type=None before calling parent deserialize to prevent __init__()
+        from creating the waste block, then restores waste_type from serialized data.
+
+        Args:
+            data: Serialized deck data dictionary
+            allow_marshal: If True, allow marshal module for function deserialization
+
+        Returns:
+            Deserialized NimbusDeck instance
+        """
+        data_copy = data.copy()
+        original_waste_type = data_copy.get("waste_type")
+        # Set waste_type=None to prevent __init__() from creating waste block
+        # The waste block will come from children data (already serialized)
+        data_copy["waste_type"] = None
+
+        # Call parent deserialize (waste block won't be created in __init__)
+        deck = super().deserialize(data_copy, allow_marshal=allow_marshal)
+
+        # Restore waste_type attribute from serialized data to keep instance consistent
+        deck.waste_type = original_waste_type
+
+        return deck
 
     @classmethod
     def from_files(
