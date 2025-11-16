@@ -424,6 +424,16 @@ class TCPBackend(TCP):
         # Build command message
         message = command.build()
 
+        # Log command parameters for debugging
+        log_params = command.get_log_params()
+        logger.info(f"{command.__class__.__name__} parameters:")
+        for key, value in log_params.items():
+            # Format arrays nicely if very long
+            if isinstance(value, list) and len(value) > 8:
+                logger.info(f"  {key}: {value[:4]}... ({len(value)} items)")
+            else:
+                logger.info(f"  {key}: {value}")
+
         # Send command
         await self.write(message)
 

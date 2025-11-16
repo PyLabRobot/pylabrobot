@@ -297,7 +297,7 @@ class GetObjectCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address):
         super().__init__(object_address)
-        self.object_address = object_address
+        self._assign_params()
 
     def build_parameters(self) -> HoiParams:
         """Build parameters for get_object command."""
@@ -333,8 +333,7 @@ class GetMethodCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, method_index: int):
         super().__init__(object_address)
-        self.object_address = object_address
-        self.method_index = method_index
+        self._assign_params()
 
     def build_parameters(self) -> HoiParams:
         """Build parameters for get_method command."""
@@ -420,8 +419,7 @@ class GetSubobjectAddressCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, subobject_index: int):
         super().__init__(object_address)
-        self.object_address = object_address
-        self.subobject_index = subobject_index
+        self._assign_params()
 
     def build_parameters(self) -> HoiParams:
         """Build parameters for get_subobject_address command."""
@@ -451,7 +449,7 @@ class GetInterfacesCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address):
         super().__init__(object_address)
-        self.object_address = object_address
+        self._assign_params()
 
     def build_parameters(self) -> HoiParams:
         """Build parameters for get_interfaces command."""
@@ -489,8 +487,7 @@ class GetEnumsCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, target_interface_id: int):
         super().__init__(object_address)
-        self.object_address = object_address
-        self.target_interface_id = target_interface_id
+        self._assign_params()
 
     def build_parameters(self) -> HoiParams:
         """Build parameters for get_enums command."""
@@ -535,8 +532,7 @@ class GetStructsCommand(HamiltonCommand):
 
     def __init__(self, object_address: Address, target_interface_id: int):
         super().__init__(object_address)
-        self.object_address = object_address
-        self.target_interface_id = target_interface_id
+        self._assign_params()
 
     def build_parameters(self) -> HoiParams:
         """Build parameters for get_structs command."""

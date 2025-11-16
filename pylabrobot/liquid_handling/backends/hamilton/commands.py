@@ -6,6 +6,7 @@ architecture: Wire → HoiParams → Packets → Messages → Commands.
 
 from __future__ import annotations
 
+import inspect
 from typing import Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.protocol import HamiltonProtocol
@@ -69,6 +70,38 @@ class HamiltonCommand:
         self.dest_address = dest  # Alias for compatibility
         self.sequence_number = 0
         self.source_address: Optional[Address] = None
+        self._log_params: dict = {}  # Initialize empty - will be populated by _assign_params() if called
+
+    def _assign_params(self, exclude: set = None):
+        """Auto-assign __init__ parameters to self attributes.
+
+        This method inspects the __init__ signature and automatically assigns
+        all parameters (except those in exclude) to self attributes. It also
+        builds and stores a params dict for logging purposes.
+
+        Args:
+            exclude: Set of parameter names to exclude from assignment.
+                    Defaults to {'self', 'dest'}.
+
+        Note:
+            This method must be called from within __init__ after super().__init__()
+            to access the calling frame's local variables.
+        """
+        exclude = exclude or {'self', 'dest'}
+        sig = inspect.signature(self.__init__)
+        frame = inspect.currentframe().f_back
+
+        # Build params dict while assigning
+        params = {}
+        for param_name in sig.parameters:
+            if param_name not in exclude:
+                if param_name in frame.f_locals:
+                    value = frame.f_locals[param_name]
+                    setattr(self, param_name, value)
+                    params[param_name] = value
+
+        # Store for logging
+        self._log_params = params
 
     def build_parameters(self) -> HoiParams:
         """Build HOI parameters for this command.
@@ -80,6 +113,21 @@ class HamiltonCommand:
             HoiParams object with command parameters
         """
         return HoiParams()
+
+    def get_log_params(self) -> dict:
+        """Get parameters to log for this command.
+
+        Returns the params dict built by _assign_params() during __init__.
+        This eliminates duplicate signature inspection and provides efficient
+        access to logged parameters.
+
+        Subclasses can override to customize formatting (e.g., unit conversions,
+        array truncation).
+
+        Returns:
+            Dictionary of parameter names to values (empty dict if _assign_params() not called)
+        """
+        return self._log_params
 
     def build(self, src: Optional[Address] = None, seq: Optional[int] = None, response_required: bool = True) -> bytes:
         """Build complete Hamilton message using CommandMessage.
