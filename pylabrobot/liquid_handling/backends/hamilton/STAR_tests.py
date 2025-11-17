@@ -332,6 +332,16 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(STARFirmwareError):
       await self.STAR._star_core_read_barcode(slot_number=5)
 
+  async def test_core_read_barcode_no_barcode_raises_value_error(self):
+    """bb/00 (no barcode) should raise ValueError so callers can handle it explicitly."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR._star_core_read_barcode(slot_number=5)
+
   async def asyncTearDown(self):
     await self.lh.stop()
 

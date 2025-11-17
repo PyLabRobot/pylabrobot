@@ -5565,7 +5565,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Read a 1D barcode using the CoRe gripper scanner.
 
     Returns:
-      A Barcode if one is successfully read, otherwise None.
+      A Barcode if one is successfully read.
+
+    Raises:
+      STARFirmwareError: if the firmware reports an error in the response.
+      ValueError: if the response format is unexpected or if no barcode is present.
     """
 
     assert 1 <= slot_number <= 54, "slot_number must be between 1 and 54"
@@ -5617,9 +5621,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     barcode_str = resp[bb_index + 5 :].strip()
 
-    # No barcode present: this is a valid "no data" case.
+    # No barcode present: treat as an error so the caller can respond explicitly.
     if bb_len == 0:
-      return None
+      raise ValueError("No barcode read by CoRe scanner.")
 
     if not barcode_str:
       # Length > 0 but no data present.
