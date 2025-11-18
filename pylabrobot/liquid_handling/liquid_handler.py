@@ -1912,9 +1912,10 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
-        # during the aspiration command
-        if tip.tracker.is_disabled or not does_volume_tracking():
+        # if we have enough liquid in the tip, remove it from the tip tracker
+        # if we do not (for example because the plunger was up on tip pickup), and we
+        # do not have volume tracking enabled, we just add a (None, volume) entry
+        if tip.tracker.get_used_volume() < volume and not does_volume_tracking():
           liquids = [(None, volume)]
         else:
           liquids = tip.tracker.remove_liquid(volume=volume)
@@ -1950,9 +1951,10 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
-        # during the aspiration command
-        if tip.tracker.is_disabled or not does_volume_tracking():
+        # if we have enough liquid in the tip, remove it from the tip tracker
+        # if we do not (for example because the plunger was up on tip pickup), and we
+        # do not have volume tracking enabled, we just add a (None, volume) entry
+        if tip.tracker.get_used_volume() < volume and not does_volume_tracking():
           liquids = [(None, volume)]
         else:
           liquids = tip.tracker.remove_liquid(volume=volume)
