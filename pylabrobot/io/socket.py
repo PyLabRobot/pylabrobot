@@ -219,7 +219,13 @@ class Socket(IOBase):
           assert self._reader is not None, "forgot to call setup?"
           return await self._reader.read(chunk_size)
 
-        chunk = await asyncio.wait_for(_read_coro(), timeout=timeout or self._read_timeout)
+        try:
+          chunk = await asyncio.wait_for(_read_coro(), timeout=timeout or self._read_timeout)
+        except asyncio.TimeoutError as exc:
+          logger.error("read_until_eof timeout: %r", exc)
+          raise TimeoutError(
+            f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
+          ) from exc
         if len(chunk) == 0:
           break
 
