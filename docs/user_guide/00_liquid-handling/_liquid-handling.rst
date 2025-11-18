@@ -17,7 +17,7 @@ Examples:
    hamilton-star/_hamilton-star
    hamilton-vantage/_hamilton-vantage
    hamilton-prep/_hamilton-prep
-   opentrons-ot2/_opentrons-ot2
+   opentrons-ot2/hello-world
    tecan-evo/_tecan-evo
    pumps/_pumps
    moving-channels-around
