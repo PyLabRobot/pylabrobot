@@ -167,9 +167,9 @@ class PreciseFlex3400SpaceConverter(CoordsConverter):
     """Convert an ElbowOrientation enum to an integer."""
     if orientation is None:
       return 0
-    if orientation == ElbowOrientation.RIGHT:
-      return 1
     if orientation == ElbowOrientation.LEFT:
+      return 1
+    if orientation == ElbowOrientation.RIGHT:
       return 2
     raise ValueError("Invalid ElbowOrientation value.")
 
