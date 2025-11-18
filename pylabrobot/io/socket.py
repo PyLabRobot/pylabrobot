@@ -288,7 +288,7 @@ class SocketValidator(Socket):
       raise ValidationError(
         f"Expected socket readuntil command from {self._unique_id}, "
         f"got {next_command.module} {next_command.action} from {next_command.device_id}"
-        f" (expected separator {expected_sep}, got {separator})"
+        f" (expected separator {expected_sep!r}, got {separator!r})"
       )
     return bytes.fromhex(next_command.data)
 
