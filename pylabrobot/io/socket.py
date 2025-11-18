@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -31,138 +31,171 @@ class Socket(IOBase):
     self,
     host: str,
     port: int,
-    read_timeout: int = 30,
-    write_timeout: int = 30,
+    read_timeout: float = 30,
+    write_timeout: float = 30,
   ):
-    """Initialize an io.Socket object.
-
-    Args:
-      host: The hostname or IP address to connect to.
-      port: The port number to connect to.
-      read_timeout: The timeout for reading from the socket in seconds.
-      write_timeout: The timeout for writing to the socket in seconds.
-    """
-
-    super().__init__()
-
-    if get_capture_or_validation_active():
-      raise RuntimeError("Cannot create a new Socket object while capture or validation is active")
-
-    self.host = host
-    self.port = port
-    self.read_timeout = read_timeout
-    self.write_timeout = write_timeout
-
+    self._host = host
+    self._port = port
     self._reader: Optional[asyncio.StreamReader] = None
     self._writer: Optional[asyncio.StreamWriter] = None
+    self._read_timeout = read_timeout
+    self._write_timeout = write_timeout
+    self._unique_id = f"{self._host}:{self._port}"
+    self._read_lock = asyncio.Lock()
+    self._write_lock = asyncio.Lock()
 
-    # unique id in the logs
-    self._unique_id = f"[{self.host}:{self.port}]"
-
-  async def write(self, data: str, timeout: Optional[int] = None):
-    if self._writer is None:
-      raise ConnectionError("Socket not connected. Call setup() first.")
-
-    if timeout is None:
-      timeout = self.write_timeout
-
-    try:
-      self._writer.write(data.encode("ascii"))
-      await asyncio.wait_for(self._writer.drain(), timeout=timeout)
-
-      logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data.strip())
-      capturer.record(SocketCommand(device_id=self._unique_id, action="write", data=data))
-    except asyncio.TimeoutError as exc:
-      raise TimeoutError(f"Timeout while writing to socket after {timeout} seconds") from exc
-
-  async def read(self, timeout: Optional[int] = None, read_once=True) -> str:
-    """Read data from the socket.
-    Args:
-      timeout: The timeout for reading from the socket in seconds. If None, uses the default
-        read_timeout set during initialization.
-      read_once: If True, reads until the first complete message is received. If False, continues
-        reading until the connection is closed or a timeout occurs.
-    """
-
-    if self._reader is None:
-      raise ConnectionError("Socket not connected. Call setup() first.")
-
-    if timeout is None:
-      timeout = self.read_timeout
-
-    try:
-      chunks = []
-      while True:
-        try:
-          data = await asyncio.wait_for(self._reader.read(1024), timeout=timeout)
-          if not data:
-            # Connection closed
-            break
-          chunks.append(data)
-          if read_once:
-            break
-        except asyncio.TimeoutError as exc:
-          if chunks:
-            # We have some data, return it
-            break
-          raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-
-      if len(chunks) == 0:
-        raise ConnectionError("Socket connection closed")
-
-      response = b"".join(chunks).decode("ascii")
-      logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, response.strip())
-      capturer.record(SocketCommand(device_id=self._unique_id, action="read", data=response))
-      return response
-
-    except UnicodeDecodeError as e:
-      raise ValueError(f"Failed to decode socket response as ASCII: {e}") from e
+    if get_capture_or_validation_active():
+      raise RuntimeError("Cannot create a new TCP object while capture or validation is active")
 
   async def setup(self):
-    """Initialize the socket connection."""
+    await self._connect()
 
-    if self._writer is not None:
-      # previous setup did not properly finish,
-      # or we are re-initializing the connection.
-      logger.warning("Socket already connected. Closing previous connection.")
-      await self.stop()
-
-    logger.info("Connecting to socket %s:%s...", self.host, self.port)
-
-    try:
-      self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
-      logger.info("Connected to socket %s:%s", self.host, self.port)
-    except Exception as e:
-      raise ConnectionError(f"Failed to connect to {self.host}:{self.port}: {e}") from e
+  async def _connect(self):
+    self._reader, self._writer = await asyncio.open_connection(self._host, self._port)
 
   async def stop(self):
-    """Close the socket connection."""
+    await self._disconnect()
 
-    if self._writer is None:
-      logger.debug("Socket already disconnected.")
-      return
-
-    logger.info("Closing connection to socket %s:%s", self.host, self.port)
-
-    try:
-      self._writer.close()
-      await self._writer.wait_closed()
-    except OSError as e:
-      logger.warning("Error while closing socket connection: %s", e)
-    finally:
+  async def _disconnect(self):
+    async with self._read_lock, self._write_lock:
       self._reader = None
-      self._writer = None
+      if self._writer is None:
+        return
 
-  def serialize(self) -> dict:
-    """Serialize the socket to a dictionary."""
+      logger.info("Closing connection to socket %s:%s", self._host, self._port)
 
+      try:
+        self._writer.close()
+        await self._writer.wait_closed()
+      except OSError as e:
+        logger.warning("Error while closing socket connection: %s", e)
+      finally:
+        self._writer = None
+
+  async def reconnect(self):
+    await self._disconnect()
+    await self._connect()
+
+  def serialize(self):
     return {
-      **super().serialize(),
-      "host": self.host,
-      "port": self.port,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
+      "host": self._host,
+      "port": self._port,
+      "type": "Socket",
+      "read_timeout": self._read_timeout,
+      "write_timeout": self._write_timeout,
     }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> "Socket":
+    kwargs = {}
+    if "read_timeout" in data:
+      kwargs["read_timeout"] = data["read_timeout"]
+    if "write_timeout" in data:
+      kwargs["write_timeout"] = data["write_timeout"]
+    return cls(
+      host=data["host"],
+      port=data["port"],
+      **kwargs,
+    )
+
+  async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
+    """Wrapper around StreamWriter.write with reconnects, lock, io logging.
+    Does not retry on timeouts.
+    """
+    assert self._writer is not None, "forgot to call setup?"
+
+    async with self._write_lock:
+      self._writer.write(data)
+      logger.log(LOG_LEVEL_IO, "[%s:%d] write %s", self._host, self._port, data)
+      capturer.record(
+        SocketCommand(
+          device_id=f"{self._host}:{self._port}",
+          action="write",
+          data=data.hex(),
+        )
+      )
+      try:
+        await asyncio.wait_for(self._writer.drain(), timeout=timeout or self._write_timeout)
+        return
+      except (ConnectionResetError, OSError) as e:
+        logger.error("write error: %r", e)
+        raise
+
+  async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
+    """Wrapper around StreamReader.read with lock and io logging."""
+    assert self._reader is not None, "forgot to call setup?"
+    async with self._read_lock:
+      data = await asyncio.wait_for(self._reader.read(num_bytes), timeout=timeout or self._read_timeout)
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
+      capturer.record(
+        SocketCommand(
+          device_id=f"{self._host}:{self._port}",
+          action="read",
+          data=data.hex(),
+        )
+      )
+      return data
+
+  async def readline(self, timeout: Optional[float] = None) -> bytes:
+    """Wrapper around StreamReader.readline with lock and io logging."""
+    assert self._reader is not None, "forgot to call setup?"
+    async with self._read_lock:
+      data = await asyncio.wait_for(self._reader.readline(), timeout=timeout or self._read_timeout)
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
+      capturer.record(
+        SocketCommand(
+          device_id=f"{self._host}:{self._port}",
+          action="readline",
+          data=data.hex(),
+        )
+      )
+      return data
+
+  async def readuntil(self, separator: bytes = b"\n", timeout: Optional[float] = None) -> bytes:
+    """Wrapper around StreamReader.readuntil with lock and io logging.
+    Do not retry on timeouts."""
+    assert self._reader is not None, "forgot to call setup?"
+    async with self._read_lock:
+      data = await asyncio.wait_for(self._reader.readuntil(separator), timeout=timeout or self._read_timeout)
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
+      capturer.record(
+        SocketCommand(
+          device_id=f"{self._host}:{self._port}",
+          action="readuntil:" + separator.hex(),
+          data=data.hex(),
+        )
+      )
+      return data
+
+  async def read_until_eof(self, chunk_size: int = 1024, timeout: Optional[float] = None) -> bytes:
+    """Read until EOF is reached.
+    Do not retry on timeouts.
+    """
+    buf = bytearray()
+
+    async with self._read_lock:
+      while True:
+        async def _read_coro() -> bytes:
+          assert self._reader is not None, "forgot to call setup?"
+          return await self._reader.read(chunk_size)
+
+        chunk = await asyncio.wait_for(_read_coro(), timeout=timeout or self._read_timeout)
+        if len(chunk) == 0:
+          break
+
+        logger.debug("read_until_eof: got %d bytes", len(chunk))
+        buf.extend(chunk)
+
+    line = bytes(buf)
+    logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, line.hex())
+    capturer.record(
+      SocketCommand(
+        device_id=f"{self._host}:{self._port}",
+        action="read_until_eof",
+        data=line.hex(),
+      )
+    )
+    return line
 
 
 class SocketValidator(Socket):
@@ -188,12 +221,8 @@ class SocketValidator(Socket):
     """Mock setup for validation."""
     return
 
-  async def write(self, *args, **kwargs):
+  async def write(self, data: bytes, *args, **kwargs):
     """Validate write command against captured data."""
-    if not args:
-      raise ValueError("No data provided to write")
-
-    data = args[0]
     next_command = SocketCommand(**self.cr.next_command())
     if not (
       next_command.module == "socket"
@@ -204,12 +233,12 @@ class SocketValidator(Socket):
         f"Expected socket write command to {self._unique_id}, "
         f"got {next_command.module} {next_command.action} to {next_command.device_id}"
       )
-    if not next_command.data == data:
+    if not bytes.fromhex(next_command.data) == data:
       raise ValidationError(
         f"Socket write data mismatch. Expected:\n{next_command.data}\nGot:\n{data}"
       )
 
-  async def read(self, *args, **kwargs) -> str:
+  async def read(self, *args, **kwargs) -> bytes:
     """Return captured read data for validation."""
     next_command = SocketCommand(**self.cr.next_command())
     if not (
@@ -221,7 +250,55 @@ class SocketValidator(Socket):
         f"Expected socket read command from {self._unique_id}, "
         f"got {next_command.module} {next_command.action} from {next_command.device_id}"
       )
-    return next_command.data
+    return bytes.fromhex(next_command.data)
+
+  async def readline(self, *args, **kwargs) -> bytes:
+    """Return captured readline data for validation."""
+    next_command = SocketCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "socket"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "readline"
+    ):
+      raise ValidationError(
+        f"Expected socket readline command from {self._unique_id}, "
+        f"got {next_command.module} {next_command.action} from {next_command.device_id}"
+      )
+    return bytes.fromhex(next_command.data)
+
+  async def readuntil(self, separator: bytes, *args, **kwargs) -> bytes:
+    """Return captured readuntil data for validation."""
+    next_command = SocketCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "socket"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "readuntil:" + separator.hex()
+    ):
+      expected_sep: Optional[bytes]
+      if "readuntil:" in next_command.action:
+        expected_sep = bytes.fromhex(next_command.action.split("readuntil:")[1])
+      else:
+        expected_sep = None
+      raise ValidationError(
+        f"Expected socket readuntil command from {self._unique_id}, "
+        f"got {next_command.module} {next_command.action} from {next_command.device_id}"
+        f" (expected separator {expected_sep}, got {separator})"
+      )
+    return bytes.fromhex(next_command.data)
+
+  async def read_until_eof(self, *args, **kwargs) -> bytes:
+    """Return captured read_until_eof data for validation."""
+    next_command = SocketCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "socket"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "read_until_eof"
+    ):
+      raise ValidationError(
+        f"Expected socket read_until_eof command from {self._unique_id}, "
+        f"got {next_command.module} {next_command.action} from {next_command.device_id}"
+      )
+    return bytes.fromhex(next_command.data)
 
   async def stop(self):
     """Mock stop for validation."""
