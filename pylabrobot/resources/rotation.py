@@ -68,15 +68,3 @@ class Rotation:
 
   def __repr__(self) -> str:
     return self.__str__()
-
-  @property
-  def roll(self) -> float:
-    return self.x
-
-  @property
-  def pitch(self) -> float:
-    return self.y
-
-  @property
-  def yaw(self) -> float:
-    return self.z

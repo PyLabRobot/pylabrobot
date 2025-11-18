@@ -20,11 +20,6 @@ PN = "PN"
 tro = "tro"
 FO = "FO"
 UE = "UE"
-commutated = "commutated"
-commutating = "commutating"
-DOUT = "DOUT"
-inconsistence = "inconsistence" # ignored to match with preciseflex documentation typo
-mis = "mis" # ignored to match with preciseflex documentation typo
 
 [files]
 extend-exclude = [
