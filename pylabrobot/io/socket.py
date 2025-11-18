@@ -127,7 +127,17 @@ class Socket(IOBase):
         raise
 
   async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
-    """Wrapper around StreamReader.read with lock and io logging."""
+    """Wrapper around StreamReader.read with lock and io logging.
+
+    Args:
+      num_bytes: The maximum number of bytes to read from the socket.
+        If fewer bytes are available, the method may return less than `num_bytes`.
+        If the end of the stream is reached before `num_bytes` bytes are read, only the available bytes are returned.
+      timeout: Maximum time to wait for data before raising a timeout.
+
+    Returns:
+      The data read from the socket, which may be fewer than `num_bytes` bytes.
+    """
     assert self._reader is not None, "forgot to call setup?"
     async with self._read_lock:
       try:
