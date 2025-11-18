@@ -118,6 +118,7 @@ class Socket(IOBase):
         await asyncio.wait_for(self._writer.drain(), timeout=timeout or self._write_timeout)
         return
       except asyncio.TimeoutError as exc:
+        logger.error("write timeout: %r", exc)
         raise TimeoutError(
           f"Timeout while writing to socket after {timeout or self._write_timeout} seconds"
         ) from exc
@@ -129,9 +130,15 @@ class Socket(IOBase):
     """Wrapper around StreamReader.read with lock and io logging."""
     assert self._reader is not None, "forgot to call setup?"
     async with self._read_lock:
-      data = await asyncio.wait_for(
-        self._reader.read(num_bytes), timeout=timeout or self._read_timeout
-      )
+      try:
+        data = await asyncio.wait_for(
+          self._reader.read(num_bytes), timeout=timeout or self._read_timeout
+        )
+      except asyncio.TimeoutError as exc:
+        logger.error("read timeout: %r", exc)
+        raise TimeoutError(
+          f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
+        ) from exc
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
@@ -146,7 +153,15 @@ class Socket(IOBase):
     """Wrapper around StreamReader.readline with lock and io logging."""
     assert self._reader is not None, "forgot to call setup?"
     async with self._read_lock:
-      data = await asyncio.wait_for(self._reader.readline(), timeout=timeout or self._read_timeout)
+      try:
+        data = await asyncio.wait_for(
+          self._reader.readline(), timeout=timeout or self._read_timeout
+        )
+      except asyncio.TimeoutError as exc:
+        logger.error("readline timeout: %r", exc)
+        raise TimeoutError(
+          f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
+        ) from exc
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
@@ -162,9 +177,15 @@ class Socket(IOBase):
     Do not retry on timeouts."""
     assert self._reader is not None, "forgot to call setup?"
     async with self._read_lock:
-      data = await asyncio.wait_for(
-        self._reader.readuntil(separator), timeout=timeout or self._read_timeout
-      )
+      try:
+        data = await asyncio.wait_for(
+          self._reader.readuntil(separator), timeout=timeout or self._read_timeout
+        )
+      except asyncio.TimeoutError as exc:
+        logger.error("readuntil timeout: %r", exc)
+        raise TimeoutError(
+          f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
+        ) from exc
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
