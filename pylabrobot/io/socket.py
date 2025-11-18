@@ -99,11 +99,12 @@ class Socket(IOBase):
     )
 
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
-    """Wrapper around StreamWriter.write with reconnects, lock, io logging.
+    """Wrapper around StreamWriter.write with lock and io logging.
     Does not retry on timeouts.
     """
-    assert self._writer is not None, "forgot to call setup?"
-
+    if self._writer is None:
+      raise RuntimeError("Socket not set up; call setup() first")
+    timeout = self._write_timeout if timeout is None else timeout
     async with self._write_lock:
       self._writer.write(data)
       logger.log(LOG_LEVEL_IO, "[%s:%d] write %s", self._host, self._port, data)
@@ -115,13 +116,11 @@ class Socket(IOBase):
         )
       )
       try:
-        await asyncio.wait_for(self._writer.drain(), timeout=timeout or self._write_timeout)
+        await asyncio.wait_for(self._writer.drain(), timeout=timeout)
         return
       except asyncio.TimeoutError as exc:
         logger.error("write timeout: %r", exc)
-        raise TimeoutError(
-          f"Timeout while writing to socket after {timeout or self._write_timeout} seconds"
-        ) from exc
+        raise TimeoutError(f"Timeout while writing to socket after {timeout} seconds") from exc
       except (ConnectionResetError, OSError) as e:
         logger.error("write error: %r", e)
         raise
@@ -138,17 +137,15 @@ class Socket(IOBase):
     Returns:
       The data read from the socket, which may be fewer than `num_bytes` bytes.
     """
-    assert self._reader is not None, "forgot to call setup?"
+    if self._reader is None:
+      raise RuntimeError("Socket not set up; call setup() first")
+    timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        data = await asyncio.wait_for(
-          self._reader.read(num_bytes), timeout=timeout or self._read_timeout
-        )
+        data = await asyncio.wait_for(self._reader.read(num_bytes), timeout=timeout)
       except asyncio.TimeoutError as exc:
         logger.error("read timeout: %r", exc)
-        raise TimeoutError(
-          f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
-        ) from exc
+        raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
@@ -161,17 +158,15 @@ class Socket(IOBase):
 
   async def readline(self, timeout: Optional[float] = None) -> bytes:
     """Wrapper around StreamReader.readline with lock and io logging."""
-    assert self._reader is not None, "forgot to call setup?"
+    if self._reader is None:
+      raise RuntimeError("Socket not set up; call setup() first")
+    timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        data = await asyncio.wait_for(
-          self._reader.readline(), timeout=timeout or self._read_timeout
-        )
+        data = await asyncio.wait_for(self._reader.readline(), timeout=timeout)
       except asyncio.TimeoutError as exc:
         logger.error("readline timeout: %r", exc)
-        raise TimeoutError(
-          f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
-        ) from exc
+        raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
@@ -185,17 +180,15 @@ class Socket(IOBase):
   async def readuntil(self, separator: bytes = b"\n", timeout: Optional[float] = None) -> bytes:
     """Wrapper around StreamReader.readuntil with lock and io logging.
     Do not retry on timeouts."""
-    assert self._reader is not None, "forgot to call setup?"
+    if self._reader is None:
+      raise RuntimeError("Socket not set up; call setup() first")
+    timeout = self._read_timeout if timeout is None else timeout
     async with self._read_lock:
       try:
-        data = await asyncio.wait_for(
-          self._reader.readuntil(separator), timeout=timeout or self._read_timeout
-        )
+        data = await asyncio.wait_for(self._reader.readuntil(separator), timeout=timeout)
       except asyncio.TimeoutError as exc:
         logger.error("readuntil timeout: %r", exc)
-        raise TimeoutError(
-          f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
-        ) from exc
+        raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
@@ -211,21 +204,17 @@ class Socket(IOBase):
     Do not retry on timeouts.
     """
     buf = bytearray()
+    timeout = self._read_timeout if timeout is None else timeout
 
     async with self._read_lock:
       while True:
-
-        async def _read_coro() -> bytes:
-          assert self._reader is not None, "forgot to call setup?"
-          return await self._reader.read(chunk_size)
-
+        if self._reader is None:
+          raise RuntimeError("Socket not set up; call setup() first")
         try:
-          chunk = await asyncio.wait_for(_read_coro(), timeout=timeout or self._read_timeout)
+          chunk = await asyncio.wait_for(self._reader.read(chunk_size), timeout=timeout)
         except asyncio.TimeoutError as exc:
           logger.error("read_until_eof timeout: %r", exc)
-          raise TimeoutError(
-            f"Timeout while reading from socket after {timeout or self._read_timeout} seconds"
-          ) from exc
+          raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
         if len(chunk) == 0:
           break
 
@@ -265,7 +254,16 @@ class SocketValidator(Socket):
 
   async def setup(self):
     """Mock setup for validation."""
+
+  async def stop(self):
+    """Mock stop for validation."""
     return
+
+  async def _connect(self):
+    """Mock connect for validation."""
+
+  async def _disconnect(self):
+    """Mock disconnect for validation."""
 
   async def write(self, data: bytes, *args, **kwargs):
     """Validate write command against captured data."""
@@ -281,9 +279,7 @@ class SocketValidator(Socket):
       )
     expected = bytes.fromhex(next_command.data)
     if not expected == data:
-      align_sequences(
-        expected=expected.decode("unicode_escape"), actual=data.decode("unicode_escape")
-      )
+      align_sequences(expected=expected.decode("latin-1"), actual=data.decode("latin-1"))
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, *args, **kwargs) -> bytes:
@@ -347,7 +343,3 @@ class SocketValidator(Socket):
         f"got {next_command.module} {next_command.action} from {next_command.device_id}"
       )
     return bytes.fromhex(next_command.data)
-
-  async def stop(self):
-    """Mock stop for validation."""
-    return
