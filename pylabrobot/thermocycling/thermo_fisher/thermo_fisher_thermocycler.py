@@ -353,22 +353,15 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
 
     result = parse_structure(response)
     status_val = result["status"]
-    try:
-      result = result["multiline"][0]
-    except:
-      print(response)
-      print(len(response))
-      raise
+    result = result["multiline"][0]
     result["status"] = status_val
     return result
 
   async def _read_response(self, timeout=1, read_once=True) -> str:
     try:
       if read_once:
-        print("_read_response: calling read")
         response_b = await self.io.read(timeout=timeout)
       else:
-        print("_read_response: calling read_until_eof")
         response_b = await self.io.read_until_eof(timeout=timeout)
       response = response_b.decode("ascii")
       self.logger.debug("Response received: %s", response)

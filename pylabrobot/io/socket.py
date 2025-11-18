@@ -109,7 +109,7 @@ class Socket(IOBase):
       logger.log(LOG_LEVEL_IO, "[%s:%d] write %s", self._host, self._port, data)
       capturer.record(
         SocketCommand(
-          device_id=f"{self._host}:{self._port}",
+          device_id=self._unique_id,
           action="write",
           data=data.hex(),
         )
@@ -125,11 +125,13 @@ class Socket(IOBase):
     """Wrapper around StreamReader.read with lock and io logging."""
     assert self._reader is not None, "forgot to call setup?"
     async with self._read_lock:
-      data = await asyncio.wait_for(self._reader.read(num_bytes), timeout=timeout or self._read_timeout)
+      data = await asyncio.wait_for(
+        self._reader.read(num_bytes), timeout=timeout or self._read_timeout
+      )
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
-          device_id=f"{self._host}:{self._port}",
+          device_id=self._unique_id,
           action="read",
           data=data.hex(),
         )
@@ -144,7 +146,7 @@ class Socket(IOBase):
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
-          device_id=f"{self._host}:{self._port}",
+          device_id=self._unique_id,
           action="readline",
           data=data.hex(),
         )
@@ -156,11 +158,13 @@ class Socket(IOBase):
     Do not retry on timeouts."""
     assert self._reader is not None, "forgot to call setup?"
     async with self._read_lock:
-      data = await asyncio.wait_for(self._reader.readuntil(separator), timeout=timeout or self._read_timeout)
+      data = await asyncio.wait_for(
+        self._reader.readuntil(separator), timeout=timeout or self._read_timeout
+      )
       logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
       capturer.record(
         SocketCommand(
-          device_id=f"{self._host}:{self._port}",
+          device_id=self._unique_id,
           action="readuntil:" + separator.hex(),
           data=data.hex(),
         )
@@ -175,6 +179,7 @@ class Socket(IOBase):
 
     async with self._read_lock:
       while True:
+
         async def _read_coro() -> bytes:
           assert self._reader is not None, "forgot to call setup?"
           return await self._reader.read(chunk_size)
@@ -190,7 +195,7 @@ class Socket(IOBase):
     logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, line.hex())
     capturer.record(
       SocketCommand(
-        device_id=f"{self._host}:{self._port}",
+        device_id=self._unique_id,
         action="read_until_eof",
         data=line.hex(),
       )
