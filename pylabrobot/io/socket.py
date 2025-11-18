@@ -238,9 +238,10 @@ class SocketValidator(Socket):
         f"Expected socket write command to {self._unique_id}, "
         f"got {next_command.module} {next_command.action} to {next_command.device_id}"
       )
-    if not bytes.fromhex(next_command.data) == data:
+    expected = bytes.fromhex(next_command.data)
+    if not expected == data:
       raise ValidationError(
-        f"Socket write data mismatch. Expected:\n{next_command.data}\nGot:\n{data}"
+        f"Socket write data mismatch. Expected:\n{expected.decode()}\nGot:\n{data.decode()}"
       )
 
   async def read(self, *args, **kwargs) -> bytes:
@@ -271,7 +272,7 @@ class SocketValidator(Socket):
       )
     return bytes.fromhex(next_command.data)
 
-  async def readuntil(self, separator: bytes, *args, **kwargs) -> bytes:
+  async def readuntil(self, separator: bytes = b"\n", *args, **kwargs) -> bytes:
     """Return captured readuntil data for validation."""
     next_command = SocketCommand(**self.cr.next_command())
     if not (
