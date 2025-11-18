@@ -45,7 +45,7 @@ class Socket(IOBase):
     self._write_lock = asyncio.Lock()
 
     if get_capture_or_validation_active():
-      raise RuntimeError("Cannot create a new TCP object while capture or validation is active")
+      raise RuntimeError("Cannot create a new Socket object while capture or validation is active")
 
   async def setup(self):
     await self._connect()
