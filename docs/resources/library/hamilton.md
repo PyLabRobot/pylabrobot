@@ -28,7 +28,7 @@ See [MFX Carrier documentation](/resources/carrier/mfx-carrier/mfx_carrier).
 
 | Description | Image | PLR definition |
 | - | - | - |
-| 'MFX_CAR_L5_base'<br>Part no.: 188039<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188039) <br>Labware carrier base for up to 5 Multiflex Modules <br>Occupies 6 tracks (6T). | ![](img/hamilton/MFX_CAR_L5_base_188039.jpg) | `MFX_CAR_L5_base` |
+| 'hamilton_mfx_carrier_L5_base'<br>Part no.: 188039<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188039) <br>Labware carrier base for up to 5 Multiflex Modules <br>Occupies 6 tracks (6T). | ![](img/hamilton/hamilton_mfx_carrier_L5_base.jpg) | `hamilton_mfx_carrier_L5_base` |
 | 'MFX_CAR_L4_SHAKER'<br>Part no.: 187001<br>[secondary supplier website](https://www.testmart.com/estore/unit.cfm/PIPPET/HAMROB/187001/automated_pippetting_devices_and_systems/8.html) (cannot find information on Hamilton website)<br>Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton. <br>Template carrier with 4 positions for Hamilton Heater Shaker. <br>Occupies 7 tracks (7T). Can be screwed onto the deck. | ![](img/hamilton/MFX_CAR_L4_SHAKER_187001.png) | `MFX_CAR_L4_SHAKER` |
 
 ### MFX modules
@@ -50,7 +50,7 @@ Sometimes called "sample carriers" in Hamilton jargon.
 | Description | Image | PLR definition |
 | - | - | - |
 | 'Tube_CAR_24_A00'<br>Part no.: 173400<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/173400) <br>Carries 24 "sample" tubes with 14.5–18 mm outer diameter, 60–120 mm high. Occupies one track. | ![](img/hamilton/Tube_CAR_24_A00.png) | `Tube_CAR_24_A00` |
-| 'Tube_CAR_32_A00'<br>Part no.: 173410<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/173410) <br>Carries 32 "sample" tubes with 11–14 mm outer diameter, 60–120 mm high. Occupies one track. | ![](img/hamilton/Tube_CAR_32_A00.png.avif) | `Tube_CAR_32_A00` |
+| 'hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL'<br>Part no.: 173410<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/173410) <br>Carries 32 `Eppendorf_DNA_LoBind_1_5ml_Vb` or `Eppendorf_Protein_LoBind_1_5ml_Vb` tubes. Occupies one track. | ![](img/hamilton/Tube_CAR_32_A00.png.avif) | `hamilton_tube_carrier_32_a00_insert_eppendorf_1_5mL` |
 | 'hamilton_tube_carrier_12_b00'<br>Part no.: 182045<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/50-ml-falcon-tube-carrier) <br>Carries 12 "sample" tubes with 30 mm outer diameter, 115 mm high. Occupies two tracks. | ![](img/hamilton/hamilton_tube_carrier_12_b00.jpg) | `hamilton_tube_carrier_12_b00` |
 
 ### Trough carriers

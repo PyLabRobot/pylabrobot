@@ -648,6 +648,7 @@ class LiquidHandler(Resource, Machine):
     self,
     use_channels: Optional[list[int]] = None,
     allow_nonzero_volume: bool = False,
+    offsets: Optional[List[Coordinate]] = None,
     **backend_kwargs,
   ):
     """Return all tips that are currently picked up to their original place.
@@ -694,6 +695,7 @@ class LiquidHandler(Resource, Machine):
       tip_spots=tip_spots,
       use_channels=channels,
       allow_nonzero_volume=allow_nonzero_volume,
+      offsets=offsets,
       **backend_kwargs,
     )
 
@@ -1898,6 +1900,7 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(resource, Container):
       containers = [resource]
 
+    liquids: List[Tuple[Optional[Liquid], float]]
     if len(containers) == 1:  # single container
       container = containers[0]
       if (
@@ -1909,7 +1912,13 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        liquids = tip.tracker.remove_liquid(volume=volume)
+        # if we have enough liquid in the tip, remove it from the tip tracker
+        # if we do not (for example because the plunger was up on tip pickup), and we
+        # do not have volume tracking enabled, we just add a (None, volume) entry
+        if tip.tracker.get_used_volume() < volume and not does_volume_tracking():
+          liquids = [(None, volume)]
+        else:
+          liquids = tip.tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
         all_liquids.append(reversed_liquids)
 
@@ -1942,9 +1951,10 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
-        # during the aspiration command
-        if tip.tracker.is_disabled or not does_volume_tracking():
+        # if we have enough liquid in the tip, remove it from the tip tracker
+        # if we do not (for example because the plunger was up on tip pickup), and we
+        # do not have volume tracking enabled, we just add a (None, volume) entry
+        if tip.tracker.get_used_volume() < volume and not does_volume_tracking():
           liquids = [(None, volume)]
         else:
           liquids = tip.tracker.remove_liquid(volume=volume)
@@ -2219,7 +2229,7 @@ class LiquidHandler(Resource, Machine):
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
       pickup_direction=self._resource_pickup.direction,
-      drop_direction=direction,
+      direction=direction,
       rotation=rotation_applied_by_move,
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)

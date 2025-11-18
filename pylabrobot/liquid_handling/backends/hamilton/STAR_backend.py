@@ -3415,6 +3415,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if use_unsafe_hotel:
         raise ValueError("Cannot use iswap hotel mode with core grippers")
 
+      if pickup.direction != GripDirection.FRONT:
+        raise NotImplementedError("Core grippers only support FRONT (default)")
+
       if channel_1 is not None or channel_2 is not None:
         warnings.warn(
           "The channel_1 and channel_2 parameters are deprecated and will be removed in future versions. "
@@ -3545,7 +3548,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           hotel_center_z_direction=0 if z >= 0 else 1,
           clearance_height=round(hotel_clearance_height * 10),
           hotel_depth=round(hotel_depth * 10),
-          grip_direction=drop.drop_direction,
+          grip_direction=drop.direction,
           open_gripper_position=round(open_gripper_position * 10),
           traverse_height_at_beginning=round(traversal_height_start * 10),
           z_position_at_end=round(z_position_at_the_command_end * 10),
@@ -3565,7 +3568,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             GripDirection.RIGHT: 2,
             GripDirection.BACK: 3,
             GripDirection.LEFT: 4,
-          }[drop.drop_direction],
+          }[drop.direction],
           minimum_traverse_height_at_beginning_of_a_command=round(traversal_height_start * 10),
           z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
           open_gripper_position=round(open_gripper_position * 10),
@@ -3575,6 +3578,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     elif use_arm == "core":
       if use_unsafe_hotel:
         raise ValueError("Cannot use iswap hotel mode with core grippers")
+
+      if drop.direction != GripDirection.FRONT:
+        raise NotImplementedError("Core grippers only support FRONT direction (default)")
 
       await self.core_release_picked_up_resource(
         location=Coordinate(x, y, z),
@@ -6823,24 +6829,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
-  async def unload_carrier(self, carrier: Carrier):
+  async def unload_carrier(
+    self,
+    carrier: Carrier,
+    park_autoload_after: bool = True,
+  ):
     """Use autoload to unload carrier."""
     # Identify carrier end rail
     track_width = 22.5
     carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
+
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
-    # Unload and read out barcodes
+    # Unload
     resp = await self.send_command(
       module="C0",
       command="CR",
       cp=carrier_end_rail_str,
     )
-    # Park autoload
-    await self.park_autoload()
+
+    if park_autoload_after:
+      await self.park_autoload()
+
     return resp
 
   async def load_carrier(
@@ -7281,45 +7294,48 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def open_not_initialized_gripper(self):
     return await self.send_command(module="C0", command="GI")
 
-  async def iswap_open_gripper(self, open_position: Optional[int] = None):
+  async def iswap_open_gripper(self, open_position: Optional[float] = None):
     """Open gripper
 
     Args:
-      open_position: Open position [0.1mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
+      open_position: Open position [mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
                      Must be between 0 and 9999. Default 1320 for iSWAP 4.0 (landscape). Default to
                      910 for iSWAP 3 (portrait).
     """
 
     if open_position is None:
-      open_position = 910 if (await self.get_iswap_version()).startswith("3") else 1320
+      open_position = 91.0 if (await self.get_iswap_version()).startswith("3") else 132.0
 
-    assert 0 <= open_position <= 9999, "open_position must be between 0 and 9999"
+    assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
 
-    return await self.send_command(module="C0", command="GF", go=f"{open_position:04}")
+    return await self.send_command(module="C0", command="GF", go=f"{round(open_position*10):04}")
 
   async def iswap_close_gripper(
     self,
     grip_strength: int = 5,
-    plate_width: int = 0,
-    plate_width_tolerance: int = 0,
+    plate_width: float = 0,
+    plate_width_tolerance: float = 0,
   ):
     """Close gripper
 
-    The gripper should be at the position gb+gt+20 before sending this command.
+    The gripper should be at the position plate_width+plate_width_tolerance+2.0mm before sending this command.
 
     Args:
       grip_strength: Grip strength. 0 = low . 9 = high. Default 5.
-      plate_width: Plate width [0.1mm]
-                   (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
-      plate_width_tolerance: Plate width tolerance [0.1mm]. Must be between 0 and 99. Default 20.
+      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
+      plate_width_tolerance: Plate width tolerance [mm]. Must be between 0 and 9.9. Default 2.0.
     """
+
+    assert 0 <= grip_strength <= 9, "grip_strength must be between 0 and 9"
+    assert 0 <= plate_width <= 999.9, "plate_width must be between 0 and 999.9"
+    assert 0 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0 and 9.9"
 
     return await self.send_command(
       module="C0",
       command="GC",
       gw=grip_strength,
-      gb=plate_width,
-      gt=plate_width_tolerance,
+      gb=f"{round(plate_width*10):04}",
+      gt=f"{round(plate_width_tolerance*10):02}",
     )
 
   # -------------- 3.17.2 Stack handling commands CP --------------
