@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 if TYPE_CHECKING:
   from pylabrobot.io.capture import CaptureReader
@@ -281,9 +281,10 @@ class SocketValidator(Socket):
       )
     expected = bytes.fromhex(next_command.data)
     if not expected == data:
-      raise ValidationError(
-        f"Socket write data mismatch. Expected:\n{expected.decode()}\nGot:\n{data.decode()}"
+      align_sequences(
+        expected=expected.decode("unicode_escape"), actual=data.decode("unicode_escape")
       )
+      raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, *args, **kwargs) -> bytes:
     """Return captured read data for validation."""
