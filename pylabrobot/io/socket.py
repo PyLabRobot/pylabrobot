@@ -215,8 +215,8 @@ class SocketValidator(Socket):
     cr: "CaptureReader",
     host: str,
     port: int,
-    read_timeout: int = 30,
-    write_timeout: int = 30,
+    read_timeout: float = 30,
+    write_timeout: float = 30,
   ):
     super().__init__(
       host=host,
