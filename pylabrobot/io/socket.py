@@ -216,16 +216,16 @@ class Socket(IOBase):
         logger.debug("read_until_eof: got %d bytes", len(chunk))
         buf.extend(chunk)
 
-    line = bytes(buf)
-    logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, line.hex())
-    capturer.record(
-      SocketCommand(
-        device_id=self._unique_id,
-        action="read_until_eof",
-        data=line.hex(),
+      line = bytes(buf)
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, line.hex())
+      capturer.record(
+        SocketCommand(
+          device_id=self._unique_id,
+          action="read_until_eof",
+          data=line.hex(),
+        )
       )
-    )
-    return line
+      return line
 
 
 class SocketValidator(Socket):
