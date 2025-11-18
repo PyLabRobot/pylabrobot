@@ -6829,24 +6829,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
-  async def unload_carrier(self, carrier: Carrier):
+  async def unload_carrier(
+    self,
+    carrier: Carrier,
+    park_autoload_after: bool = True,
+  ):
     """Use autoload to unload carrier."""
     # Identify carrier end rail
     track_width = 22.5
     carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
+
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
-    # Unload and read out barcodes
+    # Unload
     resp = await self.send_command(
       module="C0",
       command="CR",
       cp=carrier_end_rail_str,
     )
-    # Park autoload
-    await self.park_autoload()
+
+    if park_autoload_after:
+      await self.park_autoload()
+
     return resp
 
   async def load_carrier(
