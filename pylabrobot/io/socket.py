@@ -117,6 +117,10 @@ class Socket(IOBase):
       try:
         await asyncio.wait_for(self._writer.drain(), timeout=timeout or self._write_timeout)
         return
+      except asyncio.TimeoutError as exc:
+        raise TimeoutError(
+          f"Timeout while writing to socket after {timeout or self._write_timeout} seconds"
+        ) from exc
       except (ConnectionResetError, OSError) as e:
         logger.error("write error: %r", e)
         raise
