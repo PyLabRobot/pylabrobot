@@ -1900,6 +1900,7 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(resource, Container):
       containers = [resource]
 
+    liquids: List[Tuple[Optional[Liquid], float]]
     if len(containers) == 1:  # single container
       container = containers[0]
       if (
