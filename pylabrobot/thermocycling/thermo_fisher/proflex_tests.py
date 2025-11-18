@@ -12,6 +12,7 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     self.proflex = ProflexBackend(ip="1.2.3.4")
     self.proflex.io.write = unittest.mock.AsyncMock()  # type: ignore
     self.proflex.io.read = unittest.mock.AsyncMock()  # type: ignore
+    self.proflex.io.read_until_eof = unittest.mock.AsyncMock()  # type: ignore
 
   async def test_run_protocol(self):
     scpi_command = (
@@ -211,13 +212,15 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
     )
 
     self.proflex.io.read.side_effect = [  # type: ignore
-      'OK RUNS:EXISts? -type=folders "runname" False\n',
-      'OK RUNS:NEW "runname"\n',
-      "OK " + pretty_xml_scpi,
-      "OK " + tmp_scpi,
-      "OK " + pretty_xml_scpi,
-      "NEXT TBC1:RunProtocol -SampleVolume=25 -RunMode=Fast -CoverTemperature=105 -CoverEnabled=On -User=Guest elute 'runname'\n",
-      "OK CMD 1\n",
+      b'OK RUNS:EXISts? -type=folders "runname" False\n',
+      b'OK RUNS:NEW "runname"\n',
+      b"OK CMD 1\n",
+    ]
+    self.proflex.io.read_until_eof.side_effect = [  # type: ignore
+      ("OK " + pretty_xml_scpi).encode("ascii"),
+      ("OK " + tmp_scpi).encode("ascii"),
+      ("OK " + scpi_command).encode("ascii"),
+      b"NEXT TBC1:RunProtocol -SampleVolume=25 -RunMode=Fast -CoverTemperature=105 -CoverEnabled=On -User=Guest elute 'runname'\n",
     ]
 
     await self.proflex.run_protocol(
@@ -231,16 +234,16 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
 
     self.proflex.io.write.assert_has_calls(  # type: ignore
       [
-        unittest.mock.call("RUNS:EXISTS? -type=folders runname\r\n", timeout=1),
-        unittest.mock.call("RUNS:NEW runname\r\n", timeout=10),
-        unittest.mock.call(pretty_xml_scpi, timeout=1),
-        unittest.mock.call(tmp_scpi, timeout=1),
-        unittest.mock.call(scpi_command, timeout=5),
+        unittest.mock.call(b"RUNS:EXISTS? -type=folders runname\r\n", timeout=1),
+        unittest.mock.call(b"RUNS:NEW runname\r\n", timeout=10),
+        unittest.mock.call(pretty_xml_scpi.encode(), timeout=1),
+        unittest.mock.call(tmp_scpi.encode(), timeout=1),
+        unittest.mock.call(scpi_command.encode(), timeout=5),
         unittest.mock.call(
-          "TBC2:RunProtocol -User=Admin -CoverTemperature=105 -CoverEnabled=On cloning_protocol runname\r\n",
+          b"TBC2:RunProtocol -User=Admin -CoverTemperature=105 -CoverEnabled=On cloning_protocol runname\r\n",
           timeout=2,
         ),
-        unittest.mock.call("TBC2:ESTimatedTime?\r\n", timeout=1),
+        unittest.mock.call(b"TBC2:ESTimatedTime?\r\n", timeout=1),
       ],
       any_order=False,
     )
