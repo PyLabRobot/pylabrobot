@@ -1911,7 +1911,12 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        liquids = tip.tracker.remove_liquid(volume=volume)
+        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
+        # during the aspiration command
+        if tip.tracker.is_disabled or not does_volume_tracking():
+          liquids = [(None, volume)]
+        else:
+          liquids = tip.tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
         all_liquids.append(reversed_liquids)
 
