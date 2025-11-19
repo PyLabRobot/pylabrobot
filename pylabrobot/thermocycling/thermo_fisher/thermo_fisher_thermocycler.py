@@ -357,9 +357,13 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     result["status"] = status_val
     return result
 
-  async def _read_response(self, timeout=1, read_once=True):
+  async def _read_response(self, timeout=1, read_once=True) -> str:
     try:
-      response = await self.io.read(timeout=timeout, read_once=read_once)
+      if read_once:
+        response_b = await self.io.read(timeout=timeout)
+      else:
+        response_b = await self.io.read_until_eof(timeout=timeout)
+      response = response_b.decode("ascii")
       self.logger.debug("Response received: %s", response)
       return response
     except TimeoutError:
@@ -372,7 +376,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     msg = self._build_scpi_msg(data)
     self.logger.debug("Command sent: %s", msg.strip())
 
-    await self.io.write(msg, timeout=response_timeout)
+    await self.io.write(msg.encode("ascii"), timeout=response_timeout)
     return await self._read_response(timeout=response_timeout, read_once=read_once)
 
   async def _scpi_authenticate(self):
