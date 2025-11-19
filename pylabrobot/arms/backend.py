@@ -58,16 +58,6 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a robotic arm"""
 
   @abstractmethod
-  async def set_speed(self, speed: float):
-    """Set the speed percentage of the arm's movement (0-100)."""
-    ...
-
-  @abstractmethod
-  async def get_speed(self) -> float:
-    """Get the current speed percentage of the arm's movement."""
-    ...
-
-  @abstractmethod
   async def open_gripper(self):
     """Open the arm's gripper."""
     ...

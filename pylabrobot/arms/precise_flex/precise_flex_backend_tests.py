@@ -3,7 +3,7 @@ import unittest
 import pytest
 
 from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
-from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
+from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend, PreciseFlexModel
 from pylabrobot.resources import Coordinate, Rotation
 
 
@@ -12,7 +12,7 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   """Integration tests for PreciseFlex robot - RUNS ON ACTUAL HARDWARE"""
 
   # Connection config
-  MODEL = "pf3400"
+  MODEL: PreciseFlexModel = "pf3400"
   ROBOT_HOST = "192.168.0.1"
   ROBOT_PORT = 10100
 
