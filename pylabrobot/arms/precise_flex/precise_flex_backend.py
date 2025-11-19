@@ -1,6 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Literal, Optional, Union
+from typing import Dict, Literal, Optional, Union
 
 from pylabrobot.arms.backend import (
   AccessPattern,
@@ -29,10 +29,21 @@ class PreciseFlexError(Exception):
       super().__init__(f"PreciseFlexError {replycode}: {message}")
 
 
-PreciseFlexModel = Literal["pf400", "pf3400"]
+class PreciseFlexBackend(ArmBackend, ABC):
+  """Backend for the PreciseFlex robotic arm  - Default to using Cartesian coordinates, some methods in Brook's TCS don't work with Joint coordinates.
 
+  Documentation and error codes available at https://www2.brooksautomation.com/#Root/Welcome.htm
+  """
 
-class CoordsConverter(ABC):
+  def __init__(self, host: str, port: int = 10100, timeout=20) -> None:
+    super().__init__()
+    self.io = Socket(host=host, port=port)
+    self.profile_index: int = 1
+    self.location_index: int = 1
+    self.horizontal_compliance: bool = False
+    self.horizontal_compliance_torque: int = 0
+    self.timeout = timeout
+
   @abstractmethod
   def convert_to_joint_space(
     self, position: tuple[float, float, float, float, float, float]
@@ -40,36 +51,10 @@ class CoordsConverter(ABC):
     """Convert a tuple of joint angles to a JointSpace object."""
 
   @abstractmethod
-  def convert_to_cartesian_space(
-    self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
-  ) -> CartesianCoords:
-    ...
-
-  @abstractmethod
   def convert_to_joints_array(
     self, position: JointCoords
   ) -> tuple[float, float, float, float, float, float]:
     ...
-
-  @abstractmethod
-  def convert_to_cartesian_array(
-    self, position: CartesianCoords
-  ) -> tuple[float, float, float, float, float, float, int]:
-    """Convert a CartesianSpace object to a list of cartesian coordinates."""
-
-  @abstractmethod
-  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
-    """Convert an ElbowOrientation enum to an integer."""
-
-
-class PreciseFlex400SpaceConverter(CoordsConverter):
-  def convert_to_joint_space(
-    self, position: tuple[float, float, float, float, float, float]
-  ) -> JointCoords:
-    """Convert a tuple of joint angles to a JointCoords object."""
-    if len(position) != 6:
-      raise ValueError("Position must be a tuple of 6 joint angles.")
-    return JointCoords(0, position[0], position[1], position[2], position[3], 0)
 
   def convert_to_cartesian_space(
     self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
@@ -86,20 +71,6 @@ class PreciseFlex400SpaceConverter(CoordsConverter):
       orientation=orientation,
     )
 
-  def convert_to_joints_array(
-    self, position: JointCoords
-  ) -> tuple[float, float, float, float, float, float]:
-    """Convert a JointSpace object to a list of joint angles."""
-    joints = (
-      position.base,
-      position.shoulder,
-      position.elbow,
-      position.wrist,
-      0,
-      0,
-    )  # PF400 has 4 joints, last two are fixed
-    return joints
-
   def convert_to_cartesian_array(
     self, position: CartesianCoords
   ) -> tuple[float, float, float, float, float, float, int]:
@@ -115,109 +86,6 @@ class PreciseFlex400SpaceConverter(CoordsConverter):
       orientation_int,
     )
     return arr
-
-  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
-    """Convert an ElbowOrientation enum to an integer."""
-    if orientation is None:
-      return 0
-    elif orientation == ElbowOrientation.LEFT:
-      return 1
-    elif orientation == ElbowOrientation.RIGHT:
-      return 2
-    raise ValueError("Invalid ElbowOrientation value.")
-
-
-class PreciseFlex3400SpaceConverter(CoordsConverter):
-  def convert_to_joint_space(
-    self, position: tuple[float, float, float, float, float, float]
-  ) -> JointCoords:
-    """Convert a tuple of joint angles to a JointCoords object."""
-    if len(position) != 6:
-      raise ValueError("Position must be a tuple of 6 joint angles.")
-    return JointCoords(0, position[0], position[1], position[2], position[3], position[4])
-
-  def convert_to_cartesian_space(
-    self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
-  ) -> CartesianCoords:
-    """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
-    if len(position) != 7:
-      raise ValueError(
-        "Position must be a tuple of 7 values (x, y, z, yaw, pitch, roll, orientation)."
-      )
-    orientation = ElbowOrientation(position[6])
-    return CartesianCoords(
-      location=Coordinate(position[0], position[1], position[2]),
-      rotation=Rotation(position[5], position[4], position[3]),
-      orientation=orientation,
-    )
-
-  def convert_to_joints_array(
-    self, position: JointCoords
-  ) -> tuple[float, float, float, float, float, float]:
-    """Convert a JointSpace object to a list of joint angles."""
-    joints = (
-      position.base,
-      position.shoulder,
-      position.elbow,
-      position.wrist,
-      position.gripper,
-      0,
-    )  # PF400 has 5 joints, last is fixed
-    return joints
-
-  def convert_to_cartesian_array(
-    self, position: CartesianCoords
-  ) -> tuple[float, float, float, float, float, float, int]:
-    """Convert a CartesianSpace object to a list of cartesian coordinates."""
-    orientation_int = self._convert_orientation_enum_to_int(position.orientation)
-    arr = (
-      position.location.x,
-      position.location.y,
-      position.location.z,
-      position.rotation.yaw,
-      position.rotation.pitch,
-      position.rotation.roll,
-      orientation_int,
-    )
-    return arr
-
-  def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
-    """Convert an ElbowOrientation enum to an integer."""
-    if orientation is None:
-      return 0
-    if orientation == ElbowOrientation.LEFT:
-      return 1
-    if orientation == ElbowOrientation.RIGHT:
-      return 2
-    raise ValueError("Invalid ElbowOrientation value.")
-
-
-class CoordsConverterFactory:
-  @staticmethod
-  def create_coords_converter(model: PreciseFlexModel) -> CoordsConverter:
-    """Factory method to create a CoordsConverter based on the robot model."""
-    if model == "pf400":
-      return PreciseFlex400SpaceConverter()
-    if model == "pf3400":
-      return PreciseFlex3400SpaceConverter()
-    raise ValueError(f"Unsupported robot model: {model}")
-
-
-class PreciseFlexBackend(ArmBackend, ABC):
-  """Backend for the PreciseFlex robotic arm  - Default to using Cartesian coordinates, some methods in Brook's TCS don't work with Joint coordinates.
-
-  Documentation and error codes available at https://www2.brooksautomation.com/#Root/Welcome.htm
-  """
-
-  def __init__(self, model: PreciseFlexModel, host: str, port: int = 10100, timeout=20) -> None:
-    super().__init__()
-    self.io = Socket(host=host, port=port)
-    self.space_converter = CoordsConverterFactory.create_coords_converter(model)
-    self.profile_index: int = 1
-    self.location_index: int = 1
-    self.horizontal_compliance: bool = False
-    self.horizontal_compliance_torque: int = 0
-    self.timeout = timeout
 
   async def setup(self):
     """Initialize the PreciseFlex backend."""
@@ -242,15 +110,12 @@ class PreciseFlexBackend(ArmBackend, ABC):
     return await self.get_profile_speed(self.profile_index)
 
   async def open_gripper(self):
-    """Open the gripper."""
     await self.send_command("gripper 1")
 
   async def close_gripper(self):
-    """Close the gripper."""
     await self.send_command("gripper 2")
 
   async def is_gripper_closed(self) -> bool:
-    """Check if the gripper is currently closed."""
     ret_int = await self.is_fully_closed()
     return ret_int == -1
 
@@ -307,7 +172,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
         1 = attach the robot
 
     Returns:
-      int: If attach_state is omitted, returns 0 if robot is not attached, -1 if attached.
+      If attach_state is omitted, returns 0 if robot is not attached, -1 if attached.
          Otherwise returns 0 on success.
 
     Note:
@@ -330,10 +195,6 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def power_off_robot(self):
     """Power off the robot."""
     await self.set_power(False)
-
-  async def set_pc_mode(self):
-    """Set the controller to PC mode."""
-    await self.set_mode(0)
 
   async def version(self) -> str:
     """Get the robot's version."""
@@ -367,10 +228,10 @@ class PreciseFlexBackend(ArmBackend, ABC):
       access = VerticalAccess()
 
     if isinstance(position, JointCoords):
-      joints = self.space_converter.convert_to_joints_array(position)
+      joints = self.convert_to_joints_array(position)
       await self._approach_j(joints, access)
     elif isinstance(position, CartesianCoords):
-      xyz = self.space_converter.convert_to_cartesian_array(position)
+      xyz = self.convert_to_cartesian_array(position)
       await self._approach_c(xyz[:-1], xyz[-1], access)
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
@@ -411,7 +272,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     if isinstance(position, JointCoords):
       raise ValueError("pick_plate only supports CartesianCoords for PreciseFlex.")
     elif isinstance(position, CartesianCoords):
-      xyz = self.space_converter.convert_to_cartesian_array(position)
+      xyz = self.convert_to_cartesian_array(position)
       await self._pick_plate_c(xyz[:-1], xyz[-1], access)
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
@@ -452,7 +313,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     if isinstance(position, JointCoords):
       raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
     elif isinstance(position, CartesianCoords):
-      xyz = self.space_converter.convert_to_cartesian_array(position)
+      xyz = self.convert_to_cartesian_array(position)
       await self._place_plate_c(xyz[:-1], xyz[-1], access)
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
@@ -460,10 +321,10 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def move_to(self, position: Union[CartesianCoords, JointCoords]):
     """Move the arm to a specified position in 3D space."""
     if isinstance(position, JointCoords):
-      joints = self.space_converter.convert_to_joints_array(position)
+      joints = self.convert_to_joints_array(position)
       await self._move_to_j(joints)
     elif isinstance(position, CartesianCoords):
-      xyz = self.space_converter.convert_to_cartesian_array(position)
+      xyz = self.convert_to_cartesian_array(position)
       await self._move_to_c(xyz[:-1], xyz[-1])
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
@@ -471,12 +332,47 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def get_joint_position(self) -> JointCoords:
     """Get the current position of the arm in 3D space."""
     position_j = await self._get_position_j()
-    return self.space_converter.convert_to_joint_space(position_j)
+    return self.convert_to_joint_space(position_j)
 
   async def get_cartesian_position(self) -> CartesianCoords:
     """Get the current position of the arm in 3D space."""
     position_c = await self._get_position_c()
-    return self.space_converter.convert_to_cartesian_space(position_c)
+    return self.convert_to_cartesian_space(position_c)
+
+  async def send_command(self, command: str) -> str:
+    await self.io.write(command.encode("utf-8") + b"\n")
+    # TODO: is sleep needed here?
+    await asyncio.sleep(0.2)  # wait a bit for the robot to process the command
+    reply = await self.io.readline()
+
+    print(f"Sent command: {command}, Received reply: {reply!r}")
+
+    return self._parse_reply_ensure_successful(reply)
+
+  def _parse_reply_ensure_successful(self, reply: bytes) -> str:
+    """Parse reply from Precise Flex.
+
+    Expected format: b'replycode data message\r\n'
+    - replycode is an integer at the beginning
+    - data is rest of the line (excluding CRLF)
+    """
+    print("REPLY: ", reply)
+    text = reply.decode().strip()  # removes \r\n
+    if not text:
+      raise PreciseFlexError(-1, "Empty reply from device.")
+
+    parts = text.split(" ", 1)
+    if len(parts) == 1:
+      replycode = int(parts[0])
+      data = ""
+    else:
+      replycode, data = int(parts[0]), parts[1]
+
+    if replycode != 0:
+      # if error is reported, the data part generally contains the error message
+      raise PreciseFlexError(replycode, data)
+
+    return data
 
   async def _approach_j(
     self, joint_position: tuple[float, float, float, float, float, float], access: AccessPattern
@@ -497,7 +393,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Pick a plate from the specified position using joint coordinates."""
     await self.set_location_angles(self.location_index, *joint_position)
     await self._set_grip_detail(access)
-    await self.pick_plate(
+    await self.pick_plate_from_stored_position(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
 
@@ -507,7 +403,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Place a plate at the specified position using joint coordinates."""
     await self.set_location_angles(self.location_index, *joint_position)
     await self._set_grip_detail(access)
-    await self.place_plate(
+    await self.place_plate_to_stored_position(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
 
@@ -546,7 +442,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     await self.set_location_xyz(self.location_index, *cartesian_position)
     await self._set_grip_detail(access)
     await self.set_location_config(self.location_index, orientation)
-    await self.pick_plate(
+    await self.pick_plate_from_stored_position(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
 
@@ -560,7 +456,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     await self.set_location_xyz(self.location_index, *cartesian_position)
     await self._set_grip_detail(access)
     await self.set_location_config(self.location_index, orientation)
-    await self.place_plate(
+    await self.place_plate_to_stored_position(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
 
@@ -597,7 +493,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
         0,  # z_above: not used for vertical access
         access.gripper_offset_mm,  # z_grasp_offset: added when holding plate
       )
-    else:  # HorizontalAccess
+    elif isinstance(access, HorizontalAccess):
       # Horizontal access: access_type=0, z_clearance is horizontal distance
       await self.set_station_type(
         self.location_index,
@@ -607,6 +503,8 @@ class PreciseFlexBackend(ArmBackend, ABC):
         access.lift_height_mm,  # z_above: vertical lift for horizontal access
         access.gripper_offset_mm,  # z_grasp_offset: added when holding plate
       )
+    else:
+      raise ValueError("Access pattern must be VerticalAccess or HorizontalAccess.")
 
   # region GENERAL COMMANDS
 
@@ -651,13 +549,13 @@ class PreciseFlexBackend(ArmBackend, ABC):
     Note:
       Does not affect any robots that may be active.
     """
-    await self.io.write("exit".encode("utf-8") + b"\n")
+    await self.io.write(b"exit\n")
 
   async def get_power_state(self) -> int:
     """Get the current robot power state.
 
     Returns:
-      int: Current power state (0 = disabled, 1 = enabled)
+      Current power state (0 = disabled, 1 = enabled)
     """
     response = await self.send_command("hp")
     return int(response)
@@ -681,16 +579,22 @@ class PreciseFlexBackend(ArmBackend, ABC):
     else:
       await self.send_command(f"hp {power_state} {timeout}")
 
-  async def get_mode(self) -> int:
+  Mode = Literal["pc", "verbose"]
+
+  async def get_mode(self) -> Mode:
     """Get the current response mode.
 
     Returns:
-      int: Current mode (0 = PC mode, 1 = verbose mode)
+      Current mode (0 = PC mode, 1 = verbose mode)
     """
     response = await self.send_command("mode")
-    return int(response)
+    mapping: Dict[int, PreciseFlexBackend.Mode] = {
+      0: "pc",
+      1: "verbose",
+    }
+    return mapping[int(response)]
 
-  async def set_mode(self, mode: int) -> None:
+  async def set_mode(self, mode: Mode) -> None:
     """Set the response mode.
 
     Args:
@@ -702,15 +606,19 @@ class PreciseFlexBackend(ArmBackend, ABC):
       When using serial communications, the mode change does not take effect
       until one additional command has been processed.
     """
-    if mode not in [0, 1]:
-      raise ValueError("Mode must be 0 (PC mode) or 1 (verbose mode)")
-    await self.send_command(f"mode {mode}")
+    if mode not in ["pc", "verbose"]:
+      raise ValueError("Mode must be 'pc' or 'verbose'")
+    mapping = {
+      "pc": 0,
+      "verbose": 1,
+    }
+    await self.send_command(f"mode {mapping[mode]}")
 
   async def get_monitor_speed(self) -> int:
     """Get the global system (monitor) speed.
 
     Returns:
-      int: Current monitor speed as a percentage (1-100)
+      Current monitor speed as a percentage (1-100)
     """
     response = await self.send_command("mspeed")
     return int(response)
@@ -740,7 +648,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Get the payload percent value for the current robot.
 
     Returns:
-      int: Current payload as a percentage of maximum (0-100)
+      Current payload as a percentage of maximum (0-100)
     """
     response = await self.send_command("payload")
     return int(response)
@@ -749,8 +657,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Set the payload percent of maximum for the currently selected or attached robot.
 
     Args:
-      payload_percent: Payload percentage from 0 to 100 indicating the percent
-      of the maximum payload the robot is carrying.
+      payload_percent: Payload percentage from 0 to 100 indicating the percent of the maximum payload the robot is carrying.
 
     Raises:
       ValueError: If payload_percent is not between 0 and 100.
@@ -846,7 +753,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Get the number of the currently selected robot.
 
     Returns:
-      int: The number of the currently selected robot.
+      The number of the currently selected robot.
     """
     response = await self.send_command("selectRobot")
     return int(response)
@@ -870,7 +777,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
       signal_number: The number of the digital signal to get.
 
     Returns:
-      int: The current signal value.
+      The current signal value.
     """
     response = await self.send_command(f"sig {signal_number}")
     sig_id, sig_val = response.split()
@@ -889,7 +796,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Get the global system state code.
 
     Returns:
-      int: The global system state code. Please see documentation for DataID 234.
+      The global system state code. Please see documentation for DataID 234.
     """
     response = await self.send_command("sysState")
     return int(response)
@@ -1510,7 +1417,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
       profile_index: The profile index to query.
 
     Returns:
-      int: The current Straight property value.
+      The current Straight property value.
       True = follow a straight-line path
       False = follow a joint-based path (coordinated axes movement)
     """
@@ -2335,7 +2242,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Tests if the gripper is holding a plate. If not, enable robot power and home all robots.
 
     Returns:
-      int: -1 if no plate detected and the command succeeded, 0 if a plate was detected.
+      -1 if no plate detected and the command succeeded, 0 if a plate was detected.
     """
     response = await self.send_command("HomeAll_IfNoPlate")
     return int(response)
@@ -2357,7 +2264,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
         A negative value indicates the fingers must open to grasp.
 
     Returns:
-      int: -1 if the plate has been grasped, 0 if the final gripping force indicates no plate.
+      -1 if the plate has been grasped, 0 if the final gripping force indicates no plate.
 
     Raises:
       ValueError: If finger_speed_percent is not between 1 and 100.
@@ -2396,7 +2303,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """Tests if the gripper is fully closed by checking the end-of-travel sensor.
 
     Returns:
-      int: For standard gripper: -1 if the gripper is within 2mm of fully closed, otherwise 0.
+      For standard gripper: -1 if the gripper is within 2mm of fully closed, otherwise 0.
           For dual gripper: A bitmask of the closed state of each gripper where gripper 1 is bit 0
           and gripper 2 is bit 1. A bit being set to 1 represents the corresponding gripper being closed.
     """
@@ -2433,7 +2340,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """(Dual Gripper Only) Returns the currently active gripper.
 
     Returns:
-      int: 1 if Gripper A is active, 2 if Gripper B is active.
+      1 if Gripper A is active, 2 if Gripper B is active.
     """
     response = await self.send_command("GetActiveGripper")
     return int(response)
@@ -2450,7 +2357,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
       axis = -1  # means turn off free mode for all axes
     await self.send_command(f"freemode {axis}")
 
-  async def pick_plate(
+  async def pick_plate_from_stored_position(
     self,
     position_id: int,
     horizontal_compliance: bool = False,
@@ -2470,7 +2377,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     if ret_code == "0":
       raise PreciseFlexError(-1, "the force-controlled gripper detected no plate present.")
 
-  async def place_plate(
+  async def place_plate_to_stored_position(
     self,
     position_id: int,
     horizontal_compliance: bool = False,
@@ -2496,16 +2403,6 @@ class PreciseFlexBackend(ArmBackend, ABC):
       z_clearance: Optional.  The Z Clearance value. If omitted, a value of 50 is used.  Z clearance must be high enough to withdraw the gripper.
     """
     await self.send_command(f"teachplate {position_id} {z_clearance}")
-
-  async def send_command(self, command: str) -> str:
-    await self.io.write(command.encode("utf-8") + b"\n")
-    # TODO: is sleep needed here?
-    await asyncio.sleep(0.2)  # wait a bit for the robot to process the command
-    reply = await self.io.readline()
-
-    print(f"Sent command: {command}, Received reply: {reply!r}")
-
-    return self._parse_reply_ensure_successful(reply)
 
   def _parse_xyz_response(
     self, parts: list[str]
@@ -2537,28 +2434,3 @@ class PreciseFlexBackend(ArmBackend, ABC):
     angle6 = float(parts[5]) if len(parts) > 5 else 0.0
 
     return (angle1, angle2, angle3, angle4, angle5, angle6)
-
-  def _parse_reply_ensure_successful(self, reply: bytes) -> str:
-    """Parse reply from Precise Flex.
-
-    Expected format: b'replycode data message\r\n'
-    - replycode is an integer at the beginning
-    - data is rest of the line (excluding CRLF)
-    """
-    print("REPLY: ", reply)
-    text = reply.decode().strip()  # removes \r\n
-    if not text:
-      raise PreciseFlexError(-1, "Empty reply from device.")
-
-    parts = text.split(" ", 1)
-    if len(parts) == 1:
-      replycode = int(parts[0])
-      data = ""
-    else:
-      replycode, data = int(parts[0]), parts[1]
-
-    if replycode != 0:
-      # if error is reported, the data part generally contains the error message
-      raise PreciseFlexError(replycode, data)
-
-    return data

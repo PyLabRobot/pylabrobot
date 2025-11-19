@@ -24,14 +24,6 @@ class Arm(Machine):
     """Get the current position of the arm in 3D space."""
     return await self.backend.get_cartesian_position()
 
-  async def set_speed(self, speed: float):
-    """Set the speed of the arm's movement."""
-    return await self.backend.set_speed(speed)
-
-  async def get_speed(self) -> float:
-    """Get the current speed of the arm's movement."""
-    return await self.backend.get_speed()
-
   async def open_gripper(self):
     """Open the arm's gripper."""
     return await self.backend.open_gripper()
