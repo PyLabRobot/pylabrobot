@@ -604,6 +604,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
+    disable_volume_correction: Optional[List[bool]] = None,
   ):
     """Aspirate from (a) resource(s).
 
@@ -620,6 +621,7 @@ class VantageBackend(HamiltonLiquidHandler):
         documentation, "empty" is used for a different mode (dm4).
       hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used.
+      disable_volume_correction: Whether to disable volume correction for each operation.
     """
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
@@ -656,10 +658,11 @@ class VantageBackend(HamiltonLiquidHandler):
 
     self._assert_valid_resources([op.resource for op in ops])
 
-    # correct volumes using the liquid class
+    # correct volumes using the liquid class if not disabled
+    disable_volume_correction = disable_volume_correction or [False] * len(ops)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hlcs)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -790,6 +793,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
+    disable_volume_correction: Optional[List[bool]] = None,
   ):
     """Dispense to (a) resource(s).
 
@@ -812,6 +816,7 @@ class VantageBackend(HamiltonLiquidHandler):
       empty: Whether to use "empty" dispense mode for each dispense. Defaults to `False` for all.
         Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
         documentation. Dispense mode 4.
+      disable_volume_correction: Whether to disable volume correction for each operation.
     """
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
@@ -851,9 +856,10 @@ class VantageBackend(HamiltonLiquidHandler):
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
+    disable_volume_correction = disable_volume_correction or [False] * len(ops)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hlcs)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -1045,6 +1051,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_channel_pattern: Optional[List[bool]] = None,
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
+    disable_volume_correction: bool = False,
   ):
     """Aspirate from a plate.
 
@@ -1055,6 +1062,7 @@ class VantageBackend(HamiltonLiquidHandler):
         documentation.
       hlc: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used in the first well.
+      disable_volume_correction: Whether to disable volume correction.
     """
     # assert self.core96_head_installed, "96 head must be installed"
 
@@ -1116,9 +1124,10 @@ class VantageBackend(HamiltonLiquidHandler):
         blow_out=blow_out,
       )
 
-    volume = (
-      hlc.compute_corrected_volume(aspiration.volume) if hlc is not None else aspiration.volume
-    )
+    if disable_volume_correction or hlc is None:
+      volume = aspiration.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(aspiration.volume)
 
     transport_air_volume = transport_air_volume or (
       hlc.aspiration_air_transport_volume if hlc is not None else 0
@@ -1207,6 +1216,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_channel_pattern: Optional[List[bool]] = None,
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
+    disable_volume_correction: bool = False,
   ):
     """Dispense to a plate using the 96 head.
 
@@ -1221,6 +1231,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
       type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
         determined based on the jet, blow_out, and empty parameters.
+      disable_volume_correction: Whether to disable volume correction.
     """
 
     if mix_volume != 0 or mix_cycles != 0 or mix_speed is not None:
@@ -1280,7 +1291,11 @@ class VantageBackend(HamiltonLiquidHandler):
         jet=jet,
         blow_out=blow_out,  # see method docstring
       )
-    volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None else dispense.volume
+
+    if disable_volume_correction or hlc is None:
+      volume = dispense.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(dispense.volume)
 
     transport_air_volume = transport_air_volume or (
       hlc.dispense_air_transport_volume if hlc is not None else 0
