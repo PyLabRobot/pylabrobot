@@ -26,6 +26,7 @@ from pylabrobot.resources import (
   no_volume_tracking,
   set_tip_tracking,
 )
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
 
 from .STAR_backend import (
@@ -266,6 +267,114 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
     set_tip_tracking(enabled=False)
+
+  async def test_core_read_barcode_success(self):
+    """core_read_barcode_of_picked_up_resource should send ZB and return a Barcode."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/08ABCDEFGH"
+    )
+
+    barcode = await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+    # Check command format.
+    self.STAR._write_and_read_command.assert_has_calls(  # type: ignore
+      [
+        _any_write_and_read_command_call(
+          "C0ZBid0001cp05zb2200th2750zy1287bd1ma0250 2100 0860 0200mr0mo000 000 000 000 000 000 000",
+        )
+      ]
+    )
+
+    # Check returned barcode object.
+    self.assertIsInstance(barcode, Barcode)
+    assert barcode is not None
+    self.assertEqual(barcode.data, "ABCDEFGH")
+    self.assertEqual(barcode.symbology, "code128")
+    self.assertEqual(barcode.position_on_resource, "front")
+
+  async def test_core_read_barcode_raises_on_missing_error_section(self):
+    """Unexpected response without error section should raise ValueError."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001bb/08ABCDEFGH"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_raises_on_invalid_lengths(self):
+    """Non-integer / inconsistent bb length fields should raise ValueError."""
+
+    # Invalid bb field (non-integer length).
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/XXABCDEFGH"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+    # Length > 0 but no data present.
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/08"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_nonzero_error_code_raises_firmware_error(self):
+    """Non-zero error code should be surfaced as STARFirmwareError."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er05/30bb/00"
+    )
+
+    with self.assertRaises(STARFirmwareError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_no_barcode_raises_value_error(self):
+    """bb/00 (no barcode) should raise ValueError so callers can handle it explicitly."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_manual_input_success(self):
+    """When allow_manual_input=True and bb/00, manual input should be used to build a Barcode."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with unittest.mock.patch("builtins.input", return_value="MANUAL123"):
+      barcode = await self.STAR.core_read_barcode_of_picked_up_resource(
+        rails=5,
+        allow_manual_input=True,
+        labware_description="Cos_96_PCR_0001",
+      )
+
+    self.assertIsInstance(barcode, Barcode)
+    self.assertEqual(barcode.data, "MANUAL123")
+    self.assertEqual(barcode.symbology, "code128")
+    self.assertEqual(barcode.position_on_resource, "front")
+
+  async def test_core_read_barcode_manual_input_empty_raises_value_error(self):
+    """When allow_manual_input=True and user provides empty input, ValueError should be raised."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with unittest.mock.patch("builtins.input", return_value="   "):
+      with self.assertRaises(ValueError):
+        await self.STAR.core_read_barcode_of_picked_up_resource(
+          rails=5,
+          allow_manual_input=True,
+          labware_description="Cos_96_PCR_0001",
+        )
 
   async def asyncTearDown(self):
     await self.lh.stop()
