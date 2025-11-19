@@ -5555,16 +5555,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return command_output
 
-  async def _star_core_read_barcode(
+  async def core_read_barcode_of_picked_up_resource(
     self,
-    slot_number: int,
-    minimal_z_position: int = 2200,
-    traverse_height_at_beginning_of_a_command: int = 2750,
-    z_speed: int = 1287,
+    rails: int,
+    reading_direction: Literal["vertical", "horizontal", "free"] = "vertical",
+    minimal_z_position: float = 220.0,
+    traverse_height_at_beginning_of_a_command: float = 275.0,
+    z_speed: float = 128.7,
     allow_manual_input: bool = False,
     labware_description: Optional[str] = None,
   ):
     """Read a 1D barcode using the CoRe gripper scanner.
+
+    Args:
+      rails: Rail/slot number where the barcode to be read is located (1-54).
+      reading_direction: Direction of barcode reading: 'vertical', 'horizontal', or 'free'. Default is 'vertical'.
+      minimal_z_position: Minimal Z position [mm] during barcode reading (220.0-360.0). Default is 220.0.
+      traverse_height_at_beginning_of_a_command: Traverse height at beginning of command [mm] (0.0-360.0). Default is 275.0.
+      z_speed: Z speed [mm/s] during barcode reading (0.0-128.7). Default is 128.7.
+      allow_manual_input: If True, allows the user to manually input a barcode if scanning fails. Default is False.
+      labware_description: Optional description of the labware being scanned, used in the manual input
+        prompt to provide context to the user.
 
     Returns:
       A Barcode if one is successfully read, either by the scanner or via manual user input.
@@ -5576,28 +5587,42 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         provide a barcode.
     """
 
-    assert 1 <= slot_number <= 54, "slot_number must be between 1 and 54"
+    assert 1 <= rails <= 54, "rails must be between 1 and 54"
     assert 0 <= minimal_z_position <= 3600, "minimal_z_position must be between 0 and 3600"
     assert (
       0 <= traverse_height_at_beginning_of_a_command <= 3600
     ), "traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= z_speed <= 1287, "z_speed must be between 0 and 1287"
 
-    command_output = await self.send_command(
-      module="C0",
-      command="ZB",
-      cp=f"{slot_number:02}",
-      zb=f"{minimal_z_position:04}",
-      th=f"{traverse_height_at_beginning_of_a_command:04}",
-      zy=f"{z_speed:04}",
-      bd=1,
-      ma="0250 2100 0860 0200",
-      mr=0,
-      mo="000 000 000 000 000 000 000",
+    try:
+      reading_direction_int = {
+        "vertical": 0,
+        "horizontal": 1,
+        "free": 2,
+      }[reading_direction]
+    except KeyError as e:
+      raise ValueError(
+        "reading_direction must be one of 'vertical', 'horizontal', or 'free'"
+      ) from e
+
+    command_output = cast(
+      str,
+      await self.send_command(
+        module="C0",
+        command="ZB",
+        cp=f"{rails:02}",
+        zb=f"{round(minimal_z_position*10):04}",
+        th=f"{round(traverse_height_at_beginning_of_a_command*10):04}",
+        zy=f"{round(z_speed*10):04}",
+        bd=reading_direction_int,
+        ma="0250 2100 0860 0200",
+        mr=0,
+        mo="000 000 000 000 000 000 000",
+      ),
     )
 
     if command_output is None:
-      return None
+      raise RuntimeError("No response received from CoRe barcode read command.")
 
     resp = command_output.strip()
     er_index = resp.find("er")
