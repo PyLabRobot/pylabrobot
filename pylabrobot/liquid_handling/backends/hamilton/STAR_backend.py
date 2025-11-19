@@ -5629,10 +5629,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if bb_len == 0:
       if allow_manual_input:
         # Provide context and allow the user to recover by entering a barcode manually.
-        lines = ["No barcode read by CoRe scanner."]
+        # Use ANSI color codes to make the prompt stand out in typical terminals.
+        YELLOW = "\033[93m"
+        BOLD = "\033[1m"
+        RESET = "\033[0m"
+
+        lines = [
+          f"{YELLOW}{BOLD}=== CoRe barcode scan failed ==={RESET}",
+          f"{YELLOW}No barcode read by CoRe scanner.{RESET}",
+        ]
         if labware_description is not None:
-          lines.append(f"Labware: {labware_description}")
-        lines.append("Enter barcode manually (leave blank to abort): ")
+          lines.append(f"{YELLOW}Labware: {labware_description}{RESET}")
+        lines.append(f"{YELLOW}Enter barcode manually (leave blank to abort): {RESET}")
         prompt = "\n".join(lines)
 
         # Blocking input is acceptable here because this helper is only intended for CLI usage.
