@@ -5558,7 +5558,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def core_read_barcode_of_picked_up_resource(
     self,
     rails: int,
-    reading_direction: Literal["vertical", "horizontal", "free"] = "vertical",
+    reading_direction: Literal["vertical", "horizontal", "free"] = "horizontal",
     minimal_z_position: float = 220.0,
     traverse_height_at_beginning_of_a_command: float = 275.0,
     z_speed: float = 128.7,
@@ -5569,7 +5569,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Args:
       rails: Rail/slot number where the barcode to be read is located (1-54).
-      reading_direction: Direction of barcode reading: 'vertical', 'horizontal', or 'free'. Default is 'vertical'.
+      reading_direction: Direction of barcode reading: 'vertical', 'horizontal', or 'free'. Default is 'horizontal'.
       minimal_z_position: Minimal Z position [mm] during barcode reading (220.0-360.0). Default is 220.0.
       traverse_height_at_beginning_of_a_command: Traverse height at beginning of command [mm] (0.0-360.0). Default is 275.0.
       z_speed: Z speed [mm/s] during barcode reading (0.0-128.7). Default is 128.7.

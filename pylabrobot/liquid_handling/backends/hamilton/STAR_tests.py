@@ -269,13 +269,13 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     set_tip_tracking(enabled=False)
 
   async def test_core_read_barcode_success(self):
-    """_star_core_read_barcode should send ZB and return a Barcode."""
+    """core_read_barcode_of_picked_up_resource should send ZB and return a Barcode."""
 
     self.STAR._write_and_read_command.return_value = (  # type: ignore
       "C0ZBid0001er00/00bb/08ABCDEFGH"
     )
 
-    barcode = await self.STAR._star_core_read_barcode(slot_number=5)
+    barcode = await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
 
     # Check command format.
     self.STAR._write_and_read_command.assert_has_calls(  # type: ignore
@@ -301,7 +301,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
     with self.assertRaises(ValueError):
-      await self.STAR._star_core_read_barcode(slot_number=5)
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
 
   async def test_core_read_barcode_raises_on_invalid_lengths(self):
     """Non-integer / inconsistent bb length fields should raise ValueError."""
@@ -312,7 +312,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
     with self.assertRaises(ValueError):
-      await self.STAR._star_core_read_barcode(slot_number=5)
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
 
     # Length > 0 but no data present.
     self.STAR._write_and_read_command.return_value = (  # type: ignore
@@ -320,7 +320,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
     with self.assertRaises(ValueError):
-      await self.STAR._star_core_read_barcode(slot_number=5)
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
 
   async def test_core_read_barcode_nonzero_error_code_raises_firmware_error(self):
     """Non-zero error code should be surfaced as STARFirmwareError."""
@@ -330,7 +330,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
     with self.assertRaises(STARFirmwareError):
-      await self.STAR._star_core_read_barcode(slot_number=5)
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
 
   async def test_core_read_barcode_no_barcode_raises_value_error(self):
     """bb/00 (no barcode) should raise ValueError so callers can handle it explicitly."""
@@ -340,7 +340,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
     with self.assertRaises(ValueError):
-      await self.STAR._star_core_read_barcode(slot_number=5)
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
 
   async def test_core_read_barcode_manual_input_success(self):
     """When allow_manual_input=True and bb/00, manual input should be used to build a Barcode."""
@@ -350,8 +350,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
     with unittest.mock.patch("builtins.input", return_value="MANUAL123"):
-      barcode = await self.STAR._star_core_read_barcode(
-        slot_number=5,
+      barcode = await self.STAR.core_read_barcode_of_picked_up_resource(
+        rails=5,
         allow_manual_input=True,
         labware_description="Cos_96_PCR_0001",
       )
@@ -370,8 +370,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     with unittest.mock.patch("builtins.input", return_value="   "):
       with self.assertRaises(ValueError):
-        await self.STAR._star_core_read_barcode(
-          slot_number=5,
+        await self.STAR.core_read_barcode_of_picked_up_resource(
+          rails=5,
           allow_manual_input=True,
           labware_description="Cos_96_PCR_0001",
         )
