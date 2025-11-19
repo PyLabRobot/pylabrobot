@@ -1662,6 +1662,17 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
+  def _check_96_head_fits_in_container(self, container: Container) -> bool:
+    """Check if the 96 head can fit in the given container."""
+
+    tip_width = 2  # approximation
+    distance_between_tips = 9
+
+    return (
+      container.get_absolute_size_x() >= tip_width + distance_between_tips * 11
+      and container.get_absolute_size_y() >= tip_width + distance_between_tips * 7
+    )
+
   async def aspirate96(
     self,
     resource: Union[Plate, Container, List[Well]],
@@ -1738,9 +1749,7 @@ class LiquidHandler(Resource, Machine):
 
     if len(containers) == 1:  # single container
       container = containers[0]
-      if (
-        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
-      ):  # TODO: analyze as attr
+      if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
       for tip in tips:
@@ -1903,9 +1912,7 @@ class LiquidHandler(Resource, Machine):
     liquids: List[Tuple[Optional[Liquid], float]]
     if len(containers) == 1:  # single container
       container = containers[0]
-      if (
-        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
-      ):  # TODO: analyze as attr
+      if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
       for tip in tips:
