@@ -2,7 +2,7 @@ import asyncio
 from typing import Optional
 
 from pylabrobot.arms.precise_flex.error_codes import ERROR_CODES
-from pylabrobot.io.tcp import TCP
+from pylabrobot.io.socket import Socket
 
 
 class PreciseFlexError(Exception):
@@ -31,7 +31,7 @@ class PreciseFlexBackendApi:
     self.host = host
     self.port = port
     self.timeout = timeout
-    self.io = TCP(host=self.host, port=self.port)
+    self.io = Socket(host=self.host, port=self.port)
 
   async def setup(self):
     """Connect to the PreciseFlex backend."""

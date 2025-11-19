@@ -291,9 +291,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     return await self.api.get_version()
 
   async def approach(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Move the arm to an approach position (offset from target).
 
@@ -329,10 +327,8 @@ class PreciseFlexBackend(ArmBackend, ABC):
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
   async def pick_plate(
-      self,
-      position: Union[CartesianCoords, JointCoords],
-      access: Optional[AccessPattern] = None
-    ):
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
+  ):
     """Pick a plate from the specified position.
 
     Args:
@@ -372,9 +368,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
 
   async def place_plate(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Place a plate at the specified position.
 
@@ -449,9 +443,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     await self.api.move_appro(self.location_index, self.profile_index)
 
   async def _pick_plate_j(
-    self,
-    joint_position: tuple[float, float, float, float, float, float],
-    access: AccessPattern
+    self, joint_position: tuple[float, float, float, float, float, float], access: AccessPattern
   ):
     """Pick a plate from the specified position using joint coordinates."""
     await self.api.set_location_angles(self.location_index, *joint_position)
@@ -461,9 +453,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     )
 
   async def _place_plate_j(
-    self,
-    joint_position: tuple[float, float, float, float, float, float],
-    access: AccessPattern
+    self, joint_position: tuple[float, float, float, float, float, float], access: AccessPattern
   ):
     """Place a plate at the specified position using joint coordinates."""
     await self.api.set_location_angles(self.location_index, *joint_position)
@@ -484,7 +474,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     self,
     cartesian_position: tuple[float, float, float, float, float, float],
     orientation: int,
-    access: AccessPattern
+    access: AccessPattern,
   ):
     """Move the arm to a position above the specified coordinates.
 
@@ -501,7 +491,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     self,
     cartesian_position: tuple[float, float, float, float, float, float],
     orientation: int,
-    access: AccessPattern
+    access: AccessPattern,
   ):
     """Pick a plate from the specified position using Cartesian coordinates."""
     await self.api.set_location_xyz(self.location_index, *cartesian_position)
@@ -515,7 +505,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     self,
     cartesian_position: tuple[float, float, float, float, float, float],
     orientation: int,
-    access: AccessPattern
+    access: AccessPattern,
   ):
     """Place a plate at the specified position using Cartesian coordinates."""
     await self.api.set_location_xyz(self.location_index, *cartesian_position)
@@ -556,7 +546,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
         0,  # location_type: 0 = normal single location
         access.clearance_mm,  # z_clearance: vertical retract distance
         0,  # z_above: not used for vertical access
-        access.gripper_offset_mm  # z_grasp_offset: added when holding plate
+        access.gripper_offset_mm,  # z_grasp_offset: added when holding plate
       )
     else:  # HorizontalAccess
       # Horizontal access: access_type=0, z_clearance is horizontal distance
@@ -566,5 +556,5 @@ class PreciseFlexBackend(ArmBackend, ABC):
         0,  # location_type: 0 = normal single location
         access.clearance_mm,  # z_clearance: horizontal retract distance
         access.lift_height_mm,  # z_above: vertical lift for horizontal access
-        access.gripper_offset_mm  # z_grasp_offset: added when holding plate
+        access.gripper_offset_mm,  # z_grasp_offset: added when holding plate
       )

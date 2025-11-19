@@ -21,6 +21,7 @@ class VerticalAccess:
     gripper_offset_mm: Additional vertical offset added when holding a plate,
                       accounts for gripper thickness (default: 10mm)
   """
+
   approach_height_mm: float = 100
   clearance_mm: float = 100
   gripper_offset_mm: float = 10
@@ -43,6 +44,7 @@ class HorizontalAccess:
     gripper_offset_mm: Additional vertical offset added when holding a plate,
                       accounts for gripper thickness (default: 10mm)
   """
+
   approach_distance_mm: float = 50
   clearance_mm: float = 50
   lift_height_mm: float = 100
@@ -97,9 +99,7 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def approach(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Move the arm to an approach position (offset from target).
 
@@ -112,9 +112,7 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def pick_plate(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Pick a plate from the specified position.
 
@@ -127,9 +125,7 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def place_plate(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Place a plate at the specified position.
 

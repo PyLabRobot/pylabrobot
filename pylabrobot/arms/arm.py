@@ -57,9 +57,7 @@ class Arm(Machine):
     return await self.backend.move_to_safe()
 
   async def approach(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Move the arm to an approach position (offset from target).
 
@@ -71,9 +69,7 @@ class Arm(Machine):
     return await self.backend.approach(position, access)
 
   async def pick_plate(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Pick a plate from the specified position.
 
@@ -85,9 +81,7 @@ class Arm(Machine):
     return await self.backend.pick_plate(position, access)
 
   async def place_plate(
-    self,
-    position: Union[CartesianCoords, JointCoords],
-    access: Optional[AccessPattern] = None
+    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
   ):
     """Place a plate at the specified position.
 
