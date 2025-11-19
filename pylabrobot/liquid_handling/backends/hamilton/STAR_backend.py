@@ -5561,15 +5561,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimal_z_position: int = 2200,
     traverse_height_at_beginning_of_a_command: int = 2750,
     z_speed: int = 1287,
+    allow_manual_input: bool = False,
+    labware_description: Optional[str] = None,
   ):
     """Read a 1D barcode using the CoRe gripper scanner.
 
     Returns:
-      A Barcode if one is successfully read.
+      A Barcode if one is successfully read, either by the scanner or via manual user input.
 
     Raises:
       STARFirmwareError: if the firmware reports an error in the response.
-      ValueError: if the response format is unexpected or if no barcode is present.
+      ValueError: if the response format is unexpected or if no barcode is present and
+        ``allow_manual_input`` is False, or if manual input is enabled but the user does not
+        provide a barcode.
     """
 
     assert 1 <= slot_number <= 54, "slot_number must be between 1 and 54"
@@ -5621,8 +5625,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     barcode_str = resp[bb_index + 5 :].strip()
 
-    # No barcode present: treat as an error so the caller can respond explicitly.
+    # No barcode present.
     if bb_len == 0:
+      if allow_manual_input:
+        # Provide context and allow the user to recover by entering a barcode manually.
+        lines = ["No barcode read by CoRe scanner."]
+        if labware_description is not None:
+          lines.append(f"Labware: {labware_description}")
+        lines.append("Enter barcode manually (leave blank to abort): ")
+        prompt = "\n".join(lines)
+
+        # Blocking input is acceptable here because this helper is only intended for CLI usage.
+        user_barcode = input(prompt).strip()
+        if not user_barcode:
+          raise ValueError("No barcode read by CoRe scanner and no manual barcode provided.")
+
+        return Barcode(
+          data=user_barcode,
+          symbology="code128",
+          position_on_resource="front",
+        )
+
       raise ValueError("No barcode read by CoRe scanner.")
 
     if not barcode_str:

@@ -342,6 +342,40 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.STAR._star_core_read_barcode(slot_number=5)
 
+  async def test_core_read_barcode_manual_input_success(self):
+    """When allow_manual_input=True and bb/00, manual input should be used to build a Barcode."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with unittest.mock.patch("builtins.input", return_value="MANUAL123"):
+      barcode = await self.STAR._star_core_read_barcode(
+        slot_number=5,
+        allow_manual_input=True,
+        labware_description="Cos_96_PCR_0001",
+      )
+
+    self.assertIsInstance(barcode, Barcode)
+    self.assertEqual(barcode.data, "MANUAL123")
+    self.assertEqual(barcode.symbology, "code128")
+    self.assertEqual(barcode.position_on_resource, "front")
+
+  async def test_core_read_barcode_manual_input_empty_raises_value_error(self):
+    """When allow_manual_input=True and user provides empty input, ValueError should be raised."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with unittest.mock.patch("builtins.input", return_value="   "):
+      with self.assertRaises(ValueError):
+        await self.STAR._star_core_read_barcode(
+          slot_number=5,
+          allow_manual_input=True,
+          labware_description="Cos_96_PCR_0001",
+        )
+
   async def asyncTearDown(self):
     await self.lh.stop()
 
