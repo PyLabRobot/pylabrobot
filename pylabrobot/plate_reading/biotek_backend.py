@@ -7,6 +7,7 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Literal, Optional, Tuple, Union
+from pylibftdi import FtdiError
 
 from pylabrobot.resources import Plate, Well
 
@@ -1406,3 +1407,44 @@ class Cytation5Backend(ImageReaderBackend):
     focal_height_val = float(self._focal_height)
 
     return ImagingResult(images=images, exposure_time=exposure_ms, focal_height=focal_height_val)
+
+class SynergyH1Backend(Cytation5Backend):
+
+ async def _read_until(self, terminator: bytes, timeout: Optional[float] = None, chunk_size: int = 512) -> bytes:
+    """Synergy H1's receiving bytes is different from the Cytation 1 and 5
+
+    - terminator: byte (e.g. b'\x03') to stop at (returned buffer includes the terminator).
+    - timeout: seconds to wait in total (defaults to self.timeout).
+    - chunk_size: number of bytes to request per low-level read call.
+    """
+    if timeout is None:
+      timeout = self.timeout
+
+    deadline = time.time() + timeout
+    buf = bytearray()
+
+    while True:
+      if time.time() > deadline:
+        logger.debug("[Synergy H1] _read_until timed out; partial buffer (hex): %s", buf.hex())
+        raise TimeoutError(f"_read_until timed out waiting for {terminator!r}; partial={buf.hex()}")
+
+      try:
+        data = await self.io.read(chunk_size)
+        if not data:
+          await asyncio.sleep(0.02)
+          continue
+
+        buf.extend(data)
+
+        if terminator in buf:
+          idx = buf.index(terminator) + len(terminator)
+          full = bytes(buf[:idx])
+          logger.debug("[Synergy H1] _read_until received %d bytes (hex prefix): %s", len(full), full[:200].hex())
+          return full
+
+      except FtdiError as e:
+        logger.warning("[Synergy H1] transient FtdiError while reading: %s — retrying", e)
+        await asyncio.sleep(0.05)
+        continue
+      except Exception:
+        raise
