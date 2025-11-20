@@ -8,10 +8,12 @@ PyLabRobot supports the following heater shakers:
 - Inheco ThermoShake (should have the same API as RM)
 - Inheco ThermoShake AC (should have the same API as RM)
 - Hamilton Heater Shaker (tested)
+- QInstruments BioShake (3000 elmm, 5000 elm, and D30-T elm tested)
 
 ```{toctree}
 :maxdepth: 1
 
 Inheco ThermoShake <inheco>
 Hamilton Heater Shaker <hamilton>
+QInstruments BioShake <qinstruments>
 ```

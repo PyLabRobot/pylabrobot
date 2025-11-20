@@ -70,6 +70,7 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
 )
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -1781,11 +1782,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth_2nd_section: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     liquid_surfaces_no_lld: Optional[List[float]] = None,
     # PLR:
     probe_liquid_height: bool = False,
     auto_surface_following_distance: bool = False,
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
     # remove >2026-01
     mix_volume: Optional[List[float]] = None,
     mix_cycles: Optional[List[int]] = None,
@@ -1841,6 +1843,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       hamilton_liquid_classes: Override the default liquid classes. See pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
       liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0 and 360. Defaults to well bottom + liquid height. Should use absolute z.
+      disable_volume_correction: Whether to disable liquid class volume correction for each operation.
 
       probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
       auto_surface_following_distance: automatically compute the surface following distance based on the container height<->volume functions. Requires liquid height to be specified or `probe_liquid_height=True`.
@@ -1893,12 +1896,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
         )
 
-    self._assert_valid_resources([op.resource for op in ops])
-
     # correct volumes using the liquid class
+    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -2155,13 +2157,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
     min_z_endpos: Optional[float] = None,
     side_touch_off_distance: float = 0,
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
     empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
     # PLR specific
     probe_liquid_height: bool = False,
     auto_surface_following_distance: bool = False,
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
     # remove  in the future
     immersion_depth_direction: Optional[List[int]] = None,
     mix_volume: Optional[List[float]] = None,
@@ -2207,6 +2210,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       hamilton_liquid_classes: Override the default liquid classes. See
         pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
+      disable_volume_correction: Whether to disable liquid class volume correction for each operation.
 
       jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
         determining the dispense mode. True for dispense mode 0 or 1.
@@ -2285,9 +2289,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
     # correct volumes using the liquid class
+    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -2627,6 +2632,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_position_from_liquid_surface: float = 0,
     mix_surface_following_distance: float = 0,
     limit_curve_index: int = 0,
+    disable_volume_correction: bool = False,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
     liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
@@ -2674,6 +2680,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_position_from_liquid_surface: The position of the mix from the liquid surface.
       mix_surface_following_distance: The distance to follow the liquid surface during mix.
       limit_curve_index: The index of the limit curve to use.
+      disable_volume_correction: Whether to disable liquid class volume correction.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -2808,10 +2815,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       blow_out=blow_out,  # see comment in method docstring
     )
 
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(aspiration.volume)
-    else:
+    if disable_volume_correction or hlc is None:
       volume = aspiration.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(aspiration.volume)
 
     # Get better default values from the HLC if available
     transport_air_volume = transport_air_volume or (
@@ -2889,6 +2896,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
+    disable_volume_correction: bool = False,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
     liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,  # surface_following_distance!
@@ -2933,6 +2941,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       limit_curve_index: Limit curve index.
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
+      disable_volume_correction: Whether to disable liquid class volume correction.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -3087,10 +3096,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       blow_out=blow_out,  # see comment in method docstring
     )
 
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(dispense.volume)
-    else:
+    if disable_volume_correction or hlc is None:
       volume = dispense.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(dispense.volume)
 
     transport_air_volume = transport_air_volume or (
       hlc.dispense_air_transport_volume if hlc is not None else 0
@@ -5560,7 +5569,145 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return command_output
 
-  # TODO:(command:ZB)
+  async def core_read_barcode_of_picked_up_resource(
+    self,
+    rails: int,
+    reading_direction: Literal["vertical", "horizontal", "free"] = "horizontal",
+    minimal_z_position: float = 220.0,
+    traverse_height_at_beginning_of_a_command: float = 275.0,
+    z_speed: float = 128.7,
+    allow_manual_input: bool = False,
+    labware_description: Optional[str] = None,
+  ):
+    """Read a 1D barcode using the CoRe gripper scanner.
+
+    Args:
+      rails: Rail/slot number where the barcode to be read is located (1-54).
+      reading_direction: Direction of barcode reading: 'vertical', 'horizontal', or 'free'. Default is 'horizontal'.
+      minimal_z_position: Minimal Z position [mm] during barcode reading (220.0-360.0). Default is 220.0.
+      traverse_height_at_beginning_of_a_command: Traverse height at beginning of command [mm] (0.0-360.0). Default is 275.0.
+      z_speed: Z speed [mm/s] during barcode reading (0.0-128.7). Default is 128.7.
+      allow_manual_input: If True, allows the user to manually input a barcode if scanning fails. Default is False.
+      labware_description: Optional description of the labware being scanned, used in the manual input
+        prompt to provide context to the user.
+
+    Returns:
+      A Barcode if one is successfully read, either by the scanner or via manual user input.
+
+    Raises:
+      STARFirmwareError: if the firmware reports an error in the response.
+      ValueError: if the response format is unexpected or if no barcode is present and
+        ``allow_manual_input`` is False, or if manual input is enabled but the user does not
+        provide a barcode.
+    """
+
+    assert 1 <= rails <= 54, "rails must be between 1 and 54"
+    assert 0 <= minimal_z_position <= 3600, "minimal_z_position must be between 0 and 3600"
+    assert (
+      0 <= traverse_height_at_beginning_of_a_command <= 3600
+    ), "traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= z_speed <= 1287, "z_speed must be between 0 and 1287"
+
+    try:
+      reading_direction_int = {
+        "vertical": 0,
+        "horizontal": 1,
+        "free": 2,
+      }[reading_direction]
+    except KeyError as e:
+      raise ValueError(
+        "reading_direction must be one of 'vertical', 'horizontal', or 'free'"
+      ) from e
+
+    command_output = cast(
+      str,
+      await self.send_command(
+        module="C0",
+        command="ZB",
+        cp=f"{rails:02}",
+        zb=f"{round(minimal_z_position*10):04}",
+        th=f"{round(traverse_height_at_beginning_of_a_command*10):04}",
+        zy=f"{round(z_speed*10):04}",
+        bd=reading_direction_int,
+        ma="0250 2100 0860 0200",
+        mr=0,
+        mo="000 000 000 000 000 000 000",
+      ),
+    )
+
+    if command_output is None:
+      raise RuntimeError("No response received from CoRe barcode read command.")
+
+    resp = command_output.strip()
+    er_index = resp.find("er")
+    if er_index == -1:
+      # Unexpected format: no error section present.
+      raise ValueError(f"Unexpected CoRe barcode response (no error section): {resp}")
+
+    self.check_fw_string_error(resp)
+
+    # Parse barcode section: firmware returns `bb/LL<barcode>` where LL is length (00..99).
+    bb_index = resp.find("bb/", er_index + 7)
+    if bb_index == -1:
+      # Unexpected layout of barcode section.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
+
+    if len(resp) < bb_index + 5:
+      # Need at least 'bb/LL'.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
+
+    bb_len_str = resp[bb_index + 3 : bb_index + 5]
+    try:
+      bb_len = int(bb_len_str)
+    except ValueError as e:
+      raise ValueError(f"Invalid CoRe barcode length field 'bb': {bb_len_str}") from e
+
+    barcode_str = resp[bb_index + 5 :].strip()
+
+    # No barcode present.
+    if bb_len == 0:
+      if allow_manual_input:
+        # Provide context and allow the user to recover by entering a barcode manually.
+        # Use ANSI color codes to make the prompt stand out in typical terminals.
+        YELLOW = "\033[93m"
+        BOLD = "\033[1m"
+        RESET = "\033[0m"
+
+        lines = [
+          f"{YELLOW}{BOLD}=== CoRe barcode scan failed ==={RESET}",
+          f"{YELLOW}No barcode read by CoRe scanner.{RESET}",
+        ]
+        if labware_description is not None:
+          lines.append(f"{YELLOW}Labware: {labware_description}{RESET}")
+        lines.append(f"{YELLOW}Enter barcode manually (leave blank to abort): {RESET}")
+        prompt = "\n".join(lines)
+
+        # Blocking input is acceptable here because this helper is only intended for CLI usage.
+        user_barcode = input(prompt).strip()
+        if not user_barcode:
+          raise ValueError("No barcode read by CoRe scanner and no manual barcode provided.")
+
+        return Barcode(
+          data=user_barcode,
+          symbology="code128",
+          position_on_resource="front",
+        )
+
+      raise ValueError("No barcode read by CoRe scanner.")
+
+    if not barcode_str:
+      # Length > 0 but no data present.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
+
+    # If the firmware returns more characters than declared, truncate to the declared length.
+    if len(barcode_str) > bb_len:
+      barcode_str = barcode_str[:bb_len]
+
+    return Barcode(
+      data=barcode_str,
+      symbology="code128",
+      position_on_resource="front",
+    )
 
   # -------------- 3.5.6 Adjustment & movement commands --------------
 
