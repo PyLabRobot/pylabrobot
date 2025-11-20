@@ -1046,8 +1046,8 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         self,
         host: str,
         port: int = 2000,
-        read_timeout: int = 30,
-        write_timeout: int = 30,
+        read_timeout: float = 30.0,
+        write_timeout: float = 30.0,
         buffer_size: int = 1024,
         auto_reconnect: bool = True,
         max_reconnect_attempts: int = 3,
@@ -1059,7 +1059,7 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
             port: Hamilton instrument port (default: 2000)
             read_timeout: Read timeout in seconds
             write_timeout: Write timeout in seconds
-            buffer_size: TCP buffer size
+            buffer_size: Buffer size (kept for compatibility)
             auto_reconnect: Enable automatic reconnection
             max_reconnect_attempts: Maximum reconnection attempts
         """

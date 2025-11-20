@@ -4,7 +4,6 @@ from pylabrobot.io.capture import CaptureReader, capturer
 from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
-from pylabrobot.io.tcp import TCP, TCPValidator
 from pylabrobot.io.usb import USB, USBValidator
 from pylabrobot.machines.backend import MachineBackend
 
@@ -30,7 +29,6 @@ def validate(capture_file: str):
       Serial: SerialValidator,
       FTDI: FTDIValidator,
       HID: HIDValidator,
-      TCP: TCPValidator,
     }
     if not hasattr(obj, "io"):
       return False
