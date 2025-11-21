@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional
 import warnings
+from typing import Callable, Optional
 from pylabrobot.resources.volume_tracker import VolumeTracker
 
 
