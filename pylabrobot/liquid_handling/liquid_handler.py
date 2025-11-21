@@ -1662,6 +1662,17 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
+  def _check_96_head_fits_in_container(self, container: Container) -> bool:
+    """Check if the 96 head can fit in the given container."""
+
+    tip_width = 2  # approximation
+    distance_between_tips = 9
+
+    return (
+      container.get_absolute_size_x() >= tip_width + distance_between_tips * 11
+      and container.get_absolute_size_y() >= tip_width + distance_between_tips * 7
+    )
+
   async def aspirate96(
     self,
     resource: Union[Plate, Container, List[Well]],
@@ -1738,9 +1749,7 @@ class LiquidHandler(Resource, Machine):
 
     if len(containers) == 1:  # single container
       container = containers[0]
-      if (
-        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
-      ):  # TODO: analyze as attr
+      if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
       for tip in tips:
@@ -1900,18 +1909,23 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(resource, Container):
       containers = [resource]
 
+    liquids: List[Tuple[Optional[Liquid], float]]
     if len(containers) == 1:  # single container
       container = containers[0]
-      if (
-        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
-      ):  # TODO: analyze as attr
+      if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
       for tip in tips:
         if tip is None:
           continue
 
-        liquids = tip.tracker.remove_liquid(volume=volume)
+        # if we have enough liquid in the tip, remove it from the tip tracker
+        # if we do not (for example because the plunger was up on tip pickup), and we
+        # do not have volume tracking enabled, we just add a (None, volume) entry
+        if tip.tracker.get_used_volume() < volume and not does_volume_tracking():
+          liquids = [(None, volume)]
+        else:
+          liquids = tip.tracker.remove_liquid(volume=volume)
         reversed_liquids = list(reversed(liquids))
         all_liquids.append(reversed_liquids)
 
@@ -1944,9 +1958,10 @@ class LiquidHandler(Resource, Machine):
         if tip is None:
           continue
 
-        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
-        # during the aspiration command
-        if tip.tracker.is_disabled or not does_volume_tracking():
+        # if we have enough liquid in the tip, remove it from the tip tracker
+        # if we do not (for example because the plunger was up on tip pickup), and we
+        # do not have volume tracking enabled, we just add a (None, volume) entry
+        if tip.tracker.get_used_volume() < volume and not does_volume_tracking():
           liquids = [(None, volume)]
         else:
           liquids = tip.tracker.remove_liquid(volume=volume)
