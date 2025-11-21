@@ -1,4 +1,5 @@
 import enum
+from typing import Optional
 
 from pylabrobot.resources.tip import Tip
 
@@ -24,8 +25,15 @@ class TecanTip(Tip):
     maximal_volume: float,
     tip_type: TipType,
     fitting_depth: float = 0,
+    name: Optional[str] = None,
   ):
-    super().__init__(has_filter, total_tip_length, maximal_volume, fitting_depth)
+    super().__init__(
+      has_filter=has_filter,
+      total_tip_length=total_tip_length,
+      maximal_volume=maximal_volume,
+      fitting_depth=fitting_depth,
+      name=name,
+    )
     self.tip_type = tip_type
 
 

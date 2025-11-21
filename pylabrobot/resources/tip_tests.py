@@ -18,6 +18,7 @@ class TipTests(unittest.TestCase):
       serialize(tip),
       {
         "type": "Tip",
+        "name": None,
         "has_filter": False,
         "total_tip_length": 10.0,
         "maximal_volume": 10.0,
@@ -41,6 +42,7 @@ class TipTests(unittest.TestCase):
       tip.serialize(),
       {
         "type": "HamiltonTip",
+        "name": None,
         "has_filter": False,
         "total_tip_length": 10.0,
         "maximal_volume": 10.0,

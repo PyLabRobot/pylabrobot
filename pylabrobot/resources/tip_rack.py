@@ -17,7 +17,12 @@ from .resource import Resource
 
 
 class TipSpot(Resource):
-  """A tip spot, a location in a tip rack where there may or may not be a tip."""
+  """A tip spot, a location in a tip rack where there may or may not be a tip.
+
+  Each tip produced by this spot is given a unique name based on the parent
+  rack name, the spot name, and a per-spot counter (e.g. ``rack.A1#1``,
+  ``rack.A1#2``), which is stored on the :class:`Tip` instance.
+  """
 
   def __init__(
     self,
@@ -49,9 +54,35 @@ class TipSpot(Resource):
     self.tracker = TipTracker(thing="Tip spot")
     self.parent: Optional["TipRack"] = None
 
+    self._tip_counter: int = 0
+
     self.make_tip = make_tip
 
     self.tracker.register_callback(self._state_updated)
+
+  def _get_next_tip_name(self) -> str:
+    """Generate a unique name for the next tip originating from this spot."""
+
+    self._tip_counter += 1
+
+    if self.parent is not None:
+      base_name = f"{self.parent.name}.{self.name}"
+    else:
+      base_name = self.name
+
+    return f"{base_name}#{self._tip_counter}"
+
+  def create_tip(self) -> Tip:
+    """Create a new tip instance for this spot and assign it a unique name."""
+
+    tip = self.make_tip()
+
+    if getattr(tip, "name", None) is None:
+      tip.name = self._get_next_tip_name()
+      if hasattr(tip, "tracker"):
+        tip.tracker.thing = tip.name
+
+    return tip
 
   def get_tip(self) -> Tip:
     """Get a tip from the tip spot."""
@@ -59,7 +90,7 @@ class TipSpot(Resource):
     # Tracker will raise an error if there is no tip. We spawn a new tip if tip tracking is disabled
     tracks = does_tip_tracking() and not self.tracker.is_disabled
     if not self.tracker.has_tip and not tracks:
-      self.tracker.add_tip(self.make_tip())
+      self.tracker.add_tip(self.create_tip(), origin=self)
 
     return self.tracker.get_tip()
 
@@ -191,7 +222,8 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     for identifier, should_have_tip in should_have.items():
       if should_have_tip and not self.get_item(identifier).has_tip():
-        self.get_item(identifier).tracker.add_tip(self.get_item(identifier).make_tip(), commit=True)
+        spot = self.get_item(identifier)
+        spot.tracker.add_tip(spot.create_tip(), origin=spot, commit=True)
       elif not should_have_tip and self.get_item(identifier).has_tip():
         self.get_item(identifier).tracker.remove_tip(commit=True)
 
