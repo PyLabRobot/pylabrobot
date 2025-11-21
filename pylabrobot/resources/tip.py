@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Optional
-
+import warnings
 from pylabrobot.resources.volume_tracker import VolumeTracker
 
 
@@ -25,6 +25,14 @@ class Tip:
   name: Optional[str] = None
 
   def __post_init__(self):
+    if self.name is None:
+      warnings.warn(
+        "Creating a Tip without a name is deprecated. "
+        "Tips created from deck resources (e.g. TipSpot) should be named.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+
     thing = self.name or "tip_tracker"
     self.tracker = VolumeTracker(thing=thing, max_volume=self.maximal_volume)
 
