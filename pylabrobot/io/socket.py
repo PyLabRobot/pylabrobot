@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
+from ssl import SSLContext
 from typing import TYPE_CHECKING, Optional
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
@@ -8,7 +9,6 @@ from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
-from ssl import SSLContext
 if TYPE_CHECKING:
   from pylabrobot.io.capture import CaptureReader
 
