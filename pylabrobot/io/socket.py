@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 from dataclasses import dataclass
 from ssl import SSLContext
 from typing import TYPE_CHECKING, Optional
@@ -34,7 +35,8 @@ class Socket(IOBase):
     port: int,
     read_timeout: float = 30,
     write_timeout: float = 30,
-    ssl: Optional[SSLContext] = None,
+    ssl_context: Optional[ssl.SSLContext] = None,
+    server_hostname: Optional[str] = None,
   ):
     self._host = host
     self._port = port
@@ -42,6 +44,8 @@ class Socket(IOBase):
     self._writer: Optional[asyncio.StreamWriter] = None
     self._read_timeout = read_timeout
     self._write_timeout = write_timeout
+    self._ssl_context = ssl_context
+    self._server_hostname = server_hostname
     self._unique_id = f"{self._host}:{self._port}"
     self._read_lock = asyncio.Lock()
     self._write_lock = asyncio.Lock()
@@ -55,7 +59,10 @@ class Socket(IOBase):
 
   async def _connect(self):
     self._reader, self._writer = await asyncio.open_connection(
-      self._host, self._port, ssl=self._ssl
+      host=self._host,
+      port=self._port,
+      ssl=self._ssl_context,
+      server_hostname=self._server_hostname,
     )
 
   async def stop(self):

@@ -226,9 +226,11 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       else:
         self.device_shared_secret = shared_secret
 
-      ssl_context = ssl.create_default_context()
+      ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
       ssl_context.check_hostname = False
       ssl_context.verify_mode = ssl.CERT_NONE
+      ssl_context.minimum_version = ssl.TLSVersion.TLSv1
+      ssl_context.maximum_version = ssl.TLSVersion.TLSv1
       try:
         # This is required for some legacy devices that use older ciphers or protocols
         # that are disabled by default in newer OpenSSL versions.
@@ -241,7 +243,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       self.device_shared_secret = shared_secret if shared_secret is not None else b"f4ct0rymt55"
       ssl_context = None
 
-    self.io = Socket(host=ip, port=port, ssl=ssl_context)
+    self.io = Socket(host=ip, port=port, ssl_context=ssl_context, server_hostname=serial_number)
     self._num_blocks: Optional[int] = None
     self.num_temp_zones = 0
     self.available_blocks: List[int] = []
