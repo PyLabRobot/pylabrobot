@@ -247,3 +247,14 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
       ],
       any_order=False,
     )
+
+  def test_ssl_init(self):
+    backend = ProflexBackend(ip="1.2.3.4", use_ssl=True, serial_number="SN123")
+    self.assertTrue(backend.use_ssl)
+    self.assertEqual(backend.device_shared_secret, b"53rv1c3SN123")
+    self.assertEqual(backend.port, 7443)
+    self.assertIsNotNone(backend.io._ssl)
+
+  def test_ssl_init_missing_serial(self):
+    with self.assertRaisesRegex(ValueError, "Serial number is required"):
+      ProflexBackend(ip="1.2.3.4", use_ssl=True)
