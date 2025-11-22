@@ -1,0 +1,33 @@
+﻿pylabrobot.resources.corning.costar.plates
+==========================================
+
+.. currentmodule:: pylabrobot.resources.corning.costar
+
+.. automodule:: pylabrobot.resources.corning.costar.plates
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      Cor_Cos_12_wellplate_6900ul_Fb
+      Cor_Cos_24_wellplate_3470ul_Fb
+      Cor_Cos_48_wellplate_1620ul_Fb
+      Cor_Cos_6_wellplate_16800ul_Fb
+      Cor_Cos_6_wellplate_16800ul_Fb_Lid
+   
+   
+
+   
+   
+   
+
+   
+   
+   
