@@ -447,7 +447,9 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     return run_name != "-"
 
   async def _load_available_blocks(self) -> None:
-    await self._scpi_authenticate()  # in case users wants to see available blocks without setting them up
+    await (
+      self._scpi_authenticate()
+    )  # in case users wants to see available blocks without setting them up
     await self._load_num_blocks_and_type()
     assert self._num_blocks is not None, "Number of blocks not set"
     for block_id in range(self._num_blocks):
