@@ -221,7 +221,7 @@ class SerialValidator(Serial):
     pass
 
   async def write(self, data: bytes):
-    next_command = SerialCommand(**self.cr.next_command())
+    next_command = SerialCommand(**self.cr.next_command(self._port))
     if not (
       next_command.module == "serial"
       and next_command.device_id == self._port
@@ -233,18 +233,18 @@ class SerialValidator(Serial):
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    next_command = SerialCommand(**self.cr.next_command())
+    next_command = SerialCommand(**self.cr.next_command(self._port))
     if not (
       next_command.module == "serial"
       and next_command.device_id == self._port
       and next_command.action == "read"
-      and len(next_command.data) == num_bytes
+      and len(next_command.data) <= num_bytes  # we can actually read less bytes than requested
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial read {num_bytes}")
     return next_command.data.encode()
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
-    next_command = SerialCommand(**self.cr.next_command())
+    next_command = SerialCommand(**self.cr.next_command(self._port))
     if not (
       next_command.module == "serial"
       and next_command.device_id == self._port
