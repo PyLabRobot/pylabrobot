@@ -211,32 +211,39 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     self,
     ip: str,
     port: int = 7000,
-    hostname: Optional[str] = None,
+    shared_secret: Optional[bytes] = None,
+    serial_number: Optional[str] = None,
   ):
     self.ip = ip
     self.port = port
-    self.hostname = hostname
 
-    if hostname is not None:  # ssl connect
-      self.is_ssl = True
-      self.device_shared_secret = b"53rv1c3" + hostname.encode("ascii")
+    if port == 7443:
+      self.use_ssl = True
+      if shared_secret is None:
+        if serial_number is None:
+          raise ValueError("Serial number is required for SSL connection (port 7443)")
+        self.device_shared_secret = f"53rv1c3{serial_number}".encode("utf-8")
+      else:
+        self.device_shared_secret = shared_secret
 
-      ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-      ctx.check_hostname = False
-      ctx.verify_mode = ssl.CERT_NONE
-      ctx.minimum_version = ssl.TLSVersion.TLSv1
-      ctx.maximum_version = ssl.TLSVersion.TLSv1
+      ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+      ssl_context.check_hostname = False
+      ssl_context.verify_mode = ssl.CERT_NONE
+      ssl_context.minimum_version = ssl.TLSVersion.TLSv1
+      ssl_context.maximum_version = ssl.TLSVersion.TLSv1
       try:
-        ctx.set_ciphers("ALL:@SECLEVEL=0")
-      except ssl.SSLError:
+        # This is required for some legacy devices that use older ciphers or protocols
+        # that are disabled by default in newer OpenSSL versions.
+        ssl_context.set_ciphers("DEFAULT:@SECLEVEL=0")
+      except (ValueError, ssl.SSLError):
+        # This might fail on some systems/implementations, but it's worth a try
         pass
-
-      self.io = Socket(host=ip, port=port, ssl_context=ctx, server_hostname=hostname)
     else:
-      self.is_ssl = False
-      self.device_shared_secret = b"f4ct0rymt55"
-      self.io = Socket(host=ip, port=port)
+      self.use_ssl = False
+      self.device_shared_secret = shared_secret if shared_secret is not None else b"f4ct0rymt55"
+      ssl_context = None
 
+    self.io = Socket(host=ip, port=port, ssl_context=ssl_context, server_hostname=serial_number)
     self._num_blocks: Optional[int] = None
     self.num_temp_zones = 0
     self.available_blocks: List[int] = []
