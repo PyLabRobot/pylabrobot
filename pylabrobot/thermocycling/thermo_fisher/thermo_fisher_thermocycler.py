@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import logging
 import re
+import ssl
 import xml.etree.ElementTree as ET
 from abc import ABCMeta
 from base64 import b64decode
@@ -206,11 +207,36 @@ def _gen_protocol_data(
 class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   """Backend for Proflex thermocycler."""
 
-  def __init__(self, ip: str, port: int = 7000, shared_secret: bytes = b"f4ct0rymt55"):
+  def __init__(
+    self,
+    ip: str,
+    port: int = 7000,
+    hostname: Optional[str] = None,
+  ):
     self.ip = ip
     self.port = port
-    self.device_shared_secret = shared_secret
-    self.io = Socket(host=ip, port=port)
+    self.hostname = hostname
+
+    if hostname is not None: # ssl connect
+      self.is_ssl = True
+      self.device_shared_secret = b"53rv1c3" + hostname.encode("ascii")
+
+      ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+      ctx.check_hostname = False
+      ctx.verify_mode = ssl.CERT_NONE
+      ctx.minimum_version = ssl.TLSVersion.TLSv1
+      ctx.maximum_version = ssl.TLSVersion.TLSv1
+      try:
+        ctx.set_ciphers("ALL:@SECLEVEL=0")
+      except ssl.SSLError:
+        pass
+
+      self.io = Socket(host=ip, port=port, ssl_context=ctx, server_hostname=hostname)
+    else:
+      self.is_ssl = False
+      self.device_shared_secret = b"f4ct0rymt55"
+      self.io = Socket(host=ip, port=port)
+
     self._num_blocks: Optional[int] = None
     self.num_temp_zones = 0
     self.available_blocks: List[int] = []
