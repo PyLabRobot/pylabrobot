@@ -2,7 +2,6 @@ import asyncio
 import logging
 import ssl
 from dataclasses import dataclass
-from ssl import SSLContext
 from typing import TYPE_CHECKING, Optional
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
@@ -226,7 +225,7 @@ class Socket(IOBase):
           chunk = await asyncio.wait_for(self._reader.read(chunk_size), timeout=timeout)
         except asyncio.TimeoutError as exc:
           # if some previous read attempts already return some data, we should consider this a success
-          if buf:
+          if len(buf) > 0:
             break
           logger.error("read_until_eof timeout: %r", exc)
           raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
