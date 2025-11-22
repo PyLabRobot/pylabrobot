@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
 
+import ssl
 from pylabrobot.io import Socket
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
@@ -206,11 +207,43 @@ def _gen_protocol_data(
 class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   """Backend for Proflex thermocycler."""
 
-  def __init__(self, ip: str, port: int = 7000, shared_secret: bytes = b"f4ct0rymt55"):
+  def __init__(
+    self,
+    ip: str,
+    port: int = 7000,
+    shared_secret: Optional[bytes] = None,
+    serial_number: Optional[str] = None,
+  ):
     self.ip = ip
     self.port = port
-    self.device_shared_secret = shared_secret
-    self.io = Socket(host=ip, port=port)
+
+    if port == 7443:
+      self.use_ssl = True
+      if shared_secret is None:
+        if serial_number is None:
+          raise ValueError("Serial number is required for SSL connection (port 7443)")
+        self.device_shared_secret = f"53rv1c3{serial_number}".encode("utf-8")
+      else:
+        self.device_shared_secret = shared_secret
+
+      ssl_context = ssl.create_default_context()
+      ssl_context.check_hostname = False
+      ssl_context.verify_mode = ssl.CERT_NONE
+      try:
+        # This is required for some legacy devices that use older ciphers or protocols
+        # that are disabled by default in newer OpenSSL versions.
+        ssl_context.set_ciphers("DEFAULT:@SECLEVEL=0")
+      except (ValueError, ssl.SSLError):
+        # This might fail on some systems/implementations, but it's worth a try
+        pass
+    else:
+      self.use_ssl = False
+      self.device_shared_secret = (
+        shared_secret if shared_secret is not None else b"f4ct0rymt55"
+      )
+      ssl_context = None
+
+    self.io = Socket(host=ip, port=port, ssl=ssl_context)
     self._num_blocks: Optional[int] = None
     self.num_temp_zones = 0
     self.available_blocks: List[int] = []

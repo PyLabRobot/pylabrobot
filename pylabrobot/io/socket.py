@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import Any, TYPE_CHECKING, Optional
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -10,6 +10,8 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 if TYPE_CHECKING:
   from pylabrobot.io.capture import CaptureReader
+  from ssl import SSLContext
+
 
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ class Socket(IOBase):
     port: int,
     read_timeout: float = 30,
     write_timeout: float = 30,
+    ssl: Optional[SSLContext] = None,
   ):
     self._host = host
     self._port = port
@@ -43,6 +46,7 @@ class Socket(IOBase):
     self._unique_id = f"{self._host}:{self._port}"
     self._read_lock = asyncio.Lock()
     self._write_lock = asyncio.Lock()
+    self._ssl = ssl
 
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new Socket object while capture or validation is active")
@@ -51,7 +55,9 @@ class Socket(IOBase):
     await self._connect()
 
   async def _connect(self):
-    self._reader, self._writer = await asyncio.open_connection(self._host, self._port)
+    self._reader, self._writer = await asyncio.open_connection(
+      self._host, self._port, ssl=self._ssl
+    )
 
   async def stop(self):
     await self._disconnect()
@@ -213,6 +219,9 @@ class Socket(IOBase):
         try:
           chunk = await asyncio.wait_for(self._reader.read(chunk_size), timeout=timeout)
         except asyncio.TimeoutError as exc:
+          #if some previous read attempts already return some data, we should consider this a success
+          if buf:
+            break
           logger.error("read_until_eof timeout: %r", exc)
           raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
         if len(chunk) == 0:
