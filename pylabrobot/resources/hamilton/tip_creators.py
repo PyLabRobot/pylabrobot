@@ -6,7 +6,7 @@ See the TT command.
 """
 
 import enum
-from typing import Union
+from typing import Optional, Union
 
 from pylabrobot.resources.tip import Tip
 
@@ -46,6 +46,7 @@ class HamiltonTip(Tip):
     maximal_volume: float,
     tip_size: Union[TipSize, str],  # union for deserialization, will probably refactor
     pickup_method: Union[TipPickupMethod, str],  # union for deserialization, will probably refactor
+    name: Optional[str] = None,
   ):
     if isinstance(tip_size, str):
       tip_size = TipSize[tip_size]
@@ -68,6 +69,7 @@ class HamiltonTip(Tip):
       has_filter=has_filter,
       maximal_volume=maximal_volume,
       fitting_depth=fitting_depth,
+      name=name,
     )
 
     self.pickup_method = pickup_method
