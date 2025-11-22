@@ -217,7 +217,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     self.port = port
     self.hostname = hostname
 
-    if hostname is not None: # ssl connect
+    if hostname is not None:  # ssl connect
       self.is_ssl = True
       self.device_shared_secret = b"53rv1c3" + hostname.encode("ascii")
 
