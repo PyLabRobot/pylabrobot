@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import logging
 import re
+import ssl
 import xml.etree.ElementTree as ET
 from abc import ABCMeta
 from base64 import b64decode
@@ -10,7 +11,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
 
-import ssl
 from pylabrobot.io import Socket
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import LidStatus, Protocol, Stage, Step
@@ -238,9 +238,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
         pass
     else:
       self.use_ssl = False
-      self.device_shared_secret = (
-        shared_secret if shared_secret is not None else b"f4ct0rymt55"
-      )
+      self.device_shared_secret = shared_secret if shared_secret is not None else b"f4ct0rymt55"
       ssl_context = None
 
     self.io = Socket(host=ip, port=port, ssl=ssl_context)
