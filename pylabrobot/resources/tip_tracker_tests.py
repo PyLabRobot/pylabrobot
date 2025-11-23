@@ -18,6 +18,7 @@ class TestTipTracker(unittest.TestCase):
       total_tip_length=10,
       maximal_volume=10,
       fitting_depth=10,
+      name="test_tip",
     )
 
   def test_init(self):
