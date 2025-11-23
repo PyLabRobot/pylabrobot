@@ -58,8 +58,9 @@ def load_ot_tip_rack(
       well_size_x = well_size_y = round(diameter / math.sqrt(2), 3)
 
       # closure
-      def make_tip() -> Tip:
+      def make_tip(name: str) -> Tip:
         return Tip(
+          name=name,
           total_tip_length=data["parameters"]["tipLength"],
           has_filter="Filter" in data["metadata"]["displayName"],
           maximal_volume=well_data["totalLiquidVolume"],

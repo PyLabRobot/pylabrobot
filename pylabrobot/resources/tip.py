@@ -16,7 +16,7 @@ class Tip:
     total_tip_length: total length of the tip, in in mm
     maximal_volume: maximal volume of the tip, in ul
     fitting_depth: the overlap between the tip and the pipette, in mm
-    name: optional identifier for this individual tip
+    name: optional identifier for this tip
   """
 
   has_filter: bool
@@ -48,7 +48,14 @@ class Tip:
     }
 
   def __hash__(self):
-    return hash(repr(self))
+    return hash(
+      (
+        self.has_filter,
+        self.total_tip_length,
+        self.maximal_volume,
+        self.fitting_depth,
+      )
+    )
 
   def __eq__(self, other: object) -> bool:
     if not isinstance(other, Tip):
@@ -62,4 +69,4 @@ class Tip:
     )
 
 
-TipCreator = Callable[[], Tip]
+TipCreator = Callable[[str], Tip]

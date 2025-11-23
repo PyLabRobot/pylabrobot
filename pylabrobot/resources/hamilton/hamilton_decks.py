@@ -505,6 +505,12 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
       )
 
+    if core_grippers is not None and not with_teaching_rack:
+      raise ValueError(
+        "core_grippers can only be added when with_teaching_rack is True, "
+        "as they are attached to the waste block."
+      )
+
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
       waste_block.assign_child_resource(

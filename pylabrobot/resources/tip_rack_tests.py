@@ -13,7 +13,7 @@ class SimpleTipRack(TipRack):
       name="A1",
       size_x=1.0,
       size_y=1.0,
-      make_tip=lambda: Tip(False, 10.0, 10.0, 1.0),
+      make_tip=lambda name: Tip(False, 10.0, 10.0, 1.0, name=name),
     )
     spot.location = Coordinate(0.0, 0.0, 0.0)
     ordered_items = {"A1": spot}
@@ -33,8 +33,8 @@ class TipRackNamingTests(unittest.TestCase):
     rack = SimpleTipRack("my_rack")
     spot = rack.get_item("A1")
 
-    tip1 = spot.create_tip()
-    tip2 = spot.create_tip()
+    tip1 = spot.make_tip()
+    tip2 = spot.make_tip()
 
     self.assertIsNotNone(tip1.name)
     self.assertIsNotNone(tip2.name)

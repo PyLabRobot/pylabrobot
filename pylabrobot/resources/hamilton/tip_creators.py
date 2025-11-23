@@ -76,8 +76,10 @@ class HamiltonTip(Tip):
     self.tip_size = tip_size
 
   def __repr__(self) -> str:
+    name_field = f"'{self.name}'" if self.name is not None else "None"
     return (
-      f"HamiltonTip({self.tip_size.name}, "
+      f"HamiltonTip(name={name_field}, "
+      f"tip_size={self.tip_size.name}, "
       f"has_filter={self.has_filter}, "
       f"maximal_volume={self.maximal_volume}, "
       f"fitting_depth={self.fitting_depth}, "
@@ -97,6 +99,7 @@ class HamiltonTip(Tip):
   @classmethod
   def deserialize(cls, data):
     return HamiltonTip(
+      name=data["name"],
       has_filter=data["has_filter"],
       total_tip_length=data["total_tip_length"],
       maximal_volume=data["maximal_volume"],
@@ -105,9 +108,10 @@ class HamiltonTip(Tip):
     )
 
 
-def standard_volume_tip_no_filter() -> HamiltonTip:
+def standard_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
   """Standard volume tip without a filter (`tt00` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=False,
     total_tip_length=59.9,  # 60 in the ctr file, but 59.9 in the log file (519-80)/10
     maximal_volume=400,
@@ -116,9 +120,10 @@ def standard_volume_tip_no_filter() -> HamiltonTip:
   )
 
 
-def standard_volume_tip_with_filter() -> HamiltonTip:
+def standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """Standard volume tip without a filter (`tt01` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=59.9,  # 60 in the ctr file, but 59.9 in the log file (519+80)/10
     maximal_volume=360,
@@ -127,9 +132,10 @@ def standard_volume_tip_with_filter() -> HamiltonTip:
   )
 
 
-def slim_standard_volume_tip_with_filter() -> HamiltonTip:
+def slim_standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """Slim standard volume tip without a filter"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=94.8,
     maximal_volume=360,
@@ -138,9 +144,10 @@ def slim_standard_volume_tip_with_filter() -> HamiltonTip:
   )
 
 
-def low_volume_tip_no_filter() -> HamiltonTip:
+def low_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
   """Low volume tip with a filter (`tt02` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=False,
     total_tip_length=29.9,
     maximal_volume=15,
@@ -149,9 +156,10 @@ def low_volume_tip_no_filter() -> HamiltonTip:
   )
 
 
-def low_volume_tip_with_filter() -> HamiltonTip:
+def low_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """Low volume tip with a filter  (`tt03` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=29.9,
     maximal_volume=10,
@@ -160,9 +168,10 @@ def low_volume_tip_with_filter() -> HamiltonTip:
   )
 
 
-def high_volume_tip_no_filter() -> HamiltonTip:
+def high_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
   """High volume tip without a filter (`tt04` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=False,
     total_tip_length=95.1,
     maximal_volume=1250,
@@ -171,9 +180,10 @@ def high_volume_tip_no_filter() -> HamiltonTip:
   )
 
 
-def high_volume_tip_with_filter() -> HamiltonTip:
+def high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """High volume tip with a filter (`tt05` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=95.1,  # 95 in the ctr file, but 95.1 in the log file (871-80)/10
     maximal_volume=1065,
@@ -182,9 +192,10 @@ def high_volume_tip_with_filter() -> HamiltonTip:
   )
 
 
-def wide_high_volume_tip_with_filter() -> HamiltonTip:
+def wide_high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """Wide bore (1.20 mm) high volume tip with a filter, Hamilton P/N 235677"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=91.95,  # Measured
     maximal_volume=1065,
@@ -193,9 +204,10 @@ def wide_high_volume_tip_with_filter() -> HamiltonTip:
   )
 
 
-def ultrawide_high_volume_tip_with_filter() -> HamiltonTip:
+def ultrawide_high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """Ultra wide bore (3.20 mm) high volume tip with a filter, Hamilton P/N 235541"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=80.0,  # Measured
     maximal_volume=1065,
@@ -204,9 +216,10 @@ def ultrawide_high_volume_tip_with_filter() -> HamiltonTip:
   )
 
 
-def four_ml_tip_with_filter() -> HamiltonTip:
+def four_ml_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """4mL tip with a filter (`tt29` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=116,
     maximal_volume=4367,
@@ -215,9 +228,10 @@ def four_ml_tip_with_filter() -> HamiltonTip:
   )
 
 
-def five_ml_tip_with_filter() -> HamiltonTip:
+def five_ml_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """5mL tip with a filter (`tt25` in venus)"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=116,
     maximal_volume=5420,
@@ -226,7 +240,7 @@ def five_ml_tip_with_filter() -> HamiltonTip:
   )
 
 
-def five_ml_tip() -> HamiltonTip:
+def five_ml_tip(name: Optional[str] = None) -> HamiltonTip:
   """5mL tip without a filter (`tt25` in venus)
 
   This tip type is copied from five_ml_tip_with_filter, but the filter is set to False. I'm not sure
@@ -234,6 +248,7 @@ def five_ml_tip() -> HamiltonTip:
   """
 
   return HamiltonTip(
+    name=name,
     has_filter=False,
     total_tip_length=116,
     maximal_volume=5420,
@@ -242,9 +257,10 @@ def five_ml_tip() -> HamiltonTip:
   )
 
 
-def fifty_ul_tip_with_filter() -> HamiltonTip:
+def fifty_ul_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
   """50 ul tip with a filter (Hamilton cat. no.: 235948)"""
   return HamiltonTip(
+    name=name,
     has_filter=True,
     total_tip_length=50.4,
     maximal_volume=60,
@@ -253,9 +269,10 @@ def fifty_ul_tip_with_filter() -> HamiltonTip:
   )
 
 
-def fifty_ul_tip_no_filter() -> HamiltonTip:
+def fifty_ul_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
   """50 ul tip with a filter (Hamilton cat. no.: 235966)"""
   return HamiltonTip(
+    name=name,
     has_filter=False,
     total_tip_length=50.4,
     maximal_volume=65,

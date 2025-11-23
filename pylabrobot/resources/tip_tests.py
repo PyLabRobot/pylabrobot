@@ -13,12 +13,12 @@ class TipTests(unittest.TestCase):
   """Test for tip classes."""
 
   def test_serialize(self):
-    tip = Tip(False, 10.0, 10.0, 1.0)
+    tip = Tip(False, 10.0, 10.0, 1.0, name="test_tip")
     self.assertEqual(
       serialize(tip),
       {
         "type": "Tip",
-        "name": None,
+        "name": "test_tip",
         "has_filter": False,
         "total_tip_length": 10.0,
         "maximal_volume": 10.0,
@@ -27,7 +27,7 @@ class TipTests(unittest.TestCase):
     )
 
   def test_deserialize(self):
-    tip = Tip(False, 10.0, 10.0, 1.0)
+    tip = Tip(False, 10.0, 10.0, 1.0, name="test_tip")
     self.assertEqual(deserialize(serialize(tip)), tip)
 
   def test_serialize_subclass(self):
