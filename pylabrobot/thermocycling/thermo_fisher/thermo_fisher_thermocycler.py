@@ -890,7 +890,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     await self._load_num_blocks_and_type()
     if blocks_to_setup is None:
       await self._load_available_blocks()
-      if not self.available_blocks:
+      if len(self.available_blocks) == 0:
         raise ValueError("No available blocks. Set blocks_to_setup to force setup")
     else:
       self.available_blocks = blocks_to_setup
