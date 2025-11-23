@@ -451,14 +451,16 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     return run_name != "-"
 
   async def _load_available_blocks(self) -> None:
-    await self._scpi_authenticate()  # TODO: again?
+    await (
+      self._scpi_authenticate()
+    )  # in case users wants to see available blocks without setting them up
     await self._load_num_blocks_and_type()
     assert self._num_blocks is not None, "Number of blocks not set"
     for block_id in range(self._num_blocks):
       block_error = await self.get_error(block_id=block_id)
       if block_error != "0":
         raise ValueError(f"Block {block_id} has error: {block_error}")
-      if await self.is_block_running(block_id=block_id):
+      if not await self.is_block_running(block_id=block_id):
         if block_id not in self.available_blocks:
           self.available_blocks.append(block_id)
 
@@ -888,6 +890,8 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     await self._load_num_blocks_and_type()
     if blocks_to_setup is None:
       await self._load_available_blocks()
+      if len(self.available_blocks) == 0:
+        raise ValueError("No available blocks. Set blocks_to_setup to force setup")
     else:
       self.available_blocks = blocks_to_setup
     for block_index in self.available_blocks:
