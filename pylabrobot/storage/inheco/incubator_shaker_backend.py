@@ -92,8 +92,8 @@ FIRMWARE_ERROR_MAP: Dict[int, str] = {
 }
 
 
-class InhecoIncubatorShakerBackend:
-  """Interface for INHECO Incubator Shaker stack machines.
+class InhecoIncubatorShakerStackBackend:
+  """Interface for Inheco Incubator Shaker stack machines.
 
   Handles:
     - USB/serial connection setup via VID/PID
@@ -110,7 +110,7 @@ class InhecoIncubatorShakerBackend:
     Unified logging with a clear device tag and optional direction marker.
     direction: "→" for TX, "←" for RX, None for neutral.
     """
-    prefix = f"[INHECO IncShak dip={self.dip_switch_id}"
+    prefix = f"[Inheco IncShak dip={self.dip_switch_id}"
     if direction:
       prefix += f" {direction}"
     self.logger.log(level, f"{prefix} {message}")
@@ -191,7 +191,8 @@ class InhecoIncubatorShakerBackend:
 
     else:  # Multiple devices found
       raise RuntimeError(
-        f"Multiple INHECO devices detected with VID:PID {self.id_vendor}:{self.id_product}. "
+        f"Multiple INHECO devices detected with VID:PID {self.id_vendor}:{self.id_product}.\n"
+        f" Detected ports: {matching_ports}\n"
         "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
       )
 
@@ -899,7 +900,7 @@ class InhecoIncubatorShakerBackend:
     if target_temp is None:
       raise ValueError("Device did not return a valid target temperature.")
 
-    temperature_control_enabled = await self.is_temperature_control_enabled()
+    temperature_control_enabled = await self.is_temperature_control_enabled(stack_index=stack_index)
     if not temperature_control_enabled:
       raise ValueError(
         f"Temperature control is not enabled on the machine ({self.incubator_type})."
@@ -930,7 +931,7 @@ class InhecoIncubatorShakerBackend:
 
       if diff <= tolerance:
         if show_progress_bar:
-          sys.stdout.write("\n✅ Target temperature reached.\n")
+          sys.stdout.write("\n[OK] Target temperature reached.\n")
           sys.stdout.flush()
 
         self._log(logging.INFO, f"Target temperature reached ({current_temp:.2f} °C).")
@@ -940,7 +941,7 @@ class InhecoIncubatorShakerBackend:
         elapsed = asyncio.get_event_loop().time() - start_time
         if elapsed > timeout_s:
           if show_progress_bar:
-            sys.stdout.write("\n❌ Timeout waiting for temperature.\n")
+            sys.stdout.write("\n[ERROR] Timeout waiting for temperature.\n")
             sys.stdout.flush()
 
           raise TimeoutError(
@@ -1643,7 +1644,7 @@ class InhecoIncubatorShakerUnit:
         TimeoutError: If target not reached within `timeout_s`.
         ValueError: If temperature control is not enabled or no valid target returned.
     """
-    await self.get_temperature(
+    await self.backend.wait_for_temperature(
       stack_index=self.index,
       sensor=sensor,
       tolerance=tolerance,

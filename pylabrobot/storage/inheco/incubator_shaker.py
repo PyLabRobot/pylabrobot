@@ -3,7 +3,7 @@ from typing import Dict
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
-from pylabrobot.storage.inheco import InhecoIncubatorShakerBackend, InhecoIncubatorShakerUnit
+from pylabrobot.storage.inheco import InhecoIncubatorShakerStackBackend, InhecoIncubatorShakerUnit
 
 
 class IncubatorShakerStack(Resource, Machine):
@@ -14,7 +14,7 @@ class IncubatorShakerStack(Resource, Machine):
   - Handles sequential (not concurrent) setup/teardown across all units.
   """
 
-  def __init__(self, backend: InhecoIncubatorShakerBackend):
+  def __init__(self, backend: InhecoIncubatorShakerStackBackend):
     Resource.__init__(
       self,
       name="inheco_incubator_shaker_stack",
@@ -25,7 +25,7 @@ class IncubatorShakerStack(Resource, Machine):
     )
 
     Machine.__init__(self, backend=backend)
-    self.backend: InhecoIncubatorShakerBackend = backend
+    self.backend: InhecoIncubatorShakerStackBackend = backend
     self.units: Dict[int, InhecoIncubatorShakerUnit] = {}
     self.loading_trays: Dict[int, ResourceHolder] = {}
 
@@ -42,7 +42,7 @@ class IncubatorShakerStack(Resource, Machine):
     return self._size_z
 
   # ------------------------------------------------------------------------
-  # Lifecycle
+  # Lifecycle & Resource setup
   # ------------------------------------------------------------------------
 
   incubator_size_z_dict = {
@@ -52,10 +52,31 @@ class IncubatorShakerStack(Resource, Machine):
     "incubator_shaker_dwp": 139,
   }
   incubator_loading_tray_location = {  # TODO: rough measurements, verify
-    "incubator_mp": None,
+    "incubator_mp": None,  # TODO: add when available
     "incubator_shaker_mp": Coordinate(x=30.5, y=-150.5, z=51.2),
-    "incubator_dwp": None,
+    "incubator_dwp": None,  # TODO: add when available
     "incubator_shaker_dwp": Coordinate(x=30.5, y=-150.5, z=51.2),
+  }
+
+  possible_tray_y_coordinates = {
+    "open": -150.5,  # TODO: verify by careful testing in controlled geometry setup
+    "closed": +24.0,
+  }
+
+  chamber_z_clearance = 2
+
+  acceptable_plate_z_dimensions = {
+    "incubator_mp": 18 - chamber_z_clearance,
+    "incubator_shaker_mp": 50 - chamber_z_clearance,
+    "incubator_dwp": 18 - chamber_z_clearance,
+    "incubator_shaker_dwp": 53 - chamber_z_clearance,
+  }
+
+  incubator_power_credits_per_type = {
+    "incubator_mp": 1.0,
+    "incubator_dwp": 1.25,
+    "incubator_shaker_mp": 1.6,
+    "incubator_shaker_dwp": 2.5,
   }
 
   async def setup(self, verbose: bool = False):
@@ -65,6 +86,8 @@ class IncubatorShakerStack(Resource, Machine):
 
     self.num_units = self.backend.number_of_connected_units
     self.unit_composition = self.backend.unit_composition
+
+    self.power_credit = 0.0
 
     # Calculate true stack size
     stack_size_z = 0.0
@@ -76,6 +99,7 @@ class IncubatorShakerStack(Resource, Machine):
 
       # Create loading tray resources and calculate their locations
       unit_type = self.unit_composition[i]
+      self.power_credit += self.incubator_power_credits_per_type[unit_type]
       unit_size_z = self.incubator_size_z_dict[unit_type]
 
       loading_tray = ResourceHolder(
@@ -87,32 +111,59 @@ class IncubatorShakerStack(Resource, Machine):
         loading_tray,
         location=Coordinate(
           x=self.incubator_loading_tray_location[unit_type].x,
-          y=self.incubator_loading_tray_location[unit_type].y,
-          z=stack_size_z + self.incubator_loading_tray_location[unit_type].z
+          y=self.possible_tray_y_coordinates[
+            "closed"
+          ],  # setup finishes with all loading trays closed
+          z=stack_size_z + self.incubator_loading_tray_location[unit_type].z,
         ),
       )
       stack_size_z += unit_size_z
 
     self._size_z = stack_size_z
 
+    assert (
+      self.power_credit < 5
+    ), f"Too many units: unit composition {self.unit_composition} is exceeding 5 power credit limit. Reduce number of units."
+
   async def stop(self):
     """Gracefully stop backend communication."""
     await self.backend.stop()
 
   @property
-  def loading_tray_status(self) -> dict:
+  async def loading_tray_status(self) -> dict:
     """Carche of loading tray status for all units."""
-    return self.backend.loading_tray_status
+
+    loading_tray_status_dict = {}
+    for unit_index in range(self.num_units):
+      # Update loading tray status for each unit
+      resp = await self.backend.request_drawer_status(stack_index=unit_index)
+      loading_tray_status_dict[unit_index] = resp
+
+    return loading_tray_status_dict
 
   @property
-  def temperature_control_status(self) -> dict:
+  async def temperature_control_status(self) -> dict:
     """Cache of temperature control status for all units."""
-    return self.backend.temperature_control_status
+
+    temperature_control_status_dict = {}
+    for unit_index in range(self.num_units):
+      # Update temperature control status for each unit
+      resp = await self.backend.is_temperature_control_enabled(stack_index=unit_index)
+      temperature_control_status_dict[unit_index] = resp
+
+    return temperature_control_status_dict
 
   @property
-  def shaking_status(self) -> dict:
+  async def shaking_status(self) -> dict:
     """Cache of shaking status for all units."""
-    return self.backend.shaking_status
+
+    shaking_status_dict = {}
+    for unit_index in range(self.num_units):
+      # Update shaking status for each unit
+      resp = await self.backend.is_shaking_enabled(stack_index=unit_index)
+      shaking_status_dict[unit_index] = resp
+
+    return shaking_status_dict
 
   # ------------------------------------------------------------------------
   # Stack to unit master commands
