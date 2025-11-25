@@ -3,7 +3,8 @@ from typing import Dict
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
-from pylabrobot.storage.inheco import InhecoIncubatorShakerStackBackend, InhecoIncubatorShakerUnit
+
+from .incubator_shaker_backend import InhecoIncubatorShakerStackBackend, InhecoIncubatorShakerUnit
 
 
 class IncubatorShakerStack(Resource, Machine):
@@ -129,9 +130,8 @@ class IncubatorShakerStack(Resource, Machine):
     """Gracefully stop backend communication."""
     await self.backend.stop()
 
-  @property
-  async def loading_tray_status(self) -> dict:
-    """Carche of loading tray status for all units."""
+  async def request_loading_tray_states(self) -> dict:
+    """Request loading tray states for all units."""
 
     loading_tray_status_dict = {}
     for unit_index in range(self.num_units):
@@ -141,9 +141,8 @@ class IncubatorShakerStack(Resource, Machine):
 
     return loading_tray_status_dict
 
-  @property
-  async def temperature_control_status(self) -> dict:
-    """Cache of temperature control status for all units."""
+  async def request_temperature_control_states(self) -> dict:
+    """Request temperature control states for all units."""
 
     temperature_control_status_dict = {}
     for unit_index in range(self.num_units):
@@ -153,9 +152,8 @@ class IncubatorShakerStack(Resource, Machine):
 
     return temperature_control_status_dict
 
-  @property
-  async def shaking_status(self) -> dict:
-    """Cache of shaking status for all units."""
+  async def request_shaking_states(self) -> dict:
+    """Request shaking states for all units."""
 
     shaking_status_dict = {}
     for unit_index in range(self.num_units):
