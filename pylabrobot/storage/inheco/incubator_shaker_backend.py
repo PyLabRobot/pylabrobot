@@ -257,28 +257,12 @@ class InhecoIncubatorShakerStackBackend:
     self.number_of_connected_units = await self.request_number_of_connected_machines(stack_index=0)
 
     self.unit_composition = {}
-    self.loading_tray_status = {}
-    self.temperature_control_status = {}
-    self.shaking_status = {}
 
     for unit_index in range(self.number_of_connected_units):
       inc_type = await self.request_incubator_type(stack_index=unit_index)
       self.unit_composition[unit_index] = inc_type
 
       await self.initialize(stack_index=unit_index)
-
-      self.loading_tray_status[unit_index] = await self.request_drawer_status(
-        stack_index=unit_index
-      )
-
-      self.temperature_control_status[unit_index] = await self.is_temperature_control_enabled(
-        stack_index=unit_index
-      )
-
-      if "shaker" in inc_type:
-        self.shaking_status[unit_index] = await self.is_shaking_enabled(stack_index=unit_index)
-      else:
-        self.shaking_status[unit_index] = False
 
     self.setup_finished = True
 
@@ -293,13 +277,20 @@ class InhecoIncubatorShakerStackBackend:
     self._log(logging.INFO, msg)
 
   async def stop(self):
-    """Close serial connection."""
+    """Close serial connection & stop all active units the stack."""
 
     for unit_index in range(self.number_of_connected_units):
-      if self.temperature_control_status[unit_index]:
+
+      temp_status = await self.is_temperature_control_enabled(stack_index=unit_index)
+
+      if temp_status:
+        print(f"Stopping temperature control on unit {unit_index}...")
         await self.stop_temperature_control(stack_index=unit_index)
 
-      if self.shaking_status[unit_index]:
+      shake_status = await self.is_shaking_enabled(stack_index=unit_index)
+
+      if shake_status:
+        print(f"Stopping shaking on unit {unit_index}...")
         await self.stop_shaking(stack_index=unit_index)
 
     if self.io:
@@ -678,12 +669,10 @@ class InhecoIncubatorShakerStackBackend:
   async def open(self, stack_index: int) -> None:
     """Open the incubator door & move loading tray out."""
     await self.send_command("AOD", stack_index=stack_index)
-    self.loading_tray_status[stack_index] = "open"
 
   async def close(self, stack_index: int) -> None:
     """Move the loading tray in & close the incubator door."""
     await self.send_command("ACD", stack_index=stack_index)
-    self.loading_tray_status[stack_index] = "closed"
 
   async def request_drawer_status(self, stack_index: int) -> str:
     """Report the current drawer (loading tray) status.
@@ -696,10 +685,8 @@ class InhecoIncubatorShakerStackBackend:
     """
     resp = await self.send_command("RDS", stack_index=stack_index)
     if resp == "1":
-      self.loading_tray_status[stack_index] = "open"
       return "open"
     elif resp == "0":
-      self.loading_tray_status[stack_index] = "closed"
       return "closed"
     else:
       raise ValueError(f"Unexpected RDS response: {resp!r}")
@@ -759,8 +746,6 @@ class InhecoIncubatorShakerStackBackend:
     """
     await self.send_command("SHE0", stack_index=stack_index)
 
-    self.temperature_control_status[stack_index] = False
-
   async def get_temperature(
     self,
     stack_index: int,
@@ -808,7 +793,7 @@ class InhecoIncubatorShakerStackBackend:
       raise InhecoError("RHE", "E00", f"Invalid heater status value: {status}")
 
     enabled = status in (1, 2)
-    self.temperature_control_status[stack_index] = enabled
+
     return enabled
 
   async def request_pid_controller_coefficients(self, stack_index: int) -> tuple[float, float]:
@@ -924,9 +909,22 @@ class InhecoIncubatorShakerStackBackend:
       bar = "█" * filled + "-" * (bar_width - filled)
 
       if show_progress_bar:
-        sys.stdout.write(
-          f"\r[{bar}] {current_temp:.2f} °C " f"(Δ={diff:.2f} °C, target={target_temp:.2f} °C)"
-        )
+        # Compute slope (°C/sec) based on direction of travel
+        delta_total = abs(target_temp - first_temp)
+        delta_done = abs(current_temp - first_temp)
+
+        elapsed = asyncio.get_event_loop().time() - start_time
+
+        slope = delta_done / max(elapsed, 1e-6)  # °C per second
+
+        if slope > 0.0001:
+          remaining = diff  # remaining °C
+          eta_s = remaining / slope
+          eta_str = f"{eta_s:6.1f}s"
+        else:
+          eta_str = "   --- "
+
+        sys.stdout.write(f"\r[{bar}] {current_temp:.2f} °C  " f"(Δ={diff:.2f} °C | ETA: {eta_str})")
         sys.stdout.flush()
 
       if diff <= tolerance:
@@ -1051,7 +1049,6 @@ class InhecoIncubatorShakerStackBackend:
     resp = await self.send_command(f"RAY{selector}", stack_index=stack_index)
     return float(resp) / 10.0  # firmware reports in 1/10 mm
 
-  @requires_incubator_shaker
   async def is_shaking_enabled(self, stack_index: int) -> bool:
     """Return True if the shaker is currently enabled or still decelerating.
 
@@ -1064,23 +1061,27 @@ class InhecoIncubatorShakerStackBackend:
         bool: True if the shaker is active or still moving (status 1 or 2),
             False if fully stopped (status 0).
     """
-    resp = await self.send_command("RSE", stack_index=stack_index)
-    try:
-      status = int(resp)
-    except ValueError:
-      raise InhecoError("RSE", "E00", f"Unexpected response: {resp!r}")
 
-    if status not in (0, 1, 2):
-      raise InhecoError("RSE", "E00", f"Invalid shaker status value: {status}")
+    incubator_type = await self.request_incubator_type(stack_index=stack_index)
 
-    answer = status in (1, 2)  # TODO: discuss whether 2 should count as "shaking"
+    if "shaker" in incubator_type:
 
-    if answer:
-      self.shaking_status[stack_index] = True
+      resp = await self.send_command("RSE", stack_index=stack_index)
+
+      try:
+        status = int(resp)
+      except ValueError:
+        raise InhecoError("RSE", "E00", f"Unexpected response: {resp!r}")
+
+      if status not in (0, 1, 2):
+        raise InhecoError("RSE", "E00", f"Invalid shaker status value: {status}")
+
+      answer = status in (1, 2)  # TODO: discuss whether 2 should count as "shaking"
+
+      return answer
+    
     else:
-      self.shaking_status[stack_index] = False
-
-    return answer
+      return False
 
   @requires_incubator_shaker
   async def set_shaker_parameters(
@@ -1333,7 +1334,6 @@ class InhecoIncubatorShakerStackBackend:
 
     await self.set_shaker_status(False, stack_index=stack_index)
 
-    self.shaking_status[stack_index] = False
 
   @requires_incubator_shaker
   async def request_shaker_phase_shift(self, stack_index: int, selector: int = 0) -> float:
@@ -1377,16 +1377,37 @@ class InhecoIncubatorShakerStackBackend:
   # # # Self-Test # # #
 
   async def perform_self_test(self, stack_index: int, read_timeout: int = 500) -> str:
-    """Execute the internal self-test routine."""
+    """Execute the internal self-test routine.
 
-    plate_in = await self.send_command("RLW", stack_index=stack_index)
-    if plate_in == "1":
+    Normal Testing-Time: ca. 3 minutes (Beware of timeouts!)
+    Maximum Testing-Time: 465 sec. (Beware of timeouts!)
+    The Test must be performed without a Labware inside!
+    The Error code is reported as an 11-Bit-Code. A set bit (1) represents an Error. The Test stops
+    immediately, when the Drawer-Test fails to avoid damage to the device!
+    Please note the AQS was developed for the Incubator Shaker MP. This can lead assemblies to
+    DWP Incubators that the result of the AQS, due to the design, 8 (bit2) could be.
+
+    The Error Code means for example:
+    16(d) = 0001 0000(b)  Error at Bit 4. During Shaker-Test the Y-Axis doesn’t reach desired Amplitude.
+    """
+
+    plate_in_status = await self.request_plate_in_incubator(stack_index=stack_index)
+
+    loading_tray_status = await self.request_drawer_status(stack_index=stack_index)
+
+    if plate_in_status:
       raise ValueError("Self-test requires an empty incubator.")
 
-    elif self.loading_tray_status[stack_index] == "open":
+    elif loading_tray_status == "open":
       raise ValueError("Self-test requires a closed loading tray.")
 
-    return await self.send_command("AQS", stack_index=stack_index, read_timeout=read_timeout)
+    resp = await self.send_command("AQS", stack_index=stack_index, read_timeout=read_timeout)
+
+    resp_decimal = int(resp)
+
+    assert 0 <= resp_decimal <= 2047, f"Invalid self-test response received: {resp!r}"
+
+    return bin(resp_decimal)[2:].zfill(11)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
