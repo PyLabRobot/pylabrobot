@@ -6935,7 +6935,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:CI) Identify carrier (determine carrier type)
 
   async def request_single_carrier_presence(self, carrier_position: int):
-    """Request single carrier presence
+    """Request single carrier presence on the loading tray (not on deck)
 
     Args:
       carrier_position: Carrier position (slot number)
@@ -6955,7 +6955,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert resp is not None
     return resp["ct"] == 1
 
-  # Move autoload/scanner X-drive into slot number
   async def move_autoload_to_slot(self, slot_number: int):
     """Move autoload to specific slot/track position"""
 
@@ -6964,7 +6963,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="I0", command="XP", xp=slot_no_as_safe_str)
 
-  # Park autoload
   async def park_autoload(self):
     """Park autoload"""
 
@@ -7003,9 +7001,64 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
+  barcode_1d_symbology_dict = {
+      "ISBT Standard": "70",
+      "Code 128 (Subset B and C)": "71",
+      "Code 39": "72",
+      "Codebar": "73",
+      "Code 2of5 Interleaved": "74",
+      "UPC A/E": "75",
+      "YESN/EAN 8": "76",
+      "Code 93": "",
+    }
+
+  async def set_1d_barcode_type(self, barcode_symbology: Literal[
+      "ISBT Standard",
+      "Code 128 (Subset B and C)",
+      "Code 39",
+      "Codebar",
+      "Code 2of5 Interleaved",
+      "UPC A/E",
+      "YESN/EAN 8",
+      "Code 93",
+    ] = "Code 128 (Subset B and C)",):
+    """Set 1D barcode type for autoload barcode reading."""
+
+    await self.send_command(
+        module="C0",
+        command="CB",
+        bt=self.barcode_1d_symbology_dict[barcode_symbology],
+      )
+
+  async def take_carrier_out_to_identification_position(self, carrier: Carrier):
+    """Take carrier out to identification position for barcode reading.
+    Start: carrier is already on the deck
+    """
+
+    # Identify carrier end rail
+    track_width = 22.5
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
+    carrier_end_rail = int(carrier_width / track_width)
+    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+
+    carrier_on_loading_tray = await self.request_single_carrier_presence(carrier_end_rail)
+
+    if not carrier_on_loading_tray:
+
+      resp = await self.send_command(
+        module="C0",
+        command="CN",
+        cp=str(carrier_end_rail).zfill(2),
+      )
+
+    else:
+      raise ValueError(f"Carrier is already on the loading tray at position {carrier_end_rail}.")
+
+
   async def load_carrier(
     self,
     carrier: Carrier,
+    carrier_barcode_reading: bool = True,
     barcode_reading: bool = False,
     barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
     barcode_symbology: Literal[
@@ -7038,16 +7091,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "vertical": "0",
       "horizontal": "1",
     }
-    barcode_symbology_dict = {
-      "ISBT Standard": "70",
-      "Code 128 (Subset B and C)": "71",
-      "Code 39": "72",
-      "Codebar": "73",
-      "Code 2of5 Interleaved": "74",
-      "UPC A/E": "75",
-      "YESN/EAN 8": "76",
-      "Code 93": "",
-    }
+    
     # Identify carrier end rail
     track_width = 22.5
     carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
@@ -7065,17 +7109,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     # Set carrier type for identification purposes
-    await self.send_command(module="C0", command="CI", cp=carrier_end_rail_str)
+    if carrier_barcode_reading:
+      await self.send_command(module="C0", command="CI", cp=carrier_end_rail_str)
 
     # Load carrier
     # with barcoding
     if barcode_reading:
       # Choose barcode symbology
-      await self.send_command(
-        module="C0",
-        command="CB",
-        bt=barcode_symbology_dict[barcode_symbology],
-      )
+      await self.set_1d_barcode_type(barcode_symbology=barcode_symbology)
+
       # Load and read out barcodes
       resp = await self.send_command(
         module="C0",
