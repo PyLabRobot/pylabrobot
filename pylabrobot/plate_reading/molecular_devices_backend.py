@@ -520,7 +520,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     dy = loc_A1.y - loc_B1.y
 
     x_pos_cmd = f"!XPOS {top_left_well_center.x:.3f} {dx:.3f} {num_cols}"
-    y_pos_cmd = f"!YPOS {size_y-top_left_well_center.y:.3f} {dy:.3f} {num_rows}"
+    y_pos_cmd = f"!YPOS {size_y - top_left_well_center.y:.3f} {dy:.3f} {num_rows}"
     await self.send_command(x_pos_cmd)
     await self.send_command(y_pos_cmd)
 
