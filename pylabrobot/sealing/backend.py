@@ -7,16 +7,13 @@ class SealerBackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a sealer machine"""
 
   @abstractmethod
-  async def seal(self, temperature: int, duration: float):
-    ...
+  async def seal(self, temperature: int, duration: float): ...
 
   @abstractmethod
-  async def open(self):
-    ...
+  async def open(self): ...
 
   @abstractmethod
-  async def close(self):
-    ...
+  async def close(self): ...
 
   @abstractmethod
   async def set_temperature(self, temperature: float):

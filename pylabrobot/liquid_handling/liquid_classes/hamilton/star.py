@@ -3310,37 +3310,37 @@ star_mapping[(5000, False, True, False, Liquid.DMSO, True, False)] = (
 )
 
 
-star_mapping[(5000, False, True, False, Liquid.DMSO, True, True)] = (
-  _5mlT_DMSO_DispenseJet_Empty
-) = HamiltonLiquidClass(
-  curve={
-    500.0: 540.0,
-    50.0: 62.0,
-    5000.0: 5095.0,
-    4000.0: 4075.0,
-    0.0: 0.0,
-    3000.0: 3065.0,
-    100.0: 117.0,
-    2000.0: 2060.0,
-    1000.0: 1060.0,
-  },
-  aspiration_flow_rate=2000.0,
-  aspiration_mix_flow_rate=500.0,
-  aspiration_air_transport_volume=20.0,
-  aspiration_blow_out_volume=50.0,
-  aspiration_swap_speed=2.0,
-  aspiration_settling_time=1.0,
-  aspiration_over_aspirate_volume=0.0,
-  aspiration_clot_retract_height=0.0,
-  dispense_flow_rate=1000.0,
-  dispense_mode=3.0,
-  dispense_mix_flow_rate=100.0,
-  dispense_air_transport_volume=20.0,
-  dispense_blow_out_volume=50.0,
-  dispense_swap_speed=1.0,
-  dispense_settling_time=0.0,
-  dispense_stop_flow_rate=400.0,
-  dispense_stop_back_volume=0.0,
+star_mapping[(5000, False, True, False, Liquid.DMSO, True, True)] = _5mlT_DMSO_DispenseJet_Empty = (
+  HamiltonLiquidClass(
+    curve={
+      500.0: 540.0,
+      50.0: 62.0,
+      5000.0: 5095.0,
+      4000.0: 4075.0,
+      0.0: 0.0,
+      3000.0: 3065.0,
+      100.0: 117.0,
+      2000.0: 2060.0,
+      1000.0: 1060.0,
+    },
+    aspiration_flow_rate=2000.0,
+    aspiration_mix_flow_rate=500.0,
+    aspiration_air_transport_volume=20.0,
+    aspiration_blow_out_volume=50.0,
+    aspiration_swap_speed=2.0,
+    aspiration_settling_time=1.0,
+    aspiration_over_aspirate_volume=0.0,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=1000.0,
+    dispense_mode=3.0,
+    dispense_mix_flow_rate=100.0,
+    dispense_air_transport_volume=20.0,
+    dispense_blow_out_volume=50.0,
+    dispense_swap_speed=1.0,
+    dispense_settling_time=0.0,
+    dispense_stop_flow_rate=400.0,
+    dispense_stop_back_volume=0.0,
+  )
 )
 
 
@@ -4122,36 +4122,36 @@ star_mapping[(1000, False, True, False, Liquid.ACETONITRILE, False, False)] = (
 # -  Submerge depth: Aspiration 2.0mm
 #    (bei Schaumbildung durch mischen/vorbenetzen evtl.5mm, LLD-Erkennung)
 # -  Mischen 3-5 x 950µl, mix position 0.5mm, je nach Volumen im Tube
-star_mapping[(1000, False, True, False, Liquid.BLOOD, True, False)] = (
-  HighVolumeBloodDispenseJet
-) = HamiltonLiquidClass(
-  curve={
-    500.0: 536.3,
-    250.0: 275.6,
-    50.0: 59.8,
-    0.0: 0.0,
-    20.0: 26.2,
-    100.0: 115.3,
-    10.0: 12.2,
-    1000.0: 1061.6,
-  },
-  aspiration_flow_rate=250.0,
-  aspiration_mix_flow_rate=250.0,
-  aspiration_air_transport_volume=5.0,
-  aspiration_blow_out_volume=50.0,
-  aspiration_swap_speed=2.0,
-  aspiration_settling_time=2.0,
-  aspiration_over_aspirate_volume=0.0,
-  aspiration_clot_retract_height=0.0,
-  dispense_flow_rate=400.0,
-  dispense_mode=0.0,
-  dispense_mix_flow_rate=250.0,
-  dispense_air_transport_volume=5.0,
-  dispense_blow_out_volume=50.0,
-  dispense_swap_speed=2.0,
-  dispense_settling_time=0.0,
-  dispense_stop_flow_rate=300.0,
-  dispense_stop_back_volume=0.0,
+star_mapping[(1000, False, True, False, Liquid.BLOOD, True, False)] = HighVolumeBloodDispenseJet = (
+  HamiltonLiquidClass(
+    curve={
+      500.0: 536.3,
+      250.0: 275.6,
+      50.0: 59.8,
+      0.0: 0.0,
+      20.0: 26.2,
+      100.0: 115.3,
+      10.0: 12.2,
+      1000.0: 1061.6,
+    },
+    aspiration_flow_rate=250.0,
+    aspiration_mix_flow_rate=250.0,
+    aspiration_air_transport_volume=5.0,
+    aspiration_blow_out_volume=50.0,
+    aspiration_swap_speed=2.0,
+    aspiration_settling_time=2.0,
+    aspiration_over_aspirate_volume=0.0,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=400.0,
+    dispense_mode=0.0,
+    dispense_mix_flow_rate=250.0,
+    dispense_air_transport_volume=5.0,
+    dispense_blow_out_volume=50.0,
+    dispense_swap_speed=2.0,
+    dispense_settling_time=0.0,
+    dispense_stop_flow_rate=300.0,
+    dispense_stop_back_volume=0.0,
+  )
 )
 
 
@@ -4268,37 +4268,37 @@ star_mapping[(1000, False, True, False, Liquid.CHLOROFORM, True, False)] = (
 #     100  (  9 Aliquots)          0.25                  -4.81
 #
 #
-star_mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = (
-  HighVolumeDMSOAliquotJet
-) = HamiltonLiquidClass(
-  curve={
-    500.0: 500.0,
-    250.0: 250.0,
-    0.0: 0.0,
-    30.0: 30.0,
-    20.0: 20.0,
-    100.0: 100.0,
-    10.0: 10.0,
-    750.0: 750.0,
-    1000.0: 1000.0,
-  },
-  aspiration_flow_rate=250.0,
-  aspiration_mix_flow_rate=250.0,
-  aspiration_air_transport_volume=0.0,
-  aspiration_blow_out_volume=50.0,
-  aspiration_swap_speed=2.0,
-  aspiration_settling_time=1.0,
-  aspiration_over_aspirate_volume=0.0,
-  aspiration_clot_retract_height=0.0,
-  dispense_flow_rate=300.0,
-  dispense_mode=0.0,
-  dispense_mix_flow_rate=250.0,
-  dispense_air_transport_volume=0.0,
-  dispense_blow_out_volume=50.0,
-  dispense_swap_speed=2.0,
-  dispense_settling_time=0.0,
-  dispense_stop_flow_rate=200.0,
-  dispense_stop_back_volume=10.0,
+star_mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = HighVolumeDMSOAliquotJet = (
+  HamiltonLiquidClass(
+    curve={
+      500.0: 500.0,
+      250.0: 250.0,
+      0.0: 0.0,
+      30.0: 30.0,
+      20.0: 20.0,
+      100.0: 100.0,
+      10.0: 10.0,
+      750.0: 750.0,
+      1000.0: 1000.0,
+    },
+    aspiration_flow_rate=250.0,
+    aspiration_mix_flow_rate=250.0,
+    aspiration_air_transport_volume=0.0,
+    aspiration_blow_out_volume=50.0,
+    aspiration_swap_speed=2.0,
+    aspiration_settling_time=1.0,
+    aspiration_over_aspirate_volume=0.0,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=300.0,
+    dispense_mode=0.0,
+    dispense_mix_flow_rate=250.0,
+    dispense_air_transport_volume=0.0,
+    dispense_blow_out_volume=50.0,
+    dispense_swap_speed=2.0,
+    dispense_settling_time=0.0,
+    dispense_stop_flow_rate=200.0,
+    dispense_stop_back_volume=10.0,
+  )
 )
 
 
@@ -6217,37 +6217,37 @@ star_mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = (
 
 
 # V1.1: Set mix flow rate to 250
-star_mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = (
-  HighVolume_DMSO_DispenseJet
-) = HamiltonLiquidClass(
-  curve={
-    5.0: 5.1,
-    500.0: 511.2,
-    250.0: 256.2,
-    50.0: 52.2,
-    0.0: 0.0,
-    20.0: 21.3,
-    100.0: 103.4,
-    10.0: 10.7,
-    1000.0: 1021.0,
-  },
-  aspiration_flow_rate=250.0,
-  aspiration_mix_flow_rate=250.0,
-  aspiration_air_transport_volume=5.0,
-  aspiration_blow_out_volume=40.0,
-  aspiration_swap_speed=2.0,
-  aspiration_settling_time=1.0,
-  aspiration_over_aspirate_volume=0.0,
-  aspiration_clot_retract_height=0.0,
-  dispense_flow_rate=400.0,
-  dispense_mode=0.0,
-  dispense_mix_flow_rate=250.0,
-  dispense_air_transport_volume=5.0,
-  dispense_blow_out_volume=40.0,
-  dispense_swap_speed=2.0,
-  dispense_settling_time=0.0,
-  dispense_stop_flow_rate=250.0,
-  dispense_stop_back_volume=0.0,
+star_mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = HighVolume_DMSO_DispenseJet = (
+  HamiltonLiquidClass(
+    curve={
+      5.0: 5.1,
+      500.0: 511.2,
+      250.0: 256.2,
+      50.0: 52.2,
+      0.0: 0.0,
+      20.0: 21.3,
+      100.0: 103.4,
+      10.0: 10.7,
+      1000.0: 1021.0,
+    },
+    aspiration_flow_rate=250.0,
+    aspiration_mix_flow_rate=250.0,
+    aspiration_air_transport_volume=5.0,
+    aspiration_blow_out_volume=40.0,
+    aspiration_swap_speed=2.0,
+    aspiration_settling_time=1.0,
+    aspiration_over_aspirate_volume=0.0,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=400.0,
+    dispense_mode=0.0,
+    dispense_mix_flow_rate=250.0,
+    dispense_air_transport_volume=5.0,
+    dispense_blow_out_volume=40.0,
+    dispense_swap_speed=2.0,
+    dispense_settling_time=0.0,
+    dispense_stop_flow_rate=250.0,
+    dispense_stop_back_volume=0.0,
+  )
 )
 
 
@@ -7422,27 +7422,27 @@ star_mapping[(10, False, False, False, Liquid.WATER, False, False)] = (
 )
 
 
-star_mapping[(10, False, False, False, Liquid.WATER, True, False)] = (
-  LowNeedle_Water_DispenseJet
-) = HamiltonLiquidClass(
-  curve={50.0: 52.7, 30.0: 31.7, 0.0: 0.0, 20.0: 20.5, 10.0: 10.3},
-  aspiration_flow_rate=100.0,
-  aspiration_mix_flow_rate=100.0,
-  aspiration_air_transport_volume=15.0,
-  aspiration_blow_out_volume=30.0,
-  aspiration_swap_speed=2.0,
-  aspiration_settling_time=1.0,
-  aspiration_over_aspirate_volume=0.0,
-  aspiration_clot_retract_height=0.0,
-  dispense_flow_rate=200.0,
-  dispense_mode=0.0,
-  dispense_mix_flow_rate=100.0,
-  dispense_air_transport_volume=15.0,
-  dispense_blow_out_volume=30.0,
-  dispense_swap_speed=2.0,
-  dispense_settling_time=0.0,
-  dispense_stop_flow_rate=150.0,
-  dispense_stop_back_volume=0.0,
+star_mapping[(10, False, False, False, Liquid.WATER, True, False)] = LowNeedle_Water_DispenseJet = (
+  HamiltonLiquidClass(
+    curve={50.0: 52.7, 30.0: 31.7, 0.0: 0.0, 20.0: 20.5, 10.0: 10.3},
+    aspiration_flow_rate=100.0,
+    aspiration_mix_flow_rate=100.0,
+    aspiration_air_transport_volume=15.0,
+    aspiration_blow_out_volume=30.0,
+    aspiration_swap_speed=2.0,
+    aspiration_settling_time=1.0,
+    aspiration_over_aspirate_volume=0.0,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=200.0,
+    dispense_mode=0.0,
+    dispense_mix_flow_rate=100.0,
+    dispense_air_transport_volume=15.0,
+    dispense_blow_out_volume=30.0,
+    dispense_swap_speed=2.0,
+    dispense_settling_time=0.0,
+    dispense_stop_flow_rate=150.0,
+    dispense_stop_back_volume=0.0,
+  )
 )
 
 
@@ -9738,34 +9738,34 @@ star_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
 )
 
 
-star_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
-  SlimTip_DMSO_DispenseJet_Empty
-) = HamiltonLiquidClass(
-  curve={
-    300.0: 309.5,
-    50.0: 54.7,
-    0.0: 0.0,
-    100.0: 107.2,
-    20.0: 22.5,
-    200.0: 209.7,
-  },
-  aspiration_flow_rate=250.0,
-  aspiration_mix_flow_rate=250.0,
-  aspiration_air_transport_volume=5.0,
-  aspiration_blow_out_volume=10.0,
-  aspiration_swap_speed=2.0,
-  aspiration_settling_time=1.0,
-  aspiration_over_aspirate_volume=0.0,
-  aspiration_clot_retract_height=0.0,
-  dispense_flow_rate=250.0,
-  dispense_mode=3.0,
-  dispense_mix_flow_rate=1.0,
-  dispense_air_transport_volume=5.0,
-  dispense_blow_out_volume=10.0,
-  dispense_swap_speed=1.0,
-  dispense_settling_time=0.0,
-  dispense_stop_flow_rate=100.0,
-  dispense_stop_back_volume=0.0,
+star_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = SlimTip_DMSO_DispenseJet_Empty = (
+  HamiltonLiquidClass(
+    curve={
+      300.0: 309.5,
+      50.0: 54.7,
+      0.0: 0.0,
+      100.0: 107.2,
+      20.0: 22.5,
+      200.0: 209.7,
+    },
+    aspiration_flow_rate=250.0,
+    aspiration_mix_flow_rate=250.0,
+    aspiration_air_transport_volume=5.0,
+    aspiration_blow_out_volume=10.0,
+    aspiration_swap_speed=2.0,
+    aspiration_settling_time=1.0,
+    aspiration_over_aspirate_volume=0.0,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=250.0,
+    dispense_mode=3.0,
+    dispense_mix_flow_rate=1.0,
+    dispense_air_transport_volume=5.0,
+    dispense_blow_out_volume=10.0,
+    dispense_swap_speed=1.0,
+    dispense_settling_time=0.0,
+    dispense_stop_flow_rate=100.0,
+    dispense_stop_back_volume=0.0,
+  )
 )
 
 
@@ -10587,27 +10587,27 @@ star_mapping[(300, False, True, False, Liquid.ACETONITRILE, False, False)] = (
 #       20  (12 Aliquots)          2.53                 -2.97
 #       50  (  4 Aliquots)          0.84                 -2.57
 #
-star_mapping[(300, False, True, False, Liquid.DMSO, True, False)] = (
-  StandardVolumeDMSOAliquotJet
-) = HamiltonLiquidClass(
-  curve={350.0: 350.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
-  aspiration_flow_rate=100.0,
-  aspiration_mix_flow_rate=100.0,
-  aspiration_air_transport_volume=0.0,
-  aspiration_blow_out_volume=0.0,
-  aspiration_swap_speed=2.0,
-  aspiration_settling_time=1.0,
-  aspiration_over_aspirate_volume=0.0,
-  aspiration_clot_retract_height=0.0,
-  dispense_flow_rate=250.0,
-  dispense_mode=0.0,
-  dispense_mix_flow_rate=100.0,
-  dispense_air_transport_volume=0.0,
-  dispense_blow_out_volume=0.0,
-  dispense_swap_speed=0.3,
-  dispense_settling_time=0.0,
-  dispense_stop_flow_rate=200.0,
-  dispense_stop_back_volume=10.0,
+star_mapping[(300, False, True, False, Liquid.DMSO, True, False)] = StandardVolumeDMSOAliquotJet = (
+  HamiltonLiquidClass(
+    curve={350.0: 350.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
+    aspiration_flow_rate=100.0,
+    aspiration_mix_flow_rate=100.0,
+    aspiration_air_transport_volume=0.0,
+    aspiration_blow_out_volume=0.0,
+    aspiration_swap_speed=2.0,
+    aspiration_settling_time=1.0,
+    aspiration_over_aspirate_volume=0.0,
+    aspiration_clot_retract_height=0.0,
+    dispense_flow_rate=250.0,
+    dispense_mode=0.0,
+    dispense_mix_flow_rate=100.0,
+    dispense_air_transport_volume=0.0,
+    dispense_blow_out_volume=0.0,
+    dispense_swap_speed=0.3,
+    dispense_settling_time=0.0,
+    dispense_stop_flow_rate=200.0,
+    dispense_stop_back_volume=10.0,
+  )
 )
 
 

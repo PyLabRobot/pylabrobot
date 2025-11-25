@@ -174,7 +174,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
   async def set_temperature(self, temperature: float):
     """set temperature in Celsius"""
     assert 0 < temperature <= 105
-    temp_str = f"{round(10*temperature):04d}"
+    temp_str = f"{round(10 * temperature):04d}"
     return await self.interface.send_hhs_command(index=self.index, command="TA", ta=temp_str)
 
   async def _get_current_temperature(self) -> Dict[str, float]:

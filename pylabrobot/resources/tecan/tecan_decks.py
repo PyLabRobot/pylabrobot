@@ -101,7 +101,7 @@ class TecanDeck(Deck):
         and rails is not None
       ):
         raise ValueError(
-          f"Resource with width {resource.get_absolute_size_x()} does not " f"fit at rails {rails}."
+          f"Resource with width {resource.get_absolute_size_x()} does not fit at rails {rails}."
         )
 
       # Check if there is space for this new resource.
@@ -123,8 +123,7 @@ class TecanDeck(Deck):
           < og_y + og_resource.get_absolute_size_y()
         ):
           raise ValueError(
-            f"Location {resource_location} is already occupied by resource "
-            f"'{og_resource.name}'."
+            f"Location {resource_location} is already occupied by resource '{og_resource.name}'."
           )
 
     return super().assign_child_resource(resource, location=resource_location)

@@ -146,17 +146,17 @@ class Tilter(ResourceHolder, Machine):
 
     well_drain_offsets = []
     for well in wells:
-      assert (
-        well.cross_section_type == CrossSectionType.CIRCLE
-      ), "Wells must have circular cross-section"
+      assert well.cross_section_type == CrossSectionType.CIRCLE, (
+        "Wells must have circular cross-section"
+      )
 
       diameter = well.get_absolute_size_x()  # assuming circular well
       radius = diameter / 2
 
       if n_tips > 1:
-        assert (
-          (n_tips - 1) * min_tip_distance <= diameter
-        ), f"Cannot fit {n_tips} tips in a well with diameter {diameter} mm"
+        assert (n_tips - 1) * min_tip_distance <= diameter, (
+          f"Cannot fit {n_tips} tips in a well with diameter {diameter} mm"
+        )
 
         y_offsets = [
           ((n_tips - 1) / 2 - tip_index) * min_tip_distance for tip_index in range(n_tips)

@@ -40,9 +40,9 @@ def no_volume_tracking():
 
 def set_cross_contamination_tracking(enabled: bool):
   if enabled:
-    assert (
-      this.volume_tracking_enabled
-    ), "Cross contamination tracking only possible if volume tracking active."
+    assert this.volume_tracking_enabled, (
+      "Cross contamination tracking only possible if volume tracking active."
+    )
   this.cross_contamination_tracking_enabled = enabled  # type: ignore
 
 

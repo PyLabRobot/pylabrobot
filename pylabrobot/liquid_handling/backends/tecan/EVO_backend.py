@@ -486,9 +486,9 @@ class EVOBackend(TecanLiquidHandler):
       use_channels: The channels to use for the pickup operations.
     """
 
-    assert (
-      min(use_channels) >= self.num_channels - self.diti_count
-    ), f"DiTis can only be configured for the last {self.diti_count} channels"
+    assert min(use_channels) >= self.num_channels - self.diti_count, (
+      f"DiTis can only be configured for the last {self.diti_count} channels"
+    )
 
     # Get positions including offsets
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
@@ -530,12 +530,12 @@ class EVOBackend(TecanLiquidHandler):
       use_channels: The channels to use for the drop operations.
     """
 
-    assert (
-      min(use_channels) >= self.num_channels - self.diti_count
-    ), f"DiTis can only be configured for the last {self.diti_count} channels"
-    assert all(
-      isinstance(op.resource, (Trash, TipSpot)) for op in ops
-    ), "Must drop in waste container or tip rack"
+    assert min(use_channels) >= self.num_channels - self.diti_count, (
+      f"DiTis can only be configured for the last {self.diti_count} channels"
+    )
+    assert all(isinstance(op.resource, (Trash, TipSpot)) for op in ops), (
+      "Must drop in waste container or tip rack"
+    )
 
     # Get positions including offsets
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
