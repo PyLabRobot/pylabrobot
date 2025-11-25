@@ -32,7 +32,7 @@ except ImportError as e:
 
 
 class InhecoError(RuntimeError):
-  """Represents an INHECO firmware-reported error."""
+  """Represents an Inheco firmware-reported error."""
 
   def __init__(self, command: str, code: str, message: str):
     super().__init__(f"{command} failed with error {code}: {message}")
@@ -280,7 +280,6 @@ class InhecoIncubatorShakerStackBackend:
     """Close serial connection & stop all active units the stack."""
 
     for unit_index in range(self.number_of_connected_units):
-
       temp_status = await self.is_temperature_control_enabled(stack_index=unit_index)
 
       if temp_status:
@@ -1065,7 +1064,6 @@ class InhecoIncubatorShakerStackBackend:
     incubator_type = await self.request_incubator_type(stack_index=stack_index)
 
     if "shaker" in incubator_type:
-
       resp = await self.send_command("RSE", stack_index=stack_index)
 
       try:
@@ -1079,7 +1077,7 @@ class InhecoIncubatorShakerStackBackend:
       answer = status in (1, 2)  # TODO: discuss whether 2 should count as "shaking"
 
       return answer
-    
+
     else:
       return False
 
@@ -1333,7 +1331,6 @@ class InhecoIncubatorShakerStackBackend:
     """Stop shaker (ASE0)."""
 
     await self.set_shaker_status(False, stack_index=stack_index)
-
 
   @requires_incubator_shaker
   async def request_shaker_phase_shift(self, stack_index: int, selector: int = 0) -> float:
