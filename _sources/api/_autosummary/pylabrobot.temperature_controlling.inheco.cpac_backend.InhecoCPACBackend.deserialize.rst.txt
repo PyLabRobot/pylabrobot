@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.inheco.cpac\_backend.InhecoCPACBackend.deserialize
+======================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.cpac_backend
+
+.. automethod:: InhecoCPACBackend.deserialize

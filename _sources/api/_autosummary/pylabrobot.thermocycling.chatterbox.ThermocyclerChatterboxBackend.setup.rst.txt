@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.setup
+=======================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.chatterbox
+
+.. automethod:: ThermocyclerChatterboxBackend.setup

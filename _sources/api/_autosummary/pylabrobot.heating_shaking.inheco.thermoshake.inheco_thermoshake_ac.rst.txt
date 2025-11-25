@@ -1,0 +1,6 @@
+﻿pylabrobot.heating\_shaking.inheco.thermoshake.inheco\_thermoshake\_ac
+======================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.inheco.thermoshake
+
+.. autofunction:: inheco_thermoshake_ac
