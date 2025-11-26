@@ -207,7 +207,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     # --- Establish serial connection ---
     self.io = Serial(
       port=candidate_port,
-      baudrate=19200,
+      baudrate=19_200,
       bytesize=serial.EIGHTBITS,
       parity=serial.PARITY_NONE,
       stopbits=serial.STOPBITS_ONE,

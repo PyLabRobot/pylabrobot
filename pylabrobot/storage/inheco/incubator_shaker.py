@@ -67,8 +67,10 @@ class IncubatorShakerStack(Resource, Machine):
     "incubator_shaker_dwp": 2.5,
   }
 
-  async def setup(self, verbose: bool = False):
+  async def setup(self, **backend_kwargs: Any) -> None:
     """Connect to the stack and build per-unit proxies."""
+    
+    verbose = backend_kwargs.get("verbose", False)
 
     await self.backend.setup(verbose=verbose)
 
@@ -95,14 +97,12 @@ class IncubatorShakerStack(Resource, Machine):
       )
       self.loading_trays[i] = loading_tray
 
-      if self._incubator_loading_tray_location[unit_type].x is None:
-        raise ValueError(
-          f"Loading tray location for unit type {unit_type} is not defined. Cannot set up stack."
-        )
-      if self._incubator_loading_tray_location[unit_type].z is None:
-        raise ValueError(
-          f"Loading tray location for unit type {unit_type} is not defined. Cannot set up stack."
-        )
+      loc = self._incubator_loading_tray_location[unit_type]
+      if loc is None:
+          raise ValueError(
+              f"Loading tray location for unit type {unit_type} is not defined. "
+              "Cannot set up stack."
+          )
 
       self.assign_child_resource(
         loading_tray,
