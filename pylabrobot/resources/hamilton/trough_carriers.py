@@ -55,14 +55,14 @@ def Trough_CAR_5R60_A00(name: str) -> TroughCarrier:
     sites=create_homogeneous_resources(
       klass=ResourceHolder,
       locations=[
-        Coordinate(1.5, 7.0, 62.0), # measured
-        Coordinate(1.5, 103.0, 62.0),
-        Coordinate(1.5, 199.0, 62.0),
-        Coordinate(1.5, 302.0, 62.0),
+        Coordinate(1.5, 7.0, 62.0 + 1.5), # measured 62 to bottom of holder, but there is a 1.5mm pedestal
+        Coordinate(1.5, 103.0, 62.0 + 1.5),
+        Coordinate(1.5, 199.0, 62.0 + 1.5),
+        Coordinate(1.5, 302.0, 62.0 + 1.5),
       ],
       resource_size_x=19.0,
       resource_size_y=90.0,
-      pedestal_size_z=1.5, # measured
+      #pedestal_size_z=1.5, # measured
       name_prefix=name,
     ),
     model="Trough_CAR_4R200_A00",
