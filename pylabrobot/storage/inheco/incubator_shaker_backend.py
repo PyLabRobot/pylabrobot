@@ -957,18 +957,17 @@ class InhecoIncubatorShakerStackBackend:
 
     async def wrapper(self, *args, **kwargs):
       incubator_type = getattr(self, "incubator_type", None)
+      name = getattr(func, "__name__", func.__class__.__name__)
 
-      if incubator_type in (None, "unknown"):
+      if incubator_type is None or incubator_type == "unknown":
         try:
           incubator_type = await self.request_incubator_type()
         except Exception as e:
-          raise RuntimeError(
-            f"Cannot determine incubator type before calling {func.__name__}(): {e}"
-          )
+          raise RuntimeError(f"Cannot determine incubator type before calling {name}(): {e}")
 
       if "shaker" not in incubator_type:
         raise RuntimeError(
-          f"{func.__name__}() requires a shaker-capable model " f"(got {incubator_type!r})."
+          f"{name}() requires a shaker-capable model " f"(got {incubator_type!r})."
         )
 
       return await func(self, *args, **kwargs)
