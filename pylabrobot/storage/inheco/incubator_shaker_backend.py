@@ -131,8 +131,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self,
     dip_switch_id: int = 2,
     port: Optional[str] = None,
-    id_vendor: str = "0403",
-    id_product: str = "6001",
+    # id_vendor: str = "0403",
+    # id_product: str = "6001",
     write_timeout: float = 5.0,
     read_timeout: float = 10.0,
     logger: Optional[logging.Logger] = None,
@@ -141,8 +141,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self.logger = logger or logging.getLogger("pylabrobot")
 
     # Core state
-    self.id_vendor = id_vendor
-    self.id_product = id_product
+    # self.id_vendor = id_vendor
+    # self.id_product = id_product
     self.dip_switch_id = dip_switch_id
 
     self.port_hint = port
@@ -161,52 +161,23 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   def __repr__(self):
     return (
-      f"<InhecoIncubatorShakerBackend (VID:PID={self.id_vendor}:{self.id_product}, "
+      f"<InhecoIncubatorShakerBackend (VID:PID={self.io._vid}:{self.io._pid}, "
       + f"DIP={self.dip_switch_id}) at {self.port}>"
     )
 
-  async def setup(self, verbose: bool = False):
+  async def setup(
+    self, port: Optional[str] = None, vid: str = "0403", pid: str = "6001", verbose: bool = False
+  ):
     """
     Detect and connect to the Inheco machine stack.
     Discover INHECO device via VID:PID (0403:6001) and verify DIP switch ID.
     """
 
-    matching_ports = [
-      p.device
-      for p in serial.tools.list_ports.comports()
-      if f"{self.id_vendor}:{self.id_product}" in (p.hwid or "")
-    ]
-
-    if not matching_ports:
-      raise RuntimeError(f"No Inheco devices found (VID={self.id_vendor}, PID={self.id_product}).")
-
-    # --- Port selection ---
-    if self.port_hint:  # Port explicitly specified
-      candidate_port = self.port_hint
-      if candidate_port not in matching_ports:
-        raise RuntimeError(
-          f"Specified port {candidate_port} not found among Inheco devices "
-          f"(VID={self.id_vendor}, PID={self.id_product})."
-        )
-      else:
-        self._log(
-          logging.INFO,
-          f"Using explicitly provided port: {candidate_port} (verifying DIP={self.dip_switch_id})",
-        )
-
-    elif len(matching_ports) == 1:  # Single device found
-      candidate_port = matching_ports[0]
-
-    else:  # Multiple devices found
-      raise RuntimeError(
-        f"Multiple Inheco devices detected with VID:PID {self.id_vendor}:{self.id_product}.\n"
-        f" Detected ports: {matching_ports}\n"
-        "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
-      )
-
     # --- Establish serial connection ---
     self.io = Serial(
-      port=candidate_port,
+      port=port,
+      vid=vid,
+      pid=pid,
       baudrate=19_200,
       bytesize=serial.EIGHTBITS,
       parity=serial.PARITY_NONE,
@@ -215,13 +186,12 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       write_timeout=1,
     )
 
-    try:
-      await self.io.setup()
+    await self.io.setup()
 
-      # --- Verify DIP switch ID via RTS ---
+    try:  # --- Verify DIP switch ID via RTS ---
       probe = self._build_message("RTS", stack_index=0)
       await self.write(probe)
-      resp = await self._read_full_response(timeout=1.0)
+      resp = await self._read_full_response(timeout=5.0)
 
       expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
       if resp[0] != expected_hdr:
@@ -233,7 +203,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       self.io = None  # break logical link early
 
       msg = (
-        f"Device on {candidate_port} failed DIP switch verification (expected ID="
+        f"Device on {serial_obj._port} failed DIP switch verification (expected ID="
         f"{self.dip_switch_id}). Please verify the DIP switch setting or wiring."
       )
       self._log(logging.ERROR, msg)
@@ -245,20 +215,19 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
           maybe_close = serial_obj.close()
           if asyncio.iscoroutine(maybe_close):
             await maybe_close
-          self._log(logging.DEBUG, f"Closed serial connection on {candidate_port}")
+          self._log(logging.DEBUG, f"Closed serial connection on {serial_obj._port}")
         except Exception as close_err:
           self._log(
             logging.WARNING,
-            f"Failed to close serial port cleanly on {candidate_port}: {close_err}",
+            f"Failed to close serial port cleanly on {serial_obj._port}: {close_err}",
           )
 
       raise RuntimeError(msg) from e
 
     else:
       # Connection verified and active
-      self.port = candidate_port
       self._log(
-        logging.INFO, f"Connected to Inheco machine at {self.port} (DIP={self.dip_switch_id})"
+        logging.INFO, f"Connected to Inheco machine at {self.io.port} (DIP={self.dip_switch_id})"
       )
 
     # --- Cache stack-level state ---
@@ -275,7 +244,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self.setup_finished = True
 
     msg = (
-      f"Connected to Inheco Incubator Shaker Stack on {self.port}\n"
+      f"Connected to Inheco Incubator Shaker Stack on {self.io._port}\n"
       f"DIP switch ID of bottom unit: {self.dip_switch_id}\n"
       f"Number of connected units: {self.number_of_connected_units}\n"
       f"Unit composition: {self.unit_composition}"

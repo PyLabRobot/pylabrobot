@@ -9,6 +9,7 @@ from pylabrobot.io.errors import ValidationError
 
 try:
   import serial
+  import serial.tools.list_ports
 
   HAS_SERIAL = True
 except ImportError as e:
@@ -35,7 +36,9 @@ class Serial(IOBase):
 
   def __init__(
     self,
-    port: str,
+    port: Optional[str] = None,
+    vid: Optional[int] = None,
+    pid: Optional[int] = None,
     baudrate: int = 9600,
     bytesize: int = 8,  # serial.EIGHTBITS
     parity: str = "N",  # serial.PARITY_NONE
@@ -45,6 +48,8 @@ class Serial(IOBase):
     rtscts: bool = False,
   ):
     self._port = port
+    self._vid = vid
+    self._pid = pid
     self.baudrate = baudrate
     self.bytesize = bytesize
     self.parity = parity
@@ -55,6 +60,9 @@ class Serial(IOBase):
     self.timeout = timeout
     self.rtscts = rtscts
 
+    if not self._port and not (self._vid and self._pid):
+      raise ValueError("Must specify either port or vid and pid.")
+
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new Serial object while capture or validation is active")
 
@@ -63,14 +71,55 @@ class Serial(IOBase):
     return self._port
 
   async def setup(self):
+    """Connect to the serial device."""
+
     if not HAS_SERIAL:
       raise RuntimeError(f"pyserial not installed. Import error: {_SERIAL_IMPORT_ERROR}")
+
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)
 
+    # --- Find matching ports if VID and PID are specified ---
+    matching_ports = [
+      p.device
+      for p in serial.tools.list_ports.comports()
+      if f"{self._vid}:{self._pid}" in (p.hwid or "")
+    ]
+
+    if not self._port and (self._vid and self._pid):
+      if not matching_ports:
+        raise RuntimeError(
+          f"No machines found for VID={self._vid}, PID={self._pid}, and no port specified."
+        )
+
+    # --- Port selection ---
+    if self._port:  # Port explicitly specified
+      candidate_port = self._port
+
+      if (self._vid and self._pid) and candidate_port not in matching_ports:
+        raise RuntimeError(
+          f"Specified port {candidate_port} not found among machines "
+          f"(VID={self._vid}, PID={self._pid})."
+        )
+      else:
+        self._log(
+          logging.INFO,
+          f"Using explicitly provided port: {candidate_port} (verifying DIP={self.dip_switch_id})",
+        )
+
+    elif len(matching_ports) == 1:  # Single device found
+      candidate_port = matching_ports[0]
+
+    else:  # Multiple devices found
+      raise RuntimeError(
+        f"Multiple devices detected with VID:PID {self._vid}:{self._pid}.\n"
+        f"Detected ports: {matching_ports}\n"
+        "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
+      )
+
     def _open_serial() -> serial.Serial:
       return serial.Serial(
-        port=self._port,
+        port=candidate_port,
         baudrate=self.baudrate,
         bytesize=self.bytesize,
         parity=self.parity,
@@ -82,12 +131,15 @@ class Serial(IOBase):
 
     try:
       self._ser = await loop.run_in_executor(self._executor, _open_serial)
+
     except serial.SerialException as e:
       logger.error("Could not connect to device, is it in use by a different notebook/process?")
       if self._executor is not None:
         self._executor.shutdown(wait=True)
         self._executor = None
       raise e
+
+    self._port = candidate_port
 
   async def stop(self):
     if self._ser is not None and self._ser.is_open:
