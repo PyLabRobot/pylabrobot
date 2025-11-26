@@ -369,7 +369,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   def _is_report_command(self, command: str) -> bool:
     """Return True if command is a 'Report' type (starts with 'R')."""
-    return command and command[0].upper() == "R"
+    return bool(command) and command[0].upper() == "R"
 
   # === Response parsing ===
 
@@ -1186,7 +1186,12 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   def _fw_freq_pair(self, frequency_hz: Optional[float], rpm: Optional[float]) -> tuple[int, int]:
     """Return validated firmware frequency pair (Hz·10, Hz·10)."""
-    f = self._hz_to_fw_hz10(frequency_hz) if frequency_hz is not None else self._rpm_to_fw_hz10(rpm)
+    if frequency_hz is not None:
+      f = self._hz_to_fw_hz10(frequency_hz)
+    else:
+      # At this point rpm MUST be not None (validated earlier)
+      assert rpm is not None
+      f = self._rpm_to_fw_hz10(rpm)
     return (f, f)
 
   def _fw_amp_pair_linear_x(self, ax_mm: float) -> tuple[int, int]:
@@ -1534,19 +1539,17 @@ class InhecoIncubatorShakerUnit:
     no Error will be generated!
     If AID is send during operating, the shaker and heater stop immediately!
     """
-    return await self.backend.initialize("AID", stack_index=self.index)
+    return await self.backend.initialize(stack_index=self.index)
 
   # # # Loading Tray Features # # #
 
   async def open(self) -> None:
     """Open the incubator door & move loading tray out."""
     await self.backend.open(stack_index=self.index)
-    self.loading_tray = "open"
 
   async def close(self) -> None:
     """Move the loading tray in & close the incubator door."""
     await self.backend.close(stack_index=self.index)
-    self.loading_tray = "closed"
 
   async def request_drawer_status(self) -> str:
     """Report the current drawer (loading tray) status.
@@ -1558,7 +1561,6 @@ class InhecoIncubatorShakerUnit:
         - Firmware response: '1' = open, '0' = closed.
     """
     resp = await self.backend.request_drawer_status(stack_index=self.index)
-    self.loading_tray = resp
     return resp
 
   # # # Temperature Features # # #
