@@ -95,6 +95,11 @@ class IncubatorShakerStack(Resource, Machine):
       )
       self.loading_trays[i] = loading_tray
 
+      if self._incubator_loading_tray_location[unit_type] is None:
+        raise ValueError(
+          f"Loading tray location for unit type {unit_type} is not defined. Cannot set up stack."
+        )
+
       self.assign_child_resource(
         loading_tray,
         location=Coordinate(
@@ -182,10 +187,10 @@ class IncubatorShakerStack(Resource, Machine):
     for i in range(self.num_units):
       await self.units[i].stop_temperature_control()
 
-  async def start_all_shaking(self, rpm: int) -> None:
+  async def shake(self, *args, **kwargs) -> None:
     """Start shaking for all units in the stack."""
-    for i in range(self.num_units):
-      await self.units[i].start_shaking(rpm)
+    for unit in self.units:
+      await unit.shake(*args, **kwargs)
 
   async def stop_all_shaking(self) -> None:
     """Stop shaking for all units in the stack."""

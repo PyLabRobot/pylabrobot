@@ -156,7 +156,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     # Cached state (stack level)
     self.setup_finished = False
     self.max_temperature = 85.0  # safe default
-    self.number_of_connected_units: Optional[int] = None
+    self.number_of_connected_units: int = 1  # expected minimum
     self.unit_composition: Dict[int, str] = {}
 
   def __repr__(self):
