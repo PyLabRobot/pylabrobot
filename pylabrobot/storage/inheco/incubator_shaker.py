@@ -34,34 +34,34 @@ class IncubatorShakerStack(Resource, Machine):
   # Lifecycle & Resource setup
   # ------------------------------------------------------------------------
 
-  incubator_size_z_dict = {
+  _incubator_size_z_dict = {
     "incubator_mp": 58.0,
     "incubator_shaker_mp": 88.5,
     "incubator_dwp": 104,
     "incubator_shaker_dwp": 139,
   }
-  incubator_loading_tray_location = {  # TODO: rough measurements, verify
+  _incubator_loading_tray_location = {  # TODO: rough measurements, verify
     "incubator_mp": None,  # TODO: add when available
     "incubator_shaker_mp": Coordinate(x=30.5, y=-150.5, z=51.2),
     "incubator_dwp": None,  # TODO: add when available
     "incubator_shaker_dwp": Coordinate(x=30.5, y=-150.5, z=51.2),
   }
 
-  possible_tray_y_coordinates = {
+  _possible_tray_y_coordinates = {
     "open": -150.5,  # TODO: verify by careful testing in controlled geometry setup
     "closed": +24.0,
   }
 
-  chamber_z_clearance = 2
+  _chamber_z_clearance = 2
 
-  acceptable_plate_z_dimensions = {
-    "incubator_mp": 18 - chamber_z_clearance,
-    "incubator_shaker_mp": 50 - chamber_z_clearance,
-    "incubator_dwp": 18 - chamber_z_clearance,
-    "incubator_shaker_dwp": 53 - chamber_z_clearance,
+  _acceptable_plate_z_dimensions = {
+    "incubator_mp": 18 - _chamber_z_clearance,
+    "incubator_shaker_mp": 50 - _chamber_z_clearance,
+    "incubator_dwp": 18 - _chamber_z_clearance,
+    "incubator_shaker_dwp": 53 - _chamber_z_clearance,
   }
 
-  incubator_power_credits_per_type = {
+  _incubator_power_credits_per_type = {
     "incubator_mp": 1.0,
     "incubator_dwp": 1.25,
     "incubator_shaker_mp": 1.6,
@@ -88,8 +88,8 @@ class IncubatorShakerStack(Resource, Machine):
 
       # Create loading tray resources and calculate their locations
       unit_type = self.unit_composition[i]
-      self.power_credit += self.incubator_power_credits_per_type[unit_type]
-      unit_size_z = self.incubator_size_z_dict[unit_type]
+      self.power_credit += self._incubator_power_credits_per_type[unit_type]
+      unit_size_z = self._incubator_size_z_dict[unit_type]
 
       loading_tray = ResourceHolder(
         size_x=127.76, size_y=85.48, size_z=0, name=f"unit-{i}-loading-tray"
@@ -99,11 +99,11 @@ class IncubatorShakerStack(Resource, Machine):
       self.assign_child_resource(
         loading_tray,
         location=Coordinate(
-          x=self.incubator_loading_tray_location[unit_type].x,
-          y=self.possible_tray_y_coordinates[
+          x=self._incubator_loading_tray_location[unit_type].x,
+          y=self._possible_tray_y_coordinates[
             "closed"
           ],  # setup finishes with all loading trays closed
-          z=stack_size_z + self.incubator_loading_tray_location[unit_type].z,
+          z=stack_size_z + self._incubator_loading_tray_location[unit_type].z,
         ),
       )
       stack_size_z += unit_size_z
