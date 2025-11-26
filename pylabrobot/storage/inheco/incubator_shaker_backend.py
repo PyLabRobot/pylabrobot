@@ -971,7 +971,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       # ORIGINAL LOGIC — EXACTLY PRESERVED
       incubator_type = getattr(self, "incubator_type", None)
       name = getattr(func, "__name__", func.__class__.__name__)
-      stack_index = kwargs.get("stack_index", False)
+      stack_index = int(kwargs.get("stack_index", False))
 
       if incubator_type is None or incubator_type == "unknown":
         try:

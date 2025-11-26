@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Any, Dict
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
@@ -69,7 +69,7 @@ class IncubatorShakerStack(Resource, Machine):
 
   async def setup(self, **backend_kwargs: Any) -> None:
     """Connect to the stack and build per-unit proxies."""
-    
+
     verbose = backend_kwargs.get("verbose", False)
 
     await self.backend.setup(verbose=verbose)
@@ -99,19 +99,18 @@ class IncubatorShakerStack(Resource, Machine):
 
       loc = self._incubator_loading_tray_location[unit_type]
       if loc is None:
-          raise ValueError(
-              f"Loading tray location for unit type {unit_type} is not defined. "
-              "Cannot set up stack."
-          )
+        raise ValueError(
+          f"Loading tray location for unit type {unit_type} is not defined. " "Cannot set up stack."
+        )
 
       self.assign_child_resource(
         loading_tray,
         location=Coordinate(
-          x=self._incubator_loading_tray_location[unit_type].x,
+          x=loc.x,
           y=self._possible_tray_y_coordinates[
             "closed"
           ],  # setup finishes with all loading trays closed
-          z=stack_size_z + self._incubator_loading_tray_location[unit_type].z,
+          z=stack_size_z + loc.z,
         ),
       )
       stack_size_z += unit_size_z
