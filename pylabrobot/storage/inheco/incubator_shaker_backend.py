@@ -18,9 +18,10 @@ import asyncio
 import logging
 import sys
 from functools import wraps
-from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar, cast
+from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar
 
 from pylabrobot.io.serial import Serial
+from pylabrobot.machines.machine import MachineBackend
 
 if sys.version_info < (3, 10):
   from typing_extensions import Concatenate, ParamSpec
@@ -101,7 +102,7 @@ FIRMWARE_ERROR_MAP: Dict[int, str] = {
 }
 
 
-class InhecoIncubatorShakerStackBackend:
+class InhecoIncubatorShakerStackBackend(MachineBackend):
   """Interface for Inheco Incubator Shaker stack machines.
 
   Handles:
@@ -475,7 +476,7 @@ class InhecoIncubatorShakerStackBackend:
       message = FIRMWARE_ERROR_MAP.get(parsed.get("error_code", 0), "Unknown firmware error")
       raise InhecoError(command, code, message)
 
-    return cast(str, parsed["data"])
+    return str(parsed["data"])
 
   # === Public high-level API ===
 
