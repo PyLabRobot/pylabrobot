@@ -17,11 +17,15 @@ Features:
 import asyncio
 import logging
 import sys
-from typing import Awaitable, Callable, Dict, Literal, Optional, ParamSpec, TypeVar
+from functools import wraps
+from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar
 
 from pylabrobot.io.serial import Serial
-from functools import wraps
 
+if sys.version_info < (3, 10):
+  from typing_extensions import Concatenate, ParamSpec
+else:
+  from typing import Concatenate, ParamSpec
 try:
   import serial
   import serial.tools.list_ports
@@ -915,7 +919,6 @@ class InhecoIncubatorShakerStackBackend:
 
       if show_progress_bar:
         # Compute slope (°C/sec) based on direction of travel
-        delta_total = abs(target_temp - first_temp)
         delta_done = abs(current_temp - first_temp)
 
         elapsed = asyncio.get_event_loop().time() - start_time
@@ -957,9 +960,14 @@ class InhecoIncubatorShakerStackBackend:
 
   # # # Shaking Features # # #
 
-  def requires_incubator_shaker(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+  def requires_incubator_shaker(
+    func: Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]],
+  ) -> Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]]:
     @wraps(func)
-    async def wrapper(self, *args: P.args, **kwargs: P.kwargs) -> R:
+    async def wrapper(
+      self: "InhecoIncubatorShakerStackBackend", *args: P.args, **kwargs: P.kwargs
+    ) -> R:
+      # ORIGINAL LOGIC — EXACTLY PRESERVED
       incubator_type = getattr(self, "incubator_type", None)
       name = getattr(func, "__name__", func.__class__.__name__)
 
@@ -970,10 +978,9 @@ class InhecoIncubatorShakerStackBackend:
           raise RuntimeError(f"Cannot determine incubator type before calling {name}(): {e}")
 
       if "shaker" not in incubator_type:
-        raise RuntimeError(
-          f"{name}() requires a shaker-capable model " f"(got {incubator_type!r})."
-        )
+        raise RuntimeError(f"{name}() requires a shaker-capable model (got {incubator_type!r}).")
 
+      # Call the wrapped async method
       return await func(self, *args, **kwargs)
 
     return wrapper

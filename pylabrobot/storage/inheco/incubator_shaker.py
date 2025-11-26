@@ -1,4 +1,3 @@
-import asyncio
 from typing import Dict
 
 from pylabrobot.machines.machine import Machine
