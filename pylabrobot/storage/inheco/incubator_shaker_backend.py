@@ -971,10 +971,11 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       # ORIGINAL LOGIC — EXACTLY PRESERVED
       incubator_type = getattr(self, "incubator_type", None)
       name = getattr(func, "__name__", func.__class__.__name__)
+      stack_index = kwargs.get("stack_index", False)
 
       if incubator_type is None or incubator_type == "unknown":
         try:
-          incubator_type = await self.request_incubator_type()
+          incubator_type = await self.request_incubator_type(stack_index)
         except Exception as e:
           raise RuntimeError(f"Cannot determine incubator type before calling {name}(): {e}")
 

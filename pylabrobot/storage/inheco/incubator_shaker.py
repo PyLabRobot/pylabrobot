@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Any
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
