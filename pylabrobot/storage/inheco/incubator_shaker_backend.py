@@ -1427,8 +1427,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 class InhecoIncubatorShakerUnit:
   """High-level API for an individual Inheco Incubator/Shaker unit in a stacked system."""
 
-  def __init__(self, backend, index: int):
-    self.backend = backend
+  def __init__(self, backend: InhecoIncubatorShakerStackBackend, index: int):
+    self.backend: InhecoIncubatorShakerStackBackend = backend
     self.index = index
 
   def __repr__(self):
@@ -1674,7 +1674,7 @@ class InhecoIncubatorShakerUnit:
         TimeoutError: If target not reached within `timeout_s`.
         ValueError: If temperature control is not enabled or no valid target returned.
     """
-    await self.backend.wait_for_temperature(
+    return await self.backend.wait_for_temperature(
       stack_index=self.index,
       sensor=sensor,
       tolerance=tolerance,
