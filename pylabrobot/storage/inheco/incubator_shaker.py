@@ -30,18 +30,6 @@ class IncubatorShakerStack(Resource, Machine):
     self.units: Dict[int, InhecoIncubatorShakerUnit] = {}
     self.loading_trays: Dict[int, ResourceHolder] = {}
 
-  @property
-  def size_x(self) -> float:
-    return self._size_x
-
-  @property
-  def size_y(self) -> float:
-    return self._size_y
-
-  @property
-  def size_z(self) -> float:
-    return self._size_z
-
   # ------------------------------------------------------------------------
   # Lifecycle & Resource setup
   # ------------------------------------------------------------------------
