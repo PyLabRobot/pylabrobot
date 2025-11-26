@@ -130,7 +130,6 @@ class InhecoIncubatorShakerStackBackend:
     # Logger
     self.logger = logger or logging.getLogger("pylabrobot")
     self.logger.setLevel(logging.INFO)
-    logging.getLogger("pylabrobot.io.serial").disabled = True
 
     # Core state
     self.id_vendor = id_vendor
