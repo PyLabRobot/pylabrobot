@@ -17,9 +17,10 @@ Features:
 import asyncio
 import logging
 import sys
-from typing import Dict, Literal, Optional
+from typing import Awaitable, Callable, Dict, Literal, Optional, ParamSpec, TypeVar
 
 from pylabrobot.io.serial import Serial
+from functools import wraps
 
 try:
   import serial
@@ -29,6 +30,10 @@ try:
 except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class InhecoError(RuntimeError):
@@ -952,10 +957,9 @@ class InhecoIncubatorShakerStackBackend:
 
   # # # Shaking Features # # #
 
-  def requires_incubator_shaker(func):
-    """Decorator ensuring that the connected machine is a shaker-capable model."""
-
-    async def wrapper(self, *args, **kwargs):
+  def requires_incubator_shaker(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    @wraps(func)
+    async def wrapper(self, *args: P.args, **kwargs: P.kwargs) -> R:
       incubator_type = getattr(self, "incubator_type", None)
       name = getattr(func, "__name__", func.__class__.__name__)
 
