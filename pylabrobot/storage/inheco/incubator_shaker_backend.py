@@ -129,7 +129,6 @@ class InhecoIncubatorShakerStackBackend:
   ):
     # Logger
     self.logger = logger or logging.getLogger("pylabrobot")
-    self.logger.setLevel(logging.INFO)
 
     # Core state
     self.id_vendor = id_vendor
@@ -169,14 +168,14 @@ class InhecoIncubatorShakerStackBackend:
     ]
 
     if not matching_ports:
-      raise RuntimeError(f"No INHECO devices found (VID={self.id_vendor}, PID={self.id_product}).")
+      raise RuntimeError(f"No Inheco devices found (VID={self.id_vendor}, PID={self.id_product}).")
 
     # --- Port selection ---
     if self.port_hint:  # Port explicitly specified
       candidate_port = self.port_hint
       if candidate_port not in matching_ports:
         raise RuntimeError(
-          f"Specified port {candidate_port} not found among INHECO devices "
+          f"Specified port {candidate_port} not found among Inheco devices "
           f"(VID={self.id_vendor}, PID={self.id_product})."
         )
       else:
@@ -190,7 +189,7 @@ class InhecoIncubatorShakerStackBackend:
 
     else:  # Multiple devices found
       raise RuntimeError(
-        f"Multiple INHECO devices detected with VID:PID {self.id_vendor}:{self.id_product}.\n"
+        f"Multiple Inheco devices detected with VID:PID {self.id_vendor}:{self.id_product}.\n"
         f" Detected ports: {matching_ports}\n"
         "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
       )
@@ -474,11 +473,13 @@ class InhecoIncubatorShakerStackBackend:
   # Querying Machine State #
   async def request_firmware_version(self, stack_index: int) -> str:
     """EEPROM request: Return the firmware version string."""
-    return await self.send_command("RFV0", stack_index=stack_index)
+    resp = await self.send_command("RFV0", stack_index=stack_index)
+    return resp
 
   async def request_serial_number(self, stack_index: int) -> str:
     """EEPROM request: Return the device serial number."""
-    return await self.send_command("RFV2", stack_index=stack_index)
+    resp = await self.send_command("RFV2", stack_index=stack_index)
+    return resp
 
   async def request_last_calibration_date(self, stack_index: int) -> str:
     """EEPROM request"""
@@ -660,7 +661,8 @@ class InhecoIncubatorShakerStackBackend:
     no Error will be generated!
     If AID is send during operating, the shaker and heater stop immediately!
     """
-    return await self.send_command("AID", stack_index=stack_index)
+    resp = await self.send_command("AID", stack_index=stack_index)
+    return resp
 
   # # # Loading Tray Features # # #
 
