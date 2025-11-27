@@ -69,6 +69,7 @@ class Serial(IOBase):
 
   @property
   def port(self) -> str:
+    assert self._port is not None, "Port not set. Did you call setup()?"
     return self._port
 
   async def setup(self):
@@ -144,9 +145,8 @@ class Serial(IOBase):
           f"with VID={self._vid}:PID={self._pid}."
         )
       else:  # -> WINNER by port specification
-        self._log(
-          logging.INFO,
-          f"Using explicitly provided port: {candidate_port} (verifying DIP={self.dip_switch_id})",
+        logger.info(
+          f"Using explicitly provided port: {candidate_port} (for VID={self._vid}, PID={self._pid})",
         )
 
     # 3. VID:PID specified -  port not specified -> Single device found -> WINNER by VID:PID search
@@ -203,6 +203,8 @@ class Serial(IOBase):
     """Write data to the serial device."""
 
     assert self._ser is not None, "forgot to call setup?"
+    assert self._port is not None, "Port not set. Did you call setup()?"
+
     loop = asyncio.get_running_loop()
 
     if self._executor is None:
@@ -219,6 +221,8 @@ class Serial(IOBase):
     """Read data from the serial device."""
 
     assert self._ser is not None, "forgot to call setup?"
+    assert self._port is not None, "Port not set. Did you call setup()?"
+
     loop = asyncio.get_running_loop()
 
     if self._executor is None:

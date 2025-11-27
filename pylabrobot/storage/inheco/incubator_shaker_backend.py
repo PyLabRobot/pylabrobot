@@ -18,7 +18,7 @@ import asyncio
 import logging
 import sys
 from functools import wraps
-from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar, cast
+from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.machine import MachineBackend
@@ -283,7 +283,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     await self.serial.write(data)
 
   async def _read_full_response(self, timeout: float) -> bytes:
-    """Read a complete INHECO response frame asynchronously."""
+    """Read a complete Inheco response frame asynchronously."""
     if not self.io:
       raise RuntimeError("Serial port not open.")
 
@@ -312,7 +312,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   # === Encoding / Decoding ===
 
   def _crc8_legacy(self, data: bytearray) -> int:
-    """Compute legacy CRC-8 used by INHECO devices."""
+    """Compute legacy CRC-8 used by Inheco devices."""
     crc = 0xA1
     for byte in data:
       d = byte
@@ -344,8 +344,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   # === Response parsing ===
 
-  def _parse_response_binary_safe(self, resp: bytes) -> dict:
-    """Parse INHECO response frames safely (binary & multi-segment)."""
+  def _parse_response_binary_safe(self, resp: bytes) -> dict[str, str | int | bool | bytes]:
+    """Parse Inheco response frames safely (binary & multi-segment)."""
     if len(resp) < 3:
       raise ValueError("Incomplete response")
 
@@ -506,7 +506,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   async def request_number_of_connected_machines(self, layer: int = 0, stack_index: int = 0) -> int:
     """
-    Report the number of connected INHECO devices on a layer (RDAx,1).
+    Report the number of connected Inheco devices on a layer (RDAx,1).
 
     Args:
         layer (int): Layer index (0–7). Default = 0.
@@ -1455,7 +1455,7 @@ class InhecoIncubatorShakerUnit:
 
   async def request_number_of_connected_machines(self, layer: int = 0) -> int:
     """
-    Report the number of connected INHECO devices on a layer (RDAx,1).
+    Report the number of connected Inheco devices on a layer (RDAx,1).
 
     Args:
         layer (int): Layer index (0–7). Default = 0.
