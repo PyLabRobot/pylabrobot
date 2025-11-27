@@ -18,7 +18,7 @@ import asyncio
 import logging
 import sys
 from functools import wraps
-from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar
+from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar, cast
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.machine import MachineBackend
@@ -120,7 +120,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Unified logging with a clear device tag and optional direction marker.
     direction: "→" for TX, "←" for RX, None for neutral.
     """
-    prefix = f"[Inheco IncShak dip={self.dip_switch_id}"
+    prefix = f"[Inheco IncShak dip={self.dip_switch_id}]"
     if direction:
       prefix += f" {direction}"
     self.logger.log(level, f"{prefix} {message}")
@@ -131,8 +131,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self,
     dip_switch_id: int = 2,
     port: Optional[str] = None,
-    # id_vendor: str = "0403",
-    # id_product: str = "6001",
     write_timeout: float = 5.0,
     read_timeout: float = 10.0,
     logger: Optional[logging.Logger] = None,
@@ -141,8 +139,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self.logger = logger or logging.getLogger("pylabrobot")
 
     # Core state
-    # self.id_vendor = id_vendor
-    # self.id_product = id_product
     self.dip_switch_id = dip_switch_id
 
     self.port_hint = port
@@ -161,23 +157,29 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   def __repr__(self):
     return (
-      f"<InhecoIncubatorShakerBackend (VID:PID={self.io._vid}:{self.io._pid}, "
+      f"<InhecoIncubatorShakerBackend (VID:PID={self.serial._vid}:{self.serial._pid}, "
       + f"DIP={self.dip_switch_id}) at {self.port}>"
     )
+  
+  @property
+  def serial(self) -> Serial:
+      if self.io is None:
+          raise RuntimeError("Serial port not initialized. Call setup() first.")
+      return self.io
 
   async def setup(
     self, port: Optional[str] = None, vid: str = "0403", pid: str = "6001", verbose: bool = False
   ):
     """
     Detect and connect to the Inheco machine stack.
-    Discover INHECO device via VID:PID (0403:6001) and verify DIP switch ID.
+    Discover Inheco device via VID:PID (0403:6001) and verify DIP switch ID.
     """
 
     # --- Establish serial connection ---
     self.io = Serial(
       port=port,
-      vid=vid,
-      pid=pid,
+      vid=cast("str", vid),
+      pid=cast("str", pid),
       baudrate=19_200,
       bytesize=serial.EIGHTBITS,
       parity=serial.PARITY_NONE,
@@ -207,7 +209,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         f"{self.dip_switch_id}). Please verify the DIP switch setting or wiring."
       )
       self._log(logging.ERROR, msg)
-      self._log(logging.DEBUG, f"Exception during setup: {e!r}")
 
       # --- Fail-safe teardown ---
       if serial_obj is not None:
@@ -227,7 +228,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     else:
       # Connection verified and active
       self._log(
-        logging.INFO, f"Connected to Inheco machine at {self.io.port} (DIP={self.dip_switch_id})"
+        logging.INFO, f"Connected to Inheco machine at {self.serial.port} (DIP={self.dip_switch_id})"
       )
 
     # --- Cache stack-level state ---
@@ -244,7 +245,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self.setup_finished = True
 
     msg = (
-      f"Connected to Inheco Incubator Shaker Stack on {self.io._port}\n"
+      f"Connected to Inheco Incubator Shaker Stack on {self.serial.port}\n"
       f"DIP switch ID of bottom unit: {self.dip_switch_id}\n"
       f"Number of connected units: {self.number_of_connected_units}\n"
       f"Unit composition: {self.unit_composition}"
@@ -295,7 +296,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       return len(b) >= 3 and b[-1] == 0x60 and b[-3] == expected_hdr and 0x20 <= b[-2] <= 0x2F
 
     while True:
-      chunk = await self.io.read(16)
+      chunk = await self.serial.read(16)
       if chunk:
         buf.extend(chunk)
         self._log(logging.DEBUG, chunk.hex(" "), direction="←")
@@ -426,7 +427,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     msg = self._build_message(command, stack_index=stack_index)
     self._log(logging.DEBUG, f"SEND: {msg.hex(' ')} (write_timeout={w_timeout})")
 
-    await asyncio.wait_for(self.io.write(msg), timeout=w_timeout)
+    await asyncio.wait_for(self.serial.write(msg), timeout=w_timeout)
     await asyncio.sleep(delay)
 
     response = await self._read_full_response(timeout=read_timeout or self.read_timeout)
@@ -489,7 +490,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       raise ValueError(f"Layer must be between 0 and 7, got {layer}")
 
     resp = await self.send_command(f"RDA{layer},0", stack_index=stack_index)
-    slot_mask = int(resp.strip())
+    resp_str = str(resp).strip()
+    slot_mask = int(resp_str)
     slot_mask_bin = f"0b{slot_mask:016b}"
 
     slots_connected = [i for i in range(16) if (slot_mask >> i) & 1]
@@ -930,6 +932,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   # # # Shaking Features # # #
 
+  @staticmethod
   def requires_incubator_shaker(
     func: Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]],
   ) -> Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]]:
@@ -1547,9 +1550,9 @@ class InhecoIncubatorShakerUnit:
   async def stop_temperature_control(self) -> None:
     """Stop active temperature regulation.
 
-    Disables the incubator’s heating control loop.
+    Disables the incubator's heating control loop.
     The previously set target temperature remains stored in the
-    device’s memory but is no longer actively maintained.
+    device's memory but is no longer actively maintained.
     The incubator will passively drift toward ambient temperature.
     """
     await self.backend.stop_temperature_control(stack_index=self.index)
