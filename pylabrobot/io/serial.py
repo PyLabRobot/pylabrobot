@@ -242,6 +242,8 @@ class Serial(IOBase):
     """Read a line from the serial device."""
 
     assert self._ser is not None, "forgot to call setup?"
+    assert self._port is not None, "Port not set. Did you call setup()?"
+
     loop = asyncio.get_running_loop()
 
     if self._executor is None:
@@ -260,6 +262,9 @@ class Serial(IOBase):
   async def send_break(self, duration: float):
     """Send a break condition for the specified duration."""
 
+    assert self._ser is not None, "forgot to call setup?"
+    assert self._port is not None, "Port not set. Did you call setup()?"
+
     loop = asyncio.get_running_loop()
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
@@ -274,7 +279,10 @@ class Serial(IOBase):
     capturer.record(SerialCommand(device_id=self._port, action="send_break", data=str(duration)))
 
   async def reset_input_buffer(self):
+    
     assert self._ser is not None, "forgot to call setup?"
+    assert self._port is not None, "Port not set. Did you call setup()?"
+
     loop = asyncio.get_running_loop()
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
@@ -283,7 +291,10 @@ class Serial(IOBase):
     capturer.record(SerialCommand(device_id=self._port, action="reset_input_buffer", data=""))
 
   async def reset_output_buffer(self):
+      
     assert self._ser is not None, "forgot to call setup?"
+    assert self._port is not None, "Port not set. Did you call setup()?"
+
     loop = asyncio.get_running_loop()
     if self._executor is None:
       raise RuntimeError("Call setup() first.")

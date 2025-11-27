@@ -18,7 +18,7 @@ import asyncio
 import logging
 import sys
 from functools import wraps
-from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar
+from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar, cast
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.machine import MachineBackend
@@ -344,7 +344,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   # === Response parsing ===
 
-  def _parse_response_binary_safe(self, resp: bytes) -> dict[str, str | int | bool | bytes]:
+  def _parse_response_binary_safe(self, resp: bytes) -> dict:
     """Parse Inheco response frames safely (binary & multi-segment)."""
     if len(resp) < 3:
       raise ValueError("Incomplete response")
@@ -944,7 +944,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       # ORIGINAL LOGIC — EXACTLY PRESERVED
       incubator_type = getattr(self, "incubator_type", None)
       name = getattr(func, "__name__", func.__class__.__name__)
-      stack_index = int(kwargs.get("stack_index", False))
+      stack_index = cast(int, kwargs.get("stack_index", 0))
 
       if incubator_type is None or incubator_type == "unknown":
         try:
