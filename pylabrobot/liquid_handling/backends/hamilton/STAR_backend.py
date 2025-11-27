@@ -6955,6 +6955,105 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert resp is not None
     return resp["ct"] == 1
 
+  
+  # def parse_occupancy_bitmask(self, rc: str) -> list[int]:
+  #     """
+  #     Parse an RC auto-load query response and return physical deck tracks.
+      
+  #     Parameters
+  #     ----------
+  #     rc : str
+  #         Full RC response, e.g.:
+  #         'C0RCid0073er00/00cd00040404100000ce00000000000000040404100000'
+      
+  #     Returns
+  #     -------
+  #     list[int]
+  #         Sorted list of physical deck tracks that contain carriers.
+  #     """
+  #     # Extract the CE hex substring
+  #     ce_idx = rc.find("ce")
+  #     if ce_idx == -1:
+  #         raise ValueError("CE field not found in RC response.")
+  #     ce = rc[ce_idx + 2 : ce_idx + 2 + 26]  # 26 hex chars
+      
+  #     # Decode CE bitmask → internal slots (1–104)
+  #     slots = []
+  #     bit_index = 1  # slots start at 1
+  #     for nibble in reversed(ce):
+  #         val = int(nibble, 16)
+  #         for bit in range(4):
+  #             if val & (1 << bit):
+  #                 slots.append(bit_index)
+  #             bit_index += 1
+
+  #     return sorted(slots)
+  def parse_occupancy_bitmask(self, mask_hex: str) -> list[int]:
+    """
+    Decode a hex occupancy bitmask of arbitrary length.
+    Each hex nibble = 4 slots.
+    Slot numbering starts at 1 from the rightmost nibble (LSB).
+    """
+    mask_hex = mask_hex.strip()
+
+    if not all(c in "0123456789abcdefABCDEF" for c in mask_hex):
+        raise ValueError(f"Invalid hex in mask: {mask_hex!r}")
+
+    slots = []
+    bit_index = 1
+
+    # Rightmost hex digit = slot 1 (LSB)
+    for nibble in reversed(mask_hex):
+        val = int(nibble, 16)
+        for bit in range(4):
+            if val & (1 << bit):
+                slots.append(bit_index)
+            bit_index += 1
+
+    return sorted(slots)
+
+
+  # async def request_presence_of_carriers_on_loading_tray(self) -> list[int]:
+  #   """Request presence of carriers on the loading tray (not on deck).
+  #   Autoload will run along the entire loading tray and
+  #   check all rails using its proximity sensor.
+  #   """
+
+  #   resp = await self.send_command(
+  #         module="C0",
+  #         command="CS"
+  #   )
+
+  #   cd_resp = resp.split("cd")[-1]
+
+
+  #   return self.parse_occupancy_bitmask(cd_resp)
+  async def request_presence_of_carriers_on_loading_tray(self) -> list[int]:
+    resp = await self.send_command(module="C0", command="CS")
+
+    if "cd" not in resp:
+        raise ValueError(f"CD field missing: {resp!r}")
+
+    mask_hex = resp.split("cd", 1)[1].strip()
+
+    return self.parse_occupancy_bitmask(mask_hex)
+  
+  async def request_presence_of_carriers_on_deck(self) -> list[int]:
+    """Request presence of carriers on deck using carrier sensors at the back of deck.
+    No physical movement of autoload required.
+
+    Returns the right/end rail positions (1–54) where carriers are detected.
+    """
+  
+    resp = await self.send_command(
+          module="C0",
+          command="RC"
+    )
+
+    ce_resp = resp.split("ce")[-1]
+
+    return self.parse_occupancy_bitmask(ce_resp)
+
   async def move_autoload_to_slot(self, slot_number: int):
     """Move autoload to specific slot/track position"""
 
@@ -7012,6 +7111,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "Code 93": "",
     }
 
+  def compute_end_rail_of_carrier(self, carrier: Carrier) -> int:
+    """Compute end rail of carrier based on its location on the deck."""
+    track_width = 22.5
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
+    carrier_end_rail = int(carrier_width / track_width)
+
+    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+
+    return carrier_end_rail
+
   async def set_1d_barcode_type(self, barcode_symbology: Literal[
       "ISBT Standard",
       "Code 128 (Subset B and C)",
@@ -7036,10 +7145,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Identify carrier end rail
-    track_width = 22.5
-    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
-    carrier_end_rail = int(carrier_width / track_width)
-    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+    carrier_end_rail = self.compute_end_rail_of_carrier(carrier)
 
     carrier_on_loading_tray = await self.request_single_carrier_presence(carrier_end_rail)
 
@@ -7053,6 +7159,73 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     else:
       raise ValueError(f"Carrier is already on the loading tray at position {carrier_end_rail}.")
+
+  async def load_carrier_from_identification_position(
+    self,
+    barcode_reading: bool = False,
+    barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
+    barcode_symbology: Literal[
+      "ISBT Standard",
+      "Code 128 (Subset B and C)",
+      "Code 39",
+      "Codebar",
+      "Code 2of5 Interleaved",
+      "UPC A/E",
+      "YESN/EAN 8",
+      "Code 93",
+    ] = "Code 128 (Subset B and C)",
+    reading_position_of_first_barcode: float = 10.0, # mm
+    no_container_per_carrier: int = 5,
+    distance_between_containers: float = 96.0, # mm
+    width_of_reading_window: float = 38.0, # mm
+    reading_speed: float = 128.1, # mm/secs
+    park_autoload_after: bool = True,
+  ):
+    """Finishes loading the carrier that is currently engaged with the autoload sled,
+    i.e. is currently in the identification position.
+    """
+
+    assert barcode_reading_direction in ["horizontal", "vertical"]
+    assert 0 <= reading_position_of_first_barcode <= 470
+    assert 0 <= no_container_per_carrier <= 32
+    assert 0 <= distance_between_containers <= 470
+    assert 0.1 <= width_of_reading_window <= 99.9
+    assert 1.5 <= reading_speed <= 160.0
+
+    barcode_reading_direction_dict = {
+      "vertical": "0",
+      "horizontal": "1",
+    }
+
+    no_container_per_carrier_str = str(no_container_per_carrier).zfill(2)
+    reading_position_of_first_barcode_str = str(round(reading_position_of_first_barcode*10)).zfill(4)
+    distance_between_containers_str = str(round(distance_between_containers*10)).zfill(4)
+    width_of_reading_window_str = str(round(width_of_reading_window*10)).zfill(3)
+    reading_speed_str = str(round(reading_speed*10)).zfill(4)
+
+    if not barcode_reading:
+      barcode_reading_direction="vertical" # no movement
+      no_container_per_carrier_str="00" # no scanning
+
+    else:
+      # Choose barcode symbology
+      await self.set_1d_barcode_type(barcode_symbology=barcode_symbology)
+
+    resp = await self.send_command(
+        module="C0",
+        command="CL",
+        bd=barcode_reading_direction_dict[barcode_reading_direction],
+        bp=reading_position_of_first_barcode_str, # Barcode reading position of first barcode [mm]
+        cn=no_container_per_carrier_str,
+        co=distance_between_containers_str,  # Distance between containers (pattern) [mm]
+        cf=width_of_reading_window_str,  # Width of reading window [mm]
+        cv=reading_speed_str,  # Carrier reading speed [mm/sec]/
+    )
+    
+    if park_autoload_after:
+      await self.park_autoload()
+            
+    return resp
 
 
   async def load_carrier(
