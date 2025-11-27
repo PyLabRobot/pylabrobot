@@ -37,8 +37,8 @@ class Serial(IOBase):
   def __init__(
     self,
     port: Optional[str] = None,
-    vid: Optional[int] = None,
-    pid: Optional[int] = None,
+    vid: Optional[str] = None,
+    pid: Optional[str] = None,
     baudrate: int = 9600,
     bytesize: int = 8,  # serial.EIGHTBITS
     parity: str = "N",  # serial.PARITY_NONE
@@ -117,14 +117,13 @@ class Serial(IOBase):
     self._executor = ThreadPoolExecutor(max_workers=1)
 
     # 1. VID:PID specified - port maybe
-    if (self._vid and self._pid):
-
+    if self._vid and self._pid:
       matching_ports = [
         p.device
         for p in serial.tools.list_ports.comports()
         if f"{self._vid}:{self._pid}" in (p.hwid or "")
       ]
-      
+
       # 1.a. No matching devices found AND no port specified
       if not self._port and not matching_ports:
         raise RuntimeError(
@@ -144,7 +143,7 @@ class Serial(IOBase):
           f"Specified port {candidate_port} not found among machines: {matching_ports} "
           f"with VID={self._vid}:PID={self._pid}."
         )
-      else: # -> WINNER by port specification
+      else:  # -> WINNER by port specification
         self._log(
           logging.INFO,
           f"Using explicitly provided port: {candidate_port} (verifying DIP={self.dip_switch_id})",
@@ -208,7 +207,7 @@ class Serial(IOBase):
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    
+
     await loop.run_in_executor(self._executor, self._ser.write, data)
 
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
@@ -224,7 +223,7 @@ class Serial(IOBase):
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    
+
     data = await loop.run_in_executor(self._executor, self._ser.read, num_bytes)
 
     if len(data) != 0:
@@ -243,7 +242,7 @@ class Serial(IOBase):
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
-    
+
     data = await loop.run_in_executor(self._executor, self._ser.readline)
 
     if len(data) != 0:
@@ -251,12 +250,11 @@ class Serial(IOBase):
       capturer.record(
         SerialCommand(device_id=self._port, action="readline", data=data.decode("unicode_escape"))
       )
-      
+
     return cast(bytes, data)
 
   async def send_break(self, duration: float):
     """Send a break condition for the specified duration."""
-
 
     loop = asyncio.get_running_loop()
     if self._executor is None:

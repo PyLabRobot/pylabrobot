@@ -160,12 +160,12 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       f"<InhecoIncubatorShakerBackend (VID:PID={self.serial._vid}:{self.serial._pid}, "
       + f"DIP={self.dip_switch_id}) at {self.port}>"
     )
-  
+
   @property
   def serial(self) -> Serial:
-      if self.io is None:
-          raise RuntimeError("Serial port not initialized. Call setup() first.")
-      return self.io
+    if self.io is None:
+      raise RuntimeError("Serial port not initialized. Call setup() first.")
+    return self.io
 
   async def setup(
     self, port: Optional[str] = None, vid: str = "0403", pid: str = "6001", verbose: bool = False
@@ -178,8 +178,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     # --- Establish serial connection ---
     self.io = Serial(
       port=port,
-      vid=cast("str", vid),
-      pid=cast("str", pid),
+      vid=vid,
+      pid=pid,
       baudrate=19_200,
       bytesize=serial.EIGHTBITS,
       parity=serial.PARITY_NONE,
@@ -213,9 +213,9 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       # --- Fail-safe teardown ---
       if serial_obj is not None:
         try:
-          maybe_close = serial_obj.close()
-          if asyncio.iscoroutine(maybe_close):
-            await maybe_close
+          serial_obj.close()
+          # if asyncio.iscoroutine(maybe_close):
+          #   await maybe_close
           self._log(logging.DEBUG, f"Closed serial connection on {serial_obj._port}")
         except Exception as close_err:
           self._log(
@@ -228,7 +228,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     else:
       # Connection verified and active
       self._log(
-        logging.INFO, f"Connected to Inheco machine at {self.serial.port} (DIP={self.dip_switch_id})"
+        logging.INFO,
+        f"Connected to Inheco machine at {self.serial.port} (DIP={self.dip_switch_id})",
       )
 
     # --- Cache stack-level state ---
@@ -279,7 +280,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   async def write(self, data: bytes) -> None:
     """Write binary data to the serial device."""
     self._log(logging.DEBUG, f"→ {data.hex(' ')}")
-    await self.io.write(data)
+    await self.serial.write(data)
 
   async def _read_full_response(self, timeout: float) -> bytes:
     """Read a complete INHECO response frame asynchronously."""
@@ -1389,6 +1390,9 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       raise ValueError("Self-test requires a closed loading tray.")
 
     resp = await self.send_command("AQS", stack_index=stack_index, read_timeout=read_timeout)
+
+    if not isinstance(resp, str):
+      raise RuntimeError(f"Invalid response: {resp!r}")
 
     resp_decimal = int(resp)
 
