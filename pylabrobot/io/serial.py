@@ -279,7 +279,6 @@ class Serial(IOBase):
     capturer.record(SerialCommand(device_id=self._port, action="send_break", data=str(duration)))
 
   async def reset_input_buffer(self):
-    
     assert self._ser is not None, "forgot to call setup?"
     assert self._port is not None, "Port not set. Did you call setup()?"
 
@@ -291,7 +290,6 @@ class Serial(IOBase):
     capturer.record(SerialCommand(device_id=self._port, action="reset_input_buffer", data=""))
 
   async def reset_output_buffer(self):
-      
     assert self._ser is not None, "forgot to call setup?"
     assert self._port is not None, "Port not set. Did you call setup()?"
 
