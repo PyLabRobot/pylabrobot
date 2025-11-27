@@ -1,8 +1,7 @@
-from typing import Optional
+from typing import List
 
-from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
+from pylabrobot.arms.precise_flex.joints import PreciseFlexJointCoords
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
-from pylabrobot.resources import Coordinate, Rotation
 
 
 class PreciseFlex400Backend(PreciseFlexBackend):
@@ -11,24 +10,19 @@ class PreciseFlex400Backend(PreciseFlexBackend):
   def __init__(self, host: str, port: int = 10100, timeout=20) -> None:
     super().__init__(host=host, port=port, timeout=timeout)
 
-  def convert_to_joint_space(
-    self, position: tuple[float, float, float, float, float, float]
-  ) -> JointCoords:
-    """Convert a tuple of joint angles to a JointCoords object."""
+  def convert_to_joint_space(self, position: List[float]) -> PreciseFlexJointCoords:
+    """Convert a list of joint angles to a PreciseFlexJointCoords object."""
     if len(position) != 6:
-      raise ValueError("Position must be a tuple of 6 joint angles.")
-    return JointCoords(0, position[0], position[1], position[2], position[3], 0)
+      raise ValueError("Position must be a list of 6 joint angles.")
+    return PreciseFlexJointCoords(0, position[0], position[1], position[2], position[3], 0)
 
-  def convert_to_joints_array(
-    self, position: JointCoords
-  ) -> tuple[float, float, float, float, float, float]:
-    """Convert a JointSpace object to a list of joint angles."""
-    joints = (
+  def convert_to_joints_array(self, position: PreciseFlexJointCoords) -> List[float]:
+    """Convert a PreciseFlexJointCoords object to a list of joint angles."""
+    return [
       position.base,
       position.shoulder,
       position.elbow,
       position.wrist,
       0,
       0,
-    )  # PF400 has 4 joints, last two are fixed
-    return joints
+    ]  # PF400 has 4 joints, last two are fixed

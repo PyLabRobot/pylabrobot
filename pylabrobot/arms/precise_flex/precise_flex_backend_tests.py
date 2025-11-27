@@ -2,8 +2,9 @@ import unittest
 
 import pytest
 
-from pylabrobot.arms.coords import CartesianCoords, ElbowOrientation, JointCoords
+from pylabrobot.arms.precise_flex.coords import CartesianCoords, ElbowOrientation
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
+from pylabrobot.arms.standard import JointCoords
 from pylabrobot.resources import Coordinate, Rotation
 
 

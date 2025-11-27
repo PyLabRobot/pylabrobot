@@ -1,7 +1,9 @@
+from collections.abc import Iterable
 from typing import Optional, Union
 
 from pylabrobot.arms.backend import AccessPattern, ArmBackend
-from pylabrobot.arms.coords import CartesianCoords, JointCoords
+from pylabrobot.arms.precise_flex.coords import CartesianCoords
+from pylabrobot.arms.standard import JointCoords
 from pylabrobot.machines.machine import Machine
 
 
@@ -12,12 +14,14 @@ class Arm(Machine):
     super().__init__(backend=backend)
     self.backend: ArmBackend = backend
 
-  async def move_to(self, position: Union[CartesianCoords, JointCoords]):
-    """Move the arm to a specified position in 3D space."""
+  async def move_to(self, position: Union[CartesianCoords, Iterable[float]]):
+    """Move the arm to a specified position in 3D space or joint space."""
+    if isinstance(position, Iterable) and not isinstance(position, list):
+      position = list(position)
     return self.backend.move_to(position)
 
   async def get_joint_position(self) -> JointCoords:
-    """Get the current position of the arm in 3D space."""
+    """Get the current position of the arm in joint space."""
     return await self.backend.get_joint_position()
 
   async def get_cartesian_position(self) -> CartesianCoords:
@@ -25,15 +29,12 @@ class Arm(Machine):
     return await self.backend.get_cartesian_position()
 
   async def open_gripper(self):
-    """Open the arm's gripper."""
     return await self.backend.open_gripper()
 
   async def close_gripper(self):
-    """Close the arm's gripper."""
     return await self.backend.close_gripper()
 
   async def is_gripper_closed(self) -> bool:
-    """Check if the gripper is currently closed."""
     return await self.backend.is_gripper_closed()
 
   async def halt(self):
@@ -55,9 +56,10 @@ class Arm(Machine):
 
     Args:
       position: Target position (CartesianCoords or JointCoords)
-      access: Access pattern defining how to approach the target.
-              Defaults to VerticalAccess() if not specified.
+      access: Access pattern defining how to approach the target.  Defaults to VerticalAccess() if not specified.
     """
+    if isinstance(position, Iterable) and not isinstance(position, list):
+      position = list(position)
     return await self.backend.approach(position, access)
 
   async def pick_plate(
@@ -67,9 +69,10 @@ class Arm(Machine):
 
     Args:
       position: Target position for pickup
-      access: Access pattern defining how to approach and retract.
-              Defaults to VerticalAccess() if not specified.
+      access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
     """
+    if isinstance(position, Iterable) and not isinstance(position, list):
+      position = list(position)
     return await self.backend.pick_plate(position, access)
 
   async def place_plate(
@@ -79,7 +82,8 @@ class Arm(Machine):
 
     Args:
       position: Target position for placement
-      access: Access pattern defining how to approach and retract.
-              Defaults to VerticalAccess() if not specified.
+      access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
     """
+    if isinstance(position, Iterable) and not isinstance(position, list):
+      position = list(position)
     return await self.backend.place_plate(position, access)

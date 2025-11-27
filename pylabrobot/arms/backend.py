@@ -1,8 +1,9 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import List, Optional, Union
 
-from pylabrobot.arms.coords import CartesianCoords, JointCoords
+from pylabrobot.arms.precise_flex.coords import CartesianCoords
+from pylabrobot.arms.standard import JointCoords
 from pylabrobot.machines.backend import MachineBackend
 
 

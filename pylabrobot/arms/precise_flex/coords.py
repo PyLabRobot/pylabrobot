@@ -11,16 +11,6 @@ class ElbowOrientation(Enum):
 
 
 @dataclass
-class JointCoords:
-  rail: float
-  base: float
-  shoulder: float
-  elbow: float
-  wrist: float
-  gripper: float
-
-
-@dataclass
 class CartesianCoords:
   location: Coordinate
   rotation: Rotation
