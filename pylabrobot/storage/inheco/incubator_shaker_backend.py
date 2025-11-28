@@ -1,17 +1,17 @@
 """
-PyLabRobot backend for Inheco Incubator Shaker Stack machine.
+Backend for Inheco Incubator Shaker Stack machine.
 
 This module implements a fully asynchronous serial communication backend for
 Inheco Incubator/Shaker instruments (e.g., Inheco MP/DWP with or without shaker).
 
 Features:
-    • Auto-discovery of Inheco devices by VID:PID (error if more than one is found).
-    • Validation of DIP switch ID.
-    • Automatic identification of units in stack.
-    • Complete command/response layer with legacy CRC-8 and async-safe I/O.
-    • Structured firmware error reporting via InhecoError and contextual snapshotting.
-    • High-level API for temperature control, drawer handling, and shaking functions.
-    • Protocol-conformant parsing for EEPROM, sensor, and status commands.
+- Auto-discovery of Inheco devices by VID:PID (error if more than one is found).
+- Validation of DIP switch ID.
+- Automatic identification of units in stack.
+- Complete command/response layer with legacy CRC-8 and async-safe I/O.
+- Structured firmware error reporting via InhecoError and contextual snapshotting.
+- High-level API for temperature control, drawer handling, and shaking functions.
+- Protocol-conformant parsing for EEPROM, sensor, and status commands.
 """
 
 import asyncio
@@ -29,7 +29,6 @@ else:
   from typing import Concatenate, ParamSpec
 try:
   import serial
-  import serial.tools.list_ports
 
   HAS_SERIAL = True
 except ImportError as e:
@@ -455,20 +454,19 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Report which device slots are occupied on a given layer (firmware 'RDAx,0').
 
     Args:
-        layer (int): Layer index (0-7). Default = 0.
+      layer: Layer index (0-7). Default = 0.
 
     Returns:
-        dict:
-            {
-              "layer": int,
-              "slot_mask": int,       # e.g. 7
-              "slot_mask_bin": str,   # e.g. "0b0000000000000111"
-              "slots_connected": list[int]  # e.g. [0, 1, 2]
-            }
+      {
+        "layer": int,
+        "slot_mask": int,       # e.g. 7
+        "slot_mask_bin": str,   # e.g. "0b0000000000000111"
+        "slots_connected": list[int]  # e.g. [0, 1, 2]
+      }
 
     Notes:
-        Each bit in `slot_mask` represents one of 16 possible device slots:
-        bit=1 means a device is connected; bit=0 means empty.
+      Each bit in `slot_mask` represents one of 16 possible device slots:
+      bit=1 means a device is connected; bit=0 means empty.
     """
     if not (0 <= layer <= 7):
       raise ValueError(f"Layer must be between 0 and 7, got {layer}")
@@ -492,13 +490,13 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Report the number of connected Inheco devices on a layer (RDAx,1).
 
     Args:
-        layer (int): Layer index (0-7). Default = 0.
+      layer: Layer index (0-7). Default = 0.
 
     Returns:
-        int: Number of connected devices (0-16).
+      Number of connected devices (0-16).
 
     Example:
-        Response "3" → 3 connected devices on that layer.
+      Response "3" → 3 connected devices on that layer.
     """
     if not (0 <= layer <= 7):
       raise ValueError(f"Layer must be 0-7, got {layer}")
@@ -554,7 +552,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """EEPROM request: Query the date of the last thermal calibration.
 
     Returns:
-        str: Calibration date in ISO format 'YYYY-MM-DD'.
+        Calibration date in ISO format 'YYYY-MM-DD'.
     """
     resp = await self.send_command("RCD")
     date = resp.strip()
@@ -643,7 +641,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Report the current drawer (loading tray) status.
 
     Returns:
-        str: 'open' if the loading tray is open, 'closed' if closed.
+        'open' if the loading tray is open, 'closed' if closed.
 
     Notes:
         - Firmware response: '1' = open, '0' = closed.
@@ -744,9 +742,9 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     False if control is off (RHE = 0).
 
     Firmware response (RHE):
-        0 → control loop off (passive equilibrium)
-        1 → control loop on (heating/cooling active)
-        2 → control + booster on (extended heating mode)
+    0: control loop off (passive equilibrium)
+    1: control loop on (heating/cooling active)
+    2: control + booster on (extended heating mode)
     """
     resp = await self.send_command("RHE", stack_index=stack_index)
     try:
@@ -788,12 +786,12 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Query the maximum allowed or maximum measured device temperature (in °C).
 
     Args:
-        measured:
-            - False → report configured maximum allowed temperature (default)
-            - True  → report maximum measured temperature since last reset
+      measured:
+      - False: report configured maximum allowed temperature (default)
+      - True: report maximum measured temperature since last reset
 
     Returns:
-        float: Temperature in °C (value / 10)
+      Temperature in °C (value / 10)
     """
     selector = "1" if measured else ""
     resp = await self.send_command(f"RMT{selector}", stack_index=stack_index)
@@ -807,11 +805,11 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Query the absolute temperature difference between target and actual plate temperature.
 
     Returns:
-        float: Delta temperature in °C (positive if below target, negative if above target).
+      Delta temperature in °C (positive if below target, negative if above target).
 
     Notes:
-        - Reported in 1/10 °C.
-        - Negative values indicate the plate is warmer than the target.
+    - Reported in 1/10 °C.
+    - Negative values indicate the plate is warmer than the target.
     """
     resp = await self.send_command("RDT", stack_index=stack_index)
     try:
@@ -833,18 +831,18 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Wait asynchronously until the target temperature is reached.
 
     Args:
-        sensor: Temperature sensor to monitor ("main", "dif", "boost", or "mean").
-        tolerance: Acceptable difference (in °C) between current and target temperature.
-        interval_s: Polling interval in seconds. Default = 0.5 s.
-        timeout_s: Maximum time to wait in seconds. None disables timeout. Default = 600 s.
-        show_progress_bar: If True, display a dynamic ASCII progress bar in stdout. Default False.
+      sensor: Temperature sensor to monitor ("main", "dif", "boost", or "mean").
+      tolerance: Acceptable difference (in °C) between current and target temperature.
+      interval_s: Polling interval in seconds. Default = 0.5 s.
+      timeout_s: Maximum time to wait in seconds. None disables timeout. Default = 600 s.
+      show_progress_bar: If True, display a dynamic ASCII progress bar in stdout. Default False.
 
     Returns:
-        Final measured temperature in °C once within tolerance.
+      Final measured temperature in °C once within tolerance.
 
     Raises:
-        TimeoutError: If target not reached within `timeout_s`.
-        ValueError: If temperature control is not enabled or no valid target returned.
+      TimeoutError: If target not reached within `timeout_s`.
+      ValueError: If temperature control is not enabled or no valid target returned.
     """
     target_temp = await self.request_target_temperature(stack_index=stack_index)
     if target_temp is None:
@@ -948,13 +946,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Read the set or actual shaker frequency in the X-direction.
 
     Args:
-        selector (int):
-            0 = to-be-set frequency,
-            1 = actual frequency.
-            Default = 0.
+      selector: 0 = to-be-set frequency, 1 = actual frequency.  Default = 0.
 
     Returns:
-        float: Frequency in Hz.
+      Frequency in Hz.
     """
     if selector not in (0, 1):
       raise ValueError(f"Selector must be 0 or 1, got {selector}")
@@ -966,13 +961,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Read the set or actual shaker frequency in the Y-direction.
 
     Args:
-        selector (int):
-            0 = to-be-set frequency,
-            1 = actual frequency.
-            Default = 0.
+      selector: 0 = to-be-set frequency, 1 = actual frequency.  Default = 0.
 
     Returns:
-        float: Frequency in Hz.
+      Frequency in Hz.
     """
     if selector not in (0, 1):
       raise ValueError(f"Selector must be 0 or 1, got {selector}")
@@ -984,14 +976,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Read the set, actual, or static shaker amplitude in the X-direction.
 
     Args:
-        selector (int):
-            0 = set amplitude,
-            1 = actual amplitude,
-            2 = static distance from middle.
-            Default = 0.
+      selector: 0 = set amplitude, 1 = actual amplitude, 2 = static distance from middle.  Default = 0.
 
     Returns:
-        float: Amplitude in millimeters (mm).
+      Amplitude in millimeters (mm).
     """
     if selector not in (0, 1, 2):
       raise ValueError(f"Selector must be 0, 1, or 2, got {selector}")
@@ -1003,14 +991,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Read the set, actual, or static shaker amplitude in the Y-direction.
 
     Args:
-        selector (int):
-            0 = set amplitude,
-            1 = actual amplitude,
-            2 = static distance from middle.
-            Default = 0.
+      selector: 0 = set amplitude, 1 = actual amplitude, 2 = static distance from middle.  Default = 0.
 
     Returns:
-        float: Amplitude in millimeters (mm).
+      Amplitude in millimeters (mm).
     """
     if selector not in (0, 1, 2):
       raise ValueError(f"Selector must be 0, 1, or 2, got {selector}")
@@ -1020,14 +1004,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   async def is_shaking_enabled(self, stack_index: int) -> bool:
     """Return True if the shaker is currently enabled or still decelerating.
 
-    The firmware returns:
-        0 → shaker off
-        1 → shaker on
-        2 → shaker switched off but still moving
+    The firmware returns: 0 = shaker off; 1 = shaker on; 2 = shaker switched off but still moving.
 
     Returns:
-        bool: True if the shaker is active or still moving (status 1 or 2),
-            False if fully stopped (status 0).
+      True if the shaker is active or still moving (status 1 or 2), False if fully stopped (status 0).
     """
 
     incubator_type = await self.request_incubator_type(stack_index=stack_index)
@@ -1065,21 +1045,21 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     This combines the functionality of the individual SAX, SAY, SFX, SFY, and SPS commands.
 
     Args:
-        amplitude_x (float):  Amplitude on the X-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
-        amplitude_y (float):  Amplitude on the Y-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
-        frequency_x (float):  Frequency on the X-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
-        frequency_y (float):  Frequency on the Y-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
-        phase_shift (float):  Phase shift between X and Y axes in degrees (0-360°).
+      amplitude_x: Amplitude on the X-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+      amplitude_y: Amplitude on the Y-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+      frequency_x: Frequency on the X-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+      frequency_y: Frequency on the Y-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+      phase_shift: Phase shift between X and Y axes in degrees (0-360°).
 
     Notes:
-        - This command simplifies coordinated shaker setup.
-        - All arguments are automatically converted to the firmware's expected integer scaling.
-          (mm → ×10; Hz → ×10; ° left unscaled)
-        - The firmware returns an acknowledgment frame on success.
+      - This command simplifies coordinated shaker setup.
+      - All arguments are automatically converted to the firmware's expected integer scaling.
+        (mm → x10; Hz → x10; ° left unscaled)
+      - The firmware returns an acknowledgment frame on success.
 
     Raises:
-        ValueError: If any parameter is outside its valid range.
-        InhecoError: If the device reports an error or rejects the command.
+      ValueError: If any parameter is outside its valid range.
+      InhecoError: If the device reports an error or rejects the command.
     """
     # --- Validation ---
     if not (0.0 <= amplitude_x <= 3.0):
@@ -1175,11 +1155,11 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Set the shaker motion pattern and parameters (without enabling motion).
 
     Patterns:
-      - linear_x:    motion along X only.
-      - linear_y:    motion along Y only.
-      - orbital:     circular motion (equal amplitudes on both axes, 90° phase).
-      - elliptical:  elliptical motion (unequal amplitudes, 90° phase).
-      - figure_eight: double-loop motion (any amplitudes, 180° phase).
+    - linear_x: motion along X only.
+    - linear_y: motion along Y only.
+    - orbital: circular motion (equal amplitudes on both axes, 90° phase).
+    - elliptical: elliptical motion (unequal amplitudes, 90° phase).
+    - figure_eight: double-loop motion (any amplitudes, 180° phase).
     """
     self._validate_hz_or_rpm(frequency_hz, rpm)
     fx, fy = self._fw_freq_pair(frequency_hz, rpm)
@@ -1268,16 +1248,16 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     - Ensures consistent parameter changes and prevents ignored SSP updates.
 
     Args:
-        pattern: Motion pattern: `"linear_x"`, `"linear_y"`, `"orbital"`, `"elliptical"`, or `"figure_eight"`.
-        rpm: Rotational speed (396-1800 RPM). Mutually exclusive with `frequency_hz`.
-        frequency_hz: Oscillation frequency (6.6-30.0 Hz). Mutually exclusive with `rpm`.
-        amplitude_x_mm: X-axis amplitude in mm (0.0-3.0 mm).
-        amplitude_y_mm: Y-axis amplitude in mm (0.0-3.0 mm).
-        phase_deg: Optional phase offset between X and Y axes (0-360°).
+      pattern: Motion pattern: `"linear_x"`, `"linear_y"`, `"orbital"`, `"elliptical"`, or `"figure_eight"`.
+      rpm: Rotational speed (396-1800 RPM). Mutually exclusive with `frequency_hz`.
+      frequency_hz: Oscillation frequency (6.6-30.0 Hz). Mutually exclusive with `rpm`.
+      amplitude_x_mm: X-axis amplitude in mm (0.0-3.0 mm).
+      amplitude_y_mm: Y-axis amplitude in mm (0.0-3.0 mm).
+      phase_deg: Optional phase offset between X and Y axes (0-360°).
 
     Raises:
-        ValueError: If parameter ranges or combinations are invalid.
-        InhecoError: If the device rejects the command or is not ready.
+      ValueError: If parameter ranges or combinations are invalid.
+      InhecoError: If the device rejects the command or is not ready.
     """
 
     is_shaking = await self.is_shaking_enabled(stack_index=stack_index)
@@ -1309,16 +1289,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Read the set or actual phase shift between X and Y shaker drives (firmware 'RPS' command).
 
     Args:
-        selector (int):
-            0 = currently set phase shift,
-            1 = actual phase shift.
-            Default = 0.
+      selector: 0 = currently set phase shift, 1 = actual phase shift.  Default = 0.
 
     Returns:
-        float: Phase shift in degrees [°].
-               Returns 12345.0 if the shaker has not reached a stable state or
-               if phase shift calculation is invalid due to too-small amplitudes
-               (< 1 mm on either axis).
+      Phase shift in degrees [°].  Returns 12345.0 if the shaker has not reached a stable state or if phase shift calculation is invalid due to too-small amplitudes (< 1 mm on either axis).
     """
     if selector not in (0, 1):
       raise ValueError(f"Selector must be 0 or 1, got {selector}")
@@ -1417,20 +1391,18 @@ class InhecoIncubatorShakerUnit:
     Report which device slots are occupied on a given layer (firmware 'RDAx,0').
 
     Args:
-        layer (int): Layer index (0-7). Default = 0.
+      layer: Layer index (0-7). Default = 0.
 
     Returns:
-        dict:
-            {
-              "layer": int,
-              "slot_mask": int,       # e.g. 7
-              "slot_mask_bin": str,   # e.g. "0b0000000000000111"
-              "slots_connected": list[int]  # e.g. [0, 1, 2]
-            }
+      {
+        "layer": int,
+        "slot_mask": int,       # e.g. 7
+        "slot_mask_bin": str,   # e.g. "0b0000000000000111"
+        "slots_connected": list[int]  # e.g. [0, 1, 2]
+      }
 
     Notes:
-        Each bit in `slot_mask` represents one of 16 possible device slots:
-        bit=1 means a device is connected; bit=0 means empty.
+      Each bit in `slot_mask` represents one of 16 possible device slots: bit=1 means a device is connected; bit=0 means empty.
     """
     return await self.backend.request_machine_allocation(layer=layer, stack_index=self.index)
 
@@ -1439,13 +1411,13 @@ class InhecoIncubatorShakerUnit:
     Report the number of connected Inheco devices on a layer (RDAx,1).
 
     Args:
-        layer (int): Layer index (0-7). Default = 0.
+      layer: Layer index (0-7). Default = 0.
 
     Returns:
-        int: Number of connected devices (0-16).
+      Number of connected devices (0-16).
 
     Example:
-        Response "3" → 3 connected devices on that layer.
+      Response "3" → 3 connected devices on that layer.
     """
     return await self.backend.request_number_of_connected_machines(
       layer=layer, stack_index=self.index
@@ -1484,7 +1456,7 @@ class InhecoIncubatorShakerUnit:
     """EEPROM request: Query the date of the last thermal calibration.
 
     Returns:
-        str: Calibration date in ISO format 'YYYY-MM-DD'.
+      Calibration date in ISO format 'YYYY-MM-DD'.
     """
     return await self.backend.request_thermal_calibration_date(stack_index=self.index)
 
@@ -1513,13 +1485,12 @@ class InhecoIncubatorShakerUnit:
     """Report the current drawer (loading tray) status.
 
     Returns:
-        str: 'open' if the loading tray is open, 'closed' if closed.
+      'open' if the loading tray is open, 'closed' if closed.
 
     Notes:
-        - Firmware response: '1' = open, '0' = closed.
+      - Firmware response: '1' = open, '0' = closed.
     """
-    resp = await self.backend.request_drawer_status(stack_index=self.index)
-    return resp
+    return await self.backend.request_drawer_status(stack_index=self.index)
 
   # # # Temperature Features # # #
 
@@ -1561,10 +1532,7 @@ class InhecoIncubatorShakerUnit:
     Return True if active temperature control is enabled (RHE = 1 or 2),
     False if control is off (RHE = 0).
 
-    Firmware response (RHE):
-        0 → control loop off (passive equilibrium)
-        1 → control loop on (heating/cooling active)
-        2 → control + booster on (extended heating mode)
+    Firmware response (RHE): 0: control loop off (passive equilibrium).  1: control loop on (heating/cooling active).  2: control + booster on (extended heating mode).
     """
     return await self.backend.is_temperature_control_enabled(stack_index=self.index)
 
@@ -1573,9 +1541,7 @@ class InhecoIncubatorShakerUnit:
     Query the current PID controller coefficients.
 
     Returns:
-        (P, I): tuple of floats
-            - P: proportional gain (selector 1)
-            - I: integration value (selector 2; 0 = integration off)
+      (P, I): tuple of floats. P: proportional gain (selector 1). I: integration value (selector 2; 0 = integration off)
     """
     return await self.backend.request_pid_controller_coefficients(stack_index=self.index)
 
@@ -1584,12 +1550,12 @@ class InhecoIncubatorShakerUnit:
     Query the maximum allowed or maximum measured device temperature (in °C).
 
     Args:
-        measured:
-            - False → report configured maximum allowed temperature (default)
-            - True  → report maximum measured temperature since last reset
+      measured:
+        - False: report configured maximum allowed temperature (default)
+        - True: report maximum measured temperature since last reset
 
     Returns:
-        float: Temperature in °C (value / 10)
+      Temperature in °C (value / 10)
     """
     return await self.backend.request_maximum_allowed_temperature(
       stack_index=self.index, measured=measured
@@ -1600,11 +1566,11 @@ class InhecoIncubatorShakerUnit:
     Query the absolute temperature difference between target and actual plate temperature.
 
     Returns:
-        float: Delta temperature in °C (positive if below target, negative if above target).
+      Delta temperature in °C (positive if below target, negative if above target).
 
     Notes:
-        - Reported in 1/10 °C.
-        - Negative values indicate the plate is warmer than the target.
+    - Reported in 1/10 °C.
+    - Negative values indicate the plate is warmer than the target.
     """
     return await self.backend.request_delta_temperature(stack_index=self.index)
 
@@ -1621,18 +1587,18 @@ class InhecoIncubatorShakerUnit:
     Wait asynchronously until the target temperature is reached.
 
     Args:
-        sensor: Temperature sensor to monitor ("main", "dif", "boost", or "mean").
-        tolerance: Acceptable difference (in °C) between current and target temperature.
-        interval_s: Polling interval in seconds. Default = 0.5 s.
-        timeout_s: Maximum time to wait in seconds. None disables timeout. Default = 600 s.
-        show_progress_bar: If True, display a dynamic ASCII progress bar in stdout. Default False.
+      sensor: Temperature sensor to monitor ("main", "dif", "boost", or "mean").
+      tolerance: Acceptable difference (in °C) between current and target temperature.
+      interval_s: Polling interval in seconds. Default = 0.5 s.
+      timeout_s: Maximum time to wait in seconds. None disables timeout. Default = 600 s.
+      show_progress_bar: If True, display a dynamic ASCII progress bar in stdout. Default False.
 
     Returns:
-        Final measured temperature in °C once within tolerance.
+      Final measured temperature in °C once within tolerance.
 
     Raises:
-        TimeoutError: If target not reached within `timeout_s`.
-        ValueError: If temperature control is not enabled or no valid target returned.
+      TimeoutError: If target not reached within `timeout_s`.
+      ValueError: If temperature control is not enabled or no valid target returned.
     """
     return await self.backend.wait_for_temperature(
       stack_index=self.index,
@@ -1649,13 +1615,10 @@ class InhecoIncubatorShakerUnit:
     """Read the set or actual shaker frequency in the X-direction.
 
     Args:
-        selector (int):
-            0 = to-be-set frequency,
-            1 = actual frequency.
-            Default = 0.
+      selector: 0 = to-be-set frequency, 1 = actual frequency.  Default = 0.
 
     Returns:
-        float: Frequency in Hz.
+      Frequency in Hz.
     """
     return await self.backend.request_shaker_frequency_x(stack_index=self.index, selector=selector)
 
@@ -1663,13 +1626,10 @@ class InhecoIncubatorShakerUnit:
     """Read the set or actual shaker frequency in the Y-direction.
 
     Args:
-        selector (int):
-            0 = to-be-set frequency,
-            1 = actual frequency.
-            Default = 0.
+      selector: 0 = to-be-set frequency, 1 = actual frequency.  Default = 0.
 
     Returns:
-        float: Frequency in Hz.
+      Frequency in Hz.
     """
     return await self.backend.request_shaker_frequency_y(stack_index=self.index, selector=selector)
 
@@ -1677,14 +1637,10 @@ class InhecoIncubatorShakerUnit:
     """Read the set, actual, or static shaker amplitude in the X-direction.
 
     Args:
-        selector (int):
-            0 = set amplitude,
-            1 = actual amplitude,
-            2 = static distance from middle.
-            Default = 0.
+      selector: 0 = set amplitude, 1 = actual amplitude, 2 = static distance from middle.  Default = 0.
 
     Returns:
-        float: Amplitude in millimeters (mm).
+      Amplitude in millimeters (mm).
     """
     return await self.backend.request_shaker_amplitude_x(stack_index=self.index, selector=selector)
 
@@ -1692,28 +1648,20 @@ class InhecoIncubatorShakerUnit:
     """Read the set, actual, or static shaker amplitude in the Y-direction.
 
     Args:
-        selector (int):
-            0 = set amplitude,
-            1 = actual amplitude,
-            2 = static distance from middle.
-            Default = 0.
+      selector: 0 = set amplitude, 1 = actual amplitude, 2 = static distance from middle.  Default = 0.
 
     Returns:
-        float: Amplitude in millimeters (mm).
+        Amplitude in millimeters (mm).
     """
     return await self.backend.request_shaker_amplitude_y(stack_index=self.index, selector=selector)
 
   async def is_shaking_enabled(self) -> bool:
     """Return True if the shaker is currently enabled or still decelerating.
 
-    The firmware returns:
-        0 → shaker off
-        1 → shaker on
-        2 → shaker switched off but still moving
+    The firmware returns: 0: shaker off, 1: shaker on, 2: shaker switched off but still moving.
 
     Returns:
-        bool: True if the shaker is active or still moving (status 1 or 2),
-            False if fully stopped (status 0).
+      True if the shaker is active or still moving (status 1 or 2), False if fully stopped (status 0).
     """
     return await self.backend.is_shaking_enabled(stack_index=self.index)
 
@@ -1731,21 +1679,21 @@ class InhecoIncubatorShakerUnit:
     This combines the functionality of the individual SAX, SAY, SFX, SFY, and SPS commands.
 
     Args:
-        amplitude_x (float):  Amplitude on the X-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
-        amplitude_y (float):  Amplitude on the Y-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
-        frequency_x (float):  Frequency on the X-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
-        frequency_y (float):  Frequency on the Y-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
-        phase_shift (float):  Phase shift between X and Y axes in degrees (0-360°).
+      amplitude_x: Amplitude on the X-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+      amplitude_y: Amplitude on the Y-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+      frequency_x: Frequency on the X-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+      frequency_y: Frequency on the Y-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+      phase_shift: Phase shift between X and Y axes in degrees (0-360°).
 
     Notes:
-        - This command simplifies coordinated shaker setup.
-        - All arguments are automatically converted to the firmware's expected integer scaling.
-          (mm → ×10; Hz → ×10; ° left unscaled)
-        - The firmware returns an acknowledgment frame on success.
+    - This command simplifies coordinated shaker setup.
+    - All arguments are automatically converted to the firmware's expected integer scaling.
+      (mm → x10; Hz → x10; ° left unscaled)
+    - The firmware returns an acknowledgment frame on success.
 
     Raises:
-        ValueError: If any parameter is outside its valid range.
-        InhecoError: If the device reports an error or rejects the command.
+      ValueError: If any parameter is outside its valid range.
+      InhecoError: If the device reports an error or rejects the command.
     """
     await self.backend.set_shaker_parameters(
       stack_index=stack_index,
@@ -1808,23 +1756,21 @@ class InhecoIncubatorShakerUnit:
     parameters—required because the firmware only latches `SSP` settings when
     the shaker transitions from idle to active.
 
-    Args:
-        pattern: Motion pattern: `"linear_x"`, `"linear_y"`, `"orbital"`,
-                 `"elliptical"`, or `"figure_eight"`.
-        rpm: Rotational speed (396-1800 RPM). Mutually exclusive with `frequency_hz`.
-        frequency_hz: Oscillation frequency (6.6-30.0 Hz). Mutually exclusive with `rpm`.
-        amplitude_x_mm: X-axis amplitude in mm (0.0-3.0 mm).
-        amplitude_y_mm: Y-axis amplitude in mm (0.0-3.0 mm).
-        phase_deg: Optional phase offset between X and Y axes (0-360°).
-
     Behavior:
-        - Stops the shaker if active, waits briefly, applies the new pattern,
-          and restarts shaking.
-        - Ensures consistent parameter changes and prevents ignored SSP updates.
+      - Stops the shaker if active, waits briefly, applies the new pattern, and restarts shaking.
+      - Ensures consistent parameter changes and prevents ignored SSP updates.
+
+    Args:
+      pattern: Motion pattern: `"linear_x"`, `"linear_y"`, `"orbital"`, `"elliptical"`, or `"figure_eight"`.
+      rpm: Rotational speed (396-1800 RPM). Mutually exclusive with `frequency_hz`.
+      frequency_hz: Oscillation frequency (6.6-30.0 Hz). Mutually exclusive with `rpm`.
+      amplitude_x_mm: X-axis amplitude in mm (0.0-3.0 mm).
+      amplitude_y_mm: Y-axis amplitude in mm (0.0-3.0 mm).
+      phase_deg: Optional phase offset between X and Y axes (0-360°).
 
     Raises:
-        ValueError: If parameter ranges or combinations are invalid.
-        InhecoError: If the device rejects the command or is not ready.
+      ValueError: If parameter ranges or combinations are invalid.
+      InhecoError: If the device rejects the command or is not ready.
     """
     await self.backend.shake(
       stack_index=self.index,
@@ -1844,16 +1790,10 @@ class InhecoIncubatorShakerUnit:
     """Read the set or actual phase shift between X and Y shaker drives (firmware 'RPS' command).
 
     Args:
-        selector (int):
-            0 = currently set phase shift,
-            1 = actual phase shift.
-            Default = 0.
+      selector: 0 = currently set phase shift, 1 = actual phase shift.  Default = 0.
 
     Returns:
-        float: Phase shift in degrees [°].
-               Returns 12345.0 if the shaker has not reached a stable state or
-               if phase shift calculation is invalid due to too-small amplitudes
-               (< 1 mm on either axis).
+      Phase shift in degrees [°].  Returns 12345.0 if the shaker has not reached a stable state or if phase shift calculation is invalid due to too-small amplitudes (< 1 mm on either axis).
     """
     return await self.backend.request_shaker_phase_shift(stack_index=self.index, selector=selector)
 
