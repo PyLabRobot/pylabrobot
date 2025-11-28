@@ -52,7 +52,7 @@ class InhecoError(RuntimeError):
 
 
 _REF_FLAG_NAMES: Dict[int, str] = {
-  # Heater (0–15) — names per manual’s heater flags table (subset shown here)
+  # Heater (0-15) — names per manual's heater flags table (subset shown here)
   0: "H_WARN_WarmUp_TIME",
   1: "H_WARN_BoostCoolDown_TIME",
   2: "H_WARN_StartState_LIMIT_Up_TEMP_S2",
@@ -69,7 +69,7 @@ _REF_FLAG_NAMES: Dict[int, str] = {
   13: "H_ERR_S2_NTC_NotConnected",
   14: "H_ERR_S3_NTC_NotConnected",
   15: "H_WARN_DELTA_TEMP_S1_S3",
-  # Shaker (16–26) — names per manual’s shaker flag set (page 39)
+  # Shaker (16-26) — names per manual's shaker flag set (page 39)
   16: "S_WARN_MotorCurrentLimit",
   17: "S_WARN_TargetSpeedTimeout",
   18: "S_WARN_PositionTimeout",
@@ -81,7 +81,7 @@ _REF_FLAG_NAMES: Dict[int, str] = {
   24: "S_ERR_AmplitudeOutOfRange",
   25: "S_ERR_VibrationExcessive",
   26: "S_ERR_InternalTimeout",
-  # 27–31 reserved
+  # 27-31 reserved
 }
 
 FIRMWARE_ERROR_MAP: Dict[int, str] = {
@@ -134,16 +134,27 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     write_timeout: float = 5.0,
     read_timeout: float = 10.0,
     logger: Optional[logging.Logger] = None,
+    vid: str = "0403",
+    pid: str = "6001",
   ):
     # Logger
-    self.logger = logger or logging.getLogger("pylabrobot")
+    self.logger = logger or logging.getLogger(__name__)
 
     # Core state
     self.dip_switch_id = dip_switch_id
 
     self.port_hint = port
-    self.io: Optional[Serial] = None
-    self.port: Optional[str] = None
+    self.io = Serial(
+      port=port,
+      vid=vid,
+      pid=pid,
+      baudrate=19_200,
+      bytesize=serial.EIGHTBITS,
+      parity=serial.PARITY_NONE,
+      stopbits=serial.STOPBITS_ONE,
+      timeout=0,
+      write_timeout=1,
+    )
 
     # Communication timeouts (defaults for all units in stack)
     self.write_timeout = write_timeout
@@ -157,37 +168,17 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   def __repr__(self):
     return (
-      f"<InhecoIncubatorShakerBackend (VID:PID={self.serial._vid}:{self.serial._pid}, "
-      + f"DIP={self.dip_switch_id}) at {self.port}>"
+      f"<InhecoIncubatorShakerBackend (VID:PID={self.io._vid}:{self.io._pid}, "
+      + f"DIP={self.dip_switch_id}) at {self.io.port}>"
     )
 
-  @property
-  def serial(self) -> Serial:
-    if self.io is None:
-      raise RuntimeError("Serial port not initialized. Call setup() first.")
-    return self.io
-
-  async def setup(
-    self, port: Optional[str] = None, vid: str = "0403", pid: str = "6001", verbose: bool = False
-  ):
+  async def setup(self, port: Optional[str] = None, verbose: bool = False):
     """
     Detect and connect to the Inheco machine stack.
     Discover Inheco device via VID:PID (0403:6001) and verify DIP switch ID.
     """
 
     # --- Establish serial connection ---
-    self.io = Serial(
-      port=port,
-      vid=vid,
-      pid=pid,
-      baudrate=19_200,
-      bytesize=serial.EIGHTBITS,
-      parity=serial.PARITY_NONE,
-      stopbits=serial.STOPBITS_ONE,
-      timeout=0,
-      write_timeout=1,
-    )
-
     await self.io.setup()
 
     try:  # --- Verify DIP switch ID via RTS ---
@@ -201,27 +192,21 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     except Exception as e:
       # Capture current IO reference before marking disconnected
-      serial_obj = self.io
-      self.io = None  # break logical link early
-
       msg = (
-        f"Device on {serial_obj._port} failed DIP switch verification (expected ID="
+        f"Device on {self.io._port} failed DIP switch verification (expected ID="
         f"{self.dip_switch_id}). Please verify the DIP switch setting or wiring."
       )
       self._log(logging.ERROR, msg)
 
       # --- Fail-safe teardown ---
-      if serial_obj is not None:
-        try:
-          serial_obj.close()
-          # if asyncio.iscoroutine(maybe_close):
-          #   await maybe_close
-          self._log(logging.DEBUG, f"Closed serial connection on {serial_obj._port}")
-        except Exception as close_err:
-          self._log(
-            logging.WARNING,
-            f"Failed to close serial port cleanly on {serial_obj._port}: {close_err}",
-          )
+      try:
+        await self.io.stop()
+        self._log(logging.DEBUG, f"Closed serial connection on {self.io.port}")
+      except Exception as close_err:
+        self._log(
+          logging.WARNING,
+          f"Failed to close serial port cleanly on {self.io._port}: {close_err}",
+        )
 
       raise RuntimeError(msg) from e
 
@@ -229,7 +214,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       # Connection verified and active
       self._log(
         logging.INFO,
-        f"Connected to Inheco machine at {self.serial.port} (DIP={self.dip_switch_id})",
+        f"Connected to Inheco machine at {self.io.port} (DIP={self.dip_switch_id})",
       )
 
     # --- Cache stack-level state ---
@@ -246,7 +231,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self.setup_finished = True
 
     msg = (
-      f"Connected to Inheco Incubator Shaker Stack on {self.serial.port}\n"
+      f"Connected to Inheco Incubator Shaker Stack on {self.io.port}\n"
       f"DIP switch ID of bottom unit: {self.dip_switch_id}\n"
       f"Number of connected units: {self.number_of_connected_units}\n"
       f"Unit composition: {self.unit_composition}"
@@ -271,16 +256,14 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         print(f"Stopping shaking on unit {unit_index}...")
         await self.stop_shaking(stack_index=unit_index)
 
-    if self.io:
-      await self.io.stop()
-      self.io = None
+    await self.io.stop()
 
   # === Low-level I/O ===
 
   async def write(self, data: bytes) -> None:
     """Write binary data to the serial device."""
     self._log(logging.DEBUG, f"→ {data.hex(' ')}")
-    await self.serial.write(data)
+    await self.io.write(data)
 
   async def _read_full_response(self, timeout: float) -> bytes:
     """Read a complete Inheco response frame asynchronously."""
@@ -297,7 +280,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       return len(b) >= 3 and b[-1] == 0x60 and b[-3] == expected_hdr and 0x20 <= b[-2] <= 0x2F
 
     while True:
-      chunk = await self.serial.read(16)
+      chunk = await self.io.read(16)
       if chunk:
         buf.extend(chunk)
         self._log(logging.DEBUG, chunk.hex(" "), direction="←")
@@ -428,7 +411,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     msg = self._build_message(command, stack_index=stack_index)
     self._log(logging.DEBUG, f"SEND: {msg.hex(' ')} (write_timeout={w_timeout})")
 
-    await asyncio.wait_for(self.serial.write(msg), timeout=w_timeout)
+    await asyncio.wait_for(self.io.write(msg), timeout=w_timeout)
     await asyncio.sleep(delay)
 
     response = await self._read_full_response(timeout=read_timeout or self.read_timeout)
@@ -472,7 +455,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Report which device slots are occupied on a given layer (firmware 'RDAx,0').
 
     Args:
-        layer (int): Layer index (0–7). Default = 0.
+        layer (int): Layer index (0-7). Default = 0.
 
     Returns:
         dict:
@@ -509,16 +492,16 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Report the number of connected Inheco devices on a layer (RDAx,1).
 
     Args:
-        layer (int): Layer index (0–7). Default = 0.
+        layer (int): Layer index (0-7). Default = 0.
 
     Returns:
-        int: Number of connected devices (0–16).
+        int: Number of connected devices (0-16).
 
     Example:
         Response "3" → 3 connected devices on that layer.
     """
     if not (0 <= layer <= 7):
-      raise ValueError(f"Layer must be 0–7, got {layer}")
+      raise ValueError(f"Layer must be 0-7, got {layer}")
 
     resp = await self.send_command(f"RDA{layer},1", stack_index=stack_index)
     return int(resp.strip())
@@ -721,9 +704,9 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   async def stop_temperature_control(self, stack_index: int) -> None:
     """Stop active temperature regulation.
 
-    Disables the incubator’s heating control loop.
+    Disables the incubator's heating control loop.
     The previously set target temperature remains stored in the
-    device’s memory but is no longer actively maintained.
+    device's memory but is no longer actively maintained.
     The incubator will passively drift toward ambient temperature.
     """
     await self.send_command("SHE0", stack_index=stack_index)
@@ -805,7 +788,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Query the maximum allowed or maximum measured device temperature (in °C).
 
     Args:
-        measured (bool):
+        measured:
             - False → report configured maximum allowed temperature (default)
             - True  → report maximum measured temperature since last reset
 
@@ -1082,15 +1065,15 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     This combines the functionality of the individual SAX, SAY, SFX, SFY, and SPS commands.
 
     Args:
-        amplitude_x (float):  Amplitude on the X-axis in mm (0.0–3.0 mm, corresponds to 0–30 in firmware units).
-        amplitude_y (float):  Amplitude on the Y-axis in mm (0.0–3.0 mm, corresponds to 0–30 in firmware units).
-        frequency_x (float):  Frequency on the X-axis in Hz (6.6–30.0 Hz, corresponds to 66–300 in firmware units).
-        frequency_y (float):  Frequency on the Y-axis in Hz (6.6–30.0 Hz, corresponds to 66–300 in firmware units).
-        phase_shift (float):  Phase shift between X and Y axes in degrees (0–360°).
+        amplitude_x (float):  Amplitude on the X-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+        amplitude_y (float):  Amplitude on the Y-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+        frequency_x (float):  Frequency on the X-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+        frequency_y (float):  Frequency on the Y-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+        phase_shift (float):  Phase shift between X and Y axes in degrees (0-360°).
 
     Notes:
         - This command simplifies coordinated shaker setup.
-        - All arguments are automatically converted to the firmware’s expected integer scaling.
+        - All arguments are automatically converted to the firmware's expected integer scaling.
           (mm → ×10; Hz → ×10; ° left unscaled)
         - The firmware returns an acknowledgment frame on success.
 
@@ -1124,7 +1107,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   def _mm_to_fw(self, mm: float) -> int:
     """Convert mm → firmware units (1/10 mm).
 
-    Valid range: 0.0–3.0 mm (→ 0–30 in firmware).
+    Valid range: 0.0-3.0 mm (→ 0-30 in firmware).
     Raises ValueError if out of range.
     """
     if not (0.0 <= mm <= 3.0):
@@ -1134,7 +1117,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   def _rpm_to_fw_hz10(self, rpm: float) -> int:
     """Convert RPM → firmware Hz·10 units (validated).
 
-    396–1800 RPM ↔ 6.6–30.0 Hz ↔ 66–300 in firmware.
+    396-1800 RPM ↔ 6.6-30.0 Hz ↔ 66-300 in firmware.
     """
     if not (396 <= rpm <= 1800):
       raise ValueError(f"RPM must be between 396 and 1800, got {rpm}")
@@ -1152,10 +1135,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       raise ValueError("Provide exactly one of frequency_hz or rpm.")
 
   def _phase_or_default(self, phase_deg: Optional[float], default: int) -> int:
-    """Return integer phase or default (0–360°)."""
+    """Return integer phase or default (0-360°)."""
     p = default if phase_deg is None else int(round(phase_deg))
     if not (0 <= p <= 360):
-      raise ValueError(f"Phase must be 0–360°, got {p}")
+      raise ValueError(f"Phase must be 0-360°, got {p}")
     return p
 
   def _fw_freq_pair(self, frequency_hz: Optional[float], rpm: Optional[float]) -> tuple[int, int]:
@@ -1280,19 +1263,17 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     parameters—required because the firmware only latches `SSP` settings when
     the shaker transitions from idle to active.
 
-    Args:
-        pattern: Motion pattern: `"linear_x"`, `"linear_y"`, `"orbital"`,
-                 `"elliptical"`, or `"figure_eight"`.
-        rpm: Rotational speed (396–1800 RPM). Mutually exclusive with `frequency_hz`.
-        frequency_hz: Oscillation frequency (6.6–30.0 Hz). Mutually exclusive with `rpm`.
-        amplitude_x_mm: X-axis amplitude in mm (0.0–3.0 mm).
-        amplitude_y_mm: Y-axis amplitude in mm (0.0–3.0 mm).
-        phase_deg: Optional phase offset between X and Y axes (0–360°).
-
     Behavior:
-        - Stops the shaker if active, waits briefly, applies the new pattern,
-          and restarts shaking.
-        - Ensures consistent parameter changes and prevents ignored SSP updates.
+    - Stops the shaker if active, waits briefly, applies the new pattern, and restarts shaking.
+    - Ensures consistent parameter changes and prevents ignored SSP updates.
+
+    Args:
+        pattern: Motion pattern: `"linear_x"`, `"linear_y"`, `"orbital"`, `"elliptical"`, or `"figure_eight"`.
+        rpm: Rotational speed (396-1800 RPM). Mutually exclusive with `frequency_hz`.
+        frequency_hz: Oscillation frequency (6.6-30.0 Hz). Mutually exclusive with `rpm`.
+        amplitude_x_mm: X-axis amplitude in mm (0.0-3.0 mm).
+        amplitude_y_mm: Y-axis amplitude in mm (0.0-3.0 mm).
+        phase_deg: Optional phase offset between X and Y axes (0-360°).
 
     Raises:
         ValueError: If parameter ranges or combinations are invalid.
@@ -1376,7 +1357,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     DWP Incubators that the result of the AQS, due to the design, 8 (bit2) could be.
 
     The Error Code means for example:
-    16(d) = 0001 0000(b)  Error at Bit 4. During Shaker-Test the Y-Axis doesn’t reach desired Amplitude.
+    16(d) = 0001 0000(b)  Error at Bit 4. During Shaker-Test the Y-Axis doesn't reach desired Amplitude.
     """
 
     plate_in_status = await self.request_plate_in_incubator(stack_index=stack_index)
@@ -1436,7 +1417,7 @@ class InhecoIncubatorShakerUnit:
     Report which device slots are occupied on a given layer (firmware 'RDAx,0').
 
     Args:
-        layer (int): Layer index (0–7). Default = 0.
+        layer (int): Layer index (0-7). Default = 0.
 
     Returns:
         dict:
@@ -1458,10 +1439,10 @@ class InhecoIncubatorShakerUnit:
     Report the number of connected Inheco devices on a layer (RDAx,1).
 
     Args:
-        layer (int): Layer index (0–7). Default = 0.
+        layer (int): Layer index (0-7). Default = 0.
 
     Returns:
-        int: Number of connected devices (0–16).
+        int: Number of connected devices (0-16).
 
     Example:
         Response "3" → 3 connected devices on that layer.
@@ -1603,7 +1584,7 @@ class InhecoIncubatorShakerUnit:
     Query the maximum allowed or maximum measured device temperature (in °C).
 
     Args:
-        measured (bool):
+        measured:
             - False → report configured maximum allowed temperature (default)
             - True  → report maximum measured temperature since last reset
 
@@ -1750,15 +1731,15 @@ class InhecoIncubatorShakerUnit:
     This combines the functionality of the individual SAX, SAY, SFX, SFY, and SPS commands.
 
     Args:
-        amplitude_x (float):  Amplitude on the X-axis in mm (0.0–3.0 mm, corresponds to 0–30 in firmware units).
-        amplitude_y (float):  Amplitude on the Y-axis in mm (0.0–3.0 mm, corresponds to 0–30 in firmware units).
-        frequency_x (float):  Frequency on the X-axis in Hz (6.6–30.0 Hz, corresponds to 66–300 in firmware units).
-        frequency_y (float):  Frequency on the Y-axis in Hz (6.6–30.0 Hz, corresponds to 66–300 in firmware units).
-        phase_shift (float):  Phase shift between X and Y axes in degrees (0–360°).
+        amplitude_x (float):  Amplitude on the X-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+        amplitude_y (float):  Amplitude on the Y-axis in mm (0.0-3.0 mm, corresponds to 0-30 in firmware units).
+        frequency_x (float):  Frequency on the X-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+        frequency_y (float):  Frequency on the Y-axis in Hz (6.6-30.0 Hz, corresponds to 66-300 in firmware units).
+        phase_shift (float):  Phase shift between X and Y axes in degrees (0-360°).
 
     Notes:
         - This command simplifies coordinated shaker setup.
-        - All arguments are automatically converted to the firmware’s expected integer scaling.
+        - All arguments are automatically converted to the firmware's expected integer scaling.
           (mm → ×10; Hz → ×10; ° left unscaled)
         - The firmware returns an acknowledgment frame on success.
 
@@ -1830,11 +1811,11 @@ class InhecoIncubatorShakerUnit:
     Args:
         pattern: Motion pattern: `"linear_x"`, `"linear_y"`, `"orbital"`,
                  `"elliptical"`, or `"figure_eight"`.
-        rpm: Rotational speed (396–1800 RPM). Mutually exclusive with `frequency_hz`.
-        frequency_hz: Oscillation frequency (6.6–30.0 Hz). Mutually exclusive with `rpm`.
-        amplitude_x_mm: X-axis amplitude in mm (0.0–3.0 mm).
-        amplitude_y_mm: Y-axis amplitude in mm (0.0–3.0 mm).
-        phase_deg: Optional phase offset between X and Y axes (0–360°).
+        rpm: Rotational speed (396-1800 RPM). Mutually exclusive with `frequency_hz`.
+        frequency_hz: Oscillation frequency (6.6-30.0 Hz). Mutually exclusive with `rpm`.
+        amplitude_x_mm: X-axis amplitude in mm (0.0-3.0 mm).
+        amplitude_y_mm: Y-axis amplitude in mm (0.0-3.0 mm).
+        phase_deg: Optional phase offset between X and Y axes (0-360°).
 
     Behavior:
         - Stops the shaker if active, waits briefly, applies the new pattern,
