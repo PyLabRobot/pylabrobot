@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
-from pylabrobot.arms.precise_flex.coords import CartesianCoords
+from pylabrobot.arms.precise_flex.coords import PreciseFlexCartesianCoords
 from pylabrobot.arms.standard import JointCoords
 from pylabrobot.machines.backend import MachineBackend
 
@@ -55,7 +55,7 @@ class HorizontalAccess:
 AccessPattern = Union[VerticalAccess, HorizontalAccess]
 
 
-class ArmBackend(MachineBackend, metaclass=ABCMeta):
+class SCARABackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a robotic arm"""
 
   @abstractmethod
@@ -90,7 +90,9 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def approach(
-    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
+    self,
+    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None,
   ):
     """Move the arm to an approach position (offset from target).
 
@@ -103,7 +105,9 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def pick_plate(
-    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
+    self,
+    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None,
   ):
     """Pick a plate from the specified position.
 
@@ -116,7 +120,9 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def place_plate(
-    self, position: Union[CartesianCoords, JointCoords], access: Optional[AccessPattern] = None
+    self,
+    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    access: Optional[AccessPattern] = None,
   ):
     """Place a plate at the specified position.
 
@@ -128,7 +134,7 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
     ...
 
   @abstractmethod
-  async def move_to(self, position: Union[CartesianCoords, JointCoords]):
+  async def move_to(self, position: Union[PreciseFlexCartesianCoords, JointCoords]):
     """Move the arm to a specified position in 3D space."""
     ...
 
@@ -138,6 +144,6 @@ class ArmBackend(MachineBackend, metaclass=ABCMeta):
     ...
 
   @abstractmethod
-  async def get_cartesian_position(self) -> CartesianCoords:
+  async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in 3D space."""
     ...

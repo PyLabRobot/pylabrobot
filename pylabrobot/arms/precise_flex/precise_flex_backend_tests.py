@@ -2,7 +2,7 @@ import unittest
 
 import pytest
 
-from pylabrobot.arms.precise_flex.coords import CartesianCoords, ElbowOrientation
+from pylabrobot.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend
 from pylabrobot.arms.standard import JointCoords
 from pylabrobot.resources import Coordinate, Rotation
@@ -22,7 +22,7 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   TEST_PARAMETER_ID = 17018
   TEST_SIGNAL_ID = 20064
 
-  SAFE_LOCATION_C = CartesianCoords(
+  SAFE_LOCATION_C = PreciseFlexCartesianCoords(
     location=Coordinate(175, 0, 169.994),
     rotation=Rotation(180, 90, -0.001),
     orientation=ElbowOrientation.RIGHT,
@@ -30,14 +30,14 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   SAFE_LOCATION_J = JointCoords(0, 170.003, 0, 180, -180, 75.486)
 
   TEST_LOCATION_J_LEFT = JointCoords(0, 169.932, 16.883, 230.942, -224.288, 75.662)
-  TEST_LOCATION_C_LEFT = CartesianCoords(
+  TEST_LOCATION_C_LEFT = PreciseFlexCartesianCoords(
     location=Coordinate(328.426, -115.219, 169.932),
     rotation=Rotation(180, 90, 23.537),
     orientation=ElbowOrientation.LEFT,
   )
 
   TEST_LOCATION_J_RIGHT = JointCoords(0, 169.968, -4.238, 117.915, -100.062, 75.668)
-  TEST_LOCATION_C_RIGHT = CartesianCoords(
+  TEST_LOCATION_C_RIGHT = PreciseFlexCartesianCoords(
     location=Coordinate(342.562, 280.484, 169.969),
     rotation=Rotation(180, 90, 13.612),
     orientation=ElbowOrientation.RIGHT,
@@ -105,4 +105,4 @@ class PreciseFlexBackendHardwareTests(unittest.IsolatedAsyncioTestCase):
   async def test_get_position_c(self):
     """Test getting cartesian position"""
     position_c = await self.robot.get_cartesian_position()
-    self.assertIsInstance(position_c, CartesianCoords)
+    self.assertIsInstance(position_c, PreciseFlexCartesianCoords)

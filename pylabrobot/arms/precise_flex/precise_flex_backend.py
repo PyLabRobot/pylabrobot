@@ -4,12 +4,12 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import (
   AccessPattern,
-  ArmBackend,
   HorizontalAccess,
   JointCoords,
+  SCARABackend,
   VerticalAccess,
 )
-from pylabrobot.arms.precise_flex.coords import CartesianCoords, ElbowOrientation
+from pylabrobot.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.arms.precise_flex.error_codes import ERROR_CODES
 from pylabrobot.arms.precise_flex.joints import PreciseFlexJointCoords
 from pylabrobot.io.socket import Socket
@@ -31,7 +31,7 @@ class PreciseFlexError(Exception):
       super().__init__(f"PreciseFlexError {replycode}: {message}")
 
 
-class PreciseFlexBackend(ArmBackend, ABC):
+class PreciseFlexBackend(SCARABackend, ABC):
   """Backend for the PreciseFlex robotic arm  - Default to using Cartesian coordinates, some methods in Brook's TCS don't work with Joint coordinates.
 
   Documentation and error codes available at https://www2.brooksautomation.com/#Root/Welcome.htm
@@ -56,21 +56,21 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
   def convert_to_cartesian_space(
     self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
-  ) -> CartesianCoords:
+  ) -> PreciseFlexCartesianCoords:
     """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
     if len(position) != 7:
       raise ValueError(
         "Position must be a tuple of 7 values (x, y, z, yaw, pitch, roll, orientation)."
       )
     orientation = ElbowOrientation(position[6])
-    return CartesianCoords(
+    return PreciseFlexCartesianCoords(
       location=Coordinate(position[0], position[1], position[2]),
       rotation=Rotation(position[5], position[4], position[3]),
       orientation=orientation,
     )
 
   def convert_to_cartesian_array(
-    self, position: CartesianCoords
+    self, position: PreciseFlexCartesianCoords
   ) -> tuple[float, float, float, float, float, float, int]:
     """Convert a CartesianSpace object to a list of cartesian coordinates."""
     orientation_int = self._convert_orientation_enum_to_int(position.orientation)
@@ -199,7 +199,9 @@ class PreciseFlexBackend(ArmBackend, ABC):
     return await self.get_version()
 
   async def approach(
-    self, position: Union[CartesianCoords, List[float]], access: Optional[AccessPattern] = None
+    self,
+    position: Union[PreciseFlexCartesianCoords, List[float]],
+    access: Optional[AccessPattern] = None,
   ):
     """Move the arm to an approach position (offset from target).
 
@@ -227,13 +229,15 @@ class PreciseFlexBackend(ArmBackend, ABC):
     if isinstance(position, list):
       joint_position = self.convert_to_joint_space(position)
       await self._approach_j(joint_position, access)
-    elif isinstance(position, CartesianCoords):
+    elif isinstance(position, PreciseFlexCartesianCoords):
       await self._approach_c(position, access)
     else:
       raise ValueError("Position must be of type List[float] or CartesianSpace.")
 
   async def pick_plate(
-    self, position: Union[CartesianCoords, List[float]], access: Optional[AccessPattern] = None
+    self,
+    position: Union[PreciseFlexCartesianCoords, List[float]],
+    access: Optional[AccessPattern] = None,
   ):
     """Pick a plate from the specified position.
 
@@ -265,12 +269,14 @@ class PreciseFlexBackend(ArmBackend, ABC):
     if access is None:
       access = VerticalAccess()
 
-    if not isinstance(position, CartesianCoords):
+    if not isinstance(position, PreciseFlexCartesianCoords):
       raise ValueError("pick_plate only supports CartesianCoords for PreciseFlex.")
-    await self._pick_plate_c(position, access)
+    await self._pick_plate_c(cartesian_position=position, access=access)
 
   async def place_plate(
-    self, position: Union[CartesianCoords, List[float]], access: Optional[AccessPattern] = None
+    self,
+    position: Union[PreciseFlexCartesianCoords, List[float]],
+    access: Optional[AccessPattern] = None,
   ):
     """Place a plate at the specified position.
 
@@ -302,17 +308,17 @@ class PreciseFlexBackend(ArmBackend, ABC):
     if access is None:
       access = VerticalAccess()
 
-    if not isinstance(position, CartesianCoords):
+    if not isinstance(position, PreciseFlexCartesianCoords):
       raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
     await self._place_plate_c(cartesian_position=position, access=access)
 
-  async def move_to(self, position: Union[CartesianCoords, List[float]]):
+  async def move_to(self, position: Union[PreciseFlexCartesianCoords, List[float]]):
     """Move the arm to a specified position in 3D space."""
     if isinstance(position, list):
       joint_coords = self.convert_to_joint_space(position)
+      print(joint_coords)
       await self.move_j(profile_index=self.profile_index, joint_coords=joint_coords)
-    elif isinstance(position, CartesianCoords):
-      # await self._move_to_c(cartesian_position=position)
+    elif isinstance(position, PreciseFlexCartesianCoords):
       await self.move_c(profile_index=self.profile_index, cartesian_coords=position)
     else:
       raise ValueError("Position must be of type JointSpace or CartesianSpace.")
@@ -332,9 +338,9 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
     axes = list(self._parse_angles_response(parts))
     # return self.convert_to_joint_space(axes)
-    return axes
+    return self.convert_to_joint_space(axes)
 
-  async def get_cartesian_position(self) -> CartesianCoords:
+  async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in 3D space."""
     data = await self.send_command("wherec")
     parts = data.split()
@@ -399,7 +405,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """
     await self.set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail(access)
-    await self.move_appro(self.location_index, self.profile_index)
+    await self.move_to_stored_location_appro(self.location_index, self.profile_index)
 
   async def _pick_plate_j(self, joint_position: PreciseFlexJointCoords, access: AccessPattern):
     """Pick a plate from the specified position using joint coordinates."""
@@ -419,7 +425,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
   async def _approach_c(
     self,
-    cartesian_position: CartesianCoords,
+    cartesian_position: PreciseFlexCartesianCoords,
     access: AccessPattern,
   ):
     """Move the arm to a position above the specified coordinates.
@@ -432,11 +438,11 @@ class PreciseFlexBackend(ArmBackend, ABC):
     await self._set_grip_detail(access)
     orientation_int = self._convert_orientation_enum_to_int(cartesian_position.orientation)
     await self.set_location_config(self.location_index, orientation_int)
-    await self.move_appro(self.location_index, self.profile_index)
+    await self.move_to_stored_location_appro(self.location_index, self.profile_index)
 
   async def _pick_plate_c(
     self,
-    cartesian_position: CartesianCoords,
+    cartesian_position: PreciseFlexCartesianCoords,
     access: AccessPattern,
   ):
     """Pick a plate from the specified position using Cartesian coordinates."""
@@ -450,7 +456,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
 
   async def _place_plate_c(
     self,
-    cartesian_position: CartesianCoords,
+    cartesian_position: PreciseFlexCartesianCoords,
     access: AccessPattern,
   ):
     """Place a plate at the specified position using Cartesian coordinates."""
@@ -946,7 +952,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def set_location_xyz(
     self,
     location_index: int,
-    cartesian_position: CartesianCoords,
+    cartesian_position: PreciseFlexCartesianCoords,
   ) -> None:
     """Set the Cartesian position values for the specified station index.
 
@@ -1475,7 +1481,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
     )
 
   # region MOTION COMMANDS
-  async def move(self, location_index: int, profile_index: int) -> None:
+  async def move_to_stored_location(self, location_index: int, profile_index: int) -> None:
     """Move to the location specified by the station index using the specified profile.
 
     Args:
@@ -1487,10 +1493,10 @@ class PreciseFlexBackend(ArmBackend, ABC):
     """
     await self.send_command(f"move {location_index} {profile_index}")
 
-  async def move_appro(self, location_index: int, profile_index: int) -> None:
+  async def move_to_stored_location_appro(self, location_index: int, profile_index: int) -> None:
     """Approach the location specified by the station index using the specified profile.
 
-    This is similar to "move" except that the Z clearance value is included.
+    This is similar to `move_to_stored_location` except that the Z clearance value is included.
 
     Args:
       location_index: The index of the location to which the robot moves.
@@ -1538,7 +1544,7 @@ class PreciseFlexBackend(ArmBackend, ABC):
   async def move_c(
     self,
     profile_index: int,
-    cartesian_coords: CartesianCoords,
+    cartesian_coords: PreciseFlexCartesianCoords,
   ) -> None:
     """Move the robot to the Cartesian location specified by the arguments.
 

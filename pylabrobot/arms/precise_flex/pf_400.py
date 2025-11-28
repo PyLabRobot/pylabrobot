@@ -14,15 +14,22 @@ class PreciseFlex400Backend(PreciseFlexBackend):
     """Convert a list of joint angles to a PreciseFlexJointCoords object."""
     if len(position) != 6:
       raise ValueError("Position must be a list of 6 joint angles.")
-    return PreciseFlexJointCoords(0, position[0], position[1], position[2], position[3], 0)
+    return PreciseFlexJointCoords(
+      rail=0,
+      base=position[0],
+      shoulder=position[1],
+      elbow=position[2],
+      wrist=position[3],
+      gripper=0,
+    )
 
-  def convert_to_joints_array(self, position: PreciseFlexJointCoords) -> List[float]:
-    """Convert a PreciseFlexJointCoords object to a list of joint angles."""
-    return [
-      position.base,
-      position.shoulder,
-      position.elbow,
-      position.wrist,
-      0,
-      0,
-    ]  # PF400 has 4 joints, last two are fixed
+  # def convert_to_joints_array(self, position: PreciseFlexJointCoords) -> List[float]:
+  #   """Convert a PreciseFlexJointCoords object to a list of joint angles."""
+  #   return [
+  #     0,
+  #     position.base,
+  #     position.shoulder,
+  #     position.elbow,
+  #     position.wrist,
+  #     0,
+  #   ]  # PF400 has 4 joints, last two are fixed
