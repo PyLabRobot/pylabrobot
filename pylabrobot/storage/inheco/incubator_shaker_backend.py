@@ -100,6 +100,10 @@ FIRMWARE_ERROR_MAP: Dict[int, str] = {
   15: "Timeout sub device",
 }
 
+InhecoIncubatorUnitType = Literal[
+  "incubator_mp", "incubator_shaker_mp", "incubator_dwp", "incubator_shaker_dwp", "unknown"
+]
+
 
 class InhecoIncubatorShakerStackBackend(MachineBackend):
   """Interface for Inheco Incubator Shaker stack machines.
@@ -136,13 +140,11 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     vid: str = "0403",
     pid: str = "6001",
   ):
-    # Logger
     self.logger = logger or logging.getLogger(__name__)
 
     # Core state
     self.dip_switch_id = dip_switch_id
 
-    self.port_hint = port
     self.io = Serial(
       port=port,
       vid=vid,
@@ -182,7 +184,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     try:  # --- Verify DIP switch ID via RTS ---
       probe = self._build_message("RTS", stack_index=0)
-      await self.write(probe)
+      await self.io.write(probe)
       resp = await self._read_full_response(timeout=5.0)
 
       expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
@@ -259,16 +261,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   # === Low-level I/O ===
 
-  async def write(self, data: bytes) -> None:
-    """Write binary data to the serial device."""
-    self._log(logging.DEBUG, f"→ {data.hex(' ')}")
-    await self.io.write(data)
-
   async def _read_full_response(self, timeout: float) -> bytes:
     """Read a complete Inheco response frame asynchronously."""
-    if not self.io:
-      raise RuntimeError("Serial port not open.")
-
     loop = asyncio.get_event_loop()
     start = loop.time()
     buf = bytearray()
@@ -322,7 +316,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   def _is_report_command(self, command: str) -> bool:
     """Return True if command is a 'Report' type (starts with 'R')."""
-    return bool(command) and command[0].upper() == "R"
+    return len(command) > 0 and command[0].upper() == "R"
 
   # === Response parsing ===
 
@@ -509,7 +503,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     resp = await self.send_command("RDM", stack_index=stack_index)
     return int(resp)
 
-  async def request_incubator_type(self, stack_index: int) -> str:
+  async def request_incubator_type(self, stack_index: int) -> InhecoIncubatorUnitType:
     """Return a descriptive string of the incubator/shaker configuration."""
 
     incubator_type_dict = {
@@ -519,9 +513,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       "3": "incubator_shaker_dwp",
     }
     resp = await self.send_command("RTS", stack_index=stack_index)
-    ident = incubator_type_dict.get(resp, "unknown")
-    self.incubator_type = ident
-    return ident
+    return incubator_type_dict.get(resp, "unknown")  # type: ignore[return-value]
 
   async def request_plate_in_incubator(self, stack_index: int) -> bool:
     """Sensor command:"""
@@ -552,7 +544,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """EEPROM request: Query the date of the last thermal calibration.
 
     Returns:
-        Calibration date in ISO format 'YYYY-MM-DD'.
+      Calibration date in ISO format 'YYYY-MM-DD'.
     """
     resp = await self.send_command("RCD")
     date = resp.strip()
@@ -637,22 +629,21 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Move the loading tray in & close the incubator door."""
     await self.send_command("ACD", stack_index=stack_index)
 
-  async def request_drawer_status(self, stack_index: int) -> str:
+  async def request_drawer_status(self, stack_index: int) -> Literal["open", "closed"]:
     """Report the current drawer (loading tray) status.
 
     Returns:
-        'open' if the loading tray is open, 'closed' if closed.
+      'open' if the loading tray is open, 'closed' if closed.
 
     Notes:
-        - Firmware response: '1' = open, '0' = closed.
+      - Firmware response: '1' = open, '0' = closed.
     """
     resp = await self.send_command("RDS", stack_index=stack_index)
     if resp == "1":
       return "open"
-    elif resp == "0":
+    if resp == "0":
       return "closed"
-    else:
-      raise ValueError(f"Unexpected RDS response: {resp!r}")
+    raise ValueError(f"Unexpected RDS response: {resp!r}")
 
   # TODO: Drawer Placeholder Commands
 
@@ -819,7 +810,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   async def wait_for_temperature(
     self,
-    *,
     stack_index: int,
     sensor: Literal["main", "dif", "boost", "mean"] = "main",
     tolerance: float = 0.2,
@@ -851,7 +841,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     temperature_control_enabled = await self.is_temperature_control_enabled(stack_index=stack_index)
     if not temperature_control_enabled:
       raise ValueError(
-        f"Temperature control is not enabled on the machine ({self.incubator_type})."
+        f"Temperature control is not enabled on the machine ({stack_index}: {self.unit_composition[stack_index]})."
       )
 
     start_time = asyncio.get_event_loop().time()
@@ -922,21 +912,13 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     async def wrapper(
       self: "InhecoIncubatorShakerStackBackend", *args: P.args, **kwargs: P.kwargs
     ) -> R:
-      # ORIGINAL LOGIC — EXACTLY PRESERVED
-      incubator_type = getattr(self, "incubator_type", None)
       name = getattr(func, "__name__", func.__class__.__name__)
       stack_index = cast(int, kwargs.get("stack_index", 0))
-
-      if incubator_type is None or incubator_type == "unknown":
-        try:
-          incubator_type = await self.request_incubator_type(stack_index)
-        except Exception as e:
-          raise RuntimeError(f"Cannot determine incubator type before calling {name}(): {e}")
+      incubator_type = self.unit_composition[stack_index]
 
       if "shaker" not in incubator_type:
         raise RuntimeError(f"{name}() requires a shaker-capable model (got {incubator_type!r}).")
 
-      # Call the wrapped async method
       return await func(self, *args, **kwargs)
 
     return wrapper
@@ -1010,25 +992,20 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       True if the shaker is active or still moving (status 1 or 2), False if fully stopped (status 0).
     """
 
-    incubator_type = await self.request_incubator_type(stack_index=stack_index)
-
-    if "shaker" in incubator_type:
-      resp = await self.send_command("RSE", stack_index=stack_index)
-
-      try:
-        status = int(resp)
-      except ValueError:
-        raise InhecoError("RSE", "E00", f"Unexpected response: {resp!r}")
-
-      if status not in (0, 1, 2):
-        raise InhecoError("RSE", "E00", f"Invalid shaker status value: {status}")
-
-      answer = status in (1, 2)  # TODO: discuss whether 2 should count as "shaking"
-
-      return answer
-
-    else:
+    if "shaker" not in self.unit_composition[stack_index]:
       return False
+
+    resp = await self.send_command("RSE", stack_index=stack_index)
+
+    try:
+      status = int(resp)
+    except ValueError:
+      raise InhecoError("RSE", "E00", f"Unexpected response: {resp!r}")
+
+    if status not in (0, 1, 2):
+      raise InhecoError("RSE", "E00", f"Invalid shaker status value: {status}")
+
+    return status in (1, 2)  # TODO: discuss whether 2 should count as "shaking"
 
   @requires_incubator_shaker
   async def set_shaker_parameters(
@@ -1427,7 +1404,7 @@ class InhecoIncubatorShakerUnit:
     """EEPROM request"""
     return await self.backend.request_labware_detection_threshold(stack_index=self.index)
 
-  async def request_incubator_type(self) -> str:
+  async def request_incubator_type(self) -> InhecoIncubatorUnitType:
     """Return a descriptive string of the incubator/shaker configuration."""
     return await self.backend.request_incubator_type(stack_index=self.index)
 
