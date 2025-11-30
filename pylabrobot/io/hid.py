@@ -107,8 +107,9 @@ class HID(IOBase):
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _read)
-    logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
+    if len(r.hex()) != 0:
+      logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
+      capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
     return cast(bytes, r)
 
   def serialize(self):

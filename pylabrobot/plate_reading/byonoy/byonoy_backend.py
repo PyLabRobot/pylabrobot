@@ -1,10 +1,11 @@
 import abc
 import asyncio
 import enum
+import re
 import struct
 import threading
 import time
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pylabrobot.io.hid import HID
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -18,6 +19,10 @@ class _ByonoyDevice(enum.Enum):
 
 
 class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
+  """Base backend for Byonoy plate readers using HID communication.
+  Provides common functionality for different Byonoy machine types.
+  """
+
   def __init__(self, pid: int, device_type: _ByonoyDevice) -> None:
     self.io = HID(vid=0x16D0, pid=pid)
     self._background_thread: Optional[threading.Thread] = None
@@ -30,6 +35,8 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
     """Set up the plate reader. This should be called before any other methods."""
 
     await self.io.setup()
+
+    await self.initialize_measurements()
 
     # Start background keep alive messages
     self._stop_background.clear()
@@ -136,10 +143,88 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x1199, device_type=_ByonoyDevice.ABSORBANCE_96)
 
-  async def read_luminescence(
-    self, plate: Plate, wells: List[Well], focal_height: float
-  ) -> List[List[Optional[float]]]:
-    raise NotImplementedError("Absorbance plate reader does not support luminescence reading.")
+  async def setup(self, **backend_kwargs):
+    # Call the base setup (opens HID)
+    await super().setup(**backend_kwargs)
+
+    # After device is online, run reference initialisation
+    await self.initialize_measurements()
+
+  async def _run_abs_measurement(self, signal_wl: int, reference_wl: int, is_reference: bool):
+    """Perform an absorbance measurement or reference measurement.
+    This contains all shared logic between initialization and real measurements."""
+
+    # (1) SUPPORTED_REPORTS_IN   (0x0010)
+    await self.send_command(
+      report_id=0x0010,
+      payload_fmt="<BB29H",
+      payload=[0, 0, *([0] * 29)],
+      wait_for_response=False,
+    )
+
+    # (2) DEVICE_DATA_READ_IN    (0x0200)
+    await self.send_command(
+      report_id=0x0200,
+      payload_fmt="<HB52s",
+      payload=[7, 0, b"\x00" * 52],
+      wait_for_response=False,
+    )
+
+    # (3) ABS_TRIGGER_MEASUREMENT_OUT (0x0320)
+    await self.send_command(
+      report_id=0x0320,
+      payload_fmt="<hhBB",
+      payload=[signal_wl, reference_wl, int(is_reference), 0],
+      wait_for_response=False,
+      routing_info=b"\x00\x40",
+    )
+
+    # (4) Collect chunks (report_id 0x0500)
+    rows = []
+    t0 = time.time()
+
+    while True:
+      if time.time() - t0 > 120:
+        raise TimeoutError("Measurement timeout.")
+
+      chunk = await self.io.read(64, timeout=30)
+      if len(chunk) == 0:
+        continue
+
+      report_id = int.from_bytes(chunk[:2], "little")
+
+      # Only handle the measurement packets
+      if report_id == 0x0500:
+        (
+          seq,
+          seq_len,
+          signal_wl_nm,
+          reference_wl_nm,
+          duration_ms,
+          *row,
+          flags,
+          progress,
+        ) = struct.unpack("<BBhhI12fBB", chunk[2:-2])
+
+        rows.extend(row)
+
+        if seq == seq_len - 1:
+          break
+
+    return rows
+
+  async def initialize_measurements(self):
+    """Perform the reference ABS measurement required by the firmware."""
+
+    # Standard reference wavelength used by Byonoy app
+    REFERENCE_WL = 0
+    SIGNAL_WL = 660
+
+    await self._run_abs_measurement(
+      signal_wl=SIGNAL_WL,
+      reference_wl=REFERENCE_WL,
+      is_reference=True,
+    )
 
   async def get_available_absorbance_wavelengths(self) -> List[float]:
     available_wavelengths_r = await self.send_command(
@@ -157,75 +242,63 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     return available_wavelengths
 
   async def read_absorbance(
-    self, plate: Plate, wells: List[Well], wavelength: int
+    self,
+    wavelength: int,
+    plate: Optional[Plate] = None,
+    wells: Optional[List[Well]] = None,
+    output_nested_list: bool = False,
+  ):
+    """Perform an absorbance measurement.
+
+    Default return:
+        {"A1": float, "A2": float, ... }
+
+    If output_nested_list=True:
+        8*12 matrix (list of lists)
+    """
+
+    # Raw measurement → flat list of 96 floats
+    rows = await self._run_abs_measurement(
+      signal_wl=wavelength,
+      reference_wl=0,
+      is_reference=False,
+    )
+
+    # Convert flat → 8*12 matrix
+    matrix = reshape_2d(rows, (8, 12))
+
+    # Build dict mapping "A1" → float etc.
+    result_dict: Dict[str, float] = {}
+    for r in range(8):
+      for c in range(12):
+        well_id = f"{chr(ord('A') + r)}{c + 1}"
+        result_dict[well_id] = matrix[r][c]
+
+    # If no filtering requested
+    if wells is None:
+      return matrix if output_nested_list else result_dict
+
+    # Filter based on user-provided wells
+    filtered = {
+      w.get_identifier(): result_dict[w.get_identifier()]
+      for w in wells
+    }
+
+    # nested list output for filtered wells
+    if output_nested_list:
+      return [
+        [filtered.get(f"{chr(ord('A') + r)}{c+1}") for c in range(12)]
+        for r in range(8)
+      ]
+
+    # dictionary output for filtered wells
+    return filtered
+
+
+  async def read_luminescence(
+    self, plate: Plate, wells: List[Well], focal_height: float
   ) -> List[List[Optional[float]]]:
-    """Read the absorbance from the plate reader. This should return a list of lists, where the
-    outer list is the columns of the plate and the inner list is the rows of the plate."""
-
-    available_wavelengths = await self.get_available_absorbance_wavelengths()
-    if wavelength not in available_wavelengths:
-      raise ValueError(
-        f"Wavelength {wavelength} nm is not supported by this plate reader. "
-        f"Available wavelengths: {available_wavelengths}"
-      )
-
-    await self.send_command(
-      report_id=0x0010,  # SUPPORTED_REPORTS_IN
-      payload_fmt="<BB29H",
-      # "seq", "seq_len", "ids"
-      payload=[0, 0, *([0] * 29)],
-      wait_for_response=False,
-    )
-
-    await self.send_command(
-      report_id=0x0200,  # DEVICE_DATA_READ_IN
-      payload_fmt="<HB52s",
-      # field_index", "flags", "data"
-      payload=[7, 0, b"\x00" * 52],
-      wait_for_response=False,
-    )
-
-    await self.send_command(
-      report_id=0x0320,  # ABS_TRIGGER_MEASUREMENT_OUT
-      # signal_wavelength_nm, reference_wavelength_nm, is_reference_measurement, flags
-      payload_fmt="<hhBB",
-      payload=[wavelength, 0, 0, 0],  # 0, 1, 0
-      wait_for_response=False,
-      routing_info=b"\x00\x40",
-    )
-    self._stop_background_pings()
-
-    t0 = time.time()
-
-    all_rows = []
-    while True:
-      if time.time() - t0 > 120:  # read for 2 minutes max. typical is 1m5s.
-        raise TimeoutError("Reading absorbance data timed out after 2 minutes.")
-
-      chunk = await self.io.read(64, timeout=30)
-      if len(chunk) == 0:
-        continue
-
-      report_id, *_ = struct.unpack("<H", chunk[:2])
-
-      if report_id == 0x0500:  # ABS96_MEASUREMENT_IN
-        (
-          seq,
-          seq_len,
-          signal_wavelength_nm,
-          reference_wavelength_nm,
-          duration_ms,
-          *row,
-          flags,
-          progress,
-        ) = struct.unpack("<BBhhI12fBB", chunk[2:-2])
-        all_rows.extend(row)
-        _, _, _, _, _ = signal_wavelength_nm, reference_wavelength_nm, duration_ms, flags, progress
-
-        if seq == seq_len - 1:
-          break
-
-    return reshape_2d(all_rows, (8, 12))
+    raise NotImplementedError("Absorbance plate reader does not support luminescence reading.")
 
   async def read_fluorescence(
     self,
