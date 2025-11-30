@@ -143,12 +143,40 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x1199, device_type=_ByonoyDevice.ABSORBANCE_96)
 
-  async def setup(self, **backend_kwargs):
+  async def setup(self, verbose: bool = False, **backend_kwargs):
+    """Set up the plate reader. This should be called before any other methods."""
+
     # Call the base setup (opens HID)
     await super().setup(**backend_kwargs)
 
     # After device is online, run reference initialisation
     await self.initialize_measurements()
+
+    self.available_wavelengths = await self.get_available_absorbance_wavelengths()
+
+    msg = (
+      f"Connected to Bynoy {self.io.device_info['product_string']} (via HID with "
+      f"VID={self.io.device_info['vendor_id']}:PID={self.io.device_info['product_id']}) "
+      f"on {self.io.device_info['path']}\n"
+      f"Identified available wavelengths: {self.available_wavelengths} nm"
+    )
+    if verbose:
+      print(msg)
+
+  async def get_available_absorbance_wavelengths(self) -> List[float]:
+    available_wavelengths_r = await self.send_command(
+      report_id=0x0330,
+      payload_fmt="<30h",
+      payload=[0] * 30,
+      wait_for_response=True,
+      routing_info=b"\x80\x40",
+    )
+    assert available_wavelengths_r is not None, "Failed to get available wavelengths."
+    # cut out the first 2 bytes, then read the next 2 bytes as an integer
+    # 64 - 4 = 60. 60/2 = 30 16 bit integers
+    available_wavelengths = list(struct.unpack("<30h", available_wavelengths_r[2:62]))
+    available_wavelengths = [w for w in available_wavelengths if w != 0]
+    return available_wavelengths
 
   async def _run_abs_measurement(self, signal_wl: int, reference_wl: int, is_reference: bool):
     """Perform an absorbance measurement or reference measurement.
@@ -217,6 +245,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     """Perform the reference ABS measurement required by the firmware."""
 
     # Standard reference wavelength used by Byonoy app
+    # required startup protocol to initialize the photodiode reference
     REFERENCE_WL = 0
     SIGNAL_WL = 660
 
@@ -226,74 +255,93 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
       is_reference=True,
     )
 
-  async def get_available_absorbance_wavelengths(self) -> List[float]:
-    available_wavelengths_r = await self.send_command(
-      report_id=0x0330,
-      payload_fmt="<30h",
-      payload=[0] * 30,
-      wait_for_response=True,
-      routing_info=b"\x80\x40",
-    )
-    assert available_wavelengths_r is not None, "Failed to get available wavelengths."
-    # cut out the first 2 bytes, then read the next 2 bytes as an integer
-    # 64 - 4 = 60. 60/2 = 30 16 bit integers
-    available_wavelengths = list(struct.unpack("<30h", available_wavelengths_r[2:62]))
-    available_wavelengths = [w for w in available_wavelengths if w != 0]
-    return available_wavelengths
-
   async def read_absorbance(
     self,
     wavelength: int,
     plate: Optional[Plate] = None,
     wells: Optional[List[Well]] = None,
     output_nested_list: bool = False,
+    num_measurement_replicates: int = 1,
   ):
-    """Perform an absorbance measurement.
+    """
+    Measure sample absorbance in each well at the specified wavelength.
 
-    Default return:
-        {"A1": float, "A2": float, ... }
-
-    If output_nested_list=True:
-        8*12 matrix (list of lists)
+    Parameters
+    ----------
+    wavelength : int
+        Signal wavelength in nanometers.
+    plate : Plate, optional
+        The plate being read. Included for API uniformity.
+    wells : list[Well], optional
+        Subset of wells to return. If omitted, all 96 wells are returned.
+    output_nested_list : bool, default False
+        If True, return an 8×12 list-of-lists instead of a dict.
+        When `wells` is provided, a full 8×12 structure is still returned,
+        with non-requested wells filled with None.
+    num_measurement_replicates : int, default 1
+        Number of technical replicate reads to acquire.
+        Replicates are taken sequentially and averaged per well.
+        (Handled at the backend level for faster acquisition and
+        a simpler interface.)
     """
 
-    # Raw measurement → flat list of 96 floats
-    rows = await self._run_abs_measurement(
-      signal_wl=wavelength,
-      reference_wl=0,
-      is_reference=False,
-    )
+    assert (
+      wavelength in self.available_wavelengths
+    ), f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
 
-    # Convert flat → 8*12 matrix
-    matrix = reshape_2d(rows, (8, 12))
+    # ------------------------------------------
+    # 1. Collect technical replicates
+    # ------------------------------------------
+    technical_replicates = []
+    for _ in range(num_measurement_replicates):
+      rows = await self._run_abs_measurement(
+        signal_wl=wavelength,
+        reference_wl=0,
+        is_reference=False,
+      )
+      technical_replicates.append(rows)
 
-    # Build dict mapping "A1" → float etc.
+    # ------------------------------------------
+    # 2. Average the replicates (flat 96-element list)
+    # ------------------------------------------
+    if num_measurement_replicates == 1:
+      averaged_rows = technical_replicates[0]
+    else:
+      averaged_rows = [
+        sum(rep[i] for rep in technical_replicates) / num_measurement_replicates for i in range(96)
+      ]
+
+    # ------------------------------------------
+    # 3. Convert flat → 8×12 matrix
+    # ------------------------------------------
+    matrix = reshape_2d(averaged_rows, (8, 12))
+
+    # ------------------------------------------
+    # 4. Build dict mapping "A1" → float
+    # ------------------------------------------
     result_dict: Dict[str, float] = {}
     for r in range(8):
       for c in range(12):
-        well_id = f"{chr(ord('A') + r)}{c + 1}"
+        well_id = f"{chr(ord("A") + r)}{c + 1}"
         result_dict[well_id] = matrix[r][c]
 
-    # If no filtering requested
+    # ------------------------------------------
+    # 5. No filtering? return full plate
+    # ------------------------------------------
     if wells is None:
       return matrix if output_nested_list else result_dict
 
-    # Filter based on user-provided wells
-    filtered = {
-      w.get_identifier(): result_dict[w.get_identifier()]
-      for w in wells
-    }
+    # ------------------------------------------
+    # 6. Filter based on user-provided wells
+    # ------------------------------------------
+    filtered = {w.get_identifier(): result_dict[w.get_identifier()] for w in wells}
 
     # nested list output for filtered wells
     if output_nested_list:
-      return [
-        [filtered.get(f"{chr(ord('A') + r)}{c+1}") for c in range(12)]
-        for r in range(8)
-      ]
+      return [[filtered.get(f"{chr(ord("A") + r)}{c+1}") for c in range(12)] for r in range(8)]
 
     # dictionary output for filtered wells
     return filtered
-
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float
