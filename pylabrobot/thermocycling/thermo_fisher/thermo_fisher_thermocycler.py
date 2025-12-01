@@ -175,9 +175,9 @@ def _gen_protocol_data(
     }
 
   stages = protocol.stages
-  assert len(stages) == len(stage_name_prefixes), (
-    "Number of stages must match number of stage names"
-  )
+  assert len(stages) == len(
+    stage_name_prefixes
+  ), "Number of stages must match number of stage names"
 
   data = {
     # "status": "OK",

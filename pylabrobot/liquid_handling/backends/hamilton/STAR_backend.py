@@ -3432,9 +3432,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           "Please use the core_front_channel parameter instead.",
           DeprecationWarning,
         )
-        assert channel_1 is not None and channel_2 is not None, (
-          "Both channel_1 and channel_2 must be provided"
-        )
+        assert (
+          channel_1 is not None and channel_2 is not None
+        ), "Both channel_1 and channel_2 must be provided"
         assert channel_1 + 1 == channel_2, "channel_2 must be channel_1 + 1"
         core_front_channel = (
           channel_2 - 1
@@ -4201,44 +4201,44 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                                     and 9999. Default 60.
     """
 
-    assert 1 <= instrument_size_in_slots_x_range <= 9, (
-      "instrument_size_in_slots_x_range must be between 1 and 99"
-    )
+    assert (
+      1 <= instrument_size_in_slots_x_range <= 9
+    ), "instrument_size_in_slots_x_range must be between 1 and 99"
     assert 1 <= auto_load_size_in_slots <= 54, "auto_load_size_in_slots must be between 1 and 54"
     assert 1000 <= tip_waste_x_position <= 25000, "tip_waste_x_position must be between 1 and 25000"
-    assert 0 <= right_x_drive_configuration_byte_1 <= 1, (
-      "right_x_drive_configuration_byte_1 must be between 0 and 1"
-    )
-    assert 0 <= right_x_drive_configuration_byte_2 <= 1, (
-      "right_x_drive_configuration_byte_2 must be between 0 and  must1"
-    )
-    assert 0 <= minimal_iswap_collision_free_position <= 30000, (
-      "minimal_iswap_collision_free_position must be between 0 and 30000"
-    )
-    assert 0 <= maximal_iswap_collision_free_position <= 30000, (
-      "maximal_iswap_collision_free_position must be between 0 and 30000"
-    )
+    assert (
+      0 <= right_x_drive_configuration_byte_1 <= 1
+    ), "right_x_drive_configuration_byte_1 must be between 0 and 1"
+    assert (
+      0 <= right_x_drive_configuration_byte_2 <= 1
+    ), "right_x_drive_configuration_byte_2 must be between 0 and  must1"
+    assert (
+      0 <= minimal_iswap_collision_free_position <= 30000
+    ), "minimal_iswap_collision_free_position must be between 0 and 30000"
+    assert (
+      0 <= maximal_iswap_collision_free_position <= 30000
+    ), "maximal_iswap_collision_free_position must be between 0 and 30000"
     assert 0 <= left_x_arm_width <= 9999, "left_x_arm_width must be between 0 and 9999"
     assert 0 <= right_x_arm_width <= 9999, "right_x_arm_width must be between 0 and 9999"
     assert 0 <= num_pip_channels <= 16, "num_pip_channels must be between 0 and 16"
     assert 0 <= num_xl_channels <= 8, "num_xl_channels must be between 0 and 8"
     assert 0 <= num_robotic_channels <= 8, "num_robotic_channels must be between 0 and 8"
-    assert 0 <= minimal_raster_pitch_of_pip_channels <= 999, (
-      "minimal_raster_pitch_of_pip_channels must be between 0 and 999"
-    )
-    assert 0 <= minimal_raster_pitch_of_xl_channels <= 999, (
-      "minimal_raster_pitch_of_xl_channels must be between 0 and 999"
-    )
-    assert 0 <= minimal_raster_pitch_of_robotic_channels <= 999, (
-      "minimal_raster_pitch_of_robotic_channels must be between 0 and 999"
-    )
+    assert (
+      0 <= minimal_raster_pitch_of_pip_channels <= 999
+    ), "minimal_raster_pitch_of_pip_channels must be between 0 and 999"
+    assert (
+      0 <= minimal_raster_pitch_of_xl_channels <= 999
+    ), "minimal_raster_pitch_of_xl_channels must be between 0 and 999"
+    assert (
+      0 <= minimal_raster_pitch_of_robotic_channels <= 999
+    ), "minimal_raster_pitch_of_robotic_channels must be between 0 and 999"
     assert 0 <= pip_maximal_y_position <= 9999, "pip_maximal_y_position must be between 0 and 9999"
-    assert 0 <= left_arm_minimal_y_position <= 9999, (
-      "left_arm_minimal_y_position must be between 0 and 9999"
-    )
-    assert 0 <= right_arm_minimal_y_position <= 9999, (
-      "right_arm_minimal_y_position must be between 0 and 9999"
-    )
+    assert (
+      0 <= left_arm_minimal_y_position <= 9999
+    ), "left_arm_minimal_y_position must be between 0 and 9999"
+    assert (
+      0 <= right_arm_minimal_y_position <= 9999
+    ), "right_arm_minimal_y_position must be between 0 and 9999"
 
     return await self.send_command(
       module="C0",
@@ -4493,17 +4493,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         1) all arms left.  2) all arms right.
     """
 
-    assert 0 <= taken_area_identification_number <= 9999, (
-      "taken_area_identification_number must be between 0 and 9999"
-    )
+    assert (
+      0 <= taken_area_identification_number <= 9999
+    ), "taken_area_identification_number must be between 0 and 9999"
     assert 0 <= taken_area_left_margin <= 99, "taken_area_left_margin must be between 0 and 99"
-    assert 0 <= taken_area_left_margin_direction <= 1, (
-      "taken_area_left_margin_direction must be between 0 and 1"
-    )
+    assert (
+      0 <= taken_area_left_margin_direction <= 1
+    ), "taken_area_left_margin_direction must be between 0 and 1"
     assert 0 <= taken_area_size <= 50000, "taken_area_size must be between 0 and 50000"
-    assert 0 <= arm_preposition_mode_related_to_taken_areas <= 2, (
-      "arm_preposition_mode_related_to_taken_areas must be between 0 and 2"
-    )
+    assert (
+      0 <= arm_preposition_mode_related_to_taken_areas <= 2
+    ), "arm_preposition_mode_related_to_taken_areas must be between 0 and 2"
 
     return await self.send_command(
       module="C0",
@@ -4523,9 +4523,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                                         Must be between 0 and 9999. Default 0.
     """
 
-    assert 0 <= taken_area_identification_number <= 999, (
-      "taken_area_identification_number must be between 0 and 9999"
-    )
+    assert (
+      0 <= taken_area_identification_number <= 999
+    ), "taken_area_identification_number must be between 0 and 9999"
 
     return await self.send_command(
       module="C0",
@@ -4636,15 +4636,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
     assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
-    assert 0 <= begin_of_tip_deposit_process <= 3600, (
-      "begin_of_tip_deposit_process must be between 0 and 3600"
-    )
-    assert 0 <= end_of_tip_deposit_process <= 3600, (
-      "end_of_tip_deposit_process must be between 0 and 3600"
-    )
-    assert 0 <= z_position_at_end_of_a_command <= 3600, (
-      "z_position_at_end_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= begin_of_tip_deposit_process <= 3600
+    ), "begin_of_tip_deposit_process must be between 0 and 3600"
+    assert (
+      0 <= end_of_tip_deposit_process <= 3600
+    ), "end_of_tip_deposit_process must be between 0 and 3600"
+    assert (
+      0 <= z_position_at_end_of_a_command <= 3600
+    ), "z_position_at_end_of_a_command must be between 0 and 3600"
     assert 0 <= tip_type <= 99, "tip must be between 0 and 99"
     assert 0 <= discarding_method <= 1, "discarding_method must be between 0 and 1"
 
@@ -4695,15 +4695,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
     assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
-    assert 0 <= begin_tip_pick_up_process <= 3600, (
-      "begin_tip_pick_up_process must be between 0 and 3600"
-    )
-    assert 0 <= end_tip_pick_up_process <= 3600, (
-      "end_tip_pick_up_process must be between 0 and 3600"
-    )
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= begin_tip_pick_up_process <= 3600
+    ), "begin_tip_pick_up_process must be between 0 and 3600"
+    assert (
+      0 <= end_tip_pick_up_process <= 3600
+    ), "end_tip_pick_up_process must be between 0 and 3600"
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     return await self.send_command(
       module="C0",
@@ -4757,18 +4757,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
     assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
-    assert 0 <= begin_tip_deposit_process <= 3600, (
-      "begin_tip_deposit_process must be between 0 and 3600"
-    )
-    assert 0 <= end_tip_deposit_process <= 3600, (
-      "end_tip_deposit_process must be between 0 and 3600"
-    )
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
-    assert 0 <= z_position_at_end_of_a_command <= 3600, (
-      "z_position_at_end_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= begin_tip_deposit_process <= 3600
+    ), "begin_tip_deposit_process must be between 0 and 3600"
+    assert (
+      0 <= end_tip_deposit_process <= 3600
+    ), "end_tip_deposit_process must be between 0 and 3600"
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert (
+      0 <= z_position_at_end_of_a_command <= 3600
+    ), "z_position_at_end_of_a_command must be between 0 and 3600"
 
     return await self.send_command(
       module="C0",
@@ -4930,100 +4930,100 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert all(0 <= x <= 2 for x in aspiration_type), "aspiration_type must be between 0 and 2"
     assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
     assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= min_z_endpos <= 3600, "min_z_endpos must be between 0 and 3600"
-    assert all(0 <= x <= 3600 for x in lld_search_height), (
-      "lld_search_height must be between 0 and 3600"
-    )
-    assert all(0 <= x <= 500 for x in clot_detection_height), (
-      "clot_detection_height must be between 0 and 500"
-    )
-    assert all(0 <= x <= 3600 for x in liquid_surface_no_lld), (
-      "liquid_surface_no_lld must be between 0 and 3600"
-    )
-    assert all(0 <= x <= 3600 for x in pull_out_distance_transport_air), (
-      "pull_out_distance_transport_air must be between 0 and 3600"
-    )
-    assert all(0 <= x <= 3600 for x in second_section_height), (
-      "second_section_height must be between 0 and 3600"
-    )
-    assert all(0 <= x <= 10000 for x in second_section_ratio), (
-      "second_section_ratio must be between 0 and 10000"
-    )
+    assert all(
+      0 <= x <= 3600 for x in lld_search_height
+    ), "lld_search_height must be between 0 and 3600"
+    assert all(
+      0 <= x <= 500 for x in clot_detection_height
+    ), "clot_detection_height must be between 0 and 500"
+    assert all(
+      0 <= x <= 3600 for x in liquid_surface_no_lld
+    ), "liquid_surface_no_lld must be between 0 and 3600"
+    assert all(
+      0 <= x <= 3600 for x in pull_out_distance_transport_air
+    ), "pull_out_distance_transport_air must be between 0 and 3600"
+    assert all(
+      0 <= x <= 3600 for x in second_section_height
+    ), "second_section_height must be between 0 and 3600"
+    assert all(
+      0 <= x <= 10000 for x in second_section_ratio
+    ), "second_section_ratio must be between 0 and 10000"
     assert all(0 <= x <= 3600 for x in minimum_height), "minimum_height must be between 0 and 3600"
-    assert all(0 <= x <= 3600 for x in immersion_depth), (
-      "immersion_depth must be between 0 and 3600"
-    )
-    assert all(0 <= x <= 1 for x in immersion_depth_direction), (
-      "immersion_depth_direction must be between 0 and 1"
-    )
-    assert all(0 <= x <= 3600 for x in surface_following_distance), (
-      "surface_following_distance must be between 0 and 3600"
-    )
-    assert all(0 <= x <= 12500 for x in aspiration_volumes), (
-      "aspiration_volumes must be between 0 and 12500"
-    )
-    assert all(4 <= x <= 5000 for x in aspiration_speed), (
-      "aspiration_speed must be between 4 and 5000"
-    )
-    assert all(0 <= x <= 500 for x in transport_air_volume), (
-      "transport_air_volume must be between 0 and 500"
-    )
-    assert all(0 <= x <= 9999 for x in blow_out_air_volume), (
-      "blow_out_air_volume must be between 0 and 9999"
-    )
-    assert all(0 <= x <= 999 for x in pre_wetting_volume), (
-      "pre_wetting_volume must be between 0 and 999"
-    )
+    assert all(
+      0 <= x <= 3600 for x in immersion_depth
+    ), "immersion_depth must be between 0 and 3600"
+    assert all(
+      0 <= x <= 1 for x in immersion_depth_direction
+    ), "immersion_depth_direction must be between 0 and 1"
+    assert all(
+      0 <= x <= 3600 for x in surface_following_distance
+    ), "surface_following_distance must be between 0 and 3600"
+    assert all(
+      0 <= x <= 12500 for x in aspiration_volumes
+    ), "aspiration_volumes must be between 0 and 12500"
+    assert all(
+      4 <= x <= 5000 for x in aspiration_speed
+    ), "aspiration_speed must be between 4 and 5000"
+    assert all(
+      0 <= x <= 500 for x in transport_air_volume
+    ), "transport_air_volume must be between 0 and 500"
+    assert all(
+      0 <= x <= 9999 for x in blow_out_air_volume
+    ), "blow_out_air_volume must be between 0 and 9999"
+    assert all(
+      0 <= x <= 999 for x in pre_wetting_volume
+    ), "pre_wetting_volume must be between 0 and 999"
     assert all(0 <= x <= 4 for x in lld_mode), "lld_mode must be between 0 and 4"
-    assert all(1 <= x <= 4 for x in gamma_lld_sensitivity), (
-      "gamma_lld_sensitivity must be between 1 and 4"
-    )
-    assert all(1 <= x <= 4 for x in dp_lld_sensitivity), (
-      "dp_lld_sensitivity must be between 1 and 4"
-    )
-    assert all(0 <= x <= 100 for x in aspirate_position_above_z_touch_off), (
-      "aspirate_position_above_z_touch_off must be between 0 and 100"
-    )
-    assert all(0 <= x <= 99 for x in detection_height_difference_for_dual_lld), (
-      "detection_height_difference_for_dual_lld must be between 0 and 99"
-    )
+    assert all(
+      1 <= x <= 4 for x in gamma_lld_sensitivity
+    ), "gamma_lld_sensitivity must be between 1 and 4"
+    assert all(
+      1 <= x <= 4 for x in dp_lld_sensitivity
+    ), "dp_lld_sensitivity must be between 1 and 4"
+    assert all(
+      0 <= x <= 100 for x in aspirate_position_above_z_touch_off
+    ), "aspirate_position_above_z_touch_off must be between 0 and 100"
+    assert all(
+      0 <= x <= 99 for x in detection_height_difference_for_dual_lld
+    ), "detection_height_difference_for_dual_lld must be between 0 and 99"
     assert all(3 <= x <= 1600 for x in swap_speed), "swap_speed must be between 3 and 1600"
     assert all(0 <= x <= 99 for x in settling_time), "settling_time must be between 0 and 99"
     assert all(0 <= x <= 12500 for x in mix_volume), "mix_volume must be between 0 and 12500"
     assert all(0 <= x <= 99 for x in mix_cycles), "mix_cycles must be between 0 and 99"
-    assert all(0 <= x <= 900 for x in mix_position_from_liquid_surface), (
-      "mix_position_from_liquid_surface must be between 0 and 900"
-    )
+    assert all(
+      0 <= x <= 900 for x in mix_position_from_liquid_surface
+    ), "mix_position_from_liquid_surface must be between 0 and 900"
     assert all(4 <= x <= 5000 for x in mix_speed), "mix_speed must be between 4 and 5000"
-    assert all(0 <= x <= 3600 for x in mix_surface_following_distance), (
-      "mix_surface_following_distance must be between 0 and 3600"
-    )
-    assert all(0 <= x <= 999 for x in limit_curve_index), (
-      "limit_curve_index must be between 0 and 999"
-    )
+    assert all(
+      0 <= x <= 3600 for x in mix_surface_following_distance
+    ), "mix_surface_following_distance must be between 0 and 3600"
+    assert all(
+      0 <= x <= 999 for x in limit_curve_index
+    ), "limit_curve_index must be between 0 and 999"
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
-    assert all(0 <= x <= 3600 for x in retract_height_over_2nd_section_to_empty_tip), (
-      "retract_height_over_2nd_section_to_empty_tip must be between 0 and 3600"
-    )
-    assert all(4 <= x <= 5000 for x in dispensation_speed_during_emptying_tip), (
-      "dispensation_speed_during_emptying_tip must be between 4 and 5000"
-    )
-    assert all(4 <= x <= 5000 for x in dosing_drive_speed_during_2nd_section_search), (
-      "dosing_drive_speed_during_2nd_section_search must be between 4 and 5000"
-    )
-    assert all(3 <= x <= 1600 for x in z_drive_speed_during_2nd_section_search), (
-      "z_drive_speed_during_2nd_section_search must be between 3 and 1600"
-    )
+    assert all(
+      0 <= x <= 3600 for x in retract_height_over_2nd_section_to_empty_tip
+    ), "retract_height_over_2nd_section_to_empty_tip must be between 0 and 3600"
+    assert all(
+      4 <= x <= 5000 for x in dispensation_speed_during_emptying_tip
+    ), "dispensation_speed_during_emptying_tip must be between 4 and 5000"
+    assert all(
+      4 <= x <= 5000 for x in dosing_drive_speed_during_2nd_section_search
+    ), "dosing_drive_speed_during_2nd_section_search must be between 4 and 5000"
+    assert all(
+      3 <= x <= 1600 for x in z_drive_speed_during_2nd_section_search
+    ), "z_drive_speed_during_2nd_section_search must be between 3 and 1600"
     assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
-    assert all(0 <= x <= 5000 for x in ratio_liquid_rise_to_tip_deep_in), (
-      "ratio_liquid_rise_to_tip_deep_in must be between 0 and 50000"
-    )
-    assert all(0 <= x <= 3600 for x in immersion_depth_2nd_section), (
-      "immersion_depth_2nd_section must be between 0 and 3600"
-    )
+    assert all(
+      0 <= x <= 5000 for x in ratio_liquid_rise_to_tip_deep_in
+    ), "ratio_liquid_rise_to_tip_deep_in must be between 0 and 50000"
+    assert all(
+      0 <= x <= 3600 for x in immersion_depth_2nd_section
+    ), "immersion_depth_2nd_section must be between 0 and 3600"
 
     return await self.send_command(
       module="C0",
@@ -5190,73 +5190,73 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
     assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
     assert any(0 <= x <= 3600 for x in minimum_height), "minimum_height must be between 0 and 3600"
-    assert any(0 <= x <= 3600 for x in lld_search_height), (
-      "lld_search_height must be between 0 and 3600"
-    )
-    assert any(0 <= x <= 3600 for x in liquid_surface_no_lld), (
-      "liquid_surface_no_lld must be between 0 and 3600"
-    )
-    assert any(0 <= x <= 3600 for x in pull_out_distance_transport_air), (
-      "pull_out_distance_transport_air must be between 0 and 3600"
-    )
-    assert any(0 <= x <= 3600 for x in immersion_depth), (
-      "immersion_depth must be between 0 and 3600"
-    )
-    assert any(0 <= x <= 1 for x in immersion_depth_direction), (
-      "immersion_depth_direction must be between 0 and 1"
-    )
-    assert any(0 <= x <= 3600 for x in surface_following_distance), (
-      "surface_following_distance must be between 0 and 3600"
-    )
-    assert any(0 <= x <= 3600 for x in second_section_height), (
-      "second_section_height must be between 0 and 3600"
-    )
-    assert any(0 <= x <= 10000 for x in second_section_ratio), (
-      "second_section_ratio must be between 0 and 10000"
-    )
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert any(
+      0 <= x <= 3600 for x in lld_search_height
+    ), "lld_search_height must be between 0 and 3600"
+    assert any(
+      0 <= x <= 3600 for x in liquid_surface_no_lld
+    ), "liquid_surface_no_lld must be between 0 and 3600"
+    assert any(
+      0 <= x <= 3600 for x in pull_out_distance_transport_air
+    ), "pull_out_distance_transport_air must be between 0 and 3600"
+    assert any(
+      0 <= x <= 3600 for x in immersion_depth
+    ), "immersion_depth must be between 0 and 3600"
+    assert any(
+      0 <= x <= 1 for x in immersion_depth_direction
+    ), "immersion_depth_direction must be between 0 and 1"
+    assert any(
+      0 <= x <= 3600 for x in surface_following_distance
+    ), "surface_following_distance must be between 0 and 3600"
+    assert any(
+      0 <= x <= 3600 for x in second_section_height
+    ), "second_section_height must be between 0 and 3600"
+    assert any(
+      0 <= x <= 10000 for x in second_section_ratio
+    ), "second_section_ratio must be between 0 and 10000"
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= min_z_endpos <= 3600, "min_z_endpos must be between 0 and 3600"
-    assert any(0 <= x <= 12500 for x in dispense_volumes), (
-      "dispense_volume must be between 0 and 12500"
-    )
+    assert any(
+      0 <= x <= 12500 for x in dispense_volumes
+    ), "dispense_volume must be between 0 and 12500"
     assert any(4 <= x <= 5000 for x in dispense_speed), "dispense_speed must be between 4 and 5000"
     assert any(4 <= x <= 5000 for x in cut_off_speed), "cut_off_speed must be between 4 and 5000"
-    assert any(0 <= x <= 180 for x in stop_back_volume), (
-      "stop_back_volume must be between 0 and 180"
-    )
-    assert any(0 <= x <= 500 for x in transport_air_volume), (
-      "transport_air_volume must be between 0 and 500"
-    )
-    assert any(0 <= x <= 9999 for x in blow_out_air_volume), (
-      "blow_out_air_volume must be between 0 and 9999"
-    )
+    assert any(
+      0 <= x <= 180 for x in stop_back_volume
+    ), "stop_back_volume must be between 0 and 180"
+    assert any(
+      0 <= x <= 500 for x in transport_air_volume
+    ), "transport_air_volume must be between 0 and 500"
+    assert any(
+      0 <= x <= 9999 for x in blow_out_air_volume
+    ), "blow_out_air_volume must be between 0 and 9999"
     assert any(0 <= x <= 4 for x in lld_mode), "lld_mode must be between 0 and 4"
     assert 0 <= side_touch_off_distance <= 45, "side_touch_off_distance must be between 0 and 45"
-    assert any(0 <= x <= 100 for x in dispense_position_above_z_touch_off), (
-      "dispense_position_above_z_touch_off must be between 0 and 100"
-    )
-    assert any(1 <= x <= 4 for x in gamma_lld_sensitivity), (
-      "gamma_lld_sensitivity must be between 1 and 4"
-    )
-    assert any(1 <= x <= 4 for x in dp_lld_sensitivity), (
-      "dp_lld_sensitivity must be between 1 and 4"
-    )
+    assert any(
+      0 <= x <= 100 for x in dispense_position_above_z_touch_off
+    ), "dispense_position_above_z_touch_off must be between 0 and 100"
+    assert any(
+      1 <= x <= 4 for x in gamma_lld_sensitivity
+    ), "gamma_lld_sensitivity must be between 1 and 4"
+    assert any(
+      1 <= x <= 4 for x in dp_lld_sensitivity
+    ), "dp_lld_sensitivity must be between 1 and 4"
     assert any(3 <= x <= 1600 for x in swap_speed), "swap_speed must be between 3 and 1600"
     assert any(0 <= x <= 99 for x in settling_time), "settling_time must be between 0 and 99"
     assert any(0 <= x <= 12500 for x in mix_volume), "mix_volume must be between 0 and 12500"
     assert any(0 <= x <= 99 for x in mix_cycles), "mix_cycles must be between 0 and 99"
-    assert any(0 <= x <= 900 for x in mix_position_from_liquid_surface), (
-      "mix_position_from_liquid_surface must be between 0 and 900"
-    )
+    assert any(
+      0 <= x <= 900 for x in mix_position_from_liquid_surface
+    ), "mix_position_from_liquid_surface must be between 0 and 900"
     assert any(4 <= x <= 5000 for x in mix_speed), "mix_speed must be between 4 and 5000"
-    assert any(0 <= x <= 3600 for x in mix_surface_following_distance), (
-      "mix_surface_following_distance must be between 0 and 3600"
-    )
-    assert any(0 <= x <= 999 for x in limit_curve_index), (
-      "limit_curve_index must be between 0 and 999"
-    )
+    assert any(
+      0 <= x <= 3600 for x in mix_surface_following_distance
+    ), "mix_surface_following_distance must be between 0 and 3600"
+    assert any(
+      0 <= x <= 999 for x in limit_curve_index
+    ), "limit_curve_index must be between 0 and 999"
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
     return await self.send_command(
@@ -5327,9 +5327,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + self.core_adjustment.y
       )
     )
-    assert back_channel_y_center > front_channel_y_center, (
-      "back_channel_y_center must be greater than front_channel_y_center"
-    )
+    assert (
+      back_channel_y_center > front_channel_y_center
+    ), "back_channel_y_center must be greater than front_channel_y_center"
     assert front_channel_y_center > 6, "front_channel_y_center must be less than 6mm"
     return back_channel_y_center, front_channel_y_center
 
@@ -5467,12 +5467,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
     assert 0 <= plate_width <= 9999, "plate_width must be between 0 and 9999"
     assert 0 <= grip_strength <= 99, "grip_strength must be between 0 and 99"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
-    assert 0 <= minimum_z_position_at_the_command_end <= 3600, (
-      "minimum_z_position_at_the_command_end must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert (
+      0 <= minimum_z_position_at_the_command_end <= 3600
+    ), "minimum_z_position_at_the_command_end must be between 0 and 3600"
 
     command_output = await self.send_command(
       module="C0",
@@ -5515,12 +5515,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= z_press_on_distance <= 50, "z_press_on_distance must be between 0 and 999"
     assert 0 <= z_speed <= 1600, "z_speed must be between 0 and 1600"
     assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
-    assert 0 <= z_position_at_the_command_end <= 3600, (
-      "z_position_at_the_command_end must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert (
+      0 <= z_position_at_the_command_end <= 3600
+    ), "z_position_at_the_command_end must be between 0 and 3600"
 
     command_output = await self.send_command(
       module="C0",
@@ -5602,9 +5602,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 1 <= rails <= 54, "rails must be between 1 and 54"
     assert 0 <= minimal_z_position <= 3600, "minimal_z_position must be between 0 and 3600"
-    assert 0 <= traverse_height_at_beginning_of_a_command <= 3600, (
-      "traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= traverse_height_at_beginning_of_a_command <= 3600
+    ), "traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= z_speed <= 1287, "z_speed must be between 0 and 1287"
 
     try:
@@ -5720,9 +5720,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       y_position: y position [0.1mm]. Must be between 0 and 6500.
     """
 
-    assert 1 <= pipetting_channel_index <= self.num_channels, (
-      "pipetting_channel_index must be between 1 and self"
-    )
+    assert (
+      1 <= pipetting_channel_index <= self.num_channels
+    ), "pipetting_channel_index must be between 1 and self"
     assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
 
     return await self.send_command(
@@ -5745,9 +5745,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         3347 is the max.
     """
 
-    assert 1 <= pipetting_channel_index <= self.num_channels, (
-      "pipetting_channel_index must be between 1 and self.num_channels"
-    )
+    assert (
+      1 <= pipetting_channel_index <= self.num_channels
+    ), "pipetting_channel_index must be between 1 and self.num_channels"
     # docs say 3600, but empirically 3347 is the max
     assert 0 <= z_position <= 3347, "z_position must be between 0 and 3347"
 
@@ -5768,9 +5768,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_position: x position [0.1mm]. Must be between 0 and 30000.
     """
 
-    assert 1 <= pipetting_channel_index <= self.num_channels, (
-      "pipetting_channel_index must be between 1 and self.num_channels"
-    )
+    assert (
+      1 <= pipetting_channel_index <= self.num_channels
+    ), "pipetting_channel_index must be between 1 and self.num_channels"
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
 
     return await self.send_command(
@@ -5809,9 +5809,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 0 <= x_positions <= 25000, "x_positions must be between 0 and 25000"
     assert 0 <= y_positions <= 6500, "y_positions must be between 0 and 6500"
-    assert 0 <= minimum_traverse_height_at_beginning_of_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_command must be between 0 and 3600"
     assert 0 <= z_endpos <= 3600, "z_endpos must be between 0 and 3600"
 
     return await self.send_command(
@@ -5834,9 +5834,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       pipetting_channel_index: Index of pipetting channel. Must be between 0 and self.num_channels.
     """
 
-    assert 0 <= pipetting_channel_index < self.num_channels, (
-      "pipetting_channel_index must be between 1 and self.num_channels"
-    )
+    assert (
+      0 <= pipetting_channel_index < self.num_channels
+    ), "pipetting_channel_index must be between 1 and self.num_channels"
     # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
     pipetting_channel_index = pipetting_channel_index + 1
 
@@ -5871,9 +5871,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         0 is the backmost channel.
     """
 
-    assert 0 <= pipetting_channel_index < self.num_channels, (
-      "pipetting_channel_index must be between 0 and self.num_channels"
-    )
+    assert (
+      0 <= pipetting_channel_index < self.num_channels
+    ), "pipetting_channel_index must be between 0 and self.num_channels"
     # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
     pipetting_channel_index = pipetting_channel_index + 1
 
@@ -6140,12 +6140,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
     assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
-    )
-    assert 0 <= minimum_height_command_end <= 3425, (
-      "minimum_height_command_end must be between 0 and 3425"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
+    assert (
+      0 <= minimum_height_command_end <= 3425
+    ), "minimum_height_command_end must be between 0 and 3425"
 
     return await self.send_command(
       module="C0",
@@ -6190,12 +6190,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
     assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
-    )
-    assert 0 <= minimum_height_command_end <= 3425, (
-      "minimum_height_command_end must be between 0 and 3425"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
+    assert (
+      0 <= minimum_height_command_end <= 3425
+    ), "minimum_height_command_end must be between 0 and 3425"
 
     return await self.send_command(
       module="C0",
@@ -6391,23 +6391,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 1080 <= y_positions <= 5600, "y_positions must be between 1080 and 5600"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
     assert 0 <= min_z_endpos <= 3425, "min_z_endpos must be between 0 and 3425"
     assert 0 <= lld_search_height <= 3425, "lld_search_height must be between 0 and 3425"
     assert 0 <= liquid_surface_no_lld <= 3425, "liquid_surface_no_lld must be between 0 and 3425"
-    assert 0 <= pull_out_distance_transport_air <= 3425, (
-      "pull_out_distance_transport_air must be between 0 and 3425"
-    )
+    assert (
+      0 <= pull_out_distance_transport_air <= 3425
+    ), "pull_out_distance_transport_air must be between 0 and 3425"
     assert 0 <= minimum_height <= 3425, "minimum_height must be between 0 and 3425"
     assert 0 <= second_section_height <= 3425, "second_section_height must be between 0 and 3425"
     assert 0 <= second_section_ratio <= 10000, "second_section_ratio must be between 0 and 10000"
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
     assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
-    assert 0 <= surface_following_distance <= 990, (
-      "surface_following_distance must be between 0 and 990"
-    )
+    assert (
+      0 <= surface_following_distance <= 990
+    ), "surface_following_distance must be between 0 and 990"
     assert 0 <= aspiration_volumes <= 11500, "aspiration_volumes must be between 0 and 11500"
     assert 3 <= aspiration_speed <= 5000, "aspiration_speed must be between 3 and 5000"
     assert 0 <= transport_air_volume <= 500, "transport_air_volume must be between 0 and 500"
@@ -6419,12 +6419,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= settling_time <= 99, "settling_time must be between 0 and 99"
     assert 0 <= mix_volume <= 11500, "mix_volume must be between 0 and 11500"
     assert 0 <= mix_cycles <= 99, "mix_cycles must be between 0 and 99"
-    assert 0 <= mix_position_from_liquid_surface <= 990, (
-      "mix_position_from_liquid_surface must be between 0 and 990"
-    )
-    assert 0 <= mix_surface_following_distance <= 990, (
-      "mix_surface_following_distance must be between 0 and 990"
-    )
+    assert (
+      0 <= mix_position_from_liquid_surface <= 990
+    ), "mix_position_from_liquid_surface must be between 0 and 990"
+    assert (
+      0 <= mix_surface_following_distance <= 990
+    ), "mix_surface_following_distance must be between 0 and 990"
     assert 3 <= speed_of_mix <= 5000, "speed_of_mix must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
 
@@ -6668,17 +6668,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= second_section_ratio <= 10000, "second_section_ratio must be between 0 and 10000"
     assert 0 <= lld_search_height <= 3425, "lld_search_height must be between 0 and 3425"
     assert 0 <= liquid_surface_no_lld <= 3425, "liquid_surface_no_lld must be between 0 and 3425"
-    assert 0 <= pull_out_distance_transport_air <= 3425, (
-      "pull_out_distance_transport_air must be between 0 and 3425"
-    )
+    assert (
+      0 <= pull_out_distance_transport_air <= 3425
+    ), "pull_out_distance_transport_air must be between 0 and 3425"
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
     assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
-    assert 0 <= surface_following_distance <= 990, (
-      "surface_following_distance must be between 0 and 990"
-    )
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
-    )
+    assert (
+      0 <= surface_following_distance <= 990
+    ), "surface_following_distance must be between 0 and 990"
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
     assert 0 <= min_z_endpos <= 3425, "min_z_endpos must be between 0 and 3425"
     assert 0 <= dispense_volume <= 11500, "dispense_volume must be between 0 and 11500"
     assert 3 <= dispense_speed <= 5000, "dispense_speed must be between 3 and 5000"
@@ -6693,12 +6693,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= settling_time <= 99, "settling_time must be between 0 and 99"
     assert 0 <= mixing_volume <= 11500, "mixing_volume must be between 0 and 11500"
     assert 0 <= mixing_cycles <= 99, "mixing_cycles must be between 0 and 99"
-    assert 0 <= mix_position_from_liquid_surface <= 990, (
-      "mix_position_from_liquid_surface must be between 0 and 990"
-    )
-    assert 0 <= mix_surface_following_distance <= 990, (
-      "mix_surface_following_distance must be between 0 and 990"
-    )
+    assert (
+      0 <= mix_position_from_liquid_surface <= 990
+    ), "mix_position_from_liquid_surface must be between 0 and 990"
+    assert (
+      0 <= mix_surface_following_distance <= 990
+    ), "mix_surface_following_distance must be between 0 and 990"
     assert 3 <= speed_of_mixing <= 5000, "speed_of_mixing must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
@@ -6770,9 +6770,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # TODO: these are values for a STARBackend. Find them for a STARlet.
     self._check_96_position_legal(Coordinate(x, y, z))
-    assert 0 <= minimum_height_at_beginning_of_a_command <= 342.5, (
-      "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
-    )
+    assert (
+      0 <= minimum_height_at_beginning_of_a_command <= 342.5
+    ), "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
 
     return await self.send_command(
       module="C0",
@@ -7499,9 +7499,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                 of a command [0.1mm]. Must be between 0 and 3600. Default 3600.
     """
 
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     command_output = await self.send_command(
       module="C0",
@@ -7567,23 +7567,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
     assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
     assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
-    assert 0 <= z_position_at_the_command_end <= 3600, (
-      "z_position_at_the_command_end must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert (
+      0 <= z_position_at_the_command_end <= 3600
+    ), "z_position_at_the_command_end must be between 0 and 3600"
     assert 1 <= grip_strength <= 9, "grip_strength must be between 1 and 9"
     assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
     assert 0 <= plate_width <= 9999, "plate_width must be between 0 and 9999"
     assert 0 <= plate_width_tolerance <= 99, "plate_width_tolerance must be between 0 and 99"
     assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
-    assert 0 <= acceleration_index_high_acc <= 4, (
-      "acceleration_index_high_acc must be between 0 and 4"
-    )
-    assert 0 <= acceleration_index_low_acc <= 4, (
-      "acceleration_index_low_acc must be between 0 and 4"
-    )
+    assert (
+      0 <= acceleration_index_high_acc <= 4
+    ), "acceleration_index_high_acc must be between 0 and 4"
+    assert (
+      0 <= acceleration_index_low_acc <= 4
+    ), "acceleration_index_low_acc must be between 0 and 4"
 
     command_output = await self.send_command(
       module="C0",
@@ -7660,20 +7660,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
     assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
     assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
-    assert 0 <= z_position_at_the_command_end <= 3600, (
-      "z_position_at_the_command_end must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert (
+      0 <= z_position_at_the_command_end <= 3600
+    ), "z_position_at_the_command_end must be between 0 and 3600"
     assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
     assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
-    assert 0 <= acceleration_index_high_acc <= 4, (
-      "acceleration_index_high_acc must be between 0 and 4"
-    )
-    assert 0 <= acceleration_index_low_acc <= 4, (
-      "acceleration_index_low_acc must be between 0 and 4"
-    )
+    assert (
+      0 <= acceleration_index_high_acc <= 4
+    ), "acceleration_index_high_acc must be between 0 and 4"
+    assert (
+      0 <= acceleration_index_low_acc <= 4
+    ), "acceleration_index_low_acc must be between 0 and 4"
 
     command_output = await self.send_command(
       module="C0",
@@ -7882,16 +7882,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
     assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
     assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
-    assert 0 <= acceleration_index_high_acc <= 4, (
-      "acceleration_index_high_acc must be between 0 and 4"
-    )
-    assert 0 <= acceleration_index_low_acc <= 4, (
-      "acceleration_index_low_acc must be between 0 and 4"
-    )
+    assert (
+      0 <= acceleration_index_high_acc <= 4
+    ), "acceleration_index_high_acc must be between 0 and 4"
+    assert (
+      0 <= acceleration_index_low_acc <= 4
+    ), "acceleration_index_low_acc must be between 0 and 4"
 
     command_output = await self.send_command(
       module="C0",
@@ -7925,9 +7925,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       iswap_fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default False.
     """
 
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     return await self.send_command(
       module="C0",
@@ -7991,16 +7991,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
     assert 0 <= location <= 1, "location must be between 0 and 1"
     assert 0 <= hotel_depth <= 3000, "hotel_depth must be between 0 and 3000"
-    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, (
-      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    )
+    assert (
+      0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
+    ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
-    assert 0 <= acceleration_index_high_acc <= 4, (
-      "acceleration_index_high_acc must be between 0 and 4"
-    )
-    assert 0 <= acceleration_index_low_acc <= 4, (
-      "acceleration_index_low_acc must be between 0 and 4"
-    )
+    assert (
+      0 <= acceleration_index_high_acc <= 4
+    ), "acceleration_index_high_acc must be between 0 and 4"
+    assert (
+      0 <= acceleration_index_low_acc <= 4
+    ), "acceleration_index_low_acc must be between 0 and 4"
 
     return await self.send_command(
       module="C0",
@@ -8336,9 +8336,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "Channel speed must be in [1, 2, 3, 4] (* 5_000 steps/sec**2)"
       + f", is {channel_speed} mm/sec"
     )
-    assert 0 <= detection_edge <= 1_0234, (
-      "Edge steepness at capacitive LLD detection must be between 0 and 1023"
-    )
+    assert (
+      0 <= detection_edge <= 1_0234
+    ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
     assert current_limit_int in [
       1,
       2,
@@ -8433,12 +8433,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5 * 1_000)} "
       + f" and {STARBackend.z_drive_increment_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
     )
-    assert 0 <= detection_edge <= 1_023, (
-      "Edge steepness at capacitive LLD detection must be between 0 and 1023"
-    )
-    assert 0 <= detection_drop <= 1_023, (
-      "Offset after capacitive LLD edge detection must be between 0 and 1023"
-    )
+    assert (
+      0 <= detection_edge <= 1_023
+    ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
+    assert (
+      0 <= detection_drop <= 1_023
+    ), "Offset after capacitive LLD edge detection must be between 0 and 1023"
     assert 0 <= post_detection_dist_increments <= 9_999, (
       "Post cLLD-detection movement distance must be between \n0"
       + f" and {STARBackend.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
@@ -8662,13 +8662,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       f"Channel retraction speed must be between \n{STARBackend.z_drive_increment_to_mm(20)}"
       + f" and {STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed_upwards} mm/sec"
     )
-    assert 0 <= detection_limiter_in_PWM <= 125, (
-      "Detection limiter value must be between 0 and 125 PWM."
-    )
+    assert (
+      0 <= detection_limiter_in_PWM <= 125
+    ), "Detection limiter value must be between 0 and 125 PWM."
     assert 0 <= push_down_force_in_PWM <= 125, "Push down force between 0 and 125 PWM values"
-    assert 0 <= post_detection_dist <= 245, (
-      f"Post detection distance must be between 0 and 245 mm, is {post_detection_dist}"
-    )
+    assert (
+      0 <= post_detection_dist <= 245
+    ), f"Post detection distance must be between 0 and 245 mm, is {post_detection_dist}"
 
     lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
     start_pos_search_str = f"{start_pos_search_increments:05}"
@@ -8902,9 +8902,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
       ys = [y + offset.y for offset in offsets]
     else:
-      assert len(set(w.get_location_wrt(self.deck).x for w in wells)) == 1, (
-        "Wells must be on the same column"
-      )
+      assert (
+        len(set(w.get_location_wrt(self.deck).x for w in wells)) == 1
+      ), "Wells must be on the same column"
       absolute_center = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom")
       x = absolute_center.x
       ys = [well.get_location_wrt(self.deck, x="c", y="c").y for well in wells]

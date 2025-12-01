@@ -452,9 +452,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert len(tip_spots) == len(offsets) == len(use_channels), (
-      "Number of tips and offsets and use_channels must be equal."
-    )
+    assert (
+      len(tip_spots) == len(offsets) == len(use_channels)
+    ), "Number of tips and offsets and use_channels must be equal."
 
     # create operations
     pickups = [
@@ -589,9 +589,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert len(tip_spots) == len(offsets) == len(use_channels) == len(tips), (
-      "Number of channels and offsets and use_channels and tips must be equal."
-    )
+    assert (
+      len(tip_spots) == len(offsets) == len(use_channels) == len(tips)
+    ), "Number of channels and offsets and use_channels and tips must be equal."
 
     # create operations
     drops = [
@@ -2185,9 +2185,9 @@ class LiquidHandler(Resource, Machine):
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
-      assert destination.direction == "z", (
-        "Only ResourceStacks with direction 'z' are currently supported"
-      )
+      assert (
+        destination.direction == "z"
+      ), "Only ResourceStacks with direction 'z' are currently supported"
 
       # the resource can be rotated wrt the ResourceStack. This is allowed as long
       # as it's in multiples of 180 degrees. 90 degrees is not allowed.

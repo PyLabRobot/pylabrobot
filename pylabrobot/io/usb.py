@@ -70,9 +70,9 @@ class USB(IOBase):
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new USB object while capture or validation is active")
 
-    assert packet_read_timeout < read_timeout, (
-      "packet_read_timeout must be smaller than read_timeout."
-    )
+    assert (
+      packet_read_timeout < read_timeout
+    ), "packet_read_timeout must be smaller than read_timeout."
 
     self._id_vendor = id_vendor
     self._id_product = id_product
