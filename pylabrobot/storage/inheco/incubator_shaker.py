@@ -26,8 +26,8 @@ class IncubatorShakerStack(Resource, Machine):
 
     Machine.__init__(self, backend=backend)
     self.backend: InhecoIncubatorShakerStackBackend = backend
-    self.units: Dict[int, InhecoIncubatorShakerUnit] = {}
-    self.loading_trays: Dict[int, ResourceHolder] = {}
+    self.units: list[InhecoIncubatorShakerUnit] = []
+    self.loading_trays: list[ResourceHolder] = []
 
   @property
   def num_units(self) -> int:
@@ -128,35 +128,26 @@ class IncubatorShakerStack(Resource, Machine):
   async def request_loading_tray_states(self) -> dict:
     """Request loading tray states for all units."""
 
-    loading_tray_status_dict = {}
-    for unit_index in range(self.num_units):
-      # Update loading tray status for each unit
-      resp = await self.backend.request_drawer_status(stack_index=unit_index)
-      loading_tray_status_dict[unit_index] = resp
-
-    return loading_tray_status_dict
+    return {
+      unit_index: await self.backend.request_drawer_status(stack_index=unit_index)
+      for unit_index in range(self.num_units)
+    }
 
   async def request_temperature_control_states(self) -> dict:
     """Request temperature control states for all units."""
 
-    temperature_control_status_dict = {}
-    for unit_index in range(self.num_units):
-      # Update temperature control status for each unit
-      resp = await self.backend.is_temperature_control_enabled(stack_index=unit_index)
-      temperature_control_status_dict[unit_index] = resp
-
-    return temperature_control_status_dict
+    return {
+      unit_index: await self.backend.is_temperature_control_enabled(stack_index=unit_index)
+      for unit_index in range(self.num_units)
+    }
 
   async def request_shaking_states(self) -> dict:
     """Request shaking states for all units."""
 
-    shaking_status_dict = {}
-    for unit_index in range(self.num_units):
-      # Update shaking status for each unit
-      resp = await self.backend.is_shaking_enabled(stack_index=unit_index)
-      shaking_status_dict[unit_index] = resp
-
-    return shaking_status_dict
+    return {
+      unit_index: await self.backend.is_shaking_enabled(stack_index=unit_index)
+      for unit_index in range(self.num_units)
+    }
 
   # ------------------------------------------------------------------------
   # Stack to unit master commands
