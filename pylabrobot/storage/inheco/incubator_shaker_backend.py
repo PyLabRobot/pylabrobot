@@ -625,7 +625,9 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     """Move the loading tray in & close the incubator door."""
     await self.send_command("ACD", stack_index=stack_index)
 
-  async def request_drawer_status(self, stack_index: int) -> Literal["open", "closed"]:
+  DrawerStatus = Literal["open", "closed"]
+
+  async def request_drawer_status(self, stack_index: int) -> DrawerStatus:
     """Report the current drawer (loading tray) status.
 
     Returns:
@@ -1454,14 +1456,11 @@ class InhecoIncubatorShakerUnit:
     """Move the loading tray in & close the incubator door."""
     await self.backend.close(stack_index=self.index)
 
-  async def request_drawer_status(self) -> str:
+  async def request_drawer_status(self) -> InhecoIncubatorShakerStackBackend.DrawerStatus:
     """Report the current drawer (loading tray) status.
 
     Returns:
       'open' if the loading tray is open, 'closed' if closed.
-
-    Notes:
-      - Firmware response: '1' = open, '0' = closed.
     """
     return await self.backend.request_drawer_status(stack_index=self.index)
 
