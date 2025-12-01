@@ -64,3 +64,19 @@ def configure(cfg: Config):
 
 
 configure(CONFIG)
+
+
+def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
+  """Add a StreamHandler to the root logger to make logging output visible to the console.
+  If set to False, remove the StreamHandler.
+  Careful: this will remove all existing StreamHandlers!
+  """
+  logger = logging.getLogger("pylabrobot")
+  logger.setLevel(level)
+  for handler in logger.handlers:
+    if isinstance(handler, logging.StreamHandler):
+      logger.removeHandler(handler)
+  if make_verbose:
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    logger.addHandler(handler)
