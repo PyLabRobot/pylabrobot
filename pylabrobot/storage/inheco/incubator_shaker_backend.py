@@ -129,6 +129,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     vid: str = "0403",
     pid: str = "6001",
   ):
+    super().__init__()
+
     self.logger = logging.LoggerAdapter(
       logging.getLogger(__name__),
       {"dip_switch_id": dip_switch_id},

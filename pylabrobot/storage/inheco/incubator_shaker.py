@@ -85,7 +85,7 @@ class IncubatorShakerStack(Resource, Machine):
     for i in range(self.backend.number_of_connected_units):
       # Create unit proxies
       unit = InhecoIncubatorShakerUnit(self.backend, index=i)
-      self.units[i] = unit
+      self.units.append(unit)
 
       # Create loading tray resources and calculate their locations
       unit_type = self.backend.unit_composition[i]
