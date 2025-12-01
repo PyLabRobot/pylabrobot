@@ -215,7 +215,7 @@ class USB(IOBase):
       if self._serial_number is not None:
         if dev._serial_number is None:
           raise RuntimeError(
-            "A serial number was specified, but the device does not have a serial number."
+            "A serial number was specified, but the device does not have a serial " "number."
           )
 
         if dev.serial_number != self._serial_number:

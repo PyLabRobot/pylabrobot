@@ -69,6 +69,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       "num_rails": self.num_rails,
       "with_trash": False,  # data encoded as child. (not very pretty to have this key though...)
       "with_trash96": False,
+      "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }
 
   def _check_safe_z_height(self, resource: Resource):
@@ -88,14 +89,15 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       if z_top > Z_MOVEMENT_LIMIT:
         logger.warning(
-          "Resource '%s' is very high on the deck: %s mm. Be careful when traversing the deck.",
+          "Resource '%s' is very high on the deck: %s mm. Be careful when " "traversing the deck.",
           resource.name,
           z_top,
         )
 
       if z_top > Z_GRAB_LIMIT:
         logger.warning(
-          "Resource '%s' is very high on the deck: %s mm. Be careful when grabbing this resource.",
+          "Resource '%s' is very high on the deck: %s mm. Be careful when "
+          "grabbing this resource.",
           resource.name,
           z_top,
         )
@@ -206,7 +208,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
             ]
           ):
             raise ValueError(
-              f"Location {resource_location} is already occupied by resource '{og_resource.name}'."
+              f"Location {resource_location} is already occupied by resource "
+              f"'{og_resource.name}'."
             )
 
     return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
@@ -501,6 +504,12 @@ class HamiltonSTARDeck(HamiltonDeck):
       self.assign_child_resource(
         waste_block,
         location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
+      )
+
+    if core_grippers is not None and not with_teaching_rack:
+      raise ValueError(
+        "core_grippers can only be added when with_teaching_rack is True, "
+        "as they are attached to the waste block."
       )
 
     if core_grippers == "1000uL-at-waste":  # "at waste"

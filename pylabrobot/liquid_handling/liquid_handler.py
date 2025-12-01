@@ -2854,7 +2854,7 @@ class LiquidHandler(Resource, Machine):
 
       # 6: Execute tip movement/consolidation
       for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
-        print(f"   - tip transfer cycle: {idx + 1} / {len_transfers}")
+        print(f"   - tip transfer cycle: {idx+1} / {len_transfers}")
 
         origin_tip_spots = [all_origin_tip_spots.pop(0) for _ in range(len(target_tip_spots))]
 

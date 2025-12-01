@@ -892,7 +892,8 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       35: "Voltages outside permitted range",
       36: "Stop during execution of command",
       37: "Stop during execution of command",
-      40: "No parallel processes permitted (Two or more commands sent for the same controlprocess)",
+      40: "No parallel processes permitted (Two or more commands sent for the same control"
+      "process)",
       50: "Dispensing drive init. position not found",
       51: "Dispensing drive not initialized",
       52: "Dispensing drive movement error",
@@ -3773,7 +3774,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           elif user_prompt == "abort":
             raise ValueError(
               f"Resource '{resource.name}' not found at center"
-              f" location {(center.x, center.y, center.z)}"
+              f" location {(center.x,center.y,center.z)}"
               " & error not resolved -> aborted resource movement."
             )
         else:
@@ -5382,8 +5383,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       xd="0",
       ya=f"{round(back_channel_y_center * 10):04}",
       yb=f"{round(front_channel_y_center * 10):04}",
-      pa=f"{back_channel + 1:02}",  # star is 1-indexed
-      pb=f"{front_channel + 1:02}",  # star is 1-indexed
+      pa=f"{back_channel+1:02}",  # star is 1-indexed
+      pb=f"{front_channel+1:02}",  # star is 1-indexed
       tp=f"{round(begin_z_coord * 10):04}",
       tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
@@ -5624,9 +5625,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         module="C0",
         command="ZB",
         cp=f"{rails:02}",
-        zb=f"{round(minimal_z_position * 10):04}",
-        th=f"{round(traverse_height_at_beginning_of_a_command * 10):04}",
-        zy=f"{round(z_speed * 10):04}",
+        zb=f"{round(minimal_z_position*10):04}",
+        th=f"{round(traverse_height_at_beginning_of_a_command*10):04}",
+        zy=f"{round(z_speed*10):04}",
         bd=reading_direction_int,
         ma="0250 2100 0860 0200",
         mr=0,
@@ -6093,7 +6094,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       xd=0 if loc.x >= 0 else 1,
       yh=f"{abs(round(loc.y * 10)):04}",
       za=f"{round(loc.z * 10):04}",
-      ze=f"{round(z_position_at_the_command_end * 10):04}",
+      ze=f"{round(z_position_at_the_command_end*10):04}",
     )
 
   async def move_core_96_to_safe_position(self):
@@ -6777,11 +6778,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(
       module="C0",
       command="EM",
-      xs=f"{abs(round(x * 10)):05}",
+      xs=f"{abs(round(x*10)):05}",
       xd=0 if x >= 0 else 1,
-      yh=f"{round(y * 10):04}",
-      za=f"{round(z * 10):04}",
-      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+      yh=f"{round(y*10):04}",
+      za=f"{round(z*10):04}",
+      zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
   async def move_core_96_head_x(self, x_position: float):
@@ -7454,7 +7455,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
 
-    return await self.send_command(module="C0", command="GF", go=f"{round(open_position * 10):04}")
+    return await self.send_command(module="C0", command="GF", go=f"{round(open_position*10):04}")
 
   async def iswap_close_gripper(
     self,
@@ -7480,8 +7481,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="GC",
       gw=grip_strength,
-      gb=f"{round(plate_width * 10):04}",
-      gt=f"{round(plate_width_tolerance * 10):02}",
+      gb=f"{round(plate_width*10):04}",
+      gt=f"{round(plate_width_tolerance*10):02}",
     )
 
   # -------------- 3.17.2 Stack handling commands CP --------------
@@ -8326,7 +8327,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Machine-compatibility check of calculated parameters
     assert 0 <= max_y_search_pos_increments <= 13_714, (
       "Maximum y search position must be between \n0 and"
-      + f"{STARBackend.y_drive_increment_to_mm(13_714) + 9} mm, is {max_y_search_pos_increments} mm"
+      + f"{STARBackend.y_drive_increment_to_mm(13_714)+9} mm, is {max_y_search_pos_increments} mm"
     )
     assert 20 <= channel_speed_increments <= 8_000, (
       f"LLD search speed must be between \n{STARBackend.y_drive_increment_to_mm(20)}"
@@ -8430,8 +8431,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f"and {STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
     )
     assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5 * 1_000)} "
-      + f" and {STARBackend.z_drive_increment_to_mm(150 * 1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
+      f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5*1_000)} "
+      + f" and {STARBackend.z_drive_increment_to_mm(150*1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
     )
     assert (
       0 <= detection_edge <= 1_023
@@ -8655,8 +8656,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f" and {STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
     )
     assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5 * 1_000)}"
-      + f" and {STARBackend.z_drive_increment_to_mm(150 * 1_000)} mm/sec**2, is {channel_speed} mm/sec**2"
+      f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5*1_000)}"
+      + f" and {STARBackend.z_drive_increment_to_mm(150*1_000)} mm/sec**2, is {channel_speed} mm/sec**2"
     )
     assert 20 <= channel_speed_upwards_increments <= 15_000, (
       f"Channel retraction speed must be between \n{STARBackend.z_drive_increment_to_mm(20)}"
@@ -8828,7 +8829,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
 
-    yp = " ".join([f"{round(y * 10):04}" for y in channel_locations.values()])
+    yp = " ".join([f"{round(y*10):04}" for y in channel_locations.values()])
     return await self.send_command(
       module="C0",
       command="JY",
@@ -8851,7 +8852,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channel_locations[channel_idx] = z
 
     return await self.send_command(
-      module="C0", command="JZ", zp=[f"{round(z * 10):04}" for z in channel_locations.values()]
+      module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
     )
 
   async def pierce_foil(
@@ -8970,7 +8971,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if front_channel <= back_channel:
       raise ValueError(
-        "front_channel should be in front of back_channel. Channels are 0-indexed from the back."
+        "front_channel should be in front of back_channel. " "Channels are 0-indexed from the back."
       )
 
     if isinstance(wells, Well):
