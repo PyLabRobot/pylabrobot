@@ -95,7 +95,7 @@ class IncubatorShakerStack(Resource, Machine):
       loading_tray = ResourceHolder(
         size_x=127.76, size_y=85.48, size_z=0, name=f"unit-{i}-loading-tray"
       )
-      self.loading_trays[i] = loading_tray
+      self.loading_trays.append(loading_tray)
 
       loc = self._incubator_loading_tray_location[unit_type]
       if loc is None:
