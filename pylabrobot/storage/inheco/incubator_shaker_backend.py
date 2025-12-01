@@ -1294,7 +1294,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   # # # Self-Test # # #
 
-  async def perform_self_test(self, stack_index: int, read_timeout: int = 500) -> str:
+  async def perform_self_test(self, stack_index: int, read_timeout: int = 500) -> Dict[str, bool]:
     """Execute the internal self-test routine.
 
     Normal Testing-Time: ca. 3 minutes (Beware of timeouts!)
@@ -1305,18 +1305,16 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Please note the AQS was developed for the Incubator Shaker MP. This can lead assemblies to
     DWP Incubators that the result of the AQS, due to the design, 8 (bit2) could be.
 
-    The Error Code means for example:
-    16(d) = 0001 0000(b)  Error at Bit 4. During Shaker-Test the Y-Axis doesn't reach desired Amplitude.
+    Returns:
+      A dictionary mapping error condition names to booleans indicating presence of each error.
     """
 
     plate_in_status = await self.request_plate_in_incubator(stack_index=stack_index)
-
-    loading_tray_status = await self.request_drawer_status(stack_index=stack_index)
-
     if plate_in_status:
       raise ValueError("Self-test requires an empty incubator.")
 
-    elif loading_tray_status == "open":
+    loading_tray_status = await self.request_drawer_status(stack_index=stack_index)
+    if loading_tray_status == "open":
       raise ValueError("Self-test requires a closed loading tray.")
 
     resp = await self.send_command("AQS", stack_index=stack_index, read_timeout=read_timeout)
@@ -1328,7 +1326,20 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     assert 0 <= resp_decimal <= 2047, f"Invalid self-test response received: {resp!r}"
 
-    return bin(resp_decimal)[2:].zfill(11)
+    binary_response = bin(resp_decimal)[2:].zfill(11)
+    return {
+      "drawer_error": binary_response[0] == "1",
+      "homogeneity_sensor_3_vs_1_error": binary_response[1] == "1",
+      "homogeneity_sensor_2_vs_1_error": binary_response[2] == "1",
+      "sensor_1_target_temp_error": binary_response[3] == "1",
+      "y_amplitude_shaker_error": binary_response[4] == "1",
+      "x_amplitude_shaker_error": binary_response[5] == "1",
+      "phase_shift_shaker_error": binary_response[6] == "1",
+      "y_frequency_shaker_error": binary_response[7] == "1",
+      "x_frequency_shaker_error": binary_response[8] == "1",
+      "line_boost_heater_broken": binary_response[9] == "1",
+      "line_main_heater_broken": binary_response[10] == "1",
+    }
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
