@@ -159,6 +159,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self.number_of_connected_units: int = 1  # expected minimum
     self.unit_composition: Dict[int, str] = {}
 
+    self._send_command_lock = asyncio.Lock()
+
   def __repr__(self):
     return (
       f"<InhecoIncubatorShakerBackend (VID:PID={self.io._vid}:{self.io._pid}, "
@@ -392,31 +394,32 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   ) -> str:
     """Send a framed command and return parsed response or raise InhecoError."""
 
-    # Use global default if not overridden
-    w_timeout = write_timeout or self.write_timeout
-    msg = self._build_message(command, stack_index=stack_index)
-    self.logger.debug("SEND command: %s (write_timeout=%s)", msg.hex(" "), w_timeout)
+    async with self._send_command_lock:
+      # Use global default if not overridden
+      w_timeout = write_timeout or self.write_timeout
+      msg = self._build_message(command, stack_index=stack_index)
+      self.logger.debug("SEND command: %s (write_timeout=%s)", msg.hex(" "), w_timeout)
 
-    await asyncio.wait_for(self.io.write(msg), timeout=w_timeout)
-    await asyncio.sleep(delay)
+      await asyncio.wait_for(self.io.write(msg), timeout=w_timeout)
+      await asyncio.sleep(delay)
 
-    response = await self._read_full_response(timeout=read_timeout or self.read_timeout)
-    if not response:
-      raise TimeoutError(f"No response from device for command: {command}")
+      response = await self._read_full_response(timeout=read_timeout or self.read_timeout)
+      if not response:
+        raise TimeoutError(f"No response from device for command: {command}")
 
-    if self._is_error_tail(response):
-      tail_err = response[-2] - 0x20
-      code = f"E{tail_err:02d}"
-      message = FIRMWARE_ERROR_MAP.get(tail_err, "Unknown firmware error")
-      raise InhecoError(command, code, message)
+      if self._is_error_tail(response):
+        tail_err = response[-2] - 0x20
+        code = f"E{tail_err:02d}"
+        message = FIRMWARE_ERROR_MAP.get(tail_err, "Unknown firmware error")
+        raise InhecoError(command, code, message)
 
-    parsed = self._parse_response_binary_safe(response)
-    if not parsed["ok"]:
-      code = f"E{parsed.get('error_code', 0):02d}"
-      message = FIRMWARE_ERROR_MAP.get(parsed.get("error_code", 0), "Unknown firmware error")
-      raise InhecoError(command, code, message)
+      parsed = self._parse_response_binary_safe(response)
+      if not parsed["ok"]:
+        code = f"E{parsed.get('error_code', 0):02d}"
+        message = FIRMWARE_ERROR_MAP.get(parsed.get("error_code", 0), "Unknown firmware error")
+        raise InhecoError(command, code, message)
 
-    return str(parsed["data"])
+      return str(parsed["data"])
 
   # === Public high-level API ===
 

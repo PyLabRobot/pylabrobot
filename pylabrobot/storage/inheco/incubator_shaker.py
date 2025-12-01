@@ -67,12 +67,10 @@ class IncubatorShakerStack(Resource, Machine):
     "incubator_shaker_dwp": 2.5,
   }
 
-  async def setup(self, **backend_kwargs: Any) -> None:
+  async def setup(self, **backend_kwargs) -> None:
     """Connect to the stack and build per-unit proxies."""
 
-    verbose = backend_kwargs.get("verbose", False)
-
-    await self.backend.setup(verbose=verbose)
+    await self.backend.setup(**backend_kwargs)
 
     self.num_units = self.backend.number_of_connected_units
     self.unit_composition = self.backend.unit_composition
