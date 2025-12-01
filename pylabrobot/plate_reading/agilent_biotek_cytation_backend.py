@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import warnings
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
@@ -933,13 +934,19 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     return ImagingResult(images=images, exposure_time=exposure_ms, focal_height=focal_height_val)
 
 
-class Cytation5ImagingConfig:
+class Cytation5ImagingConfig(CytationImagingConfig):
   def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`Cytation5ImagingConfig` is deprecated. Please use `CytationImagingConfig` instead. "
+    warnings.warn(
+      "`Cytation5ImagingConfig` is deprecated. Please use `CytationImagingConfig` instead. ",
+      FutureWarning,
     )
+    super().__init__(*args, **kwargs)
 
 
-class Cytation5Backend:
+class Cytation5Backend(CytationBackend):
   def __init__(self, *args, **kwargs):
-    raise RuntimeError("`Cytation5Backend` is deprecated. Please use `CytationBackend` instead. ")
+    warnings.warn(
+      "`Cytation5Backend` is deprecated. Please use `CytationBackend` instead. ",
+      FutureWarning,
+    )
+    super().__init__(*args, **kwargs)
