@@ -1328,17 +1328,17 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     binary_response = bin(resp_decimal)[2:].zfill(11)
     return {
-      "drawer_error": binary_response[0] == "1",
-      "homogeneity_sensor_3_vs_1_error": binary_response[1] == "1",
-      "homogeneity_sensor_2_vs_1_error": binary_response[2] == "1",
-      "sensor_1_target_temp_error": binary_response[3] == "1",
-      "y_amplitude_shaker_error": binary_response[4] == "1",
-      "x_amplitude_shaker_error": binary_response[5] == "1",
-      "phase_shift_shaker_error": binary_response[6] == "1",
-      "y_frequency_shaker_error": binary_response[7] == "1",
-      "x_frequency_shaker_error": binary_response[8] == "1",
-      "line_boost_heater_broken": binary_response[9] == "1",
-      "line_main_heater_broken": binary_response[10] == "1",
+      "drawer_error": binary_response[-1] == "1",
+      "homogeneity_sensor_3_vs_1_error": binary_response[-2] == "1",
+      "homogeneity_sensor_2_vs_1_error": binary_response[-3] == "1",
+      "sensor_1_target_temp_error": binary_response[-4] == "1",
+      "y_amplitude_shaker_error": binary_response[-5] == "1",
+      "x_amplitude_shaker_error": binary_response[-6] == "1",
+      "phase_shift_shaker_error": binary_response[-7] == "1",
+      "y_frequency_shaker_error": binary_response[-8] == "1",
+      "x_frequency_shaker_error": binary_response[-9] == "1",
+      "line_boost_heater_broken": binary_response[-10] == "1",
+      "line_main_heater_broken": binary_response[-11] == "1",
     }
 
 
