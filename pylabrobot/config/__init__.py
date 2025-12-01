@@ -5,7 +5,6 @@ created and written to the project directory containing the .git directory. If
 this does not exist, the current directory will be used.
 """
 
-import logging
 from pathlib import Path
 from typing import Optional, Union
 
