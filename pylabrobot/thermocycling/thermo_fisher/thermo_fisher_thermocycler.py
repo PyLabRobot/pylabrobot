@@ -442,7 +442,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       self.num_temp_zones = 2
     elif self.bid == "31":
       self._num_blocks = 1
-      self.num_temp_zones = 1
+      self.num_temp_zones = 3
     else:
       raise NotImplementedError("Only BID 31, 12 and 13 are supported")
 
@@ -935,6 +935,15 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     for i, stage in enumerate(protocol.stages):
       if isinstance(stage, Step):
         protocol.stages[i] = Stage(steps=[stage], repeats=1)
+
+    for stage in protocol.stages:
+      for step in stage.steps:
+        if len(step.temperature) != self.num_temp_zones:
+          raise ValueError(
+            f"Each step in the protocol must have a list of temperatures "
+            f"of length {self.num_temp_zones}. "
+            f"Step temperatures: {step.temperature} (length {len(step.temperature)})"
+          )
 
     stage_name_prefixes = stage_name_prefixes or ["Stage_" for i in range(len(protocol.stages))]
 
