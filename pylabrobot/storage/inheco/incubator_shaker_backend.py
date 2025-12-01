@@ -18,7 +18,7 @@ import asyncio
 import logging
 import sys
 from functools import wraps
-from typing import Awaitable, Callable, Dict, Literal, Optional, TypeVar, cast
+from typing import Awaitable, Callable, Dict, List, Literal, Optional, TypeVar, cast
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.machine import MachineBackend
@@ -156,10 +156,16 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     # Cached state (stack level)
     self.setup_finished = False
     self.max_temperature = 85.0  # safe default
-    self.number_of_connected_units: int = 1  # expected minimum
-    self.unit_composition: Dict[int, str] = {}
+    self.unit_composition: List[
+      InhecoIncubatorUnitType
+    ] = []  # e.g. ["incubator_mp", "incubator_shaker_dwp", ...]
 
     self._send_command_lock = asyncio.Lock()
+
+  @property
+  def number_of_connected_units(self) -> int:
+    """Return the number of connected units in the stack."""
+    return len(self.unit_composition)
 
   def __repr__(self):
     return (
@@ -213,13 +219,13 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       )
 
     # --- Cache stack-level state ---
-    self.number_of_connected_units = await self.request_number_of_connected_machines(stack_index=0)
+    number_of_connected_units = await self.request_number_of_connected_machines(stack_index=0)
 
-    self.unit_composition = {}
+    self.unit_composition = []
 
-    for unit_index in range(self.number_of_connected_units):
+    for unit_index in range(number_of_connected_units):
       inc_type = await self.request_incubator_type(stack_index=unit_index)
-      self.unit_composition[unit_index] = inc_type
+      self.unit_composition.append(inc_type)
 
       await self.initialize(stack_index=unit_index)
 
@@ -1782,7 +1788,7 @@ class InhecoIncubatorShakerUnit:
 
   # # # Self-Test # # #
 
-  async def perform_self_test(self, read_timeout: int = 500) -> str:
+  async def perform_self_test(self, read_timeout: int = 500) -> Dict[str, bool]:
     """Execute the internal self-test routine."""
 
     return await self.backend.perform_self_test(stack_index=self.index, read_timeout=read_timeout)

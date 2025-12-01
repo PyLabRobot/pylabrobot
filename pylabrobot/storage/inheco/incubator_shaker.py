@@ -29,6 +29,11 @@ class IncubatorShakerStack(Resource, Machine):
     self.units: Dict[int, InhecoIncubatorShakerUnit] = {}
     self.loading_trays: Dict[int, ResourceHolder] = {}
 
+  @property
+  def num_units(self) -> int:
+    """Return number of connected units in the stack."""
+    return len(self.units)
+
   # ------------------------------------------------------------------------
   # Lifecycle & Resource setup
   # ------------------------------------------------------------------------
@@ -72,21 +77,18 @@ class IncubatorShakerStack(Resource, Machine):
 
     await self.backend.setup(**backend_kwargs)
 
-    self.num_units = self.backend.number_of_connected_units
-    self.unit_composition = self.backend.unit_composition
-
     self.power_credit = 0.0
 
     # Calculate true stack size
     stack_size_z = 0.0
 
-    for i in range(self.num_units):
+    for i in range(self.backend.number_of_connected_units):
       # Create unit proxies
       unit = InhecoIncubatorShakerUnit(self.backend, index=i)
       self.units[i] = unit
 
       # Create loading tray resources and calculate their locations
-      unit_type = self.unit_composition[i]
+      unit_type = self.backend.unit_composition[i]
       self.power_credit += self._incubator_power_credits_per_type[unit_type]
       unit_size_z = self._incubator_size_z_dict[unit_type]
 
@@ -117,7 +119,7 @@ class IncubatorShakerStack(Resource, Machine):
 
     assert (
       self.power_credit < 5
-    ), f"Too many units: unit composition {self.unit_composition} is exceeding 5 power credit limit. Reduce number of units."
+    ), f"Too many units: unit composition {self.backend.unit_composition} is exceeding 5 power credit limit. Reduce number of units."
 
   async def stop(self):
     """Gracefully stop backend communication."""
