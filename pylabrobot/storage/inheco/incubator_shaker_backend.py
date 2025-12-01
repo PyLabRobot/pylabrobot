@@ -118,16 +118,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   # === Logging utility ===
 
-  def _log(self, level: int, message: str, direction: Optional[str] = None):
-    """
-    Unified logging with a clear device tag and optional direction marker.
-    direction: "→" for TX, "←" for RX, None for neutral.
-    """
-    prefix = f"[Inheco IncShak dip={self.dip_switch_id}]"
-    if direction:
-      prefix += f" {direction}"
-    self.logger.log(level, f"{prefix} {message}")
-
   # === Constructor ===
 
   def __init__(
@@ -136,11 +126,13 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     port: Optional[str] = None,
     write_timeout: float = 5.0,
     read_timeout: float = 10.0,
-    logger: Optional[logging.Logger] = None,
     vid: str = "0403",
     pid: str = "6001",
   ):
-    self.logger = logger or logging.getLogger(__name__)
+    self.logger = logging.LoggerAdapter(
+      logging.getLogger(__name__),
+      {"dip_switch_id": dip_switch_id},
+    )
 
     # Core state
     self.dip_switch_id = dip_switch_id
@@ -173,7 +165,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       + f"DIP={self.dip_switch_id}) at {self.io.port}>"
     )
 
-  async def setup(self, port: Optional[str] = None, verbose: bool = False):
+  async def setup(self, port: Optional[str] = None):
     """
     Detect and connect to the Inheco machine stack.
     Discover Inheco device via VID:PID (0403:6001) and verify DIP switch ID.
@@ -197,23 +189,23 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         f"Device on {self.io._port} failed DIP switch verification (expected ID="
         f"{self.dip_switch_id}). Please verify the DIP switch setting or wiring."
       )
-      self._log(logging.ERROR, msg)
+      self.logger.error(msg, exc_info=e)
 
       # --- Fail-safe teardown ---
       try:
         await self.io.stop()
-        self._log(logging.DEBUG, f"Closed serial connection on {self.io.port}")
+        self.logger.debug("Closed serial connection on %s", self.io.port)
       except Exception as close_err:
-        self._log(
-          logging.WARNING,
-          f"Failed to close serial port cleanly on {self.io._port}: {close_err}",
+        self.logger.warning(
+          "Failed to close serial port cleanly on %s: %s",
+          self.io._port,
+          close_err,
         )
-
       raise RuntimeError(msg) from e
 
     else:
       # Connection verified and active
-      self._log(
+      self.logger.log(
         logging.INFO,
         f"Connected to Inheco machine at {self.io.port} (DIP={self.dip_switch_id})",
       )
@@ -231,15 +223,16 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     self.setup_finished = True
 
-    msg = (
-      f"Connected to Inheco Incubator Shaker Stack on {self.io.port}\n"
-      f"DIP switch ID of bottom unit: {self.dip_switch_id}\n"
-      f"Number of connected units: {self.number_of_connected_units}\n"
-      f"Unit composition: {self.unit_composition}"
+    self.logger.info(
+      "Connected to Inheco Incubator Shaker Stack on %s\n"
+      "DIP switch ID of bottom unit: %s\n"
+      "Number of connected units: %s\n"
+      "Unit composition: %s",
+      self.io.port,
+      self.dip_switch_id,
+      self.number_of_connected_units,
+      self.unit_composition,
     )
-    if verbose:
-      print(msg)
-    self._log(logging.INFO, msg)
 
   async def stop(self):
     """Close serial connection & stop all active units the stack."""
@@ -274,10 +267,10 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     while True:
       chunk = await self.io.read(16)
-      if chunk:
+      if len(chunk) > 0:
         buf.extend(chunk)
-        self._log(logging.DEBUG, chunk.hex(" "), direction="←")
         if has_complete_tail(buf):
+          self.logger.debug("RECV response: %s", buf.hex(" "))
           return bytes(buf)
 
       if loop.time() - start > timeout:
@@ -402,7 +395,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     # Use global default if not overridden
     w_timeout = write_timeout or self.write_timeout
     msg = self._build_message(command, stack_index=stack_index)
-    self._log(logging.DEBUG, f"SEND: {msg.hex(' ')} (write_timeout={w_timeout})")
+    self.logger.debug("SEND command: %s (write_timeout=%s)", msg.hex(" "), w_timeout)
 
     await asyncio.wait_for(self.io.write(msg), timeout=w_timeout)
     await asyncio.sleep(delay)
@@ -884,7 +877,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
           sys.stdout.write("\n[OK] Target temperature reached.\n")
           sys.stdout.flush()
 
-        self._log(logging.INFO, f"Target temperature reached ({current_temp:.2f} °C).")
+        self.logger.info("Target temperature reached (%.2f °C).", current_temp)
         return current_temp
 
       if timeout_s is not None:
