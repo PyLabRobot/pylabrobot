@@ -11,48 +11,58 @@ from pylabrobot.utils.interpolation import interpolate_1d
 
 # # # # # # # # # # Greiner_384_wellplate_28ul_Fb # # # # # # # # # #
 
-_Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements = {
-  0.0: 0.0,  # height in mm : volume in µL
-  2.2: 3.0,
-  3.5: 5.0,
-  4.0: 8.0,
-  4.7: 11.0,
-  5.2: 15.0,
-  5.6: 20.0,
-  6.0: 25.0,
-  5.5: 28.0,
-}
-_Greiner_384_wellplate_28ul_Fb_volume_to_height_measurements = {
-  v: k for k, v in _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements.items()
-}
+# _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements = {
+#   0.0: 0.0,  # height in mm : volume in µL
+#   2.2: 3.0,
+#   3.5: 5.0,
+#   4.0: 8.0,
+#   4.7: 11.0,
+#   5.2: 15.0,
+#   5.6: 20.0,
+#   6.0: 25.0,
+#   5.5: 28.0,
+# }
+# _Greiner_384_wellplate_28ul_Fb_volume_to_height_measurements = {
+#   v: k for k, v in _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements.items()
+# }
 
 
 def _compute_volume_from_height_Greiner_384_wellplate_28ul_Fb(h: float) -> float:
   """Estimate liquid volume (µL) from observed liquid height (mm)
   in the Greiner 384 wellplate 28ul Fb, using piecewise linear interpolation.
   """
-  if h < 0:
-    raise ValueError("Height must be ≥ 0 mm.")
-  if h > 5.5 * 1.05:
-    raise ValueError(f"Height {h} is too large for Greiner_384_wellplate_28ul_Fb.")
+  # if h < 0:
+  #   raise ValueError("Height must be ≥ 0 mm.")
+  # if h > 5.5 * 1.05:
+  #   raise ValueError(f"Height {h} is too large for Greiner_384_wellplate_28ul_Fb.")
 
-  vol_ul = interpolate_1d(
-    h, _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements, bounds_handling="error"
+  # vol_ul = interpolate_1d(
+  #   h, _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements, bounds_handling="error"
+  # )
+  # return round(max(0.0, vol_ul), 3)
+  raise NotImplementedError(
+    "Computation of volume from height is not currently defined. "
+    "It is difficult (perhaps impossible?) to robustly perform liquid "
+    "level detection in such a small well AND such low volumes."
   )
-  return round(max(0.0, vol_ul), 3)
 
 
 def _compute_height_from_volume_Greiner_384_wellplate_28ul_Fb(volume_ul: float) -> float:
   """Estimate liquid height (mm) from known liquid volume (µL)
   in the Greiner 384 wellplate 28ul Fb, using piecewise linear interpolation.
-  """
-  if volume_ul < 0:
-    raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
+  #"""
+  # if volume_ul < 0:
+  #   raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
 
-  h_mm = interpolate_1d(
-    volume_ul, _Greiner_384_wellplate_28ul_Fb_volume_to_height_measurements, bounds_handling="error"
+  # h_mm = interpolate_1d(
+  #   volume_ul, _Greiner_384_wellplate_28ul_Fb_volume_to_height_measurements, bounds_handling="error"
+  # )
+  # return round(max(0.0, h_mm), 3)
+  raise NotImplementedError(
+    "Computation of height from volume is not currently defined. "
+    "It is difficult (perhaps impossible?) to robustly perform liquid "
+    "level detection in such a small well AND such low volumes."
   )
-  return round(max(0.0, h_mm), 3)
 
 
 def Greiner_384_wellplate_28ul_Fb_Lid(name: str) -> Lid:
@@ -97,18 +107,18 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
       Well,
       num_items_x=24,
       num_items_y=16,
-      dx=8.83,
-      dy=5.69,
-      dz=7.9,
+      dx=8.83 + 0.8,
+      dy=5.69 + 1.3,
+      dz=8.9,
       item_dx=4.5,
       item_dy=4.5,
       size_x=3.3,
       size_y=3.3,
       size_z=5.5,
       bottom_type=WellBottomType.FLAT,
-      material_z_thickness=1.0,
+      material_z_thickness=0.9,
       cross_section_type=CrossSectionType.CIRCLE,
-      compute_volume_from_height=_compute_volume_from_height_Greiner_384_wellplate_28ul_Fb,
-      compute_height_from_volume=_compute_height_from_volume_Greiner_384_wellplate_28ul_Fb,
+      # compute_volume_from_height=_compute_volume_from_height_Greiner_384_wellplate_28ul_Fb,
+      # compute_height_from_volume=_compute_height_from_volume_Greiner_384_wellplate_28ul_Fb,
     ),
   )
