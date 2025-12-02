@@ -221,19 +221,10 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
   async def close(self, plate: Optional[Plate], slow: bool = False):
     # reset cache
     self._plate = None
-    self._exposure = None
-    self._focal_height = None
-    self._gain = None
-    self._imaging_mode = None
-    self._row = None
-    self._column = None
-    self._pos_x, self._pos_y = 0, 0
-    self._objective = None
 
     await self._set_slow_mode(slow)
     if plate is not None:
       await self.set_plate(plate)
-    self._row, self._column = None, None
     return await self.send_command("A")
 
   async def home(self):

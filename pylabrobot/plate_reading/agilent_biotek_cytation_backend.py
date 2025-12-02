@@ -1,5 +1,8 @@
 import asyncio
+import atexit
 import logging
+import math
+import re
 import time
 import warnings
 from dataclasses import dataclass
@@ -136,6 +139,31 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
         # python kernel is restarted.
         await self.stop()
         raise
+
+  async def stop(self):
+    await super().stop()
+
+    if self._acquiring:
+      self.stop_acquisition()
+
+    logger.info(f"{self.__class__.__name__} stopping")
+    await self.stop_shaking()
+    await self.io.stop()
+
+    self._stop_camera()
+
+    self._objectives = None
+    self._filters = None
+    self._slow_mode = None
+
+    self._exposure = None
+    self._focal_height = None
+    self._gain = None
+    self._imaging_mode = None
+    self._row = None
+    self._column = None
+    self._pos_x, self._pos_y = 0, 0
+    self._objective = None
 
   @property
   def supports_heating(self):
@@ -406,20 +434,6 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
           self._objectives.append(annulus_part_number2objective[annulus_part_number])
     else:
       raise RuntimeError(f"{self.__class__.__name__}: Unsupported version: {self.version}")
-
-  async def stop(self) -> None:
-    if self._acquiring:
-      self.stop_acquisition()
-
-    logger.info(f"{self.__class__.__name__} stopping")
-    await self.stop_shaking()
-    await self.io.stop()
-
-    self._stop_camera()
-
-    self._objectives = None
-    self._filters = None
-    self._slow_mode = None
 
   def _stop_camera(self) -> None:
     if self.cam is not None:
