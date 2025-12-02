@@ -79,4 +79,5 @@ def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
     logger.setLevel(level)
     handler = logging.StreamHandler()
     handler.setLevel(level)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
