@@ -49,6 +49,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
   @abstractmethod
   def convert_to_joint_space(self, position: List[float]) -> PreciseFlexJointCoords:
     """Convert a tuple of joint angles to a PreciseFlexJointCoords object."""
+    ...
 
   @abstractmethod
   def convert_to_joints_array(self, position: PreciseFlexJointCoords) -> List[float]:
@@ -313,10 +314,22 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._place_plate_c(cartesian_position=position, access=access)
 
   async def move_to(self, position: Union[PreciseFlexCartesianCoords, List[float]]):
-    """Move the arm to a specified position in 3D space."""
+    """Move the arm to a specified position in 3D space.
+
+    Args:
+      position: Either CartesianCoords or a 6-element list [rail, base, shoulder, elbow, wrist, gripper]
+    """
     if isinstance(position, list):
-      joint_coords = self.convert_to_joint_space(position)
-      print(joint_coords)
+      if len(position) < 6:
+        raise ValueError("Joint list must have 6 elements: [rail, base, shoulder, elbow, wrist, gripper]")
+      joint_coords = PreciseFlexJointCoords(
+        rail=position[0],
+        base=position[1],
+        shoulder=position[2],
+        elbow=position[3],
+        wrist=position[4],
+        gripper=position[5],
+      )
       await self.move_j(profile_index=self.profile_index, joint_coords=joint_coords)
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self.move_c(profile_index=self.profile_index, cartesian_coords=position)
