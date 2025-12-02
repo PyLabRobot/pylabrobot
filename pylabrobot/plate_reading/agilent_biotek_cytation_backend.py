@@ -8,12 +8,9 @@ import warnings
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
-from pylibftdi import FtdiError
-
-from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.agilent_biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.plate_reading.backend import ImagerBackend
-from pylabrobot.resources import Plate, Well
+from pylabrobot.resources import Plate
 
 try:
   import PySpin  # type: ignore

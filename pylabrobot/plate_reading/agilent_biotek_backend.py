@@ -1,14 +1,8 @@
 import asyncio
-import atexit
 import enum
 import logging
-import math
-import re
 import time
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Literal, Optional, Tuple, Union
-
-from pylibftdi import FtdiError
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import PlateReaderBackend
