@@ -72,11 +72,11 @@ def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
   Careful: this will remove all existing StreamHandlers!
   """
   logger = logging.getLogger("pylabrobot")
-  logger.setLevel(level)
   for handler in logger.handlers:
     if isinstance(handler, logging.StreamHandler):
       logger.removeHandler(handler)
   if make_verbose:
+    logger.setLevel(level)
     handler = logging.StreamHandler()
     handler.setLevel(level)
     logger.addHandler(handler)
