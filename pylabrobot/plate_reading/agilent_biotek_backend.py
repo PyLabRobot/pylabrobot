@@ -490,7 +490,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       )
       checksum = str((sum(cmd.encode()) + 7) % 100).zfill(2)  # don't know why +7
       cmd = cmd + checksum + "\x03"
-      resp = await self.send_command("D", cmd)
+      await self.send_command("D", cmd)
 
       resp = await self.send_command("O")
       assert resp == b"\x060000\x03"
