@@ -14,7 +14,7 @@ from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
 
-logger = logging.getLogger("pylabrobot.plate_reading.agilent_biotek.backend")
+logger = logging.getLogger(__name__)
 
 
 class BioTekPlateReaderBackend(PlateReaderBackend):
@@ -33,16 +33,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     self._version: Optional[str] = None
 
     self._plate: Optional[Plate] = None
-    self._exposure: Optional[Exposure] = None
-    self._focal_height: Optional[FocalPosition] = None
-    self._gain: Optional[Gain] = None
-    self._imaging_mode: Optional["ImagingMode"] = None
-    self._row: Optional[int] = None
-    self._column: Optional[int] = None
     self._shaking = False
-    self._pos_x: Optional[float] = None
-    self._pos_y: Optional[float] = None
-    self._objective: Optional[Objective] = None
     self._slow_mode: Optional[bool] = None
 
   def _non_overlapping_rectangles(
@@ -146,18 +137,14 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     return False
 
   @property
-  def temperature_range(self) -> tuple[float, float]:
-    if not self.supports_heating and not self.supports_cooling:
-      raise NotImplementedError(f"{self.__class__.__name__} does not support temperature control.")
-
-    max_temp = 45.0  # default BioTek max
-    min_temp = 4.0  # default cooling minimum
-
-    if self.supports_heating and not self.supports_cooling:
-      return (25.0, max_temp)  # ambient → max
-
-    if self.supports_heating and self.supports_cooling:
-      return (min_temp, max_temp)
+  def temperature_range(self) -> Tuple[Optional[float], Optional[float]]:
+    """Return (min_temp, max_temp).
+    If cooling is not supported (heating only), min_temp is None.
+    If heating is not supported (cooling only), max_temp is None.
+    """
+    max_temp = 45.0 if self.supports_heating else None  # default BioTek max
+    min_temp = 4.0 if self.supports_cooling else None  # default cooling minimum
+    return (min_temp, max_temp)
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
@@ -264,12 +251,18 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       raise NotImplementedError(f"{self.__class__.__name__} does not support temperature control.")
 
     tmin, tmax = self.temperature_range
-    if not (tmin <= temperature <= tmax):
+    current_temperature = await self.get_current_temperature()
+
+    if (tmin is not None and temperature < tmin) or (tmax is not None and temperature > tmax):
       raise ValueError(
         f"{self.__class__.__name__}: "
         f"Requested temperature {temperature}°C is outside supported range "
-        f"{tmin}–{tmax}°C"
+        f"{tmin}-{tmax}°C"
       )
+    if temperature < current_temperature and not self.supports_cooling:
+      raise ValueError(f"{self.__class__.__name__}: Cooling is not supported.")
+    if temperature > current_temperature and not self.supports_heating:
+      raise ValueError(f"{self.__class__.__name__}: Heating is not supported.")
 
     return await self.send_command("g", f"{int(temperature * 1000):05}")
 

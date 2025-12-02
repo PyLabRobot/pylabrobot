@@ -84,30 +84,23 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     device_id: Optional[str] = None,
     imaging_config: Optional[CytationImagingConfig] = None,
   ) -> None:
-    super().__init__()
-    self.timeout = timeout
-
-    self.io = FTDI(device_id=device_id)
+    super().__init__(timeout=timeout, device_id=device_id)
 
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
     self.imaging_config = imaging_config or CytationImagingConfig()
     self._filters: Optional[List[Optional[ImagingMode]]] = self.imaging_config.filters
     self._objectives: Optional[List[Optional[Objective]]] = self.imaging_config.objectives
-    self._version: Optional[str] = None
 
-    self._plate: Optional[Plate] = None
     self._exposure: Optional[Exposure] = None
     self._focal_height: Optional[FocalPosition] = None
     self._gain: Optional[Gain] = None
     self._imaging_mode: Optional["ImagingMode"] = None
     self._row: Optional[int] = None
     self._column: Optional[int] = None
-    self._shaking = False
     self._pos_x: Optional[float] = None
     self._pos_y: Optional[float] = None
     self._objective: Optional[Objective] = None
-    self._slow_mode: Optional[bool] = None
 
     self._acquiring = False
 
