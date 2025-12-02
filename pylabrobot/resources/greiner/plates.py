@@ -102,7 +102,7 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
     size_y=85.48,
     size_z=14.4,
     lid=Greiner_384_wellplate_28ul_Fb_Lid(name + "_lid") if with_lid else None,
-    model="Greiner_384_wellplate_28ul_Fb",
+    model=Greiner_384_wellplate_28ul_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=24,
