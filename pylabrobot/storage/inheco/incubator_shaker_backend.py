@@ -550,7 +550,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     Returns:
       Calibration date in ISO format 'YYYY-MM-DD'.
     """
-    resp = await self.send_command("RCD")
+    resp = await self.send_command("RCD", stack_index=stack_index)
     date = resp.strip()
     if not date or len(date) != 10 or date.count("-") != 2:
       raise RuntimeError(f"Unexpected RCD response: {resp!r}")
@@ -1446,7 +1446,7 @@ class InhecoIncubatorShakerUnit:
     """EEPROM request: Check if the plate status is known."""
     return await self.backend.request_plate_status_known(stack_index=self.index)
 
-  async def request_thermal_calibration_date(self, stack_index: int) -> str:
+  async def request_thermal_calibration_date(self) -> str:
     """EEPROM request: Query the date of the last thermal calibration.
 
     Returns:
