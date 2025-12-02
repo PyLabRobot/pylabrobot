@@ -119,6 +119,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.sanofi.com
 ```
 
+```{image} /img/used_by/logo_bio_techne.jpg
+:alt: Bio-Techne
+:class: company
+:target: https://www.bio-techne.com/
+```
+
 ```{raw} html
 <style>
 .company {
