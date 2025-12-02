@@ -100,6 +100,13 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
 
+  async def stop(self) -> None:
+    logger.info(f"{self.__class__.__name__} stopping")
+    await self.stop_shaking()
+    await self.io.stop()
+
+    self._slow_mode = None
+
   @property
   def version(self) -> str:
     if self._version is None:
@@ -146,14 +153,14 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       await self.io.usb_purge_rx_buffer()
     await self.io.usb_purge_tx_buffer()
 
-  async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
+  async def _read_until(self, terminator: bytes, timeout: Optional[float] = None) -> bytes:
     """If timeout is None, use self.timeout"""
     if timeout is None:
       timeout = self.timeout
     x = None
     res = b""
     t0 = time.time()
-    while x != char:
+    while x != terminator:
       x = await self.io.read(1)
       res += x
 
@@ -586,10 +593,3 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
         # Task cancellation is expected here; safe to ignore this exception.
         pass
       self._shaking_task = None
-
-  async def stop(self) -> None:
-    logger.info(f"{self.__class__.__name__} stopping")
-    await self.stop_shaking()
-    await self.io.stop()
-
-    self._slow_mode = None
