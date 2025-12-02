@@ -5,7 +5,6 @@ import unittest
 import unittest.mock
 from typing import Iterator
 
-# from pylabrobot.plate_reading.biotek_backend import Cytation5Backend (deprecated)
 from pylabrobot.plate_reading.agilent_biotek_cytation_backend import CytationBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 

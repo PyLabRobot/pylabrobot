@@ -361,7 +361,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
   async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     min_abs, max_abs = self.abs_wavelength_range
     if not (min_abs <= wavelength <= max_abs):
-      raise ValueError(f"{self.__class__.__name__}: wavelength must be within {min_abs}–{max_abs}")
+      raise ValueError(f"{self.__class__.__name__}: wavelength must be within {min_abs}-{max_abs}")
 
     await self.set_plate(plate)
 
@@ -409,7 +409,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
   ) -> List[Dict]:
     min_fh, max_fh = self.focal_height_range
     if not (min_fh <= focal_height <= max_fh):
-      raise ValueError(f"{self.__class__.__name__}: focal height must be within {min_fh}–{max_fh}")
+      raise ValueError(f"{self.__class__.__name__}: focal height must be within {min_fh}-{max_fh}")
 
     await self.set_plate(plate)
 
@@ -475,17 +475,17 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
   ) -> List[Dict]:
     min_fh, max_fh = self.focal_height_range
     if not (min_fh <= focal_height <= max_fh):
-      raise ValueError(f"{self.__class__.__name__}: focal height must be within {min_fh}–{max_fh}")
+      raise ValueError(f"{self.__class__.__name__}: focal height must be within {min_fh}-{max_fh}")
 
     min_ex, max_ex = self.excitation_range
     if not (min_ex <= excitation_wavelength <= max_ex):
       raise ValueError(
-        f"{self.__class__.__name__}: excitation wavelength must be {min_ex}–{max_ex}"
+        f"{self.__class__.__name__}: excitation wavelength must be {min_ex}-{max_ex}"
       )
 
     min_em, max_em = self.emission_range
     if not (min_em <= emission_wavelength <= max_em):
-      raise ValueError(f"{self.__class__.__name__}: emission wavelength must be {min_em}–{max_em}")
+      raise ValueError(f"{self.__class__.__name__}: emission wavelength must be {min_em}-{max_em}")
 
     await self.set_plate(plate)
 

@@ -98,8 +98,5 @@ class ImagerBackend(MachineBackend, metaclass=ABCMeta):
     """Capture an image of the plate in the specified mode."""
 
 
-class ImageReaderBackend:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`ImageReaderBackend` is deprecated. Please use `BioTekPlateReaderBackend` instead. "
-    )
+class ImageReaderBackend(PlateReaderBackend, ImagerBackend):
+  pass

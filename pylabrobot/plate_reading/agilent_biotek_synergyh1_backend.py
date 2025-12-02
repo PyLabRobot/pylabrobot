@@ -29,8 +29,6 @@ class SynergyH1Backend(BioTekPlateReaderBackend):
   async def _read_until(
     self, terminator: bytes, timeout: Optional[float] = None, chunk_size: int = 512
   ) -> bytes:
-    """Synergy H1 reads bytes differently"""
-
     if timeout is None:
       timeout = self.timeout
 
@@ -48,7 +46,7 @@ class SynergyH1Backend(BioTekPlateReaderBackend):
 
       try:
         data = await self.io.read(chunk_size)
-        if not data:
+        if len(data) == 0:
           await asyncio.sleep(0.02)
           continue
 
