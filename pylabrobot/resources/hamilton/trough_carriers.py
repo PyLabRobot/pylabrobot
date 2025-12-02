@@ -65,5 +65,5 @@ def Trough_CAR_5R60_A00(name: str) -> TroughCarrier:
       # pedestal_size_z=1.5, # measured
       name_prefix=name,
     ),
-    model="Trough_CAR_4R200_A00",
+    model=Trough_CAR_5R60_A00.__name__,
   )
