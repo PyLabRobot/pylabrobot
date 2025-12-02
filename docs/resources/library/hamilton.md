@@ -60,7 +60,7 @@ Sometimes called "reagent carriers" in Hamilton jargon.
 | Description | Image | PLR definition |
 | - | - | - |
 | 'Trough_CAR_4R200_A00'<br>Part no.: 185436 (same as 96890-01?)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/96890-01) <br>Trough carrier for 4x 200ml troughs. 2 tracks(T) wide. | ![](img/hamilton/Trough_CAR_4R200_A00.png) | `Trough_CAR_4R200_A00` |
-
+| 'Trough_CAR_5R60_A00'<br>Part no.: 53646-01<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/reagent-reservoir-carrier-5-x-60-ml-2) <br>Trough carrier for 5x 60ml troughs. 1 track(T) wide. | ![](img/hamilton/Trough_CAR_5R60_A00.jpg) | `Trough_CAR_5R60_A00` |
 
 ## Plate Adapters
 
