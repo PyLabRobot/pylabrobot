@@ -583,6 +583,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       try:
         await self._shaking_task
       except asyncio.CancelledError:
+        # Task cancellation is expected here; safe to ignore this exception.
         pass
       self._shaking_task = None
 
