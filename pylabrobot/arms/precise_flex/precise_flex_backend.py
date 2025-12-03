@@ -91,7 +91,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self.io.setup()
     await self.set_mode("pc")
     await self.power_on_robot()
-    await self.attach()
+    await self.attach(1)
 
   async def stop(self):
     """Stop the PreciseFlex backend."""
@@ -141,16 +141,16 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   def _convert_orientation_int_to_enum(self, orientation_int: int) -> Optional[ElbowOrientation]:
     if orientation_int == 1:
-      return ElbowOrientation.LEFT
-    if orientation_int == 2:
       return ElbowOrientation.RIGHT
+    if orientation_int == 2:
+      return ElbowOrientation.LEFT
     return None
 
   def _convert_orientation_enum_to_int(self, orientation: Optional[ElbowOrientation]) -> int:
     if orientation == ElbowOrientation.LEFT:
-      return 1
-    if orientation == ElbowOrientation.RIGHT:
       return 2
+    if orientation == ElbowOrientation.RIGHT:
+      return 1
     return 0
 
   async def home_all(self) -> None:
@@ -462,6 +462,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self.set_location_xyz(self.location_index, cartesian_position)
     await self._set_grip_detail(access)
     orientation_int = self._convert_orientation_enum_to_int(cartesian_position.orientation)
+    orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
     await self.set_location_config(self.location_index, orientation_int)
     await self.pick_plate_from_stored_position(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
@@ -476,6 +477,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self.set_location_xyz(self.location_index, cartesian_position)
     await self._set_grip_detail(access)
     orientation_int = self._convert_orientation_enum_to_int(cartesian_position.orientation)
+    orientation_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
     await self.set_location_config(self.location_index, orientation_int)
     await self.place_plate_to_stored_position(
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
@@ -985,7 +987,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       f"{cartesian_position.location.z} "
       f"{cartesian_position.rotation.yaw} "
       f"{cartesian_position.rotation.pitch} "
-      f"{cartesian_position.rotation.y}"
+      f"{cartesian_position.rotation.roll}"
     )
 
   async def get_location_z_clearance(self, location_index: int) -> tuple[int, float, bool]:
@@ -1587,6 +1589,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     if cartesian_coords.orientation is not None:
       config_int = self._convert_orientation_enum_to_int(cartesian_coords.orientation)
+      config_int |= 0x1000  # GPL_Single: restrict wrist to ±180°
       cmd += f"{config_int}"
 
     await self.send_command(cmd)
