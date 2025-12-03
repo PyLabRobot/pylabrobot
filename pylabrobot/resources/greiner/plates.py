@@ -75,7 +75,7 @@ def Greiner_384_wellplate_28ul_Fb_Lid(name: str) -> Lid:
   #   size_y=85.48,
   #   size_z=None,           # measure the total z height
   #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="Revvity_384_wellplate_28ul_Ub_Lid",
+  #   model="Greiner_384_wellplate_28ul_Fb_Lid",
   # )
 
 
@@ -108,8 +108,8 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
       Well,
       num_items_x=24,
       num_items_y=16,
-      dx=8.83 + 0.8,
-      dy=5.69 + 1.3,
+      dx=10.48,  # 8.83 + 0.8,
+      dy=7.34,  # 5.69 + 1.3,
       dz=8.9,
       item_dx=4.5,
       item_dy=4.5,
@@ -119,7 +119,7 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       material_z_thickness=0.9,
       cross_section_type=CrossSectionType.CIRCLE,
-      # compute_volume_from_height=_compute_volume_from_height_Greiner_384_wellplate_28ul_Fb,
-      # compute_height_from_volume=_compute_height_from_volume_Greiner_384_wellplate_28ul_Fb,
+      compute_volume_from_height=_compute_volume_from_height_Greiner_384_wellplate_28ul_Fb,
+      compute_height_from_volume=_compute_height_from_volume_Greiner_384_wellplate_28ul_Fb,
     ),
   )
