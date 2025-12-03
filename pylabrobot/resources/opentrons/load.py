@@ -7,6 +7,7 @@ from typing import Dict, List, cast
 from pylabrobot.resources import Coordinate, Tip, TipRack, TipSpot
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tube_rack import TubeRack
+from pylabrobot.resources.carrier import Coordinate, PlateHolder
 
 
 def _download_file(url: str, local_path: str) -> bytes:
@@ -145,5 +146,28 @@ def load_ot_tube_rack(
     size_y=data["dimensions"]["yDimension"],
     size_z=data["dimensions"]["zDimension"],
     ordered_items=cast(Dict[str, ResourceHolder], ordered_items),
+    model=data["metadata"]["displayName"],
+  )
+
+
+def load_ot_adapter(
+  ot_name: str, plr_resource_name: str, z_offset: float, force_download: bool = False
+) -> PlateHolder:
+  """Convert an Opentrons adapter definition file to a PyLabRobot PlateHolder resource."""
+
+  data = _download_ot_resource_file(ot_name=ot_name, force_download=force_download)
+
+  display_category = data["metadata"]["displayCategory"]
+  if display_category not in {"adapter", "aluminumBlock"}:
+    raise ValueError("Not a plate adapter definition file.")
+
+  location = data["cornerOffsetFromSlot"]
+
+  return PlateHolder(
+    name=plr_resource_name,
+    size_x=data["dimensions"]["xDimension"],
+    size_y=data["dimensions"]["yDimension"],
+    size_z=data["dimensions"]["zDimension"],
+    child_location=Coordinate(location["x"], location["y"], z_offset),
     model=data["metadata"]["displayName"],
   )
