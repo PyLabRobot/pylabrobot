@@ -58,6 +58,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.nuggetscientific.com
 ```
 
+```{image} /img/supported_by/logo_alpaqua.png
+:alt: Alpaqua
+:class: company
+:target: https://www.alpaqua.com/
+```
+
 ## Used by
 
 ```{image} /img/used_by/logo_mit.jpg
@@ -119,6 +125,12 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.sanofi.com
 ```
 
+```{image} /img/used_by/logo_bio_techne.jpg
+:alt: Bio-Techne
+:class: company
+:target: https://www.bio-techne.com/
+```
+
 ```{raw} html
 <style>
 .company {
@@ -155,6 +167,14 @@ user_guide/index
 ```
 
 ```{toctree}
+:maxdepth: 0
+:caption: Cookbook
+:hidden:
+
+ Cookbook <cookbook/index>
+```
+
+```{toctree}
 :maxdepth: 2
 :caption: Development
 :hidden:
@@ -175,6 +195,7 @@ api/pylabrobot
 
 Community <https://discuss.pylabrobot.org/>
 ```
+
 
 ## Citing
 

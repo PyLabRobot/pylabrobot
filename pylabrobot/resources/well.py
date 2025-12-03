@@ -108,24 +108,40 @@ class Well(Container):
       "cross_section_type": self.cross_section_type.value,
     }
 
+  def set_volume(self, volume: float):
+    """Set the volume of the well.
+
+    (wraps :meth:`~.VolumeTracker.set_volume`)
+
+    Example:
+      Set the volume in a well to 10 uL:
+
+      >>> well.set_volume(10)
+    """
+
+    self.tracker.set_volume(volume)
+
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """Set the liquids in the well.
 
-    (wraps :meth:`~.VolumeTracker.set_liquids`)
-
-    Example:
-      Set the liquids in a well to 10 uL of water:
-
-      >>> well.set_liquids([(Liquid.WATER, 10)])
+    Deprecated: Use `set_volume` instead. This method will be removed in a future version.
     """
 
     self.tracker.set_liquids(liquids)
 
-  def get_identifier(self) -> str:
-    """Get the (canonical) identifier, like `"A1"` of the well in the parent plate. If the well is
-    not in a plate, this will raise a ValueError."""
-
+  def _get_parent_plate(self) -> Plate:
     if self.parent is None or not isinstance(self.parent, Plate):
-      raise ValueError("Well must be in a plate to get its identifier.")
+      raise ValueError("Well must be in a plate to get its parent plate.")
+    return self.parent
 
-    return self.parent.get_child_identifier(self)
+  def get_identifier(self) -> str:
+    """Get the (canonical) identifier, like `"A1"` of the well in the parent plate. If the well is not in a plate, this will raise a ValueError."""
+    return self._get_parent_plate().get_child_identifier(self)
+
+  def get_row(self) -> int:
+    """Get the row (0-indexed) of the well in the parent plate. If the well is not in a plate, this will raise a ValueError."""
+    return self._get_parent_plate().get_child_row(self)
+
+  def get_column(self) -> int:
+    """Get the column (0-indexed) of the well in the parent plate. If the well is not in a plate, this will raise a ValueError."""
+    return self._get_parent_plate().get_child_column(self)

@@ -26,6 +26,7 @@ from pylabrobot.resources import (
   no_volume_tracking,
   set_tip_tracking,
 )
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
 
 from .STAR_backend import (
@@ -267,6 +268,114 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     set_tip_tracking(enabled=False)
 
+  async def test_core_read_barcode_success(self):
+    """core_read_barcode_of_picked_up_resource should send ZB and return a Barcode."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/08ABCDEFGH"
+    )
+
+    barcode = await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+    # Check command format.
+    self.STAR._write_and_read_command.assert_has_calls(  # type: ignore
+      [
+        _any_write_and_read_command_call(
+          "C0ZBid0001cp05zb2200th2750zy1287bd1ma0250 2100 0860 0200mr0mo000 000 000 000 000 000 000",
+        )
+      ]
+    )
+
+    # Check returned barcode object.
+    self.assertIsInstance(barcode, Barcode)
+    assert barcode is not None
+    self.assertEqual(barcode.data, "ABCDEFGH")
+    self.assertEqual(barcode.symbology, "code128")
+    self.assertEqual(barcode.position_on_resource, "front")
+
+  async def test_core_read_barcode_raises_on_missing_error_section(self):
+    """Unexpected response without error section should raise ValueError."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001bb/08ABCDEFGH"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_raises_on_invalid_lengths(self):
+    """Non-integer / inconsistent bb length fields should raise ValueError."""
+
+    # Invalid bb field (non-integer length).
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/XXABCDEFGH"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+    # Length > 0 but no data present.
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/08"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_nonzero_error_code_raises_firmware_error(self):
+    """Non-zero error code should be surfaced as STARFirmwareError."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er05/30bb/00"
+    )
+
+    with self.assertRaises(STARFirmwareError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_no_barcode_raises_value_error(self):
+    """bb/00 (no barcode) should raise ValueError so callers can handle it explicitly."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with self.assertRaises(ValueError):
+      await self.STAR.core_read_barcode_of_picked_up_resource(rails=5)
+
+  async def test_core_read_barcode_manual_input_success(self):
+    """When allow_manual_input=True and bb/00, manual input should be used to build a Barcode."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with unittest.mock.patch("builtins.input", return_value="MANUAL123"):
+      barcode = await self.STAR.core_read_barcode_of_picked_up_resource(
+        rails=5,
+        allow_manual_input=True,
+        labware_description="Cos_96_PCR_0001",
+      )
+
+    self.assertIsInstance(barcode, Barcode)
+    self.assertEqual(barcode.data, "MANUAL123")
+    self.assertEqual(barcode.symbology, "code128")
+    self.assertEqual(barcode.position_on_resource, "front")
+
+  async def test_core_read_barcode_manual_input_empty_raises_value_error(self):
+    """When allow_manual_input=True and user provides empty input, ValueError should be raised."""
+
+    self.STAR._write_and_read_command.return_value = (  # type: ignore
+      "C0ZBid0001er00/00bb/00"
+    )
+
+    with unittest.mock.patch("builtins.input", return_value="   "):
+      with self.assertRaises(ValueError):
+        await self.STAR.core_read_barcode_of_picked_up_resource(
+          rails=5,
+          allow_manual_input=True,
+          labware_description="Cos_96_PCR_0001",
+        )
+
   async def asyncTearDown(self):
     await self.lh.stop()
 
@@ -384,7 +493,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     for well in self.plate.get_items(["A1", "B1"]):
-      well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+      well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate(self.plate["A1", "B1"], vols=[100, 100], use_channels=[4, 5])
     self.STAR._write_and_read_command.assert_has_calls(
       [
@@ -414,7 +523,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
-    well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+    well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate([well], vols=[100])
     self.STAR._write_and_read_command.assert_has_calls(
       [
@@ -435,7 +544,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
-    well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+    well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate([well], vols=[100], liquid_height=[10])
 
     # This passes the test, but is not the real command.
@@ -459,7 +568,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.lid.unassign()
     wells = self.plate.get_items("A1:B1")
     for well in wells:
-      well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+      well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate(self.plate["A1:B1"], vols=[100] * 2)
 
     # This passes the test, but is not the real command.
@@ -920,14 +1029,13 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       pickup_distance_from_top=13 - 3.33,
       use_arm="core",
       # kwargs specific to pickup and drop
-      channel_1=7,
-      channel_2=8,
+      core_front_channel=7,
       return_core_gripper=True,
     )
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0ZTid0001xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2800tt14"
+          "C0ZTid0001xs07975xd0ya1250yb1070pa07pb08tp2350tz2250th2800tt14"
         ),
         _any_write_and_read_command_call(
           "C0ZPid0002xs03479xd0yj1142yv0050zj1876zy0500yo0885yg0825yw15" "th2800te2800"
@@ -936,7 +1044,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "C0ZRid0003xs03479xd0yj2102zj1876zi000zy0500yo0885th2800te2800"
         ),
         _any_write_and_read_command_call(
-          "C0ZSid0004xs07975xd0ya1240yb1065tp2150tz2050th2800te2800"
+          "C0ZSid0004xs07975xd0ya1250yb1070tp2150tz2050th2800te2800"
         ),
       ]
     )

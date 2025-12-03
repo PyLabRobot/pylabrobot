@@ -114,7 +114,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
     However, in our discussions, it became evident that the term "labware" has different meanings to different stakeholders
     (e.g., "A plate is clearly labware, but is a liquid handler or a plate reader labware?").
     As a result, PLR avoids the ambiguous term "labware".</p>
-    <p><u>Every physical item (describable via its <code>item_x</code>, <code>item_y</code>, <code>item_z</code>) is a "resource"</u>.</p>
+    <p><u>Every physical item (describable by its physical dimensions <code>size_x</code>, <code>size_y</code>, <code>size_z</code>) is a `Resource`</u>.</p>
 </details>
 
 <hr>
@@ -179,6 +179,7 @@ library/corning
 library/eppendorf
 library/falcon
 library/hamilton
+library/imcs
 library/nest
 library/opentrons
 library/perkin_elmer
@@ -187,4 +188,5 @@ library/revvity
 library/sergi
 library/thermo_fisher
 library/vwr
+library/diy/index
 ```

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.plate_reading.standard import (
@@ -13,6 +13,7 @@ from pylabrobot.plate_reading.standard import (
   Objective,
 )
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.well import Well
 
 
 class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
@@ -36,25 +37,49 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     """Close the plate reader. Also known as plate in."""
 
   @abstractmethod
-  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
-    """Read the luminescence from the plate reader. This should return a list of lists, where the
-    outer list is the columns of the plate and the inner list is the rows of the plate."""
+  async def read_luminescence(
+    self, plate: Plate, wells: List[Well], focal_height: float
+  ) -> List[Dict]:
+    """Read the luminescence from the plate reader.
+
+    Returns:
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
+    """
 
   @abstractmethod
-  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
-    """Read the absorbance from the plate reader. This should return a list of lists, where the
-    outer list is the columns of the plate and the inner list is the rows of the plate."""
+  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
+    """Read the absorbance from the plate reader.
+
+    Returns:
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "wavelength": int,
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
+    """
 
   @abstractmethod
   async def read_fluorescence(
     self,
     plate: Plate,
+    wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[float]]:
-    """Read the fluorescence from the plate reader. This should return a list of lists, where the
-    outer list is the columns of the plate and the inner list is the rows of the plate."""
+  ) -> List[Dict]:
+    """Read the fluorescence from the plate reader.
+
+    Returns:
+      A list of dictionaries, one for each measurement. Each dictionary contains:
+        "ex_wavelength": int,
+        "em_wavelength": int,
+        "time": float,
+        "temperature": float,
+        "data": List[List[float]]
+    """
 
 
 class ImagerBackend(MachineBackend, metaclass=ABCMeta):

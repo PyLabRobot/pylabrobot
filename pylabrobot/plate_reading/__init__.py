@@ -1,4 +1,12 @@
-from .biotek_backend import Cytation5Backend, Cytation5ImagingConfig
+from .agilent_biotek_backend import BioTekPlateReaderBackend
+from .agilent_biotek_cytation_backend import (
+  Cytation5Backend,
+  Cytation5ImagingConfig,
+  CytationBackend,
+  CytationImagingConfig,
+)
+from .agilent_biotek_synergyh1_backend import SynergyH1Backend
+from .chatterbox import PlateReaderChatterboxBackend
 from .clario_star_backend import CLARIOstarBackend
 from .image_reader import ImageReader
 from .imager import Imager

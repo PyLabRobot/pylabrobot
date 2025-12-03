@@ -6,7 +6,7 @@ from io import IOBase
 from typing import Optional, cast
 
 try:
-  from pylibftdi import Device, LibraryMissingError
+  from pylibftdi import Device, FtdiError, LibraryMissingError
 
   HAS_PYLIBFTDI = True
 except ImportError as e:
@@ -52,7 +52,12 @@ class FTDI(IOBase):
     return self._dev
 
   async def setup(self):
-    self.dev.open()
+    try:
+      self.dev.open()
+    except FtdiError as e:
+      raise RuntimeError(
+        f"Failed to open FTDI device: {e}. Is the device connected? Is it in use by another process? Try restarting the kernel."
+      ) from e
     self._executor = ThreadPoolExecutor(max_workers=1)
 
   async def set_baudrate(self, baudrate: int):
@@ -132,6 +137,12 @@ class FTDI(IOBase):
       FTDICommand(device_id=self._device_id, action="poll_modem_status", data=str(stat.value))
     )
     return stat.value
+
+  async def get_serial(self) -> str:
+    serial = self._dev.driver.list_devices()[self._dev.device_index][2]  # type: ignore
+    logger.log(LOG_LEVEL_IO, "[%s] get_serial %s", self._device_id, serial)
+    capturer.record(FTDICommand(device_id=self._device_id, action="get_serial", data=str(serial)))
+    return serial  # type: ignore
 
   async def stop(self):
     self.dev.close()
@@ -283,6 +294,18 @@ class FTDIValidator(FTDI):
         f"Next line is {next_command}, expected FTDI poll_modem_status {self._device_id}"
       )
     return int(next_command.data)
+
+  async def get_serial(self) -> str:
+    next_command = FTDICommand(**self.cr.next_command())
+    if not (
+      next_command.module == "ftdi"
+      and next_command.device_id == self._device_id
+      and next_command.action == "get_serial"
+    ):
+      raise ValidationError(
+        f"Next line is {next_command}, expected FTDI get_serial {self._device_id}"
+      )
+    return next_command.data
 
   async def write(self, data: bytes):
     next_command = FTDICommand(**self.cr.next_command())

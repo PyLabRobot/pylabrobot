@@ -19,7 +19,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.resources import Deck, Resource, Tip
+from pylabrobot.resources import Deck, Tip
 from pylabrobot.resources.tip_tracker import TipTracker
 
 
@@ -69,24 +69,6 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   async def setup(self):
     """Set up the robot. This method should be called before any other method is called."""
     assert self._deck is not None, "Deck not set"
-
-  async def assigned_resource_callback(self, resource: Resource):
-    """Called when a new resource was assigned to the robot.
-
-    This callback will also be called immediately after the setup method has been called for any
-    resources that were assigned to the robot before it was set up. The first resource will always
-    be the deck itself.
-
-    Args:
-      resource: The resource that was assigned to the robot.
-    """
-
-  async def unassigned_resource_callback(self, name: str):
-    """Called when a resource is unassigned from the robot.
-
-    Args:
-      resource: The name of the resource that was unassigned from the robot.
-    """
 
   @property
   @abstractmethod

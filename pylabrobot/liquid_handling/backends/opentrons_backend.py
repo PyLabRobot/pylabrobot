@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, List, Optional, Union, cast
+from typing import Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.backends.backend import (
@@ -85,7 +85,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     self.left_pipette: Optional[Dict[str, str]] = None
     self.right_pipette: Optional[Dict[str, str]] = None
 
-    self.traversal_height = 170  # test
+    self.traversal_height = 120  # test
     self._tip_racks: Dict[str, int] = {}  # tip_rack.name -> slot index
     self._plr_name_to_load_name: Dict[str, str] = {}
 
@@ -174,6 +174,7 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     return None
 
   async def _assign_tip_rack(self, tip_rack: TipRack, tip: Tip):
+    ot_slot_size_y = 86
     lw = {
       "schemaVersion": 2,
       "version": 1,
@@ -199,7 +200,12 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
         [self.get_ot_name(tip_spot.name) for tip_spot in tip_rack.get_all_items()],
         (tip_rack.num_items_x, tip_rack.num_items_y),
       ),
-      "cornerOffsetFromSlot": {"x": 0, "y": 0, "z": 0},
+      "cornerOffsetFromSlot": {
+        "x": 0,
+        "y": ot_slot_size_y
+        - tip_rack.get_absolute_size_y(),  # hinges push it to the back (PLR is LFB, OT is LBB)
+        "z": 0,
+      },
       "dimensions": {
         "xDimension": tip_rack.get_absolute_size_x(),
         "yDimension": tip_rack.get_absolute_size_y(),
@@ -276,8 +282,6 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if tip_rack.name not in self._tip_racks:
       await self._assign_tip_rack(tip_rack, op.tip)
 
-    # ad-hoc offset adjustment that makes it smoother.
-    # TODO: is this needed?
     offset_z += op.tip.total_tip_length
 
     ot_api.lh.pick_up_tip(
@@ -574,6 +578,61 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""
     return cast(List[dict], ot_api.modules.list_connected_modules())
+
+  def _pipette_id_for_channel(self, channel: int) -> str:
+    pipettes = []
+    if self.left_pipette is not None:
+      pipettes.append(self.left_pipette["pipetteId"])
+    if self.right_pipette is not None:
+      pipettes.append(self.right_pipette["pipetteId"])
+    if channel < 0 or channel >= len(pipettes):
+      raise NoChannelError(f"Channel {channel} not available on this OT-2 setup.")
+    return pipettes[channel]
+
+  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+    """Return the pipette id and current coordinate for a given channel."""
+
+    pipette_id = self._pipette_id_for_channel(channel)
+    try:
+      res = ot_api.lh.save_position(pipette_id=pipette_id)
+      pos = res["data"]["result"]["position"]
+      current = Coordinate(pos["x"], pos["y"], pos["z"])
+    except Exception as exc:  # noqa: BLE001
+      raise RuntimeError("Failed to query current pipette position") from exc
+
+    return pipette_id, current
+
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    """Validate channel exists (no-op otherwise for OT-2)."""
+
+    _ = self._pipette_id_for_channel(channel)
+
+  async def move_channel_x(self, channel: int, x: float):
+    """Move a channel to an absolute x coordinate using savePosition to seed pose."""
+
+    pipette_id, current = self._current_channel_position(channel)
+    target = Coordinate(x=x, y=current.y, z=current.z)
+    await self.move_pipette_head(
+      location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
+    )
+
+  async def move_channel_y(self, channel: int, y: float):
+    """Move a channel to an absolute y coordinate using savePosition to seed pose."""
+
+    pipette_id, current = self._current_channel_position(channel)
+    target = Coordinate(x=current.x, y=y, z=current.z)
+    await self.move_pipette_head(
+      location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
+    )
+
+  async def move_channel_z(self, channel: int, z: float):
+    """Move a channel to an absolute z coordinate using savePosition to seed pose."""
+
+    pipette_id, current = self._current_channel_position(channel)
+    target = Coordinate(x=current.x, y=current.y, z=z)
+    await self.move_pipette_head(
+      location=target, minimum_z_height=self.traversal_height, pipette_id=pipette_id
+    )
 
   async def move_pipette_head(
     self,

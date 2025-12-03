@@ -485,7 +485,7 @@ class VantageBackend(HamiltonLiquidHandler):
     x_positions, y_positions, tip_pattern = self._ops_to_fw_positions(ops, use_channels)
 
     tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
-    ttti = await self.get_ttti(tips)
+    ttti = [await self.get_or_assign_tip_type_index(tip) for tip in tips]
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
@@ -604,6 +604,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
+    disable_volume_correction: Optional[List[bool]] = None,
   ):
     """Aspirate from (a) resource(s).
 
@@ -620,6 +621,7 @@ class VantageBackend(HamiltonLiquidHandler):
         documentation, "empty" is used for a different mode (dm4).
       hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used.
+      disable_volume_correction: Whether to disable volume correction for each operation.
     """
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
@@ -638,17 +640,13 @@ class VantageBackend(HamiltonLiquidHandler):
     if hlcs is None:
       hlcs = []
       for j, bo, op in zip(jet, blow_out, ops):
-        liquid = Liquid.WATER  # default to WATER
-        # [-1][0]: get last liquid in well, [0] is indexing into the tuple
-        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
-          liquid = op.liquids[-1][0]
         hlcs.append(
           get_vantage_liquid_class(
             tip_volume=op.tip.maximal_volume,
             is_core=False,
             is_tip=True,
             has_filter=op.tip.has_filter,
-            liquid=liquid,
+            liquid=Liquid.WATER,  # default to WATER
             jet=j,
             blow_out=bo,
           )
@@ -656,10 +654,11 @@ class VantageBackend(HamiltonLiquidHandler):
 
     self._assert_valid_resources([op.resource for op in ops])
 
-    # correct volumes using the liquid class
+    # correct volumes using the liquid class if not disabled
+    disable_volume_correction = disable_volume_correction or [False] * len(ops)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hlcs)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -790,6 +789,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     limit_curve_index: Optional[List[int]] = None,
     recording_mode: int = 0,
+    disable_volume_correction: Optional[List[bool]] = None,
   ):
     """Dispense to (a) resource(s).
 
@@ -812,6 +812,7 @@ class VantageBackend(HamiltonLiquidHandler):
       empty: Whether to use "empty" dispense mode for each dispense. Defaults to `False` for all.
         Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
         documentation. Dispense mode 4.
+      disable_volume_correction: Whether to disable volume correction for each operation.
     """
 
     if mix_volume is not None or mix_cycles is not None or mix_speed is not None:
@@ -832,17 +833,13 @@ class VantageBackend(HamiltonLiquidHandler):
     if hlcs is None:
       hlcs = []
       for j, bo, op in zip(jet, blow_out, ops):
-        liquid = Liquid.WATER  # default to WATER
-        # [-1][0]: get last liquid in tip, [0] is indexing into the tuple
-        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
-          liquid = op.liquids[-1][0]
         hlcs.append(
           get_vantage_liquid_class(
             tip_volume=op.tip.maximal_volume,
             is_core=False,
             is_tip=True,
             has_filter=op.tip.has_filter,
-            liquid=liquid,
+            liquid=Liquid.WATER,  # default to WATER
             jet=j,
             blow_out=bo,
           )
@@ -851,9 +848,10 @@ class VantageBackend(HamiltonLiquidHandler):
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
+    disable_volume_correction = disable_volume_correction or [False] * len(ops)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hlcs)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -1045,6 +1043,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_channel_pattern: Optional[List[bool]] = None,
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
+    disable_volume_correction: bool = False,
   ):
     """Aspirate from a plate.
 
@@ -1055,6 +1054,7 @@ class VantageBackend(HamiltonLiquidHandler):
         documentation.
       hlc: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used in the first well.
+      disable_volume_correction: Whether to disable volume correction.
     """
     # assert self.core96_head_installed, "96 head must be installed"
 
@@ -1101,24 +1101,21 @@ class VantageBackend(HamiltonLiquidHandler):
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
     tip = next(tip for tip in aspiration.tips if tip is not None)
-    liquid_to_be_aspirated = Liquid.WATER  # default to water
-    if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][-1][0] is not None:
-      # first part of tuple in last liquid of first well
-      liquid_to_be_aspirated = aspiration.liquids[0][-1][0]
     if hlc is None:
       hlc = get_vantage_liquid_class(
         tip_volume=tip.maximal_volume,
         is_core=True,
         is_tip=True,
         has_filter=tip.has_filter,
-        liquid=liquid_to_be_aspirated,
+        liquid=Liquid.WATER,  # default to WATER
         jet=jet,
         blow_out=blow_out,
       )
 
-    volume = (
-      hlc.compute_corrected_volume(aspiration.volume) if hlc is not None else aspiration.volume
-    )
+    if disable_volume_correction or hlc is None:
+      volume = aspiration.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(aspiration.volume)
 
     transport_air_volume = transport_air_volume or (
       hlc.aspiration_air_transport_volume if hlc is not None else 0
@@ -1207,6 +1204,7 @@ class VantageBackend(HamiltonLiquidHandler):
     tadm_channel_pattern: Optional[List[bool]] = None,
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
+    disable_volume_correction: bool = False,
   ):
     """Dispense to a plate using the 96 head.
 
@@ -1221,6 +1219,7 @@ class VantageBackend(HamiltonLiquidHandler):
 
       type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
         determined based on the jet, blow_out, and empty parameters.
+      disable_volume_correction: Whether to disable volume correction.
     """
 
     if mix_volume != 0 or mix_cycles != 0 or mix_speed is not None:
@@ -1266,21 +1265,21 @@ class VantageBackend(HamiltonLiquidHandler):
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
     tip = next(tip for tip in dispense.tips if tip is not None)
-    liquid_to_be_dispensed = Liquid.WATER  # default to WATER
-    if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
-      # first part of tuple in last liquid of first well
-      liquid_to_be_dispensed = dispense.liquids[0][-1][0]
     if hlc is None:
       hlc = get_vantage_liquid_class(
         tip_volume=tip.maximal_volume,
         is_core=True,
         is_tip=True,
         has_filter=tip.has_filter,
-        liquid=liquid_to_be_dispensed,
+        liquid=Liquid.WATER,  # default to WATER
         jet=jet,
         blow_out=blow_out,  # see method docstring
       )
-    volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None else dispense.volume
+
+    if disable_volume_correction or hlc is None:
+      volume = dispense.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(dispense.volume)
 
     transport_air_volume = transport_air_volume or (
       hlc.dispense_air_transport_volume if hlc is not None else 0
