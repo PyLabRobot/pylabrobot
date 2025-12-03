@@ -12,36 +12,52 @@ class PreciseFlex400Backend(PreciseFlexBackend):
     self._has_rail = has_rail
 
   def convert_to_joint_space(self, position: List[float]) -> PreciseFlexJointCoords:
-    """Convert a list of joint angles to a PreciseFlexJointCoords object.
+    """Convert parsed joint values to PreciseFlexJointCoords.
 
     Args:
-      position: List of 6 joint angles in order: [rail, base, shoulder, elbow, wrist, gripper]
-                This matches the output format of the wherej command.
+      position: List of 6 floats from _parse_angles_response() (always padded to 6).
+                For has_rail=True: [rail, base, shoulder, elbow, wrist, gripper]
+                For has_rail=False: [base, shoulder, elbow, wrist, gripper, 0.0(padding)]
 
     Returns:
-      PreciseFlexJointCoords with all joint values mapped correctly.
+      PreciseFlexJointCoords with joint values mapped based on robot configuration.
     """
-    if len(position) != 6:
-      raise ValueError("Position must be a list of 6 joint angles.")
-    return PreciseFlexJointCoords(
-      rail=position[0],
-      base=position[1],
-      shoulder=position[2],
-      elbow=position[3],
-      wrist=position[4],
-      gripper=position[5],
-    )
+    if len(position) < 5:
+      raise ValueError("Position must have at least 5 joint angles.")
 
-  # def convert_to_joints_array(self, position: PreciseFlexJointCoords) -> List[float]:
-  #   """Convert a PreciseFlexJointCoords object to a list of joint angles."""
-  #   return [
-  #     0,
-  #     position.base,
-  #     position.shoulder,
-  #     position.elbow,
-  #     position.wrist,
-  #     0,
-  #   ]  # PF400 has 4 joints, last two are fixed
+    if self._has_rail:
+      if len(position) < 6:
+        raise ValueError("Position must have 6 joint angles for robot with rail.")
+      return PreciseFlexJointCoords(
+        rail=position[0],
+        base=position[1],
+        shoulder=position[2],
+        elbow=position[3],
+        wrist=position[4],
+        gripper=position[5],
+      )
+    else:
+      # No rail: positions 0-4 are [base, shoulder, elbow, wrist, gripper]
+      # position[5] is 0.0 padding from _parse_angles_response() - ignore it
+      return PreciseFlexJointCoords(
+        rail=0.0,
+        base=position[0],
+        shoulder=position[1],
+        elbow=position[2],
+        wrist=position[3],
+        gripper=position[4],
+      )
+
+  def convert_to_joints_array(self, position: PreciseFlexJointCoords) -> List[float]:
+    """Convert a PreciseFlexJointCoords object to a list of joint angles."""
+    return [
+      position.rail,
+      position.base,
+      position.shoulder,
+      position.elbow,
+      position.wrist,
+      position.gripper,
+    ]
 
   async def move_j(self, profile_index: int, joint_coords: PreciseFlexJointCoords) -> None:
     """Move the robot using joint coordinates, handling rail configuration."""
