@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections import OrderedDict
 from typing import (
   TYPE_CHECKING,
@@ -175,7 +176,7 @@ class Plate(ItemizedResource["Well"]):
     """Fill all wells in the plate with a given volume.
 
     Args:
-      volume: The volume to fill each well with, in uL.
+      volumes: The volume to fill each well with, in uL.
     """
 
     if not len(volumes) == self.num_items:
@@ -195,6 +196,11 @@ class Plate(ItemizedResource["Well"]):
     ],
   ):
     """Deprecated: Use `set_well_volumes` instead."""
+    warnings.warn(
+      "set_well_liquids is deprecated and will be removed in a future version. "
+      "Use set_well_volumes instead.",
+      FutureWarning,
+    )
     if isinstance(liquids, tuple):
       liquids = [liquids] * self.num_items
     elif isinstance(liquids, list) and all(isinstance(column, list) for column in liquids):

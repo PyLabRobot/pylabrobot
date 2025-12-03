@@ -76,7 +76,7 @@ class Tube(Container):
     warnings.warn(
       "`set_liquids` is deprecated and will be removed in a future version. Use `set_volume` instead.",
       DeprecationWarning,
-      stacklevel=2
+      stacklevel=2,
     )
 
     self.tracker.set_liquids(liquids)

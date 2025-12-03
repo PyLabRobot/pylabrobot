@@ -1849,11 +1849,8 @@ class LiquidHandler(Resource, Machine):
       if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
-      for tip in tips:
-        if tip is None:
-          continue
-        if not container.tracker.is_disabled and does_volume_tracking():
-          container.tracker.add_liquid(volume=volume)
+      if not container.tracker.is_disabled and does_volume_tracking():
+        container.tracker.add_liquid(volume=len([t for t in tips if t is not None]) * volume)
 
       dispense = MultiHeadDispenseContainer(
         container=container,
