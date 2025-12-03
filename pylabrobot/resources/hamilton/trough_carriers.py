@@ -39,3 +39,31 @@ def Trough_CAR_4R200_A00(name: str) -> TroughCarrier:
     ),
     model="Trough_CAR_4R200_A00",
   )
+
+
+def Trough_CAR_5R60_A00(name: str) -> TroughCarrier:
+  """Hamilton cat. no.: 53646-01
+  Hamilton name: 'RGT_CAR5X60'.
+  Trough carrier for 5x 60ml troughs. 1 tracks(T) wide.
+  Carries hamilton_1_trough_60ml_Vb
+  """
+  return TroughCarrier(
+    name=name,
+    size_x=22.5,  # standard
+    size_y=497.0,  # standard
+    size_z=104,  # measured
+    sites=create_homogeneous_resources(
+      klass=ResourceHolder,
+      locations=[
+        Coordinate(1.5, 7.0, 62.0 + 1.5),
+        Coordinate(1.5, 103.0, 62.0 + 1.5),
+        Coordinate(1.5, 199.0, 62.0 + 1.5),
+        Coordinate(1.5, 302.0, 62.0 + 1.5),
+      ],  # measured 62 to bottom of holder, but there is a 1.5mm pedestal
+      resource_size_x=19.0,
+      resource_size_y=90.0,
+      # pedestal_size_z=1.5, # measured
+      name_prefix=name,
+    ),
+    model=Trough_CAR_5R60_A00.__name__,
+  )

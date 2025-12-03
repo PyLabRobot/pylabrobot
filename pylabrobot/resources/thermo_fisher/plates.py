@@ -364,7 +364,7 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
     size_z=9.70,
     lid=None,
     model=thermo_AB_384_wellplate_40uL_Vb_MicroAmp.__name__,
-    plate_type="non-skirted",
+    plate_type="skirted",
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=24,

@@ -209,7 +209,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "offset": serialize(drop.offset),
         "pickup_distance_from_top": drop.pickup_distance_from_top,
         "pickup_direction": serialize(drop.pickup_direction),
-        "drop_direction": serialize(drop.drop_direction),
+        "drop_direction": serialize(drop.direction),
         "rotation": drop.rotation,
       },
       **backend_kwargs,

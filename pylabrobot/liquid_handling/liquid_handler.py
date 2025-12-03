@@ -630,6 +630,7 @@ class LiquidHandler(Resource, Machine):
     self,
     use_channels: Optional[list[int]] = None,
     allow_nonzero_volume: bool = False,
+    offsets: Optional[List[Coordinate]] = None,
     **backend_kwargs,
   ):
     """Return all tips that are currently picked up to their original place.
@@ -676,6 +677,7 @@ class LiquidHandler(Resource, Machine):
       tip_spots=tip_spots,
       use_channels=channels,
       allow_nonzero_volume=allow_nonzero_volume,
+      offsets=offsets,
       **backend_kwargs,
     )
 
@@ -1605,6 +1607,17 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
+  def _check_96_head_fits_in_container(self, container: Container) -> bool:
+    """Check if the 96 head can fit in the given container."""
+
+    tip_width = 2  # approximation
+    distance_between_tips = 9
+
+    return (
+      container.get_absolute_size_x() >= tip_width + distance_between_tips * 11
+      and container.get_absolute_size_y() >= tip_width + distance_between_tips * 7
+    )
+
   async def aspirate96(
     self,
     resource: Union[Plate, Container, List[Well]],
@@ -1680,9 +1693,7 @@ class LiquidHandler(Resource, Machine):
 
     if len(containers) == 1:  # single container
       container = containers[0]
-      if (
-        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
-      ):  # TODO: analyze as attr
+      if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
       for tip in tips:
@@ -1821,19 +1832,26 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(resource, Container):
       containers = [resource]
 
+    # if we have enough liquid in the tip, remove it from the tip tracker for accounting.
+    # if we do not (for example because the plunger was up on tip pickup), and we
+    # do not have volume tracking enabled, we just ignore it.
+    for tip in tips:
+      if tip is None:
+        continue
+
+      if does_volume_tracking():
+        tip.tracker.remove_liquid(volume=volume)
+      elif tip.tracker.get_used_volume() < volume:
+        tip.tracker.remove_liquid(volume=min(tip.tracker.get_used_volume(), volume))
+
     if len(containers) == 1:  # single container
       container = containers[0]
-      if (
-        container.get_absolute_size_x() < 108.0 or container.get_absolute_size_y() < 70.0
-      ):  # TODO: analyze as attr
+      if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
       for tip in tips:
         if tip is None:
           continue
-
-        tip.tracker.remove_liquid(volume=volume)
-
         if not container.tracker.is_disabled and does_volume_tracking():
           container.tracker.add_liquid(volume=volume)
 
@@ -1860,9 +1878,6 @@ class LiquidHandler(Resource, Machine):
       for well, tip in zip(containers, tips):
         if tip is None:
           continue
-
-        if not tip.tracker.is_disabled and does_volume_tracking():
-          tip.tracker.remove_liquid(volume=volume)
 
         if not well.tracker.is_disabled and does_volume_tracking():
           well.tracker.add_liquid(volume=volume)
@@ -2130,7 +2145,7 @@ class LiquidHandler(Resource, Machine):
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
       pickup_direction=self._resource_pickup.direction,
-      drop_direction=direction,
+      direction=direction,
       rotation=rotation_applied_by_move,
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)

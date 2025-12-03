@@ -70,6 +70,7 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
 )
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -82,11 +83,7 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import (
-  STAR_SIZE_X,
-  STARLET_SIZE_X,
-  HamiltonCoreGrippers,
-)
+from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
@@ -1785,11 +1782,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth_2nd_section: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     liquid_surfaces_no_lld: Optional[List[float]] = None,
     # PLR:
     probe_liquid_height: bool = False,
     auto_surface_following_distance: bool = False,
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
     # remove >2026-01
     mix_volume: Optional[List[float]] = None,
     mix_cycles: Optional[List[int]] = None,
@@ -1845,6 +1843,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       hamilton_liquid_classes: Override the default liquid classes. See pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
       liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0 and 360. Defaults to well bottom + liquid height. Should use absolute z.
+      disable_volume_correction: Whether to disable liquid class volume correction for each operation.
 
       probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
       auto_surface_following_distance: automatically compute the surface following distance based on the container height<->volume functions. Requires liquid height to be specified or `probe_liquid_height=True`.
@@ -1892,12 +1891,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
         )
 
-    self._assert_valid_resources([op.resource for op in ops])
-
     # correct volumes using the liquid class
+    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -2154,13 +2152,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
     min_z_endpos: Optional[float] = None,
     side_touch_off_distance: float = 0,
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
     empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
     # PLR specific
     probe_liquid_height: bool = False,
     auto_surface_following_distance: bool = False,
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
     # remove  in the future
     immersion_depth_direction: Optional[List[int]] = None,
     mix_volume: Optional[List[float]] = None,
@@ -2206,6 +2205,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       hamilton_liquid_classes: Override the default liquid classes. See
         pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
+      disable_volume_correction: Whether to disable liquid class volume correction for each operation.
 
       jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
         determining the dispense mode. True for dispense mode 0 or 1.
@@ -2279,9 +2279,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
     # correct volumes using the liquid class
+    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -2621,6 +2622,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_position_from_liquid_surface: float = 0,
     mix_surface_following_distance: float = 0,
     limit_curve_index: int = 0,
+    disable_volume_correction: bool = False,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
     liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
@@ -2668,6 +2670,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_position_from_liquid_surface: The position of the mix from the liquid surface.
       mix_surface_following_distance: The distance to follow the liquid surface during mix.
       limit_curve_index: The index of the limit curve to use.
+      disable_volume_correction: Whether to disable liquid class volume correction.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -2798,10 +2801,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       blow_out=blow_out,  # see comment in method docstring
     )
 
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(aspiration.volume)
-    else:
+    if disable_volume_correction or hlc is None:
       volume = aspiration.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(aspiration.volume)
 
     # Get better default values from the HLC if available
     transport_air_volume = transport_air_volume or (
@@ -2879,6 +2882,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
+    disable_volume_correction: bool = False,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
     liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,  # surface_following_distance!
@@ -2923,6 +2927,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       limit_curve_index: Limit curve index.
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
+      disable_volume_correction: Whether to disable liquid class volume correction.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -3073,10 +3078,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       blow_out=blow_out,  # see comment in method docstring
     )
 
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(dispense.volume)
-    else:
+    if disable_volume_correction or hlc is None:
       volume = dispense.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(dispense.volume)
 
     transport_air_volume = transport_air_volume or (
       hlc.dispense_air_transport_volume if hlc is not None else 0
@@ -3401,6 +3406,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if use_unsafe_hotel:
         raise ValueError("Cannot use iswap hotel mode with core grippers")
 
+      if pickup.direction != GripDirection.FRONT:
+        raise NotImplementedError("Core grippers only support FRONT (default)")
+
       if channel_1 is not None or channel_2 is not None:
         warnings.warn(
           "The channel_1 and channel_2 parameters are deprecated and will be removed in future versions. "
@@ -3531,7 +3539,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           hotel_center_z_direction=0 if z >= 0 else 1,
           clearance_height=round(hotel_clearance_height * 10),
           hotel_depth=round(hotel_depth * 10),
-          grip_direction=drop.drop_direction,
+          grip_direction=drop.direction,
           open_gripper_position=round(open_gripper_position * 10),
           traverse_height_at_beginning=round(traversal_height_start * 10),
           z_position_at_end=round(z_position_at_the_command_end * 10),
@@ -3551,7 +3559,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             GripDirection.RIGHT: 2,
             GripDirection.BACK: 3,
             GripDirection.LEFT: 4,
-          }[drop.drop_direction],
+          }[drop.direction],
           minimum_traverse_height_at_beginning_of_a_command=round(traversal_height_start * 10),
           z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
           open_gripper_position=round(open_gripper_position * 10),
@@ -3561,6 +3569,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     elif use_arm == "core":
       if use_unsafe_hotel:
         raise ValueError("Cannot use iswap hotel mode with core grippers")
+
+      if drop.direction != GripDirection.FRONT:
+        raise NotImplementedError("Core grippers only support FRONT direction (default)")
 
       await self.core_release_picked_up_resource(
         location=Coordinate(x, y, z),
@@ -5291,7 +5302,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + core_grippers.back_channel_y_center
         + self.core_adjustment.y
       )
-      * 10
     )
     front_channel_y_center = int(
       (
@@ -5299,19 +5309,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + core_grippers.front_channel_y_center
         + self.core_adjustment.y
       )
-      * 10
     )
     assert (
       back_channel_y_center > front_channel_y_center
     ), "back_channel_y_center must be greater than front_channel_y_center"
-    assert front_channel_y_center > 60, "front_channel_y_center must be less than 6mm (60 [0.1mm])"
+    assert front_channel_y_center > 6, "front_channel_y_center must be less than 6mm"
     return back_channel_y_center, front_channel_y_center
 
-  def _get_core_x(self) -> int:
+  def _get_core_x(self) -> float:
     """Get the X coordinate for the CoRe grippers based on deck size and adjustment."""
     core_grippers = self.deck.get_resource("core_grippers")
     assert isinstance(core_grippers, HamiltonCoreGrippers), "core_grippers must be CoReGrippers"
-    return round((core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x) * 10)
+    return core_grippers.get_location_wrt(self.deck).x + self.core_adjustment.x
 
   async def get_core(self, p1: int, p2: int):
     warnings.warn("Deprecated. Use pick_up_core_gripper_tools instead.", DeprecationWarning)
@@ -5319,30 +5328,47 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.pick_up_core_gripper_tools(front_channel=p2 - 1)  # p1 here is 1-indexed
 
   @need_iswap_parked
-  async def pick_up_core_gripper_tools(self, front_channel: int):
+  async def pick_up_core_gripper_tools(
+    self,
+    front_channel: int,
+    front_offset: Optional[Coordinate] = None,
+    back_offset: Optional[Coordinate] = None,
+  ):
     """Get CoRe gripper tool from wasteblock mount."""
 
     if not 0 < front_channel < self.num_channels:
       raise ValueError(f"front_channel must be between 1 and {self.num_channels - 1} (inclusive)")
     back_channel = front_channel - 1
 
-    xs = self._get_core_x()
+    # Only enforce x equality if both offsets are explicitly provided.
+    if front_offset is not None and back_offset is not None and front_offset.x != back_offset.x:
+      raise ValueError("front_offset.x and back_offset.x must be the same")
+
+    xs = self._get_core_x() + (front_offset.x if front_offset is not None else 0)
 
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    begin_z_coord = round(2350 + self.core_adjustment.z * 10)
-    end_z_coord = round(2250 + self.core_adjustment.z * 10)
+    if back_offset is not None:
+      back_channel_y_center += back_offset.y
+    if front_offset is not None:
+      front_channel_y_center += front_offset.y
+
+    if front_offset is not None and back_offset is not None and front_offset.z != back_offset.z:
+      raise ValueError("front_offset.z and back_offset.z must be the same")
+    z_offset = 0 if front_offset is None else front_offset.z
+    begin_z_coord = round(235.0 + self.core_adjustment.z + z_offset)
+    end_z_coord = round(225.0 + self.core_adjustment.z + z_offset)
 
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=f"{xs:05}",
+      xs=f"{round(xs * 10):05}",
       xd="0",
-      ya=f"{back_channel_y_center:04}",
-      yb=f"{front_channel_y_center:04}",
+      ya=f"{round(back_channel_y_center * 10):04}",
+      yb=f"{round(front_channel_y_center * 10):04}",
       pa=f"{back_channel+1:02}",  # star is 1-indexed
       pb=f"{front_channel+1:02}",  # star is 1-indexed
-      tp=f"{begin_z_coord:04}",
-      tz=f"{end_z_coord:04}",
+      tp=f"{round(begin_z_coord * 10):04}",
+      tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
       tt="14",
     )
@@ -5354,33 +5380,40 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.return_core_gripper_tools()
 
   @need_iswap_parked
-  async def return_core_gripper_tools(self):
+  async def return_core_gripper_tools(
+    self,
+    front_offset: Optional[Coordinate] = None,
+    back_offset: Optional[Coordinate] = None,
+  ):
     """Put CoRe gripper tool at wasteblock mount."""
 
-    assert self.deck is not None, "must have deck defined to access CoRe grippers"
+    # Only enforce x equality if both offsets are explicitly provided.
+    if front_offset is not None and back_offset is not None and back_offset.x != front_offset.x:
+      raise ValueError("back_offset.x and front_offset.x must be the same")
 
-    deck_size = self.deck.get_absolute_size_x()
-    if deck_size == STARLET_SIZE_X:
-      xs = 7975
-    elif deck_size == STAR_SIZE_X:
-      xs = 13375
-    else:
-      raise ValueError(f"Deck size {deck_size} not supported")
+    xs = self._get_core_x() + (front_offset.x if front_offset is not None else 0)
 
-    channel_x_coord = round(xs + self.core_adjustment.x * 10)
     back_channel_y_center, front_channel_y_center = self._get_core_front_back()
-    begin_z_coord = round(2150 + self.core_adjustment.z * 10)
-    end_z_coord = round(2050 + self.core_adjustment.z * 10)
+    if back_offset is not None:
+      back_channel_y_center += back_offset.y
+    if front_offset is not None:
+      front_channel_y_center += front_offset.y
+
+    if front_offset is not None and back_offset is not None and back_offset.z != front_offset.z:
+      raise ValueError("back_offset.z and front_offset.z must be the same")
+    z_offset = 0 if front_offset is None else front_offset.z
+    begin_z_coord = round(215.0 + self.core_adjustment.z + z_offset)
+    end_z_coord = round(205.0 + self.core_adjustment.z + z_offset)
 
     command_output = await self.send_command(
       module="C0",
       command="ZS",
-      xs=f"{channel_x_coord:05}",
+      xs=f"{round(xs * 10):05}",
       xd="0",
-      ya=f"{back_channel_y_center:04}",
-      yb=f"{front_channel_y_center:04}",
-      tp=f"{begin_z_coord:04}",
-      tz=f"{end_z_coord:04}",
+      ya=f"{round(back_channel_y_center * 10):04}",
+      yb=f"{round(front_channel_y_center * 10):04}",
+      tp=f"{round(begin_z_coord * 10):04}",
+      tz=f"{round(end_z_coord * 10):04}",
       th=round(self._iswap_traversal_height * 10),
       te=round(self._iswap_traversal_height * 10),
     )
@@ -5518,7 +5551,145 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return command_output
 
-  # TODO:(command:ZB)
+  async def core_read_barcode_of_picked_up_resource(
+    self,
+    rails: int,
+    reading_direction: Literal["vertical", "horizontal", "free"] = "horizontal",
+    minimal_z_position: float = 220.0,
+    traverse_height_at_beginning_of_a_command: float = 275.0,
+    z_speed: float = 128.7,
+    allow_manual_input: bool = False,
+    labware_description: Optional[str] = None,
+  ):
+    """Read a 1D barcode using the CoRe gripper scanner.
+
+    Args:
+      rails: Rail/slot number where the barcode to be read is located (1-54).
+      reading_direction: Direction of barcode reading: 'vertical', 'horizontal', or 'free'. Default is 'horizontal'.
+      minimal_z_position: Minimal Z position [mm] during barcode reading (220.0-360.0). Default is 220.0.
+      traverse_height_at_beginning_of_a_command: Traverse height at beginning of command [mm] (0.0-360.0). Default is 275.0.
+      z_speed: Z speed [mm/s] during barcode reading (0.0-128.7). Default is 128.7.
+      allow_manual_input: If True, allows the user to manually input a barcode if scanning fails. Default is False.
+      labware_description: Optional description of the labware being scanned, used in the manual input
+        prompt to provide context to the user.
+
+    Returns:
+      A Barcode if one is successfully read, either by the scanner or via manual user input.
+
+    Raises:
+      STARFirmwareError: if the firmware reports an error in the response.
+      ValueError: if the response format is unexpected or if no barcode is present and
+        ``allow_manual_input`` is False, or if manual input is enabled but the user does not
+        provide a barcode.
+    """
+
+    assert 1 <= rails <= 54, "rails must be between 1 and 54"
+    assert 0 <= minimal_z_position <= 3600, "minimal_z_position must be between 0 and 3600"
+    assert (
+      0 <= traverse_height_at_beginning_of_a_command <= 3600
+    ), "traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= z_speed <= 1287, "z_speed must be between 0 and 1287"
+
+    try:
+      reading_direction_int = {
+        "vertical": 0,
+        "horizontal": 1,
+        "free": 2,
+      }[reading_direction]
+    except KeyError as e:
+      raise ValueError(
+        "reading_direction must be one of 'vertical', 'horizontal', or 'free'"
+      ) from e
+
+    command_output = cast(
+      str,
+      await self.send_command(
+        module="C0",
+        command="ZB",
+        cp=f"{rails:02}",
+        zb=f"{round(minimal_z_position*10):04}",
+        th=f"{round(traverse_height_at_beginning_of_a_command*10):04}",
+        zy=f"{round(z_speed*10):04}",
+        bd=reading_direction_int,
+        ma="0250 2100 0860 0200",
+        mr=0,
+        mo="000 000 000 000 000 000 000",
+      ),
+    )
+
+    if command_output is None:
+      raise RuntimeError("No response received from CoRe barcode read command.")
+
+    resp = command_output.strip()
+    er_index = resp.find("er")
+    if er_index == -1:
+      # Unexpected format: no error section present.
+      raise ValueError(f"Unexpected CoRe barcode response (no error section): {resp}")
+
+    self.check_fw_string_error(resp)
+
+    # Parse barcode section: firmware returns `bb/LL<barcode>` where LL is length (00..99).
+    bb_index = resp.find("bb/", er_index + 7)
+    if bb_index == -1:
+      # Unexpected layout of barcode section.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
+
+    if len(resp) < bb_index + 5:
+      # Need at least 'bb/LL'.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
+
+    bb_len_str = resp[bb_index + 3 : bb_index + 5]
+    try:
+      bb_len = int(bb_len_str)
+    except ValueError as e:
+      raise ValueError(f"Invalid CoRe barcode length field 'bb': {bb_len_str}") from e
+
+    barcode_str = resp[bb_index + 5 :].strip()
+
+    # No barcode present.
+    if bb_len == 0:
+      if allow_manual_input:
+        # Provide context and allow the user to recover by entering a barcode manually.
+        # Use ANSI color codes to make the prompt stand out in typical terminals.
+        YELLOW = "\033[93m"
+        BOLD = "\033[1m"
+        RESET = "\033[0m"
+
+        lines = [
+          f"{YELLOW}{BOLD}=== CoRe barcode scan failed ==={RESET}",
+          f"{YELLOW}No barcode read by CoRe scanner.{RESET}",
+        ]
+        if labware_description is not None:
+          lines.append(f"{YELLOW}Labware: {labware_description}{RESET}")
+        lines.append(f"{YELLOW}Enter barcode manually (leave blank to abort): {RESET}")
+        prompt = "\n".join(lines)
+
+        # Blocking input is acceptable here because this helper is only intended for CLI usage.
+        user_barcode = input(prompt).strip()
+        if not user_barcode:
+          raise ValueError("No barcode read by CoRe scanner and no manual barcode provided.")
+
+        return Barcode(
+          data=user_barcode,
+          symbology="code128",
+          position_on_resource="front",
+        )
+
+      raise ValueError("No barcode read by CoRe scanner.")
+
+    if not barcode_str:
+      # Length > 0 but no data present.
+      raise ValueError(f"Unexpected CoRe barcode response format: {resp}")
+
+    # If the firmware returns more characters than declared, truncate to the declared length.
+    if len(barcode_str) > bb_len:
+      barcode_str = barcode_str[:bb_len]
+
+    return Barcode(
+      data=barcode_str,
+      symbology="code128",
+      position_on_resource="front",
+    )
 
   # -------------- 3.5.6 Adjustment & movement commands --------------
 
@@ -6787,24 +6958,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
-  async def unload_carrier(self, carrier: Carrier):
+  async def unload_carrier(
+    self,
+    carrier: Carrier,
+    park_autoload_after: bool = True,
+  ):
     """Use autoload to unload carrier."""
     # Identify carrier end rail
     track_width = 22.5
     carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
+
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
-    # Unload and read out barcodes
+    # Unload
     resp = await self.send_command(
       module="C0",
       command="CR",
       cp=carrier_end_rail_str,
     )
-    # Park autoload
-    await self.park_autoload()
+
+    if park_autoload_after:
+      await self.park_autoload()
+
     return resp
 
   async def load_carrier(
@@ -7245,45 +7423,48 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def open_not_initialized_gripper(self):
     return await self.send_command(module="C0", command="GI")
 
-  async def iswap_open_gripper(self, open_position: Optional[int] = None):
+  async def iswap_open_gripper(self, open_position: Optional[float] = None):
     """Open gripper
 
     Args:
-      open_position: Open position [0.1mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
+      open_position: Open position [mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
                      Must be between 0 and 9999. Default 1320 for iSWAP 4.0 (landscape). Default to
                      910 for iSWAP 3 (portrait).
     """
 
     if open_position is None:
-      open_position = 910 if (await self.get_iswap_version()).startswith("3") else 1320
+      open_position = 91.0 if (await self.get_iswap_version()).startswith("3") else 132.0
 
-    assert 0 <= open_position <= 9999, "open_position must be between 0 and 9999"
+    assert 0 <= open_position <= 999.9, "open_position must be between 0 and 999.9"
 
-    return await self.send_command(module="C0", command="GF", go=f"{open_position:04}")
+    return await self.send_command(module="C0", command="GF", go=f"{round(open_position*10):04}")
 
   async def iswap_close_gripper(
     self,
     grip_strength: int = 5,
-    plate_width: int = 0,
-    plate_width_tolerance: int = 0,
+    plate_width: float = 0,
+    plate_width_tolerance: float = 0,
   ):
     """Close gripper
 
-    The gripper should be at the position gb+gt+20 before sending this command.
+    The gripper should be at the position plate_width+plate_width_tolerance+2.0mm before sending this command.
 
     Args:
       grip_strength: Grip strength. 0 = low . 9 = high. Default 5.
-      plate_width: Plate width [0.1mm]
-                   (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
-      plate_width_tolerance: Plate width tolerance [0.1mm]. Must be between 0 and 99. Default 20.
+      plate_width: Plate width [mm] (gb should be > min. Pos. + stop ramp + gt -> gb > 760 + 5 + g )
+      plate_width_tolerance: Plate width tolerance [mm]. Must be between 0 and 9.9. Default 2.0.
     """
+
+    assert 0 <= grip_strength <= 9, "grip_strength must be between 0 and 9"
+    assert 0 <= plate_width <= 999.9, "plate_width must be between 0 and 999.9"
+    assert 0 <= plate_width_tolerance <= 9.9, "plate_width_tolerance must be between 0 and 9.9"
 
     return await self.send_command(
       module="C0",
       command="GC",
       gw=grip_strength,
-      gb=plate_width,
-      gt=plate_width_tolerance,
+      gb=f"{round(plate_width*10):04}",
+      gt=f"{round(plate_width_tolerance*10):02}",
     )
 
   # -------------- 3.17.2 Stack handling commands CP --------------

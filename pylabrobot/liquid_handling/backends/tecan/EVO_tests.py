@@ -385,7 +385,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       offset=Coordinate.zero(),
       pickup_distance_from_top=13.2,
       pickup_direction=GripDirection.FRONT,
-      drop_direction=GripDirection.FRONT,
+      direction=GripDirection.FRONT,
       rotation=0,
     )
 
