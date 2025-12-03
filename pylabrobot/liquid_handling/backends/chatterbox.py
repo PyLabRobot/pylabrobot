@@ -133,7 +133,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
       f"{'flow rate':<{LiquidHandlerChatterboxBackend._flow_rate_length}} "
       f"{'blowout':<{LiquidHandlerChatterboxBackend._blowout_length}} "
       f"{'lld_z':<{LiquidHandlerChatterboxBackend._lld_z_length}}  "
-      # f"{'liquids':<20}" # TODO: add liquids
     )
     for key in backend_kwargs:
       header += f"{key:<{LiquidHandlerChatterboxBackend._kwargs_length}} "[-16:]
@@ -149,7 +148,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
         f"{str(o.flow_rate):<{LiquidHandlerChatterboxBackend._flow_rate_length}} "
         f"{str(o.blow_out_air_volume):<{LiquidHandlerChatterboxBackend._blowout_length}} "
         f"{str(o.liquid_height):<{LiquidHandlerChatterboxBackend._lld_z_length}} "
-        # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
         if isinstance(value, list) and all(isinstance(v, bool) for v in value):
@@ -174,7 +172,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
       f"{'flow rate':<{LiquidHandlerChatterboxBackend._flow_rate_length}} "
       f"{'blowout':<{LiquidHandlerChatterboxBackend._blowout_length}} "
       f"{'lld_z':<{LiquidHandlerChatterboxBackend._lld_z_length}}  "
-      # f"{'liquids':<20}" # TODO: add liquids
     )
     for key in backend_kwargs:
       header += f"{key:<{LiquidHandlerChatterboxBackend._kwargs_length}} "[-16:]
@@ -190,7 +187,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
         f"{str(o.flow_rate):<{LiquidHandlerChatterboxBackend._flow_rate_length}} "
         f"{str(o.blow_out_air_volume):<{LiquidHandlerChatterboxBackend._blowout_length}} "
         f"{str(o.liquid_height):<{LiquidHandlerChatterboxBackend._lld_z_length}} "
-        # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
         if isinstance(value, list) and all(isinstance(v, bool) for v in value):

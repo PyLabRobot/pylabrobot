@@ -95,7 +95,6 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "flow_rate": serialize(op.flow_rate),
         "liquid_height": serialize(op.liquid_height),
         "blow_out_air_volume": serialize(op.blow_out_air_volume),
-        "liquids": serialize(op.liquids),
         "mix": serialize(op.mix),
       }
       for op in ops
@@ -115,7 +114,6 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "flow_rate": serialize(op.flow_rate),
         "liquid_height": serialize(op.liquid_height),
         "blow_out_air_volume": serialize(op.blow_out_air_volume),
-        "liquids": serialize(op.liquids),
         "mix": serialize(op.mix),
       }
       for op in ops
@@ -153,7 +151,6 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "flow_rate": serialize(aspiration.flow_rate),
         "liquid_height": serialize(aspiration.liquid_height),
         "blow_out_air_volume": serialize(aspiration.blow_out_air_volume),
-        "liquids": serialize(aspiration.liquids),
         "tips": [serialize(tip) for tip in aspiration.tips],
       }
     }
@@ -171,7 +168,6 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "flow_rate": serialize(dispense.flow_rate),
         "liquid_height": serialize(dispense.liquid_height),
         "blow_out_air_volume": serialize(dispense.blow_out_air_volume),
-        "liquids": serialize(dispense.liquids),
         "tips": [serialize(tip) for tip in dispense.tips],
       }
     }
