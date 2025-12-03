@@ -1,7 +1,9 @@
 
 def MFX_opentrons_module(name: str) -> ResourceHolder:
   """3D printed part
-  Module to position a opentrons module
+  Module to hold a opentrons module on an MFX carrier. Bolts into carrier
+  see STL file for printing
+  https://cad.onshape.com/documents/71f70c40910fd15876f75d76/w/81912f5001c1f8dcb28dfd3b/e/da8c964d83d158897c596d21
   """
 
   # resource_size_x=127.76,
