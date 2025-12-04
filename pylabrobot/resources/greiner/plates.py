@@ -8,39 +8,13 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-# from pylabrobot.utils.interpolation import interpolate_1d
-
 # # # # # # # # # # Greiner_384_wellplate_28ul_Fb # # # # # # # # # #
-
-# _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements = {
-#   0.0: 0.0,  # height in mm : volume in µL
-#   2.2: 3.0,
-#   3.5: 5.0,
-#   4.0: 8.0,
-#   4.7: 11.0,
-#   5.2: 15.0,
-#   5.6: 20.0,
-#   6.0: 25.0,
-#   5.5: 28.0,
-# }
-# _Greiner_384_wellplate_28ul_Fb_volume_to_height_measurements = {
-#   v: k for k, v in _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements.items()
-# }
 
 
 def _compute_volume_from_height_Greiner_384_wellplate_28ul_Fb(h: float) -> float:
   """Estimate liquid volume (µL) from observed liquid height (mm)
   in the Greiner 384 wellplate 28ul Fb, using piecewise linear interpolation.
   """
-  # if h < 0:
-  #   raise ValueError("Height must be ≥ 0 mm.")
-  # if h > 5.5 * 1.05:
-  #   raise ValueError(f"Height {h} is too large for Greiner_384_wellplate_28ul_Fb.")
-
-  # vol_ul = interpolate_1d(
-  #   h, _Greiner_384_wellplate_28ul_Fb_height_to_volume_measurements, bounds_handling="error"
-  # )
-  # return round(max(0.0, vol_ul), 3)
   raise NotImplementedError(
     "Computation of volume from height is not currently defined. "
     "It is difficult (perhaps impossible?) to robustly perform liquid "
@@ -51,14 +25,7 @@ def _compute_volume_from_height_Greiner_384_wellplate_28ul_Fb(h: float) -> float
 def _compute_height_from_volume_Greiner_384_wellplate_28ul_Fb(volume_ul: float) -> float:
   """Estimate liquid height (mm) from known liquid volume (µL)
   in the Greiner 384 wellplate 28ul Fb, using piecewise linear interpolation.
-  #"""
-  # if volume_ul < 0:
-  #   raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-
-  # h_mm = interpolate_1d(
-  #   volume_ul, _Greiner_384_wellplate_28ul_Fb_volume_to_height_measurements, bounds_handling="error"
-  # )
-  # return round(max(0.0, h_mm), 3)
+  """
   raise NotImplementedError(
     "Computation of height from volume is not currently defined. "
     "It is difficult (perhaps impossible?) to robustly perform liquid "
@@ -68,15 +35,6 @@ def _compute_height_from_volume_Greiner_384_wellplate_28ul_Fb(volume_ul: float) 
 
 def Greiner_384_wellplate_28ul_Fb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
-  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
-  # return Lid(
-  #   name=name,
-  #   size_x=127.76,
-  #   size_y=85.48,
-  #   size_z=None,           # measure the total z height
-  #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="Greiner_384_wellplate_28ul_Fb_Lid",
-  # )
 
 
 #: Greiner_384_wellplate_28ul_Fb
@@ -108,7 +66,7 @@ def Greiner_384_wellplate_28ul_Fb(name: str, with_lid: bool = False) -> Plate:
       Well,
       num_items_x=24,
       num_items_y=16,
-      dx=10.48-0.2,
+      dx=10.48 - 0.2,  # physical testing shows -0.2mm deviation from OEM technical drawing
       dy=7.34,
       dz=8.9,
       item_dx=4.5,
