@@ -2508,7 +2508,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert self.core96_head_installed, "96 head must be installed"
 
-    alignment_tipspot = pickup.resource.get_item(alignment_tipspot)
+    alignment_tipspot_instance = pickup.resource.get_item(alignment_tipspot)
 
     prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
     if prototypical_tip is None:
@@ -2529,11 +2529,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tip_engage_height_from_tipspot -= 2
 
     # Compute pickup Z
-    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
+    tip_spot_z = alignment_tipspot_instance.get_location_wrt(self.deck).z + pickup.offset.z
     z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
 
     # Compute full position (used for x/y)
-    pickup_position = alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
+    pickup_position = (
+      alignment_tipspot_instance.get_location_wrt(self.deck)
+      + alignment_tipspot_instance.center()
+      + pickup.offset
+    )
     pickup_position.z = round(z_pickup_position, 2)
 
     self._check_96_position_legal(pickup_position, skip_z=True)
