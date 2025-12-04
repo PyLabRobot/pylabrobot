@@ -5,9 +5,9 @@ import urllib.request
 from typing import Dict, List, cast
 
 from pylabrobot.resources import Coordinate, Tip, TipRack, TipSpot
+from pylabrobot.resources.carrier import Coordinate, PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tube_rack import TubeRack
-from pylabrobot.resources.carrier import Coordinate, PlateHolder
 
 
 def _download_file(url: str, local_path: str) -> bytes:
@@ -150,7 +150,7 @@ def load_ot_tube_rack(
   )
 
 
-def load_ot_adapter(
+def load_ot_plate_holder(
   ot_name: str, plr_resource_name: str, z_offset: float, force_download: bool = False
 ) -> PlateHolder:
   """Convert an Opentrons adapter definition file to a PyLabRobot PlateHolder resource."""
