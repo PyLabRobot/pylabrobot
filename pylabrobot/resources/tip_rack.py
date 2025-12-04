@@ -7,10 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip, TipCreator
-from pylabrobot.resources.tip_tracker import (
-  TipTracker,
-  does_tip_tracking,
-)
+from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource

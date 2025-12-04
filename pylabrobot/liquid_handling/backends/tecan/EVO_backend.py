@@ -364,7 +364,7 @@ class EVOBackend(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquids[-1][0] or Liquid.WATER,
+        liquid_class=Liquid.WATER,
         tip_type=op.tip.tip_type,
       )
       if isinstance(op.tip, TecanTip)
@@ -453,7 +453,7 @@ class EVOBackend(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquids[-1][0] or Liquid.WATER,
+        liquid_class=Liquid.WATER,
         tip_type=op.tip.tip_type,
       )
       if isinstance(op.tip, TecanTip)

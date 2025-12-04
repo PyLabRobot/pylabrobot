@@ -60,11 +60,8 @@ from .utils import (
 )
 from .volume_tracker import (
   VolumeTracker,
-  does_cross_contamination_tracking,
   does_volume_tracking,
-  no_cross_contamination_tracking,
   no_volume_tracking,
-  set_cross_contamination_tracking,
   set_volume_tracking,
 )
 from .vwr import *
