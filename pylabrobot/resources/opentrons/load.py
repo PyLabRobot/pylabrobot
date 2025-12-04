@@ -27,7 +27,10 @@ def _download_ot_resource_file(ot_name: str, force_download: bool):
     The labware definition as a dictionary.
   """
   url = f"https://raw.githubusercontent.com/Opentrons/opentrons/5b51a98ce736b2bb5aff780bf3fdf91941a038fa/shared-data/labware/definitions/2/{ot_name}/1.json"
-  path = f"/tmp/{ot_name}.json"
+  if os.path.exists("/tmp"):
+    path = f"/tmp/{ot_name}.json"  # only works with linux/mac systems
+  else:
+    path = f"C:/Windows/Temp/{ot_name}.json"
   if force_download or not os.path.exists(path):
     data = _download_file(url=url, local_path=path)
   else:
@@ -169,5 +172,6 @@ def load_ot_plate_holder(
     size_y=data["dimensions"]["yDimension"],
     size_z=data["dimensions"]["zDimension"],
     child_location=Coordinate(location["x"], location["y"], z_offset),
+    pedestal_size_z = 0,
     model=data["metadata"]["displayName"],
   )
