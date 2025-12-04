@@ -5,7 +5,7 @@ import urllib.request
 from typing import Dict, List, cast
 
 from pylabrobot.resources import Coordinate, Tip, TipRack, TipSpot
-from pylabrobot.resources.carrier import Coordinate, PlateHolder
+from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tube_rack import TubeRack
 
