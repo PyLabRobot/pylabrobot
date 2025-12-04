@@ -172,6 +172,6 @@ def load_ot_plate_holder(
     size_y=data["dimensions"]["yDimension"],
     size_z=data["dimensions"]["zDimension"],
     child_location=Coordinate(location["x"], location["y"], z_offset),
-    pedestal_size_z = 0,
+    pedestal_size_z=0,
     model=data["metadata"]["displayName"],
   )
