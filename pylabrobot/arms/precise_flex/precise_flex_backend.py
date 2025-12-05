@@ -5,7 +5,6 @@ from typing import Dict, Iterable, List, Literal, Optional, Union
 from pylabrobot.arms.backend import (
   AccessPattern,
   HorizontalAccess,
-  JointCoords,
   SCARABackend,
   VerticalAccess,
 )
