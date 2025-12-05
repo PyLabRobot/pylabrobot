@@ -856,36 +856,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return await self.send_command("version")
 
   # region LOCATION COMMANDS
-  async def get_location(
-    self, location_index: int
-  ) -> tuple[int, int, float, float, float, float, float, float]:
-    """Get the location values for the specified station index.
-
-    Args:
-      location_index: The station index, from 1 to N_LOC.
-
-    Returns:
-      A tuple containing (type_code, station_index, val1, val2, val3, val4, val5, val6)
-         - For Cartesian type (type_code=0): (0, station_index, X, Y, Z, yaw, pitch, roll, unused = 0.0)
-         - For angles type (type_code=1): (1, station_index, angle1, angle2, angle3, angle4, angle5, angle6) - any unused angles are set to 0.0
-    """
-    data = await self.send_command(f"loc {location_index}")
-    parts = data.split(" ")
-
-    type_code = int(parts[0])
-    station_index = int(parts[1])
-
-    # location stored as cartesian
-    if type_code == 0:
-      x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[2:8])
-      return (type_code, station_index, x, y, z, yaw, pitch, roll)
-
-    # location stored as angles
-    if type_code == 1:
-      angle1, angle2, angle3, angle4, angle5, angle6 = self._parse_angles_response(parts[2:])
-      return (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6)
-
-    raise PreciseFlexError(-1, "Unexpected response format from loc command.")
 
   async def get_location_angles(
     self, location_index: int
@@ -1180,28 +1150,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
       location_index: The station index, from 1 to N_LOC.
     """
     await self.send_command(f"hereC {location_index}")
-
-  # async def where(self) -> tuple[float, float, float, float, float, float, tuple[float, ...]]:
-  #   """Return the current position of the selected robot in both Cartesian and joints format.
-
-  #   Returns:
-  #     A tuple containing (X, Y, Z, yaw, pitch, roll, (axis1, axis2, axis3, axis4, axis5, axis6))
-  #   """
-  #   data = await self.send_command("where")
-  #   parts = data.split()
-
-  #   if len(parts) < 6:
-  #     # In case of incomplete response, wait for EOM and try to read again
-  #     await self.wait_for_eom()
-  #     data = await self.send_command("where")
-  #     parts = data.split()
-  #     if len(parts) < 6:
-  #       raise PreciseFlexError(-1, "Unexpected response format from where command.")
-
-  #   x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
-  #   axes = self._parse_angles_response(parts[6:])
-
-  #   return (x, y, z, yaw, pitch, roll, axes)
 
   # region PROFILE COMMANDS
 
