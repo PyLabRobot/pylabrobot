@@ -102,7 +102,7 @@ class Imager(Resource, Machine):
   def _will_assign_resource(self, resource: Resource):
     if len(self.children) >= 1:
       raise ValueError(
-        f"Imager {self} already has a plate assigned " f"(attempting to assign {resource})"
+        f"Imager {self} already has a plate assigned (attempting to assign {resource})"
       )
 
   def get_plate(self) -> Plate:

@@ -40,7 +40,6 @@ class linear_tip_spot_generator:
 
   async def __anext__(self) -> TipSpot:
     while True:
-      self.save_state()
       if self._tip_spot_idx >= len(self.tip_spots):
         if self.repeat:
           self._tip_spot_idx = 0
@@ -48,6 +47,7 @@ class linear_tip_spot_generator:
           raise StopAsyncIteration
 
       self._tip_spot_idx += 1
+      self.save_state()
       return self.tip_spots[self._tip_spot_idx - 1]
 
   def save_state(self):
@@ -72,6 +72,11 @@ class linear_tip_spot_generator:
     """Get the next n tip spots."""
     assert 0 <= n <= self.get_num_tips_left()
     return [await self.__anext__() for _ in range(n)]
+
+  def reset(self):
+    """Reset the generator to the beginning."""
+    self._tip_spot_idx = 0
+    self.save_state()
 
 
 class randomized_tip_spot_generator:
@@ -126,3 +131,8 @@ class randomized_tip_spot_generator:
     """Get the next n tip spots."""
     assert 0 <= n
     return [await self.__anext__() for _ in range(n)]
+
+  def reset(self):
+    """Reset the generator to the beginning."""
+    self.recently_sampled.clear()
+    self.save_state()

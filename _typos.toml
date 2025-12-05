@@ -20,6 +20,8 @@ PN = "PN"
 tro = "tro"
 FO = "FO"
 UE = "UE"
+RHE = "RHE"
+"ASEND" = "ASEND"
 
 [files]
 extend-exclude = [

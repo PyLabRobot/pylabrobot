@@ -1782,11 +1782,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth_2nd_section: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     liquid_surfaces_no_lld: Optional[List[float]] = None,
     # PLR:
     probe_liquid_height: bool = False,
     auto_surface_following_distance: bool = False,
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
     # remove >2026-01
     mix_volume: Optional[List[float]] = None,
     mix_cycles: Optional[List[int]] = None,
@@ -1842,6 +1843,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       hamilton_liquid_classes: Override the default liquid classes. See pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
       liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0 and 360. Defaults to well bottom + liquid height. Should use absolute z.
+      disable_volume_correction: Whether to disable liquid class volume correction for each operation.
 
       probe_liquid_height: PLR-specific parameter. If True, probe the liquid height using cLLD before aspirating to set the liquid_height of every operation instead of using the default 0. Liquid heights must not be set when using this function.
       auto_surface_following_distance: automatically compute the surface following distance based on the container height<->volume functions. Requires liquid height to be specified or `probe_liquid_height=True`.
@@ -1877,29 +1879,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = []
       for i, op in enumerate(ops):
-        liquid = Liquid.WATER  # default to WATER
-        # [-1][0]: get last liquid in well, [0] is indexing into the tuple
-        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
-          liquid = op.liquids[-1][0]
-
         hamilton_liquid_classes.append(
           get_star_liquid_class(
             tip_volume=op.tip.maximal_volume,
             is_core=False,
             is_tip=True,
             has_filter=op.tip.has_filter,
-            liquid=liquid,
+            liquid=Liquid.WATER,  # default to WATER
             jet=jet[i],
             blow_out=blow_out[i],
           )
         )
 
-    self._assert_valid_resources([op.resource for op in ops])
-
     # correct volumes using the liquid class
+    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -2156,13 +2152,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
     min_z_endpos: Optional[float] = None,
     side_touch_off_distance: float = 0,
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
     empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
     # PLR specific
     probe_liquid_height: bool = False,
     auto_surface_following_distance: bool = False,
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
     # remove  in the future
     immersion_depth_direction: Optional[List[int]] = None,
     mix_volume: Optional[List[float]] = None,
@@ -2208,6 +2205,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       hamilton_liquid_classes: Override the default liquid classes. See
         pylabrobot/liquid_handling/liquid_classes/hamilton/STARBackend.py
+      disable_volume_correction: Whether to disable liquid class volume correction for each operation.
 
       jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
         determining the dispense mode. True for dispense mode 0 or 1.
@@ -2268,27 +2266,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = []
       for i, op in enumerate(ops):
-        liquid = Liquid.WATER  # default to WATER
-        # [-1][0]: get last liquid in tip, [0] is indexing into the tuple
-        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
-          liquid = op.liquids[-1][0]
-
         hamilton_liquid_classes.append(
           get_star_liquid_class(
             tip_volume=op.tip.maximal_volume,
             is_core=False,
             is_tip=True,
             has_filter=op.tip.has_filter,
-            liquid=liquid,
+            liquid=Liquid.WATER,  # default to WATER
             jet=jet[i],
             blow_out=blow_out[i],
           )
         )
 
     # correct volumes using the liquid class
+    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
-      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
-      for op, hlc in zip(ops, hamilton_liquid_classes)
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
     ]
 
     well_bottoms = [
@@ -2628,6 +2622,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_position_from_liquid_surface: float = 0,
     mix_surface_following_distance: float = 0,
     limit_curve_index: int = 0,
+    disable_volume_correction: bool = False,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
     liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
@@ -2675,6 +2670,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       mix_position_from_liquid_surface: The position of the mix from the liquid surface.
       mix_surface_following_distance: The distance to follow the liquid surface during mix.
       limit_curve_index: The index of the limit curve to use.
+      disable_volume_correction: Whether to disable liquid class volume correction.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -2794,25 +2790,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
-    liquid_to_be_aspirated = Liquid.WATER
-    if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
-      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
-      liquid_to_be_aspirated = aspiration.liquids[0][0][0]
     hlc = hlc or get_star_liquid_class(
       tip_volume=tip.maximal_volume,
       is_core=True,
       is_tip=True,
       has_filter=tip.has_filter,
       # get last liquid in pipette, first to be dispensed
-      liquid=liquid_to_be_aspirated,
+      liquid=Liquid.WATER,  # default to WATER
       jet=jet,
       blow_out=blow_out,  # see comment in method docstring
     )
 
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(aspiration.volume)
-    else:
+    if disable_volume_correction or hlc is None:
       volume = aspiration.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(aspiration.volume)
 
     # Get better default values from the HLC if available
     transport_air_volume = transport_air_volume or (
@@ -2890,6 +2882,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
+    disable_volume_correction: bool = False,
     # Deprecated parameters, to be removed in future versions
     # rm: >2026-01
     liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,  # surface_following_distance!
@@ -2934,6 +2927,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       limit_curve_index: Limit curve index.
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
+      disable_volume_correction: Whether to disable liquid class volume correction.
     """
 
     # # # TODO: delete > 2026-01 # # #
@@ -3073,25 +3067,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     liquid_height = position.z + (dispense.liquid_height or 0)
 
-    liquid_to_be_dispensed = Liquid.WATER  # default to water.
-    if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
-      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
-      liquid_to_be_dispensed = dispense.liquids[0][-1][0]
     hlc = hlc or get_star_liquid_class(
       tip_volume=tip.maximal_volume,
       is_core=True,
       is_tip=True,
       has_filter=tip.has_filter,
       # get last liquid in pipette, first to be dispensed
-      liquid=liquid_to_be_dispensed,
+      liquid=Liquid.WATER,  # default to WATER
       jet=jet,
       blow_out=blow_out,  # see comment in method docstring
     )
 
-    if hlc is not None:
-      volume = hlc.compute_corrected_volume(dispense.volume)
-    else:
+    if disable_volume_correction or hlc is None:
       volume = dispense.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(dispense.volume)
 
     transport_air_volume = transport_air_volume or (
       hlc.dispense_air_transport_volume if hlc is not None else 0
@@ -3157,11 +3147,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert self.iswap_installed, "iswap must be installed"
 
+    x_direction = 0 if center.x >= 0 else 1
+    y_direction = 0 if center.y >= 0 else 1
+
     await self.move_plate_to_position(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_direction=0,
+      x_position=round(abs(center.x) * 10),
+      x_direction=x_direction,
+      y_position=round(abs(center.y) * 10),
+      y_direction=y_direction,
       z_position=round(center.z * 10),
       z_direction=0,
       grip_direction={

@@ -2,6 +2,7 @@ import asyncio
 import ctypes
 import json
 import logging
+import math
 import os
 import time
 import warnings
@@ -279,11 +280,22 @@ class VSpinBackend(CentrifugeBackend):
     _save_vspin_calibrations(device_id, remainder)
 
   async def get_bucket_1_position(self) -> int:
-    """Get the bucket 1 position based on calibration."""
+    """Get the bucket 1 position based on calibration.
+    Normally it is the home position minus the remainder (calibration).
+    The bucket 1 position must be greater than the current position, so we find
+    the first position greater than the current position by adding full rotations if needed.
+    """
     if self._bucket_1_remainder is None:
       raise bucket_1_not_set_error
     home_position = await self.get_home_position()
-    bucket_1_position = (home_position - self.bucket_1_remainder) % FULL_ROTATION
+    bucket_1_position_mod_full_rotation = home_position - self.bucket_1_remainder
+    # first number after current position that matches bucket 1 position mod FULL_ROTATION
+    current_position = await self.get_position()
+    bucket_1_position = (
+      FULL_ROTATION
+      * math.floor((current_position - bucket_1_position_mod_full_rotation) / FULL_ROTATION + 1)
+      + bucket_1_position_mod_full_rotation
+    )
     return bucket_1_position
 
   async def stop(self):
@@ -572,18 +584,21 @@ class VSpinBackend(CentrifugeBackend):
     await self._send_command(byte_string)
 
     # 3 - wait for acceleration to the set rpm
-    while await self.get_tachometer() < rpm * 0.95:
+    # we also check the position to avoid waiting forever if the speed is not reached (e.g. short spin...)
+    while await self.get_tachometer() < rpm * 0.95 and await self.get_position() < final_position:
       await asyncio.sleep(0.1)
 
     # 4 - once the speed is reached, compute the position at which to start deceleration
     # this is different than computed above, because above we assumed constant acceleration from 0 to rpm.
     # however, in reality there is jerk and the acceleration is not constant, so we have to adjust as we go.
     # this is what the vendor software does too.
-    decel_start_position = await self.get_position() + distance_at_speed
+    # if we are already past that position, we skip this part.
+    if await self.get_position() < final_position:
+      decel_start_position = await self.get_position() + distance_at_speed
 
-    # then wait until we reach that position
-    while await self.get_position() < decel_start_position:
-      await asyncio.sleep(0.1)
+      # then wait until we reach that position
+      while await self.get_position() < decel_start_position:
+        await asyncio.sleep(0.1)
 
     # 5 - send deceleration command
     await self._send_command(bytes.fromhex("aa01e60500640000000000fd00803e01000c"))
@@ -598,16 +613,31 @@ class VSpinBackend(CentrifugeBackend):
     await asyncio.sleep(2)
 
     # 6 - reset position back to 0ish
-    # this part is needed because otherwise calling go_to_position will not work after
-    await self._send_command(bytes.fromhex("aa0117021a"))
-    await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
-    await self._send_command(bytes.fromhex("aa0117041c"))
-    await self._send_command(bytes.fromhex("aa01170119"))
-    await self._send_command(bytes.fromhex("aa010b0c"))
-    await self._send_command(bytes.fromhex("aa010001"))  # set position back to 0 (exactly)
-    await self._send_command(bytes.fromhex("aa01e605006400000000003200e80301006e"))
-    await self._send_command(bytes.fromhex("aa0194b61283000012010000f3"))
-    await self._send_command(bytes.fromhex("aa01192842"))  # it starts moving again
+    # this part is aneeded because otherwise calling go_to_position will not work after
+    async def _reset_to_zero():
+      await self._send_command(bytes.fromhex("aa0117021a"))
+      await self._send_command(bytes.fromhex("aa01e6c800b00496000f004b00a00f050007"))
+      await self._send_command(bytes.fromhex("aa0117041c"))
+      await self._send_command(bytes.fromhex("aa01170119"))
+      await self._send_command(bytes.fromhex("aa010b0c"))
+      await self._send_command(bytes.fromhex("aa010001"))  # set position back to 0 (exactly)
+      await self._send_command(bytes.fromhex("aa01e605006400000000003200e80301006e"))
+      await self._send_command(bytes.fromhex("aa0194b61283000012010000f3"))
+      await self._send_command(bytes.fromhex("aa01192842"))  # it starts moving again
+
+    await _reset_to_zero()
+
+    # 7 - wait for home position to change
+    # go_to_bucket{1,2} does not work until the home position changes
+    start = await self.get_home_position()
+    num_tries = 0
+    while await self.get_home_position() == start:
+      await asyncio.sleep(0.1)
+      num_tries += 1
+      if num_tries % 25 == 0:
+        await _reset_to_zero()
+      if num_tries > 100:
+        raise RuntimeError("Home position did not change after spin.")
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)

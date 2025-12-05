@@ -110,7 +110,7 @@ class Centrifuge(Machine, Resource):
 
     Args:
       g: The g-force to spin at.
-      duration: The duration of the spin in seconds.
+      duration: The duration of the spin in seconds. Time at speed.
       acceleration: The acceleration as a fraction of maximum acceleration (0-1).
     """
     await self.backend.spin(

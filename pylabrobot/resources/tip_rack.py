@@ -1,15 +1,13 @@
 from __future__ import annotations
 
+import warnings
 from abc import ABCMeta
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip, TipCreator
-from pylabrobot.resources.tip_tracker import (
-  TipTracker,
-  does_tip_tracking,
-)
+from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
@@ -17,7 +15,12 @@ from .resource import Resource
 
 
 class TipSpot(Resource):
-  """A tip spot, a location in a tip rack where there may or may not be a tip."""
+  """A tip spot, a location in a tip rack where there may or may not be a tip.
+
+  Each tip produced by this spot is given a unique name based on the parent
+  rack name, the spot name, and a per-spot counter (e.g. ``rack.A1#1``,
+  ``rack.A1#2``), which is stored on the :class:`Tip` instance.
+  """
 
   def __init__(
     self,
@@ -49,9 +52,37 @@ class TipSpot(Resource):
     self.tracker = TipTracker(thing="Tip spot")
     self.parent: Optional["TipRack"] = None
 
-    self.make_tip = make_tip
+    self._tip_counter: int = 0
+
+    self._make_tip_func = make_tip
 
     self.tracker.register_callback(self._state_updated)
+
+  def _get_next_tip_name(self) -> str:
+    """Generate a unique name for the next tip originating from this spot."""
+
+    name = f"{self.name}#{self._tip_counter}"
+    self._tip_counter += 1
+    return name
+
+  def make_tip(self) -> Tip:
+    """Create a new tip instance for this spot and assign it a unique name."""
+
+    # use introspection to see if _make_tip_func has a name parameter
+    if "name" in self._make_tip_func.__code__.co_varnames:
+      tip = self._make_tip_func(self._get_next_tip_name())
+    else:
+      warnings.warn(
+        "The make_tip function should accept a 'name' parameter to " "assign unique names to tips.",
+        DeprecationWarning,
+      )
+      tip = self._make_tip_func()  # type: ignore # ignore type check for deprecated behavior
+      if getattr(tip, "name", None) is None:
+        tip.name = self._get_next_tip_name()
+        if hasattr(tip, "tracker"):
+          tip.tracker.thing = tip.name
+
+    return tip
 
   def get_tip(self) -> Tip:
     """Get a tip from the tip spot."""
@@ -59,7 +90,7 @@ class TipSpot(Resource):
     # Tracker will raise an error if there is no tip. We spawn a new tip if tip tracking is disabled
     tracks = does_tip_tracking() and not self.tracker.is_disabled
     if not self.tracker.has_tip and not tracks:
-      self.tracker.add_tip(self.make_tip())
+      self.tracker.add_tip(self.make_tip(), origin=self)
 
     return self.tracker.get_tip()
 
@@ -83,8 +114,9 @@ class TipSpot(Resource):
     """Deserialize a tip spot."""
     tip_data = data["prototype_tip"]
 
-    def make_tip() -> Tip:
-      return cast(Tip, deserialize(tip_data, allow_marshal=allow_marshal))
+    def make_tip(name: str) -> Tip:
+      tip_data_with_name = {**tip_data, "name": name}
+      return cast(Tip, deserialize(tip_data_with_name, allow_marshal=allow_marshal))
 
     return cls(
       name=data["name"],
@@ -191,7 +223,8 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     for identifier, should_have_tip in should_have.items():
       if should_have_tip and not self.get_item(identifier).has_tip():
-        self.get_item(identifier).tracker.add_tip(self.get_item(identifier).make_tip(), commit=True)
+        spot = self.get_item(identifier)
+        spot.tracker.add_tip(spot.make_tip(), origin=spot, commit=True)
       elif not should_have_tip and self.get_item(identifier).has_tip():
         self.get_item(identifier).tracker.remove_tip(commit=True)
 

@@ -25,4 +25,5 @@ Backends
 
     chatterbox.PlateReaderChatterboxBackend
     clario_star_backend.CLARIOStarBackend
-    biotek_backend.Cytation5Backend
+    agilent_biotek_cytation_backend.CytationBackend
+    agilent_biotek_synergyh1_backend.SynergyH1Backend

@@ -30,7 +30,7 @@ def build_layout() -> HamiltonDeck:
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-  plate.get_item("A1").tracker.set_liquids([(None, 400)])
+  plate.get_item("A1").tracker.set_volume(400)
 
   deck = STARLetDeck()
   deck.assign_child_resource(tip_car, rails=1)
@@ -211,7 +211,6 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
                 "y": 0,
                 "z": 0,
               },
-              "liquids": [[None, 10]],
               "flow_rate": None,
               "liquid_height": None,
               "blow_out_air_volume": 0,
@@ -245,7 +244,6 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
                 "y": 0,
                 "z": 0,
               },
-              "liquids": [[None, 10]],
               "flow_rate": None,
               "liquid_height": None,
               "blow_out_air_volume": 0,

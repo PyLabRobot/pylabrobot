@@ -1,5 +1,6 @@
 import datetime
 import logging
+import sys
 from pathlib import Path
 from typing import Optional, Union
 
@@ -64,3 +65,21 @@ def configure(cfg: Config):
 
 
 configure(CONFIG)
+
+
+def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
+  """Add a StreamHandler to the pylabrobot logger to make logging output visible to the console.
+  If set to False, remove the console StreamHandler. This only removes StreamHandlers that output
+  to sys.stdout or sys.stderr, and will not affect FileHandlers or other subclasses.
+  """
+  logger = logging.getLogger("pylabrobot")
+  for handler in logger.handlers[:]:  # iterate over a copy to allow safe removal
+    if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+      if handler.stream in (sys.stdout, sys.stderr):
+        logger.removeHandler(handler)
+  if make_verbose:
+    logger.setLevel(level)
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
