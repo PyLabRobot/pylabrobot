@@ -183,6 +183,20 @@ class Serial(IOBase):
         self._executor = None
       raise e
 
+    # --- FIX: Prevent FTDI reset on open/close (critical for Inheco on Raspberry Pi) ---
+    try:
+      # Some pyserial versions require direct attribute access:
+      self._ser.dtr = False
+      self._ser.rts = False
+
+      # Others only respect the explicit setter:
+      self._ser.setDTR(False)
+      self._ser.setRTS(False)
+
+      logger.info(f"[{candidate_port}] Disabled FTDI DTR/RTS (prevent USB disconnect).")
+    except Exception as e:
+      logger.warning(f"[{candidate_port}] Could not disable DTR/RTS: {e}")
+
     self._port = candidate_port
 
   async def stop(self):
