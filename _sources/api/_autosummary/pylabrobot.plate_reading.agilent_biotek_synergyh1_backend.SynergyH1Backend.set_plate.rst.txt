@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.agilent\_biotek\_synergyh1\_backend.SynergyH1Backend.set\_plate
+=========================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent_biotek_synergyh1_backend
+
+.. automethod:: SynergyH1Backend.set_plate

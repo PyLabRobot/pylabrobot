@@ -1,0 +1,6 @@
+pylabrobot.resources.Trough.get\_location\_wrt
+==============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trough.get_location_wrt

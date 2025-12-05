@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin\_backend.VSpinBackend.bucket\_1\_remainder
+======================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. autoproperty:: VSpinBackend.bucket_1_remainder

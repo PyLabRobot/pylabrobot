@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.serializing\_backend.SerializingBackend.can\_pick\_up\_tip
+===============================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.serializing_backend
+
+.. automethod:: SerializingBackend.can_pick_up_tip

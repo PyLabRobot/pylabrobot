@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.agilent\_biotek\_cytation\_backend.CytationBackend.home
+=================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent_biotek_cytation_backend
+
+.. automethod:: CytationBackend.home

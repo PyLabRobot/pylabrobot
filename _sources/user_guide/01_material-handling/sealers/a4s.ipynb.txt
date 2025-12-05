@@ -1,0 +1,285 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "18708b66",
+   "metadata": {},
+   "source": [
+    "# Azenta a4S\n",
+    "\n",
+    "| Summary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Photo                                            |\n",
+    "|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------|\n",
+    "| - [OEM Link](https://www.azenta.com/products/automated-roll-heat-sealer-formerly-a4s)<br>- **Communication Protocol / Hardware**: Serial / USB-A<br>- **Communication Level**: Firmware (documentation shared by OEM)<br>- **Sealing Method**: Thermal (heat + pressure)<br>- **Compressed Air Required?**: No<br>- **Typical Seal Time**: ~7 seconds<br><br>The a4S has only 2 programmatically-accessible action parameters for sealing:<br>  - temperature<br>  - sealing duration | ![quadrants](img/azenta_a4s.png) |\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "adb29364",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Setup Instructions (Programmatic)\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "34531f2c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload\n",
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0e8abc45",
+   "metadata": {},
+   "source": [
+    "Identify your control PC's port to your a4S sealer and instantiate the `Sealer` frontend called `a4s`:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "363b8144",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.sealing import a4s\n",
+    "\n",
+    "s = a4s(port=\"/dev/tty.usbserial-0001\") # This is a predifned Sealer object with the A4SBackend\n",
+    "\n",
+    "# You can also use the Sealer class directly, e.g.:\n",
+    "# from pylabrobot.sealing.sealer import Sealer\n",
+    "# from pylabrobot.sealing.a4s_backend import A4SBackend\n",
+    "# s = Sealer(backend=A4SBackend(port=\"/dev/tty.usbserial-0001\"))\n",
+    "\n",
+    "type(s)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "30720acb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await s.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "65555028",
+   "metadata": {},
+   "source": [
+    "```{note}\n",
+    "When the a4S is first powered on, it will open its loading tray - this means the **machine default state is open**!\n",
+    "\n",
+    "If this is the first time you are using the a4S, follow the OEM’s instructions to load a foil/film roll using the required metal film loading tool.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7d2e9ed2",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "\n",
+    "## Usage\n",
+    "\n",
+    "### Sealing\n",
+    "\n",
+    "The a4S firmware enables sealing with just one simple command:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c0834a6e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await s.seal(\n",
+    "  temperature=180, # degrees Celsius\n",
+    "  duration=5, # sec\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ce638f41",
+   "metadata": {},
+   "source": [
+    "This command will...\n",
+    "1. set the `temperature`\n",
+    "2. wait until temperature is reached (!)\n",
+    "3. move the plate into the machine / close the loading tray\n",
+    "4. cut the film off its roll (!!)\n",
+    "5. perform sealing of film onto the plate for the specified `duration`\n",
+    "6. move the plate out of the machine / open the loading tray"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9c4d21b7",
+   "metadata": {},
+   "source": [
+    "### Pre-set Temperature\n",
+    "\n",
+    "To accelerate the sealing step you can pre-set the temperature of the sealer by using the `set_temperature` method.\n",
+    "The temperature is set in degrees Celsius."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "97dbe69e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await s.set_temperature(170)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bb2de16b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await s.get_temperature()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c4be6218",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "### Close and Open of the Loading Tray\n",
+    "\n",
+    "The a4S does empower standalone closing and opening of the loading tray.\n",
+    "However, there is no conceivable reason to do so when one considers the issues this creates:\n",
+    "\n",
+    "The default position of the machine's loading tray is open.\n",
+    "If one executes..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e23acc3d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await s.close()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c7a70d7e",
+   "metadata": {},
+   "source": [
+    "...this not only closes the loading tray but **also cuts the film/foil that is currently loaded - without performing a sealing action!**\n",
+    "\n",
+    "```{warning}\n",
+    "This means a **single leaf of film will fall onto the loading tray** (or on the top of a plate located on the loading tray).\n",
+    "```\n",
+    "\n",
+    "(This is a mechanical constraint of the a4S' design:\n",
+    "\n",
+    "Without active motors turning the film roll into the opposite direction during an `await s.close()` command the film inside the machine would be pushed inwards and buckle.\n",
+    "This could lead to multiple problems, including potential sticking of the film to hot internals.\n",
+    "As a result, the cutting of the film during close is an inbuilt, mechanical safety feature [to our knowledge])\n",
+    "\n",
+    "When executing..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c8656ef6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await s.open()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8554a66c",
+   "metadata": {},
+   "source": [
+    "...the single leaf of film will then require manual removal.\n",
+    "\n",
+    "(Except if you are using some advanced soft-robotics arm that can handle films/foils 🐙👀)\n",
+    "\n",
+    "```{note}\n",
+    "It is possible that this cutting of film during a closing procedure disconnects the film roll with the internals.\n",
+    "If this happens you have to manually re-spool the film roll before you can continue.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "39a0d84f",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "\n",
+    "### Querying Machine Status\n",
+    "\n",
+    "The a4S has advanced features that are available by calling the frontend's (`Sealer`/`a4s`) backend (`A4SBackend`) directly."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b85f0c49",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "status = await s.backend.get_status()\n",
+    "print(\"current_temperature:        \", status.current_temperature)\n",
+    "print(\"system_status:              \", status.system_status)\n",
+    "print(\"heater_block_status:        \", status.heater_block_status)\n",
+    "print(\"error_code:                 \", status.error_code)\n",
+    "print(\"warning_code:               \", status.warning_code)\n",
+    "print(\"sensor_status:              \")\n",
+    "print(\"  shuttle_middle_sensor:    \", status.sensor_status.shuttle_middle_sensor)\n",
+    "print(\"  shuttle_open_sensor:      \", status.sensor_status.shuttle_open_sensor)\n",
+    "print(\"  shuttle_close_sensor:     \", status.sensor_status.shuttle_close_sensor)\n",
+    "print(\"  clean_door_sensor:        \", status.sensor_status.clean_door_sensor)\n",
+    "print(\"  seal_roll_sensor:         \", status.sensor_status.seal_roll_sensor)\n",
+    "print(\"  heater_motor_up_sensor:   \", status.sensor_status.heater_motor_up_sensor)\n",
+    "print(\"  heater_motor_down_sensor: \", status.sensor_status.heater_motor_down_sensor)\n",
+    "print(\"remaining_time:             \", status.remaining_time)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env (3.10.15)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.15"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

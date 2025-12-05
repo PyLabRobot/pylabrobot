@@ -1,0 +1,101 @@
+﻿pylabrobot.thermocycling.thermocycler.Thermocycler
+==================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. autoclass:: Thermocycler
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Thermocycler.name
+      ~Thermocycler.resource
+      ~Thermocycler.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Thermocycler.__init__
+      ~Thermocycler.assign_child_resource
+      ~Thermocycler.at
+      ~Thermocycler.center
+      ~Thermocycler.centers
+      ~Thermocycler.close_lid
+      ~Thermocycler.copy
+      ~Thermocycler.deactivate_block
+      ~Thermocycler.deactivate_lid
+      ~Thermocycler.deregister_did_assign_resource_callback
+      ~Thermocycler.deregister_did_unassign_resource_callback
+      ~Thermocycler.deregister_state_update_callback
+      ~Thermocycler.deregister_will_assign_resource_callback
+      ~Thermocycler.deregister_will_unassign_resource_callback
+      ~Thermocycler.deserialize
+      ~Thermocycler.get_absolute_location
+      ~Thermocycler.get_absolute_rotation
+      ~Thermocycler.get_absolute_size_x
+      ~Thermocycler.get_absolute_size_y
+      ~Thermocycler.get_absolute_size_z
+      ~Thermocycler.get_all_children
+      ~Thermocycler.get_anchor
+      ~Thermocycler.get_block_current_temperature
+      ~Thermocycler.get_block_status
+      ~Thermocycler.get_block_target_temperature
+      ~Thermocycler.get_current_cycle_index
+      ~Thermocycler.get_current_step_index
+      ~Thermocycler.get_default_child_location
+      ~Thermocycler.get_highest_known_point
+      ~Thermocycler.get_hold_time
+      ~Thermocycler.get_lid_current_temperature
+      ~Thermocycler.get_lid_open
+      ~Thermocycler.get_lid_status
+      ~Thermocycler.get_lid_target_temperature
+      ~Thermocycler.get_location_wrt
+      ~Thermocycler.get_resource
+      ~Thermocycler.get_root
+      ~Thermocycler.get_size_x
+      ~Thermocycler.get_size_y
+      ~Thermocycler.get_size_z
+      ~Thermocycler.get_total_cycle_count
+      ~Thermocycler.get_total_step_count
+      ~Thermocycler.is_in_subtree_of
+      ~Thermocycler.is_profile_running
+      ~Thermocycler.load_all_state
+      ~Thermocycler.load_from_json_file
+      ~Thermocycler.load_state
+      ~Thermocycler.load_state_from_file
+      ~Thermocycler.open_lid
+      ~Thermocycler.register_did_assign_resource_callback
+      ~Thermocycler.register_did_unassign_resource_callback
+      ~Thermocycler.register_state_update_callback
+      ~Thermocycler.register_will_assign_resource_callback
+      ~Thermocycler.register_will_unassign_resource_callback
+      ~Thermocycler.rotate
+      ~Thermocycler.rotated
+      ~Thermocycler.run_pcr_profile
+      ~Thermocycler.run_protocol
+      ~Thermocycler.save
+      ~Thermocycler.save_state_to_file
+      ~Thermocycler.serialize
+      ~Thermocycler.serialize_all_state
+      ~Thermocycler.serialize_state
+      ~Thermocycler.set_block_temperature
+      ~Thermocycler.set_lid_temperature
+      ~Thermocycler.setup
+      ~Thermocycler.stop
+      ~Thermocycler.unassign
+      ~Thermocycler.unassign_child_resource
+      ~Thermocycler.wait_for_block
+      ~Thermocycler.wait_for_lid
+      ~Thermocycler.wait_for_profile_completion
+   
+   
