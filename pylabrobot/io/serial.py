@@ -183,6 +183,8 @@ class Serial(IOBase):
         self._executor = None
       raise e
 
+    assert self._ser is not None
+
     # --- FIX: Prevent FTDI reset on open/close (critical for Inheco on Raspberry Pi) ---
     try:
       # Some pyserial versions require direct attribute access:
