@@ -53,3 +53,8 @@ Unfortunately, most of the other labware (plates) is missing information that is
 - `opentrons_96_aluminumblock_generic_pcr_strip_200ul`
 - `opentrons_96_aluminumblock_nest_wellplate_100ul`
 - `opentrons_96_well_aluminum_block`
+
+
+## Plate Adapters
+
+- `opentrons_96_deep_well_temp_mod_adapter`
