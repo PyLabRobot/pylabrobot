@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Iterable
 
 from pylabrobot.resources import Coordinate, Rotation
 
-JointCoords = List[float]
+JointCoords = Iterable[float]
 
 
 @dataclass

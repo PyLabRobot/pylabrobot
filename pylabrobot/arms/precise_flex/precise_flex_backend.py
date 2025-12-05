@@ -1,6 +1,6 @@
 import asyncio
-from abc import ABC, abstractmethod
-from typing import Dict, List, Literal, Optional, Union
+from abc import ABC
+from typing import Dict, Iterable, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import (
   AccessPattern,
@@ -47,12 +47,14 @@ class PreciseFlexBackend(SCARABackend, ABC):
     self.timeout = timeout
     self._has_rail = has_rail
 
-  def convert_to_joint_space(self, position: List[float]) -> PreciseFlexJointCoords:
+  def convert_to_joint_space(self, position: Iterable[float]) -> PreciseFlexJointCoords:
     """Convert joint list to PreciseFlexJointCoords.
 
     Args:
       position: List of 6 floats (always padded to 6). position[0] must be 0.0 if robot has no rail.
     """
+
+    position = list(position)
 
     if len(position) < 6:
       raise ValueError("Position must have 6 joint angles for robot with rail.")
@@ -87,7 +89,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
   def convert_to_cartesian_array(
     self, position: PreciseFlexCartesianCoords
   ) -> tuple[float, float, float, float, float, float, int]:
-    """Convert a CartesianSpace object to a list of cartesian coordinates."""
+    """Convert a CartesianCoords object to a list of cartesian coordinates."""
     orientation_int = self._convert_orientation_enum_to_int(position.orientation)
     arr = (
       position.location.x,
@@ -215,13 +217,13 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def approach(
     self,
-    position: Union[PreciseFlexCartesianCoords, List[float]],
+    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
     access: Optional[AccessPattern] = None,
   ):
     """Move the arm to an approach position (offset from target).
 
     Args:
-      position: Target position (CartesianCoords or List[float])
+      position: Target position (CartesianCoords or Iterable[float])
       access: Access pattern defining how to approach the target. Defaults to VerticalAccess() if not specified.
 
     Example:
@@ -247,11 +249,11 @@ class PreciseFlexBackend(SCARABackend, ABC):
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self._approach_c(position, access)
     else:
-      raise ValueError("Position must be of type List[float] or CartesianSpace.")
+      raise ValueError("Position must be of type Iterable[float] or CartesianCoords.")
 
   async def pick_plate(
     self,
-    position: Union[PreciseFlexCartesianCoords, List[float]],
+    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
     access: Optional[AccessPattern] = None,
   ):
     """Pick a plate from the specified position.
@@ -290,7 +292,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def place_plate(
     self,
-    position: Union[PreciseFlexCartesianCoords, List[float]],
+    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
     access: Optional[AccessPattern] = None,
   ):
     """Place a plate at the specified position.
@@ -327,7 +329,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
     await self._place_plate_c(cartesian_position=position, access=access)
 
-  async def move_to(self, position: Union[PreciseFlexCartesianCoords, List[float]]):
+  async def move_to(self, position: Union[PreciseFlexCartesianCoords, Iterable[float]]):
     """Move the arm to a specified position in 3D space.
 
     Args:
@@ -350,9 +352,9 @@ class PreciseFlexBackend(SCARABackend, ABC):
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self.move_c(profile_index=self.profile_index, cartesian_coords=position)
     else:
-      raise ValueError("Position must be of type JointSpace or CartesianSpace.")
+      raise ValueError("Position must be of type JointSpace or CartesianCoords.")
 
-  async def get_joint_position(self) -> JointCoords:
+  async def get_joint_position(self) -> PreciseFlexJointCoords:
     """Get the current position of the arm in 3D space."""
     data = await self.send_command("wherej")
     parts = data.split()
@@ -391,8 +393,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def send_command(self, command: str) -> str:
     await self.io.write(command.encode("utf-8") + b"\n")
-    # TODO: is sleep needed here?
-    await asyncio.sleep(0.2)  # wait a bit for the robot to process the command
     reply = await self.io.readline()
 
     print(f"Sent command: {command}, Received reply: {reply!r}")
