@@ -1,5 +1,7 @@
+from pylabrobot.resources.carrier import Coordinate, ResourceHolder
 
-def MFX_opentrons_module(name: str) -> ResourceHolder:
+
+def hamilton_mfx_opentrons_module(name: str) -> ResourceHolder:
   """3D printed part
   Module to hold a opentrons module on an MFX carrier. Bolts into carrier
   see STL file for printing
@@ -15,6 +17,6 @@ def MFX_opentrons_module(name: str) -> ResourceHolder:
     size_y=94.0,
     size_z=7,  # designed
     # probe height - carrier_height - deck_height
-    child_location=Coordinate(4, 3, 4),
-    model=MFX_opentrons_module.__name__,
+    child_location=Coordinate(2, 5, 6),
+    model=hamilton_mfx_opentrons_module.__name__,
   )
