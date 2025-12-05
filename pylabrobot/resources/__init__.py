@@ -22,6 +22,7 @@ from .corning import *
 from .deck import Deck
 from .eppendorf import *
 from .errors import ResourceNotFoundError
+from .greiner import *
 from .hamilton import *
 from .itemized_resource import ItemizedResource
 from .liquid import Liquid
