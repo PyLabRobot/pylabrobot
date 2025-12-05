@@ -132,7 +132,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
     )
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     well = self.plate.get_item("A1")
-    well.tracker.set_liquids([(None, 10)])
+    well.tracker.set_volume(10)
     await self.lh.aspirate([well], [10])
 
   @responses.activate
@@ -145,7 +145,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
       status=200,
     )
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
-    self.lh.head[0].get_tip().tracker.add_liquid(None, 10)
+    self.lh.head[0].get_tip().tracker.add_liquid(10)
     with no_volume_tracking():
       await self.lh.dispense(self.plate["A1"], [10])
 

@@ -23,8 +23,10 @@ UE = "UE"
 commutated = "commutated"
 commutating = "commutating"
 DOUT = "DOUT"
-inconsistence = "inconsistence" # ignored to match with preciseflex documentation typo
-mis = "mis" # ignored to match with preciseflex documentation typo
+inconsistence = "inconsistence"
+mis = "mis"
+RHE = "RHE"
+"ASEND" = "ASEND"
 
 [files]
 extend-exclude = [

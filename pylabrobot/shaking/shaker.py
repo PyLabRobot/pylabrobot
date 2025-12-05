@@ -53,14 +53,14 @@ class Shaker(ResourceHolder, Machine):
     if self.backend.supports_locking:
       await self.backend.unlock_plate()
 
-  async def stop_shaking(self):
-    await self.backend.stop_shaking()
+  async def stop_shaking(self, **backend_kwargs):
+    await self.backend.stop_shaking(**backend_kwargs)
 
-  async def lock_plate(self):
-    await self.backend.lock_plate()
+  async def lock_plate(self, **backend_kwargs):
+    await self.backend.lock_plate(**backend_kwargs)
 
-  async def unlock_plate(self):
-    await self.backend.unlock_plate()
+  async def unlock_plate(self, **backend_kwargs):
+    await self.backend.unlock_plate(**backend_kwargs)
 
   def serialize(self) -> dict:
     return {
