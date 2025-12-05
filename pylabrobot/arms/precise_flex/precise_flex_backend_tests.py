@@ -259,7 +259,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_approach_invalid_position_type(self):
     with self.assertRaisesRegex(
-      ValueError, "Position must be of type List[float] or CartesianCoords."
+      ValueError, "Position must be of type Iterable\[float\] or CartesianCoords."
     ):
       await self.backend.approach("invalid")  # type: ignore
 
