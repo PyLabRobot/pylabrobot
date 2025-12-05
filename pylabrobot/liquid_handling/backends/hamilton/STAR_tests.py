@@ -493,7 +493,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     for well in self.plate.get_items(["A1", "B1"]):
-      well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+      well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate(self.plate["A1", "B1"], vols=[100, 100], use_channels=[4, 5])
     self.STAR._write_and_read_command.assert_has_calls(
       [
@@ -523,7 +523,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
-    well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+    well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate([well], vols=[100])
     self.STAR._write_and_read_command.assert_has_calls(
       [
@@ -544,7 +544,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
-    well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+    well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate([well], vols=[100], liquid_height=[10])
 
     # This passes the test, but is not the real command.
@@ -568,7 +568,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.lid.unassign()
     wells = self.plate.get_items("A1:B1")
     for well in wells:
-      well.tracker.set_liquids([(None, 100 * 1.072)])  # liquid class correction
+      well.tracker.set_volume(100 * 1.072)  # liquid class correction
     await self.lh.aspirate(self.plate["A1:B1"], vols=[100] * 2)
 
     # This passes the test, but is not the real command.

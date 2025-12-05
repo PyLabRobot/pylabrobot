@@ -108,15 +108,23 @@ class Well(Container):
       "cross_section_type": self.cross_section_type.value,
     }
 
+  def set_volume(self, volume: float):
+    """Set the volume of the well.
+
+    (wraps :meth:`~.VolumeTracker.set_volume`)
+
+    Example:
+      Set the volume in a well to 10 uL:
+
+      >>> well.set_volume(10)
+    """
+
+    self.tracker.set_volume(volume)
+
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """Set the liquids in the well.
 
-    (wraps :meth:`~.VolumeTracker.set_liquids`)
-
-    Example:
-      Set the liquids in a well to 10 uL of water:
-
-      >>> well.set_liquids([(Liquid.WATER, 10)])
+    Deprecated: Use `set_volume` instead. This method will be removed in a future version.
     """
 
     self.tracker.set_liquids(liquids)

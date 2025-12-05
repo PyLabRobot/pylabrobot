@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections import OrderedDict
 from typing import (
   TYPE_CHECKING,
@@ -13,10 +14,10 @@ from typing import (
   cast,
 )
 
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.resource_holder import get_child_location
 
 from .itemized_resource import ItemizedResource
-from .liquid import Liquid
 from .resource import Coordinate, Resource
 
 if TYPE_CHECKING:
@@ -168,6 +169,24 @@ class Plate(ItemizedResource["Well"]):
   def has_lid(self) -> bool:
     return self.lid is not None
 
+  def set_well_volumes(
+    self,
+    volumes: List[float],
+  ) -> None:
+    """Fill all wells in the plate with a given volume.
+
+    Args:
+      volumes: The volume to fill each well with, in uL.
+    """
+
+    if not len(volumes) == self.num_items:
+      raise ValueError(
+        f"Length of volumes ({len(volumes)}) does not match number of wells ({self.num_items})."
+      )
+
+    for well, volume in zip(self.get_all_items(), volumes):
+      well.set_volume(volume)
+
   def set_well_liquids(
     self,
     liquids: Union[
@@ -175,24 +194,13 @@ class Plate(ItemizedResource["Well"]):
       List[Tuple[Optional["Liquid"], Union[int, float]]],
       Tuple[Optional["Liquid"], Union[int, float]],
     ],
-  ) -> None:
-    """Update the liquid in the volume tracker for each well in the plate.
-
-    Args:
-      liquids: A list of liquids, one for each well in the plate. The list can be a list of lists,
-        where each inner list contains the liquids for each well in a column. If a single tuple is
-        given, the volume is assumed to be the same for all wells. Liquids are in uL.
-
-    Raises:
-      ValueError: If the number of liquids does not match the number of wells in the plate.
-
-    Example:
-      Set the volume of each well in a 96-well plate to 10 uL.
-
-      >>> plate = Plate("plate", 127.76, 85.48, 14.5, num_items_x=12, num_items_y=8)
-      >>> plate.set_well_liquids((Liquid.WATER, 10))
-    """
-
+  ):
+    """Deprecated: Use `set_well_volumes` instead."""
+    warnings.warn(
+      "set_well_liquids is deprecated and will be removed in a future version. "
+      "Use set_well_volumes instead.",
+      FutureWarning,
+    )
     if isinstance(liquids, tuple):
       liquids = [liquids] * self.num_items
     elif isinstance(liquids, list) and all(isinstance(column, list) for column in liquids):
@@ -201,15 +209,7 @@ class Plate(ItemizedResource["Well"]):
       liquids = [list(column) for column in zip(*liquids)]  # transpose the list of lists
       liquids = [volume for column in liquids for volume in column]  # flatten the list of lists
 
-    if len(liquids) != self.num_items:
-      raise ValueError(
-        f"Number of liquids ({len(liquids)}) does not match number of wells "
-        f"({self.num_items}) in plate '{self.name}'."
-      )
-
-    for i, (liquid, volume) in enumerate(liquids):
-      well = self.get_well(i)
-      well.tracker.set_liquids([(liquid, volume)])  # type: ignore
+    self.set_well_volumes([volume for _, volume in liquids])  # type: ignore
 
   def disable_volume_trackers(self) -> None:
     """Disable volume tracking for all wells in the plate."""
