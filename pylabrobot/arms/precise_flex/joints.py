@@ -1,17 +1,17 @@
 from dataclasses import dataclass
+from typing import Iterator
 
 
 @dataclass
 class PreciseFlexJointCoords:
-  rail: float
   base: float
   shoulder: float
   elbow: float
   wrist: float
   gripper: float
+  rail: float = 0
 
-  def __iter__(self):
-    # for conversion to a list
+  def __iter__(self) -> Iterator[float]:
     return iter(
       [
         self.rail,

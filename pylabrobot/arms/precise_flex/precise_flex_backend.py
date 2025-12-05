@@ -37,7 +37,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
   Documentation and error codes available at https://www2.brooksautomation.com/#Root/Welcome.htm
   """
 
-  def __init__(self, host: str, port: int = 10100, timeout=20) -> None:
+  def __init__(self, has_rail: bool, host: str, port: int = 10100, timeout=20) -> None:
     super().__init__()
     self.io = Socket(host=host, port=port)
     self.profile_index: int = 1
@@ -45,15 +45,29 @@ class PreciseFlexBackend(SCARABackend, ABC):
     self.horizontal_compliance: bool = False
     self.horizontal_compliance_torque: int = 0
     self.timeout = timeout
+    self._has_rail = has_rail
 
-  @abstractmethod
   def convert_to_joint_space(self, position: List[float]) -> PreciseFlexJointCoords:
-    """Convert a tuple of joint angles to a PreciseFlexJointCoords object."""
-    ...
+    """Convert joint list to PreciseFlexJointCoords.
 
-  @abstractmethod
-  def convert_to_joints_array(self, position: PreciseFlexJointCoords) -> List[float]:
-    ...
+    Args:
+      position: List of 6 floats (always padded to 6). position[0] must be 0.0 if robot has no rail.
+    """
+
+    if len(position) < 6:
+      raise ValueError("Position must have 6 joint angles for robot with rail.")
+
+    if not self._has_rail and position[0] != 0.0:
+      raise ValueError("Position[0] (rail) must be 0.0 for robot without rail.")
+
+    return PreciseFlexJointCoords(
+      rail=position[0],
+      base=position[1],
+      shoulder=position[2],
+      elbow=position[3],
+      wrist=position[4],
+      gripper=position[5],
+    )
 
   def convert_to_cartesian_space(
     self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
@@ -321,7 +335,9 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """
     if isinstance(position, list):
       if len(position) < 6:
-        raise ValueError("Joint list must have 6 elements: [rail, base, shoulder, elbow, wrist, gripper]")
+        raise ValueError(
+          "Joint list must have 6 elements: [rail, base, shoulder, elbow, wrist, gripper]"
+        )
       joint_coords = PreciseFlexJointCoords(
         rail=position[0],
         base=position[1],
@@ -350,7 +366,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
         raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
 
     axes = list(self._parse_angles_response(parts))
-    # return self.convert_to_joint_space(axes)
     return self.convert_to_joint_space(axes)
 
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
@@ -888,22 +903,27 @@ class PreciseFlexBackend(SCARABackend, ABC):
     location_index: int,
     joint_position: PreciseFlexJointCoords,
   ) -> None:
-    """Set the angle values for the specified station index.
-
-    Args:
-      location_index: The station index, from 1 to N_LOC.
-      joint_position: The joint angles to set.
-    """
-
-    await self.send_command(
-      f"locAngles {location_index} "
-      f"{joint_position.rail} "
-      f"{joint_position.base} "
-      f"{joint_position.shoulder} "
-      f"{joint_position.elbow} "
-      f"{joint_position.wrist} "
-      f"{joint_position.gripper}"
-    )
+    """Set joint angles for stored location, handling rail configuration."""
+    if self._has_rail:
+      await self.send_command(
+        f"locAngles {location_index} "
+        f"{joint_position.rail} "
+        f"{joint_position.base} "
+        f"{joint_position.shoulder} "
+        f"{joint_position.elbow} "
+        f"{joint_position.wrist} "
+        f"{joint_position.gripper}"
+      )
+    else:
+      # Exclude rail for robots without rail
+      await self.send_command(
+        f"locAngles {location_index} "
+        f"{joint_position.base} "
+        f"{joint_position.shoulder} "
+        f"{joint_position.elbow} "
+        f"{joint_position.wrist} "
+        f"{joint_position.gripper}"
+      )
 
   async def get_location_xyz(
     self, location_index: int
@@ -1543,23 +1563,25 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self.send_command(cmd)
 
   async def move_j(self, profile_index: int, joint_coords: PreciseFlexJointCoords) -> None:
-    """Move the robot to the angles location specified by the arguments.
-
-    Args:
-      profile_index: The profile index to use for this motion.
-      joint_coords: The joint coordinates specifying where the robot should move.
-
-    Note:
-      Requires that the robot be attached.
-    """
-    angles_str = (
-      f"{joint_coords.rail} "
-      f"{joint_coords.base} "
-      f"{joint_coords.shoulder} "
-      f"{joint_coords.elbow} "
-      f"{joint_coords.wrist} "
-      f"{joint_coords.gripper}"
-    )
+    """Move the robot using joint coordinates, handling rail configuration."""
+    if self._has_rail:
+      angles_str = (
+        f"{joint_coords.rail} "
+        f"{joint_coords.base} "
+        f"{joint_coords.shoulder} "
+        f"{joint_coords.elbow} "
+        f"{joint_coords.wrist} "
+        f"{joint_coords.gripper}"
+      )
+    else:
+      # Exclude rail for robots without rail
+      angles_str = (
+        f"{joint_coords.base} "
+        f"{joint_coords.shoulder} "
+        f"{joint_coords.elbow} "
+        f"{joint_coords.wrist} "
+        f"{joint_coords.gripper}"
+      )
     await self.send_command(f"moveJ {profile_index} {angles_str}")
 
   async def release_brake(self, axis: int) -> None:
@@ -2347,15 +2369,29 @@ class PreciseFlexBackend(SCARABackend, ABC):
   def _parse_angles_response(
     self, parts: List[str]
   ) -> tuple[float, float, float, float, float, float]:
+    """
+    For self._has_rail=True:  [rail, base, shoulder, elbow, wrist, gripper]
+    For self._has_rail=False: [base, shoulder, elbow, wrist, gripper, 0.0(padding)]
+    """
+
     if len(parts) < 3:
       raise PreciseFlexError(-1, "Unexpected response format for angles.")
 
-    # Ensure we have exactly 6 elements, padding with 0.0 if necessary
-    angle1 = float(parts[0])
-    angle2 = float(parts[1])
-    angle3 = float(parts[2])
-    angle4 = float(parts[3]) if len(parts) > 3 else 0.0
-    angle5 = float(parts[4]) if len(parts) > 4 else 0.0
-    angle6 = float(parts[5]) if len(parts) > 5 else 0.0
+    if self._has_rail:
+      return (
+        float(parts[0]),
+        float(parts[1]),
+        float(parts[2]),
+        float(parts[3]) if len(parts) > 3 else 0.0,
+        float(parts[4]) if len(parts) > 4 else 0.0,
+        float(parts[5]) if len(parts) > 5 else 0.0,
+      )
 
-    return (angle1, angle2, angle3, angle4, angle5, angle6)
+    return (
+      0.0,
+      float(parts[0]),
+      float(parts[1]),
+      float(parts[2]) if len(parts) > 2 else 0.0,
+      float(parts[3]) if len(parts) > 3 else 0.0,
+      float(parts[4]) if len(parts) > 4 else 0.0,
+    )
