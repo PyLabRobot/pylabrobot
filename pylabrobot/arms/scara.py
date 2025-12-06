@@ -14,46 +14,51 @@ class SCARA(Machine):
     super().__init__(backend=backend)
     self.backend: SCARABackend = backend
 
-  async def move_to(self, position: Union[PreciseFlexCartesianCoords, Iterable[float]]):
+  async def move_to(
+    self,
+    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
+    **backend_kwargs,
+  ) -> None:
     """Move the arm to a specified position in 3D space or joint space."""
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
-    return await self.backend.move_to(position)
+    return await self.backend.move_to(position, **backend_kwargs)
 
-  async def get_joint_position(self) -> JointCoords:
+  async def get_joint_position(self, **backend_kwargs) -> JointCoords:
     """Get the current position of the arm in joint space."""
-    return await self.backend.get_joint_position()
+    return await self.backend.get_joint_position(**backend_kwargs)
 
-  async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
+  async def get_cartesian_position(self, **backend_kwargs) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in 3D space."""
-    return await self.backend.get_cartesian_position()
+    return await self.backend.get_cartesian_position(**backend_kwargs)
 
-  async def open_gripper(self):
-    return await self.backend.open_gripper()
+  async def open_gripper(self, **backend_kwargs) -> None:
+    return await self.backend.open_gripper(**backend_kwargs)
 
-  async def close_gripper(self):
-    return await self.backend.close_gripper()
+  async def close_gripper(self, **backend_kwargs) -> None:
+    return await self.backend.close_gripper(**backend_kwargs)
 
-  async def is_gripper_closed(self) -> bool:
-    return await self.backend.is_gripper_closed()
+  async def is_gripper_closed(self, **backend_kwargs) -> bool:
+    return await self.backend.is_gripper_closed(**backend_kwargs)
 
-  async def halt(self):
+  async def halt(self, **backend_kwargs) -> None:
     """Stop any ongoing movement of the arm."""
-    return await self.backend.halt()
+    return await self.backend.halt(**backend_kwargs)
 
-  async def home(self):
+  async def home(self, **backend_kwargs) -> None:
     """Home the arm to its default position."""
-    return await self.backend.home()
+    return await self.backend.home(**backend_kwargs)
 
-  async def move_to_safe(self):
+  async def move_to_safe(self, **backend_kwargs) -> None:
     """Move the arm to a predefined safe position."""
-    return await self.backend.move_to_safe()
+    return await self.backend.move_to_safe(**backend_kwargs)
 
   async def approach(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
     access: Optional[AccessPattern] = None,
-  ):
+    **backend_kwargs,
+  ) -> None:
     """Move the arm to an approach position (offset from target).
 
     Args:
@@ -62,13 +67,14 @@ class SCARA(Machine):
     """
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
-    return await self.backend.approach(position, access)
+    return await self.backend.approach(position, access=access, **backend_kwargs)
 
   async def pick_plate(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
     access: Optional[AccessPattern] = None,
-  ):
+    **backend_kwargs,
+  ) -> None:
     """Pick a plate from the specified position.
 
     Args:
@@ -77,13 +83,14 @@ class SCARA(Machine):
     """
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
-    return await self.backend.pick_plate(position, access)
+    return await self.backend.pick_plate(position, access=access, **backend_kwargs)
 
   async def place_plate(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
     access: Optional[AccessPattern] = None,
-  ):
+    **backend_kwargs,
+  ) -> None:
     """Place a plate at the specified position.
 
     Args:
@@ -92,4 +99,4 @@ class SCARA(Machine):
     """
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
-    return await self.backend.place_plate(position, access)
+    return await self.backend.place_plate(position, access=access, **backend_kwargs)
