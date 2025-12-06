@@ -413,7 +413,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self.io.write(command.encode("utf-8") + b"\n")
     reply = await self.io.readline()
 
-    print(f"Sent command: {command}, Received reply: {reply!r}")
+    # print(f"Sent command: {command}, Received reply: {reply!r}")
 
     return self._parse_reply_ensure_successful(reply)
 
@@ -424,7 +424,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     - replycode is an integer at the beginning
     - data is rest of the line (excluding CRLF)
     """
-    print("REPLY: ", reply)
+    # print("REPLY: ", reply)
     text = reply.decode().strip()  # removes \r\n
     if not text:
       raise PreciseFlexError(-1, "Empty reply from device.")

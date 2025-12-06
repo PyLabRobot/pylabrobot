@@ -296,7 +296,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(
       TypeError, r"Position must be of type Iterable\[float\] or CartesianCoords."
     ):
-      await self.backend.pick_plate("invalid")  # type: ignore
+      await self.backend.pick_plate("invalid", plate_width=1.0)  # type: ignore
 
   async def test_place_plate(self):
     self.mock_socket_instance.readline.side_effect = [
