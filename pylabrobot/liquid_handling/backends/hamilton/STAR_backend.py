@@ -3147,11 +3147,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert self.iswap_installed, "iswap must be installed"
 
+    x_direction = 0 if center.x >= 0 else 1
+    y_direction = 0 if center.y >= 0 else 1
+
     await self.move_plate_to_position(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_direction=0,
+      x_position=round(abs(center.x) * 10),
+      x_direction=x_direction,
+      y_position=round(abs(center.y) * 10),
+      y_direction=y_direction,
       z_position=round(center.z * 10),
       z_direction=0,
       grip_direction={
