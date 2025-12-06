@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 from abc import ABC
 from typing import Dict, Iterable, List, Literal, Optional, Union
 
@@ -36,7 +37,9 @@ class PreciseFlexBackend(SCARABackend, ABC):
   Documentation and error codes available at https://www2.brooksautomation.com/#Root/Welcome.htm
   """
 
-  def __init__(self, has_rail: bool, host: str, port: int = 10100, timeout=20) -> None:
+  def __init__(
+    self, has_rail: bool, host: str, is_dual_gripper: bool = False, port: int = 10100, timeout=20
+  ) -> None:
     super().__init__()
     self.io = Socket(host=host, port=port)
     self.profile_index: int = 1
@@ -45,8 +48,13 @@ class PreciseFlexBackend(SCARABackend, ABC):
     self.horizontal_compliance_torque: int = 0
     self.timeout = timeout
     self._has_rail = has_rail
+    self._is_dual_gripper = is_dual_gripper
+    if is_dual_gripper:
+      warnings.warn(
+        "Dual gripper support is experimental and may not work as expected.", UserWarning
+      )
 
-  def convert_to_joint_space(self, position: Iterable[float]) -> PreciseFlexJointCoords:
+  def _convert_to_joint_space(self, position: Iterable[float]) -> PreciseFlexJointCoords:
     """Convert joint list to PreciseFlexJointCoords.
 
     Args:
@@ -70,7 +78,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       gripper=position[5],
     )
 
-  def convert_to_cartesian_space(
+  def _convert_to_cartesian_space(
     self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
   ) -> PreciseFlexCartesianCoords:
     """Convert a tuple of cartesian coordinates to a CartesianCoords object."""
@@ -85,7 +93,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       orientation=orientation,
     )
 
-  def convert_to_cartesian_array(
+  def _convert_to_cartesian_array(
     self, position: PreciseFlexCartesianCoords
   ) -> tuple[float, float, float, float, float, float, int]:
     """Convert a CartesianCoords object to a list of cartesian coordinates."""
@@ -101,12 +109,14 @@ class PreciseFlexBackend(SCARABackend, ABC):
     )
     return arr
 
-  async def setup(self):
+  async def setup(self, skip_home: bool = False):
     """Initialize the PreciseFlex backend."""
     await self.io.setup()
-    await self.set_mode("pc")
+    await self.set_response_mode("pc")
     await self.power_on_robot()
     await self.attach(1)
+    if not skip_home:
+      await self.home()
 
   async def stop(self):
     """Stop the PreciseFlex backend."""
@@ -123,15 +133,15 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """Get the current speed percentage of the arm's movement."""
     return await self.get_profile_speed(self.profile_index)
 
-  async def open_gripper(self):
+  async def open_gripper(self, gripper_width: float):
+    """Open the gripper to the specified width. If no width is specified, opens to the default open position."""
+    await self._set_grip_open_pos(gripper_width)
     await self.send_command("gripper 1")
 
-  async def close_gripper(self):
+  async def close_gripper(self, gripper_width: float):
+    """Close the gripper to the specified width. If no width is specified, closes to the default close position."""
+    await self._set_grip_close_pos(gripper_width)
     await self.send_command("gripper 2")
-
-  async def is_gripper_closed(self) -> bool:
-    ret_int = await self.is_fully_closed()
-    return ret_int == -1
 
   async def halt(self):
     """Stops the current robot immediately but leaves power on."""
@@ -181,13 +191,10 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """Attach or release the robot, or get attachment state.
 
     Args:
-      attach_state: If omitted, returns the attachment state.
-        0 = release the robot
-        1 = attach the robot
+      attach_state: If omitted, returns the attachment state.  0 = release the robot; 1 = attach the robot.
 
     Returns:
-      If attach_state is omitted, returns 0 if robot is not attached, -1 if attached.
-         Otherwise returns 0 on success.
+      If attach_state is omitted, returns 0 if robot is not attached, -1 if attached.  Otherwise returns 0 on success.
 
     Note:
       The robot must be attached to allow motion commands.
@@ -209,10 +216,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
   async def power_off_robot(self):
     """Power off the robot."""
     await self.set_power(False)
-
-  async def version(self) -> str:
-    """Get the robot's version."""
-    return await self.get_version()
 
   async def approach(
     self,
@@ -243,24 +246,29 @@ class PreciseFlexBackend(SCARABackend, ABC):
       access = VerticalAccess()
 
     if isinstance(position, list):
-      joint_position = self.convert_to_joint_space(position)
+      joint_position = self._convert_to_joint_space(position)
       await self._approach_j(joint_position, access)
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self._approach_c(position, access)
     else:
-      raise ValueError("Position must be of type Iterable[float] or CartesianCoords.")
+      raise TypeError("Position must be of type Iterable[float] or CartesianCoords.")
 
   async def pick_plate(
     self,
     position: Union[PreciseFlexCartesianCoords, Iterable[float]],
+    plate_width: float,
     access: Optional[AccessPattern] = None,
+    finger_speed_percent: float = 50.0,
+    grasp_force: float = 10.0,
   ):
     """Pick a plate from the specified position.
 
     Args:
       position: Target position for pickup (CartesianCoords only, PreciseFlexJointCoords not supported)
-      access: How to access the location (VerticalAccess or HorizontalAccess).
-              Defaults to VerticalAccess() if not specified.
+      plate_width: Gripper width in millimeters used when gripping the plate.
+      access: How to access the location (VerticalAccess or HorizontalAccess).  Defaults to VerticalAccess() if not specified.
+      finger_speed_percent: Speed percentage for the gripper fingers (1-100)
+      grasp_force: Grasp force in Newtons
 
     Raises:
       ValueError: If position is not CartesianCoords
@@ -285,9 +293,19 @@ class PreciseFlexBackend(SCARABackend, ABC):
     if access is None:
       access = VerticalAccess()
 
-    if not isinstance(position, PreciseFlexCartesianCoords):
-      raise ValueError("pick_plate only supports CartesianCoords for PreciseFlex.")
-    await self._pick_plate_c(cartesian_position=position, access=access)
+    await self.set_grasp_data(
+      plate_width=plate_width,
+      finger_speed_percent=finger_speed_percent,
+      grasp_force=grasp_force,
+    )
+
+    if isinstance(position, PreciseFlexCartesianCoords):
+      await self._pick_plate_c(cartesian_position=position, access=access)
+    elif isinstance(position, list):
+      joint_position = self._convert_to_joint_space(position)
+      await self._pick_plate_j(joint_position, access)
+    else:
+      raise TypeError("Position must be of type Iterable[float] or CartesianCoords.")
 
   async def place_plate(
     self,
@@ -298,8 +316,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     Args:
       position: Target position for placement (CartesianCoords only, PreciseFlexJointCoords not supported)
-      access: How to access the location (VerticalAccess or HorizontalAccess).
-              Defaults to VerticalAccess() if not specified.
+      access: How to access the location (VerticalAccess or HorizontalAccess).  Defaults to VerticalAccess() if not specified.
 
     Raises:
       ValueError: If position is not CartesianCoords
@@ -325,7 +342,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       access = VerticalAccess()
 
     if not isinstance(position, PreciseFlexCartesianCoords):
-      raise ValueError("place_plate only supports CartesianCoords for PreciseFlex.")
+      raise TypeError("place_plate only supports CartesianCoords for PreciseFlex.")
     await self._place_plate_c(cartesian_position=position, access=access)
 
   async def move_to(self, position: Union[PreciseFlexCartesianCoords, Iterable[float]]):
@@ -351,36 +368,38 @@ class PreciseFlexBackend(SCARABackend, ABC):
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self.move_c(profile_index=self.profile_index, cartesian_coords=position)
     else:
-      raise ValueError("Position must be of type JointSpace or CartesianCoords.")
+      raise TypeError("Position must be of type Iterable[float] or CartesianCoords.")
 
   async def get_joint_position(self) -> PreciseFlexJointCoords:
     """Get the current position of the arm in 3D space."""
-    data = await self.send_command("wherej")
-    parts = data.split()
 
-    if not parts:
-      # In case of incomplete response, wait for EOM and try to read again
-      await self.wait_for_eom()
+    await self.wait_for_eom()
+
+    num_tries = 2
+    for _ in range(num_tries):
       data = await self.send_command("wherej")
       parts = data.split()
-      if not parts:
-        raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
+      if len(parts) > 0:
+        break
+    else:
+      raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
 
     axes = list(self._parse_angles_response(parts))
-    return self.convert_to_joint_space(axes)
+    return self._convert_to_joint_space(axes)
 
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in 3D space."""
-    data = await self.send_command("wherec")
-    parts = data.split()
 
-    if len(parts) != 7:
-      # In case of incomplete response, wait for EOM and try to read again
-      await self.wait_for_eom()
+    await self.wait_for_eom()
+
+    num_tries = 2
+    for _ in range(num_tries):
       data = await self.send_command("wherec")
       parts = data.split()
-      if len(parts) != 7:
-        raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
+      if len(parts) == 7:
+        break
+    else:
+      raise PreciseFlexError(-1, "Unexpected response format from wherec command.")
 
     x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts[0:6])
     config = int(parts[6])
@@ -388,7 +407,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     # return (x, y, z, yaw, pitch, roll, config)
     enum_thing = self._convert_orientation_int_to_enum(config)
 
-    return self.convert_to_cartesian_space(position=(x, y, z, yaw, pitch, roll, enum_thing))
+    return self._convert_to_cartesian_space(position=(x, y, z, yaw, pitch, roll, enum_thing))
 
   async def send_command(self, command: str) -> str:
     await self.io.write(command.encode("utf-8") + b"\n")
@@ -504,8 +523,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     clearance values and performs approach/retract motions.
 
     Args:
-      access: Access pattern (VerticalAccess or HorizontalAccess) defining
-              how to approach and retract from the location.
+      access: Access pattern (VerticalAccess or HorizontalAccess) defining how to approach and retract from the location.
     """
     if isinstance(access, VerticalAccess):
       # Vertical access: access_type=1, z_clearance is vertical distance
@@ -528,7 +546,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
         z_grasp_offset=access.gripper_offset_mm,
       )
     else:
-      raise ValueError("Access pattern must be VerticalAccess or HorizontalAccess.")
+      raise TypeError("Access pattern must be VerticalAccess or HorizontalAccess.")
 
   # region GENERAL COMMANDS
 
@@ -603,22 +621,22 @@ class PreciseFlexBackend(SCARABackend, ABC):
     else:
       await self.send_command(f"hp {power_state} {timeout}")
 
-  Mode = Literal["pc", "verbose"]
+  ResponseMode = Literal["pc", "verbose"]
 
-  async def get_mode(self) -> Mode:
+  async def get_mode(self) -> ResponseMode:
     """Get the current response mode.
 
     Returns:
       Current mode (0 = PC mode, 1 = verbose mode)
     """
     response = await self.send_command("mode")
-    mapping: Dict[int, PreciseFlexBackend.Mode] = {
+    mapping: Dict[int, PreciseFlexBackend.ResponseMode] = {
       0: "pc",
       1: "verbose",
     }
     return mapping[int(response)]
 
-  async def set_mode(self, mode: Mode) -> None:
+  async def set_response_mode(self, mode: ResponseMode) -> None:
     """Set the response mode.
 
     Args:
@@ -825,7 +843,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     response = await self.send_command("sysState")
     return int(response)
 
-  async def get_tool(self) -> tuple[float, float, float, float, float, float]:
+  async def get_tool_transformation_values(self) -> tuple[float, float, float, float, float, float]:
     """Get the current tool transformation values.
 
     Returns:
@@ -844,7 +862,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     return (x, y, z, yaw, pitch, roll)
 
-  async def set_tool(
+  async def set_tool_transformation_values(
     self, x: float, y: float, z: float, yaw: float, pitch: float, roll: float
   ) -> None:
     """Set the robot tool transformation.
@@ -962,12 +980,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     Args:
       location_index: The station index, from 1 to N_LOC.
-      x: X coordinate.
-      y: Y coordinate.
-      z: Z coordinate.
-      yaw: Yaw rotation. Defaults to 0.0.
-      pitch: Pitch rotation. Defaults to 0.0.
-      roll: Roll rotation. Defaults to 0.0.
+      cartesian_position: The Cartesian position to set.
     """
     await self.send_command(
       f"locXyz {location_index} "
@@ -1532,13 +1545,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     Args:
       profile_index: The profile index to use for this motion.
-      x: X coordinate.
-      y: Y coordinate.
-      z: Z coordinate.
-      yaw: Yaw rotation.
-      pitch: Pitch rotation.
-      roll: Roll rotation.
-      config: If specified, sets the Config property for the location.
+      cartesian_coords: The Cartesian coordinates to which the robot should move.
 
     Note:
       Requires that the robot be attached.
@@ -1632,12 +1639,8 @@ class PreciseFlexBackend(SCARABackend, ABC):
     Individual axes may be placed into zero torque mode while the remaining axes are servoing.
 
     Args:
-      enable: If True, enable torque mode for axes specified by axis_mask.
-            If False, disable torque mode for the entire robot.
-      axis_mask: The bit mask specifying the axes to be placed in torque mode when enable is True.
-              The mask is computed by OR'ing the axis bits:
-              1 = axis 1, 2 = axis 2, 4 = axis 3, 8 = axis 4, etc.
-              Ignored when enable is False.
+      enable: If True, enable torque mode for axes specified by axis_mask.  If False, disable torque mode for the entire robot.
+      axis_mask: The bit mask specifying the axes to be placed in torque mode when enable is True.  The mask is computed by OR'ing the axis bits: 1 = axis 1, 2 = axis 2, 4 = axis 3, 8 = axis 4, etc.  Ignored when enable is False.
     """
 
     if enable:
@@ -1682,7 +1685,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """Get the data to be used for the next force-controlled PickPlate command grip operation.
 
     Returns:
-      A tuple containing (plate_width_mm, finger_speed_percent, grasp_force_newtons)
+      A tuple containing (plate_width_mm, finger_speed_percent, grasp_force)
     """
     data = await self.send_command("GraspData")
     parts = data.split()
@@ -1697,7 +1700,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return (plate_width, finger_speed, grasp_force)
 
   async def set_grasp_data(
-    self, plate_width_mm: float, finger_speed_percent: float, grasp_force_newtons: float
+    self, plate_width: float, finger_speed_percent: float, grasp_force: float
   ) -> None:
     """Set the data to be used for the next force-controlled PickPlate command grip operation.
 
@@ -1706,15 +1709,13 @@ class PreciseFlexBackend(SCARABackend, ABC):
     Args:
       plate_width_mm: The plate width in mm.
       finger_speed_percent: The finger speed during grasp where 100 means 100%.
-      grasp_force_newtons: The gripper squeezing force, in Newtons.
+      grasp_force: The gripper squeezing force, in Newtons.
       A positive value indicates the fingers must close to grasp.
       A negative value indicates the fingers must open to grasp.
     """
-    await self.send_command(
-      f"GraspData {plate_width_mm} {finger_speed_percent} {grasp_force_newtons}"
-    )
+    await self.send_command(f"GraspData {plate_width} {finger_speed_percent} {grasp_force}")
 
-  async def get_grip_close_pos(self) -> float:
+  async def _get_grip_close_pos(self) -> float:
     """Get the gripper close position for the servoed gripper.
 
     Returns:
@@ -1723,7 +1724,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     data = await self.send_command("GripClosePos")
     return float(data)
 
-  async def set_grip_close_pos(self, close_position: float) -> None:
+  async def _set_grip_close_pos(self, close_position: float) -> None:
     """Set the gripper close position for the servoed gripper.
 
     The close position may be changed by a force-controlled grip operation.
@@ -1733,7 +1734,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """
     await self.send_command(f"GripClosePos {close_position}")
 
-  async def get_grip_open_pos(self) -> float:
+  async def _get_grip_open_pos(self) -> float:
     """Get the gripper open position for the servoed gripper.
 
     Returns:
@@ -1742,7 +1743,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     data = await self.send_command("GripOpenPos")
     return float(data)
 
-  async def set_grip_open_pos(self, open_position: float) -> None:
+  async def _set_grip_open_pos(self, open_position: float) -> None:
     """Set the gripper open position for the servoed gripper.
 
     Args:
@@ -1867,13 +1868,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
   async def set_pallet_origin(
     self,
     station_id: int,
-    x: float,
-    y: float,
-    z: float,
-    yaw: float,
-    pitch: float,
-    roll: float,
-    config: Optional[int] = None,
+    cartesian_coords: PreciseFlexCartesianCoords,
   ) -> None:
     """Define the origin of a pallet reference frame.
 
@@ -1885,20 +1880,24 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     Args:
       station_id: Station ID, from 1 to N_LOC.
-      x: World location X coordinate.
-      y: World location Y coordinate.
-      z: World location Z coordinate.
-      yaw: Yaw rotation.
-      pitch: Pitch rotation.
-      roll: Roll rotation.
-      config: The configuration flags for this location.
+      cartesian_coords: The Cartesian coordinates defining the pallet origin.
     """
-    if config is None:
-      await self.send_command(f"PalletOrigin {station_id} {x} {y} {z} {yaw} {pitch} {roll}")
-    else:
-      await self.send_command(
-        f"PalletOrigin {station_id} {x} {y} {z} {yaw} {pitch} {roll} {config}"
-      )
+
+    cmd = (
+      f"PalletOrigin {station_id} "
+      f"{cartesian_coords.location.x} "
+      f"{cartesian_coords.location.y} "
+      f"{cartesian_coords.location.z} "
+      f"{cartesian_coords.rotation.yaw} "
+      f"{cartesian_coords.rotation.pitch} "
+      f"{cartesian_coords.rotation.roll} "
+    )
+
+    if cartesian_coords.orientation is not None:
+      config_int = self._convert_orientation_enum_to_int(cartesian_coords.orientation)
+      cmd += f"{config_int}"
+
+    await self.send_command(cmd)
 
   async def get_pallet_x(self, station_id: int) -> tuple[int, int, float, float, float]:
     """Get the current pallet X data for the specified station.
@@ -2194,7 +2193,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     return int(response)
 
   async def grasp_plate(
-    self, plate_width_mm: float, finger_speed_percent: int, grasp_force_newtons: float
+    self, plate_width_mm: float, finger_speed_percent: int, grasp_force: float
   ) -> int:
     """Grasps a plate with limited force.
 
@@ -2205,7 +2204,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     Args:
       plate_width_mm: Plate width in mm. Should be accurate to within about 1 mm.
       finger_speed_percent: Percent speed to close fingers. 1 to 100.
-      grasp_force_newtons: Maximum gripper squeeze force in Newtons.
+      grasp_force: Maximum gripper squeeze force in Newtons.
         A positive value indicates the fingers must close to grasp.
         A negative value indicates the fingers must open to grasp.
 
@@ -2219,7 +2218,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       raise ValueError("Finger speed percent must be between 1 and 100")
 
     response = await self.send_command(
-      f"GraspPlate {plate_width_mm} {finger_speed_percent} {grasp_force_newtons}"
+      f"GraspPlate {plate_width_mm} {finger_speed_percent} {grasp_force}"
     )
     return int(response)
 
@@ -2245,16 +2244,26 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     await self.send_command(f"ReleasePlate {open_width_mm} {finger_speed_percent} {in_range}")
 
-  async def is_fully_closed(self) -> int:
-    """Tests if the gripper is fully closed by checking the end-of-travel sensor.
+  async def is_gripper_closed(self) -> bool:
+    """(Single Gripper Only) Tests if the gripper is fully closed by checking the end-of-travel sensor.
 
     Returns:
-      For standard gripper: -1 if the gripper is within 2mm of fully closed, otherwise 0.
-          For dual gripper: A bitmask of the closed state of each gripper where gripper 1 is bit 0
-          and gripper 2 is bit 1. A bit being set to 1 represents the corresponding gripper being closed.
+      For standard gripper: True if the gripper is within 2mm of fully closed, otherwise False.
     """
+    if self._is_dual_gripper:
+      raise ValueError("IsGripperClosed command is only valid for single gripper robots.")
     response = await self.send_command("IsFullyClosed")
-    return int(response)
+    return int(response) == -1
+
+  async def are_grippers_closed(self) -> tuple[bool, bool]:
+    """(Dual Gripper Only) Tests if each gripper is fully closed by checking the end-of-travel sensors."""
+    if not self._is_dual_gripper:
+      raise ValueError("AreGrippersClosed command is only valid for dual gripper robots.")
+    response = await self.send_command("IsFullyClosed")
+    ret_int = int(response)
+    gripper_1_closed = (ret_int & 1) != 0
+    gripper_2_closed = (ret_int & 2) != 0
+    return (gripper_1_closed, gripper_2_closed)
 
   async def set_active_gripper(
     self, gripper_id: int, spin_mode: int = 0, profile_index: Optional[int] = None
@@ -2291,7 +2300,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     response = await self.send_command("GetActiveGripper")
     return int(response)
 
-  async def free_mode(self, on: bool, axis: int = 0):
+  async def set_free_mode(self, on: bool, axis: int = 0):
     """
     Activates or deactivates free mode.  The robot must be attached to enter free mode.
 
@@ -2302,6 +2311,19 @@ class PreciseFlexBackend(SCARABackend, ABC):
     if not on:
       axis = -1  # means turn off free mode for all axes
     await self.send_command(f"freemode {axis}")
+
+  async def activate_free_mode(self, axis: int = 0):
+    """
+    Activates free mode.  The robot must be attached to enter free mode.
+
+    Args:
+      axis: Axis to apply free mode to. 0 = all axes or > 0 = Free just this axis.
+    """
+    await self.set_free_mode(True, axis)
+
+  async def deactivate_free_mode(self):
+    """Deactivates free mode for all axes."""
+    await self.set_free_mode(False)
 
   async def pick_plate_from_stored_position(
     self,

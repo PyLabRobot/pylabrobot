@@ -58,7 +58,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_convert_to_joint_space_no_rail(self):
     position = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0]
-    joint_coords = self.backend.convert_to_joint_space(position)
+    joint_coords = self.backend._convert_to_joint_space(position)
     self.assertEqual(joint_coords.rail, 0.0)
     self.assertEqual(joint_coords.base, 10.0)
     self.assertEqual(joint_coords.shoulder, 20.0)
@@ -69,20 +69,20 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_convert_to_joint_space_no_rail_error(self):
     position = [1.0, 10.0, 20.0, 30.0, 40.0, 50.0]
     with self.assertRaisesRegex(
-      ValueError, "Position\[0\] \(rail\) must be 0.0 for robot without rail."
+      ValueError, r"Position\[0\] \(rail\) must be 0.0 for robot without rail."
     ):
-      self.backend.convert_to_joint_space(position)
+      self.backend._convert_to_joint_space(position)
 
   async def test_convert_to_joint_space_too_few_elements(self):
     position = [0.0, 10.0, 20.0, 30.0, 40.0]
     with self.assertRaisesRegex(
       ValueError, "Position must have 6 joint angles for robot with rail."
     ):
-      self.backend.convert_to_joint_space(position)
+      self.backend._convert_to_joint_space(position)
 
   async def test_convert_to_cartesian_space(self):
     position = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, ElbowOrientation.RIGHT)
-    cartesian_coords = self.backend.convert_to_cartesian_space(position)
+    cartesian_coords = self.backend._convert_to_cartesian_space(position)
     self.assertEqual(cartesian_coords.location.x, 1.0)
     self.assertEqual(cartesian_coords.location.y, 2.0)
     self.assertEqual(cartesian_coords.location.z, 3.0)
@@ -94,7 +94,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_convert_to_cartesian_space_too_few_elements(self):
     position = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
     with self.assertRaisesRegex(ValueError, "Position must be a tuple of 7 values"):
-      self.backend.convert_to_cartesian_space(position)  # type: ignore
+      self.backend._convert_to_cartesian_space(position)  # type: ignore
 
   async def test_convert_to_cartesian_array(self):
     cartesian_coords = PreciseFlexCartesianCoords(
@@ -102,20 +102,22 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       rotation=Rotation(4.0, 5.0, 6.0),
       orientation=ElbowOrientation.LEFT,
     )
-    cartesian_array = self.backend.convert_to_cartesian_array(cartesian_coords)
+    cartesian_array = self.backend._convert_to_cartesian_array(cartesian_coords)
     self.assertEqual(cartesian_array, (1.0, 2.0, 3.0, 6.0, 5.0, 4.0, 2))
 
   async def test_setup(self):
     self.mock_socket_instance.readline.side_effect = [
-      b"0 pc\r\n",  # set_mode
-      b"0 hp\r\n",  # power_on_robot
-      b"0 attach\r\n",  # attach
+      b"0 OK\r\n",  # set_mode
+      b"0 OK\r\n",  # power_on_robot
+      b"0 OK\r\n",  # attach
+      b"0 OK\r\n",  # home
     ]
     await self.backend.setup()
     self.mock_socket_instance.setup.assert_called_once()
     self.mock_socket_instance.write.assert_any_call(b"mode 0\n")
     self.mock_socket_instance.write.assert_any_call(b"hp 1 20\n")
     self.mock_socket_instance.write.assert_any_call(b"attach 1\n")
+    self.mock_socket_instance.write.assert_any_call(b"home\n")
 
   async def test_stop(self):
     self.mock_socket_instance.readline.side_effect = [
@@ -142,12 +144,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_open_gripper(self):
     self.mock_socket_instance.readline.return_value = b"0 gripper 1\r\n"
-    await self.backend.open_gripper()
+    await self.backend.open_gripper(50.0)
+    self.mock_socket_instance.write.assert_any_call(b"GripOpenPos 50.0\n")
     self.mock_socket_instance.write.assert_called_with(b"gripper 1\n")
 
   async def test_close_gripper(self):
     self.mock_socket_instance.readline.return_value = b"0 gripper 2\r\n"
-    await self.backend.close_gripper()
+    await self.backend.close_gripper(50.0)
+    self.mock_socket_instance.write.assert_any_call(b"GripClosePos 50.0\n")
     self.mock_socket_instance.write.assert_called_with(b"gripper 2\n")
 
   async def test_is_gripper_closed(self):
@@ -223,7 +227,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_version(self):
     self.mock_socket_instance.readline.return_value = b"0 v1.0.0\r\n"
-    version = await self.backend.version()
+    version = await self.backend.get_version()
     self.assertEqual(version, "v1.0.0")
     self.mock_socket_instance.write.assert_called_with(b"version\n")
 
@@ -259,15 +263,16 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_approach_invalid_position_type(self):
     with self.assertRaisesRegex(
-      ValueError, "Position must be of type Iterable\[float\] or CartesianCoords."
+      TypeError, r"Position must be of type Iterable\[float\] or CartesianCoords."
     ):
       await self.backend.approach("invalid")  # type: ignore
 
   async def test_pick_plate(self):
     self.mock_socket_instance.readline.side_effect = [
-      b"0 locXyz 1 1.0 2.0 3.0 4.0 5.0 6.0\r\n",  # set_location_xyz
-      b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
-      b"0 locConfig 1 4097\r\n",  # set_location_config
+      b"0 OK\r\n",  # set_grasp_data
+      b"0 OK\r\n",  # set_location_xyz
+      b"0 OK\r\n",  # _set_grip_detail (StationType)
+      b"0 OK\r\n",  # set_location_config
       b"0 1\r\n",  # pick_plate_from_stored_position
     ]
     position = PreciseFlexCartesianCoords(
@@ -275,17 +280,23 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       rotation=Rotation(4.0, 5.0, 6.0),
       orientation=ElbowOrientation.RIGHT,
     )
-    await self.backend.pick_plate(position)
+    await self.backend.pick_plate(
+      position, plate_width=85.6, finger_speed_percent=50.0, grasp_force=10.0
+    )
+    self.mock_socket_instance.write.assert_any_call(b"GraspData 85.6 50.0 10.0\n")
     self.mock_socket_instance.write.assert_any_call(b"locXyz 1 1.0 2.0 3.0 6.0 5.0 4.0\n")
     self.mock_socket_instance.write.assert_any_call(b"StationType 1 1 0 100 0 10\n")
     self.mock_socket_instance.write.assert_any_call(b"locConfig 1 4097\n")
     self.mock_socket_instance.write.assert_any_call(b"pickplate 1 0 0\n")
 
   async def test_pick_plate_invalid_position_type(self):
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 OK\r\n",  # For set_grasp_data
+    ]
     with self.assertRaisesRegex(
-      ValueError, "pick_plate only supports CartesianCoords for PreciseFlex."
+      TypeError, r"Position must be of type Iterable\[float\] or CartesianCoords."
     ):
-      await self.backend.pick_plate([1, 2, 3, 4, 5, 6])
+      await self.backend.pick_plate("invalid")  # type: ignore
 
   async def test_place_plate(self):
     self.mock_socket_instance.readline.side_effect = [
@@ -307,7 +318,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_place_plate_invalid_position_type(self):
     with self.assertRaisesRegex(
-      ValueError, "place_plate only supports CartesianCoords for PreciseFlex."
+      TypeError, "place_plate only supports CartesianCoords for PreciseFlex."
     ):
       await self.backend.place_plate([1, 2, 3, 4, 5, 6])
 
@@ -329,7 +340,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_to_invalid_position_type(self):
     with self.assertRaisesRegex(
-      ValueError, "Position must be of type JointSpace or CartesianCoords."
+      TypeError, "Position must be of type Iterable\\[float\\] or CartesianCoords."
     ):
       await self.backend.move_to("invalid")  # type: ignore
 
@@ -487,7 +498,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_grip_detail_invalid_access(self):
     with self.assertRaisesRegex(
-      ValueError, "Access pattern must be VerticalAccess or HorizontalAccess."
+      TypeError, "Access pattern must be VerticalAccess or HorizontalAccess."
     ):
       await self.backend._set_grip_detail("invalid")  # type: ignore
 
@@ -541,15 +552,15 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_mode(self):
     self.mock_socket_instance.readline.return_value = b"0 mode 0\r\n"
-    await self.backend.set_mode("pc")
+    await self.backend.set_response_mode("pc")
     self.mock_socket_instance.write.assert_called_with(b"mode 0\n")
 
     self.mock_socket_instance.readline.return_value = b"0 mode 1\r\n"
-    await self.backend.set_mode("verbose")
+    await self.backend.set_response_mode("verbose")
     self.mock_socket_instance.write.assert_called_with(b"mode 1\n")
 
     with self.assertRaisesRegex(ValueError, "Mode must be 'pc' or 'verbose'"):
-      await self.backend.set_mode("invalid")  # type: ignore
+      await self.backend.set_response_mode("invalid")  # type: ignore
 
   async def test_get_monitor_speed(self):
     self.mock_socket_instance.readline.return_value = b"0 50\r\n"
@@ -672,7 +683,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_tool(self):
     self.mock_socket_instance.readline.return_value = b"0 1.0 2.0 3.0 4.0 5.0 6.0\r\n"
-    x, y, z, yaw, pitch, roll = await self.backend.get_tool()
+    x, y, z, yaw, pitch, roll = await self.backend.get_tool_transformation_values()
     self.assertEqual(x, 1.0)
     self.assertEqual(y, 2.0)
     self.assertEqual(z, 3.0)
@@ -683,7 +694,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_tool_with_prefix(self):
     self.mock_socket_instance.readline.return_value = b"0 tool: 1.0 2.0 3.0 4.0 5.0 6.0\r\n"
-    x, y, z, yaw, pitch, roll = await self.backend.get_tool()
+    x, y, z, yaw, pitch, roll = await self.backend.get_tool_transformation_values()
     self.assertEqual(x, 1.0)
     self.assertEqual(y, 2.0)
     self.assertEqual(z, 3.0)
@@ -695,11 +706,11 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_get_tool_invalid_response(self):
     self.mock_socket_instance.readline.return_value = b"0 1.0 2.0 3.0 4.0 5.0\r\n"
     with self.assertRaisesRegex(PreciseFlexError, "Unexpected response format from tool command."):
-      await self.backend.get_tool()
+      await self.backend.get_tool_transformation_values()
 
   async def test_set_tool(self):
     self.mock_socket_instance.readline.return_value = b"0 tool 1.0 2.0 3.0 4.0 5.0 6.0\r\n"
-    await self.backend.set_tool(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    await self.backend.set_tool_transformation_values(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
     self.mock_socket_instance.write.assert_called_with(b"tool 1.0 2.0 3.0 4.0 5.0 6.0\n")
 
   async def test_get_location_angles(self):
@@ -1174,24 +1185,24 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_grip_close_pos(self):
     self.mock_socket_instance.readline.return_value = b"0 10.0\r\n"
-    pos = await self.backend.get_grip_close_pos()
+    pos = await self.backend._get_grip_close_pos()
     self.assertEqual(pos, 10.0)
     self.mock_socket_instance.write.assert_called_with(b"GripClosePos\n")
 
   async def test_set_grip_close_pos(self):
     self.mock_socket_instance.readline.return_value = b"0 GripClosePos 10.0\r\n"
-    await self.backend.set_grip_close_pos(10.0)
+    await self.backend._set_grip_close_pos(10.0)
     self.mock_socket_instance.write.assert_called_with(b"GripClosePos 10.0\n")
 
   async def test_get_grip_open_pos(self):
     self.mock_socket_instance.readline.return_value = b"0 20.0\r\n"
-    pos = await self.backend.get_grip_open_pos()
+    pos = await self.backend._get_grip_open_pos()
     self.assertEqual(pos, 20.0)
     self.mock_socket_instance.write.assert_called_with(b"GripOpenPos\n")
 
   async def test_set_grip_open_pos(self):
     self.mock_socket_instance.readline.return_value = b"0 GripOpenPos 20.0\r\n"
-    await self.backend.set_grip_open_pos(20.0)
+    await self.backend._set_grip_open_pos(20.0)
     self.mock_socket_instance.write.assert_called_with(b"GripOpenPos 20.0\n")
 
   async def test_move_rail_no_args(self):
@@ -1261,16 +1272,15 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.readline.return_value = (
       b"0 PalletOrigin 1 1.0 2.0 3.0 4.0 5.0 6.0 1\r\n"
     )
-    await self.backend.set_pallet_origin(1, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 1)
+    position = PreciseFlexCartesianCoords(
+      location=Coordinate(1.0, 2.0, 3.0),
+      rotation=Rotation(4.0, 5.0, 6.0),
+      orientation=ElbowOrientation.RIGHT,
+    )
+    await self.backend.set_pallet_origin(1, position)
     self.mock_socket_instance.write.assert_called_with(
-      b"PalletOrigin 1 1.0 2.0 3.0 4.0 5.0 6.0 1\n"
+      b"PalletOrigin 1 1.0 2.0 3.0 6.0 5.0 4.0 1\n"
     )
-
-    self.mock_socket_instance.readline.return_value = (
-      b"0 PalletOrigin 1 1.0 2.0 3.0 4.0 5.0 6.0\r\n"
-    )
-    await self.backend.set_pallet_origin(1, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
-    self.mock_socket_instance.write.assert_called_with(b"PalletOrigin 1 1.0 2.0 3.0 4.0 5.0 6.0\n")
 
   async def test_get_pallet_x(self):
     self.mock_socket_instance.readline.return_value = b"0 1 1 1.0 2.0 3.0\r\n"
@@ -1478,12 +1488,12 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_free_mode_enable(self):
     self.mock_socket_instance.readline.return_value = b"0 freemode 1\r\n"
-    await self.backend.free_mode(True, 1)
+    await self.backend.set_free_mode(True, 1)
     self.mock_socket_instance.write.assert_called_with(b"freemode 1\n")
 
   async def test_free_mode_disable(self):
     self.mock_socket_instance.readline.return_value = b"0 freemode -1\r\n"
-    await self.backend.free_mode(False)
+    await self.backend.set_free_mode(False)
     self.mock_socket_instance.write.assert_called_with(b"freemode -1\n")
 
   async def test_teach_position(self):

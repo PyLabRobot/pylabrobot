@@ -32,11 +32,11 @@ class SCARA(Machine):
     """Get the current position of the arm in 3D space."""
     return await self.backend.get_cartesian_position(**backend_kwargs)
 
-  async def open_gripper(self, **backend_kwargs) -> None:
-    return await self.backend.open_gripper(**backend_kwargs)
+  async def open_gripper(self, gripper_width: float, **backend_kwargs) -> None:
+    return await self.backend.open_gripper(gripper_width=gripper_width, **backend_kwargs)
 
-  async def close_gripper(self, **backend_kwargs) -> None:
-    return await self.backend.close_gripper(**backend_kwargs)
+  async def close_gripper(self, gripper_width: float, **backend_kwargs) -> None:
+    return await self.backend.close_gripper(gripper_width=gripper_width, **backend_kwargs)
 
   async def is_gripper_closed(self, **backend_kwargs) -> bool:
     return await self.backend.is_gripper_closed(**backend_kwargs)
@@ -72,6 +72,7 @@ class SCARA(Machine):
   async def pick_plate(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
+    plate_width: float,
     access: Optional[AccessPattern] = None,
     **backend_kwargs,
   ) -> None:
@@ -80,10 +81,13 @@ class SCARA(Machine):
     Args:
       position: Target position for pickup
       access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
+      plate_width: ripper width in millimeters used when gripping the plate.
     """
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
-    return await self.backend.pick_plate(position, access=access, **backend_kwargs)
+    return await self.backend.pick_plate(
+      plate_width=plate_width, position=position, access=access, **backend_kwargs
+    )
 
   async def place_plate(
     self,
