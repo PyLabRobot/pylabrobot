@@ -280,7 +280,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       rotation=Rotation(4.0, 5.0, 6.0),
       orientation=ElbowOrientation.RIGHT,
     )
-    await self.backend.pick_plate(
+    await self.backend.pick_up_resource(
       position, plate_width=85.6, finger_speed_percent=50.0, grasp_force=10.0
     )
     self.mock_socket_instance.write.assert_any_call(b"GraspData 85.6 50.0 10.0\n")
@@ -296,7 +296,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(
       TypeError, r"Position must be of type Iterable\[float\] or CartesianCoords."
     ):
-      await self.backend.pick_plate("invalid", plate_width=1.0)  # type: ignore
+      await self.backend.pick_up_resource("invalid", plate_width=1.0)  # type: ignore
 
   async def test_place_plate(self):
     self.mock_socket_instance.readline.side_effect = [
@@ -310,7 +310,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       rotation=Rotation(4.0, 5.0, 6.0),
       orientation=ElbowOrientation.RIGHT,
     )
-    await self.backend.place_plate(position)
+    await self.backend.drop_resource(position)
     self.mock_socket_instance.write.assert_any_call(b"locXyz 1 1.0 2.0 3.0 6.0 5.0 4.0\n")
     self.mock_socket_instance.write.assert_any_call(b"StationType 1 1 0 100 0 10\n")
     self.mock_socket_instance.write.assert_any_call(b"locConfig 1 4097\n")
@@ -320,7 +320,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(
       TypeError, "place_plate only supports CartesianCoords for PreciseFlex."
     ):
-      await self.backend.place_plate([1, 2, 3, 4, 5, 6])
+      await self.backend.drop_resource([1, 2, 3, 4, 5, 6])
 
   async def test_move_to_joint_space(self):
     self.mock_socket_instance.readline.return_value = b"0 moveJ 1 0.0 10.0 20.0 30.0 40.0 50.0\r\n"
@@ -1443,28 +1443,28 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_grasp_plate(self):
     self.mock_socket_instance.readline.return_value = b"0 -1\r\n"
-    result = await self.backend.grasp_plate(10.0, 50, 10.0)
+    result = await self.backend._grasp_plate(10.0, 50, 10.0)
     self.assertEqual(result, -1)
     self.mock_socket_instance.write.assert_called_with(b"GraspPlate 10.0 50 10.0\n")
 
     with self.assertRaisesRegex(ValueError, "Finger speed percent must be between 1 and 100"):
-      await self.backend.grasp_plate(10.0, 0, 10.0)
+      await self.backend._grasp_plate(10.0, 0, 10.0)
     with self.assertRaisesRegex(ValueError, "Finger speed percent must be between 1 and 100"):
-      await self.backend.grasp_plate(10.0, 101, 10.0)
+      await self.backend._grasp_plate(10.0, 101, 10.0)
 
   async def test_release_plate(self):
     self.mock_socket_instance.readline.return_value = b"0 ReleasePlate 20.0 50 0.0\r\n"
-    await self.backend.release_plate(20.0, 50)
+    await self.backend._release_plate(20.0, 50)
     self.mock_socket_instance.write.assert_called_with(b"ReleasePlate 20.0 50 0.0\n")
 
     self.mock_socket_instance.readline.return_value = b"0 ReleasePlate 20.0 50 10.0\r\n"
-    await self.backend.release_plate(20.0, 50, 10.0)
+    await self.backend._release_plate(20.0, 50, 10.0)
     self.mock_socket_instance.write.assert_called_with(b"ReleasePlate 20.0 50 10.0\n")
 
     with self.assertRaisesRegex(ValueError, "Finger speed percent must be between 1 and 100"):
-      await self.backend.release_plate(20.0, 0)
+      await self.backend._release_plate(20.0, 0)
     with self.assertRaisesRegex(ValueError, "Finger speed percent must be between 1 and 100"):
-      await self.backend.release_plate(20.0, 101)
+      await self.backend._release_plate(20.0, 101)
 
   async def test_set_active_gripper(self):
     self.mock_socket_instance.readline.return_value = b"0 SetActiveGripper 1 0\r\n"

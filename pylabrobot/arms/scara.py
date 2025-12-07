@@ -69,7 +69,7 @@ class SCARA(Machine):
       position = list(position)
     return await self.backend.approach(position, access=access, **backend_kwargs)
 
-  async def pick_plate(
+  async def pick_up_resource(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
     plate_width: float,
@@ -85,11 +85,11 @@ class SCARA(Machine):
     """
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
-    return await self.backend.pick_plate(
+    return await self.backend.pick_up_resource(
       plate_width=plate_width, position=position, access=access, **backend_kwargs
     )
 
-  async def place_plate(
+  async def drop_resource(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
     access: Optional[AccessPattern] = None,
@@ -103,4 +103,4 @@ class SCARA(Machine):
     """
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
-    return await self.backend.place_plate(position, access=access, **backend_kwargs)
+    return await self.backend.drop_resource(position, access=access, **backend_kwargs)

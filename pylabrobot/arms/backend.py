@@ -89,7 +89,7 @@ class SCARABackend(MachineBackend, metaclass=ABCMeta):
     """
 
   @abstractmethod
-  async def pick_plate(
+  async def pick_up_resource(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
     plate_width: float,
@@ -103,7 +103,7 @@ class SCARABackend(MachineBackend, metaclass=ABCMeta):
     """
 
   @abstractmethod
-  async def place_plate(
+  async def drop_resource(
     self,
     position: Union[PreciseFlexCartesianCoords, JointCoords],
     access: Optional[AccessPattern] = None,
