@@ -38,7 +38,12 @@ class PreciseFlexBackend(SCARABackend, ABC):
   """
 
   def __init__(
-    self, has_rail: bool, host: str, is_dual_gripper: bool = False, port: int = 10100, timeout=20
+    self,
+    host: str,
+    port: int = 10100,
+    is_dual_gripper: bool = False,
+    has_rail: bool = False,
+    timeout=20,
   ) -> None:
     super().__init__()
     self.io = Socket(host=host, port=port)
