@@ -1423,11 +1423,11 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.write.assert_called_with(b"StationType 1 0 0 50.0 0.0 0.0\n")
 
     with self.assertRaisesRegex(
-      ValueError, "Access type must be 0 \\(horizontal\\) or 1 \\(vertical\)"
+      ValueError, r"Access type must be 0 \(horizontal\) or 1 \(vertical\)"
     ):
       await self.backend.set_station_type(1, 2, 0, 50.0, 0.0, 0.0)
     with self.assertRaisesRegex(
-      ValueError, "Location type must be 0 \\(normal single\\) or 1 \\(pallet\)"
+      ValueError, r"Location type must be 0 \(normal single\) or 1 \(pallet\)"
     ):
       await self.backend.set_station_type(1, 0, 2, 50.0, 0.0, 0.0)
 
@@ -1481,10 +1481,12 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       await self.backend.set_active_gripper(1, 2)
 
   async def test_get_active_gripper(self):
-    self.mock_socket_instance.readline.return_value = b"0 1\r\n"
-    gripper_id = await self.backend.get_active_gripper()
-    self.assertEqual(gripper_id, 1)
-    self.mock_socket_instance.write.assert_called_with(b"GetActiveGripper\n")
+    # patch the backend to set ._dual_grippers to True for this test
+    with patch.object(self.backend, "_is_dual_gripper", True):
+      self.mock_socket_instance.readline.return_value = b"0 1\r\n"
+      gripper_id = await self.backend.get_active_gripper()
+      self.assertEqual(gripper_id, 1)
+      self.mock_socket_instance.write.assert_called_with(b"GetActiveGripper\n")
 
   async def test_free_mode_enable(self):
     self.mock_socket_instance.readline.return_value = b"0 freemode 1\r\n"
