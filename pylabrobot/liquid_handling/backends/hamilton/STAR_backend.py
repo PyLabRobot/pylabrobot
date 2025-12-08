@@ -2469,6 +2469,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    experimental_alignment_tipspot_identifier: str = "A1",
   ):
     """Pick up tips using the 96 head.
 
@@ -2490,6 +2491,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tip_pickup_method: The method to use for picking up tips. One of "from_rack", "from_waste", "full_blowout".
       minimum_height_command_end: The minimum height to move to at the end of the command.
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to at the beginning of the command.
+      experimental_alignment_tipspot_identifier: The tipspot to use for alignment with head's A1 channel. Defaults to "tipspot A1".  allowed range is A1 to H12.
     """
 
     if isinstance(tip_pickup_method, int):
@@ -2504,8 +2506,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert self.core96_head_installed, "96 head must be installed"
 
-    tip_spot_a1 = pickup.resource.get_item("A1")
-
     prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
     if prototypical_tip is None:
       raise ValueError("No tips found in the tip rack.")
@@ -2518,19 +2518,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     fitting_depth = prototypical_tip.fitting_depth
     tip_engage_height_from_tipspot = tip_length - fitting_depth
 
-    # Tip size–based z-adjustment
-    h_tip = self._get_hamilton_tip([tip_spot_a1])
-    if h_tip.tip_size == TipSize.LOW_VOLUME:
+    # Adjust tip engage height based on tip size
+    if prototypical_tip.tip_size == TipSize.LOW_VOLUME:
       tip_engage_height_from_tipspot += 2
-    elif h_tip.tip_size != TipSize.STANDARD_VOLUME:
+    elif prototypical_tip.tip_size != TipSize.STANDARD_VOLUME:
       tip_engage_height_from_tipspot -= 2
 
     # Compute pickup Z
-    tip_spot_z = tip_spot_a1.get_location_wrt(self.deck).z + pickup.offset.z
+    alignment_tipspot = pickup.resource.get_item(experimental_alignment_tipspot_identifier)
+    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
     z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
 
     # Compute full position (used for x/y)
-    pickup_position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + pickup.offset
+    pickup_position = (
+      alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
+    )
     pickup_position.z = round(z_pickup_position, 2)
 
     self._check_96_position_legal(pickup_position, skip_z=True)
@@ -2564,12 +2566,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     drop: DropTipRack,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    experimental_alignment_tipspot_identifier: str = "A1",
   ):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
 
     if isinstance(drop.resource, TipRack):
-      tip_spot_a1 = drop.resource.get_item("A1")
+      tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
       position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
       tip_rack = tip_spot_a1.parent
       assert tip_rack is not None
