@@ -2491,10 +2491,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tip_pickup_method: The method to use for picking up tips. One of "from_rack", "from_waste", "full_blowout".
       minimum_height_command_end: The minimum height to move to at the end of the command.
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to at the beginning of the command.
-      alignment_tipspot: The tipspot to use for alignment with head's A1 channel. Defaults to "tipspot A1".
-        allowed range is ZA-11 to H12 (negative numbers indicate 'head offset to the left'), see PLR's head documentation for details.
+      experimental_alignment_tipspot_identifier: The tipspot to use for alignment with head's A1 channel. Defaults to "tipspot A1".  allowed range is A1 to H12.
     """
-    # TODO: add link to documentation
 
     if isinstance(tip_pickup_method, int):
       warnings.warn(
