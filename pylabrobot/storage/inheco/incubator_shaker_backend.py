@@ -245,7 +245,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     )
 
   async def stop(self):
-    """Close serial connection & stop all active units the stack."""
+    """Close serial connection & stop all active units in the stack."""
 
     for unit_index in range(self.number_of_connected_units):
       temp_status = await self.is_temperature_control_enabled(stack_index=unit_index)
@@ -259,6 +259,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       if shake_status:
         print(f"Stopping shaking on unit {unit_index}...")
         await self.stop_shaking(stack_index=unit_index)
+
+      await self.close(stack_index=unit_index)
 
     await self.io.stop()
 
