@@ -183,6 +183,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
     # --- Establish serial connection ---
     await self.io.setup()
+    self.io.dtr = False
+    self.io.rts = False
 
     try:  # --- Verify DIP switch ID via RTS ---
       probe = self._build_message("RTS", stack_index=0)
