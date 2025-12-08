@@ -6842,7 +6842,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp["za"] = resp["za"] / 10
     return resp
 
-  async def request_96head_position(self):
+  async def request_96head_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
 
     Returns:
