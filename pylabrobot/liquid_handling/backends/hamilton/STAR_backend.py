@@ -6835,6 +6835,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp["za"] = resp["za"] / 10
     return resp
 
+  async def request_96head_position(self):
+    """Request position of CoRe 96 Head (A1 considered to tip length)
+
+    Returns:
+      Coordinate: x, y, z in mm
+    """
+
+    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
+
+    x_coordinate = resp["xs"] / 10
+    y_coordinate = resp["yh"] / 10
+    z_coordinate = resp["za"] / 10
+
+    x_coordinate = x_coordinate if resp["xd"] == 0 else -x_coordinate
+
+    return Coordinate(x=x_coordinate, y=y_coordinate, z=z_coordinate)
+
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
 
