@@ -2469,7 +2469,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    alignment_tipspot: str = "A1",
+    experimental_alignment_tipspot_identifier: str = "A1",
   ):
     """Pick up tips using the 96 head.
 
@@ -2508,8 +2508,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert self.core96_head_installed, "96 head must be installed"
 
-    alignment_tipspot_instance = pickup.resource.get_item(alignment_tipspot)
-
     prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
     if prototypical_tip is None:
       raise ValueError("No tips found in the tip rack.")
@@ -2529,14 +2527,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       tip_engage_height_from_tipspot -= 2
 
     # Compute pickup Z
-    tip_spot_z = alignment_tipspot_instance.get_location_wrt(self.deck).z + pickup.offset.z
+    alignment_tipspot = pickup.resource.get_item(experimental_alignment_tipspot_identifier)
+    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
     z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
 
     # Compute full position (used for x/y)
     pickup_position = (
-      alignment_tipspot_instance.get_location_wrt(self.deck)
-      + alignment_tipspot_instance.center()
-      + pickup.offset
+      alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
     )
     pickup_position.z = round(z_pickup_position, 2)
 
@@ -2571,13 +2568,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     drop: DropTipRack,
     minimum_height_command_end: Optional[float] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    alignment_tipspot: str = "A1",
+    experimental_alignment_tipspot_identifier: str = "A1",
   ):
     """Drop tips from the 96 head."""
     assert self.core96_head_installed, "96 head must be installed"
 
     if isinstance(drop.resource, TipRack):
-      tip_spot_a1 = drop.resource.get_item(alignment_tipspot)
+      tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
       position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
       tip_rack = tip_spot_a1.parent
       assert tip_rack is not None
