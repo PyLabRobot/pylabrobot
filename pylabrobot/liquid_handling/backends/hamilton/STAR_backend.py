@@ -6829,6 +6829,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       za: Z height [1mm]
     """
 
+    warnings.warn(  # TODO: remove 2025-02
+      "`request_position_of_core_96_head` is deprecated and will be "
+      "removed in 2025-02 use `request_96head_position` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+
     resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
     resp["xs"] = resp["xs"] / 10
     resp["yh"] = resp["yh"] / 10
