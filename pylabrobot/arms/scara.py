@@ -81,7 +81,7 @@ class ExperimentalSCARA(Machine):
     Args:
       position: Target position for pickup
       access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
-      plate_width: ripper width in millimeters used when gripping the plate.
+      plate_width: gripper width in millimeters used when gripping the plate.
     """
     if isinstance(position, Iterable) and not isinstance(position, list):
       position = list(position)
