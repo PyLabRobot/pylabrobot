@@ -46,6 +46,7 @@ class Serial(IOBase):
     write_timeout=1,
     timeout=1,
     rtscts: bool = False,
+    dsrdtr: bool = False,
   ):
     self._port = port
     self._vid = vid
@@ -59,6 +60,7 @@ class Serial(IOBase):
     self.write_timeout = write_timeout
     self.timeout = timeout
     self.rtscts = rtscts
+    self.dsrdtr = dsrdtr
 
     # Instant parameter validation at init time
     if not self._port and not (self._vid and self._pid):
@@ -171,6 +173,7 @@ class Serial(IOBase):
         write_timeout=self.write_timeout,
         timeout=self.timeout,
         rtscts=self.rtscts,
+        dsrdtr=self.dsrdtr,
       )
 
     try:
@@ -326,6 +329,7 @@ class Serial(IOBase):
       "write_timeout": self.write_timeout,
       "timeout": self.timeout,
       "rtscts": self.rtscts,
+      "dsrdtr": self.dsrdtr,
     }
 
   @classmethod
@@ -339,6 +343,7 @@ class Serial(IOBase):
       write_timeout=data["write_timeout"],
       timeout=data["timeout"],
       rtscts=data["rtscts"],
+      dsrdtr=data["dsrdtr"],
     )
 
 
@@ -354,6 +359,7 @@ class SerialValidator(Serial):
     write_timeout=1,
     timeout=1,
     rtscts: bool = False,
+    dsrdtr: bool = False,
   ):
     super().__init__(
       port=port,
@@ -364,6 +370,7 @@ class SerialValidator(Serial):
       write_timeout=write_timeout,
       timeout=timeout,
       rtscts=rtscts,
+      dsrdtr=dsrdtr,
     )
     self.cr = cr
 
