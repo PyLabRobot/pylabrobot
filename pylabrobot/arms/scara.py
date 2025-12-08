@@ -7,8 +7,8 @@ from pylabrobot.arms.standard import JointCoords
 from pylabrobot.machines.machine import Machine
 
 
-class SCARA(Machine):
-  """A robotic arm."""
+class ExperimentalSCARA(Machine):
+  """A SCARA robotic arm. In experimental stage."""
 
   def __init__(self, backend: SCARABackend):
     super().__init__(backend=backend)
