@@ -6941,7 +6941,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       stacklevel=2,
     )
     return await self.initialize_autoload()
-  
+
   async def initialize_autoload(self) -> None:
     """Initialize Auto load module"""
 
@@ -7001,10 +7001,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     resp = await self.send_command(module="C0", command="QA", fmt="cq##")
 
-    autoload_type = resp["cq"]   # guaranteed by fmt parser
+    autoload_type = resp["cq"]  # guaranteed by fmt parser
 
     return autoload_type
-
 
   # -------------- 3.13.2 Carrier sensing --------------
 
@@ -7132,7 +7131,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return carrier_end_rail
 
   async def move_autoload_to_slot(self, slot_number: int):
-    """ deprecated - use `move_autoload_to_track` instead."""
+    """deprecated - use `move_autoload_to_track` instead."""
 
     warnings.warn(  # TODO: remove 2025-02
       "`move_autoload_to_slot` is deprecated and will be "
@@ -7149,7 +7148,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 1 <= track <= 54, "track must be between 1 and 54"
     track_no_as_safe_str = str(track).zfill(2)
     return await self.send_command(module="I0", command="XP", xp=track_no_as_safe_str)
-  
+
   async def park_autoload(self):
     """Park autoload"""
 
@@ -7252,13 +7251,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:CW) Unload carrier finally
 
   async def request_carrier_barcode(
-      self,
-      carrier: Carrier,
-      barcode_position: float = 4.3,  # mm
-      barcode_reading_window_width: float = 8.5,  # mm
-      reading_speed: float = 128.1,  # mm/sec
-      ) -> str:
-
+    self,
+    carrier: Carrier,
+    barcode_position: float = 4.3,  # mm
+    barcode_reading_window_width: float = 8.5,  # mm
+    reading_speed: float = 128.1,  # mm/sec
+  ) -> str:
     carrier_end_rail_str = self._compute_end_rail_of_carrier(carrier)
     carrier_end_rail_str = str(carrier_end_rail_str).zfill(2)
 
@@ -7268,12 +7266,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 1.5 <= reading_speed <= 160.0
 
     resp = await self.send_command(
-      module="C0",command="CI",
+      module="C0",
+      command="CI",
       cp=carrier_end_rail_str,
       bi=f"{round(barcode_position*10)}",
       bw=f"{round(barcode_reading_window_width*10)}",
       bv=f"{round(reading_speed*10)}",
-      )
+    )
 
     return resp
 
