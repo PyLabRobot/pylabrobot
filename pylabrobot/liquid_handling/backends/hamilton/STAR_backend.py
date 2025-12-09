@@ -7200,16 +7200,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def set_1d_barcode_type(
     self,
-    barcode_symbology: Optional[Literal[
-      "ISBT Standard",
-      "Code 128 (Subset B and C)",
-      "Code 39",
-      "Codebar",
-      "Code 2of5 Interleaved",
-      "UPC A/E",
-      "YESN/EAN 8",
-      "Code 93",
-    ]] = None,
+    barcode_symbology: Optional[
+      Literal[
+        "ISBT Standard",
+        "Code 128 (Subset B and C)",
+        "Code 39",
+        "Codebar",
+        "Code 2of5 Interleaved",
+        "UPC A/E",
+        "YESN/EAN 8",
+        "Code 93",
+      ]
+    ] = None,
   ):
     """Set 1D barcode type for autoload barcode reading."""
 
@@ -7278,7 +7280,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0 <= barcode_position <= 470
     assert 0.1 <= barcode_reading_window_width <= 99.9
     assert 1.5 <= reading_speed <= 160.0
-    
+
     resp = await self.send_command(
       module="C0",
       command="CI",
@@ -7292,10 +7294,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return resp
 
   async def unload_carrier_after_carrier_barcode_scanning(self) -> None:
-    """ After scanning the barcode of the carrier currently engaged with
-      the autoload sled, unload the carrier back to the loading tray.
+    """After scanning the barcode of the carrier currently engaged with
+    the autoload sled, unload the carrier back to the loading tray.
     """
-    
+
     resp = await self.send_command(
       module="C0",
       command="CA",
@@ -7319,16 +7321,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     barcode_reading: bool = False,
     barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
-    barcode_symbology: Optional[Literal[
-      "ISBT Standard",
-      "Code 128 (Subset B and C)",
-      "Code 39",
-      "Codebar",
-      "Code 2of5 Interleaved",
-      "UPC A/E",
-      "YESN/EAN 8",
-      "Code 93",
-    ]] = None,
+    barcode_symbology: Optional[
+      Literal[
+        "ISBT Standard",
+        "Code 128 (Subset B and C)",
+        "Code 39",
+        "Codebar",
+        "Code 2of5 Interleaved",
+        "UPC A/E",
+        "YESN/EAN 8",
+        "Code 93",
+      ]
+    ] = None,
     reading_position_of_first_barcode: float = 63.0,  # mm
     no_container_per_carrier: int = 5,
     distance_between_containers: float = 96.0,  # mm
@@ -7397,16 +7401,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     carrier_barcode_reading: bool = True,
     barcode_reading: bool = False,
     barcode_reading_direction: Literal["horizontal", "vertical"] = "vertical",
-    barcode_symbology: Optional[Literal[
-      "ISBT Standard",
-      "Code 128 (Subset B and C)",
-      "Code 39",
-      "Codebar",
-      "Code 2of5 Interleaved",
-      "UPC A/E",
-      "YESN/EAN 8",
-      "Code 93",
-    ]] = None,
+    barcode_symbology: Optional[
+      Literal[
+        "ISBT Standard",
+        "Code 128 (Subset B and C)",
+        "Code 39",
+        "Codebar",
+        "Code 2of5 Interleaved",
+        "UPC A/E",
+        "YESN/EAN 8",
+        "Code 93",
+      ]
+    ] = None,
     no_container_per_carrier: int = 5,
     park_autoload_after: bool = True,
   ):
@@ -7456,7 +7462,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._default_1d_symbology = barcode_symbology
 
       # Load and read out barcodes # TODO: swap with load_carrier_from_autoload_belt?
-      resp = await self.send_command( 
+      resp = await self.send_command(
         module="C0",
         command="CL",
         bd=barcode_reading_direction_dict[barcode_reading_direction],
@@ -7471,7 +7477,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if park_autoload_after:
       await self.park_autoload()
-      
+
     return resp
 
   async def set_loading_indicators(self, bit_pattern: List[bool], blink_pattern: List[bool]):
