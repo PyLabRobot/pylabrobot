@@ -1178,6 +1178,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
+    self._default_1d_symbology = "Code 128 (Subset B and C)"
+
     self._setup_done = False
 
   @property
@@ -6980,8 +6982,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       track (0..54)
     """
-
-    return await self.send_command(module="C0", command="QA", fmt="qa##")
+    resp = await self.send_command(module="C0", command="QA", fmt="qa##")
+    return resp["qa"]
 
   async def request_autoload_type(self) -> int:
     """
@@ -6991,19 +6993,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     the autoload identification fields, error/trace information, and the module
     type code. The `cq` field specifies the autoload hardware type:
 
-        0 = ML-STAR autoload
+        0 = ML-STAR with 1D Barcode Scanner
         1 = XRP Lite
-        2–9 = Reserved / other module variants
+        2 = ML-STAR with 2D Barcode Scanner
+        3-9 = Reserved / other module variants
 
     Returns:
         int: The autoload module type code (0-9).
     """
 
-    resp = await self.send_command(module="C0", command="QA", fmt="cq##")
+    autoload_type_dict = {
+      0: "ML-STAR with 1D Barcode Scanner",
+      1: "XRP Lite",
+      2: "ML-STAR with 2D Barcode Scanner",
+    }
 
-    autoload_type = resp["cq"]  # guaranteed by fmt parser
+    resp = await self.send_command(module="C0", command="CQ", fmt="cq#")
 
-    return autoload_type
+    return autoload_type_dict[resp["cq"]] if resp["cq"] in autoload_type_dict else resp["cq"]
 
   # -------------- 3.13.2 Carrier sensing --------------
 
@@ -7158,7 +7165,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Park autoload to max x position available
     return await self.send_command(module="I0", command="XP", xp=max_x_pos)
 
-  async def take_carrier_out_to_identification_position(self, carrier: Carrier):
+  async def take_carrier_out_to_autoload_belt(self, carrier: Carrier):
     """Take carrier out to identification position for barcode reading.
     Start: carrier is already on the deck
     """
@@ -7193,7 +7200,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def set_1d_barcode_type(
     self,
-    barcode_symbology: Literal[
+    barcode_symbology: Optional[Literal[
       "ISBT Standard",
       "Code 128 (Subset B and C)",
       "Code 39",
@@ -7202,15 +7209,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "UPC A/E",
       "YESN/EAN 8",
       "Code 93",
-    ] = "Code 128 (Subset B and C)",
+    ]] = None,
   ):
     """Set 1D barcode type for autoload barcode reading."""
+
+    if barcode_symbology is None:
+      barcode_symbology = self._default_1d_symbology
 
     await self.send_command(
       module="C0",
       command="CB",
       bt=self.barcode_1d_symbology_dict[barcode_symbology],
     )
+
+    self._default_1d_symbology = barcode_symbology
 
   async def set_barcode_type(
     self,
@@ -7250,28 +7262,43 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # TODO:(command:CW) Unload carrier finally
 
-  async def request_carrier_barcode(
+  async def load_carrier_from_tray_and_scan_carrier_barcode(
     self,
     carrier: Carrier,
-    barcode_position: float = 4.3,  # mm
-    barcode_reading_window_width: float = 8.5,  # mm
+    barcode_position: float = 61.6,  # mm
+    barcode_reading_window_width: float = 38.0,  # mm
     reading_speed: float = 128.1,  # mm/sec
   ) -> str:
+    """Load carrier from tray and scan barcode"""
+
     carrier_end_rail_str = self._compute_end_rail_of_carrier(carrier)
     carrier_end_rail_str = str(carrier_end_rail_str).zfill(2)
 
-    assert 1 <= carrier_end_rail_str <= 54
+    assert 1 <= int(carrier_end_rail_str) <= 54
     assert 0 <= barcode_position <= 470
     assert 0.1 <= barcode_reading_window_width <= 99.9
     assert 1.5 <= reading_speed <= 160.0
-
+    
     resp = await self.send_command(
       module="C0",
       command="CI",
       cp=carrier_end_rail_str,
-      bi=f"{round(barcode_position*10)}",
-      bw=f"{round(barcode_reading_window_width*10)}",
-      bv=f"{round(reading_speed*10)}",
+      bi=f"{round(barcode_position*10):04}",
+      bw=f"{round(barcode_reading_window_width*10):03}",
+      co="0960",  # Distance between containers (pattern) [0.1 mm]
+      cv=f"{round(reading_speed*10):04}",
+    )
+
+    return resp
+
+  async def unload_carrier_after_carrier_barcode_scanning(self) -> None:
+    """ After scanning the barcode of the carrier currently engaged with
+      the autoload sled, unload the carrier back to the loading tray.
+    """
+    
+    resp = await self.send_command(
+      module="C0",
+      command="CA",
     )
 
     return resp
@@ -7288,14 +7315,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="CU", cu=should_monitor)
 
-  # TODO:(command:CI) Identify carrier on loading tray)
-  # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
-
-  async def load_carrier_from_identification_position(
+  async def load_carrier_from_autoload_belt(
     self,
     barcode_reading: bool = False,
     barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
-    barcode_symbology: Literal[
+    barcode_symbology: Optional[Literal[
       "ISBT Standard",
       "Code 128 (Subset B and C)",
       "Code 39",
@@ -7304,8 +7328,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "UPC A/E",
       "YESN/EAN 8",
       "Code 93",
-    ] = "Code 128 (Subset B and C)",
-    reading_position_of_first_barcode: float = 10.0,  # mm
+    ]] = None,
+    reading_position_of_first_barcode: float = 63.0,  # mm
     no_container_per_carrier: int = 5,
     distance_between_containers: float = 96.0,  # mm
     width_of_reading_window: float = 38.0,  # mm
@@ -7328,6 +7352,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "horizontal": "1",
     }
 
+    if barcode_symbology is None:
+      barcode_symbology = self._default_1d_symbology
+
     no_container_per_carrier_str = str(no_container_per_carrier).zfill(2)
     reading_position_of_first_barcode_str = str(
       round(reading_position_of_first_barcode * 10)
@@ -7343,6 +7370,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       # Choose barcode symbology
       await self.set_1d_barcode_type(barcode_symbology=barcode_symbology)
+
+      self._default_1d_symbology = barcode_symbology
 
     resp = await self.send_command(
       module="C0",
@@ -7367,8 +7396,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     carrier: Carrier,
     carrier_barcode_reading: bool = True,
     barcode_reading: bool = False,
-    barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
-    barcode_symbology: Literal[
+    barcode_reading_direction: Literal["horizontal", "vertical"] = "vertical",
+    barcode_symbology: Optional[Literal[
       "ISBT Standard",
       "Code 128 (Subset B and C)",
       "Code 39",
@@ -7377,7 +7406,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "UPC A/E",
       "YESN/EAN 8",
       "Code 93",
-    ] = "Code 128 (Subset B and C)",
+    ]] = None,
     no_container_per_carrier: int = 5,
     park_autoload_after: bool = True,
   ):
@@ -7399,15 +7428,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "horizontal": "1",
     }
 
+    if barcode_symbology is None:
+      barcode_symbology = self._default_1d_symbology
+
     # Identify carrier end rail
-    track_width = 22.5
-    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
-    carrier_end_rail = int(carrier_width / track_width)
-    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+    carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
+    assert 1 <= int(carrier_end_rail) <= 54, "carrier loading rail must be between 1 and 54"
 
     # Determine presence of carrier at defined position
-    presence_check = await self.request_single_carrier_presence(carrier_end_rail)
-    carrier_end_rail_str = str(carrier_end_rail).zfill(2)
+    presence_check = await self.request_presence_of_single_carrier_on_loading_tray(carrier_end_rail)
 
     if presence_check != 1:
       raise ValueError(
@@ -7417,20 +7446,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Set carrier type for identification purposes
     if carrier_barcode_reading:
-      await self.send_command(module="C0", command="CI", cp=carrier_end_rail_str)
+      carrier_barcode = await self.load_carrier_from_tray_and_scan_carrier_barcode(carrier)
 
     # Load carrier
     # with barcoding
     if barcode_reading:
       # Choose barcode symbology
       await self.set_1d_barcode_type(barcode_symbology=barcode_symbology)
+      self._default_1d_symbology = barcode_symbology
 
-      # Load and read out barcodes
-      resp = await self.send_command(
+      # Load and read out barcodes # TODO: swap with load_carrier_from_autoload_belt?
+      resp = await self.send_command( 
         module="C0",
         command="CL",
         bd=barcode_reading_direction_dict[barcode_reading_direction],
-        bp="0616",  # Barcode reading direction (0 = vertical 1 = horizontal)
+        bp="0616",  # Barcode reading position of first barcode [0.1 mm]
         co="0960",  # Distance between containers (pattern) [0.1 mm]
         cf="380",  # Width of reading window [0.1 mm]
         cv="1281",  # Carrier reading speed [0.1 mm]/s
@@ -7441,6 +7471,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if park_autoload_after:
       await self.park_autoload()
+      
     return resp
 
   async def set_loading_indicators(self, bit_pattern: List[bool], blink_pattern: List[bool]):
