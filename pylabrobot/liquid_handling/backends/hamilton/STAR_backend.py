@@ -6757,6 +6757,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
+    warnings.warn(  # TODO: remove 2025-02
+      "`move_core_96_head_to_defined_position` is deprecated and will be "
+      "removed in 2025-02 use `move_96head_to_coordinate` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+
     # TODO: these are values for a STARBackend. Find them for a STARlet.
     self._check_96_position_legal(Coordinate(x, y, z))
     assert (
@@ -6781,7 +6788,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move STAR(let) 96-Head to defined Coordinate
 
     Args:
-      coordinate: Coordinate of A1 in mm 
+      coordinate: Coordinate of A1 in mm
         - if tip present refers to tip bottom,
         - if not present refers to channel bottom
       minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
