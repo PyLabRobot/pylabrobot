@@ -6928,11 +6928,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:RR)
   # TODO:(command:QU)
 
-  # -------------- 3.13 Auto load commands --------------
+  # -------------- 3.13 Autoload commands --------------
 
   # -------------- 3.13.1 Initialization --------------
 
   async def initialize_auto_load(self):
+    """Deprecated - use `initialize_autoload` instead."""
+    warnings.warn(  # TODO: remove 2025-02
+      "`initialize_auto_load` is deprecated and will be removed "
+      "in 2025-02 use  `initialize_autoload` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.initialize_autoload()
+  
+  async def initialize_autoload(self) -> None:
     """Initialize Auto load module"""
 
     return await self.send_command(module="C0", command="II")
@@ -6940,67 +6950,65 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def move_auto_load_to_z_save_position(self):
     """Move auto load to Z save position"""
 
+    warnings.warn(  # TODO: remove 2025-02
+      "`move_auto_load_to_z_save_position` is deprecated and will be "
+      "removed in 2025-02 use `move_autoload_to_save_z_position` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+
+    return await self.move_autoload_to_save_z_position()
+
+  async def move_autoload_to_save_z_position(self) -> None:
+    """Move auto load to Z save position"""
+
     return await self.send_command(module="C0", command="IV")
 
-  # -------------- 3.13.2 Carrier handling --------------
+  async def request_auto_load_slot_position(self):
+    """Deprecated - use `request_autoload_track` instead."""
+    warnings.warn(  # TODO: remove 2025-02
+      "`request_auto_load_slot_position` is deprecated and will be "
+      "removed in 2025-02 use `request_autoload_track` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.request_autoload_track()
 
-  # TODO:(command:CI) Identify carrier (determine carrier type)
-
-  async def request_single_carrier_presence(self, carrier_position: int):
-    """Request single carrier presence on the loading tray (not on deck)
-
-    Args:
-      carrier_position: Carrier position (slot number)
+  async def request_autoload_track(self) -> int:
+    """Request current track of the autoload 'carrier handler'.
 
     Returns:
-      True if present, False otherwise
+      track (0..54)
     """
 
-    assert 1 <= carrier_position <= 54, "carrier_position must be between 1 and 54"
-    carrier_position_str = str(carrier_position).zfill(2)
-    resp = await self.send_command(
-      module="C0",
-      command="CT",
-      fmt="ct#",
-      cp=carrier_position_str,
-    )
-    assert resp is not None
-    return resp["ct"] == 1
+    return await self.send_command(module="C0", command="QA", fmt="qa##")
 
-  
-  # def parse_occupancy_bitmask(self, rc: str) -> list[int]:
-  #     """
-  #     Parse an RC auto-load query response and return physical deck tracks.
-      
-  #     Parameters
-  #     ----------
-  #     rc : str
-  #         Full RC response, e.g.:
-  #         'C0RCid0073er00/00cd00040404100000ce00000000000000040404100000'
-      
-  #     Returns
-  #     -------
-  #     list[int]
-  #         Sorted list of physical deck tracks that contain carriers.
-  #     """
-  #     # Extract the CE hex substring
-  #     ce_idx = rc.find("ce")
-  #     if ce_idx == -1:
-  #         raise ValueError("CE field not found in RC response.")
-  #     ce = rc[ce_idx + 2 : ce_idx + 2 + 26]  # 26 hex chars
-      
-  #     # Decode CE bitmask → internal slots (1–104)
-  #     slots = []
-  #     bit_index = 1  # slots start at 1
-  #     for nibble in reversed(ce):
-  #         val = int(nibble, 16)
-  #         for bit in range(4):
-  #             if val & (1 << bit):
-  #                 slots.append(bit_index)
-  #             bit_index += 1
+  async def request_autoload_type(self) -> int:
+    """
+    Query the autoload module type.
 
-  #     return sorted(slots)
-  def parse_occupancy_bitmask(self, mask_hex: str) -> list[int]:
+    This sends the `C0:QA` command, which returns a CQ-format response containing
+    the autoload identification fields, error/trace information, and the module
+    type code. The `cq` field specifies the autoload hardware type:
+
+        0 = ML-STAR autoload
+        1 = XRP Lite
+        2–9 = Reserved / other module variants
+
+    Returns:
+        int: The autoload module type code (0-9).
+    """
+
+    resp = await self.send_command(module="C0", command="QA", fmt="cq##")
+
+    autoload_type = resp["cq"]   # guaranteed by fmt parser
+
+    return autoload_type
+
+
+  # -------------- 3.13.2 Carrier sensing --------------
+
+  def _decode_hex_bitmask_to_track_list(self, mask_hex: str) -> list[int]:
     """
     Decode a hex occupancy bitmask of arbitrary length.
     Each hex nibble = 4 slots.
@@ -7009,71 +7017,139 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mask_hex = mask_hex.strip()
 
     if not all(c in "0123456789abcdefABCDEF" for c in mask_hex):
-        raise ValueError(f"Invalid hex in mask: {mask_hex!r}")
+      raise ValueError(f"Invalid hex in mask: {mask_hex!r}")
 
     slots = []
     bit_index = 1
 
     # Rightmost hex digit = slot 1 (LSB)
     for nibble in reversed(mask_hex):
-        val = int(nibble, 16)
-        for bit in range(4):
-            if val & (1 << bit):
-                slots.append(bit_index)
-            bit_index += 1
+      val = int(nibble, 16)
+      for bit in range(4):
+        if val & (1 << bit):
+          slots.append(bit_index)
+        bit_index += 1
 
     return sorted(slots)
 
-
-  # async def request_presence_of_carriers_on_loading_tray(self) -> list[int]:
-  #   """Request presence of carriers on the loading tray (not on deck).
-  #   Autoload will run along the entire loading tray and
-  #   check all rails using its proximity sensor.
-  #   """
-
-  #   resp = await self.send_command(
-  #         module="C0",
-  #         command="CS"
-  #   )
-
-  #   cd_resp = resp.split("cd")[-1]
-
-
-  #   return self.parse_occupancy_bitmask(cd_resp)
-  async def request_presence_of_carriers_on_loading_tray(self) -> list[int]:
-    resp = await self.send_command(module="C0", command="CS")
-
-    if "cd" not in resp:
-        raise ValueError(f"CD field missing: {resp!r}")
-
-    mask_hex = resp.split("cd", 1)[1].strip()
-
-    return self.parse_occupancy_bitmask(mask_hex)
-  
   async def request_presence_of_carriers_on_deck(self) -> list[int]:
-    """Request presence of carriers on deck using carrier sensors at the back of deck.
-    No physical movement of autoload required.
-
-    Returns the right/end rail positions (1–54) where carriers are detected.
     """
-  
-    resp = await self.send_command(
-          module="C0",
-          command="RC"
-    )
+    Read the deck carrier presence sensors and return the positions where carriers
+    are currently detected.
+
+    This sends the `C0:RC` command to query the rear deck sensors. No autoload
+    movement is performed. The returned hex bitmask is decoded into a list of
+    track numbers (1-54), where each number corresponds to a deck rail position
+    that is occupied by a carrier.
+
+    Returns:
+        list[int]: Sorted list of deck rail positions where carriers are present.
+    """
+    resp = await self.send_command(module="C0", command="RC")
 
     ce_resp = resp.split("ce")[-1]
 
-    return self.parse_occupancy_bitmask(ce_resp)
+    return self._decode_hex_bitmask_to_track_list(ce_resp)
+
+  async def request_presence_of_carriers_on_loading_tray(self) -> list[int]:
+    """
+    Moves autoload sled across loading tray and reads its front-facing proximity sensors
+    to determine which tray positions contain carriers.
+
+    This sends the `C0:CS` command, which provides a hex-encoded presence bitmask
+    for the loading tray. The bitmask is decoded into a list of track numbers (1-54)
+    representing tray positions that currently contain a carrier.
+
+    Returns:
+        list[int]: Sorted list of loading-tray positions where carriers are present.
+
+    Raises:
+        ValueError: If the response is missing the expected 'cd' field.
+    """
+    resp = await self.send_command(module="C0", command="CS")
+
+    if "cd" not in resp:
+      raise ValueError(f"CD field missing: {resp!r}")
+
+    mask_hex = resp.split("cd", 1)[1].strip()
+
+    return self._decode_hex_bitmask_to_track_list(mask_hex)
+
+  async def request_presence_of_single_carrier_on_loading_tray(self, track: int) -> bool:
+    """ "
+    Check whether a specific loading-tray track contains a carrier.
+
+    This sends the `C0:CT` command, which instructs the autoload sled to move to
+    the specified tray track and read its front-facing proximity sensor. Unlike
+    `request_presence_of_carriers_on_loading_tray`, which scans all tray
+    positions and returns a bitmask, this method queries only a single track and
+    returns a boolean result.
+
+    Args:
+        track (int): The loading-tray track number to query (1-54).
+
+    Returns:
+        bool: True if a carrier is detected at the given track; False otherwise.
+
+    Raises:
+        AssertionError: If `track` is outside the valid range (1-54).
+    """
+
+    assert 1 <= track <= 54, "track must be between 1 and 54"
+
+    track_str = str(track).zfill(2)
+
+    resp = await self.send_command(
+      module="C0",
+      command="CT",
+      fmt="ct#",
+      cp=track_str,
+    )
+    assert resp is not None
+
+    return resp["ct"] == 1
+
+  async def request_single_carrier_presence(self, carrier_position: int):
+    """Request single carrier presence on the loading tray (not on deck)"""
+    warnings.warn(  # TODO: remove 2025-02
+      "`request_single_carrier_presence` is deprecated and will be "
+      "removed in 2025-02 use `is_carrier_present_on_loading_tray` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    await self.request_presence_of_single_carrier_on_loading_tray(carrier_position)
+
+  # -------------- 3.13.3 Autoload movement commands --------------
+
+  def _compute_end_rail_of_carrier(self, carrier: Carrier, track_width: float = 22.5) -> int:
+    """Compute end rail of carrier based on its location on the deck."""
+
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
+    carrier_end_rail = int(carrier_width / track_width)
+
+    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+
+    return carrier_end_rail
 
   async def move_autoload_to_slot(self, slot_number: int):
+    """ deprecated - use `move_autoload_to_track` instead."""
+
+    warnings.warn(  # TODO: remove 2025-02
+      "`move_autoload_to_slot` is deprecated and will be "
+      "removed in 2025-02 use `move_autoload_to_track` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+
+    return await self.move_autoload_to_track(track=slot_number)
+
+  async def move_autoload_to_track(self, track: int) -> None:
     """Move autoload to specific slot/track position"""
 
-    assert 1 <= slot_number <= 54, "slot_number must be between 1 and 54"
-    slot_no_as_safe_str = str(slot_number).zfill(2)
-
-    return await self.send_command(module="I0", command="XP", xp=slot_no_as_safe_str)
-
+    assert 1 <= track <= 54, "track must be between 1 and 54"
+    track_no_as_safe_str = str(track).zfill(2)
+    return await self.send_command(module="I0", command="XP", xp=track_no_as_safe_str)
+  
   async def park_autoload(self):
     """Park autoload"""
 
@@ -7083,86 +7159,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Park autoload to max x position available
     return await self.send_command(module="I0", command="XP", xp=max_x_pos)
 
-  # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
-
-  async def unload_carrier(
-    self,
-    carrier: Carrier,
-    park_autoload_after: bool = True,
-  ):
-    """Use autoload to unload carrier."""
-    # Identify carrier end rail
-    track_width = 22.5
-    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
-    carrier_end_rail = int(carrier_width / track_width)
-
-    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
-
-    carrier_end_rail_str = str(carrier_end_rail).zfill(2)
-
-    # Unload
-    resp = await self.send_command(
-      module="C0",
-      command="CR",
-      cp=carrier_end_rail_str,
-    )
-
-    if park_autoload_after:
-      await self.park_autoload()
-
-    return resp
-
-  barcode_1d_symbology_dict = {
-      "ISBT Standard": "70",
-      "Code 128 (Subset B and C)": "71",
-      "Code 39": "72",
-      "Codebar": "73",
-      "Code 2of5 Interleaved": "74",
-      "UPC A/E": "75",
-      "YESN/EAN 8": "76",
-      "Code 93": "",
-    }
-
-  def compute_end_rail_of_carrier(self, carrier: Carrier) -> int:
-    """Compute end rail of carrier based on its location on the deck."""
-    track_width = 22.5
-    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
-    carrier_end_rail = int(carrier_width / track_width)
-
-    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
-
-    return carrier_end_rail
-
-  async def set_1d_barcode_type(self, barcode_symbology: Literal[
-      "ISBT Standard",
-      "Code 128 (Subset B and C)",
-      "Code 39",
-      "Codebar",
-      "Code 2of5 Interleaved",
-      "UPC A/E",
-      "YESN/EAN 8",
-      "Code 93",
-    ] = "Code 128 (Subset B and C)",):
-    """Set 1D barcode type for autoload barcode reading."""
-
-    await self.send_command(
-        module="C0",
-        command="CB",
-        bt=self.barcode_1d_symbology_dict[barcode_symbology],
-      )
-
   async def take_carrier_out_to_identification_position(self, carrier: Carrier):
     """Take carrier out to identification position for barcode reading.
     Start: carrier is already on the deck
     """
 
     # Identify carrier end rail
-    carrier_end_rail = self.compute_end_rail_of_carrier(carrier)
+    carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
 
     carrier_on_loading_tray = await self.request_single_carrier_presence(carrier_end_rail)
 
     if not carrier_on_loading_tray:
-
       resp = await self.send_command(
         module="C0",
         command="CN",
@@ -7171,6 +7178,119 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     else:
       raise ValueError(f"Carrier is already on the loading tray at position {carrier_end_rail}.")
+
+  # -------------- 3.13.4 Autoload barcode reading commands --------------
+
+  barcode_1d_symbology_dict = {
+    "ISBT Standard": "70",
+    "Code 128 (Subset B and C)": "71",
+    "Code 39": "72",
+    "Codebar": "73",
+    "Code 2of5 Interleaved": "74",
+    "UPC A/E": "75",
+    "YESN/EAN 8": "76",
+    "Code 93": "",
+  }
+
+  async def set_1d_barcode_type(
+    self,
+    barcode_symbology: Literal[
+      "ISBT Standard",
+      "Code 128 (Subset B and C)",
+      "Code 39",
+      "Codebar",
+      "Code 2of5 Interleaved",
+      "UPC A/E",
+      "YESN/EAN 8",
+      "Code 93",
+    ] = "Code 128 (Subset B and C)",
+  ):
+    """Set 1D barcode type for autoload barcode reading."""
+
+    await self.send_command(
+      module="C0",
+      command="CB",
+      bt=self.barcode_1d_symbology_dict[barcode_symbology],
+    )
+
+  async def set_barcode_type(
+    self,
+    ISBT_Standard: bool = True,
+    code128: bool = True,
+    code39: bool = True,
+    codebar: bool = True,
+    code2_5: bool = True,
+    UPC_AE: bool = True,
+    EAN8: bool = True,
+  ):
+    """deprecated - use set_1d_barcode_type instead"""
+
+    warnings.warn(  # TODO: remove 2025-02
+      "`set_barcode_type` is deprecated and will be "
+      "removed in 2025-02 use `set_1d_barcode_type` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+
+    # Encode values into bit pattern. Last bit is always one.
+    bt = ""
+    for t in [
+      ISBT_Standard,
+      code128,
+      code39,
+      codebar,
+      code2_5,
+      UPC_AE,
+      EAN8,
+      True,
+    ]:
+      bt += "1" if t else "0"
+    # Convert bit pattern to hex.
+    bt_hex = hex(int(bt, base=2))
+    return await self.send_command(module="C0", command="CB", bt=bt_hex)
+
+  # TODO:(command:CW) Unload carrier finally
+
+  async def request_carrier_barcode(
+      self,
+      carrier: Carrier,
+      barcode_position: float = 4.3,  # mm
+      barcode_reading_window_width: float = 8.5,  # mm
+      reading_speed: float = 128.1,  # mm/sec
+      ) -> str:
+
+    carrier_end_rail_str = self._compute_end_rail_of_carrier(carrier)
+    carrier_end_rail_str = str(carrier_end_rail_str).zfill(2)
+
+    assert 1 <= carrier_end_rail_str <= 54
+    assert 0 <= barcode_position <= 470
+    assert 0.1 <= barcode_reading_window_width <= 99.9
+    assert 1.5 <= reading_speed <= 160.0
+
+    resp = await self.send_command(
+      module="C0",command="CI",
+      cp=carrier_end_rail_str,
+      bi=f"{round(barcode_position*10)}",
+      bw=f"{round(barcode_reading_window_width*10)}",
+      bv=f"{round(reading_speed*10)}",
+      )
+
+    return resp
+
+  async def set_carrier_monitoring(self, should_monitor: bool = False):
+    """Set carrier monitoring
+
+    Args:
+      should_monitor: whether carrier should be monitored.
+
+    Returns:
+      True if present, False otherwise
+    """
+
+    return await self.send_command(module="C0", command="CU", cu=should_monitor)
+
+  # TODO:(command:CI) Identify carrier on loading tray)
+  # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
   async def load_carrier_from_identification_position(
     self,
@@ -7186,11 +7306,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "YESN/EAN 8",
       "Code 93",
     ] = "Code 128 (Subset B and C)",
-    reading_position_of_first_barcode: float = 10.0, # mm
+    reading_position_of_first_barcode: float = 10.0,  # mm
     no_container_per_carrier: int = 5,
-    distance_between_containers: float = 96.0, # mm
-    width_of_reading_window: float = 38.0, # mm
-    reading_speed: float = 128.1, # mm/secs
+    distance_between_containers: float = 96.0,  # mm
+    width_of_reading_window: float = 38.0,  # mm
+    reading_speed: float = 128.1,  # mm/secs
     park_autoload_after: bool = True,
   ):
     """Finishes loading the carrier that is currently engaged with the autoload sled,
@@ -7210,35 +7330,38 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
 
     no_container_per_carrier_str = str(no_container_per_carrier).zfill(2)
-    reading_position_of_first_barcode_str = str(round(reading_position_of_first_barcode*10)).zfill(4)
-    distance_between_containers_str = str(round(distance_between_containers*10)).zfill(4)
-    width_of_reading_window_str = str(round(width_of_reading_window*10)).zfill(3)
-    reading_speed_str = str(round(reading_speed*10)).zfill(4)
+    reading_position_of_first_barcode_str = str(
+      round(reading_position_of_first_barcode * 10)
+    ).zfill(4)
+    distance_between_containers_str = str(round(distance_between_containers * 10)).zfill(4)
+    width_of_reading_window_str = str(round(width_of_reading_window * 10)).zfill(3)
+    reading_speed_str = str(round(reading_speed * 10)).zfill(4)
 
     if not barcode_reading:
-      barcode_reading_direction="vertical" # no movement
-      no_container_per_carrier_str="00" # no scanning
+      barcode_reading_direction = "vertical"  # no movement
+      no_container_per_carrier_str = "00"  # no scanning
 
     else:
       # Choose barcode symbology
       await self.set_1d_barcode_type(barcode_symbology=barcode_symbology)
 
     resp = await self.send_command(
-        module="C0",
-        command="CL",
-        bd=barcode_reading_direction_dict[barcode_reading_direction],
-        bp=reading_position_of_first_barcode_str, # Barcode reading position of first barcode [mm]
-        cn=no_container_per_carrier_str,
-        co=distance_between_containers_str,  # Distance between containers (pattern) [mm]
-        cf=width_of_reading_window_str,  # Width of reading window [mm]
-        cv=reading_speed_str,  # Carrier reading speed [mm/sec]/
+      module="C0",
+      command="CL",
+      bd=barcode_reading_direction_dict[barcode_reading_direction],
+      bp=reading_position_of_first_barcode_str,  # Barcode reading position of first barcode [mm]
+      cn=no_container_per_carrier_str,
+      co=distance_between_containers_str,  # Distance between containers (pattern) [mm]
+      cf=width_of_reading_window_str,  # Width of reading window [mm]
+      cv=reading_speed_str,  # Carrier reading speed [mm/sec]/
     )
-    
+
     if park_autoload_after:
       await self.park_autoload()
-            
+
     return resp
 
+  # -------------- 3.13.5 Autoload carrier loading/unloading commands --------------
 
   async def load_carrier(
     self,
@@ -7276,7 +7399,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "vertical": "0",
       "horizontal": "1",
     }
-    
+
     # Identify carrier end rail
     track_width = 22.5
     carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
@@ -7348,79 +7471,32 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       cb=blink_pattern_hex,
     )
 
-  # TODO:(command:CS) Check for presence of carriers on loading tray
-
-  async def set_barcode_type(
+  async def unload_carrier(
     self,
-    ISBT_Standard: bool = True,
-    code128: bool = True,
-    code39: bool = True,
-    codebar: bool = True,
-    code2_5: bool = True,
-    UPC_AE: bool = True,
-    EAN8: bool = True,
+    carrier: Carrier,
+    park_autoload_after: bool = True,
   ):
-    """Set bar code type: which types of barcodes will be scanned for.
+    """Use autoload to unload carrier."""
+    # Identify carrier end rail
+    track_width = 22.5
+    carrier_width = carrier.get_location_wrt(self.deck).x - 100 + carrier.get_absolute_size_x()
+    carrier_end_rail = int(carrier_width / track_width)
 
-    Args:
-      ISBT_Standard: ISBT_Standard. Default True.
-      code128: Code128. Default True.
-      code39: Code39. Default True.
-      codebar: Codebar. Default True.
-      code2_5: Code2_5. Default True.
-      UPC_AE: UPC_AE. Default True.
-      EAN8: EAN8. Default True.
-    """
+    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
-    # Encode values into bit pattern. Last bit is always one.
-    bt = ""
-    for t in [
-      ISBT_Standard,
-      code128,
-      code39,
-      codebar,
-      code2_5,
-      UPC_AE,
-      EAN8,
-      True,
-    ]:
-      bt += "1" if t else "0"
+    carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
-    # Convert bit pattern to hex.
-    bt_hex = hex(int(bt, base=2))
+    # Unload
+    resp = await self.send_command(
+      module="C0",
+      command="CR",
+      cp=carrier_end_rail_str,
+    )
 
-    return await self.send_command(module="C0", command="CB", bt=bt_hex)
+    if park_autoload_after:
+      await self.park_autoload()
 
-  # TODO:(command:CW) Unload carrier finally
-
-  async def set_carrier_monitoring(self, should_monitor: bool = False):
-    """Set carrier monitoring
-
-    Args:
-      should_monitor: whether carrier should be monitored.
-
-    Returns:
-      True if present, False otherwise
-    """
-
-    return await self.send_command(module="C0", command="CU", cu=should_monitor)
-
-  # TODO:(command:CN) Take out the carrier to identification position
-
-  # -------------- 3.13.3 Auto load query --------------
-
-  # TODO:(command:RC) Query presence of carrier on deck
-
-  async def request_auto_load_slot_position(self):
-    """Request auto load slot position.
-
-    Returns:
-      slot position (0..54)
-    """
-
-    return await self.send_command(module="C0", command="QA", fmt="qa##")
-
-  # TODO:(command:CQ) Request auto load module type
+    return resp
 
   # -------------- 3.14 G1-3/ CR Needle Washer commands --------------
 
@@ -7553,11 +7629,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Initialize iSWAP (for standalone configuration only)"""
 
     return await self.send_command(module="C0", command="FI")
-
-  async def initialize_autoload(self):
-    """Initialize autoload (for standalone configuration only)"""
-
-    return await self.send_command(module="C0", command="II")
 
   async def position_components_for_free_iswap_y_range(self):
     """Position all components so that there is maximum free Y range for iSWAP"""
