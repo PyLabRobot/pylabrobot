@@ -7153,6 +7153,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move autoload to specific slot/track position"""
 
     assert 1 <= track <= 54, "track must be between 1 and 54"
+
+    await self.move_autoload_to_save_z_position()
+
     track_no_as_safe_str = str(track).zfill(2)
     return await self.send_command(module="I0", command="XP", xp=track_no_as_safe_str)
 
@@ -7161,6 +7164,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Identify max number of x positions for your liquid handler
     max_x_pos = str(self.extended_conf["xt"]).zfill(2)
+
+    await self.move_autoload_to_save_z_position()
 
     # Park autoload to max x position available
     return await self.send_command(module="I0", command="XP", xp=max_x_pos)
@@ -7176,12 +7181,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     carrier_on_loading_tray = await self.request_single_carrier_presence(carrier_end_rail)
 
     if not carrier_on_loading_tray:
-      resp = await self.send_command(
-        module="C0",
-        command="CN",
-        cp=str(carrier_end_rail).zfill(2),
-      )
 
+      try:
+        resp = await self.send_command(
+          module="C0",
+          command="CN",
+          cp=str(carrier_end_rail).zfill(2),
+        )
+      except Exception as e:
+        await self.move_autoload_to_save_z_position()
+        raise RuntimeError(
+          f"Failed to take carrier at rail {carrier_end_rail} "f"out to autoload belt: {e}"
+        )
     else:
       raise ValueError(f"Carrier is already on the loading tray at position {carrier_end_rail}.")
 
@@ -7267,7 +7278,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def load_carrier_from_tray_and_scan_carrier_barcode(
     self,
     carrier: Carrier,
-    barcode_position: float = 61.6,  # mm
+    carrier_barcode_reading: bool = True,
+    barcode_symbology: str = "Code 128 (Subset B and C)",
+    barcode_position: float = 4.3,  # mm
     barcode_reading_window_width: float = 38.0,  # mm
     reading_speed: float = 128.1,  # mm/sec
   ) -> str:
@@ -7281,27 +7294,47 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 0.1 <= barcode_reading_window_width <= 99.9
     assert 1.5 <= reading_speed <= 160.0
 
-    resp = await self.send_command(
-      module="C0",
-      command="CI",
-      cp=carrier_end_rail_str,
-      bi=f"{round(barcode_position*10):04}",
-      bw=f"{round(barcode_reading_window_width*10):03}",
-      co="0960",  # Distance between containers (pattern) [0.1 mm]
-      cv=f"{round(reading_speed*10):04}",
-    )
+    try:
+      resp = await self.send_command(
+        module="C0",
+        command="CI",
+        cp=carrier_end_rail_str,
+        bi=f"{round(barcode_position*10):04}",
+        bw=f"{round(barcode_reading_window_width*10):03}",
+        co="0960",  # Distance between containers (pattern) [0.1 mm]
+        cv=f"{round(reading_speed*10):04}",
+      )
+    except Exception as e:
+      if carrier_barcode_reading:
+        await self.move_autoload_to_save_z_position()
+        raise RuntimeError(
+          f"Failed to load carrier at rail {carrier_end_rail} "f"and scan barcode: {e}"
+        )
+      else:
+        pass
 
-    return resp
+    barcode_str = resp.split("bb/")[-1]
+  
+    return Barcode(
+      data=barcode_str,
+      symbology=barcode_symbology,
+      position_on_resource="right"
+    )
 
   async def unload_carrier_after_carrier_barcode_scanning(self) -> None:
     """After scanning the barcode of the carrier currently engaged with
     the autoload sled, unload the carrier back to the loading tray.
     """
-
-    resp = await self.send_command(
-      module="C0",
-      command="CA",
-    )
+    try:
+      resp = await self.send_command(
+        module="C0",
+        command="CA",
+      )
+    except Exception as e:
+      await self.move_autoload_to_save_z_position()
+      raise RuntimeError(
+        f"Failed to unload carrier after barcode scanning: {e}"
+      )
 
     return resp
 
@@ -7339,7 +7372,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     width_of_reading_window: float = 38.0,  # mm
     reading_speed: float = 128.1,  # mm/secs
     park_autoload_after: bool = True,
-  ):
+  ) -> dict[int, str]:
     """Finishes loading the carrier that is currently engaged with the autoload sled,
     i.e. is currently in the identification position.
     """
@@ -7376,22 +7409,47 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.set_1d_barcode_type(barcode_symbology=barcode_symbology)
 
       self._default_1d_symbology = barcode_symbology
-
-    resp = await self.send_command(
-      module="C0",
-      command="CL",
-      bd=barcode_reading_direction_dict[barcode_reading_direction],
-      bp=reading_position_of_first_barcode_str,  # Barcode reading position of first barcode [mm]
-      cn=no_container_per_carrier_str,
-      co=distance_between_containers_str,  # Distance between containers (pattern) [mm]
-      cf=width_of_reading_window_str,  # Width of reading window [mm]
-      cv=reading_speed_str,  # Carrier reading speed [mm/sec]/
-    )
+    
+    try:
+      resp = await self.send_command(
+        module="C0",
+        command="CL",
+        bd=barcode_reading_direction_dict[barcode_reading_direction],
+        bp=reading_position_of_first_barcode_str,  # Barcode reading position of first barcode [mm]
+        cn=no_container_per_carrier_str,
+        co=distance_between_containers_str,  # Distance between containers (pattern) [mm]
+        cf=width_of_reading_window_str,  # Width of reading window [mm]
+        cv=reading_speed_str,  # Carrier reading speed [mm/sec]/
+      )
+    except Exception as e:
+      await self.move_autoload_to_save_z_position()
+      raise RuntimeError(
+        f"Failed to load carrier from autoload belt: {e}"
+      )
 
     if park_autoload_after:
       await self.park_autoload()
 
-    return resp
+    assert isinstance(resp, str), f"Response is not a string: {resp!r}"
+
+    barcode_dict = {}
+
+    if barcode_reading:
+      resp_list = resp.split("bb/")[-1].split("/")  # remove header
+
+      assert len(resp_list) == no_container_per_carrier, (
+        f"Number of barcodes read ({len(resp_list)}) does not match "
+        f"expected number ({no_container_per_carrier})"
+      )
+      for i in range(0, no_container_per_carrier):
+
+        barcode_dict[i] = Barcode(
+          data=resp_list[i],
+          symbology=barcode_symbology,
+          position_on_resource="right"
+        )
+
+    return barcode_dict
 
   # -------------- 3.13.5 Autoload carrier loading/unloading commands --------------
 
@@ -7400,7 +7458,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     carrier: Carrier,
     carrier_barcode_reading: bool = True,
     barcode_reading: bool = False,
-    barcode_reading_direction: Literal["horizontal", "vertical"] = "vertical",
+    barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
     barcode_symbology: Optional[
       Literal[
         "ISBT Standard",
@@ -7414,8 +7472,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ]
     ] = None,
     no_container_per_carrier: int = 5,
+    reading_position_of_first_barcode: float = 63.0,  # mm
+    distance_between_containers: float = 96.0,  # mm
+    width_of_reading_window: float = 38.0,  # mm
+    reading_speed: float = 128.1,  # mm/secs
     park_autoload_after: bool = True,
-  ):
+  ) -> dict:
     """
     Use autoload to load carrier.
 
@@ -7428,11 +7490,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       no_container_per_carrier: Number of containers per carrier. Default 5.
       park_autoload_after: Whether to park autoload after loading. Default True.
     """
-
-    barcode_reading_direction_dict = {
-      "vertical": "0",
-      "horizontal": "1",
-    }
 
     if barcode_symbology is None:
       barcode_symbology = self._default_1d_symbology
@@ -7451,8 +7508,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     # Set carrier type for identification purposes
-    if carrier_barcode_reading:
-      carrier_barcode = await self.load_carrier_from_tray_and_scan_carrier_barcode(carrier)
+    carrier_barcode = await self.load_carrier_from_tray_and_scan_carrier_barcode(
+      carrier,
+      carrier_barcode_reading=carrier_barcode_reading
+      )
 
     # Load carrier
     # with barcoding
@@ -7462,23 +7521,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       self._default_1d_symbology = barcode_symbology
 
       # Load and read out barcodes # TODO: swap with load_carrier_from_autoload_belt?
-      resp = await self.send_command(
-        module="C0",
-        command="CL",
-        bd=barcode_reading_direction_dict[barcode_reading_direction],
-        bp="0616",  # Barcode reading position of first barcode [0.1 mm]
-        co="0960",  # Distance between containers (pattern) [0.1 mm]
-        cf="380",  # Width of reading window [0.1 mm]
-        cv="1281",  # Carrier reading speed [0.1 mm]/s
-        cn=str(no_container_per_carrier).zfill(2),  # No of containers (cups, plates) in a carrier
+      resp = await self.load_carrier_from_autoload_belt(
+        barcode_reading=barcode_reading,
+        barcode_reading_direction=barcode_reading_direction,
+        barcode_symbology=barcode_symbology,
+        reading_position_of_first_barcode=reading_position_of_first_barcode,
+        no_container_per_carrier=no_container_per_carrier,
+        distance_between_containers=distance_between_containers,
+        width_of_reading_window=width_of_reading_window,
+        reading_speed=reading_speed,
+        park_autoload_after = False,
       )
     else:  # without barcoding
-      resp = await self.send_command(module="C0", command="CL", cn="00")
+      resp = await self.load_carrier_from_autoload_belt(barcode_reading=False, park_autoload_after=False)
 
     if park_autoload_after:
       await self.park_autoload()
 
-    return resp
+    # Parse response and create output dict
+    output = {
+      "carrier_barcode": carrier_barcode if carrier_barcode_reading else None,
+      "container_barcodes": resp if barcode_reading else None,
+    }
+
+    return output
 
   async def set_loading_indicators(self, bit_pattern: List[bool], blink_pattern: List[bool]):
     """Set loading indicators (LEDs)
