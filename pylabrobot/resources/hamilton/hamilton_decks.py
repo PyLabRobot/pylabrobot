@@ -219,12 +219,12 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       occupied_rails = []
       for og_resource in self.children:
         occupied_rails.append(_rails_for_x_coordinate(og_resource.location.x))
-      led_bits = [0]*54
+      led_bits = [0] * 54
       for rail in range(54):
-        if rail+1 in occupied_rails:
+        if rail + 1 in occupied_rails:
           led_bits[rail] = 1
       # invert order of bits and send command
-      asyncio.create_task(root.backend.set_loading_indicators(led_bits[::-1], [0]*54))
+      asyncio.create_task(root.backend.set_loading_indicators(led_bits[::-1], [0] * 54))
 
     return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
 
