@@ -7082,7 +7082,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return self._decode_hex_bitmask_to_track_list(mask_hex)
 
   async def request_presence_of_single_carrier_on_loading_tray(self, track: int) -> bool:
-    """ "
+    """
     Check whether a specific loading-tray track contains a carrier.
 
     This sends the `C0:CT` command, which instructs the autoload sled to move to
