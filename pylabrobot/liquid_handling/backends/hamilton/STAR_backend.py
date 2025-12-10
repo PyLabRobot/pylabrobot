@@ -7273,8 +7273,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   ) -> str:
     """Load carrier from tray and scan barcode"""
 
-    carrier_end_rail_str = self._compute_end_rail_of_carrier(carrier)
-    carrier_end_rail_str = str(carrier_end_rail_str).zfill(2)
+    carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
+    carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
     assert 1 <= int(carrier_end_rail_str) <= 54
     assert 0 <= barcode_position <= 470
