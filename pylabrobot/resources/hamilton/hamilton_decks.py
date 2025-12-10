@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABCMeta, abstractmethod
 from typing import Literal, Optional, cast
@@ -211,6 +212,19 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
               f"Location {resource_location} is already occupied by resource "
               f"'{og_resource.name}'."
             )
+
+    # Turn on LED lights for each position occupied
+    root = self.get_root()
+    if root.category == "liquid_handler":
+      occupied_rails = []
+      for og_resource in self.children:
+        occupied_rails.append(_rails_for_x_coordinate(og_resource.location.x))
+      led_bits = [0]*54
+      for rail in range(54):
+        if rail+1 in occupied_rails:
+          led_bits[rail] = 1
+      # invert order of bits and send command
+      asyncio.create_task(root.backend.set_loading_indicators(led_bits[::-1], [0]*54))
 
     return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
 
