@@ -6944,7 +6944,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     return await self.initialize_autoload()
 
-  async def initialize_autoload(self) -> None:
+  async def initialize_autoload(self):
     """Initialize Auto load module"""
 
     return await self.send_command(module="C0", command="II")
@@ -6961,7 +6961,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.move_autoload_to_save_z_position()
 
-  async def move_autoload_to_save_z_position(self) -> None:
+  async def move_autoload_to_save_z_position(self):
     """Move auto load to Z save position"""
 
     return await self.send_command(module="C0", command="IV")
@@ -6983,7 +6983,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       track (0..54)
     """
     resp = await self.send_command(module="C0", command="QA", fmt="qa##")
-    return resp["qa"]
+    return int(resp["qa"])
 
   async def request_autoload_type(self) -> int:
     """
@@ -7009,8 +7009,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     }
 
     resp = await self.send_command(module="C0", command="CQ", fmt="cq#")
+    resp = autoload_type_dict[resp["cq"]] if resp["cq"] in autoload_type_dict else resp["cq"]
 
-    return autoload_type_dict[resp["cq"]] if resp["cq"] in autoload_type_dict else resp["cq"]
+    return str(resp)
 
   # -------------- 3.13.2 Carrier sensing --------------
 
@@ -7181,9 +7182,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     carrier_on_loading_tray = await self.request_single_carrier_presence(carrier_end_rail)
 
     if not carrier_on_loading_tray:
-
       try:
-        resp = await self.send_command(
+        await self.send_command(
           module="C0",
           command="CN",
           cp=str(carrier_end_rail).zfill(2),
@@ -7191,7 +7191,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       except Exception as e:
         await self.move_autoload_to_save_z_position()
         raise RuntimeError(
-          f"Failed to take carrier at rail {carrier_end_rail} "f"out to autoload belt: {e}"
+          f"Failed to take carrier at rail {carrier_end_rail} " f"out to autoload belt: {e}"
         )
     else:
       raise ValueError(f"Carrier is already on the loading tray at position {carrier_end_rail}.")
@@ -7308,18 +7308,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if carrier_barcode_reading:
         await self.move_autoload_to_save_z_position()
         raise RuntimeError(
-          f"Failed to load carrier at rail {carrier_end_rail} "f"and scan barcode: {e}"
+          f"Failed to load carrier at rail {carrier_end_rail} " f"and scan barcode: {e}"
         )
       else:
         pass
 
     barcode_str = resp.split("bb/")[-1]
-  
-    return Barcode(
-      data=barcode_str,
-      symbology=barcode_symbology,
-      position_on_resource="right"
-    )
+
+    return Barcode(data=barcode_str, symbology=barcode_symbology, position_on_resource="right")
 
   async def unload_carrier_after_carrier_barcode_scanning(self) -> None:
     """After scanning the barcode of the carrier currently engaged with
@@ -7332,9 +7328,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     except Exception as e:
       await self.move_autoload_to_save_z_position()
-      raise RuntimeError(
-        f"Failed to unload carrier after barcode scanning: {e}"
-      )
+      raise RuntimeError(f"Failed to unload carrier after barcode scanning: {e}")
 
     return resp
 
@@ -7409,7 +7403,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.set_1d_barcode_type(barcode_symbology=barcode_symbology)
 
       self._default_1d_symbology = barcode_symbology
-    
+
     try:
       resp = await self.send_command(
         module="C0",
@@ -7423,9 +7417,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     except Exception as e:
       await self.move_autoload_to_save_z_position()
-      raise RuntimeError(
-        f"Failed to load carrier from autoload belt: {e}"
-      )
+      raise RuntimeError(f"Failed to load carrier from autoload belt: {e}")
 
     if park_autoload_after:
       await self.park_autoload()
@@ -7442,11 +7434,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"expected number ({no_container_per_carrier})"
       )
       for i in range(0, no_container_per_carrier):
-
         barcode_dict[i] = Barcode(
-          data=resp_list[i],
-          symbology=barcode_symbology,
-          position_on_resource="right"
+          data=resp_list[i], symbology=barcode_symbology, position_on_resource="right"
         )
 
     return barcode_dict
@@ -7509,9 +7498,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Set carrier type for identification purposes
     carrier_barcode = await self.load_carrier_from_tray_and_scan_carrier_barcode(
-      carrier,
-      carrier_barcode_reading=carrier_barcode_reading
-      )
+      carrier, carrier_barcode_reading=carrier_barcode_reading
+    )
 
     # Load carrier
     # with barcoding
@@ -7530,10 +7518,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         distance_between_containers=distance_between_containers,
         width_of_reading_window=width_of_reading_window,
         reading_speed=reading_speed,
-        park_autoload_after = False,
+        park_autoload_after=False,
       )
     else:  # without barcoding
-      resp = await self.load_carrier_from_autoload_belt(barcode_reading=False, park_autoload_after=False)
+      resp = await self.load_carrier_from_autoload_belt(
+        barcode_reading=False, park_autoload_after=False
+      )
 
     if park_autoload_after:
       await self.park_autoload()
