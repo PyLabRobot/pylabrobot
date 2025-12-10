@@ -70,7 +70,7 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
 )
-from pylabrobot.resources.barcode import Barcode
+from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -1178,7 +1178,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
-    self._default_1d_symbology = "Code 128 (Subset B and C)"
+    self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
     self._setup_done = False
 
@@ -6985,7 +6985,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="QA", fmt="qa##")
     return int(resp["qa"])
 
-  async def request_autoload_type(self) -> int:
+  async def request_autoload_type(self) -> str:
     """
     Query the autoload module type.
 
@@ -7114,7 +7114,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert resp is not None
 
-    return resp["ct"] == 1
+    return int(resp["ct"]) == 1
 
   async def request_single_carrier_presence(self, carrier_position: int):
     """Request single carrier presence on the loading tray (not on deck)"""
@@ -7150,7 +7150,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.move_autoload_to_track(track=slot_number)
 
-  async def move_autoload_to_track(self, track: int) -> None:
+  async def move_autoload_to_track(self, track: int):
     """Move autoload to specific slot/track position"""
 
     assert 1 <= track <= 54, "track must be between 1 and 54"
@@ -7198,7 +7198,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.13.4 Autoload barcode reading commands --------------
 
-  barcode_1d_symbology_dict = {
+  barcode_1d_symbology_dict: dict[Barcode1DSymbology, str] = {
     "ISBT Standard": "70",
     "Code 128 (Subset B and C)": "71",
     "Code 39": "72",
@@ -7211,18 +7211,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def set_1d_barcode_type(
     self,
-    barcode_symbology: Optional[
-      Literal[
-        "ISBT Standard",
-        "Code 128 (Subset B and C)",
-        "Code 39",
-        "Codebar",
-        "Code 2of5 Interleaved",
-        "UPC A/E",
-        "YESN/EAN 8",
-        "Code 93",
-      ]
-    ] = None,
+    barcode_symbology: Optional[Barcode1DSymbology] = None,
   ):
     """Set 1D barcode type for autoload barcode reading."""
 
@@ -7279,7 +7268,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     carrier: Carrier,
     carrier_barcode_reading: bool = True,
-    barcode_symbology: str = "Code 128 (Subset B and C)",
+    barcode_symbology: Optional[Barcode1DSymbology] = None,
     barcode_position: float = 4.3,  # mm
     barcode_reading_window_width: float = 38.0,  # mm
     reading_speed: float = 128.1,  # mm/sec
@@ -7348,18 +7337,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     barcode_reading: bool = False,
     barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
-    barcode_symbology: Optional[
-      Literal[
-        "ISBT Standard",
-        "Code 128 (Subset B and C)",
-        "Code 39",
-        "Codebar",
-        "Code 2of5 Interleaved",
-        "UPC A/E",
-        "YESN/EAN 8",
-        "Code 93",
-      ]
-    ] = None,
+    barcode_symbology: Optional[Barcode1DSymbology] = None,
     reading_position_of_first_barcode: float = 63.0,  # mm
     no_container_per_carrier: int = 5,
     distance_between_containers: float = 96.0,  # mm
@@ -7448,18 +7426,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     carrier_barcode_reading: bool = True,
     barcode_reading: bool = False,
     barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
-    barcode_symbology: Optional[
-      Literal[
-        "ISBT Standard",
-        "Code 128 (Subset B and C)",
-        "Code 39",
-        "Codebar",
-        "Code 2of5 Interleaved",
-        "UPC A/E",
-        "YESN/EAN 8",
-        "Code 93",
-      ]
-    ] = None,
+    barcode_symbology: Optional[Barcode1DSymbology] = None,
     no_container_per_carrier: int = 5,
     reading_position_of_first_barcode: float = 63.0,  # mm
     distance_between_containers: float = 96.0,  # mm

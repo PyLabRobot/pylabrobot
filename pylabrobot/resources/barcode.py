@@ -8,6 +8,17 @@ from typing import Literal
 
 BarcodePosition = Literal["right", "front", "left", "back", "bottom", "top"]
 
+Barcode1dSymbology = Literal[
+  "ISBT Standard",
+  "Code 128 (Subset B and C)",
+  "Code 39",
+  "Codebar",
+  "Code 2of5 Interleaved",
+  "UPC A/E":"75",
+  "YESN/EAN 8",
+  "Code 9",
+]
+
 
 @dataclass
 class Barcode:
