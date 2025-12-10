@@ -6759,7 +6759,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     warnings.warn(  # TODO: remove 2025-02
       "`move_core_96_head_to_defined_position` is deprecated and will be "
-      "removed in 2025-02 use `move_96head_to_coordinate` instead.",
+      "removed in 2025-02. Use `move_96head_to_coordinate` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
