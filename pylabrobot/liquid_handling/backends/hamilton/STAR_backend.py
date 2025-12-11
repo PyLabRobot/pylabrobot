@@ -7631,11 +7631,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         carrier_start_rail = int((carrier_x - 100.0) / track_width) + 1
         carrier_end_rail = int((carrier_x - 100.0 + child.get_absolute_size_x()) / track_width)
 
-        # Clamp rails to valid range (1-54)
+        # Verify rails are valid
         carrier_start_rail = max(1, min(carrier_start_rail, 54))
-        carrier_end_rail = max(1, min(carrier_end_rail, 54))
-
-        carrier_rails.append((carrier_start_rail, carrier_end_rail))
+        if 1 <= carrier_end_rail <= 54:
+          carrier_rails.append((carrier_start_rail, carrier_end_rail))
 
     if not carrier_rails:
       raise ValueError("No carriers found on deck. Assign carriers to the deck.")
@@ -7655,6 +7654,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         bit_pattern=[False] * 54,
         blink_pattern=[False] * 54,
       )
+      print(f"\n✓ All carriers successfully detected at end rail positions: {expected_end_rails}\n")
       return
 
     # Prompt user about missing carriers
