@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.inheco.control\_box.InhecoTECControlBox.set\_touchscreen
+============================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.control_box
+
+.. automethod:: InhecoTECControlBox.set_touchscreen

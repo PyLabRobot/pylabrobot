@@ -1,0 +1,430 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "39d0c1a5",
+   "metadata": {},
+   "source": [
+    "# Plate reading\n",
+    "\n",
+    "PyLabRobot supports the following plate readers:\n",
+    "\n",
+    "```{toctree}\n",
+    ":maxdepth: 1\n",
+    "\n",
+    "bmg-clariostar\n",
+    "cytation5\n",
+    "```\n",
+    "\n",
+    "This example uses the `PlateReaderChatterboxBackend`. When using a real machine, use the corresponding backend."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "33571473",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Setting up the plate reader.\n"
+     ]
+    }
+   ],
+   "source": [
+    "from pylabrobot.plate_reading import PlateReader, PlateReaderChatterboxBackend\n",
+    "pr = PlateReader(name=\"plate reader\", backend=PlateReaderChatterboxBackend(), size_x=0, size_y=0, size_z=0)\n",
+    "await pr.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f8e17a8f",
+   "metadata": {},
+   "source": [
+    "## Basic plate reading"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8f026de0",
+   "metadata": {},
+   "source": [
+    "First you need to assign a plate to the plate reader."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "55a22956",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import Cor_96_wellplate_360ul_Fb\n",
+    "plate = Cor_96_wellplate_360ul_Fb(name=\"plate\")\n",
+    "pr.assign_child_resource(plate)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b504f303",
+   "metadata": {},
+   "source": [
+    "### Luminescence\n",
+    "\n",
+    "![Cytation{1,5} supported](https://img.shields.io/badge/Cytation-supported-blue)\n",
+    "![ClarioSTAR supported](https://img.shields.io/badge/ClarioSTAR-supported-blue)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "f1b0e9b9",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Reading luminescence at focal height 4.5.\n",
+      "Read the following wells:\n",
+      "  |      1|      2|      3|      4|      5|      6|      7|      8|      9|     10|     11|     12|\n",
+      "---------------------------------------------------------------------------------------------------\n",
+      "A |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "B |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "C |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "D |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "E |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "F |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "G |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "H |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n"
+     ]
+    }
+   ],
+   "source": [
+    "data = await pr.read_luminescence(focal_height=4.5)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8a756e56",
+   "metadata": {},
+   "source": [
+    "Data is a 2d array of optional floats."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "68dff25c",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "data"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5d7bc15a",
+   "metadata": {},
+   "source": [
+    "### Absorbance\n",
+    "\n",
+    "![Cytation{1,5} supported](https://img.shields.io/badge/Cytation-supported-blue)\n",
+    "![ClarioSTAR supported](https://img.shields.io/badge/ClarioSTAR-supported-blue)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "ee711c57",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Reading absorbance at wavelength 450.\n",
+      "Read the following wells:\n",
+      "  |      1|      2|      3|      4|      5|      6|      7|      8|      9|     10|     11|     12|\n",
+      "---------------------------------------------------------------------------------------------------\n",
+      "A |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "B |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "C |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "D |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "E |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "F |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "G |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "H |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "[[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]"
+      ]
+     },
+     "execution_count": 5,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await pr.read_absorbance(wavelength=450)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b3f93810",
+   "metadata": {},
+   "source": [
+    "Data is a 2d array of optional floats."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "74359d8a",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]"
+      ]
+     },
+     "execution_count": 6,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "data"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "74fdf54d",
+   "metadata": {},
+   "source": [
+    "### Fluorescence\n",
+    "\n",
+    "![Cytation{1,5} supported](https://img.shields.io/badge/Cytation-supported-blue)\n",
+    "![ClarioSTAR not support](https://img.shields.io/badge/ClarioSTAR-not%20supported-red)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "f9cdb44b",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Reading fluorescence at excitation wavelength 485, emission wavelength 520, and focal height 4.5.\n",
+      "Read the following wells:\n",
+      "  |      1|      2|      3|      4|      5|      6|      7|      8|      9|     10|     11|     12|\n",
+      "---------------------------------------------------------------------------------------------------\n",
+      "A |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "B |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "C |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "D |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "E |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "F |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "G |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n",
+      "H |  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|  0.000|\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "[[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]"
+      ]
+     },
+     "execution_count": 7,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await pr.read_fluorescence(excitation_wavelength=485, emission_wavelength=520, focal_height=4.5)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "87d0a591",
+   "metadata": {},
+   "source": [
+    "Data is a 2d array of optional floats."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "da310f3e",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]"
+      ]
+     },
+     "execution_count": 8,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "data"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "dc936154",
+   "metadata": {},
+   "source": [
+    "## Reading parts of plates\n",
+    "\n",
+    "![Cytation{1,5} supported](https://img.shields.io/badge/Cytation-supported-blue)\n",
+    "![ClarioSTAR not support](https://img.shields.io/badge/ClarioSTAR-not%20supported-red)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "081173b2",
+   "metadata": {},
+   "source": [
+    "The example below shows luminescence, but the API is the same for luminescence, absorbance and fluorescence."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "716887a6",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Reading luminescence at focal height 4.5.\n",
+      "Read the following wells:\n",
+      "  |      1|      2|      3|      4|      5|      6|      7|      8|      9|     10|     11|     12|\n",
+      "---------------------------------------------------------------------------------------------------\n",
+      "A |  0.000|  0.000|  0.000|  0.000|  0.000|       |       |       |       |       |       |       |\n",
+      "B |  0.000|  0.000|  0.000|  0.000|  0.000|       |       |       |       |       |       |       |\n",
+      "C |  0.000|  0.000|  0.000|  0.000|  0.000|       |       |       |       |       |       |       |\n",
+      "D |       |       |       |       |       |       |       |       |       |       |       |       |\n",
+      "E |       |       |       |       |       |       |       |       |       |       |       |       |\n",
+      "F |       |       |       |       |       |       |       |       |       |       |       |       |\n",
+      "G |       |       |       |       |       |       |       |       |       |       |       |       |\n",
+      "H |       |       |       |       |       |       |       |       |       |       |       |       |\n"
+     ]
+    }
+   ],
+   "source": [
+    "data = await pr.read_luminescence(focal_height=4.5, wells=plate[\"A1:C5\"])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "e9d21c1e",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[[0.0, 0.0, 0.0, 0.0, 0.0, None, None, None, None, None, None, None],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, None, None, None, None, None, None, None],\n",
+       " [0.0, 0.0, 0.0, 0.0, 0.0, None, None, None, None, None, None, None],\n",
+       " [None, None, None, None, None, None, None, None, None, None, None, None],\n",
+       " [None, None, None, None, None, None, None, None, None, None, None, None],\n",
+       " [None, None, None, None, None, None, None, None, None, None, None, None],\n",
+       " [None, None, None, None, None, None, None, None, None, None, None, None],\n",
+       " [None, None, None, None, None, None, None, None, None, None, None, None]]"
+      ]
+     },
+     "execution_count": 10,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "data"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.23"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

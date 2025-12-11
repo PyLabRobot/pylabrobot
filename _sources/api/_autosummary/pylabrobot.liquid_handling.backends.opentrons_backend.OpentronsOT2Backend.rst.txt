@@ -1,0 +1,62 @@
+﻿pylabrobot.liquid\_handling.backends.opentrons\_backend.OpentronsOT2Backend
+===========================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.opentrons_backend
+
+.. autoclass:: OpentronsOT2Backend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsOT2Backend.deck
+      ~OpentronsOT2Backend.head
+      ~OpentronsOT2Backend.head96
+      ~OpentronsOT2Backend.num_channels
+      ~OpentronsOT2Backend.pipette_name2volume
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsOT2Backend.__init__
+      ~OpentronsOT2Backend.aspirate
+      ~OpentronsOT2Backend.aspirate96
+      ~OpentronsOT2Backend.can_pick_up_tip
+      ~OpentronsOT2Backend.deserialize
+      ~OpentronsOT2Backend.dispense
+      ~OpentronsOT2Backend.dispense96
+      ~OpentronsOT2Backend.drop_resource
+      ~OpentronsOT2Backend.drop_tips
+      ~OpentronsOT2Backend.drop_tips96
+      ~OpentronsOT2Backend.get_all_instances
+      ~OpentronsOT2Backend.get_ot_name
+      ~OpentronsOT2Backend.get_pipette_name
+      ~OpentronsOT2Backend.home
+      ~OpentronsOT2Backend.list_connected_modules
+      ~OpentronsOT2Backend.move_channel_x
+      ~OpentronsOT2Backend.move_channel_y
+      ~OpentronsOT2Backend.move_channel_z
+      ~OpentronsOT2Backend.move_picked_up_resource
+      ~OpentronsOT2Backend.move_pipette_head
+      ~OpentronsOT2Backend.pick_up_resource
+      ~OpentronsOT2Backend.pick_up_tips
+      ~OpentronsOT2Backend.pick_up_tips96
+      ~OpentronsOT2Backend.prepare_for_manual_channel_operation
+      ~OpentronsOT2Backend.select_liquid_pipette
+      ~OpentronsOT2Backend.select_tip_pipette
+      ~OpentronsOT2Backend.serialize
+      ~OpentronsOT2Backend.set_deck
+      ~OpentronsOT2Backend.set_heads
+      ~OpentronsOT2Backend.setup
+      ~OpentronsOT2Backend.stop
+   
+   

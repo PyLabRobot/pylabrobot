@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.door\_open
+======================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. autoproperty:: Centrifuge.door_open
