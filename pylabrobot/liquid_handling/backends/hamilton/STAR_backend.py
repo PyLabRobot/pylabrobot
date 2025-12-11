@@ -7629,7 +7629,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         # Get x coordinate relative to deck
         carrier_x = child.get_location_wrt(self.deck).x
         carrier_start_rail = int((carrier_x - 100.0) / track_width) + 1
-        carrier_end_rail = int((carrier_x - 100.0 + child.get_absolute_size_x()) / track_width) + 1
+        carrier_end_rail = int((carrier_x - 100.0 + child.get_absolute_size_x()) / track_width)
 
         # Clamp rails to valid range (1-54)
         carrier_start_rail = max(1, min(carrier_start_rail, 54))
@@ -7672,7 +7672,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Flash LEDs until all carriers are detected
-    blink_state = False
     while missing_end_rails:
       # Create bit pattern for missing carriers
       # Flash all LEDs from start_rail to end_rail (inclusive) for each missing carrier
@@ -7689,14 +7688,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               if 1 <= rail <= 54:
                 indicator_index = rail - 1  # Convert rail (1-54) to index (0-53)
                 bit_pattern[indicator_index] = True
-                blink_pattern[indicator_index] = blink_state
+                blink_pattern[indicator_index] = True
             break
 
       # Set loading indicators
-      await self.set_loading_indicators(bit_pattern, blink_pattern)
-
-      # Toggle blink state for next cycle
-      blink_state = not blink_state
+      await self.set_loading_indicators(bit_pattern[::-1], blink_pattern[::-1])
 
       # Wait before checking again
       await asyncio.sleep(check_interval)
