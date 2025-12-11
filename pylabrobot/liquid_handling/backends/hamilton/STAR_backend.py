@@ -7238,7 +7238,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.13.4 Autoload barcode reading commands --------------
 
-  # 1D barcode symbology bitmask (Hamilton STAR firmware)
+  # 1D barcode symbology bitmask
   # Each symbology corresponds to exactly one bit in the 8-bit barcode type field.
   # Bit definitions from spec:
   #   Bit 0 = ISBT Standard
@@ -7264,12 +7264,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def set_1d_barcode_type(
     self,
-    barcode_symbology: Optional[Barcode1DSymbology] = None,
+    barcode_symbology: Optional[Barcode1DSymbology],
   ):
     """Set 1D barcode type for autoload barcode reading."""
-
-    if barcode_symbology is None:
-      barcode_symbology = self._default_1d_symbology
 
     await self.send_command(
       module="C0",
