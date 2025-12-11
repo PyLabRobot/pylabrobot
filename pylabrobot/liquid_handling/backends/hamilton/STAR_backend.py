@@ -5938,7 +5938,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert isinstance(liquid_levels, list), "liquid_levels must be a list"
     assert (
       len(liquid_levels) == self.num_channels
-    ), "liquid_levels length must match number of channels"
+    ), f"Expected {self.num_channels} liquid level values, got {len(liquid_levels)} instead"
 
     current_absolute_liquid_heights = [float(lld_channel / 10) for lld_channel in liquid_levels]
 
