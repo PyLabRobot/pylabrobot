@@ -1732,13 +1732,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ]
     )
 
-    liquid_levels: List[int] = (await self.request_pip_height_last_lld())["lh"]  # type: ignore
-    current_absolute_liquid_heights = [
-      float(liquid_levels[channel_idx] / 10) for channel_idx in use_channels
+    current_absolute_liquid_heights = await self.request_pip_height_last_lld()  # type: ignore
+
+    filtered_absolute_liquid_heights = [
+      current_absolute_liquid_heights[idx] for idx in use_channels
     ]
 
     relative_to_well = [
-      current_absolute_liquid_heights[i]
+      filtered_absolute_liquid_heights[i]
       - resource.get_absolute_location("c", "c", "cavity_bottom").z
       for i, resource in enumerate(containers)
     ]
@@ -5913,14 +5914,39 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
     return cast(List[int], resp.get("rt"))
 
-  async def request_pip_height_last_lld(self):
-    """Request PIP height of last LLD
+  async def request_pip_height_last_lld(self) -> List[float]:
+    """
+    Return the absolute liquid heights measured during the most recent
+    liquid-level detection (LLD) event for all channels.
+
+    This value is maintained internally by the STAR/STARlet firmware and is
+    updated **whenever a liquid level is detected**, regardless of whether the
+    detection method used was:
+      • capacitive LLD (cLLD == 'STAR.LLDMode(1)'), or
+      • pressure-based LLD (pLLD == 'STAR.LLDMode(2)').
+
+    Heights are returned in millimeters, one value per channel, ordered by
+    channel index.
 
     Returns:
-      LLD height of all channels
-    """
+        List[float]: Absolute liquid heights (mm) from the last LLD event for
+        each channel.
 
-    return await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
+    Raises:
+        AssertionError: If the instrument response does not contain a valid
+        ``"lh"`` list.
+    """
+    resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
+
+    liquid_levels = resp.get("lh")
+
+    assert (
+      len(liquid_levels) == self.num_channels
+    ), f"Expected {self.num_channels} liquid level values, got {len(liquid_levels)} instead"
+
+    current_absolute_liquid_heights = [float(lld_channel / 10) for lld_channel in liquid_levels]
+
+    return current_absolute_liquid_heights
 
   async def request_tadm_status(self):
     """Request PIP height of last LLD
@@ -8936,10 +8962,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if move_channels_to_save_pos_after:
       await self.move_all_channels_in_z_safety()
 
-    get_llds = await self.request_pip_height_last_lld()
-    result_in_mm = float(get_llds["lh"][channel_idx] / 10)
+    current_absolute_liquid_heights = await self.request_pip_height_last_lld()
+    result_probed_z_height = current_absolute_liquid_heights[channel_idx]
 
-    return result_in_mm
+    return result_probed_z_height
 
   async def request_tip_len_on_channel(
     self,
