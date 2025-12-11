@@ -7428,6 +7428,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if barcode_symbology is None:
       barcode_symbology = self._default_1d_symbology
+    assert barcode_symbology is not None
 
     no_container_per_carrier_str = str(no_container_per_carrier).zfill(2)
     reading_position_of_first_barcode_str = str(
@@ -7467,7 +7468,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert isinstance(resp, str), f"Response is not a string: {resp!r}"
 
-    barcode_dict = {}
+    barcode_dict: dict[int, Optional[Barcode]] = {}
 
     if barcode_reading:
       resp_list = resp.split("bb/")[-1].split("/")  # remove header
