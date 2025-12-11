@@ -46,6 +46,7 @@ class Serial(IOBase):
     write_timeout=1,
     timeout=1,
     rtscts: bool = False,
+    dsrdtr: bool = False,
   ):
     self._port = port
     self._vid = vid
@@ -59,6 +60,7 @@ class Serial(IOBase):
     self.write_timeout = write_timeout
     self.timeout = timeout
     self.rtscts = rtscts
+    self.dsrdtr = dsrdtr
 
     # Instant parameter validation at init time
     if not self._port and not (self._vid and self._pid):
@@ -118,7 +120,7 @@ class Serial(IOBase):
     self._executor = ThreadPoolExecutor(max_workers=1)
 
     # 1. VID:PID specified - port maybe
-    if self._vid and self._pid:
+    if self._vid is not None and self._pid is not None:
       matching_ports = [
         p.device
         for p in serial.tools.list_ports.comports()
@@ -126,7 +128,7 @@ class Serial(IOBase):
       ]
 
       # 1.a. No matching devices found AND no port specified
-      if not self._port and not matching_ports:
+      if self._port is None and len(matching_ports) == 0:
         raise RuntimeError(
           f"No machines found for VID={self._vid}, PID={self._pid}, and no port specified."
         )
@@ -139,7 +141,7 @@ class Serial(IOBase):
       candidate_port = self._port
 
       # 2.a. Port specified but does not match VID:PID - sanity check (e.g. typo in port)
-      if (self._vid and self._pid) and candidate_port not in matching_ports:
+      if (self._vid is not None and self._pid is not None) and candidate_port not in matching_ports:
         raise RuntimeError(
           f"Specified port {candidate_port} not found among machines: {matching_ports} "
           f"with VID={self._vid}:PID={self._pid}."
@@ -171,6 +173,7 @@ class Serial(IOBase):
         write_timeout=self.write_timeout,
         timeout=self.timeout,
         rtscts=self.rtscts,
+        dsrdtr=self.dsrdtr,
       )
 
     try:
@@ -182,6 +185,8 @@ class Serial(IOBase):
         self._executor.shutdown(wait=True)
         self._executor = None
       raise e
+
+    assert self._ser is not None
 
     self._port = candidate_port
 
@@ -300,6 +305,38 @@ class Serial(IOBase):
     logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
     capturer.record(SerialCommand(device_id=self._port, action="reset_output_buffer", data=""))
 
+  @property
+  def dtr(self) -> bool:
+    """Get the DTR (Data Terminal Ready) status."""
+    assert self._ser is not None and self._port is not None, "forgot to call setup?"
+    value = self._ser.dtr
+    capturer.record(SerialCommand(device_id=self._port, action="get_dtr", data=str(value)))
+    return value  # type: ignore # ?
+
+  @dtr.setter
+  def dtr(self, value: bool):
+    """Set the DTR (Data Terminal Ready) status."""
+    assert self._ser is not None and self._port is not None, "forgot to call setup?"
+    logger.log(LOG_LEVEL_IO, "[%s] set DTR %s", self._port, value)
+    capturer.record(SerialCommand(device_id=self._port, action="set_dtr", data=str(value)))
+    self._ser.dtr = value
+
+  @property
+  def rts(self) -> bool:
+    """Get the RTS (Request To Send) status."""
+    assert self._ser is not None and self._port is not None, "forgot to call setup?"
+    value = self._ser.rts
+    capturer.record(SerialCommand(device_id=self._port, action="get_rts", data=str(value)))
+    return value  # type: ignore # ?
+
+  @rts.setter
+  def rts(self, value: bool):
+    """Set the RTS (Request To Send) status."""
+    assert self._ser is not None and self._port is not None, "forgot to call setup?"
+    logger.log(LOG_LEVEL_IO, "[%s] set RTS %s", self._port, value)
+    capturer.record(SerialCommand(device_id=self._port, action="set_rts", data=str(value)))
+    self._ser.rts = value
+
   def serialize(self):
     return {
       "port": self._port,
@@ -310,6 +347,7 @@ class Serial(IOBase):
       "write_timeout": self.write_timeout,
       "timeout": self.timeout,
       "rtscts": self.rtscts,
+      "dsrdtr": self.dsrdtr,
     }
 
   @classmethod
@@ -323,6 +361,7 @@ class Serial(IOBase):
       write_timeout=data["write_timeout"],
       timeout=data["timeout"],
       rtscts=data["rtscts"],
+      dsrdtr=data["dsrdtr"],
     )
 
 
@@ -338,6 +377,7 @@ class SerialValidator(Serial):
     write_timeout=1,
     timeout=1,
     rtscts: bool = False,
+    dsrdtr: bool = False,
   ):
     super().__init__(
       port=port,
@@ -348,6 +388,7 @@ class SerialValidator(Serial):
       write_timeout=write_timeout,
       timeout=timeout,
       rtscts=rtscts,
+      dsrdtr=dsrdtr,
     )
     self.cr = cr
 
@@ -415,3 +456,49 @@ class SerialValidator(Serial):
       and next_command.action == "reset_output_buffer"
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial reset_output_buffer")
+
+  @property
+  def dtr(self) -> bool:
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "get_dtr"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial get_dtr")
+    return next_command.data.lower() == "true"
+
+  @dtr.setter
+  def dtr(self, value: bool):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "set_dtr"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial set_dtr")
+    if next_command.data.lower() != str(value).lower():
+      raise ValidationError("Data mismatch: difference was written to stdout.")
+
+  @property
+  def rts(self) -> bool:
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "get_rts"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial get_rts")
+    return next_command.data.lower() == "true"
+
+  @rts.setter
+  def rts(self, value: bool):
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "set_rts"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial set_rts")
+    if next_command.data.lower() != str(value).lower():
+      raise ValidationError("Data mismatch: difference was written to stdout.")
