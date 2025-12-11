@@ -1734,8 +1734,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     current_absolute_liquid_heights = await self.request_pip_height_last_lld()  # type: ignore
 
+    filtered_absolute_liquid_heights = [
+      current_absolute_liquid_heights[idx] for idx in use_channels
+    ]
+
     relative_to_well = [
-      current_absolute_liquid_heights[i]
+      filtered_absolute_liquid_heights[i]
       - resource.get_absolute_location("c", "c", "cavity_bottom").z
       for i, resource in enumerate(containers)
     ]
@@ -5935,7 +5939,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
 
     liquid_levels = resp.get("lh")
-    assert isinstance(liquid_levels, list), f"Expected liquid_levels to be a list, got {type(liquid_levels).__name__} instead"
+    assert isinstance(
+      liquid_levels, list
+    ), f"Expected liquid_levels to be a list, got {type(liquid_levels).__name__} instead"
     assert (
       len(liquid_levels) == self.num_channels
     ), f"Expected {self.num_channels} liquid level values, got {len(liquid_levels)} instead"
