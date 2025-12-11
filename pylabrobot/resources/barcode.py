@@ -17,6 +17,7 @@ Barcode1DSymbology = Literal[
   "UPC A/E",
   "YESN/EAN 8",
   "Code 93",
+  "ANY 1D",  # wildcard for any 1D symbology available, depends on scanner capabilities
 ]
 
 

@@ -7238,15 +7238,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.13.4 Autoload barcode reading commands --------------
 
+  # 1D barcode symbology bitmask (Hamilton STAR firmware)
+  # Each symbology corresponds to exactly one bit in the 8-bit barcode type field.
+  # Bit definitions from spec:
+  #   Bit 0 = ISBT Standard
+  #   Bit 1 = Code 128 (Subset B and C)
+  #   Bit 2 = Code 39
+  #   Bit 3 = Codabar
+  #   Bit 4 = Code 2of5 Interleaved
+  #   Bit 5 = UPC A/E
+  #   Bit 6 = YESN/EAN 8
+  #   Bit 7 = (unused / undocumented)
+
   barcode_1d_symbology_dict: dict[Barcode1DSymbology, str] = {
-    "ISBT Standard": "70",
-    "Code 128 (Subset B and C)": "71",
-    "Code 39": "72",
-    "Codebar": "73",
-    "Code 2of5 Interleaved": "74",
-    "UPC A/E": "75",
-    "YESN/EAN 8": "76",
-    "Code 93": "",
+    "ISBT Standard": "01",  # bit 0 → 0b00000001 → 0x01 → 1
+    "Code 128 (Subset B and C)": "02",  # bit 1 → 0b00000010 → 0x02 → 2
+    "Code 39": "04",  # bit 2 → 0b00000100 → 0x04 → 4
+    "Codebar": "08",  # bit 3 → 0b00001000 → 0x08 → 8
+    "Code 2of5 Interleaved": "10",  # bit 4 → 0b00010000 → 0x10 → 16
+    "UPC A/E": "20",  # bit 5 → 0b00100000 → 0x20 → 32
+    "YESN/EAN 8": "40",  # bit 6 → 0b01000000 → 0x40 → 64
+    # Bit 7 → 0b10000000 → 0x80 → 128  (not documented, so omitted)
+    "ANY 1D": "7F",  # bits 0-6 → 0b01111111 → 0x7F → 127
   }
 
   async def set_1d_barcode_type(
