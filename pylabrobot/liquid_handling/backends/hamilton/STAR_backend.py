@@ -7599,6 +7599,91 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       cb=blink_pattern_hex,
     )
 
+  async def verify_and_wait_for_carriers(
+    self,
+    check_interval: float = 1.0,
+  ):
+    """Verify that carriers have been loaded at expected rail positions.
+
+    This function checks if carriers are physically present on the deck at the specified
+    rail positions using the deck's presence sensors. If any carriers are missing, it will:
+    1. Prompt the user to load the missing carriers
+    2. Flash LEDs at the missing positions using set_loading_indicators
+    3. Continue checking until all carriers are detected
+
+    Args:
+      check_interval: Interval in seconds between presence checks (default: 1.0)
+
+    Raises:
+      ValueError: If no carriers are found on the deck.
+    """
+    # Extract from deck children
+    expected_rail_positions = []
+    for child in self.deck.children:
+      if isinstance(child, Carrier):
+        rails = self.deck._rails_for_x_coordinate(child.coordinate.x)
+        if 1 <= rails <= 54:
+          expected_rail_positions.append(rails)
+
+    if not expected_rail_positions:
+      raise ValueError("No carriers found on deck. Assign carriers to the deck.")
+
+    # Check initial presence
+    detected_rails = set(await self.request_presence_of_carriers_on_deck())
+    missing_rails = sorted(set(expected_rail_positions) - detected_rails)
+
+    if not missing_rails:
+      logger.info(f"All carriers detected at rail positions: {expected_rail_positions}")
+      # Turn off all indicators
+      await self.set_loading_indicators(
+        bit_pattern=[False] * 54,
+        blink_pattern=[False] * 54,
+      )
+      return
+
+    # Prompt user about missing carriers
+    print(
+      f"\n{'='*60}\n"
+      f"CARRIER LOADING REQUIRED\n"
+      f"{'='*60}\n"
+      f"Expected carriers at rail positions: {expected_rail_positions}\n"
+      f"Detected carriers at rail positions: {sorted(detected_rails)}\n"
+      f"Missing carriers at rail positions: {missing_rails}\n"
+      f"{'='*60}\n"
+      f"Please load the missing carriers. LEDs will flash at the missing positions.\n"
+      f"The system will automatically detect when all carriers are loaded.\n"
+      f"{'='*60}\n"
+    )
+
+    # Flash LEDs until all carriers are detected
+    while missing_rails:
+      # Create bit pattern for missing rails
+      bit_pattern = [False] * 54
+      blink_pattern = [False] * 54
+
+      for rail in missing_rails:
+        indicator_index = rail - 1  # Convert rail (1-54) to index (0-53)
+        bit_pattern[indicator_index] = True
+        blink_pattern[indicator_index] = True
+
+      # Set loading indicators
+      await self.set_loading_indicators(bit_pattern[::-1], blink_pattern[::-1])
+
+      # Check for presence again
+      detected_rails = set(await self.request_presence_of_carriers_on_deck())
+      missing_rails = sorted(set(expected_rail_positions) - detected_rails)
+
+      # Brief pause before next check cycle
+      await asyncio.sleep(check_interval)
+
+    # All carriers detected, turn off all indicators
+    logger.info(f"All carriers successfully detected at rail positions: {expected_rail_positions}")
+    await self.set_loading_indicators(
+      bit_pattern=[False] * 54,
+      blink_pattern=[False] * 54,
+    )
+    print(f"\nAll carriers successfully loaded and detected!\n")
+
   async def unload_carrier(
     self,
     carrier: Carrier,
