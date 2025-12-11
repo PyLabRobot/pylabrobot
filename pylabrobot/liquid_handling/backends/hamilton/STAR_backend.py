@@ -5939,9 +5939,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
 
     liquid_levels = resp.get("lh")
-    assert isinstance(
-      liquid_levels, list
-    ), f"Expected liquid_levels to be a list, got {type(liquid_levels).__name__} instead"
+
     assert (
       len(liquid_levels) == self.num_channels
     ), f"Expected {self.num_channels} liquid level values, got {len(liquid_levels)} instead"
@@ -8966,10 +8964,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     current_absolute_liquid_heights = await self.request_pip_height_last_lld()
     result_probed_z_height = current_absolute_liquid_heights[channel_idx]
-
-    assert isinstance(result_probed_z_height, float), (
-      "Expected probed z-height to be a float, got " f"{type(result_probed_z_height)} instead."
-    )
 
     return result_probed_z_height
 
