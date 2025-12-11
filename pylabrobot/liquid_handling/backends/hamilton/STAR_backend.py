@@ -83,7 +83,10 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
+from pylabrobot.resources.hamilton.hamilton_decks import (
+  HamiltonCoreGrippers,
+  _rails_for_x_coordinate,
+)
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
@@ -7617,23 +7620,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Raises:
       ValueError: If no carriers are found on the deck.
     """
-    # Extract from deck children
-    expected_rail_positions = []
+    # Extract carriers from deck children with start and end rail positions
+    track_width = 22.5
+    carrier_rails = []  # List of (start_rail, end_rail) tuples
+
     for child in self.deck.children:
       if isinstance(child, Carrier):
-        rails = self.deck._rails_for_x_coordinate(child.coordinate.x)
-        if 1 <= rails <= 54:
-          expected_rail_positions.append(rails)
+        # Get x coordinate relative to deck
+        carrier_x = child.get_location_wrt(self.deck).x
+        carrier_start_rail = int((carrier_x - 100.0) / track_width) + 1
+        carrier_end_rail = int((carrier_x - 100.0 + child.get_absolute_size_x()) / track_width) + 1
 
-    if not expected_rail_positions:
+        # Clamp rails to valid range (1-54)
+        carrier_start_rail = max(1, min(carrier_start_rail, 54))
+        carrier_end_rail = max(1, min(carrier_end_rail, 54))
+
+        carrier_rails.append((carrier_start_rail, carrier_end_rail))
+
+    if not carrier_rails:
       raise ValueError("No carriers found on deck. Assign carriers to the deck.")
+
+    # Extract end rails for comparison with detected rails
+    # The presence detection reports the end rail position
+    expected_end_rails = [end_rail for _, end_rail in carrier_rails]
 
     # Check initial presence
     detected_rails = set(await self.request_presence_of_carriers_on_deck())
-    missing_rails = sorted(set(expected_rail_positions) - detected_rails)
+    missing_end_rails = sorted(set(expected_end_rails) - detected_rails)
 
-    if not missing_rails:
-      logger.info(f"All carriers detected at rail positions: {expected_rail_positions}")
+    if not missing_end_rails:
+      logger.info(f"All carriers detected at end rail positions: {expected_end_rails}")
       # Turn off all indicators
       await self.set_loading_indicators(
         bit_pattern=[False] * 54,
@@ -7646,43 +7662,56 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       f"\n{'='*60}\n"
       f"CARRIER LOADING REQUIRED\n"
       f"{'='*60}\n"
-      f"Expected carriers at rail positions: {expected_rail_positions}\n"
+      f"Expected carriers at end rail positions: {expected_end_rails}\n"
       f"Detected carriers at rail positions: {sorted(detected_rails)}\n"
-      f"Missing carriers at rail positions: {missing_rails}\n"
+      f"Missing carriers at end rail positions: {missing_end_rails}\n"
       f"{'='*60}\n"
-      f"Please load the missing carriers. LEDs will flash at the missing positions.\n"
+      f"Please load the missing carriers. LEDs will flash at the carrier positions.\n"
       f"The system will automatically detect when all carriers are loaded.\n"
       f"{'='*60}\n"
     )
 
     # Flash LEDs until all carriers are detected
-    while missing_rails:
-      # Create bit pattern for missing rails
+    blink_state = False
+    while missing_end_rails:
+      # Create bit pattern for missing carriers
+      # Flash all LEDs from start_rail to end_rail (inclusive) for each missing carrier
       bit_pattern = [False] * 54
       blink_pattern = [False] * 54
 
-      for rail in missing_rails:
-        indicator_index = rail - 1  # Convert rail (1-54) to index (0-53)
-        bit_pattern[indicator_index] = True
-        blink_pattern[indicator_index] = True
+      # For each missing carrier (identified by missing end rail), flash all its rails
+      for missing_end_rail in missing_end_rails:
+        # Find the carrier with this end rail
+        for start_rail, end_rail in carrier_rails:
+          if end_rail == missing_end_rail:
+            # Flash all LEDs from start_rail to end_rail (inclusive)
+            for rail in range(start_rail, end_rail + 1):
+              if 1 <= rail <= 54:
+                indicator_index = rail - 1  # Convert rail (1-54) to index (0-53)
+                bit_pattern[indicator_index] = True
+                blink_pattern[indicator_index] = blink_state
+            break
 
       # Set loading indicators
-      await self.set_loading_indicators(bit_pattern[::-1], blink_pattern[::-1])
+      await self.set_loading_indicators(bit_pattern, blink_pattern)
+
+      # Toggle blink state for next cycle
+      blink_state = not blink_state
+
+      # Wait before checking again
+      await asyncio.sleep(check_interval)
 
       # Check for presence again
       detected_rails = set(await self.request_presence_of_carriers_on_deck())
-      missing_rails = sorted(set(expected_rail_positions) - detected_rails)
-
-      # Brief pause before next check cycle
-      await asyncio.sleep(check_interval)
+      missing_end_rails = sorted(set(expected_end_rails) - detected_rails)
 
     # All carriers detected, turn off all indicators
-    logger.info(f"All carriers successfully detected at rail positions: {expected_rail_positions}")
+    logger.info(f"All carriers successfully detected at end rail positions: {expected_end_rails}")
     await self.set_loading_indicators(
       bit_pattern=[False] * 54,
       blink_pattern=[False] * 54,
     )
-    print(f"\nAll carriers successfully loaded and detected!\n")
+    print(f"\n✓ All carriers successfully loaded and detected!\n")
 
   async def unload_carrier(
     self,
