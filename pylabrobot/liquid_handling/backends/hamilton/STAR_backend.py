@@ -7409,7 +7409,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     width_of_reading_window: float = 38.0,  # mm
     reading_speed: float = 128.1,  # mm/secs
     park_autoload_after: bool = True,
-  ) -> dict[int, Barcode]:
+  ) -> dict[int, Optional[Barcode]]:
     """Finishes loading the carrier that is currently engaged with the autoload sled,
     i.e. is currently in the identification position.
     """
@@ -7477,9 +7477,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"expected number ({no_container_per_carrier})"
       )
       for i in range(0, no_container_per_carrier):
-        barcode_dict[i] = Barcode(
-          data=resp_list[i], symbology=barcode_symbology, position_on_resource="right"
-        )
+        if resp_list[i] == "00":
+          barcode_dict[i] = None
+        else:
+          barcode_dict[i] = Barcode(
+            data=resp_list[i], symbology=barcode_symbology, position_on_resource="right"
+          )
 
     return barcode_dict
 
