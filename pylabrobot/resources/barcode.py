@@ -8,15 +8,15 @@ from typing import Literal
 
 BarcodePosition = Literal["right", "front", "left", "back", "bottom", "top"]
 
-Barcode1dSymbology = Literal[
+Barcode1DSymbology = Literal[
   "ISBT Standard",
   "Code 128 (Subset B and C)",
   "Code 39",
   "Codebar",
   "Code 2of5 Interleaved",
-  "UPC A/E":"75",
+  "UPC A/E",
   "YESN/EAN 8",
-  "Code 9",
+  "Code 93",
 ]
 
 
