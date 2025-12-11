@@ -7312,8 +7312,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     barcode_position: float = 4.3,  # mm
     barcode_reading_window_width: float = 38.0,  # mm
     reading_speed: float = 128.1,  # mm/sec
-  ) -> str:
-    """Load carrier from tray and scan barcode"""
+  ) -> Optional[Barcode]:
+    """Load carrier from loading tray and - optionally - scan 1D carrier barcode"""
+
+    if barcode_symbology is None:
+      barcode_symbology = self._default_1d_symbology
+
+    assert barcode_symbology is not None
 
     carrier_end_rail = self._compute_end_rail_of_carrier(carrier)
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
@@ -7342,11 +7347,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       else:
         pass
 
+    if not carrier_barcode_reading:
+      return None
+
     barcode_str = resp.split("bb/")[-1]
 
     return Barcode(data=barcode_str, symbology=barcode_symbology, position_on_resource="right")
 
-  async def unload_carrier_after_carrier_barcode_scanning(self) -> None:
+  async def unload_carrier_after_carrier_barcode_scanning(self):
     """After scanning the barcode of the carrier currently engaged with
     the autoload sled, unload the carrier back to the loading tray.
     """
@@ -7384,7 +7392,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     width_of_reading_window: float = 38.0,  # mm
     reading_speed: float = 128.1,  # mm/secs
     park_autoload_after: bool = True,
-  ) -> dict[int, str]:
+  ) -> dict[int, Barcode]:
     """Finishes loading the carrier that is currently engaged with the autoload sled,
     i.e. is currently in the identification position.
     """
