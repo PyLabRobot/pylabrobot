@@ -7265,8 +7265,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def set_1d_barcode_type(
     self,
     barcode_symbology: Optional[Barcode1DSymbology],
-  ):
+  ) -> None:
     """Set 1D barcode type for autoload barcode reading."""
+
+    # If none given, use the default
+    if barcode_symbology is None:
+      barcode_symbology = self._default_1d_symbology
+
+    # Prove to mypy that barcode_symbology is no longer Optional
+    assert barcode_symbology is not None
 
     await self.send_command(
       module="C0",
