@@ -5935,7 +5935,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
 
     liquid_levels = resp.get("lh")
-    assert isinstance(liquid_levels, list), "liquid_levels must be a list"
+    assert isinstance(liquid_levels, list), f"Expected liquid_levels to be a list, got {type(liquid_levels).__name__} instead"
     assert (
       len(liquid_levels) == self.num_channels
     ), f"Expected {self.num_channels} liquid level values, got {len(liquid_levels)} instead"
