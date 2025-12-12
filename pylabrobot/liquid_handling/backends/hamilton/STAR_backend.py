@@ -1797,6 +1797,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if min_z_endpos is None:
       min_z_endpos = self._channel_traversal_height
 
+    if traversal_height is None:
+      traversal_height = self._channel_traversal_height
+
     center_offsets = [Coordinate.zero()] * len(use_channels)
     if len(set(containers)) == 1:
       center_offsets = get_wide_single_resource_liquid_op_offsets(
