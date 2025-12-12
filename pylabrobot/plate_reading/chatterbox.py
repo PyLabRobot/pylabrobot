@@ -46,7 +46,7 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     # Header
     top = " " * (len(row_label(num_cols - 1)) + 1) + "|"
     for c in range(num_cols):
-      top += f"{c+1:>{cell_width}}|"
+      top += f"{c + 1:>{cell_width}}|"
     print(top)
 
     # Divider

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Sequence, Union
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 
 if TYPE_CHECKING:
@@ -58,7 +57,6 @@ class SingleChannelAspiration:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
-  liquids: List[Tuple[Optional[Liquid], float]]
   mix: Optional[Mix]
 
 
@@ -71,7 +69,6 @@ class SingleChannelDispense:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
-  liquids: List[Tuple[Optional[Liquid], float]]
   mix: Optional[Mix]
 
 
@@ -91,7 +88,6 @@ class MultiHeadAspirationPlate:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
-  liquids: List[List[Tuple[Optional[Liquid], float]]]
   mix: Optional[Mix]
 
 
@@ -104,7 +100,6 @@ class MultiHeadDispensePlate:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
-  liquids: List[List[Tuple[Optional[Liquid], float]]]
   mix: Optional[Mix]
 
 
@@ -117,7 +112,6 @@ class MultiHeadAspirationContainer:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
-  liquids: List[List[Tuple[Optional[Liquid], float]]]
   mix: Optional[Mix]
 
 
@@ -130,7 +124,6 @@ class MultiHeadDispenseContainer:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
-  liquids: List[List[Tuple[Optional[Liquid], float]]]
   mix: Optional[Mix]
 
 
