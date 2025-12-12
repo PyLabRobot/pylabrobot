@@ -17,6 +17,7 @@ from typing import (
   Literal,
   Optional,
   Sequence,
+  Tuple,
   Type,
   TypeVar,
   Union,
@@ -1759,7 +1760,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
     techn_replicate_num: int = 3,
-    return_geomean: bool = True,
+    return_mean: bool = True,
     traversal_height: float = 240.0,
     move_to_z_safety_after: bool = True,
   ) -> Union[List[float], List[Tuple[float, ...]]]:
@@ -1877,7 +1878,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if move_to_z_safety_after:
       await self.move_all_channels_in_z_safety()
 
-    if return_geomean:
+    if return_mean:
       return [
         round(sum(channel_results) / techn_replicate_num, 2)
         for channel_results in merged_channel_results
