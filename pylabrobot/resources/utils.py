@@ -236,20 +236,30 @@ def sort_by_xy_and_chunk_by_x(
   sort_chunks_by_size: bool = True,
 ) -> list[list[Any]]:
   """
-  Sort resources by...
-  1. x ascending
-  2. y descending within each x
-  3. grouped into chunks by x
-  4. split into sub-chunks of size <= max_chunk_size
-  5. chunks sorted by length (smallest → largest)
+  Sort resources spatially and partition them into chunks for channel processing.
+
+  Procedure
+  ---------
+  1. Sort all resources by:
+      - x ascending
+      - y descending within each x
+  2. Group resources into chunks based on identical x values.
+  3. Split each chunk into sub-chunks of size <= max_chunk_size.
+  4. Optionally sort the resulting sub-chunks by their length
+      (smallest → largest).
 
   Parameters
   ----------
   resources : list[Any]
-      List of resources that implement .get_absolute_location()
-      returning an object with x and y attributes.
+      List of resources that implement ``.get_absolute_location()``,
+      returning an object with ``x`` and ``y`` attributes.
   max_chunk_size : int
-      Maximum size for any single chunk.
+      Maximum allowed size for any produced chunk or sub-chunk.
+  sort_chunks_by_size : bool, optional
+      If True (default), the output list of chunks is sorted by
+      ascending chunk size. If False, chunks retain their original
+      order.
+
 
   Returns
   -------
