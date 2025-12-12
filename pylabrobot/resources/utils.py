@@ -1,6 +1,7 @@
 import re
 from string import ascii_uppercase as LETTERS
-from typing import Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar
+from itertools import groupby
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -227,3 +228,75 @@ def query(
       )
     )
   return matched
+
+def sort_by_xy_and_chunk_by_x(
+    resources: list[Any],
+    max_chunk_size: int,
+    sort_chunks_by_size: bool = True,
+) -> list[list[Any]]:
+    """
+    Sort resources by...
+    1. x ascending
+    2. y descending within each x
+    3. grouped into chunks by x
+    4. split into sub-chunks of size <= max_chunk_size
+    5. chunks sorted by length (smallest → largest)
+
+    Parameters
+    ----------
+    resources : list[Any]
+        List of resources that implement .get_absolute_location()
+        returning an object with x and y attributes.
+    max_chunk_size : int
+        Maximum size for any single chunk.
+
+    Returns
+    -------
+    list[list[Any]]
+        A list of grouped and sorted resources.
+
+    Example
+    -------
+    >>> sorted_chunks = sort_by_xy_and_chunk_by_x(well_list, max_chunk_size=8)
+    >>> [
+    ...   list(
+    ...     zip(
+    ...       [r.get_identifier() for r in chunk],
+    ...       [r.get_absolute_location() for r in chunk],
+    ...     )
+    ...   )
+    ...   for chunk in sorted_chunks
+    ... ]
+    [[('D1', Coordinate(x=450.9, y=402.3, z=164.45)),
+      ('H1', Coordinate(x=450.9, y=366.3, z=164.45)), ...],
+     [('D2', Coordinate(x=459.9, y=402.3, z=164.45)), ...]]
+    """
+    # 1. & 2.: Sort by x ascending, y descending
+    sorted_resources = sorted(
+        resources,
+        key=lambda res: (
+            res.get_absolute_location().x,
+            -res.get_absolute_location().y,
+        ),
+    )
+
+    # 3. Group into chunks by x
+    chunks = [
+        list(group)
+        for _, group in groupby(
+            sorted_resources,
+            key=lambda res: res.get_absolute_location().x,
+        )
+    ]
+
+    # 4. Split chunks by max_chunk_size
+    split_chunks: list[list[Any]] = []
+    for chunk in chunks:
+        for i in range(0, len(chunk), max_chunk_size):
+            split_chunks.append(chunk[i : i + max_chunk_size])
+
+    # Optional 5: Sort chunks by number of elements
+    if sort_chunks_by_size:
+        return sorted(split_chunks, key=len)
+    else:
+        return split_chunks
