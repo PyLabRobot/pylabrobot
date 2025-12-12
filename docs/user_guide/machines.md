@@ -66,7 +66,10 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
-| Brooks Automation | PreciseFlex 400 | WIP | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
+| Brooks Automation | PreciseFlex PF400 |  Basics | [PLR]([https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
+| Brooks Automation | PreciseFlex PF3400 |  Basics | [PLR]([https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
+
+| PAA | KX2 | WIP | |
 
 ### Centrifuges
 
@@ -103,7 +106,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Thermo Fisher Scientific | Cytomat 2 C450_SHAKE | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / [OEM](https://www.thermofisher.com/order/catalog/product/51033035) |
 | Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / [OEM](https://www.thermofisher.com/order/catalog/product/51031526) |
 | Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM? |
-| Inheco | Incubator Shaker (MTP/DWP) | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | WIP | [OEM](https://www.inheco.com/incubator-shaker.html) |
+| Inheco | Incubator Shaker (MTP/DWP) | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | Mostly | [OEM](https://www.inheco.com/incubator-shaker.html) |
 
 ### Peelers
 
@@ -122,8 +125,8 @@ tr > td:nth-child(5) { width: 15%; }
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
 | Opentrons | Thermocycler | Full | [OEM](https://opentrons.com/products/thermocycler-module-1) |
-| Thermo Fisher Scientific | ATC | WIP | [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html) |
-| Thermo Fisher Scientific | ProFlex | WIP | [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html) |
+| Thermo Fisher Scientific | ATC | Full | [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/automated-thermal-cycler-atc.html) |
+| Thermo Fisher Scientific | ProFlex | Full | [OEM](https://www.thermofisher.com/us/en/home/life-science/pcr/thermal-cyclers-realtime-instruments/thermal-cyclers/proflex-pcr-system.html) |
 | Inheco | ODTC | WIP | [OEM](https://www.inheco.com/odtc.html) |
 
 ### Temperature Controllers
@@ -154,6 +157,8 @@ tr > td:nth-child(5) { width: 15%; }
 | Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | WIP | [OEM](https://byonoy.com/luminescence-96-automate/) |
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM] (https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM] (https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
+| Agilent (Biotek) | Synergy H1 | <span class="badge badge-absorbance">absorbance</span> | Mostly |  |
+
 ### Flow Cytometers
 
 | Manufacturer | Machine | PLR-Support | Links |
