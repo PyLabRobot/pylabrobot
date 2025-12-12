@@ -1831,7 +1831,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     for replicate_idx in range(techn_replicate_num):
       x_coords_of_ops = [c.get_location_wrt(self.deck, "c").x for c in containers]
       assert len(set(x_coords_of_ops)) == 1, (
-        "probing is only allowed in the same x-coordinate for safety reasons"
+        "probing is only allowed in the same x-coordinate for safety reasons."
         f"given: {x_coords_of_ops}"
       )
 
