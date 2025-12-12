@@ -1761,7 +1761,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     min_z_endpos: Optional[float] = None,
     techn_replicate_num: int = 3,
     return_mean: bool = True,
-    traversal_height: float = 240.0,
+    traversal_height: Optional[float] = None,
     move_to_z_safety_after: bool = True,
   ) -> Union[List[float], List[Tuple[float, ...]]]:
     """
@@ -1795,7 +1795,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command = traversal_height
 
     if min_z_endpos is None:
-      min_z_endpos = traversal_height
+      min_z_endpos = self._channel_traversal_height
 
     center_offsets = [Coordinate.zero()] * len(use_channels)
     if len(set(containers)) == 1:
