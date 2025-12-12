@@ -69,7 +69,7 @@ from pylabrobot.resources import (
   TipRack,
   TipSpot,
   Well,
-  standard_volume_tip_with_filter
+  standard_volume_tip_with_filter,
 )
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
 from pylabrobot.resources.errors import (
@@ -1755,72 +1755,71 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     containers: List[Container],
     use_channels: List[int],
     resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: Optional[List[int]] = None,
+    lld_mode: Optional[List[LLDMode]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
     techn_replicate_num: int = 3,
     return_geomean: bool = True,
     traversal_height: float = 240.0,
     move_to_z_safety_after: bool = True,
-) -> Union[List[float], List[List[float]]]:
+  ) -> Union[List[float], List[tuple[float]]]:
     """
     Probe liquid volumes in one or more containers using Hamilton STAR Liquid Level Detection (LLD).
     Both lld_mode=1/capacitative-, and lld_mode=2/pressure- LLD are accepted.
 
     This performs repeated zero-volume aspirate operations (LLD-only probe moves) for the
     specified channels and converts the detected liquid heights into estimated volumes using
-    each container’s ``compute_volume_from_height()`` method.
+    each container's `compute_volume_from_height()` method.
     """
-    
+
     # Default offsets
-    resource_offsets = (
-        resource_offsets or
-        [Coordinate().zero() for _ in range(len(containers))]
-    )
-    
+    resource_offsets = resource_offsets or [Coordinate().zero() for _ in range(len(containers))]
+
     # Default LLD mode == capacitive LLD
     if lld_mode is None:
-        lld_mode = [self.LLDMode(1)] * len(containers)
+      lld_mode = [self.LLDMode(1)] * len(containers)
 
-    assert len(containers) == len(use_channels) == len(resource_offsets) == len(lld_mode), \
-        f"{containers=}, {use_channels=}, {resource_offsets=}, and {lld_mode=} must be same length"
+    assert (
+      len(containers) == len(use_channels) == len(resource_offsets) == len(lld_mode)
+    ), f"{containers=}, {use_channels=}, {resource_offsets=}, and {lld_mode=} must be same length"
 
     # Validate individual modes
     for mode in lld_mode:
-        assert mode in [self.LLDMode(1), self.LLDMode(2)], \
-            f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {mode}"
+      assert mode in [
+        self.LLDMode(1),
+        self.LLDMode(2),
+      ], f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {mode}"
 
     if minimum_traverse_height_at_beginning_of_a_command is None:
-        minimum_traverse_height_at_beginning_of_a_command=traversal_height
+      minimum_traverse_height_at_beginning_of_a_command = traversal_height
 
     if min_z_endpos is None:
-        min_z_endpos=traversal_height
+      min_z_endpos = traversal_height
 
     center_offsets = [Coordinate.zero()] * len(use_channels)
-    if len(set(containers)) == 1:        
-        center_offsets = get_wide_single_resource_liquid_op_offsets(
-              resource=containers[0], num_channels=len(containers)
-            )
+    if len(set(containers)) == 1:
+      center_offsets = get_wide_single_resource_liquid_op_offsets(
+        resource=containers[0], num_channels=len(containers)
+      )
 
     # Create proxy aspirate operations
     ops = []
     for i, c in enumerate(containers):
-        ops.append(
-            SingleChannelAspiration(
-            resource=c,
-            offset=center_offsets[i],
-            tip=standard_volume_tip_with_filter(),
-            volume=0.0,
-            flow_rate=None,
-            liquid_height=None,
-            blow_out_air_volume=None,
-            mix=None
-            )
+      ops.append(
+        SingleChannelAspiration(
+          resource=c,
+          offset=center_offsets[i],
+          tip=standard_volume_tip_with_filter(),
+          volume=0.0,
+          flow_rate=None,
+          liquid_height=None,
+          blow_out_air_volume=None,
+          mix=None,
         )
+      )
 
     minimum_heights_tip_can_go_to = [
-        c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z
-        for c in containers
+      c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z for c in containers
     ]
 
     replicate_summary = []
@@ -1828,71 +1827,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # TODO: merge x_chunking helper function of containers into PLR, then use it to smartly split
     # containers to probe -> minimise back and forth movement in x dimension when containers are
     # in different x coordinates
-    
+
     for replicate_idx in range(techn_replicate_num):
+      x_coords_of_ops = [c.get_location_wrt(self.deck, "c").x for c in containers]
+      assert len(set(x_coords_of_ops)) == 1, (
+        "probing is only allowed in the same x-coordinate for safety reasons"
+        f"given: {x_coords_of_ops}"
+      )
 
-        x_coords_of_ops = [
-            c.get_location_wrt(self.deck, "c").x
-            for c in containers
-        ]
-        assert len(set(x_coords_of_ops)) == 1, (
-            "probing is only allowed in the same x-coordinate for safety reasons"
-            f"given: {x_coords_of_ops}"
-        )
+      # Perform zero-volume aspirate operation for probing
+      await self.aspirate(
+        ops=ops,
+        use_channels=use_channels,
+        lld_mode=lld_mode,
+        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+        immersion_depth=[-2] * len(containers),
+        minimum_height=minimum_heights_tip_can_go_to,
+        settling_time=[0] * len(containers),
+        pull_out_distance_transport_air=[0] * len(containers),
+        transport_air_volume=[0] * len(containers),
+        min_z_endpos=min_z_endpos,
+      )
 
-        # Perform zero-volume aspirate operation for probing
-        await self.aspirate(
-            ops=ops,
-            use_channels=use_channels,
-            lld_mode=lld_mode,
-            minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
-            immersion_depth=[-2]*len(containers),
-            minimum_height=minimum_heights_tip_can_go_to,
-            settling_time=[0]*len(containers),
-            pull_out_distance_transport_air=[0]*len(containers),
-            transport_air_volume=[0]*len(containers),
-            min_z_endpos=min_z_endpos,
-        )
-    
-        all_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        
-        absolute_llds_filtered_to_used_channels = [
-            all_absolute_liquid_heights[i] for i in use_channels
-        ]
-    
-        # Compute heights relative to cavity bottom
-        relative_to_well = []
-        for abs_h, resource in zip(absolute_llds_filtered_to_used_channels, containers):
-            bottom_z = resource.get_location_wrt(
-                self.deck, "c", "c", z="cavity_bottom"
-            ).z
-            relative_to_well.append(abs_h - bottom_z)
-    
-        # Convert heights to volumes
-        computed_volumes = [
-            resource.compute_volume_from_height(h)
-            for resource, h in zip(containers, relative_to_well)
-        ]
+      all_absolute_liquid_heights = await self.request_pip_height_last_lld()
 
-        replicate_summary.append(computed_volumes)
+      absolute_llds_filtered_to_used_channels = [
+        all_absolute_liquid_heights[i] for i in use_channels
+      ]
 
-        # Move to specified traversal height to save time
-        zs = {ch: traversal_height for ch in use_channels}
-        await self.position_channels_in_z_direction(zs)
+      # Compute heights relative to cavity bottom
+      relative_to_well = []
+      for abs_h, resource in zip(absolute_llds_filtered_to_used_channels, containers):
+        bottom_z = resource.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z
+        relative_to_well.append(abs_h - bottom_z)
+
+      # Convert heights to volumes
+      computed_volumes = [
+        resource.compute_volume_from_height(h) for resource, h in zip(containers, relative_to_well)
+      ]
+
+      replicate_summary.append(computed_volumes)
+
+      # Move to specified traversal height to save time
+      zs = {ch: traversal_height for ch in use_channels}
+      await self.position_channels_in_z_direction(zs)
 
     merged_channel_results = list(zip(*replicate_summary))
-    
+
     if move_to_z_safety_after:
       await self.move_all_channels_in_z_safety()
 
     if return_geomean:
-        return [
-          round(sum(channel_results)/techn_replicate_num, 2)
-          for channel_results in merged_channel_results
-          ]
+      return [
+        round(sum(channel_results) / techn_replicate_num, 2)
+        for channel_results in merged_channel_results
+      ]
 
     return merged_channel_results
-
 
   async def aspirate(
     self,
