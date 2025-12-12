@@ -272,21 +272,24 @@ def sort_by_xy_and_chunk_by_x(
     ('H1', Coordinate(x=450.9, y=366.3, z=164.45)), ...],
    [('D2', Coordinate(x=459.9, y=402.3, z=164.45)), ...]]
   """
+  # Cache absolute locations to avoid redundant calls
+  resources_with_loc = [(res, res.get_absolute_location()) for res in resources]
+
   # 1. & 2.: Sort by x ascending, y descending
-  sorted_resources = sorted(
-    resources,
-    key=lambda res: (
-      res.get_absolute_location().x,
-      -res.get_absolute_location().y,
+  sorted_resources_with_loc = sorted(
+    resources_with_loc,
+    key=lambda pair: (
+      pair[1].x,
+      -pair[1].y,
     ),
   )
 
   # 3. Group into chunks by x
   chunks = [
-    list(group)
+    [res for res, _ in group]
     for _, group in groupby(
-      sorted_resources,
-      key=lambda res: res.get_absolute_location().x,
+      sorted_resources_with_loc,
+      key=lambda pair: pair[1].x,
     )
   ]
 
