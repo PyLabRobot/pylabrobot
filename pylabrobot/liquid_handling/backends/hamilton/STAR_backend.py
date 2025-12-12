@@ -1792,7 +1792,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ], f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {mode}"
 
     if minimum_traverse_height_at_beginning_of_a_command is None:
-      minimum_traverse_height_at_beginning_of_a_command = traversal_height
+      minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
 
     if min_z_endpos is None:
       min_z_endpos = self._channel_traversal_height
