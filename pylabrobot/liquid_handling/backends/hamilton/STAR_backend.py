@@ -1762,7 +1762,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return_geomean: bool = True,
     traversal_height: float = 240.0,
     move_to_z_safety_after: bool = True,
-  ) -> Union[List[float], List[tuple[float]]]:
+  ) -> Union[List[float], List[Tuple[float, ...]]]:
     """
     Probe liquid volumes in one or more containers using Hamilton STAR Liquid Level Detection (LLD).
     Both lld_mode=1/capacitative-, and lld_mode=2/pressure- LLD are accepted.
