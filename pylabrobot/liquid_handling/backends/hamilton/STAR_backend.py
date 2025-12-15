@@ -8699,10 +8699,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       float: Estimated x-position of the detected material boundary in millimeters.
     """
 
-
-    assert channel_idx in range(self.num_channels), (
-      f"Channel index must be between 0 and {self.num_channels - 1}, is {channel_idx}."
-    )
+    assert channel_idx in range(
+      self.num_channels
+    ), f"Channel index must be between 0 and {self.num_channels - 1}, is {channel_idx}."
     assert probing_direction in [
       "right",
       "left",
@@ -8723,17 +8722,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     track_width = 22.5  # mm
     reachable_dist_to_last_rail = 125.0
 
-    max_safe_upper_x_pos = num_rails * track_width + reachable_dist_to_last_rail 
-    max_safe_lower_x_pos = 95.0 # unit: mm
+    max_safe_upper_x_pos = num_rails * track_width + reachable_dist_to_last_rail
+    max_safe_lower_x_pos = 95.0  # unit: mm
 
     if start_pos_search is None:
       start_pos_search = current_x_position
     else:
-      assert (max_safe_lower_x_pos <= start_pos_search <= max_safe_upper_x_pos), (
-          f"Start position for x search must be between "
-          f"{max_safe_lower_x_pos} and {max_safe_upper_x_pos} mm, "
-          f"is {start_pos_search} mm."
-        )
+      assert max_safe_lower_x_pos <= start_pos_search <= max_safe_upper_x_pos, (
+        f"Start position for x search must be between "
+        f"{max_safe_lower_x_pos} and {max_safe_upper_x_pos} mm, "
+        f"is {start_pos_search} mm."
+      )
 
     if end_pos_search is None:
       if probing_direction == "right":
@@ -8741,7 +8740,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       else:  # probing_direction == "left"
         end_pos_search = max_safe_lower_x_pos
     else:
-      assert (max_safe_lower_x_pos <= end_pos_search <= max_safe_upper_x_pos), (
+      assert max_safe_lower_x_pos <= end_pos_search <= max_safe_upper_x_pos, (
         f"End position for x search must be between "
         f"{max_safe_lower_x_pos} and {max_safe_upper_x_pos} mm, "
         f"is {end_pos_search} mm."
@@ -8761,20 +8760,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Move to save z position for cLLD
     if start_pos_search != current_x_position:
-
       if move_to_safe_z_before_move_to_start_pos:
         await self.move_all_channels_in_z_safety()
 
-      await self.move_channel_x(
-          x=start_pos_search,
-          channel=channel_idx
-          )
-      
+      await self.move_channel_x(x=start_pos_search, channel=channel_idx)
+
       await self.move_channel_z(
         z=current_z_position,
         channel=channel_idx,
       )
-    
+
     # Move channel for cLLD (Note: does not return detected x-position!)
     await self.send_command(
       module="C0",
@@ -8788,7 +8783,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Move channel post-detection
     if probing_direction == "left":
       final_x_pos = sensor_triggered_x_pos + post_detection_dist
-     
+
       # tip_bottom_diameter geometric correction assuming cylindrical tip contact
       material_x_pos = sensor_triggered_x_pos - tip_bottom_diameter / 2
 
@@ -8803,8 +8798,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # - post_detection_dist always moves inward
     await self.move_channel_x(x=final_x_pos, channel=channel_idx)
 
-    return round(material_x_pos,1)
-
+    return round(material_x_pos, 1)
 
   async def clld_probe_y_position_using_channel(
     self,
