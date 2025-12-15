@@ -8672,6 +8672,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     move_to_safe_z_before_move_to_start_pos: bool = True,
     post_detection_dist: float = 2.0,  # mm,
     tip_bottom_diameter: float = 1.2,  # mm
+    read_timeout=240.0,  # seconds
   ) -> float:
     """
     Probe the x-position of a conductive material using a channel’s capacitive liquid
@@ -8779,6 +8780,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       module="C0",
       command="XL",
       xs=f"{int(round(end_pos_search*10)):05}",
+      read_timeout=read_timeout,
     )
 
     sensor_triggered_x_pos = await self.request_x_pos_channel_n(channel_idx)
@@ -8801,7 +8803,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # - post_detection_dist always moves inward
     await self.move_channel_x(x=final_x_pos, channel=channel_idx)
 
-    return material_x_pos
+    return round(material_x_pos,1)
 
 
   async def clld_probe_y_position_using_channel(
@@ -8989,7 +8991,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:  # probing_direction == "forward"
       material_y_pos = detected_material_y_pos - tip_bottom_diameter / 2
 
-    return material_y_pos
+    return round(material_y_pos, 1)
 
   async def move_z_drive_to_liquid_surface_using_clld(
     self,
