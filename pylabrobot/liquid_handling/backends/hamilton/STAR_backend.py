@@ -8758,7 +8758,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + f"end position ({end_pos_search} mm) when probing left."
       )
 
-    # Move to save z position for cLLD
+    # Move to safe z position for cLLD
     if start_pos_search != current_x_position:
       if move_to_safe_z_before_move_to_start_pos:
         await self.move_all_channels_in_z_safety()
