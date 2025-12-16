@@ -8667,9 +8667,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     channel_idx: int,  # 0-based indexing of channels!
     probing_direction: Literal["right", "left"],
-    start_pos_search: Optional[float] = None,  # mm
     end_pos_search: Optional[float] = None,  # mm
-    move_to_safe_z_before_move_to_start_pos: bool = True,
     post_detection_dist: float = 2.0,  # mm,
     tip_bottom_diameter: float = 1.2,  # mm
     read_timeout=240.0,  # seconds
@@ -8678,22 +8676,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Probe the x-position of a conductive material using a channel’s capacitive liquid
     level detection (cLLD) via a lateral X scan.
 
-    The channel is optionally moved to a safe Z, positioned at a start X coordinate,
-    and then scanned in the specified direction using the XL command until cLLD
-    triggers. After detection, the channel retreats inward by `post_detection_dist`.
+    Starting from the channel’s current X position, the channel is moved laterally in
+    the specified direction using the XL command until cLLD triggers or the configured
+    end position is reached. After the scan, the channel is retracted inward by
+    `post_detection_dist`.
 
-    The returned value is a first-order geometric estimate of the material boundary
-    position in millimeters, corrected by half the tip bottom diameter assuming
-    cylindrical tip contact.
+    The returned value is a first-order geometric estimate of the material boundary,
+    corrected by half the tip bottom diameter assuming cylindrical tip contact.
 
-    Assumptions:
-    - Channels can move between x-coordinates 95 - 800 (STARlet) or 95 - 1415 (STAR).
-    - XL motion is constrained to the interval between start and end positions.
-    - `post_detection_dist` is non-negative and always moves the channel inward.
+    Notes:
+    - The XL command does not report whether cLLD triggered; reaching the end position
+      is indistinguishable from a successful detection.
+    - This function assumes cLLD triggers before `end_pos_search`.
+
+    Preconditions:
+    - The channel must already be at a Z height safe for lateral X motion.
+    - The current X position must be consistent with `probing_direction`.
 
     Side effects:
-    - Moves the specified channel in X and Z.
-    - Leaves the channel at a retracted X position after detection.
+    - Moves the specified channel in X.
+    - Leaves the channel retracted from the detected object.
 
     Returns:
       float: Estimated x-position of the detected material boundary in millimeters.
@@ -8714,7 +8716,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # TODO: Anti-channel-crash feature -> use self.deck with recursive logic
     current_x_position = await self.request_x_pos_channel_n(channel_idx)
     # y_position = await self.request_y_pos_channel_n(channel_idx)
-    current_z_position = await self.request_z_pos_channel_n(channel_idx)
+    # current_z_position = await self.request_z_pos_channel_n(channel_idx)
 
     # Use identified rail number to calculate possible upper limit:
     # STAR = 95 - 1415 mm, STARlet = 95 - 800mm
@@ -8724,15 +8726,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     max_safe_upper_x_pos = num_rails * track_width + reachable_dist_to_last_rail
     max_safe_lower_x_pos = 95.0  # unit: mm
-
-    if start_pos_search is None:
-      start_pos_search = current_x_position
-    else:
-      assert max_safe_lower_x_pos <= start_pos_search <= max_safe_upper_x_pos, (
-        f"Start position for x search must be between "
-        f"{max_safe_lower_x_pos} and {max_safe_upper_x_pos} mm, "
-        f"is {start_pos_search} mm."
-      )
 
     if end_pos_search is None:
       if probing_direction == "right":
@@ -8748,29 +8741,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Assert probing direction matches start and end positions
     if probing_direction == "right":
-      assert start_pos_search < end_pos_search, (
-        f"Start position ({start_pos_search} mm) must be less than "
+      assert current_x_position < end_pos_search, (
+        f"Current position ({current_x_position} mm) must be less than "
         + f"end position ({end_pos_search} mm) when probing right."
       )
     else:  # probing_direction == "left"
-      assert start_pos_search > end_pos_search, (
-        f"Start position ({start_pos_search} mm) must be greater than "
+      assert current_x_position > end_pos_search, (
+        f"Current position ({current_x_position} mm) must be greater than "
         + f"end position ({end_pos_search} mm) when probing left."
       )
 
-    # Move to safe z position for cLLD
-    if start_pos_search != current_x_position:
-      if move_to_safe_z_before_move_to_start_pos:
-        await self.move_all_channels_in_z_safety()
-
-      await self.move_channel_x(x=start_pos_search, channel=channel_idx)
-
-      await self.move_channel_z(
-        z=current_z_position,
-        channel=channel_idx,
-      )
-
-    # Move channel for cLLD (Note: does not return detected x-position!)
+    # Move channel in x until cLLD (Note: does not return detected x-position!)
     await self.send_command(
       module="C0",
       command="XL",
@@ -8792,10 +8773,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       material_x_pos = sensor_triggered_x_pos + tip_bottom_diameter / 2
 
-    # final_x_pos is guaranteed to lie within safe bounds because:
-    # - start_pos_search and end_pos_search are bounded
-    # - XL motion is constrained to that interval
-    # - post_detection_dist always moves inward
+    # Move away from detected object to avoid mechanical interference
+    # e.g. touch carrier, then carrier moves -> friction on channel!
     await self.move_channel_x(x=final_x_pos, channel=channel_idx)
 
     return round(material_x_pos, 1)
