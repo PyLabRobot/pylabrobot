@@ -47,8 +47,9 @@ tr > td:nth-child(5) { width: 15%; }
 |--------------|---------|----------|-------------|--------|
 | Hamilton | STAR(let) | <span class="badge badge-transfer">arm</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-star/_hamilton-star.html) / [OEM](https://www.hamiltoncompany.com/microlab-star) |
 | Hamilton | Vantage | <span class="badge badge-transfer">arm</span> | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-vantage/_hamilton-vantage.html) / [OEM](https://www.hamiltoncompany.com/microlab-vantage) |
-| Hamilton | Prep | <span class="badge badge-transfer">arm</span> | WIP | [OEM](https://www.hamiltoncompany.com/microlab-prep) |
-| Tecan | EVO |  | Basic | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/tecan-evo/_tecan-evo.html) / [OEM](https://lifesciences.tecan.com/freedom-evo-platform) |
+| Hamilton | Prep | | WIP | [OEM](https://www.hamiltoncompany.com/microlab-prep) |
+| Hamilton | Nimbus | <span class="badge badge-transfer">arm</span> | WIP | [OEM](https://www.hamiltoncompany.com/microlab-nimbus) |
+| Tecan | EVO | <span class="badge badge-transfer">arm</span> | Basic | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/tecan-evo/_tecan-evo.html) / [OEM](https://lifesciences.tecan.com/freedom-evo-platform) |
 | Opentrons | OT-2 |  | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/opentrons-ot2/_opentrons-ot2.html) / [OEM](https://opentrons.com/products/ot-2-robot) |
 
 ### Pumps
@@ -66,9 +67,8 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
-| Brooks Automation | PreciseFlex PF400 |  Basics | [PLR]([https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
-| Brooks Automation | PreciseFlex PF3400 |  Basics | [PLR]([https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
-
+| Brooks Automation | PreciseFlex PF400 |  Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html)/ [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
+| Brooks Automation | PreciseFlex PF3400 |  Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/arms/c_scara/precise-flex-pf400/_precise-flex-pf400.html) / [OEM](https://www.brooks.com/laboratory-automation/collaborative-robots/preciseflex-400/) |
 | PAA | KX2 | WIP | |
 
 ### Centrifuges
