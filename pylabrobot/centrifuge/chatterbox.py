@@ -35,7 +35,7 @@ class CentrifugeChatterboxBackend(CentrifugeBackend):
   async def unlock_bucket(self):
     print("Unlocking bucket")
 
-  async def start_spin_cycle(self, g: float, duration: float, acceleration: float):
+  async def spin(self, g: float, duration: float, acceleration: float):
     print(f"Starting spin cycle with g: {g}, duration: {duration}, acceleration: {acceleration}")
 
 

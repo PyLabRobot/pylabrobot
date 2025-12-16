@@ -143,7 +143,6 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       flow_rate=100,
       liquid_height=10,
       blow_out_air_volume=0,
-      liquids=[(None, 100)],
       mix=None,
     )
     await self.evo.aspirate([op], use_channels=[0])
@@ -285,7 +284,6 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       flow_rate=100,
       liquid_height=10,
       blow_out_air_volume=0,
-      liquids=[(None, 100)],
       mix=None,
     )
     await self.evo.dispense([op], use_channels=[0])
@@ -387,7 +385,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       offset=Coordinate.zero(),
       pickup_distance_from_top=13.2,
       pickup_direction=GripDirection.FRONT,
-      drop_direction=GripDirection.FRONT,
+      direction=GripDirection.FRONT,
       rotation=0,
     )
 

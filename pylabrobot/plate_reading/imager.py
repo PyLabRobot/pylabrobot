@@ -3,7 +3,7 @@ import math
 import time
 from typing import Any, Awaitable, Callable, Coroutine, Dict, Literal, Optional, Tuple, Union, cast
 
-from pylabrobot.machines import Machine
+from pylabrobot.machines import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.plate_reading.standard import (
   AutoExposure,
@@ -102,7 +102,7 @@ class Imager(Resource, Machine):
   def _will_assign_resource(self, resource: Resource):
     if len(self.children) >= 1:
       raise ValueError(
-        f"Imager {self} already has a plate assigned " f"(attempting to assign {resource})"
+        f"Imager {self} already has a plate assigned (attempting to assign {resource})"
       )
 
   def get_plate(self) -> Plate:
@@ -209,6 +209,7 @@ class Imager(Resource, Machine):
     )
     return await local_capture(best_focal_height)
 
+  @need_setup_finished
   async def capture(
     self,
     well: Union[Well, Tuple[int, int]],

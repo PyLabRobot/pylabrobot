@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
 
 from pylabrobot.resources.volume_tracker import VolumeTracker
 
@@ -15,21 +16,31 @@ class Tip:
     total_tip_length: total length of the tip, in in mm
     maximal_volume: maximal volume of the tip, in ul
     fitting_depth: the overlap between the tip and the pipette, in mm
+    name: optional identifier for this tip
   """
 
   has_filter: bool
   total_tip_length: float
   maximal_volume: float
   fitting_depth: float
+  name: Optional[str] = None
 
   def __post_init__(self):
-    # TODO: use the name
-    # https://github.com/PyLabRobot/pylabrobot/issues/653
-    self.tracker = VolumeTracker(thing="tip_tracker", max_volume=self.maximal_volume)
+    if self.name is None:
+      warnings.warn(
+        "Creating a Tip without a name is deprecated. "
+        "Tips created from deck resources (e.g. TipSpot) should be named.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+
+    thing = self.name or "tip_tracker"
+    self.tracker = VolumeTracker(thing=thing, max_volume=self.maximal_volume)
 
   def serialize(self) -> dict:
     return {
       "type": self.__class__.__name__,
+      "name": self.name,
       "total_tip_length": self.total_tip_length,
       "has_filter": self.has_filter,
       "maximal_volume": self.maximal_volume,
@@ -37,7 +48,25 @@ class Tip:
     }
 
   def __hash__(self):
-    return hash(repr(self))
+    return hash(
+      (
+        self.has_filter,
+        self.total_tip_length,
+        self.maximal_volume,
+        self.fitting_depth,
+      )
+    )
+
+  def __eq__(self, other: object) -> bool:
+    if not isinstance(other, Tip):
+      return NotImplemented
+
+    return (
+      self.has_filter == other.has_filter
+      and self.total_tip_length == other.total_tip_length
+      and self.maximal_volume == other.maximal_volume
+      and self.fitting_depth == other.fitting_depth
+    )
 
 
-TipCreator = Callable[[], Tip]
+TipCreator = Callable[[str], Tip]

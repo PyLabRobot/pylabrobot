@@ -33,6 +33,7 @@ Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
 | 'Thermo_Nunc_96_well_plate_1300uL_Rb'<br>Part no.: 26025X | ![](img/thermo_fisher/Thermo_Nunc_96_well_plate_1300uL_Rb.jpg) | `Thermo_Nunc_96_well_plate_1300uL_Rb` |
 | 'thermo_AB_96_wellplate_300ul_Vb_MicroAmp'<br>Part no.: N8010560/4316813 (w/o barcode)<br>Part no.: 4306737/4326659 (with barcode) | ![](img/thermo_fisher/thermo_AB_96_wellplate_300ul_Vb_MicroAmp.webp) | `thermo_AB_96_wellplate_300ul_Vb_MicroAmp` |
 | 'thermo_AB_384_wellplate_40uL_Vb_MicroAmp'<br>Part no.: 4309849, 4326270, 4343814 (with barcode), 4343370 (w/o barcode). | ![](img/thermo_fisher/thermo_AB_384_wellplate_40uL_Vb_MicroAmp.jpg) | `thermo_AB_384_wellplate_40uL_Vb_MicroAmp` |
+| 'thermo_nunc_1_wellplate_90000uL_Fb_omnitray'<br>Part no.: 165218, 140156, 242811, 264728 | ![](img/thermo_fisher/thermo_nunc_1_wellplate_90000uL_Fb_omnitray.jpg.avif) | `thermo_nunc_1_wellplate_90000uL_Fb_omnitray` |
 
 ## Troughs
 

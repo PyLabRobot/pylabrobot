@@ -20,6 +20,7 @@ You can use PLR on any operating system, but Raspberry Pis can be a good choice 
 - Make USB devices accessible to users: add the following line to `/etc/udev/rules.d/99-usb.rules`:
   ```
   SUBSYSTEM=="usb", MODE="0666"
+  SUBSYSTEM=="tty", MODE="0666"
   ```
 - Reload the udev rules with
   ```bash

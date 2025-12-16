@@ -7,12 +7,15 @@ Tools for working with Hamilton-STAR specific functions.
    :maxdepth: 1
 
    basic
+   96head
+   autoload_and_1d_barcode_reader
    iswap-module
    star_lld
    y-probing
    z-probing
    foil
-   96head
    debug
    hardware/index
    hamilton-liquid-classes
+   core-grippers
+   surface-following

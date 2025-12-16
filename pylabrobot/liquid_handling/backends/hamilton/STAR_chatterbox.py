@@ -143,3 +143,12 @@ class STARChatterboxBackend(STARBackend):
       f"piercing foil | wells: {wells} | piercing channels: {piercing_channels} | hold down channels: {hold_down_channels} | "
       f"move inwards: {move_inwards} | spread: {spread} | one by one: {one_by_one} | distance from bottom: {distance_from_bottom}"
     )
+
+  async def move_iswap_x(self, x_position: float):
+    print("moving iswap x to", x_position)
+
+  async def move_iswap_y(self, y_position: float):
+    print("moving iswap y to", y_position)
+
+  async def move_iswap_z(self, z_position: float):
+    print("moving iswap z to", z_position)

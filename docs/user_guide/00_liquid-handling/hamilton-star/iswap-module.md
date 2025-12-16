@@ -9,7 +9,7 @@ The `R0` module allows fine grained control of the iSWAP gripper.
 You can park the iSWAP using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.park_iswap`.
 
 ```python
-await star.park_iswap()
+await star_backend.park_iswap()
 ```
 
 - Opening gripper:
@@ -17,7 +17,19 @@ await star.park_iswap()
 You can open the iSWAP gripper using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.iswap_open_gripper`. Warning: this will release any object that is gripped. Used for error recovery.
 
 ```python
-await star.iswap_open_gripper()
+# opening all the way
+await star_backend.iswap_open_gripper()
+```
+
+```python
+# opening partially to 90mm
+await star_backend.iswap_open_gripper(open_position=90)
+```
+
+- Closing gripper: note: this will throw an error if there is no object to grip.
+
+```python
+await star_backend.iswap_close_gripper()
 ```
 
 ## Rotations
@@ -39,10 +51,10 @@ Moving the iswap between two positions with the same `grip_direction` while chan
 You can also control the wrist (T-drive) and rotation drive (W-drive) individually using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.rotate_iswap_wrist` and {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.rotate_iswap_rotation_drive` respectively. Make sure you have enough space (you can use {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.move_iswap_y_relative`)
 
 ```python
-rotation_drive = random.choice([STAR.RotationDriveOrientation.LEFT, STAR.RotationDriveOrientation.RIGHT, STAR.RotationDriveOrientation.FRONT])
-wrist_drive = random.choice([STAR.WristOrientation.LEFT, STAR.WristOrientation.RIGHT, STAR.WristOrientation.STRAIGHT, STAR.WristOrientation.REVERSE])
-await lh.backend.rotate_iswap_rotation_drive(rotation_drive)
-await lh.backend.rotate_iswap_wrist(wrist_drive)
+rotation_drive = random.choice([STARBackend.RotationDriveOrientation.LEFT, STARBackend.RotationDriveOrientation.RIGHT, STARBackend.RotationDriveOrientation.FRONT])
+wrist_drive = random.choice([STARBackend.WristDriveOrientation.LEFT, STARBackend.WristDriveOrientation.RIGHT, STARBackend.WristDriveOrientation.STRAIGHT, STARBackend.WristDriveOrientation.REVERSE])
+await star_backend.rotate_iswap_rotation_drive(rotation_drive)
+await star_backend.rotate_iswap_wrist(wrist_drive)
 ```
 
 ## Slow movement
@@ -50,7 +62,7 @@ await lh.backend.rotate_iswap_wrist(wrist_drive)
 You can make the iswap move more slowly during sensitive operations using {meth}`~pylabrobot.liquid_handling.backends.hamilton.STAR_backend.STARBackend.slow_iswap`. This is useful when you want to avoid splashing or other disturbances.
 
 ```python
-async with star.slow_iswap():
+async with star_backend.slow_iswap():
   await lh.move_plate(plate, plt_car[1])
 ```
 
@@ -59,7 +71,7 @@ async with star.slow_iswap():
 1. For safety, move the other components as far away as possible before teaching. This is easily done using the firmware command `C0FY`, implemented in PLR as `position_components_for_free_iswap_y_range`:
 
 ```python
-await star.position_components_for_free_iswap_y_range()
+await star_backend.position_components_for_free_iswap_y_range()
 ```
 
 2. Move the iSWAP wrist and rotation drive to the correct orientation as [explained above](#rotations). Repeated: be careful to move the iSWAP to a position where it does not hit any other components. See commands below for how to do this.
@@ -67,15 +79,15 @@ await star.position_components_for_free_iswap_y_range()
 3. You can then use the following three commands to move the iSWAP in the X, Y and Z directions. All units are in mm.
 
 ```python
-await star.move_iswap_x(x)
+await star_backend.move_iswap_x(x)
 ```
 
 ```python
-await star.move_iswap_y(y)
+await star_backend.move_iswap_y(y)
 ```
 
 ```python
-await star.move_iswap_z(z)
+await star_backend.move_iswap_z(z)
 ```
 
 4. Note that the x, y and z here refer to the **center** of the iSWAP gripper. This is to make it agnostic to plate size. But in PLR all locations are with respect to LFB (left front bottom) of the plate. To get the LFB after calibrating to the center, subtract the distance from the plate LFB to CCB:
@@ -101,15 +113,15 @@ This will be the location of the plate wrt the parent. You can use this with `pa
 You can also move the iSWAP relative to its current position using the following commands. All units are in mm.
 
 ```python
-await star.move_iswap_x_relative(x)
+await star_backend.move_iswap_x_relative(x)
 ```
 
 ```python
-await star.move_iswap_y_relative(y)
+await star_backend.move_iswap_y_relative(y)
 ```
 
 ```python
-await star.move_iswap_z_relative(z)
+await star_backend.move_iswap_z_relative(z)
 ```
 
 This is the center of the iSWAP gripper. See the note above.
