@@ -8774,7 +8774,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.send_command(
       module="C0",
       command="XL",
-      xs=f"{int(round(end_pos_search*10)):05}",
+      xs=f"{int(round(end_pos_search * 10)):05}",
       read_timeout=read_timeout,
     )
 
