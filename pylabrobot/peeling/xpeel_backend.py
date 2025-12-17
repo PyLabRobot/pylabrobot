@@ -17,7 +17,6 @@ class XPeelBackend(PeelerBackend):
   with <CR><LF>.
   """
 
-  DEFAULT_PORT = "COM3"
   BAUDRATE = 9600
   RESPONSE_TIMEOUT = 20.0
 
@@ -26,7 +25,7 @@ class XPeelBackend(PeelerBackend):
     code: int
     description: str
 
-  ERROR_DEFINITIONS = {
+  _ERROR_DEFINITIONS = {
     0: ErrorInfo(0, "No error"),
     1: ErrorInfo(1, "Conveyor motor stalled"),
     2: ErrorInfo(2, "Elevator motor stalled"),
@@ -44,38 +43,29 @@ class XPeelBackend(PeelerBackend):
     52: ErrorInfo(52, "Circuitry fault detected: remove power"),
   }
 
-  def __init__(self, port=None, simulating=False, logger=None, timeout=None):
-    self.simulating = simulating
+  def __init__(self, port: str, logger=None, timeout=None):
     self.logger = logger or logging.getLogger(__name__)
-    self.port = port or self.DEFAULT_PORT
+    self.port = port
     self.response_timeout = timeout if timeout is not None else self.RESPONSE_TIMEOUT
 
     self._serial_timeout = timeout if timeout is not None else self.response_timeout
-    self.io: Optional[Serial] = (
-      None
-      if simulating
-      else Serial(
-        port=self.port,
-        baudrate=self.BAUDRATE,
-        bytesize=serial.EIGHTBITS,
-        parity=serial.PARITY_NONE,
-        stopbits=serial.STOPBITS_ONE,
-        timeout=self._serial_timeout,
-        write_timeout=self._serial_timeout,
-        rtscts=False,
-      )
+    self.io: Optional[Serial] = Serial(
+      port=self.port,
+      baudrate=self.BAUDRATE,
+      bytesize=serial.EIGHTBITS,
+      parity=serial.PARITY_NONE,
+      stopbits=serial.STOPBITS_ONE,
+      timeout=self._serial_timeout,
+      write_timeout=self._serial_timeout,
+      rtscts=False,
     )
 
   async def setup(self):
-    if self.simulating:
-      return
     if self.io is None:
       raise RuntimeError("Serial interface not initialized.")
     await self.io.setup()
 
   async def stop(self):
-    if self.simulating:
-      return
     if self.io is None:
       return
     await self.io.stop()
@@ -86,7 +76,7 @@ class XPeelBackend(PeelerBackend):
     """
     Translate an XPeel error/status code to a human-readable message.
     """
-    info = cls.ERROR_DEFINITIONS.get(code)
+    info = cls._ERROR_DEFINITIONS.get(code)
     if info:
       return info.description
     return f"Unknown error code {code}"
@@ -108,7 +98,7 @@ class XPeelBackend(PeelerBackend):
       return None
 
   async def _send_command(
-    self, cmd, action_desc=None, expect_ack=False, wait_for_ready=False, clear_buffer=True
+    self, cmd, expect_ack=False, wait_for_ready=False, clear_buffer=True
   ) -> List[str]:
     """
     Send a command and collect responses until *ready (optional) or timeout.
@@ -116,20 +106,11 @@ class XPeelBackend(PeelerBackend):
     Returns a list of response lines (strings).
     """
     full_cmd = cmd if cmd.endswith("\r\n") else f"{cmd}\r\n"
-    if action_desc:
-      print(action_desc)
-    if self.simulating:
-      msg = f"[SIMULATION] Would send command: {full_cmd.strip()}"
-      print(msg)
-      if self.logger:
-        self.logger.info(msg)
-      return []
 
     if self.io is None:
       raise RuntimeError("Serial interface not initialized; call setup() first.")
 
-    self.logger.info(f"Sending command: {full_cmd.strip()}")
-    print(f"Sending command: {full_cmd.strip()}")
+    self.logger.debug(f"Sending command: {full_cmd.strip()}")
     if clear_buffer:
       await self.io.reset_input_buffer()
     await self.io.write(full_cmd.encode("ascii"))
@@ -175,23 +156,23 @@ class XPeelBackend(PeelerBackend):
 
   async def get_status(self):
     """Request instrument status; returns *ready:XX,XX,XX."""
-    return await self._send_command("*stat", action_desc="Requesting status...")
+    self.logger.debug("Requesting status...")
+    return await self._send_command("*stat")
 
-  async def version(self):
+  async def get_version(self):
     """Request firmware version."""
-    return await self._send_command("*version", action_desc="Requesting version...")
+    self.logger.debug("Requesting firmware version...")
+    return await self._send_command("*version")
 
   async def reset(self):
     """Request reset; instrument replies with ack then ready."""
-    return await self._send_command(
-      "*reset", action_desc="Requesting reset...", expect_ack=True, wait_for_ready=True
-    )
+    self.logger.debug("Requesting reset...")
+    return await self._send_command("*reset", expect_ack=True, wait_for_ready=True)
 
   async def restart(self):
     """Request restart; instrument replies with ack then poweron/homing/ready."""
-    return await self._send_command(
-      "*restart", action_desc="Requesting restart...", expect_ack=True, wait_for_ready=True
-    )
+    self.logger.debug("Requesting restart...")
+    return await self._send_command("*restart", expect_ack=True, wait_for_ready=True)
 
   async def peel(
     self,
@@ -199,14 +180,17 @@ class XPeelBackend(PeelerBackend):
     fast: bool = False,
     adhere_time: float = 2.5,
   ):
-    """
-    Run an automated de-seal cycle.
+    """Run an automated de-seal cycle.
 
     Args:
       begin_location: Begin peel location in mm relative to default (0). Must be one of: -2, 0, 2, 4.
       fast: Use fast speed if True, slow if False.
       adhere_time: Adhere time (seconds). Must be one of: 2.5, 5.0, 7.5, 10.0.
     """
+
+    self.logger.debug(
+      f"Running peel with begin_location={begin_location}, fast={fast}, adhere_time={adhere_time}..."
+    )
 
     if not adhere_time in {2.5, 5.0, 7.5, 10.0}:
       raise ValueError("adhere_time must be one of: 2.5, 5.0, 7.5, 10.0")
@@ -229,102 +213,98 @@ class XPeelBackend(PeelerBackend):
     cmd = f"*xpeel:{parameter_set}{adhere_time}"
     return await self._send_command(
       cmd,
-      action_desc="Starting XPeel cycle...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
   async def seal_check(self):
     """Check for seal presence; ready response encodes result."""
-    return await self._send_command(
-      "*sealcheck", action_desc="Running seal check...", expect_ack=True, wait_for_ready=True
-    )
+    self.logger.debug("Checking for seal presence...")
+    return await self._send_command("*sealcheck", expect_ack=True, wait_for_ready=True)
 
-  async def tape_remaining(self):
+  async def get_tape_remaining(self):
     """Query remaining tape."""
-    return await self._send_command(
-      "*tapeleft", action_desc="Checking tape remaining...", expect_ack=True, wait_for_ready=True
-    )
+    self.logger.debug("Querying remaining tape...")
+    return await self._send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
 
-  async def plate_check(self, enabled=True):
+  async def enable_plate_check(self, enabled=True):
     """Enable or disable plate presence check."""
+    self.logger.debug(f"{'Enabling' if enabled else 'Disabling'} plate presence check...")
     flag = "y" if enabled else "n"
     return await self._send_command(
       f"*platecheck:{flag}",
-      action_desc=f"Setting plate check to {'on' if enabled else 'off'}...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
-  async def seal_sensor_status(self):
+  async def get_seal_sensor_status(self):
     """Get seal sensor threshold status."""
-    return await self._send_command(
-      "*sealstat", action_desc="Requesting seal status...", expect_ack=True, wait_for_ready=True
-    )
+    self.logger.debug("Getting seal sensor threshold status...")
+    return await self._send_command("*sealstat", expect_ack=True, wait_for_ready=True)
 
-  async def set_seal_threshold_higher(self, value):
-    """Set higher seal sensor threshold (0-999)."""
+  async def set_seal_threshold_upper(self, value: int):
+    """Set upper seal sensor threshold (0-999)."""
+    self.logger.debug(f"Setting upper seal sensor threshold to {value}...")
     if not 0 <= value <= 999:
       raise ValueError("value must be between 0 and 999")
     return await self._send_command(
       f"*sealhigher:{value:03d}",
-      action_desc=f"Setting higher seal threshold to {value}...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
-  async def set_seal_threshold_lower(self, value):
+  async def set_seal_threshold_lower(self, value: int):
     """Set lower seal sensor threshold (0-999)."""
+    self.logger.debug(f"Setting lower seal sensor threshold to {value}...")
     if not 0 <= value <= 999:
       raise ValueError("value must be between 0 and 999")
     return await self._send_command(
       f"*seallower:{value:03d}",
-      action_desc=f"Setting lower seal threshold to {value}...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
   async def move_conveyor_out(self):
     """Move conveyor out; ack then ready expected."""
+    self.logger.debug("Moving conveyor out...")
     return await self._send_command(
       "*moveout",
-      action_desc="Moving conveyor out...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
   async def move_conveyor_in(self):
     """Move conveyor in; ack then ready expected."""
+    self.logger.debug("Moving conveyor in...")
     return await self._send_command(
       "*movein",
-      action_desc="Moving conveyor in...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
   async def move_elevator_down(self):
     """Move elevator down; ack then ready expected."""
+    self.logger.debug("Moving elevator down...")
     return await self._send_command(
       "*movedown",
-      action_desc="Moving elevator down...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
   async def move_elevator_up(self):
     """Move elevator up; ack then ready expected."""
+    self.logger.debug("Moving elevator up...")
     return await self._send_command(
       "*moveup",
-      action_desc="Moving elevator up...",
       expect_ack=True,
       wait_for_ready=True,
     )
 
   async def advance_tape(self):
     """Advance tape / move spool; ack then ready expected."""
+    self.logger.debug("Advancing tape/spool...")
     return await self._send_command(
       "*movespool",
-      action_desc="Advancing tape...",
       expect_ack=True,
       wait_for_ready=True,
     )
