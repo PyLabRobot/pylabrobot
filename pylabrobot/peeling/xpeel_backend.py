@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -192,9 +191,9 @@ class XPeelBackend(PeelerBackend):
       f"Running peel with begin_location={begin_location}, fast={fast}, adhere_time={adhere_time}..."
     )
 
-    if not adhere_time in {2.5, 5.0, 7.5, 10.0}:
+    if adhere_time not in {2.5, 5.0, 7.5, 10.0}:
       raise ValueError("adhere_time must be one of: 2.5, 5.0, 7.5, 10.0")
-    if not begin_location in {-2, 0, 2, 4}:
+    if begin_location not in {-2, 0, 2, 4}:
       raise ValueError("begin_location must be one of: -2, 0, 2, 4")
 
     parameter_set = {
