@@ -1754,6 +1754,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if lld_search_height is None:
       lld_search_height = [
         c.get_location_wrt(self.deck, "c", "c", z="top").z
+        - c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z
         + 5.0  # Default 5 mm above top of Container
         for c in containers
       ]
@@ -1891,7 +1892,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     This method performs repeated LLD-only probe operations to measure the liquid
     surface height in each container and converts the measured heights into liquid
-    volumes using each container’s geometric model
+    volumes using each container's geometric model
     (`Container.compute_volume_from_height`).
 
     Only containers that support height-to-volume conversion can be used with this
