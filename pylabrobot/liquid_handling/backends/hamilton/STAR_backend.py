@@ -1761,15 +1761,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if minimum_traverse_height_at_beginning_of_a_command is None:
       minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
 
-    
-    minimal_z_positions =[
-        c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z for c in containers
-      ]
+    minimal_z_positions = [
+      c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z for c in containers
+    ]
     if min_z_endpos is None:
       min_z_endpos = min(minimal_z_positions)
 
     if minimum_height is None:
-      minimum_height =  minimal_z_positions
+      minimum_height = minimal_z_positions
 
     if traversal_height is None:
       traversal_height = self._channel_traversal_height
@@ -1829,7 +1828,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         lld_search_height=lld_search_height,
         minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
         immersion_depth=[-post_detection_distance] * len(containers),
-        minimum_height=min_z_endpos,
+        minimum_height=minimum_height,
         settling_time=[0] * len(containers),
         pull_out_distance_transport_air=[0] * len(containers),
         transport_air_volume=[0] * len(containers),
@@ -1944,8 +1943,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # First, probe liquid heights
     merged_channel_results_liquid_heights = cast(
-    List[Tuple[float, ...]],
-    await self.probe_liquid_heights(
+      List[Tuple[float, ...]],
+      await self.probe_liquid_heights(
         containers=containers,
         use_channels=use_channels,
         resource_offsets=resource_offsets,
@@ -1959,7 +1958,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         n_replicates=n_replicates,
         return_mean=False,
         move_to_z_safety_after=move_to_z_safety_after,
-      )
+      ),
     )
 
     merged_channel_results_volumes = []
