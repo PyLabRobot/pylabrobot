@@ -10,8 +10,8 @@ class Peeler(Machine):
     super().__init__(backend=backend)
     self.backend: PeelerBackend = backend
 
-  async def peel(self):
-    return await self.backend.peel()
+  async def peel(self, **backend_kwargs):
+    return await self.backend.peel(**backend_kwargs)
 
-  async def restart(self):
-    return await self.backend.restart()
+  async def restart(self, **backend_kwargs):
+    return await self.backend.restart(**backend_kwargs)

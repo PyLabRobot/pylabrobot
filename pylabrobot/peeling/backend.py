@@ -8,12 +8,8 @@ class PeelerBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def peel(self):
-    """
-    Run an automated de-seal cycle.
-    """
-    ...
+    """Run an automated de-seal cycle."""
 
   @abstractmethod
   async def restart(self):
     """Restart the peeler machine."""
-    ...

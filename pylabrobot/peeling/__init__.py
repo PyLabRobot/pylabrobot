@@ -1,2 +1,2 @@
 from .xpeel import xpeel
-from .xpeel_backend import PlatePeeler
+from .xpeel_backend import XPeelBackend
