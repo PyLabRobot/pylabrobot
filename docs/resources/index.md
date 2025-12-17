@@ -178,7 +178,9 @@ library/cellvis
 library/corning
 library/eppendorf
 library/falcon
+library/greiner
 library/hamilton
+library/imcs
 library/nest
 library/opentrons
 library/perkin_elmer
@@ -187,4 +189,5 @@ library/revvity
 library/sergi
 library/thermo_fisher
 library/vwr
+library/diy/index
 ```

@@ -5,6 +5,7 @@ import urllib.request
 from typing import Dict, List, cast
 
 from pylabrobot.resources import Coordinate, Tip, TipRack, TipSpot
+from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tube_rack import TubeRack
 
@@ -26,7 +27,10 @@ def _download_ot_resource_file(ot_name: str, force_download: bool):
     The labware definition as a dictionary.
   """
   url = f"https://raw.githubusercontent.com/Opentrons/opentrons/5b51a98ce736b2bb5aff780bf3fdf91941a038fa/shared-data/labware/definitions/2/{ot_name}/1.json"
-  path = f"/tmp/{ot_name}.json"
+  if os.path.exists("/tmp"):
+    path = f"/tmp/{ot_name}.json"  # only works with linux/mac systems
+  else:
+    path = f"C:/Windows/Temp/{ot_name}.json"
   if force_download or not os.path.exists(path):
     data = _download_file(url=url, local_path=path)
   else:
@@ -58,8 +62,9 @@ def load_ot_tip_rack(
       well_size_x = well_size_y = round(diameter / math.sqrt(2), 3)
 
       # closure
-      def make_tip() -> Tip:
+      def make_tip(name: str) -> Tip:
         return Tip(
+          name=name,
           total_tip_length=data["parameters"]["tipLength"],
           has_filter="Filter" in data["metadata"]["displayName"],
           maximal_volume=well_data["totalLiquidVolume"],
@@ -144,5 +149,29 @@ def load_ot_tube_rack(
     size_y=data["dimensions"]["yDimension"],
     size_z=data["dimensions"]["zDimension"],
     ordered_items=cast(Dict[str, ResourceHolder], ordered_items),
+    model=data["metadata"]["displayName"],
+  )
+
+
+def load_ot_plate_holder(
+  ot_name: str, plr_resource_name: str, z_offset: float, force_download: bool = False
+) -> PlateHolder:
+  """Convert an Opentrons adapter definition file to a PyLabRobot PlateHolder resource."""
+
+  data = _download_ot_resource_file(ot_name=ot_name, force_download=force_download)
+
+  display_category = data["metadata"]["displayCategory"]
+  if display_category not in {"adapter", "aluminumBlock"}:
+    raise ValueError("Not a plate adapter definition file.")
+
+  location = data["cornerOffsetFromSlot"]
+
+  return PlateHolder(
+    name=plr_resource_name,
+    size_x=data["dimensions"]["xDimension"],
+    size_y=data["dimensions"]["yDimension"],
+    size_z=data["dimensions"]["zDimension"],
+    child_location=Coordinate(location["x"], location["y"], z_offset),
+    pedestal_size_z=0,
     model=data["metadata"]["displayName"],
   )

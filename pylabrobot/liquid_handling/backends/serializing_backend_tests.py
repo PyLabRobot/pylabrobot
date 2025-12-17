@@ -85,7 +85,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate(self):
     well = self.plate.get_item("A1")
-    well.tracker.set_liquids([(None, 10)])
+    well.tracker.set_volume(10)
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
     self.backend.clear()
@@ -104,7 +104,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "flow_rate": None,
             "liquid_height": None,
             "blow_out_air_volume": None,
-            "liquids": [[None, 10]],
             "mix": None,
           }
         ],
@@ -133,7 +132,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
             "flow_rate": None,
             "liquid_height": None,
             "blow_out_air_volume": None,
-            "liquids": [[None, 10]],
             "mix": None,
           }
         ],
@@ -187,7 +185,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": None,
-          "liquids": [[[None, 10]]] * 96,  # tuple, list of liquids per well, list of wells
           "tips": [serialize(tip) for tip in tips],
         }
       },
@@ -208,11 +205,10 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
         "dispense": {
           "well_names": [well.name for well in self.plate.get_all_items()],
           "offset": serialize(Coordinate.zero()),
-          "volume": 10,
+          "volume": 10.0,
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": None,
-          "liquids": [[[None, 10]]] * 96,  # tuple, list of liquids per well, list of wells
           "tips": [serialize(tip) for tip in tips],
         }
       },
