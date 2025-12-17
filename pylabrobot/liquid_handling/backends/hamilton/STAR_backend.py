@@ -1677,6 +1677,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: Optional[List[LLDMode]] = None,
     lld_search_height: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    minimum_height: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
     traversal_height: Optional[float] = None,
     post_detection_distance: float = 2.0,
@@ -1760,8 +1761,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if minimum_traverse_height_at_beginning_of_a_command is None:
       minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
 
+    
+    minimal_z_position = min([
+        c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z for c in containers
+      ])
     if min_z_endpos is None:
-      min_z_endpos = self._channel_traversal_height
+      min_z_endpos = minimal_z_position
+
+    if minimum_height is None:
+      minimum_height = minimal_z_position
 
     if traversal_height is None:
       traversal_height = self._channel_traversal_height
@@ -1795,10 +1803,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
       )
 
-    minimum_heights_tip_can_go_to = [
-      c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z for c in containers
-    ]
-
     if swap_speed is None:
       swap_speed = [100.0] * len(containers)
 
@@ -1825,7 +1829,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         lld_search_height=lld_search_height,
         minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
         immersion_depth=[-post_detection_distance] * len(containers),
-        minimum_height=minimum_heights_tip_can_go_to,
+        minimum_height=min_z_endpos,
         settling_time=[0] * len(containers),
         pull_out_distance_transport_air=[0] * len(containers),
         transport_air_volume=[0] * len(containers),
@@ -1939,20 +1943,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         ) from e
 
     # First, probe liquid heights
-    merged_channel_results_liquid_heights = await self.probe_liquid_heights(
-      containers=containers,
-      use_channels=use_channels,
-      resource_offsets=resource_offsets,
-      lld_mode=lld_mode,
-      lld_search_height=lld_search_height,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
-      min_z_endpos=min_z_endpos,
-      traversal_height=traversal_height,
-      post_detection_distance=post_detection_distance,
-      swap_speed=swap_speed,
-      n_replicates=n_replicates,
-      return_mean=False,
-      move_to_z_safety_after=move_to_z_safety_after,
+    merged_channel_results_liquid_heights = cast(
+    List[Tuple[float, ...]],
+    await self.probe_liquid_heights(
+        containers=containers,
+        use_channels=use_channels,
+        resource_offsets=resource_offsets,
+        lld_mode=lld_mode,
+        lld_search_height=lld_search_height,
+        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+        min_z_endpos=min_z_endpos,
+        traversal_height=traversal_height,
+        post_detection_distance=post_detection_distance,
+        swap_speed=swap_speed,
+        n_replicates=n_replicates,
+        return_mean=False,
+        move_to_z_safety_after=move_to_z_safety_after,
+      )
     )
 
     merged_channel_results_volumes = []
@@ -2224,7 +2231,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
-        tips=[cast(HamiltonTip, op.tip) for op in ops],
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
       )
@@ -2591,7 +2597,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
-        tips=[cast(HamiltonTip, op.tip) for op in ops],
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
       )
