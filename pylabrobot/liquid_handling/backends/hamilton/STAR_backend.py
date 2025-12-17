@@ -1771,10 +1771,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         resource=containers[0], num_channels=len(containers)
       )
 
-    tip_presence_summary = []
-    for c in self._num_channels:
-      channel_check = await self.request_tip_presence()
-      tip_presence_summary.append(channel_check)
+    tip_presence_summary = await self.request_tip_presence()
 
     if not all(tip_presence_summary[ch] for ch in use_channels):
       raise RuntimeError(
