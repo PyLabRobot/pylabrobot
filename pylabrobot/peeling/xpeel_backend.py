@@ -1,7 +1,7 @@
 import logging
 import time
 from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 import serial
 
@@ -48,7 +48,7 @@ class XPeelBackend(PeelerBackend):
     self.response_timeout = timeout if timeout is not None else self.RESPONSE_TIMEOUT
 
     self._serial_timeout = timeout if timeout is not None else self.response_timeout
-    self.io: Optional[Serial] = Serial(
+    self.io = Serial(
       port=self.port,
       baudrate=self.BAUDRATE,
       bytesize=serial.EIGHTBITS,
@@ -60,13 +60,9 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def setup(self):
-    if self.io is None:
-      raise RuntimeError("Serial interface not initialized.")
     await self.io.setup()
 
   async def stop(self):
-    if self.io is None:
-      return
     await self.io.stop()
     self.logger.info("Serial interface closed.")
 
