@@ -1677,7 +1677,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: Optional[List[LLDMode]] = None,
     lld_search_height: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    minimum_height: Optional[float] = None,
+    minimum_height: Optional[List[float]] = None,
     min_z_endpos: Optional[float] = None,
     traversal_height: Optional[float] = None,
     post_detection_distance: float = 2.0,
@@ -1762,14 +1762,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
 
     
-    minimal_z_position = min([
+    minimal_z_positions =[
         c.get_location_wrt(self.deck, "c", "c", z="cavity_bottom").z for c in containers
-      ])
+      ]
     if min_z_endpos is None:
-      min_z_endpos = minimal_z_position
+      min_z_endpos = min(minimal_z_positions)
 
     if minimum_height is None:
-      minimum_height = minimal_z_position
+      minimum_height =  minimal_z_positions
 
     if traversal_height is None:
       traversal_height = self._channel_traversal_height
