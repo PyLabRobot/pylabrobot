@@ -1814,12 +1814,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # containers to probe -> minimise back and forth movement in x dimension when containers are
     # in different x coordinates
 
-    for replicate_idx in range(n_replicates):
+    for _ in range(n_replicates):
       x_coords_of_ops = [c.get_location_wrt(self.deck, "c").x for c in containers]
-      assert len(set(x_coords_of_ops)) == 1, (
-        "probing is only allowed in the same x-coordinate for safety reasons."
-        f"given: {x_coords_of_ops}"
-      )
+      if n_replicates > 1 and len(set(x_coords_of_ops)) > 1:
+        raise ValueError(
+          "probing is only allowed in the same x-coordinate for safety reasons."
+          f"given: {x_coords_of_ops}"
+        )
 
       # Perform zero-volume aspirate operation for probing
       await self.aspirate(
@@ -2228,11 +2229,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if any(op.liquid_height is not None for op in ops):
         raise ValueError("Cannot use probe_liquid_height when liquid heights are set.")
 
+      if len(set(x_positions)) > 1:
+        raise ValueError(
+          "probe_liquid_height can only be used when all operations are in the same x position."
+        )
+      
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
+        minimum_height=minimum_height,
+        min_z_endpos=minimum_height,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
