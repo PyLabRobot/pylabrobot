@@ -5922,19 +5922,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     This value is maintained internally by the STAR/STARlet firmware and is
     updated **whenever a liquid level is detected**, regardless of whether the
     detection method used was:
-      • capacitive LLD (cLLD == 'STAR.LLDMode(1)'), or
-      • pressure-based LLD (pLLD == 'STAR.LLDMode(2)').
+    - capacitive LLD (cLLD == 'STAR.LLDMode(1)'), or
+    - pressure-based LLD (pLLD == 'STAR.LLDMode(2)').
 
     Heights are returned in millimeters, one value per channel, ordered by
     channel index.
 
     Returns:
-        List[float]: Absolute liquid heights (mm) from the last LLD event for
-        each channel.
+      Absolute liquid heights (mm) from the last LLD event for each channel.
 
     Raises:
-        AssertionError: If the instrument response does not contain a valid
-        ``"lh"`` list.
+      AssertionError: If the instrument response does not contain a valid ``"lh"`` list.
     """
     resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
 
@@ -8673,10 +8671,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     read_timeout=240.0,  # seconds
   ) -> float:
     """
-    Probe the x-position of a conductive material using a channel’s capacitive liquid
+    Probe the x-position of a conductive material using a channel's capacitive liquid
     level detection (cLLD) via a lateral X scan.
 
-    Starting from the channel’s current X position, the channel is moved laterally in
+    Starting from the channel's current X position, the channel is moved laterally in
     the specified direction using the XL command until cLLD triggers or the configured
     end position is reached. After the scan, the channel is retracted inward by
     `post_detection_dist`.
@@ -8685,8 +8683,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     corrected by half the tip bottom diameter assuming cylindrical tip contact.
 
     Notes:
-    - The XL command does not report whether cLLD triggered; reaching the end position
-      is indistinguishable from a successful detection.
+    - The XL command does not report whether cLLD triggered; reaching the end position is indistinguishable from a successful detection.
     - This function assumes cLLD triggers before `end_pos_search`.
 
     Preconditions:
@@ -8698,7 +8695,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     - Leaves the channel retracted from the detected object.
 
     Returns:
-      float: Estimated x-position of the detected material boundary in millimeters.
+      Estimated x-position of the detected material boundary in millimeters.
     """
 
     assert channel_idx in range(

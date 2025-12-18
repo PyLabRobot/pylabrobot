@@ -250,14 +250,6 @@ def sort_by_xy_and_chunk_by_x(
   3. Split each chunk into sub-chunks of size <= max_chunk_size.
   4. Optionally sort the resulting sub-chunks by their length (smallest -> largest).
 
-  Args:
-    resources: List of resources that implement ``.get_absolute_location()``, returning an object with ``x`` and ``y`` attributes.
-    max_chunk_size: Maximum allowed size for any produced chunk or sub-chunk.
-    sort_chunks_by_size: If True (default), the output list of chunks is sorted by ascending chunk size. If False, chunks retain their original order.
-
-  Returns:
-    A list of grouped and sorted resources.
-
   Example:
     >>> sorted_chunks = sort_by_xy_and_chunk_by_x(well_list, max_chunk_size=8)
     >>> [
@@ -269,11 +261,17 @@ def sort_by_xy_and_chunk_by_x(
     ...   )
     ...   for chunk in sorted_chunks
     ... ]
-
     [[('D1', Coordinate(x=450.9, y=402.3, z=164.45)),
       ('H1', Coordinate(x=450.9, y=366.3, z=164.45)), ...],
     [('D2', Coordinate(x=459.9, y=402.3, z=164.45)), ...]]
 
+  Args:
+    resources: List of resources that implement ``.get_absolute_location()``, returning an object with ``x`` and ``y`` attributes.
+    max_chunk_size: Maximum allowed size for any produced chunk or sub-chunk.
+    sort_chunks_by_size: If True (default), the output list of chunks is sorted by ascending chunk size. If False, chunks retain their original order.
+
+  Returns:
+    A list of grouped and sorted resources.
   """
 
   # 1. & 2.: Sort by x ascending, y descending
