@@ -112,7 +112,7 @@ tr > td:nth-child(5) { width: 15%; }
 
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
-| Azenta Life Sciences | XPeel | WIP | [OEM](https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel) |
+| Azenta Life Sciences | XPeel | Full | [OEM](https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel) |
 
 ### Sealers
 
