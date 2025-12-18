@@ -35,8 +35,6 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
 
     await self.io.setup()
 
-    await self.initialize_measurements()
-
     # Start background keep alive messages
     self._stop_background.clear()
     self._background_thread = threading.Thread(target=self._background_ping_worker, daemon=True)
@@ -256,41 +254,26 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
 
   async def read_absorbance(
     self,
+    plate: Plate,
+    wells: List[Well],
     wavelength: int,
-    plate: Optional[Plate] = None,
-    wells: Optional[List[Well]] = None,
-    output_nested_list: bool = False,
     num_measurement_replicates: int = 1,
-  ):
+  ) -> List[dict]:
     """
     Measure sample absorbance in each well at the specified wavelength.
 
-    Parameters
-    ----------
-    wavelength : int
-        Signal wavelength in nanometers.
-    plate : Plate, optional
-        The plate being read. Included for API uniformity.
-    wells : list[Well], optional
-        Subset of wells to return. If omitted, all 96 wells are returned.
-    output_nested_list : bool, default False
-        If True, return an 8×12 list-of-lists instead of a dict.
-        When `wells` is provided, a full 8×12 structure is still returned,
-        with non-requested wells filled with None.
-    num_measurement_replicates : int, default 1
-        Number of technical replicate reads to acquire.
-        Replicates are taken sequentially and averaged per well.
-        (Handled at the backend level for faster acquisition and
-        a simpler interface.)
+    Args:
+      wavelength: Signal wavelength in nanometers.
+      plate: The plate being read. Included for API uniformity.
+      wells, Subset of wells to return. If omitted, all 96 wells are returned.
+      num_measurement_replicates: Number of technical replicate reads to acquire.  Replicates are taken sequentially and averaged per well.  (Handled at the backend level for faster acquisition and a simpler interface.)
     """
 
     assert (
       wavelength in self.available_wavelengths
     ), f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
 
-    # ------------------------------------------
     # 1. Collect technical replicates
-    # ------------------------------------------
     technical_replicates = []
     for _ in range(num_measurement_replicates):
       rows = await self._run_abs_measurement(
@@ -300,9 +283,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
       )
       technical_replicates.append(rows)
 
-    # ------------------------------------------
     # 2. Average the replicates (flat 96-element list)
-    # ------------------------------------------
     if num_measurement_replicates == 1:
       averaged_rows = technical_replicates[0]
     else:
@@ -310,41 +291,22 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
         sum(rep[i] for rep in technical_replicates) / num_measurement_replicates for i in range(96)
       ]
 
-    # ------------------------------------------
-    # 3. Convert flat -> 8×12 matrix
-    # ------------------------------------------
+    # 3. Convert flat -> 8x12 matrix
     matrix = reshape_2d(averaged_rows, (8, 12))
 
-    # ------------------------------------------
-    # 4. Build dict mapping "A1" -> float
-    # ------------------------------------------
-    result_dict: Dict[str, float] = {}
-    for r in range(8):
-      for c in range(12):
-        well_id = f"{chr(ord('A') + r)}{c + 1}"
-        result_dict[well_id] = matrix[r][c]
-
-    # ------------------------------------------
-    # 5. No filtering? return full plate
-    # ------------------------------------------
-    if wells is None:
-      return matrix if output_nested_list else result_dict
-
-    # ------------------------------------------
-    # 6. Filter based on user-provided wells
-    # ------------------------------------------
-    filtered = {w.get_identifier(): result_dict[w.get_identifier()] for w in wells}
-
-    # nested list output for filtered wells
-    if output_nested_list:
-      return [[filtered.get(f"{chr(ord('A') + r)}{c+1}") for c in range(12)] for r in range(8)]
-
     # dictionary output for filtered wells
-    return filtered
+    return [
+      {
+        "wavelength": wavelength,
+        "time": time.time(),
+        "temperature": None,
+        "data": matrix,
+      }
+    ]
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float
-  ) -> List[List[Optional[float]]]:
+  ) -> List[dict]:
     raise NotImplementedError("Absorbance plate reader does not support luminescence reading.")
 
   async def read_fluorescence(
@@ -354,7 +316,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[Optional[float]]]:
+  ) -> List[dict]:
     raise NotImplementedError("Absorbance plate reader does not support fluorescence reading.")
 
 
@@ -362,14 +324,14 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x119B, device_type=_ByonoyDevice.LUMINESCENCE_96)
 
-  async def read_absorbance(self, plate, wells, wavelength):
+  async def read_absorbance(self, plate, wells, wavelength) -> List[Dict]:
     raise NotImplementedError(
       "Luminescence plate reader does not support absorbance reading. Use ByonoyAbsorbance96Automate instead."
     )
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float, integration_time: float = 2
-  ) -> List[List[Optional[float]]]:
+  ) -> List[Dict]:
     """integration_time: in seconds, default 2 s"""
 
     await self.send_command(
@@ -433,7 +395,13 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
     _ = all_rows[96 * 6 : 96 * 7]  # integration_times
     _ = all_rows[96 * 7 : 96 * 8]  # below_breakdown_measurement
 
-    return reshape_2d(hybrid_result, (8, 12))
+    return [
+      {
+        "time": time.time(),
+        "temperature": None,
+        "data": reshape_2d(hybrid_result, (8, 12)),
+      }
+    ]
 
   async def read_fluorescence(
     self,
@@ -442,5 +410,5 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-  ) -> List[List[Optional[float]]]:
+  ) -> List[Dict]:
     raise NotImplementedError("Fluorescence plate reader does not support fluorescence reading.")
