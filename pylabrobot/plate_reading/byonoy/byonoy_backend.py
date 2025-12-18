@@ -1,7 +1,6 @@
 import abc
 import asyncio
 import enum
-import re
 import struct
 import threading
 import time
@@ -312,17 +311,17 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
       ]
 
     # ------------------------------------------
-    # 3. Convert flat → 8×12 matrix
+    # 3. Convert flat -> 8×12 matrix
     # ------------------------------------------
     matrix = reshape_2d(averaged_rows, (8, 12))
 
     # ------------------------------------------
-    # 4. Build dict mapping "A1" → float
+    # 4. Build dict mapping "A1" -> float
     # ------------------------------------------
     result_dict: Dict[str, float] = {}
     for r in range(8):
       for c in range(12):
-        well_id = f"{chr(ord("A") + r)}{c + 1}"
+        well_id = f"{chr(ord('A') + r)}{c + 1}"
         result_dict[well_id] = matrix[r][c]
 
     # ------------------------------------------
@@ -338,7 +337,7 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
 
     # nested list output for filtered wells
     if output_nested_list:
-      return [[filtered.get(f"{chr(ord("A") + r)}{c+1}") for c in range(12)] for r in range(8)]
+      return [[filtered.get(f"{chr(ord('A') + r)}{c+1}") for c in range(12)] for r in range(8)]
 
     # dictionary output for filtered wells
     return filtered
