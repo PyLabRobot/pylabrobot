@@ -230,14 +230,14 @@ def query(
   return matched
 
 
-T = TypeVar("T", bound=Resource)
+R = TypeVar("R", bound=Resource)
 
 
 def sort_by_xy_and_chunk_by_x(
-  resources: list[T],
+  resources: list[R],
   max_chunk_size: int,
   sort_chunks_by_size: bool = True,
-) -> list[list[T]]:
+) -> list[list[R]]:
   """
   Sort resources spatially and partition them into chunks for channel processing.
 
