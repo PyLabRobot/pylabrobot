@@ -1,7 +1,7 @@
 import logging
 import time
 from dataclasses import dataclass
-from typing import List, Literal
+from typing import List, Literal, Tuple
 
 import serial  # type: ignore
 
@@ -149,7 +149,7 @@ class XPeelBackend(PeelerBackend):
 
     return responses
 
-  async def get_status(self):
+  async def get_status(self) -> Tuple[int, int, int]:
     """
     Request instrument status; returns *ready:XX,XX,XX.
 
@@ -162,7 +162,8 @@ class XPeelBackend(PeelerBackend):
     error codes back to 00.
     """
     self.logger.debug("Requesting status...")
-    return await self._send_command("*stat")
+    resp = await self._send_command("*stat")
+    return tuple([int(x) for x in resp[-1].split(":")[1].split(",")])  # type: ignore
 
   async def get_version(self):
     """Request firmware version."""
@@ -223,7 +224,7 @@ class XPeelBackend(PeelerBackend):
       wait_for_ready=True,
     )
 
-  async def seal_check(self):
+  async def seal_check(self) -> Literal["seal_detected", "no_seal", "plate_not_detected"]:
     """
     Check for seal presence; ready response encodes result.
 
@@ -231,7 +232,21 @@ class XPeelBackend(PeelerBackend):
     *ready:XX,00,00<CR><LF> (XX=04 if seal detected, XX=00 if no seal present, XX=06 if plate not detected)
     """
     self.logger.debug("Checking for seal presence...")
-    return await self._send_command("*sealcheck", expect_ack=True, wait_for_ready=True)
+    resp = await self._send_command("*sealcheck", expect_ack=True, wait_for_ready=True)
+    ready_line = resp[-1]
+    parsed = self.parse_ready_line(ready_line)
+    if parsed is None:
+      raise RuntimeError(f"Could not parse ready line: {ready_line}")
+    code, _ = parsed
+    if code == 0:
+      return "no_seal"
+    if code == 4:
+      return "seal_detected"
+    if code == 6:
+      return "plate_not_detected"
+    raise RuntimeError(
+      f"Unexpected seal check code: {code}, interpreted as: {self.describe_error(code)}"
+    )
 
   async def get_tape_remaining(self):
     """
@@ -240,11 +255,16 @@ class XPeelBackend(PeelerBackend):
     Response:
     *tape:SS,TT<CR><LF>
 
-    Where ‘SS’ times 10 is the number of “deseals” remaining on the supply spool and ‘TT’ times 10 is the
+    Where 'SS' times 10 is the number of “deseals” remaining on the supply spool and 'TT' times 10 is the
     number of “deseals” that can be held on the space remaining on the take-up spool.
     """
     self.logger.debug("Querying remaining tape...")
-    return await self._send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
+    resp = await self._send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
+    tape_line = resp[-1]
+    parts = tape_line.split(":")[1].split(",")
+    supply_remaining = int(parts[0]) * 10
+    takeup_remaining = int(parts[1]) * 10
+    return supply_remaining, takeup_remaining
 
   async def enable_plate_check(self, enabled=True):
     """Enable or disable plate presence check."""
