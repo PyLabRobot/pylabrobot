@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass
 from typing import List, Literal
 
-import serial
+import serial  # type: ignore
 
 from pylabrobot.io.serial import Serial
 from pylabrobot.peeling.backend import PeelerBackend
@@ -150,7 +150,17 @@ class XPeelBackend(PeelerBackend):
     return responses
 
   async def get_status(self):
-    """Request instrument status; returns *ready:XX,XX,XX."""
+    """
+    Request instrument status; returns *ready:XX,XX,XX.
+
+    The 'XX' fields refer to the three possible error codes from the error table that
+    occurred during the previous Automated Plate Peeler motion. The error codes
+    will remain in the ready response until another motion command is made or until a
+    restart command is sent. A single commanded action may accumulate up to three errors.
+    Since they are logged as they occur (left to right), any error code may appear in
+    any error field. Successful completion of any motion command will clear all three
+    error codes back to 00.
+    """
     self.logger.debug("Requesting status...")
     return await self._send_command("*stat")
 
@@ -175,7 +185,8 @@ class XPeelBackend(PeelerBackend):
     fast: bool = False,
     adhere_time: float = 2.5,
   ):
-    """Run an automated de-seal cycle.
+    """
+    Run an automated de-seal cycle.
 
     Args:
       begin_location: Begin peel location in mm relative to default (0). Must be one of: -2, 0, 2, 4.
@@ -213,12 +224,25 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def seal_check(self):
-    """Check for seal presence; ready response encodes result."""
+    """
+    Check for seal presence; ready response encodes result.
+
+    Response:
+    *ready:XX,00,00<CR><LF> (XX=04 if seal detected, XX=00 if no seal present, XX=06 if plate not detected)
+    """
     self.logger.debug("Checking for seal presence...")
     return await self._send_command("*sealcheck", expect_ack=True, wait_for_ready=True)
 
   async def get_tape_remaining(self):
-    """Query remaining tape."""
+    """
+    Query remaining tape.
+
+    Response:
+    *tape:SS,TT<CR><LF>
+
+    Where ‘SS’ times 10 is the number of “deseals” remaining on the supply spool and ‘TT’ times 10 is the
+    number of “deseals” that can be held on the space remaining on the take-up spool.
+    """
     self.logger.debug("Querying remaining tape...")
     return await self._send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
 
@@ -233,12 +257,15 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def get_seal_sensor_status(self):
-    """Get seal sensor threshold status."""
+    """Get seal sensor threshold value (0-999)"""
     self.logger.debug("Getting seal sensor threshold status...")
     return await self._send_command("*sealstat", expect_ack=True, wait_for_ready=True)
 
   async def set_seal_threshold_upper(self, value: int):
-    """Set upper seal sensor threshold (0-999)."""
+    """
+    Set the seal detected threshold value(0-999).
+    Sensor readings higher than this value will be considered as "seal not detected"
+    """
     self.logger.debug(f"Setting upper seal sensor threshold to {value}...")
     if not 0 <= value <= 999:
       raise ValueError("value must be between 0 and 999")
@@ -249,7 +276,10 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def set_seal_threshold_lower(self, value: int):
-    """Set lower seal sensor threshold (0-999)."""
+    """
+    Set the seal detected threshold value(0-999).
+    Sensor readings higher than this value will be considered as "seal not detected"
+    """
     self.logger.debug(f"Setting lower seal sensor threshold to {value}...")
     if not 0 <= value <= 999:
       raise ValueError("value must be between 0 and 999")
@@ -260,7 +290,7 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def move_conveyor_out(self):
-    """Move conveyor out; ack then ready expected."""
+    """Move conveyor out"""
     self.logger.debug("Moving conveyor out...")
     return await self._send_command(
       "*moveout",
@@ -269,7 +299,7 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def move_conveyor_in(self):
-    """Move conveyor in; ack then ready expected."""
+    """Move conveyor in"""
     self.logger.debug("Moving conveyor in...")
     return await self._send_command(
       "*movein",
@@ -278,7 +308,7 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def move_elevator_down(self):
-    """Move elevator down; ack then ready expected."""
+    """Move elevator down"""
     self.logger.debug("Moving elevator down...")
     return await self._send_command(
       "*movedown",
@@ -287,7 +317,7 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def move_elevator_up(self):
-    """Move elevator up; ack then ready expected."""
+    """Move elevator up"""
     self.logger.debug("Moving elevator up...")
     return await self._send_command(
       "*moveup",
@@ -296,7 +326,7 @@ class XPeelBackend(PeelerBackend):
     )
 
   async def advance_tape(self):
-    """Advance tape / move spool; ack then ready expected."""
+    """Advance tape / move spool"""
     self.logger.debug("Advancing tape/spool...")
     return await self._send_command(
       "*movespool",
