@@ -9123,9 +9123,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     probe_position = await self.request_probe_z_position(channel_idx=channel_idx)
 
     # Request z-coordinate of channel+tip bottom
-    tip_bottom_z_coordinate = await self.request_tip_bottom_z_position(
-      pipetting_channel_index=channel_idx
-    )
+    tip_bottom_z_coordinate = await self.request_tip_bottom_z_position(channel_idx=channel_idx)
 
     total_tip_len = round(
       probe_position - (tip_bottom_z_coordinate - fitting_depth_of_all_standard_channel_tips),
