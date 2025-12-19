@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime as _dt
 import re as _re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 SOAP_ENV = "http://schemas.xmlsoap.org/soap/envelope/"
