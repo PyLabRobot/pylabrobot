@@ -914,7 +914,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
 
   # # # Shaking Features # # #
 
-  @staticmethod
   def requires_incubator_shaker(
     func: Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]],
   ) -> Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]]:
