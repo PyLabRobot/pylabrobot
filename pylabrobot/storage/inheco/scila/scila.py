@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
 
