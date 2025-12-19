@@ -55,7 +55,7 @@ class SCILABackend:
     root = await self._sila_interface.send_command("GetLiquidLevel")
     return _get_param(root, "LiquidLevel")  # type: ignore
 
-  async def get_temperature_information(self) -> Dict[int, Any]:
+  async def get_temperature_information(self) -> Dict[str, Any]:
     root = await self._sila_interface.send_command("GetTemperature")
     return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
 
