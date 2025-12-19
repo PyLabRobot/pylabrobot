@@ -69,13 +69,13 @@ class SCILABackend:
     return (await self.get_temperature_information())["TemperatureControl"]  # type: ignore
 
   async def open_drawer(self, drawer_id: int) -> None:
-    if not drawer_id in {1, 2, 3, 4}:
+    if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     await self._sila_interface.send_command("PrepareForInput", position=drawer_id)
     await self._sila_interface.send_command("OpenDoor")
 
   async def close_drawer(self, drawer_id: int) -> None:
-    if not drawer_id in {1, 2, 3, 4}:
+    if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
     await self._sila_interface.send_command("CloseDoor")
