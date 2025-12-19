@@ -86,11 +86,11 @@ class SCILABackend:
     root = await self._sila_interface.send_command("GetDoorStatus")
     return _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])  # type: ignore
 
-  async def get_drawer_position(self, drawer_index: int) -> DrawerPosition:
-    if not drawer_index in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_index}. Must be 1, 2, 3, or 4.")
+  async def get_drawer_position(self, drawer_id: int) -> DrawerPosition:
+    if not drawer_id in {1, 2, 3, 4}:
+      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     positions = await self.get_drawer_positions()
-    return positions[f"Drawer{drawer_index}"]
+    return positions[f"Drawer{drawer_id}"]
 
   async def get_co2_flow_status(self) -> str:
     # "NOK", ...?
