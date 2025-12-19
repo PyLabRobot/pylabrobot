@@ -252,8 +252,11 @@ class InhecoSiLAInterface:
 
     async with self._making_request:
       try:
-        with urllib.request.urlopen(req) as resp:
-          body = resp.read()
+        def _do_request() -> bytes:
+          with urllib.request.urlopen(req) as resp:
+            return resp.read()
+
+        body = await asyncio.to_thread(_do_request)
         return_code, message = self._get_return_code_and_message(command, soap_decode(body))
         if return_code == 1:  # success
           return soap_decode(body)
