@@ -509,7 +509,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self,
     plate: Plate,
     wells: List[Well],
-    focal_height: float,  # noqa: ARG002
+    focal_height: float,
   ) -> List[Dict]:
     """Queue and execute a luminescence scan."""
 
