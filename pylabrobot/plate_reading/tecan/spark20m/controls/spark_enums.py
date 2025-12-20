@@ -1,0 +1,555 @@
+from enum import Enum
+
+class BarcodePosition(Enum):
+    LEFT = "LEFT"
+    RIGHT = "RIGHT"
+
+class FilterType(Enum):
+    UNDEFINED = "UNDEFINED"
+    SHORTPASS = "SP"
+    LONGPASS = "LP"
+    BANDPASS = "BP"
+    OPTICAL_DENSITY = "OD"
+    EMPTY = "EMPTY"
+    DARK = "DARK"
+    AUTOMATIC = "AUTOMATIC"
+
+class FluorescenceCarrier(Enum):
+    FILTER_EXCITATION = "FILTER_EX"
+    FILTER_EMISSION = "FILTER_EM1"
+    FILTER_DUAL_EMISSION = "FILTER_EM2"
+    MONOCHROMATOR_EXCITATION = "MONO"
+    MONOCHROMATOR_EMISSION = "MONO"
+
+class FluorescenceConfiguration(Enum):
+    UNKNOWN = "UNKNOWN"
+    FILTER_EX_FILTER_EM = "FILTER_EX_FILTER_EM"
+    FILTER_EX_MONO_EM = "FILTER_EX_MONO_EM"
+    MONO_EX_FILTER_EM = "MONO_EX_FILTER_EM"
+    MONO_EX_MONO_EM = "MONO_EX_MONO_EM"
+
+class FluorescenceMeasurementDirection(Enum):
+    TOP = "FITOP"
+    BOTTOM = "FIBOTTOM"
+
+class InjectionMode(Enum):
+    RINSE = "RINSE"
+    PRIME = "PRIME"
+    DISPENSE = "DISPENSE"
+    BACKFLUSH = "BACKFLUSH"
+    REFILL = "REFILL"
+
+class InjectorModel(Enum):
+    STANDARD = "STANDARD"
+    ENHANCED = "ENHANCED"
+
+class InjectorName(Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+
+class InjectorRefillMode(Enum):
+    STANDARD = "STANDARD"
+    BEFORE_EVERY_INJECTION = "BEFORE_EVERY_INJECTION"
+
+class InjectorState(Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+class LightingName(Enum):
+    AUTOFOCUS = "AF"
+    BRIGHTFIELD = "BF"
+    BLUE = "UV_BLUE"
+    GREEN = "BLUE_GREEN"
+    RED = "LIME_RED"
+    FAR_RED = "RED_FARRED"
+
+class LightingType(Enum):
+    AUTOFOCUS = "AF_LED"
+    BRIGHTFIELD = "BF_LED"
+    FLUORESCENCE = "FI_LED"
+
+class LuminescenceType(Enum):
+    NONE = "NONE"
+    STANDARD = "STANDARD"
+    ENHANCED = "ENHANCED"
+    ALPHA = "ALPHA"
+
+class MeasurementMode(Enum):
+    ABSORBANCE = "ABS"
+    CUVETTE = "CUV"
+    LUMINESCENCE = "LUM"
+    ALPHA = "ALPHA"
+    FLUORESCENCE_TOP = "FITOP"
+    FLUORESCENCE_BOTTOM = "FIBOTTOM"
+    FLUORESCENCE_POLARIZATION = "FP"
+    CELL = "CELL"
+    INJECTOR = "INJ"
+    WELL_TEMPERATURE = "WELL_TEMP"
+    BARCODE = "BARCODE"
+    FLUORESCENCE_IMAGING = "FIM"
+
+class MirrorType(Enum):
+    HALF_HALF = "50_50"
+    DICHROIC = "DICHROIC"
+    BOTTOM = "BOTTOM"
+    UNUSED = "UNUSED"
+    AUTOMATIC = "AUTOMATIC"
+
+class MtpAreaType(Enum):
+    SMALL = "SMALL"
+    MEDIUM = "MEDIUM"
+    LARGE = "LARGE"
+
+class ObjectiveType(Enum):
+    UNDEFINED = "XX"
+    TWO_TIMES = "2X"
+    FOUR_TIMES = "4X"
+    TEN_TIMES = "10X"
+
+class PlatePosition(Enum):
+    UNDEFINED = "UNDEFINED"
+    OUT_LEFT = "OUT_LEFT"
+    OUT_RIGHT = "OUT_RIGHT"
+    PLATE_IN = "PLATE_IN"
+    PICK_N_PLACE = "PICK_N_PLACE"
+    LID_LIFTER = "LIDLIFTER"
+    CHECK = "CHECK"
+    HEATING = "HEATING"
+    INCUBATION = "INCUBATION"
+    COOLING = "COOLING"
+    BARCODE_LEFT = "BARCODE_LEFT"
+    BARCODE_RIGHT = "BARCODE_RIGHT"
+
+class ShakingMode(Enum):
+    LINEAR = "LINEAR"
+    ORBITAL = "ORBITAL"
+    DOUBLE = "DOUBLE"
+
+class ShakingName(Enum):
+    SLOW = "SLOW"
+    MEDIUM = "MEDIUM"
+    FAST = "FAST"
+
+class ColumnType(Enum):
+    INPUT = "INPUT"
+    OUTPUT = "OUTPUT"
+
+class HumidityCassetteModel(Enum):
+    STANDARD = "STANDARD"
+    CYTO = "CYTO"
+
+class InstrumentMessageType(Enum):
+    ALL = "ALL"
+    TEMPERATURE = "TEMPERATURE"
+
+class MovementSpeed(Enum):
+    NORMAL = "NORMAL"
+    SMALLSTEP = "SMALLSTEP"
+    AUTOMATIC = "AUTOMATIC"
+    SMOOTH = "SMOOTH"
+    SLOW = "SLOW"
+    FLASH_INJECTION = "FLASH_INJECTION"
+
+class StackerColumn(Enum):
+    PRESENT = "PRESENT"
+    NOT_PRESENT = "NOT_PRESENT"
+    UNKNOWN = "UNKNOWN"
+
+class StackerPlate(Enum):
+    PRESENT = "PRESENT"
+    NOT_PRESENT = "NOT_PRESENT"
+    UNKNOWN = "UNKNOWN"
+
+class ControlCommandType(Enum):
+    OFF = "OFF"
+    ON = "ON"
+    TARGET_TEMP = "TARGET_TEMP"
+
+class GasBuzzerState(Enum):
+    OFF = "OFF"
+    ON = "ON"
+
+class GasMode(Enum):
+    OFF = "OFF"
+    LOG = "LOG"
+    CTRL = "CTRL"
+
+class GasOption(Enum):
+    O2 = "O2"
+    CO2 = "CO2"
+
+class GasPowerState(Enum):
+    OFF = "OFF"
+    ON = "ON"
+
+class GasSensorState(Enum):
+    OFF = "OFF"
+    INIT = "INIT"
+    READY = "READY"
+
+class GasErrorMessage(Enum):
+    TIMEOUT = 1240
+    SENSOR_HEATS_UP = 1241
+    SENSOR_SIGNAL_CORRUPT = 1242
+    GAS_CONFIG_ERROR = 1243
+
+class GasMessage(Enum):
+    CO2_CONCENTRATION = 250
+    O2_CONCENTRATION = 251
+    SENSOR_READY = 252
+
+class SymbioErrors(Enum):
+    TEMPERATURE_SENSOR_READING = 1104
+    INJECTOR_CARRIER_INSERTED = 1213
+    GAS_TIMEOUT = 1240
+    GAS_SIGNAL_CORRUPT = 1242
+
+class SymbioMessages(Enum):
+    TEMPERATURE_CHAMBER = 100
+    TEMPERATURE_AMBIENT = 101
+    EXCITATION_FILTERSLIDE_INSERTED = 150
+    EMISSION_FILTERSLIDE_INSERTED = 151
+    DUAL_EMISSION_FILTERSLIDE_INSERTED = 152
+    POWER_ON = 200
+    POWER_OFF = 201
+    START_STOP = 202
+    FILTERSLIDES_OUT = 203
+    PLATE_OUT_IN = 204
+    GAS_CO2_CONCENTRATION = 250
+    GAS_O2_CONCENTRATION = 251
+    GAS_SENSOR_READY = 252
+    INJECTOR_A_PRIME = 300
+    INJECTOR_A_RINSE = 301
+    INJECTOR_B_PRIME = 302
+    INJECTOR_B_RINSE = 303
+    INJECTOR_C_PRIME = 304
+    INJECTOR_C_RINSE = 305
+    INJECTOR_ACTION_FINISHED = 306
+    STACKER_INPUT_COLUMN_PRESENT = 401
+    STACKER_INPUT_COLUMN_NOT_PRESENT = 402
+    STACKER_OUTPUT_COLUMN_PRESENT = 403
+    STACKER_OUTPUT_COLUMN_NOT_PRESENT = 404
+
+class Mode(Enum):
+    BOOT = "B"
+    SERVICE = "S"
+    OPERATION = "O"
+
+class ModuleName(Enum):
+    BOOT = "BOOT"
+    MAIN = "MAIN"
+    LUM = "LUM"
+    MEX = "MEX"
+    MEM = "MEM"
+    FIM = "FIM"
+
+class ModuleType(Enum):
+    BOOTLOADER = "BOOT"
+    MAIN = "MAIN"
+    LUMINESCENCE = "LUM"
+    MONO_EXCITATION = "MEX"
+    MONO_EMISSION = "MEM"
+    FLUORESCENCE_IMAGING = "FIM"
+    ABSORBANCE = "ABS"
+    FLUORESCENCE = "FLUOR"
+    PLATE_TRANSPORT = "MTP"
+    STACKER = "STACKER"
+    INJECTOR = "INJ"
+    POWER_DISTRIBUTION_BOARD = "PODI"
+    COOLING = "COOLING"
+    BARCODE = "BARCODE"
+    CELL = "CELL"
+    GAS_CONTROL = "GCM"
+    LIFTER = "LIFT"
+    PICK_AND_PLACE = "PAP"
+    TWO_STEP_MOTORS = "2SM"
+    USB_CAMERA = "USBCAM"
+    USB_CAMERA2 = "USBCAM2"
+
+class CameraMode(Enum):
+    PREPARE = "PREPARE"
+    TRIGGER = "TRIGGER"
+    VIDEO = "VIDEO"
+
+class GasMessageType(Enum):
+    CONCENTRATION = "CONCENTRATION"
+    SENSOR_READY = "SENSOR_READY"
+    GAS_ERROR = "GAS_ERROR"
+
+class HardwareButtons(Enum):
+    START_STOP = "START_STOP"
+    FILTER_OUT = "FILTER_OUT"
+    PLATE = "PLATE"
+    INJECTOR = "INJECTOR"
+    POWER = "POWER"
+    ALL = "ALL"
+
+class InjectorCarrierState(Enum):
+    OPERATING_POSITION = "OPERATINGPOSITION"
+    PRIME_POSITION = "PRIMEPOSITION"
+
+class LedColor(Enum):
+    RED = "RED"
+    GREEN = "GREEN"
+    BLUE = "BLUE"
+    YELLOW = "YELLOW"
+    MAGENTA = "MAGENTA"
+    CYAN = "CYAN"
+    WHITE = "WHITE"
+    BLACK = "BLACK"
+
+class LedState(Enum):
+    OFF = "OFF"
+    STANDBY = "STANDBY"
+    IDLE = "IDLE"
+    IDLE_ACQUIRED = "IDLE_ACQUIRED"
+    RUN = "RUN"
+    ERROR = "ERROR"
+    USER_INTERACTION = "USER_INTERACTION"
+    PAUSE = "PAUSE"
+    SHUT_DOWN = "SHUT_DOWN"
+    ACTION_IMPOSSIBLE = "ACTION_IMPOSSIBLE"
+
+class MotorDirection(Enum):
+    LEFT = "LEFT"
+    RIGHT = "RIGHT"
+
+class MoveableCarrier(Enum):
+    EXCITATION_FILTER = "EXCITATION_FILTER"
+    EMISSION_FILTER = "EMISSION_FILTER"
+    DUAL_PMT_EMISSION_FILTER = "DUAL_PMT_EMISSION_FILTER"
+    MIRROR = "MIRROR"
+    DUAL_PMT_MIRROR = "DUAL_PMT_MIRROR"
+    ALL = "ALL"
+
+class MoveableCarrierPosition(Enum):
+    IN = "IN"
+    OUT = "OUT"
+
+class MtpMotor(Enum):
+    X = "X"
+    Y = "Y"
+    Z = "Z"
+
+class PolarisationEmissionMode(Enum):
+    AUTOMATIC = "AUTOMATIC"
+    MANUAL = "MANUAL"
+
+class PolarisationMode(Enum):
+    PARALLEL = "PARALLEL"
+    PERPENDICULAR = "PERPENDICULAR"
+
+class Retractable(Enum):
+    FILTER_SLIDE = "FILTER_SLIDE"
+
+class State(Enum):
+    ON = "ON"
+    OFF = "OFF"
+
+class TargetMode(Enum):
+    AMBIENT = "AMBIENT"
+    FIX = "FIX"
+
+class SoftwareCounter(Enum):
+    PLATE_0001_WELL = "PLATE_0001_WELL"
+    ABSORBANCE = "ABSORBANCE"
+    ABSORBANCE_SCAN = "ABSORBANCE_SCAN"
+    FLUORESCENCE_INTENSITY = "FLUORESCENCE_INTENSITY"
+    FLUORESCENCE_INTENSITY_SCAN = "FLUORESCENCE_INTENSITY_SCAN"
+    FLUORESCENCE_POLARIZATION = "FLUORESCENCE_POLARIZATION"
+    LUMINESCENCE = "LUMINESCENCE"
+    LUMINESCENCE_SCAN = "LUMINESCENCE_SCAN"
+    ALPHA = "ALPHA"
+    CELL = "CELL"
+    FLASH_DROPOUT = "FLASH_DROPOUT"
+    ON_BOARD_START = "ON_BOARD_START"
+    ON_BOARD_CONTINUE = "ON_BOARD_CONTINUE"
+    ON_BOARD_STOP = "ON_BOARD_STOP"
+
+class FirmwareCounter(Enum):
+    LID_LIFTED = "LID_LIFTED"
+    X_MOVEMENT = "X_MOVEMENT"
+    Y_MOVEMENT = "Y_MOVEMENT"
+    Z_MOVEMENT = "Z_MOVEMENT"
+    SHAKING = "SHAKING"
+    HEATING_STANDARD = "HEATING_STANDARD"
+    HEATING_ENHANCED = "HEATING_ENHANCED"
+    INSTRUMENT_ON_TIME = "INSTRUMENT_ON_TIME"
+    FLASHES = "FLASHES"
+    LASER_ON_TIME = "LASER_ON_TIME"
+    VALVE_SWITCHES_O2 = "VALVE_SWITCHES_O2"
+    VALVE_SWITCHES_CO2 = "VALVE_SWITCHES_CO2"
+    PUMPED_VOLUME_INJECTOR_A = "PUMPED_VOLUME_INJECTOR_A"
+    PUMPED_VOLUME_INJECTOR_B = "PUMPED_VOLUME_INJECTOR_B"
+    PUMPED_VOLUME_INJECTOR_C = "PUMPED_VOLUME_INJECTOR_C"
+    ON_TIME = "ON_TIME"
+    VALVE_SWITCHES = "VALVE_SWITCHES"
+    READING = "READING"
+
+class AreaOfInterestProperty(Enum):
+    X = "X"
+    Y = "Y"
+    WIDTH = "WIDTH"
+    HEIGHT = "HEIGHT"
+
+class CameraExecutionDetails(Enum):
+    SUCCESSFUL = "SUCCESSFUL"
+    FRAME_DROP = "FRAME_DROP"
+
+class InstrumentMode(Enum):
+    OPERATION = "OPERATION"
+    SERVICE = "SERVICE"
+
+class Unit(Enum):
+    NONE = "NONE"
+    S = "S"
+    NS = "NS"
+    US_MICRO = "µS"
+    US = "US"
+    UM = "UM"
+    M = "M"
+    PERCENT = "PERCENT"
+    STEP = "STEP"
+    MS = "MS"
+    FPS = "FPS"
+    MHZ = "MHZ"
+    HZ10 = "HZ10"
+    ANG = "ANG"
+    HZ = "HZ"
+    C100 = "C100"
+    UL_MICRO = "µL"
+    UL = "UL"
+    UL_PER_S = "UL_PER_S"
+    DHZ = "DHZ"
+    PPM = "PPM"
+    H = "H"
+    ML = "ML"
+    KHZ = "KHZ"
+
+# Limits Enums - Using FirmwareNames as values where available
+class AbsorbanceLimit(Enum):
+    REFERENCE_DATA_RANGE_LOW = "REF_DATARANGE_LOW"
+    SIGNAL_DATA_RANGE_LOW = "SIG_DATARANGE_LOW"
+    REFERENCE_DATA_RANGE_HIGH = "REF_DATARANGE_HIGH"
+    SIGNAL_DATA_RANGE_HIGH = "SIG_DATARANGE_HIGH"
+    OD_MAX = "OD_MAX"
+    FLASH_DROPOUT = "FLASH_DROPOUT"
+
+class CameraLimit(Enum):
+    ROI_START_X = "ROI_START_X"
+    ROI_START_Y = "ROI_START_Y"
+    LASER_OFFSET = "LASER_OFFSET"
+    INT_TIME_THIN = "INT_TIME_THIN"
+    INT_TIME_THICK = "INT_TIME_THICK"
+
+class FluorescenceLimit(Enum):
+    REFERENCE_FILTER_RANGE_LOW = "REF_FIL_RANGE_LOW"
+    REFERENCE_FILTER_RANGE_HIGH = "REF_FIL_RANGE_HIGH"
+    REFERENCE_MONO_RANGE_LOW = "REF_MONO_RANGE_LOW"
+    REFERENCE_MONO_RANGE_HIGH = "REF_MONO_RANGE_HIGH"
+    SIGNAL_RANGE_LOW = "SIGNAL_RANGE_LOW"
+    SIGNAL_RANGE_HIGH = "SIGNAL_RANGE_HIGH"
+    FLASH_DROPOUT = "FLASH_DROPOUT"
+    EX_WL_FILTER_TOP_MIN = "EX_WL_FIL_TOP_MIN"
+    EX_WL_FILTER_TOP_MAX = "EX_WL_FIL_TOP_MAX"
+    EM_WL_FILTER_TOP_MIN = "EM_WL_FIL_TOP_MIN"
+    EM_WL_FILTER_TOP_MAX = "EM_WL_FIL_TOP_MAX"
+    EX_WL_FILTER_BOTTOM_MIN = "EX_WL_FIL_BOTTOM_MIN"
+    EX_WL_FILTER_BOTTOM_MAX = "EX_WL_FIL_BOTTOM_MAX"
+    EM_WL_FILTER_BOTTOM_MIN = "EM_WL_FIL_BOTTOM_MIN"
+    EM_WL_FILTER_BOTTOM_MAX = "EM_WL_FIL_BOTTOM_MAX"
+    EX_WL_FP_MIN = "EX_WL_FP_MIN"
+    EX_WL_FP_MAX = "EX_WL_FP_MAX"
+    EM_WL_FP_MIN = "EM_WL_FP_MIN"
+    EM_WL_FP_MAX = "EM_WL_FP_MAX"
+    EX_WL_MONO_MIN = "EX_WL_MONO_MIN"
+    EX_WL_MONO_MAX = "EX_WL_MONO_MAX"
+    EM_WL_MONO_MIN = "EM_WL_MONO_MIN"
+    EM_WL_MONO_MAX = "EM_WL_MONO_MAX"
+    MAX_CHAR_FILTER_DESCRIPTION = "MAX_CHAR_FILTERDESCR"
+
+class LuminescenceLimit(Enum):
+    DARK_TIME_MIN = "DARKTIMEMIN"
+    LID_CHECK_MAX = "LIDCHECKMAX"
+    DARK_MAX = "DARKMAX"
+    DARK_TIME_MAX = "DARKTIMEMAX"
+    ALPHA_TEMP_SLOPE = "TEMP_SLOPE"
+    ALPHA_TEMP_INTERCEPT = "TEMP_INTERCEPT"
+
+class PlateTransportLimit(Enum):
+    MIN_PLATE_HEIGHT = "MIN_PLATEHEIGHT"
+    MAX_PLATE_HEIGHT = "MAX_PLATEHEIGHT"
+    PLATE_REFERENCE_WIDTH = "PLATE_REF_WIDTH"
+    MAX_PLATE_FORMAT = "MAX_PLATEFORMAT"
+    DELTA_WELL_TEMP_LUM_X = "DELTAX_WELLTEMP_LUM"
+    DELTA_WELL_TEMP_LUM_Y = "DELTAY_WELLTEMP_LUM"
+
+class ConfigAxis(Enum):
+    X = "X"
+    Y = "Y"
+    Z = "Z"
+
+class TriggerMode(Enum):
+    SOFTWARE = "SOFTWARE"
+    EXTERNAL = "EXTERNAL"
+
+class FlippingMode(Enum):
+    STANDARD = "STANDARD"
+    HORIZONTAL = "HORIZONTAL"
+    VERTICAL = "VERTICAL"
+    BOTH = "BOTH"
+
+class BrightnessState(Enum):
+    ENABLED = "ENABLED"
+    DISABLED = "DISABLED"
+
+class TemperatureDevice(Enum):
+    PLATE = 'PLATE'
+
+class TemperatureState(Enum):
+    ON = "ON"
+    OFF = "OFF"
+
+class ChillerState(Enum):
+    ON = "ON"
+    OFF = "OFF"
+
+class MirrorCarrier(Enum):
+    MIRROR1 = "MIRROR1"
+
+class LaserPowerState(Enum):
+    ON = "ON"
+    OFF = "OFF"
+
+class LightingState(Enum):
+    ON = "ON"
+    OFF = "OFF"
+
+class LidLiftState(Enum):
+    ON = "ON"
+    OFF = "OFF"
+
+class RetractionState(Enum):
+    ENABLED = "ENABLED"
+    DISABLED = "DISABLED"
+
+class PlateColor(Enum):
+    BLACK = "BLACK"
+    WHITE = "WHITE"
+    TRANSPARENT = "TRANSPARENT"
+    NO = "NO"
+
+class ScanDirection(Enum):
+    UP = "UP"
+    DOWN = "DOWN"
+    ALTERNATE_UP = "ALTERNATE_UP"
+    ALTERNATE_DOWN = "ALTERNATE_DOWN"
+
+class ScanDarkState(Enum):
+    TRUE = "TRUE"
+    FALSE = "FALSE"
+
+class SimulationState(Enum):
+    ON = "ON"
+    OFF = "OFF"
