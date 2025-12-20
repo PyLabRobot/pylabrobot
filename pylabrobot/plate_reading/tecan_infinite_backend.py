@@ -400,9 +400,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self,
     plate: Plate,
     wells: List[Well],
-    excitation_wavelength: int,  # noqa: ARG002
-    emission_wavelength: int,  # noqa: ARG002
-    focal_height: float,  # noqa: ARG002
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float,
   ) -> List[Dict]:
     """Queue and execute a fluorescence scan."""
 
