@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import asyncio
 
 # Import the module under test
-from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import SparkReaderAsync, SparkDevice
+from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import SparkReaderAsync, SparkDevice, SparkEndpoint
 
 class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -73,7 +73,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
         mock_ep_out.write = MagicMock() # sync write
         
         self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
-        self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {"bulk_out": mock_ep_out}
+        self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {SparkEndpoint.BULK_OUT: mock_ep_out}
         
         # Mock calculate_checksum to return a predictable value
         with patch.object(self.reader, '_calculate_checksum', return_value=0x99):
@@ -146,7 +146,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
         mock_dev = MagicMock()
         mock_ep = MagicMock()
         self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
-        self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {"interrupt_in": mock_ep}
+        self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {SparkEndpoint.INTERRUPT_IN: mock_ep}
         
         with patch.object(self.reader, 'init_read') as mock_init_read, \
              patch.object(self.reader, 'get_response', new_callable=AsyncMock) as mock_get_resp:
@@ -171,7 +171,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
         mock_ep.bEndpointAddress = 0x81
         
         self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
-        self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {"interrupt_in": mock_ep}
+        self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {SparkEndpoint.INTERRUPT_IN: mock_ep}
         
         # Mock _usb_read
         with patch.object(self.reader, '_usb_read', new_callable=AsyncMock) as mock_read:

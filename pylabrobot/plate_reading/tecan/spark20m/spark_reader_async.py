@@ -63,16 +63,16 @@ class SparkReaderAsync:
                 cfg = d.get_active_configuration()
                 intf = cfg[(0, 0)]
 
-                ep_bulk_out = usb.util.find_descriptor(intf, bEndpointAddress=0x01)
-                ep_bulk_in = usb.util.find_descriptor(intf, bEndpointAddress=0x82)
-                ep_bulk_in1 = usb.util.find_descriptor(intf, bEndpointAddress=0x81)
-                ep_interrupt_in = usb.util.find_descriptor(intf, bEndpointAddress=0x83)
+                ep_bulk_out = usb.util.find_descriptor(intf, bEndpointAddress=SparkEndpoint.BULK_OUT.value)
+                ep_bulk_in = usb.util.find_descriptor(intf, bEndpointAddress=SparkEndpoint.BULK_IN.value)
+                ep_bulk_in1 = usb.util.find_descriptor(intf, bEndpointAddress=SparkEndpoint.BULK_IN1.value)
+                ep_interrupt_in = usb.util.find_descriptor(intf, bEndpointAddress=SparkEndpoint.INTERRUPT_IN.value)
                 self.devices[device_type] = d
                 self.endpoints[device_type] = {
-                    "bulk_out": ep_bulk_out,
-                    "bulk_in": ep_bulk_in,
-                    "bulk_in1": ep_bulk_in1,
-                    "interrupt_in": ep_interrupt_in
+                    SparkEndpoint.BULK_OUT: ep_bulk_out,
+                    SparkEndpoint.BULK_IN: ep_bulk_in,
+                    SparkEndpoint.BULK_IN1: ep_bulk_in1,
+                    SparkEndpoint.INTERRUPT_IN: ep_interrupt_in
                 }
                 d.set_configuration(0)
                 d.set_configuration(0)
@@ -112,7 +112,7 @@ class SparkReaderAsync:
             return False
 
         endpoints = self.endpoints[device_type]
-        ep_bulk_out = endpoints["bulk_out"]
+        ep_bulk_out = endpoints[SparkEndpoint.BULK_OUT]
 
         async with self.lock:
             logging.debug(f"Sending to {device_type.name}: {command_str}")
@@ -194,15 +194,15 @@ class SparkReaderAsync:
         self.msgs = []
 
     @contextlib.asynccontextmanager
-    async def reading(self, device_type=SparkDevice.PLATE_TRANSPORT, endpoint_type="interrupt_in", count=512, read_timeout=2000):
+    async def reading(self, device_type=SparkDevice.PLATE_TRANSPORT, endpoint=SparkEndpoint.INTERRUPT_IN, count=512, read_timeout=2000):
         if device_type not in self.devices:
             raise ValueError(f"Device type {device_type} not connected.")
 
-        endpoint = self.endpoints[device_type].get(endpoint_type)
-        if not endpoint:
-            raise ValueError(f"Endpoint type {endpoint_type} not found for {device_type.name}.")
+        ep = self.endpoints[device_type].get(endpoint)
+        if not ep:
+            raise ValueError(f"Endpoint {endpoint} not found for {device_type.name}.")
 
-        read_task = self.init_read(endpoint, count, read_timeout)
+        read_task = self.init_read(ep, count, read_timeout)
         await asyncio.sleep(0.01)  # Short delay to ensure the read task starts
 
         response_task = asyncio.create_task(self.get_response(read_task))
@@ -210,7 +210,7 @@ class SparkReaderAsync:
         try:
             yield response_task
         finally:
-            logging.debug(f"Context manager exiting, awaiting read task for {device_type.name} {endpoint_type}")
+            logging.debug(f"Context manager exiting, awaiting read task for {device_type.name} {endpoint.name}")
             if not response_task.done():
                 await response_task
 
@@ -220,25 +220,25 @@ class SparkReaderAsync:
             except Exception as e:
                 logging.debug(f"Response task exception: {e}")
 
-    async def start_background_read(self, device_type, endpoint_type="interrupt_in", read_timeout=100):
+    async def start_background_read(self, device_type, endpoint=SparkEndpoint.INTERRUPT_IN, read_timeout=100):
         if device_type not in self.devices:
             logging.error(f"Device type {device_type} not connected.")
             return None, None, None
 
-        endpoint = self.endpoints[device_type].get(endpoint_type)
-        if not endpoint:
-            logging.error(f"Endpoint type {endpoint_type} not found for {device_type.name}.")
+        ep = self.endpoints[device_type].get(endpoint)
+        if not ep:
+            logging.error(f"Endpoint {endpoint} not found for {device_type.name}.")
             return None, None, None
 
         stop_event = asyncio.Event()
         results = []
 
         async def background_reader():
-            logging.info(f"Starting background reader for {device_type.name} {endpoint_type} (0x{endpoint.bEndpointAddress:02x})")
+            logging.info(f"Starting background reader for {device_type.name} {endpoint.name} (0x{ep.bEndpointAddress:02x})")
             while not stop_event.is_set():
                 await asyncio.sleep(0.2) # Avoid tight loop
                 try:
-                    data = await self._usb_read(endpoint, read_timeout, 1024)
+                    data = await self._usb_read(ep, read_timeout, 1024)
                     if data:
                         results.append(bytes(data))
                         logging.debug(f"Background read {len(data)} bytes: {bytes(data).hex()}")
@@ -254,7 +254,7 @@ class SparkReaderAsync:
                 except Exception as e:
                     logging.error(f"Error in background reader: {e}", exc_info=True)
                     await asyncio.sleep(0.1)
-            logging.info(f"Stopping background reader for {device_type.name} {endpoint_type}")
+            logging.info(f"Stopping background reader for {device_type.name} {endpoint.name}")
 
         task = asyncio.create_task(background_reader())
         return task, stop_event, results

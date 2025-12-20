@@ -8,7 +8,7 @@ from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.utils import _get_min_max_row_col_tuples
 
 
-from .spark_reader_async import SparkReaderAsync, SparkDevice
+from .spark_reader_async import SparkReaderAsync, SparkDevice, SparkEndpoint
 from .spark_processor import AbsorbanceProcessor, FluorescenceProcessor
 
 from .controls.config_control import ConfigControl
@@ -168,7 +168,7 @@ class SparkBackend(PlateReaderBackend):
         await self.optics.set_excitation_filter(FilterType.BANDPASS, wavelength=wavelength * 10, bandwidth=bandwidth, label=1)
 
         # Start Background Read
-        bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.ABSORPTION, "bulk_in")
+        bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.ABSORPTION, SparkEndpoint.BULK_IN)
 
         try:
             # Execute Measurement Sequence
@@ -237,7 +237,7 @@ class SparkBackend(PlateReaderBackend):
         await self.measure.set_number_of_reads(num_reads)
 
         # Start Background Read
-        bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.FLUORESCENCE, "bulk_in1")
+        bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.FLUORESCENCE, SparkEndpoint.BULK_IN1)
 
         try:
             # Execute Measurement Sequence
