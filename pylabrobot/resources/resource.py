@@ -517,6 +517,12 @@ class Resource:
     new_resource.location = location
     return new_resource
 
+  def named(self, name: str) -> Self:
+    """Return a copy of this resource with the given name."""
+    new_resource = self.copy()
+    new_resource.name = name
+    return new_resource
+
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
     """Get the center of this resource.
 
