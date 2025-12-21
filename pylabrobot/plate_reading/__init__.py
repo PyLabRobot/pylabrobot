@@ -8,11 +8,10 @@ from .agilent_biotek_cytation_backend import (
 from .agilent_biotek_synergyh1_backend import SynergyH1Backend
 from .chatterbox import PlateReaderChatterboxBackend
 from .clario_star_backend import CLARIOstarBackend
-from .molecular_devices_spectramax_384_plus_backend import MolecularDevicesSpectraMax384PlusBackend
-from .molecular_devices_spectramax_m5_backend import MolecularDevicesSpectraMaxM5Backend
-from .tecan.spark20m.spark_backend import SparkBackend
 from .image_reader import ImageReader
 from .imager import Imager
+from .molecular_devices_spectramax_384_plus_backend import MolecularDevicesSpectraMax384PlusBackend
+from .molecular_devices_spectramax_m5_backend import MolecularDevicesSpectraMaxM5Backend
 from .plate_reader import PlateReader
 from .standard import (
   Exposure,
@@ -22,3 +21,4 @@ from .standard import (
   ImagingResult,
   Objective,
 )
+from .tecan.spark20m.spark_backend import SparkBackend
