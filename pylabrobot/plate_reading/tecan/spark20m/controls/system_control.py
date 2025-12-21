@@ -12,10 +12,6 @@ class SystemControl(baseControl):
     """Terminates the connection to the device."""
     return await self.send_command("TERMINATE")
 
-  async def send_command(self, command):
-    """Sends a raw command string to the device."""
-    return await self.send_command(command)
-
   async def get_version(
     self, hw_module: Optional[ModuleType] = None, number=None, subcomponent=None
   ):
