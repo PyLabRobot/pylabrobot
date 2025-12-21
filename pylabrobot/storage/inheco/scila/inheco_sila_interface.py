@@ -4,6 +4,7 @@ import asyncio
 import http.server
 import logging
 import random
+import socket
 import socketserver
 import urllib.parse
 import urllib.request
@@ -43,6 +44,19 @@ SOAP_RESPONSE_StatusEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlso
 </s:Envelope>"""
 
 
+def _get_local_ip(machine_ip: str) -> str:
+  s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  try:
+    # Doesn't actually connect, just determines the route
+    s.connect((machine_ip, 1))
+    local_ip = s.getsockname()[0]
+    if local_ip is None or local_ip.startswith("127."):
+      raise RuntimeError("Could not determine local IP address.")
+  finally:
+    s.close()
+  return local_ip
+
+
 class InhecoSiLAInterface:
   @dataclass(frozen=True)
   class _HTTPRequest:
@@ -60,12 +74,12 @@ class InhecoSiLAInterface:
 
   def __init__(
     self,
-    client_ip: str,
-    scila_ip: str,
+    machine_ip: str,
+    client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
   ) -> None:
-    self._client_ip = client_ip
-    self._machine_ip = scila_ip
+    self._client_ip = client_ip or _get_local_ip(machine_ip)
+    self._machine_ip = machine_ip
     self._logger = logger or logging.getLogger(__name__)
 
     # single "in-flight token"

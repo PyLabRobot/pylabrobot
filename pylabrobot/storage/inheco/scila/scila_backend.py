@@ -31,8 +31,8 @@ def _get_params(root: ET.Element, names: list[str]) -> dict[str, object]:
 
 
 class SCILABackend:
-  def __init__(self, client_ip: str, scila_ip: str) -> None:
-    self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, scila_ip=scila_ip)
+  def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
+    self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
   async def setup(self) -> None:
     await self._sila_interface.setup()
