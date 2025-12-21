@@ -110,6 +110,8 @@ def _consume_leading_ascii_frame(buffer: bytearray) -> Tuple[bool, Optional[str]
   end = buffer.find(b"\x03", 1)
   if end == -1:
     return False, None
+  if len(buffer) < end + 6:
+    return False, None
   text = buffer[1:end].decode("ascii", "ignore")
   del buffer[: end + 2]
   if buffer and buffer[0] == 0x0D:
