@@ -5881,25 +5881,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
   async def request_z_pos_channel_n(self, pipetting_channel_index: int) -> float:
-    """Request Z-Position of Pipetting channel n
+    warnings.warn(
+      "Deprecated. Use either request_tip_bottom_z_position or request_probe_z_position. "
+      "Returning request_tip_bottom_z_position for now."
+    )
+    return await self.request_tip_bottom_z_position(channel_idx=pipetting_channel_index)
+
+  async def request_tip_bottom_z_position(self, channel_idx: int) -> float:
+    """Request Z-Position of the tip bottom of the tip mounted at on channel `channel_idx`.
+
+    Requires a tip to be mounted and will raise if no tip is mounted.
+
+    To get the z-position of the probe (irrespective of tip), use `request_probe_z_position`.
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 0 and 15.
-        0 is the backmost channel.
-
-    Returns:
-      Z-Position of channel n [0.1mm]. Taking into account tip presence and length.
+      channel_idx: Index of pipetting channel. Must be between 0 and 15.  0 is the backmost channel.
     """
 
-    assert 0 <= pipetting_channel_index <= 15, "pipetting_channel_index must be between 0 and 15"
-    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
-    pipetting_channel_index = pipetting_channel_index + 1
+    if not (await self.request_tip_presence())[channel_idx]:
+      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
+
+    if not 0 <= channel_idx <= self.num_channels - 1:
+      raise ValueError("channel_idx must be in [0, num_channels - 1]")
 
     z_pos_query = await self.send_command(
       module="C0",
       command="RD",
       fmt="rd####",
-      pn=f"{pipetting_channel_index:02}",
+      # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+      pn=f"{channel_idx + 1:02}",
     )
     # Extract z-coordinate and convert to mm
     return float(z_pos_query["rd"] / 10)
@@ -5922,19 +5932,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     This value is maintained internally by the STAR/STARlet firmware and is
     updated **whenever a liquid level is detected**, regardless of whether the
     detection method used was:
-      • capacitive LLD (cLLD == 'STAR.LLDMode(1)'), or
-      • pressure-based LLD (pLLD == 'STAR.LLDMode(2)').
+    - capacitive LLD (cLLD == 'STAR.LLDMode(1)'), or
+    - pressure-based LLD (pLLD == 'STAR.LLDMode(2)').
 
     Heights are returned in millimeters, one value per channel, ordered by
     channel index.
 
     Returns:
-        List[float]: Absolute liquid heights (mm) from the last LLD event for
-        each channel.
+      Absolute liquid heights (mm) from the last LLD event for each channel.
 
     Raises:
-        AssertionError: If the instrument response does not contain a valid
-        ``"lh"`` list.
+      AssertionError: If the instrument response does not contain a valid ``"lh"`` list.
     """
     resp = await self.send_command(module="C0", command="RL", fmt="lh#### (n)")
 
@@ -8673,10 +8681,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     read_timeout=240.0,  # seconds
   ) -> float:
     """
-    Probe the x-position of a conductive material using a channel’s capacitive liquid
+    Probe the x-position of a conductive material using a channel's capacitive liquid
     level detection (cLLD) via a lateral X scan.
 
-    Starting from the channel’s current X position, the channel is moved laterally in
+    Starting from the channel's current X position, the channel is moved laterally in
     the specified direction using the XL command until cLLD triggers or the configured
     end position is reached. After the scan, the channel is retracted inward by
     `post_detection_dist`.
@@ -8685,8 +8693,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     corrected by half the tip bottom diameter assuming cylindrical tip contact.
 
     Notes:
-    - The XL command does not report whether cLLD triggered; reaching the end position
-      is indistinguishable from a successful detection.
+    - The XL command does not report whether cLLD triggered; reaching the end position is indistinguishable from a successful detection.
     - This function assumes cLLD triggers before `end_pos_search`.
 
     Preconditions:
@@ -8698,7 +8705,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     - Leaves the channel retracted from the detected object.
 
     Returns:
-      float: Estimated x-position of the detected material boundary in millimeters.
+      Estimated x-position of the detected material boundary in millimeters.
     """
 
     assert channel_idx in range(
@@ -9083,22 +9090,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return result_probed_z_height
 
-  async def request_tip_len_on_channel(
-    self,
-    channel_idx: int,  # 0-based indexing of channels!
-  ) -> float:
-    """
-    Measures the length of the tip attached to the specified pipetting channel.
-    Checks if a tip is present on the given channel. If present, moves all channels
-    to THE safe Z position, 334.3 mm, measures the tip bottom Z-coordinate, and calculates
-    the total tip length. Supports tips of lengths 50.4 mm, 59.9 mm, and 95.1 mm.
-    Raises an error if the tip length is unsupported or if no tip is present.
+  async def request_probe_z_position(self, channel_idx: int) -> float:
+    """Request the z-position of the channel probe (EXCLUDING the tip)"""
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx), command="RZ", fmt="rz######"
+    )
+    increments = resp["rz"]
+    return self.z_drive_increment_to_mm(increments)
+
+  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
+    """Measures the length of the tip attached to the specified pipetting channel.
+    Checks if a tip is present on the given channel. Raises an error if no tip is present.
+
     Parameters:
-      channel_idx: Index of the pipetting channel (0-based).
+      channel_idx: Index of the pipetting channel (0-indexed).
+
     Returns:
       The measured tip length in millimeters.
+
     Raises:
-      ValueError: If no tip is present on the channel or if the tip length is unsupported.
+      RuntimeError: If no tip is present on the channel.
     """
 
     # Check there is a tip on the channel
@@ -9106,30 +9117,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not all_channel_occupancy[channel_idx]:
       raise ValueError(f"No tip present on channel {channel_idx}")
 
-    # Level all channels
-    await self.move_all_channels_in_z_safety()
-    known_top_position_channel_head = 334.3  # mm
+    # # Level all channels
+    # await self.move_all_channels_in_z_safety()
     fitting_depth_of_all_standard_channel_tips = 8  # mm
-    unknown_offset_for_all_tips = 0.4  # mm
+    probe_position = await self.request_probe_z_position(channel_idx=channel_idx)
 
     # Request z-coordinate of channel+tip bottom
-    tip_bottom_z_coordinate = await self.request_z_pos_channel_n(
-      pipetting_channel_index=channel_idx
-    )
+    tip_bottom_z_coordinate = await self.request_tip_bottom_z_position(channel_idx=channel_idx)
 
     total_tip_len = round(
-      known_top_position_channel_head
-      - (
-        tip_bottom_z_coordinate
-        - fitting_depth_of_all_standard_channel_tips
-        - unknown_offset_for_all_tips
-      ),
+      probe_position - (tip_bottom_z_coordinate - fitting_depth_of_all_standard_channel_tips),
       1,
     )
 
-    if total_tip_len in [50.4, 59.9, 95.1]:  # 50ul, 300ul, 1000ul
-      return total_tip_len
-    raise ValueError(f"Tip of length {total_tip_len} not yet supported")
+    return total_tip_len
 
   async def ztouch_probe_z_height_using_channel(
     self,
