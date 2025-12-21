@@ -256,9 +256,12 @@ class Resource:
         "This operation is not currently supported."
       )
 
-    return self.get_absolute_location(x=x, y=y, z=z) - other.get_absolute_location(
-      x="l", y="f", z="b"
+    other_absolute_lfb = (
+      other.get_absolute_location(x="l", y="f", z="b")
+      if other.location is not None
+      else Coordinate(0, 0, 0)
     )
+    return self.get_absolute_location(x=x, y=y, z=z) - other_absolute_lfb
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
@@ -512,6 +515,12 @@ class Resource:
     """Return a copy of this resource at the given location."""
     new_resource = self.copy()
     new_resource.location = location
+    return new_resource
+
+  def named(self, name: str) -> Self:
+    """Return a copy of this resource with the given name."""
+    new_resource = self.copy()
+    new_resource.name = name
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
