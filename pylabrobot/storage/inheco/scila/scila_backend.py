@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
 
 
@@ -30,13 +31,16 @@ def _get_params(root: ET.Element, names: list[str]) -> dict[str, object]:
   return {n: _get_param(root, n) for n in names}
 
 
-class SCILABackend:
+class SCILABackend(MachineBackend):
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
   async def setup(self) -> None:
     await self._sila_interface.setup()
     await self._reset_and_initialize()
+
+  async def stop(self):
+    pass
 
   async def _reset_and_initialize(self) -> None:
     event_uri = f"http://{self._sila_interface._client_ip}:{self._sila_interface.bound_port}/"
@@ -49,7 +53,7 @@ class SCILABackend:
   async def get_status(self) -> str:
     # "standBy", "inError", "startup"
     resp = await self._sila_interface.send_command("GetStatus")
-    return resp.get("GetStatusResponse", {}).get("state", "Unknown")
+    return resp.get("GetStatusResponse", {}).get("state", "Unknown")  # type: ignore
 
   async def get_liquid_level(self) -> str:
     root = await self._sila_interface.send_command("GetLiquidLevel")
@@ -87,7 +91,7 @@ class SCILABackend:
     return _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])  # type: ignore
 
   async def get_drawer_position(self, drawer_id: int) -> DrawerPosition:
-    if not drawer_id in {1, 2, 3, 4}:
+    if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     positions = await self.get_drawer_positions()
     return positions[f"Drawer{drawer_id}"]

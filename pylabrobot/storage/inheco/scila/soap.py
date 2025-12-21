@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 import re as _re
 import xml.etree.ElementTree as ET
-from typing import Any, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 SOAP_ENV = "http://schemas.xmlsoap.org/soap/envelope/"
 XSI = "http://www.w3.org/2001/XMLSchema-instance"
@@ -78,7 +78,10 @@ def _format_duration_iso8601(td: _dt.timedelta) -> str:
   return out
 
 
-def _parse_scalar(text: Optional[str]) -> Any:
+Scalar = Union[str, int, float, bool, _dt.timedelta, _dt.datetime]
+
+
+def _parse_scalar(text: Optional[str]) -> Scalar:
   if text is None:
     return ""
   s = text.strip()
@@ -149,25 +152,28 @@ def _is_xsi_nil(el: ET.Element) -> bool:
 # --------- generic XML -> Python structure ---------
 
 
-def _xml_to_obj(el: ET.Element) -> dict[str, Any]:
+Object = Union[Dict[str, Union["Object", List["Object"]]], Scalar]
+
+
+def _xml_to_obj(el: ET.Element) -> Object:
   if _is_xsi_nil(el):
-    return None
+    return {}
 
   children = list(el)
   if not children:
     return _parse_scalar(el.text)
 
   # group by localname
-  grouped: dict[str, list[ET.Element]] = {}
+  grouped: Dict[str, list[ET.Element]] = {}
   for ch in children:
     grouped.setdefault(_localname(ch.tag), []).append(ch)
 
-  out: dict[str, Any] = {}
+  out: Object = {}
   for name, items in grouped.items():
     if len(items) == 1:
-      out[name] = _xml_to_obj(items[0])
+      out[name] = _xml_to_obj(items[0])  # type: ignore
     else:
-      out[name] = [_xml_to_obj(i) for i in items]
+      out[name] = [_xml_to_obj(i) for i in items]  # type: ignore
   return out
 
 

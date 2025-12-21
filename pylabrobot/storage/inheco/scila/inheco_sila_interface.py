@@ -49,7 +49,7 @@ def _get_local_ip(machine_ip: str) -> str:
   try:
     # Doesn't actually connect, just determines the route
     s.connect((machine_ip, 1))
-    local_ip = s.getsockname()[0]
+    local_ip: str = s.getsockname()[0]  # type: ignore
     if local_ip is None or local_ip.startswith("127."):
       raise RuntimeError("Could not determine local IP address.")
   finally:
@@ -266,14 +266,17 @@ class InhecoSiLAInterface:
 
     async with self._making_request:
       try:
+
         def _do_request() -> bytes:
           with urllib.request.urlopen(req) as resp:
-            return resp.read()
+            return resp.read()  # type: ignore
 
         body = await asyncio.to_thread(_do_request)
-        return_code, message = self._get_return_code_and_message(command, soap_decode(body))
+        return_code, message = self._get_return_code_and_message(
+          command, soap_decode(body.decode("utf-8"))
+        )
         if return_code == 1:  # success
-          return soap_decode(body)
+          return soap_decode(body.decode("utf-8"))
         elif return_code == 2:  # concurrent command
           fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
           self._pending = InhecoSiLAInterface._SiLACommand(
