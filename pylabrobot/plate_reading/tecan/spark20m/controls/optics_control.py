@@ -668,8 +668,8 @@ class OpticsControl(baseControl):
     command += f" POSITION={position} EMISSION_END={em_end}{self._create_mirror_settings_target()}"
     return await self.send_command(command)
 
-  async def get_defineable_mirror_positions(self, carrier: Optional[MirrorCarrier] = None):
-    """Gets the defineable mirror positions."""
+  async def get_definable_mirror_positions(self, carrier: Optional[MirrorCarrier] = None):
+    """Gets the definable mirror positions."""
     command = "#DEFINE MIRROR"
     if carrier:
       command += f" CARRIER={carrier.value}"
