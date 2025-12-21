@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Dict, List, Optional, Union, Iterable, Tuple
 
 from pylabrobot.resources.plate import Plate
@@ -175,6 +176,7 @@ class SparkBackend(PlateReaderBackend):
             await self.measure.prepare_instrument(measure_reference=True)
 
             await self.scan_plate_range(plate, wells)
+            measurement_time = time.time()
 
         finally:
             stop_event.set()
@@ -190,7 +192,7 @@ class SparkBackend(PlateReaderBackend):
         # Construct the response
         return [{
             "wavelength": wavelength,
-            "time": 0.0,
+            "time": measurement_time,
             "temperature": avg_temp if avg_temp is not None else 0.0,
             "data": data_matrix
         }]
@@ -243,6 +245,7 @@ class SparkBackend(PlateReaderBackend):
             # Execute Measurement Sequence
             await self.measure.prepare_instrument(measure_reference=True)
             await self.scan_plate_range(plate, wells, focal_height)
+            measurement_time = time.time()
 
 
         finally:
@@ -259,7 +262,7 @@ class SparkBackend(PlateReaderBackend):
         return [{
             "ex_wavelength": excitation_wavelength,
             "em_wavelength": emission_wavelength,
-            "time": 0.0,
+            "time": measurement_time,
             "temperature": avg_temp if avg_temp is not None else 0.0,
             "data": data_matrix
         }]
