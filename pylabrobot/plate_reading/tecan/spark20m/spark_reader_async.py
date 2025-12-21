@@ -79,6 +79,9 @@ class SparkReaderAsync:
           SparkEndpoint.BULK_IN1: ep_bulk_in1,
           SparkEndpoint.INTERRUPT_IN: ep_interrupt_in,
         }
+        # Note: calling set_configuration(0) twice before switching to configuration 1
+        # is intentional. Some Tecan Spark devices require a double reset to config 0
+        # to reliably accept configuration 1 after startup.
         d.set_configuration(0)
         d.set_configuration(0)
         d.set_configuration(1)
