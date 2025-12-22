@@ -394,6 +394,10 @@ class Resource:
       msg = " ".join(msgs)
       raise ValueError(msg)
 
+    # Prevent cycles (dropping an ancestor into its own subtree)
+    if self.is_in_subtree_of(resource):
+      raise ValueError(f"Cannot drop '{resource.name}' onto '{self.name}': would create a cycle.")
+
   def get_root(self) -> Resource:
     """Get the root of the resource tree."""
     if self.parent is None:
@@ -855,13 +859,8 @@ class Resource:
     # Tree-wide invariants enforced at the root (e.g., global naming constraints).
     self.get_root()._check_naming_conflicts(resource=resource)
 
-    # Extra drop-specific safety: prevent cycles
-    if self.is_in_subtree_of(resource):
-      raise ValueError(f"Cannot drop '{resource.name}' onto '{self.name}': would create a cycle.")
-
     # Subclasses can add stricter “drop rules” here.
     # Examples:
-    # - Only allow certain resource categories/types as children
     # - Enforce placement/geometry constraints (must fit, no overlaps, valid coordinates)
     # - Enforce state/permission rules (locked, read-only, etc.)
     # Base `Resource` does not impose any of those extra rules beyond the generic
