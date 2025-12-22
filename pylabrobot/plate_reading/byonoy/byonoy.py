@@ -2,10 +2,10 @@ from typing import Optional, Tuple
 
 from pylabrobot.plate_reading.byonoy.byonoy_backend import ByonoyAbsorbance96AutomateBackend
 from pylabrobot.plate_reading.plate_reader import PlateReader
-from pylabrobot.resources import Coordinate, PlateHolder, Resource, ResourceHolder, Plate
-
+from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, ResourceHolder
 
 # NEW RESOURCE MODELLING SYSTEM FOR BYONOY A96A
+
 
 def byonoy_sbs_adapter(name: str) -> ResourceHolder:
   """Create a Byonoy SBS adapter `ResourceHolder`.
@@ -30,11 +30,11 @@ def byonoy_sbs_adapter(name: str) -> ResourceHolder:
     ),
   )
 
+
 def byonoy_a96a_illumination_unit(
   name: str,
 ) -> Resource:
-  """
-  """
+  """ """
   return Resource(
     name=name,
     size_x=155.26,
@@ -63,9 +63,6 @@ def byonoy_a96a_detection_unit(
   Returns:
     A configured `ResourceHolder` instance representing the detection unit.
   """
-
-
-
 
   return ResourceHolder(
     name=name,
@@ -99,80 +96,75 @@ def byonoy_a96a_parking_unit(name: str) -> ResourceHolder:
   )
 
 
-class ByonoyA96ABaseUnit(ResourceHolder):
+class ByonoyA96ABaseUnit(Resource):
   def __init__(self, name, rotation=None, category=None, model=None, barcode=None):
     super().__init__(
       name=name,
       size_x=155.26,
       size_y=95.48,
       size_z=18.5,
-      child_location=Coordinate( # Dafault location for plate holder
-        x=22.5,
-        y=5.0,
-        z=16.0,
-      ),
+      # child_location=Coordinate( # Dafault location for plate holder
+      #   x=22.5,
+      #   y=5.0,
+      #   z=16.0,
+      # ),
+      # pedestal_size_z=0,
     )
 
-    child_location_map_per_model = { # Can be extended for future top units
-      "Byonoy A96A Illumination Unit": Coordinate(x=0.0, y=0.0, z=14.1),
-    }
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+  child_location_map_per_model = {  # Can be extended for future top units
+    "Byonoy A96A Illumination Unit": Coordinate(x=0.0, y=0.0, z=14.1),
+  }
+  plate_location = Coordinate(
+    x=22.5,
+    y=5.0,
+    z=16.0,
+  )
 
-
+  plate_accessible: bool = True
 
   def assign_child_resource(
-    self, resource: Resource, location: Optional[Coordinate] = None, reassign=True
+    self, resource: Resource, location: Optional[Coordinate] = None, reassign: bool = True
   ):
-    
     # Check there is no resource on the Byonoy base unit
     if len(self.children) != 0:
+      # Check whether illumination_unit already on BaseUnit
+      if "Byonoy A96A Illumination Unit" in [child.model for child in self.children]:
+        raise ValueError(
+          f"'{self.name}' already has an illumination unit assigned."
+          f"Cannot assign '{resource.name}' while an illumination unit"
+          " is already assigned."
+        )
 
-        # Check whether illumination_unit already on BaseUnit
-        if "Byonoy A96A Illumination Unit" in [
-          child.model for child in self.children
-        ]:
-          raise ValueError(
-            f"'{self.name}' already has an illumination unit assigned."
-            f"Cannot assign '{resource.name}' while an illumination unit"
-              " is already assigned."
-          )
-        
-        # Check maximum number of child resources (plate holder + illumination unit)
-        if len(self.children) >= 2:
-          raise ValueError(
-            f"'{self.name}' already has maximum number of child resources assigned."
-            f"Cannot assign '{resource.name}'."
-            f" Current children: {[child.name for child in self.children]}."
-          )
-        # Assign child location based on model
+      # Check maximum number of child resources (plate holder + illumination unit)
+      if len(self.children) >= 2:
+        raise ValueError(
+          f"'{self.name}' already has maximum number of child resources assigned."
+          f"Cannot assign '{resource.name}'."
+          f" Current children: {[child.name for child in self.children]}."
+        )
+      # Assign child location based on model
 
-
-
-    
     if location is None:
-      location = self.child_location
-    
+      location = self.plate_location
+
     # Check if the resource is a Byonoy A96A Illumination Unit
     if resource.model == "Byonoy A96A Illumination Unit":
-
       location = self.child_location_map_per_model[resource.model]
 
     elif isinstance(resource, Plate):
-      
-      location = self.child_location
+      location = self.plate_location
 
     return super().assign_child_resource(resource, location, reassign)
 
-  def check_can_drop_resource_here(self, resource: Resource) -> None:
-    raise RuntimeError(
-      "ByonoyBase does not support assigning child resources directly. "
-      "Use the plate_holder or reader_holder to assign plates and the reader, respectively."
-    )
-  
-  
+  # def check_can_drop_resource_here(self, resource: Resource) -> None:
+  #   raise RuntimeError(
+  #     "ByonoyBase does not support assigning child resources directly. "
+  #     "Use the plate_holder or reader_holder to assign plates and the reader, respectively."
+  #   )
 
 
 # OLD MODEL
+
 
 def byonoy_absorbance_adapter(name: str) -> ResourceHolder:
   return ResourceHolder(
@@ -215,20 +207,20 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
     )
     self._byonoy_base: Optional["ByonoyBase"] = None
 
-  def check_can_drop_resource_here(self, resource: Resource) -> None:
-    if self._byonoy_base is None:
-      raise RuntimeError(
-        "ByonoyBase not assigned its plate holder. "
-        "Please assign a ByonoyBase instance to the plate holder."
-      )
+  # def check_can_drop_resource_here(self, resource: Resource) -> None:
+  #   if self._byonoy_base is None:
+  #     raise RuntimeError(
+  #       "ByonoyBase not assigned its plate holder. "
+  #       "Please assign a ByonoyBase instance to the plate holder."
+  #     )
 
-    if self._byonoy_base.reader_holder.resource is not None:
-      raise RuntimeError(
-        f"Cannot drop resource {resource.name} onto plate holder while reader is on the base. "
-        "Please remove the reader from the base before dropping a resource."
-      )
+  #   if self._byonoy_base.reader_holder.resource is not None:
+  #     raise RuntimeError(
+  #       f"Cannot drop resource {resource.name} onto plate holder while reader is on the base. "
+  #       "Please remove the reader from the base before dropping a resource."
+  #     )
 
-    super().check_can_drop_resource_here(resource)
+  #   super().check_can_drop_resource_here(resource)
 
 
 class ByonoyBase(Resource):
