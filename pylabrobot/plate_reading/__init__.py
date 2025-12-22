@@ -10,6 +10,8 @@ from .chatterbox import PlateReaderChatterboxBackend
 from .clario_star_backend import CLARIOstarBackend
 from .image_reader import ImageReader
 from .imager import Imager
+from .molecular_devices_spectramax_384_plus_backend import MolecularDevicesSpectraMax384PlusBackend
+from .molecular_devices_spectramax_m5_backend import MolecularDevicesSpectraMaxM5Backend
 from .plate_reader import PlateReader
 from .standard import (
   Exposure,
@@ -19,3 +21,4 @@ from .standard import (
   ImagingResult,
   Objective,
 )
+from .tecan.spark20m.spark_backend import SparkBackend
