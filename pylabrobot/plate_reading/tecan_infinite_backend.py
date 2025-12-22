@@ -48,6 +48,10 @@ class InfiniteTransport(Protocol):
     """Read raw data from the transport."""
     ...
 
+  async def reset(self) -> None:
+    """Reset the transport connection."""
+    ...
+
 
 class PyUSBInfiniteTransport(InfiniteTransport):
   """Transport that reuses pylabrobot.io.usb.USB for Infinite communication."""
@@ -79,6 +83,11 @@ class PyUSBInfiniteTransport(InfiniteTransport):
     if self._usb is not None:
       await self._usb.stop()
       self._usb = None
+
+  async def reset(self) -> None:
+    await self.close()
+    await asyncio.sleep(0.2)
+    await self.open()
 
   async def write(self, data: bytes) -> None:
     if self._usb is None or self._usb.write_endpoint is None:
@@ -595,6 +604,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._lum_integration_s: Dict[int, float] = {}
     self._pending_bin_events: List[Tuple[int, bytes]] = []
     self._ascii_parser = _StreamParser(allow_bare_ascii=True)
+    self._run_active = False
+    self._active_step_loss_commands: List[str] = []
+    self._active_mode: Optional[str] = None
     self._packet_log_path = packet_log_path
     self._packet_log_handle: Optional[TextIO] = None
     self._packet_log_lock = asyncio.Lock()
@@ -614,10 +626,14 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     async with self._setup_lock:
       if not self._ready:
         return
+      await self._cleanup_protocol()
       await self._transport.close()
       if self._packet_log_handle is not None:
         self._packet_log_handle.close()
         self._packet_log_handle = None
+      self._device_initialized = False
+      self._mode_capabilities.clear()
+      self._reset_stream_state()
       self._ready = False
 
   async def open(self) -> None:
@@ -640,7 +656,10 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
+
     step_loss = ["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"]
+    self._active_step_loss_commands = list(step_loss)
+    self._active_mode = "ABS"
     await self._begin_run()
     try:
       decoder = _AbsorbanceRunDecoder(len(scan_wells))
@@ -746,6 +765,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
     step_loss = ["CHECK MTP.STEPLOSS", "CHECK FI.TOP.STEPLOSS", "CHECK FI.STEPLOSS.Z"]
+    self._active_step_loss_commands = list(step_loss)
+    self._active_mode = "FI.TOP"
     await self._begin_run()
     try:
       await self._configure_fluorescence(excitation_wavelength, emission_wavelength)
@@ -852,6 +873,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
     step_loss = ["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"]
+    self._active_step_loss_commands = list(step_loss)
+    self._active_mode = "LUM"
     await self._begin_run()
     try:
       await self._configure_luminescence()
@@ -1027,16 +1050,35 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._initialize_device()
     self._reset_stream_state()
     await self._send_ascii("KEYLOCK ON")
+    self._run_active = True
 
   def _reset_stream_state(self) -> None:
     self._pending_bin_events.clear()
     self._ascii_parser = _StreamParser(allow_bare_ascii=True)
 
   async def _read_packet(self, size: int) -> bytes:
-    data = await self._transport.read(size)
+    try:
+      data = await self._transport.read(size)
+    except TimeoutError:
+      await self._recover_transport()
+      raise
     if data:
       await self._log_packet("in", data)
     return data
+
+  async def _recover_transport(self) -> None:
+    try:
+      await self._transport.reset()
+    except Exception:
+      try:
+        await self._transport.close()
+        await asyncio.sleep(0.2)
+        await self._transport.open()
+      except Exception:
+        return
+    self._device_initialized = False
+    self._mode_capabilities.clear()
+    self._reset_stream_state()
 
   async def _log_packet(
     self, direction: str, data: bytes, ascii_payload: Optional[str] = None
@@ -1061,11 +1103,30 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       self._packet_log_handle.flush()
 
   async def _end_run(self, step_loss_commands: Sequence[str]) -> None:
-    await self._send_ascii("TERMINATE")
-    for cmd in step_loss_commands:
-      await self._send_ascii(cmd)
-    await self._send_ascii("KEYLOCK OFF")
-    await self._send_ascii("ABSOLUTE MTP,IN")
+    try:
+      await self._send_ascii("TERMINATE", allow_timeout=True)
+      for cmd in step_loss_commands:
+        await self._send_ascii(cmd, allow_timeout=True)
+      await self._send_ascii("KEYLOCK OFF", allow_timeout=True)
+      await self._send_ascii("ABSOLUTE MTP,IN", allow_timeout=True)
+    finally:
+      self._run_active = False
+      self._active_step_loss_commands = []
+      self._active_mode = None
+
+  async def _cleanup_protocol(self) -> None:
+    if not self._run_active and not self._active_step_loss_commands:
+      commands = ["KEYLOCK OFF", "ABSOLUTE MTP,IN"]
+    else:
+      commands = ["TERMINATE", *self._active_step_loss_commands, "KEYLOCK OFF", "ABSOLUTE MTP,IN"]
+    for cmd in commands:
+      try:
+        await self._send_ascii(cmd, allow_timeout=True, read_response=False)
+      except Exception:
+        logger.warning("Cleanup command failed: %s", cmd)
+    self._run_active = False
+    self._active_step_loss_commands = []
+    self._active_mode = None
 
   async def _query_mode_capabilities(self, mode: str) -> None:
     commands = self._MODE_CAPABILITY_COMMANDS.get(mode)
