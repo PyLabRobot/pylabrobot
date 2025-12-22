@@ -866,4 +866,3 @@ class Resource:
     # - Enforce state/permission rules (locked, read-only, etc.)
     # Base `Resource` does not impose any of those extra rules beyond the generic
     # assignment safety checks.
-
