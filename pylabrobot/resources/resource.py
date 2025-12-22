@@ -394,6 +394,10 @@ class Resource:
       msg = " ".join(msgs)
       raise ValueError(msg)
 
+    # Prevent cycles (dropping an ancestor into its own subtree)
+    if self.is_in_subtree_of(resource):
+      raise ValueError(f"Cannot drop '{resource.name}' onto '{self.name}': would create a cycle.")
+
   def get_root(self) -> Resource:
     """Get the root of the resource tree."""
     if self.parent is None:
