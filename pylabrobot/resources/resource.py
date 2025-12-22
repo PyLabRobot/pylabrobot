@@ -837,3 +837,33 @@ class Resource:
     for resource in self.children:
       highest_point = max(highest_point, resource.get_highest_known_point())
     return highest_point
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    """Validate whether `resource` may be dropped onto this resource.
+
+    Non-mutating preflight check used before assignment (e.g., drag/drop, LiquidHandler).
+    Enforces generic tree/assignment rules (reassign semantics, root name conflicts, no cycles).
+    Override in subclasses (and call `super()`) to add domain-specific constraints.
+
+    Raises:
+      ValueError: If the drop/assignment is not allowed.
+    """
+    # Baseline validity checks for attaching `resource` under `self`
+    # (delegated to `_check_assignment` to stay consistent as rules evolve).
+    self._check_assignment(resource=resource, reassign=reassign)
+
+    # Tree-wide invariants enforced at the root (e.g., global naming constraints).
+    self.get_root()._check_naming_conflicts(resource=resource)
+
+    # Extra drop-specific safety: prevent cycles
+    if self.is_in_subtree_of(resource):
+      raise ValueError(f"Cannot drop '{resource.name}' onto '{self.name}': would create a cycle.")
+
+    # Subclasses can add stricter “drop rules” here.
+    # Examples:
+    # - Only allow certain resource categories/types as children
+    # - Enforce placement/geometry constraints (must fit, no overlaps, valid coordinates)
+    # - Enforce state/permission rules (locked, read-only, etc.)
+    # Base `Resource` does not impose any of those extra rules beyond the generic
+    # assignment safety checks.
+
