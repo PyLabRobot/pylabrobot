@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from pylabrobot.plate_reading.byonoy.byonoy_backend import ByonoyAbsorbance96AutomateBackend
 from pylabrobot.plate_reading.plate_reader import PlateReader
@@ -64,16 +64,20 @@ def byonoy_a96a_detection_unit(
     A configured `ResourceHolder` instance representing the detection unit.
   """
 
-  return ResourceHolder(
+  return ByonoyBaseUnit(
     name=name,
     size_x=155.26,
     size_y=95.48,
     size_z=18.5,
-    child_location=Coordinate(
+    child_location_map_per_model = {
+      "Byonoy A96A Illumination Unit": Coordinate(x=0.0, y=0.0, z=14.1),
+    },
+    plate_location = Coordinate(
       x=22.5,
       y=5.0,
       z=16.0,
     ),
+    plate_accessible=True,
     model=model,
   )
 
@@ -96,31 +100,45 @@ def byonoy_a96a_parking_unit(name: str) -> ResourceHolder:
   )
 
 
-class ByonoyA96ABaseUnit(Resource):
-  def __init__(self, name, rotation=None, category=None, model=None, barcode=None):
+class ByonoyBaseUnit(Resource):
+  def __init__(
+      self,
+      name,
+      size_x: float,
+      size_y: float,
+      size_z: float,
+      child_location_map_per_model: Dict[str, Coordinate],
+      plate_location: Coordinate,
+      plate_accessible: bool = True,
+      rotation=None, 
+      category=None, 
+      model=None, 
+      barcode=None,
+      ):
     super().__init__(
       name=name,
-      size_x=155.26,
-      size_y=95.48,
-      size_z=18.5,
-      # child_location=Coordinate( # Dafault location for plate holder
-      #   x=22.5,
-      #   y=5.0,
-      #   z=16.0,
-      # ),
-      # pedestal_size_z=0,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
     )
+    self.child_location_map_per_model = child_location_map_per_model
+    self.plate_location = plate_location
+    self.plate_accessible = plate_accessible
+    # self.rotation = rotation
+    # self.category = category
+    # self.model = model
+    # self.barcode = barcode
 
-  child_location_map_per_model = {  # Can be extended for future top units
-    "Byonoy A96A Illumination Unit": Coordinate(x=0.0, y=0.0, z=14.1),
-  }
-  plate_location = Coordinate(
-    x=22.5,
-    y=5.0,
-    z=16.0,
-  )
+  # child_location_map_per_model = {  # Can be extended for future top units
+  #   "Byonoy A96A Illumination Unit": Coordinate(x=0.0, y=0.0, z=14.1),
+  # }
+  # plate_location = Coordinate(
+  #   x=22.5,
+  #   y=5.0,
+  #   z=16.0,
+  # )
 
-  plate_accessible: bool = True
+  # plate_accessible: bool = True
 
   def assign_child_resource(
     self, resource: Resource, location: Optional[Coordinate] = None, reassign: bool = True

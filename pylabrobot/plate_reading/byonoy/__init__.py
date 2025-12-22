@@ -1,8 +1,9 @@
 from .byonoy import (
-  ByonoyA96ABaseUnit,
+  byonoy_sbs_adapter,
+  ByonoyBaseUnit,
+  byonoy_a96a_detection_unit,
   byonoy_a96a_illumination_unit,
   byonoy_absorbance96_base_and_reader,
   byonoy_absorbance_adapter,
-  byonoy_sbs_adapter,
 )
 from .byonoy_backend import ByonoyAbsorbance96AutomateBackend, ByonoyLuminescence96AutomateBackend

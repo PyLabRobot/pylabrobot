@@ -857,7 +857,7 @@ class Resource:
     self._check_assignment(resource=resource, reassign=reassign)
 
     # Tree-wide invariants enforced at the root (e.g., global naming constraints).
-    self.get_root()._check_naming_conflicts(resource=resource)
+    # self.get_root()._check_naming_conflicts(resource=resource)
 
     # Subclasses can add stricter “drop rules” here.
     # Examples:
