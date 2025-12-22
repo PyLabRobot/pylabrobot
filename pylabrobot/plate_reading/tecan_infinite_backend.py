@@ -7,12 +7,15 @@ This backend targets the Infinite "M" series (e.g., Infinite 200 PRO).  The
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
+import os
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Protocol, Sequence, Tuple
+from typing import Dict, List, Optional, Protocol, Sequence, TextIO, Tuple
 
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -20,6 +23,7 @@ from pylabrobot.resources import Plate
 from pylabrobot.resources.well import Well
 
 logger = logging.getLogger(__name__)
+BIN_RE = re.compile(r"^(\d+),BIN:$")
 
 
 class InfiniteTransport(Protocol):
@@ -29,15 +33,19 @@ class InfiniteTransport(Protocol):
   """
 
   async def open(self) -> None:
+    """Open the transport connection."""
     ...
 
   async def close(self) -> None:
+    """Close the transport connection."""
     ...
 
   async def write(self, data: bytes) -> None:
+    """Send raw data to the transport."""
     ...
 
   async def read(self, size: int) -> bytes:
+    """Read raw data from the transport."""
     ...
 
 
@@ -87,6 +95,8 @@ class PyUSBInfiniteTransport(InfiniteTransport):
 
 @dataclass
 class InfiniteScanConfig:
+  """Scan configuration for Infinite plate readers."""
+
   flashes: int = 25
   counts_per_mm_x: float = 1_000
   counts_per_mm_y: float = 1_000
@@ -95,8 +105,258 @@ class InfiniteScanConfig:
 TecanScanConfig = InfiniteScanConfig
 
 
-def _be16_words(payload: bytes) -> List[int]:
-  return [int.from_bytes(payload[i : i + 2], "big") for i in range(0, len(payload), 2)]
+def _u16be(payload: bytes, offset: int) -> int:
+  return int.from_bytes(payload[offset : offset + 2], "big")
+
+
+def _u32be(payload: bytes, offset: int) -> int:
+  return int.from_bytes(payload[offset : offset + 4], "big")
+
+
+def _i32be(payload: bytes, offset: int) -> int:
+  return int.from_bytes(payload[offset : offset + 4], "big", signed=True)
+
+
+def _integration_value_to_seconds(value: int) -> float:
+  return value / 1_000_000.0 if value >= 1000 else value / 1000.0
+
+
+def _is_abs_prepare_marker(marker: int) -> bool:
+  return marker >= 22 and (marker - 4) % 18 == 0
+
+
+def _is_abs_data_marker(marker: int) -> bool:
+  return marker >= 14 and (marker - 4) % 10 == 0
+
+
+def _split_payload_and_trailer(marker: int, blob: bytes) -> Optional[Tuple[bytes, Tuple[int, int]]]:
+  if len(blob) != marker + 4:
+    return None
+  payload = blob[:marker]
+  trailer = blob[marker:]
+  return payload, (_u16be(trailer, 0), _u16be(trailer, 2))
+
+
+@dataclass(frozen=True)
+class _AbsorbancePrepareItem:
+  ticker_overflows: int
+  ticker_counter: int
+  meas_gain: int
+  meas_dark: int
+  meas_bright: int
+  ref_gain: int
+  ref_dark: int
+  ref_bright: int
+
+
+@dataclass(frozen=True)
+class _AbsorbancePrepare:
+  ex: int
+  items: List[_AbsorbancePrepareItem]
+
+
+def _decode_abs_prepare(marker: int, blob: bytes) -> Optional[_AbsorbancePrepare]:
+  split = _split_payload_and_trailer(marker, blob)
+  if split is None:
+    return None
+  payload, _ = split
+  if len(payload) < 4 + 18:
+    return None
+  ex = _u16be(payload, 2)
+  items_blob = payload[4:]
+  if len(items_blob) % 18 != 0:
+    return None
+  items: List[_AbsorbancePrepareItem] = []
+  for off in range(0, len(items_blob), 18):
+    item = items_blob[off : off + 18]
+    items.append(
+      _AbsorbancePrepareItem(
+        ticker_overflows=_u32be(item, 0),
+        ticker_counter=_u16be(item, 4),
+        meas_gain=_u16be(item, 6),
+        meas_dark=_u16be(item, 8),
+        meas_bright=_u16be(item, 10),
+        ref_gain=_u16be(item, 12),
+        ref_dark=_u16be(item, 14),
+        ref_bright=_u16be(item, 16),
+      )
+    )
+  return _AbsorbancePrepare(ex=ex, items=items)
+
+
+def _decode_abs_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[Tuple[int, int]]]]:
+  split = _split_payload_and_trailer(marker, blob)
+  if split is None:
+    return None
+  payload, _ = split
+  if len(payload) < 4:
+    return None
+  label = _u16be(payload, 0)
+  ex = _u16be(payload, 2)
+  off = 4
+  items: List[Tuple[int, int]] = []
+  while off + 10 <= len(payload):
+    meas = _u16be(payload, off + 6)
+    ref = _u16be(payload, off + 8)
+    items.append((meas, ref))
+    off += 10
+  if off != len(payload):
+    return None
+  return label, ex, items
+
+
+def _absorbance_od_calibrated(
+  prep: _AbsorbancePrepare, meas_ref_items: List[Tuple[int, int]], od_max: float = 4.0
+) -> float:
+  if not prep.items:
+    raise ValueError("ABS prepare packet contained no calibration items.")
+
+  min_corr_trans = math.pow(10.0, -od_max)
+
+  if len(prep.items) == len(meas_ref_items) and len(prep.items) > 1:
+    corr_trans_vals: List[float] = []
+    for (meas, ref), cal in zip(meas_ref_items, prep.items):
+      denom_corr = cal.meas_bright - cal.meas_dark
+      if denom_corr == 0:
+        continue
+      f_corr = (cal.ref_bright - cal.ref_dark) / denom_corr
+      denom = ref - cal.ref_dark
+      if denom == 0:
+        continue
+      corr_trans_vals.append(((meas - cal.meas_dark) / denom) * f_corr)
+    if not corr_trans_vals:
+      raise ZeroDivisionError("ABS invalid: no usable reads after per-read calibration.")
+    corr_trans = max(sum(corr_trans_vals) / len(corr_trans_vals), min_corr_trans)
+    return float(-math.log10(corr_trans))
+
+  cal0 = prep.items[0]
+  denom_corr = cal0.meas_bright - cal0.meas_dark
+  if denom_corr == 0:
+    raise ZeroDivisionError("ABS calibration invalid: meas_bright == meas_dark")
+  f_corr = (cal0.ref_bright - cal0.ref_dark) / denom_corr
+
+  trans_vals: List[float] = []
+  for meas, ref in meas_ref_items:
+    denom = ref - cal0.ref_dark
+    if denom == 0:
+      continue
+    trans_vals.append((meas - cal0.meas_dark) / denom)
+  if not trans_vals:
+    raise ZeroDivisionError("ABS invalid: all ref reads equal ref_dark")
+
+  trans_mean = sum(trans_vals) / len(trans_vals)
+  corr_trans = max(trans_mean * f_corr, min_corr_trans)
+  return float(-math.log10(corr_trans))
+
+
+@dataclass(frozen=True)
+class _FluorescencePrepare:
+  ex: int
+  meas_dark: int
+  ref_dark: int
+  ref_bright: int
+
+
+def _decode_flr_prepare(marker: int, blob: bytes) -> Optional[_FluorescencePrepare]:
+  split = _split_payload_and_trailer(marker, blob)
+  if split is None:
+    return None
+  payload, _ = split
+  if len(payload) != 18:
+    return None
+  return _FluorescencePrepare(
+    ex=_u16be(payload, 0),
+    meas_dark=_u16be(payload, 10),
+    ref_dark=_u16be(payload, 14),
+    ref_bright=_u16be(payload, 16),
+  )
+
+
+def _decode_flr_data(
+  marker: int, blob: bytes
+) -> Optional[Tuple[int, int, int, List[Tuple[int, int]]]]:
+  split = _split_payload_and_trailer(marker, blob)
+  if split is None:
+    return None
+  payload, _ = split
+  if len(payload) < 6:
+    return None
+  label = _u16be(payload, 0)
+  ex = _u16be(payload, 2)
+  em = _u16be(payload, 4)
+  off = 6
+  items: List[Tuple[int, int]] = []
+  while off + 10 <= len(payload):
+    meas = _u16be(payload, off + 6)
+    ref = _u16be(payload, off + 8)
+    items.append((meas, ref))
+    off += 10
+  if off != len(payload):
+    return None
+  return label, ex, em, items
+
+
+def _fluorescence_corrected(
+  prep: _FluorescencePrepare, meas_ref_items: List[Tuple[int, int]]
+) -> int:
+  if not meas_ref_items:
+    return 0
+  meas_mean = sum(m for m, _ in meas_ref_items) / len(meas_ref_items)
+  ref_mean = sum(r for _, r in meas_ref_items) / len(meas_ref_items)
+  denom = ref_mean - prep.ref_dark
+  if denom == 0:
+    return 0
+  corr = (meas_mean - prep.meas_dark) * (prep.ref_bright - prep.ref_dark) / denom
+  return int(round(corr))
+
+
+@dataclass(frozen=True)
+class _LuminescencePrepare:
+  ref_dark: int
+
+
+def _decode_lum_prepare(marker: int, blob: bytes) -> Optional[_LuminescencePrepare]:
+  split = _split_payload_and_trailer(marker, blob)
+  if split is None:
+    return None
+  payload, _ = split
+  if len(payload) != 10:
+    return None
+  return _LuminescencePrepare(ref_dark=_i32be(payload, 6))
+
+
+def _decode_lum_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[int]]]:
+  split = _split_payload_and_trailer(marker, blob)
+  if split is None:
+    return None
+  payload, _ = split
+  if len(payload) < 4:
+    return None
+  label = _u16be(payload, 0)
+  em = _u16be(payload, 2)
+  off = 4
+  counts: List[int] = []
+  while off + 10 <= len(payload):
+    counts.append(_i32be(payload, off + 6))
+    off += 10
+  if off != len(payload):
+    return None
+  return label, em, counts
+
+
+def _luminescence_intensity(
+  prep: _LuminescencePrepare,
+  counts: List[int],
+  dark_integration_s: float,
+  meas_integration_s: float,
+) -> int:
+  if not counts:
+    return 0
+  if dark_integration_s == 0 or meas_integration_s == 0:
+    return 0
+  count_mean = sum(counts) / len(counts)
+  corrected_rate = (count_mean / meas_integration_s) - (prep.ref_dark / dark_integration_s)
+  return int(corrected_rate)
 
 
 StagePosition = Tuple[int, int]
@@ -110,10 +370,11 @@ def _consume_leading_ascii_frame(buffer: bytearray) -> Tuple[bool, Optional[str]
   end = buffer.find(b"\x03", 1)
   if end == -1:
     return False, None
-  if len(buffer) < end + 6:
+  # Payload is followed by a 4-byte trailer and optional CR.
+  if len(buffer) < end + 5:
     return False, None
   text = buffer[1:end].decode("ascii", "ignore")
-  del buffer[: end + 2]
+  del buffer[: end + 5]
   if buffer and buffer[0] == 0x0D:
     del buffer[0]
   return True, text
@@ -128,15 +389,82 @@ def _consume_status_frame(buffer: bytearray, length: int) -> bool:
   return False
 
 
+@dataclass
+class _StreamEvent:
+  """Parsed stream event (ASCII or binary)."""
+
+  text: Optional[str] = None
+  marker: Optional[int] = None
+  blob: Optional[bytes] = None
+
+
+class _StreamParser:
+  """Parse mixed ASCII and binary packets from the reader."""
+
+  def __init__(
+    self,
+    *,
+    status_frame_len: Optional[int] = None,
+    allow_bare_ascii: bool = False,
+  ) -> None:
+    """Initialize the stream parser."""
+    self._buffer = bytearray()
+    self._pending_bin: Optional[int] = None
+    self._status_frame_len = status_frame_len
+    self._allow_bare_ascii = allow_bare_ascii
+
+  def has_pending_bin(self) -> bool:
+    """Return True if a binary payload length is pending."""
+    return self._pending_bin is not None
+
+  def feed(self, chunk: bytes) -> List[_StreamEvent]:
+    """Feed raw bytes and return newly parsed events."""
+    self._buffer.extend(chunk)
+    events: List[_StreamEvent] = []
+    progressed = True
+    while progressed:
+      progressed = False
+      if self._pending_bin is not None:
+        need = self._pending_bin + 4
+        if len(self._buffer) < need:
+          break
+        blob = bytes(self._buffer[:need])
+        del self._buffer[:need]
+        events.append(_StreamEvent(marker=self._pending_bin, blob=blob))
+        self._pending_bin = None
+        progressed = True
+        continue
+      if self._status_frame_len and _consume_status_frame(self._buffer, self._status_frame_len):
+        progressed = True
+        continue
+      consumed, text = _consume_leading_ascii_frame(self._buffer)
+      if consumed:
+        events.append(_StreamEvent(text=text))
+        if text:
+          m = BIN_RE.match(text)
+          if m:
+            self._pending_bin = int(m.group(1))
+        progressed = True
+        continue
+      if self._allow_bare_ascii and self._buffer and all(32 <= b <= 126 for b in self._buffer):
+        text = self._buffer.decode("ascii", "ignore")
+        self._buffer.clear()
+        events.append(_StreamEvent(text=text))
+        progressed = True
+        continue
+    return events
+
+
 class _MeasurementDecoder(ABC):
   """Shared incremental decoder for Infinite measurement streams."""
 
   STATUS_FRAME_LEN: Optional[int] = None
 
   def __init__(self, expected: int) -> None:
+    """Initialize decoder state for a scan with expected measurements."""
     self.expected = expected
-    self._buffer: bytearray = bytearray()
     self._terminal_seen = False
+    self._parser = _StreamParser(status_frame_len=self.STATUS_FRAME_LEN)
 
   @property
   @abstractmethod
@@ -145,43 +473,34 @@ class _MeasurementDecoder(ABC):
 
   @property
   def done(self) -> bool:
+    """Return True if the decoder has seen all expected measurements."""
     return self.count >= self.expected
 
   def pop_terminal(self) -> bool:
+    """Return and clear the terminal frame seen flag."""
     seen = self._terminal_seen
     self._terminal_seen = False
     return seen
 
   def feed(self, chunk: bytes) -> None:
-    self._buffer.extend(chunk)
-    progressed = True
-    while progressed:
-      progressed = False
-      consumed, text = _consume_leading_ascii_frame(self._buffer)
-      if consumed:
-        if text == "ST":
+    """Consume a raw chunk and update decoder state."""
+    for event in self._parser.feed(chunk):
+      if event.text is not None:
+        if event.text == "ST":
           self._terminal_seen = True
-        progressed = True
-        continue
-      if not self.done and self._consume_measurement():
-        progressed = True
-        continue
-      if self.STATUS_FRAME_LEN and _consume_status_frame(self._buffer, self.STATUS_FRAME_LEN):
-        progressed = True
-        continue
-      if self.done or not self._buffer:
-        break
-      progressed = self._discard_byte()
+      elif event.marker is not None and event.blob is not None:
+        self.feed_bin(event.marker, event.blob)
 
-  @abstractmethod
-  def _consume_measurement(self) -> bool:
-    """Attempt to consume a measurement frame from the buffer."""
+  def feed_bin(self, marker: int, blob: bytes) -> None:
+    """Handle a binary payload if the decoder expects one."""
+    if self._should_consume_bin(marker):
+      self._handle_bin(marker, blob)
 
-  def _discard_byte(self) -> bool:
-    if self._buffer:
-      del self._buffer[0]
-      return True
+  def _should_consume_bin(self, _marker: int) -> bool:
     return False
+
+  def _handle_bin(self, _marker: int, _blob: bytes) -> None:
+    return None
 
 
 class TecanInfinite200ProBackend(PlateReaderBackend):
@@ -206,7 +525,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       # "#TEMPERATURE PLATE",
     ],
     "FI.TOP": [
-      "#BEAM DIAMETER",
+      # "#BEAM DIAMETER",
       # Additional capabilities available but currently unused:
       # "#EMISSION WAVELENGTH",
       # "#EMISSION USAGE",
@@ -232,7 +551,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       # "#TEMPERATURE PLATE",
     ],
     "FI.BOTTOM": [
-      "#BEAM DIAMETER",
+      # "#BEAM DIAMETER",
       # Additional capabilities available but currently unused:
       # "#EMISSION WAVELENGTH",
       # "#EMISSION USAGE",
@@ -243,7 +562,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       # "#TIME READDELAY",
     ],
     "LUM": [
-      "#BEAM DIAMETER",
+      # "#BEAM DIAMETER",
       # Additional capabilities available but currently unused:
       # "#EMISSION WAVELENGTH",
       # "#EMISSION USAGE",
@@ -260,7 +579,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self,
     transport: Optional[InfiniteTransport] = None,
     scan_config: Optional[InfiniteScanConfig] = None,
+    packet_log_path: Optional[str] = None,
   ) -> None:
+    super().__init__()
     self._transport = transport or PyUSBInfiniteTransport()
     self.config = scan_config or InfiniteScanConfig()
     self._setup_lock = asyncio.Lock()
@@ -271,6 +592,12 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._mode_capabilities: Dict[str, Dict[str, str]] = {}
     self._current_fluorescence_excitation: Optional[int] = None
     self._current_fluorescence_emission: Optional[int] = None
+    self._lum_integration_s: Dict[int, float] = {}
+    self._pending_bin_events: List[Tuple[int, bytes]] = []
+    self._ascii_parser = _StreamParser(allow_bare_ascii=True)
+    self._packet_log_path = packet_log_path
+    self._packet_log_handle: Optional[TextIO] = None
+    self._packet_log_lock = asyncio.Lock()
 
   async def setup(self) -> None:
     async with self._setup_lock:
@@ -288,6 +615,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       if not self._ready:
         return
       await self._transport.close()
+      if self._packet_log_handle is not None:
+        self._packet_log_handle.close()
+        self._packet_log_handle = None
       self._ready = False
 
   async def open(self) -> None:
@@ -310,11 +640,10 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
-
+    step_loss = ["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"]
     await self._begin_run()
     try:
-      wl_decitenth = int(round(wavelength * 10))
-      decoder = _AbsorbanceRunDecoder(len(scan_wells), wl_decitenth)
+      decoder = _AbsorbanceRunDecoder(len(scan_wells))
       await self._configure_absorbance(wavelength)
 
       for row_index, row_wells in self._group_by_row(ordered_wells):
@@ -323,7 +652,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
         await self._send_ascii(f"ABSOLUTE MTP,Y={y_stage}")
         await self._send_ascii("SCAN DIRECTION=ALTUP")
-        await self._send_ascii(f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False)
+        await self._send_ascii(
+          f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
+        )
         logger.info(
           "Queued scan row %s (%s wells): y=%s, x=%s..%s",
           row_index,
@@ -337,9 +668,14 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
       if len(decoder.measurements) != len(scan_wells):
         raise RuntimeError("Absorbance decoder did not complete scan.")
-      intensities = [
-        self._calculate_absorbance_od(meas.sample, meas.reference) for meas in decoder.measurements
-      ]
+      intensities: List[float] = []
+      prep = decoder.prepare
+      if prep is None:
+        raise RuntimeError("ABS prepare packet not seen; cannot compute calibrated OD.")
+      for meas in decoder.measurements:
+        items = meas.items or [(meas.sample, meas.reference)]
+        od = _absorbance_od_calibrated(prep, items)
+        intensities.append(od)
       matrix = self._format_plate_result(plate, scan_wells, intensities)
       return [
         {
@@ -350,12 +686,12 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         }
       ]
     finally:
-      await self._end_run(["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"])
+      await self._end_run(step_loss)
 
   async def _configure_absorbance(self, wavelength_nm: int) -> None:
     wl_decitenth = int(round(wavelength_nm * 10))
     bw_decitenth = int(round(self._auto_bandwidth(wavelength_nm) * 10))
-    reads_number = 1
+    reads_number = max(1, int(self.config.flashes))
 
     await self._send_ascii("MODE ABS")
 
@@ -380,23 +716,15 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     ]
 
     for cmd in commands:
-      await self._send_ascii(cmd)
+      if cmd == "PREPARE REF":
+        await self._send_ascii(cmd, allow_timeout=True, read_response=False)
+      else:
+        await self._send_ascii(cmd, allow_timeout=True)
 
   def _auto_bandwidth(self, wavelength_nm: int) -> float:
     """Return bandwidth in nm based on Infinite M specification."""
 
     return 9.0 if wavelength_nm > 315 else 5.0
-
-  @staticmethod
-  def _calculate_absorbance_od(
-    sample: int,
-    reference: int,
-  ) -> float:
-    """Return log10(reference / sample) with guard rails around zero."""
-
-    safe_sample = max(sample, 1)
-    safe_reference = max(reference, 1)
-    return float(math.log10(safe_reference / safe_sample))
 
   async def read_fluorescence(
     self,
@@ -417,6 +745,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
+    step_loss = ["CHECK MTP.STEPLOSS", "CHECK FI.TOP.STEPLOSS", "CHECK FI.STEPLOSS.Z"]
     await self._begin_run()
     try:
       await self._configure_fluorescence(excitation_wavelength, emission_wavelength)
@@ -434,7 +763,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
         await self._send_ascii(f"ABSOLUTE MTP,Y={y_stage}")
         await self._send_ascii("SCAN DIRECTION=UP")
-        await self._send_ascii(f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False)
+        await self._send_ascii(
+          f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
+        )
         logger.info(
           "Queued fluorescence scan row %s (%s wells): y=%s, x=%s..%s",
           row_index,
@@ -460,14 +791,14 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         }
       ]
     finally:
-      await self._end_run(["CHECK MTP.STEPLOSS", "CHECK FI.TOP.STEPLOSS", "CHECK FI.STEPLOSS.Z"])
+      await self._end_run(step_loss)
 
   async def _configure_fluorescence(self, excitation_nm: int, emission_nm: int) -> None:
     ex_decitenth = int(round(excitation_nm * 10))
     em_decitenth = int(round(emission_nm * 10))
     self._current_fluorescence_excitation = ex_decitenth
     self._current_fluorescence_emission = em_decitenth
-    reads_number = 1
+    reads_number = max(1, int(self.config.flashes))
     clear_cmds = [
       "MODE FI.TOP",
       "READS CLEAR",
@@ -502,10 +833,10 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     # UI issues the entire FI configuration twice before PREPARE REF.
     for _ in range(2):
       for cmd in clear_cmds:
-        await self._send_ascii(cmd)
+        await self._send_ascii(cmd, allow_timeout=True)
       for cmd in configure_cmds:
-        await self._send_ascii(cmd)
-    await self._send_ascii("PREPARE REF")
+        await self._send_ascii(cmd, allow_timeout=True)
+    await self._send_ascii("PREPARE REF", allow_timeout=True, read_response=False)
 
   async def read_luminescence(
     self,
@@ -515,16 +846,22 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
   ) -> List[Dict]:
     """Queue and execute a luminescence scan."""
 
-    logger.warning("Luminescence path is experimental; decoding is not yet validated.")
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for luminescence scans.")
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
+    step_loss = ["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"]
     await self._begin_run()
     try:
       await self._configure_luminescence()
-      decoder = _LuminescenceRunDecoder(len(scan_wells))
+      dark_t = self._lum_integration_s.get(0, 0.0)
+      meas_t = self._lum_integration_s.get(1, 0.0)
+      decoder = _LuminescenceRunDecoder(
+        len(scan_wells),
+        dark_integration_s=dark_t,
+        meas_integration_s=meas_t,
+      )
 
       for row_index, row_wells in self._group_by_row(ordered_wells):
         start_x, end_x, count = self._scan_range(row_index, row_wells, serpentine=False)
@@ -532,7 +869,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
         await self._send_ascii(f"ABSOLUTE MTP,Y={y_stage}")
         await self._send_ascii("SCAN DIRECTION=UP")
-        await self._send_ascii(f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False)
+        await self._send_ascii(
+          f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
+        )
         logger.info(
           "Queued luminescence scan row %s (%s wells): y=%s, x=%s..%s",
           row_index,
@@ -556,15 +895,19 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         }
       ]
     finally:
-      await self._end_run(["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"])
+      await self._end_run(step_loss)
 
   async def _await_measurements(
     self, decoder: "_MeasurementDecoder", row_count: int, mode: str
   ) -> None:
     target = decoder.count + row_count
+    if self._pending_bin_events:
+      for marker, blob in self._pending_bin_events:
+        decoder.feed_bin(marker, blob)
+      self._pending_bin_events.clear()
     iterations = 0
     while decoder.count < target and iterations < self._max_read_iterations:
-      chunk = await self._transport.read(self._read_chunk_size)
+      chunk = await self._read_packet(self._read_chunk_size)
       if not chunk:
         raise RuntimeError(f"{mode} read returned empty chunk; transport may not support reads.")
       decoder.feed(chunk)
@@ -584,6 +927,11 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_ascii("CHECK LUM.LID")
     await self._send_ascii("CHECK LUM.STEPLOSS")
     await self._send_ascii("MODE LUM")
+    reads_number = max(1, int(self.config.flashes))
+    self._lum_integration_s = {
+      0: _integration_value_to_seconds(3_000_000),
+      1: _integration_value_to_seconds(1_000_000),
+    }
     commands = [
       "READS CLEAR",
       "EMISSION CLEAR",
@@ -593,16 +941,21 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       "MIRROR CLEAR",
       "POSITION LUM,Z=14620",
       "TIME 0,INTEGRATION=3000000",
+      f"READS 0,NUMBER={reads_number}",
       "SCAN DIRECTION=UP",
       "RATIO LABELS=1",
       "EMISSION 1,EMPTY,0,0,0",
       "TIME 1,INTEGRATION=1000000",
       "TIME 1,READDELAY=0",
+      f"READS 1,NUMBER={reads_number}",
       "#EMISSION ATTENUATION",
       "PREPARE REF",
     ]
     for cmd in commands:
-      await self._send_ascii(cmd)
+      if cmd == "PREPARE REF":
+        await self._send_ascii(cmd, allow_timeout=True, read_response=False)
+      else:
+        await self._send_ascii(cmd, allow_timeout=True)
 
   def _group_by_row(self, wells: Sequence[Well]) -> List[Tuple[int, List[Well]]]:
     grouped: Dict[int, List[Well]] = {}
@@ -672,7 +1025,40 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
   async def _begin_run(self) -> None:
     await self._initialize_device()
+    self._reset_stream_state()
     await self._send_ascii("KEYLOCK ON")
+
+  def _reset_stream_state(self) -> None:
+    self._pending_bin_events.clear()
+    self._ascii_parser = _StreamParser(allow_bare_ascii=True)
+
+  async def _read_packet(self, size: int) -> bytes:
+    data = await self._transport.read(size)
+    if data:
+      await self._log_packet("in", data)
+    return data
+
+  async def _log_packet(
+    self, direction: str, data: bytes, ascii_payload: Optional[str] = None
+  ) -> None:
+    if not self._packet_log_path:
+      return
+    async with self._packet_log_lock:
+      if self._packet_log_handle is None:
+        parent = os.path.dirname(self._packet_log_path)
+        if parent:
+          os.makedirs(parent, exist_ok=True)
+        self._packet_log_handle = open(self._packet_log_path, "a", encoding="utf-8")
+      record = {
+        "ts": time.time(),
+        "dir": direction,
+        "size": len(data),
+        "data_hex": data.hex(),
+      }
+      if ascii_payload is not None:
+        record["ascii"] = ascii_payload
+      self._packet_log_handle.write(json.dumps(record) + "\n")
+      self._packet_log_handle.flush()
 
   async def _end_run(self, step_loss_commands: Sequence[str]) -> None:
     await self._send_ascii("TERMINATE")
@@ -729,56 +1115,66 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     length = len(payload) & 0xFF
     return b"\x02" + payload + b"\x03\x00\x00" + bytes([length, checksum]) + b"\x0d"
 
-  async def _send_ascii(self, command: str, wait_for_terminal: bool = True) -> List[str]:
+  async def _send_ascii(
+    self,
+    command: str,
+    wait_for_terminal: bool = True,
+    allow_timeout: bool = False,
+    read_response: bool = True,
+  ) -> List[str]:
     logger.debug("[tecan] >> %s", command)
     framed = self._frame_ascii_command(command)
     await self._transport.write(framed)
+    await self._log_packet("out", framed, ascii_payload=command)
+    if not read_response:
+      return []
     if command.startswith(("#", "?")):
-      frames = await self._read_ascii_response(require_terminal=False)
-      return frames
-    frames = await self._read_ascii_response(require_terminal=wait_for_terminal)
+      try:
+        return await self._read_ascii_response(require_terminal=False)
+      except TimeoutError:
+        if allow_timeout:
+          logger.warning("Timeout waiting for response to %s", command)
+          return []
+        raise
+    try:
+      frames = await self._read_ascii_response(require_terminal=wait_for_terminal)
+    except TimeoutError:
+      if allow_timeout:
+        logger.warning("Timeout waiting for response to %s", command)
+        return []
+      raise
     for pkt in frames:
       logger.debug("[tecan] << %s", pkt)
     return frames
 
   async def _drain_ascii(self, attempts: int = 4) -> None:
+    """Read and discard a few ASCII packets to clear the stream."""
     for _ in range(attempts):
-      data = await self._transport.read(128)
+      data = await self._read_packet(128)
       if not data:
         break
 
   async def _read_ascii_response(
     self, max_iterations: int = 8, require_terminal: bool = True
   ) -> List[str]:
-    buffer = bytearray()
+    """Read ASCII frames and cache any binary payloads that arrive."""
     frames: List[str] = []
     saw_terminal = False
     for _ in range(max_iterations):
-      chunk = await self._transport.read(128)
+      chunk = await self._read_packet(128)
       if not chunk:
         break
-      buffer.extend(chunk)
-      decoded = self._decode_ascii_frames(buffer)
-      if decoded:
-        frames.extend(decoded)
-        if not require_terminal:
-          break
-        if any(self._is_terminal_frame(text) for text in decoded):
-          saw_terminal = True
-          break
-        continue
-      if buffer and all(32 <= b <= 126 for b in buffer):
-        text = ""
-        try:
-          text = buffer.decode("ascii", "ignore")
-          frames.append(text)
-        except Exception:
-          pass
-        buffer.clear()
-        if self._is_terminal_frame(text):
-          saw_terminal = True
-          break
-        continue
+      for event in self._ascii_parser.feed(chunk):
+        if event.text is not None:
+          frames.append(event.text)
+          if self._is_terminal_frame(event.text):
+            saw_terminal = True
+        elif event.marker is not None and event.blob is not None:
+          self._pending_bin_events.append((event.marker, event.blob))
+      if not require_terminal and frames and not self._ascii_parser.has_pending_bin():
+        break
+      if require_terminal and saw_terminal and not self._ascii_parser.has_pending_bin():
+        break
     if require_terminal and not saw_terminal:
       # best effort: drain once more so pending ST doesn't leak into next command
       await self._drain_ascii(1)
@@ -786,116 +1182,73 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
   @staticmethod
   def _is_terminal_frame(text: str) -> bool:
+    """Return True if the ASCII frame is a terminal marker."""
     return text in {"ST", "+", "-"} or text.startswith("BY#T")
-
-  @staticmethod
-  def _decode_ascii_frames(data: bytearray) -> List[str]:
-    frames: List[str] = []
-    while True:
-      try:
-        stx = data.index(0x02)
-      except ValueError:
-        data.clear()
-        break
-      if stx > 0:
-        del data[:stx]
-      try:
-        etx = data.index(0x03, 1)
-      except ValueError:
-        break
-      trailer_len = 4 if len(data) >= etx + 5 else 0
-      frame_end = etx + 1 + trailer_len
-      if len(data) < frame_end:
-        break
-      payload = data[1:etx]
-      try:
-        frames.append(payload.decode("ascii", "ignore"))
-      except Exception:
-        frames.append(payload.hex())
-      del data[:frame_end]
-      if data and data[0] == 0x0D:
-        del data[0]
-    return frames
-
 
 @dataclass
 class _AbsorbanceMeasurement:
   sample: int
   reference: int
+  items: Optional[List[Tuple[int, int]]] = None
 
 
 class _AbsorbanceRunDecoder(_MeasurementDecoder):
   """Incrementally decode absorbance measurement frames."""
 
   STATUS_FRAME_LEN = 31
-  _MEAS_LEN = 18
 
-  def __init__(self, expected: int, wavelength_decitenth: int, skip_initial: int = 0) -> None:
+  def __init__(self, expected: int) -> None:
     super().__init__(expected)
-    self._wavelength = wavelength_decitenth
     self.measurements: List[_AbsorbanceMeasurement] = []
-    self._skip_initial = max(0, skip_initial)
+    self._prepare: Optional[_AbsorbancePrepare] = None
 
   @property
   def count(self) -> int:
     return len(self.measurements)
 
-  def _consume_measurement(self) -> bool:
-    frame = self._find_measurement_frame()
-    if frame is None:
-      return False
-    offset, length = frame
-    if offset:
-      del self._buffer[:offset]
-    payload = bytes(self._buffer[:length])
-    del self._buffer[:length]
-    self._handle_measurement(payload)
-    return True
+  @property
+  def prepare(self) -> Optional[_AbsorbancePrepare]:
+    """Return the absorbance prepare data, if available."""
+    return self._prepare
 
-  def _handle_measurement(self, payload: bytes) -> None:
-    words = _be16_words(payload)
-    if len(words) != 9:
-      return
-    if not self._words_match_measurement(words):
-      return
-    meas = _AbsorbanceMeasurement(sample=words[5], reference=words[6])
-    if self._skip_initial > 0:
-      self._skip_initial -= 1
-      return
-    self.measurements.append(meas)
+  def _should_consume_bin(self, marker: int) -> bool:
+    return _is_abs_prepare_marker(marker) or _is_abs_data_marker(marker)
 
-  def _find_measurement_frame(self) -> Optional[Tuple[int, int]]:
-    limit = len(self._buffer) - self._MEAS_LEN
-    for offset in range(0, limit + 1, 2):
-      chunk = self._buffer[offset : offset + self._MEAS_LEN]
-      words = _be16_words(chunk)
-      if len(words) == 9 and self._words_match_measurement(words):
-        return offset, self._MEAS_LEN
-    return None
-
-  def _words_match_measurement(self, words: List[int]) -> bool:
-    if len(words) != 9:
-      return False
-    if words[0] != 1 or words[2] != 0:
-      return False
-    if abs(words[1] - self._wavelength) > 1:
-      return False
-    return True
+  def _handle_bin(self, marker: int, blob: bytes) -> None:
+    if _is_abs_prepare_marker(marker):
+      if self._prepare is not None:
+        return
+      decoded = _decode_abs_prepare(marker, blob)
+      if decoded is not None:
+        self._prepare = decoded
+      return
+    if _is_abs_data_marker(marker):
+      decoded = _decode_abs_data(marker, blob)
+      if decoded is None:
+        return
+      _label, _ex, items = decoded
+      sample, reference = items[0] if items else (0, 0)
+      self.measurements.append(
+        _AbsorbanceMeasurement(sample=sample, reference=reference, items=items)
+      )
 
 
 class _FluorescenceRunDecoder(_MeasurementDecoder):
-  """Incrementally decode fluorescence measurement frames from measurement tails."""
+  """Incrementally decode fluorescence measurement frames."""
 
   STATUS_FRAME_LEN = 31
-  _MEAS_LEN = 20
 
   def __init__(
-    self, expected_wells: int, excitation_decitenth: int, emission_decitenth: Optional[int]
+    self,
+    expected_wells: int,
+    excitation_decitenth: int,
+    emission_decitenth: Optional[int],
   ) -> None:
     super().__init__(expected_wells)
     self._excitation = excitation_decitenth
     self._emission = emission_decitenth
     self._intensities: List[int] = []
+    self._prepare: Optional[_FluorescencePrepare] = None
 
   @property
   def count(self) -> int:
@@ -903,137 +1256,87 @@ class _FluorescenceRunDecoder(_MeasurementDecoder):
 
   @property
   def intensities(self) -> List[int]:
+    """Return decoded fluorescence intensities."""
     return self._intensities
 
-  def _consume_measurement(self) -> bool:
-    frame = self._find_measurement_frame()
-    if frame:
-      offset, length = frame
-      if offset:
-        del self._buffer[:offset]
-      tail = bytes(self._buffer[:length])
-      del self._buffer[:length]
-      self._handle_measurement_tail(tail)
+  def _should_consume_bin(self, marker: int) -> bool:
+    if marker == 18:
       return True
-    calib_len = self._calibration_frame_len()
-    if calib_len:
-      del self._buffer[:calib_len]
+    if marker >= 16 and (marker - 6) % 10 == 0:
       return True
     return False
 
-  def _find_measurement_frame(self) -> Optional[Tuple[int, int]]:
-    limit = len(self._buffer) - self._MEAS_LEN
-    for offset in range(0, limit + 1, 2):
-      chunk = self._buffer[offset : offset + self._MEAS_LEN]
-      words = _be16_words(chunk)
-      if len(words) == 10 and self._words_match_measurement(words):
-        return offset, self._MEAS_LEN
-    return None
-
-  def _calibration_frame_len(self) -> Optional[int]:
-    return None
-
-  def _handle_measurement_tail(self, tail: bytes) -> None:
-    words = _be16_words(tail)
-    intensity = None
-    if len(words) == 10 and self._words_match_measurement(words):
-      intensity = words[6]
-    if intensity is not None:
-      self._intensities.append(intensity)
-
-  def _words_match_measurement(self, words: List[int]) -> bool:
-    if not words:
-      return False
-    excit = words[1]
-    emiss = words[2]
-    if words[0] != 1:
-      return False
-    if abs(excit - self._excitation) > 1:
-      return False
-    if self._emission is not None and abs(emiss - self._emission) > 1:
-      return False
-    return True
-
-  def _discard_byte(self) -> bool:
-    if self._buffer:
-      del self._buffer[0]
-      return True
-    return False
+  def _handle_bin(self, marker: int, blob: bytes) -> None:
+    if marker == 18:
+      decoded = _decode_flr_prepare(marker, blob)
+      if decoded is not None:
+        self._prepare = decoded
+      return
+    decoded = _decode_flr_data(marker, blob)
+    if decoded is None:
+      return
+    _label, _ex, _em, items = decoded
+    if self._prepare is not None:
+      intensity = _fluorescence_corrected(self._prepare, items)
+    else:
+      if not items:
+        intensity = 0
+      else:
+        intensity = int(round(sum(m for m, _ in items) / len(items)))
+    self._intensities.append(intensity)
 
 
 @dataclass
 class _LuminescenceMeasurement:
-  raw_tail: int
   intensity: int
-  words: List[int]
 
 
 class _LuminescenceRunDecoder(_MeasurementDecoder):
   """Incrementally decode luminescence measurement frames."""
 
-  FRAME_LEN = 45
-  _MEAS_LEN = 18
-
-  def __init__(self, expected: int) -> None:
+  def __init__(
+    self,
+    expected: int,
+    *,
+    dark_integration_s: float = 0.0,
+    meas_integration_s: float = 0.0,
+  ) -> None:
     super().__init__(expected)
     self.measurements: List[_LuminescenceMeasurement] = []
+    self._prepare: Optional[_LuminescencePrepare] = None
+    self._dark_integration_s = float(dark_integration_s)
+    self._meas_integration_s = float(meas_integration_s)
 
   @property
   def count(self) -> int:
     return len(self.measurements)
 
-  def _consume_measurement(self) -> bool:
-    frame = self._find_measurement_frame()
-    if frame:
-      offset, length = frame
-      if offset:
-        del self._buffer[:offset]
-      payload = bytes(self._buffer[:length])
-      del self._buffer[:length]
-      self._handle_measurement(payload)
+  def _should_consume_bin(self, marker: int) -> bool:
+    if marker == 10:
+      return True
+    if marker >= 14 and (marker - 4) % 10 == 0:
       return True
     return False
 
-  def _discard_byte(self) -> bool:
-    if self._buffer and self._buffer[0] not in (0x02, 0x1B):
-      del self._buffer[0]
-      return True
-    return False
-
-  def _find_measurement_frame(self) -> Optional[Tuple[int, int]]:
-    limit = len(self._buffer) - self._MEAS_LEN
-    for offset in range(0, limit + 1, 2):
-      chunk = self._buffer[offset : offset + self._MEAS_LEN]
-      words = _be16_words(chunk)
-      if len(words) == 9 and self._words_match_measurement(words):
-        return offset, self._MEAS_LEN
-    return None
-
-  def _handle_measurement(self, payload: bytes) -> None:
-    words = _be16_words(payload)
-    if len(words) != 9:
+  def _handle_bin(self, marker: int, blob: bytes) -> None:
+    if marker == 10:
+      decoded = _decode_lum_prepare(marker, blob)
+      if decoded is not None:
+        self._prepare = decoded
       return
-    if not self._words_match_measurement(words):
+    decoded = _decode_lum_data(marker, blob)
+    if decoded is None:
       return
-    raw_tail = payload[-1] if payload else 0
-    # Unconfirmed: using words[6] as luminescence intensity; not validated against OEM exports due to lack of proper glowing sample.
-    intensity = words[6]
-    self.measurements.append(
-      _LuminescenceMeasurement(
-        raw_tail=raw_tail,
-        intensity=intensity,
-        words=words,
+    _label, _em, counts = decoded
+    if self._prepare is not None and self._dark_integration_s and self._meas_integration_s:
+      intensity = _luminescence_intensity(
+        self._prepare, counts, self._dark_integration_s, self._meas_integration_s
       )
+    else:
+      intensity = int(round(sum(counts) / len(counts))) if counts else 0
+    self.measurements.append(
+      _LuminescenceMeasurement(intensity=intensity)
     )
-
-  def _words_match_measurement(self, words: List[int]) -> bool:
-    if len(words) != 9:
-      return False
-    if words[0] != 1:
-      return False
-    if words[2] != 0:
-      return False
-    return True
 
 
 __all__ = [
