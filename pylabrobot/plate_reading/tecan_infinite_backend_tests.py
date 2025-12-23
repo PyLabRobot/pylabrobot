@@ -4,6 +4,7 @@ from pylabrobot.plate_reading.tecan_infinite_backend import (
   InfiniteScanConfig,
   TecanInfinite200ProBackend,
   _AbsorbanceRunDecoder,
+  _absorbance_od_calibrated,
   _consume_leading_ascii_frame,
   _FluorescenceRunDecoder,
   _LuminescenceRunDecoder,
@@ -12,8 +13,46 @@ from pylabrobot.resources import Coordinate, Plate, Well, create_ordered_items_2
 from pylabrobot.resources.tecan.plates import Plate_384_Well
 
 
-def _pack_words(words):
+def _pack_u16(words):
   return b"".join(int(word).to_bytes(2, "big") for word in words)
+
+
+def _bin_blob(payload):
+  marker = len(payload)
+  trailer = b"\x00\x00\x00\x00"
+  return marker, payload + trailer
+
+
+def _abs_prepare_blob(ex_decitenth, meas_dark, meas_bright, ref_dark, ref_bright):
+  header = _pack_u16([0, ex_decitenth])
+  item = (
+    (0).to_bytes(4, "big")
+    + _pack_u16([0, 0, meas_dark, meas_bright, 0, ref_dark, ref_bright])
+  )
+  return _bin_blob(header + item)
+
+
+def _abs_data_blob(ex_decitenth, meas, ref):
+  payload = _pack_u16([0, ex_decitenth, 0, 0, 0, meas, ref])
+  return _bin_blob(payload)
+
+
+def _flr_prepare_blob(ex_decitenth, meas_dark, ref_dark, ref_bright):
+  words = [ex_decitenth, 0, 0, 0, 0, meas_dark, 0, ref_dark, ref_bright]
+  return _bin_blob(_pack_u16(words))
+
+
+def _flr_data_blob(ex_decitenth, em_decitenth, meas, ref):
+  words = [0, ex_decitenth, em_decitenth, 0, 0, 0, meas, ref]
+  return _bin_blob(_pack_u16(words))
+
+
+def _lum_data_blob(em_decitenth, intensity):
+  payload = bytearray(14)
+  payload[0:2] = (0).to_bytes(2, "big")
+  payload[2:4] = int(em_decitenth).to_bytes(2, "big")
+  payload[10:14] = int(intensity).to_bytes(4, "big", signed=True)
+  return _bin_blob(bytes(payload))
 
 
 def _make_test_plate():
@@ -476,12 +515,12 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
       for value, exp in zip(row_actual, row_expected):
         self.assertAlmostEqual(value or 0.0, exp)
 
-  def _run_decoder_case(self, decoder, build_words, extract_actual):
+  def _run_decoder_case(self, decoder, build_packet, extract_actual):
     expected_values = []
     for well in self.scan_wells:
       intensity = self.grid[well.get_row()][well.get_column()]
-      words, expected = build_words(intensity)
-      decoder.feed(_pack_words(words))
+      marker, blob, expected = build_packet(intensity)
+      decoder.feed_bin(marker, blob)
       expected_values.append(expected)
     self.assertTrue(decoder.done)
     actual_values = extract_actual(decoder)
@@ -493,50 +532,64 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     wavelength = 600
     reference = 10000
     max_absorbance = 1.0
-    decoder = _AbsorbanceRunDecoder(len(self.scan_wells), wavelength * 10)
+    decoder = _AbsorbanceRunDecoder(len(self.scan_wells))
+    prep_marker, prep_blob = _abs_prepare_blob(
+      wavelength * 10,
+      meas_dark=0,
+      meas_bright=1000,
+      ref_dark=0,
+      ref_bright=1000,
+    )
+    decoder.feed_bin(prep_marker, prep_blob)
+    prep = decoder.prepare
+    self.assertIsNotNone(prep)
 
-    def build_words(intensity):
+    def build_packet(intensity):
       target = 0.0
       if self.max_intensity:
         target = (intensity / self.max_intensity) * max_absorbance
       sample = max(1, int(round(reference / (10**target))))
-      words = [1, wavelength * 10, 0, 0, 0, sample, reference, 0, 0]
-      expected = self.backend._calculate_absorbance_od(sample, reference)
-      return words, expected
+      marker, blob = _abs_data_blob(wavelength * 10, sample, reference)
+      expected = _absorbance_od_calibrated(prep, [(sample, reference)])
+      return marker, blob, expected
 
     def extract_actual(decoder):
       return [
-        self.backend._calculate_absorbance_od(meas.sample, meas.reference)
+        _absorbance_od_calibrated(prep, [(meas.sample, meas.reference)])
         for meas in decoder.measurements
       ]
 
-    self._run_decoder_case(decoder, build_words, extract_actual)
+    self._run_decoder_case(decoder, build_packet, extract_actual)
 
   def test_decode_fluorescence_pattern(self):
     excitation = 485
     emission = 520
     decoder = _FluorescenceRunDecoder(len(self.scan_wells), excitation * 10, emission * 10)
+    prep_marker, prep_blob = _flr_prepare_blob(
+      excitation * 10, meas_dark=0, ref_dark=0, ref_bright=1000
+    )
+    decoder.feed_bin(prep_marker, prep_blob)
 
-    def build_words(intensity):
-      words = [1, excitation * 10, emission * 10, 0, 0, 0, intensity, 0, 0, 0]
-      return words, intensity
+    def build_packet(intensity):
+      marker, blob = _flr_data_blob(excitation * 10, emission * 10, intensity, 1000)
+      return marker, blob, intensity
 
     def extract_actual(decoder):
       return decoder.intensities
 
-    self._run_decoder_case(decoder, build_words, extract_actual)
+    self._run_decoder_case(decoder, build_packet, extract_actual)
 
   def test_decode_luminescence_pattern(self):
     decoder = _LuminescenceRunDecoder(len(self.scan_wells))
 
-    def build_words(intensity):
-      words = [1, 0, 0, 0, 0, 0, intensity, 0, 0]
-      return words, intensity
+    def build_packet(intensity):
+      marker, blob = _lum_data_blob(0, intensity)
+      return marker, blob, intensity
 
     def extract_actual(decoder):
       return [measurement.intensity for measurement in decoder.measurements]
 
-    self._run_decoder_case(decoder, build_words, extract_actual)
+    self._run_decoder_case(decoder, build_packet, extract_actual)
 
 
 class TestTecanInfiniteScanGeometry(unittest.TestCase):
@@ -577,14 +630,8 @@ class TestTecanInfiniteAscii(unittest.TestCase):
     framed = TecanInfinite200ProBackend._frame_ascii_command("A")
     self.assertEqual(framed, b"\x02A\x03\x00\x00\x01\x40\x0d")
 
-  def test_decode_ascii_frames(self):
-    data = bytearray(b"\x02HELLO\x03\x00\x00\x05\x00\r\x02ST\x03\x00\x00\x02\x06\r")
-    frames = TecanInfinite200ProBackend._decode_ascii_frames(data)
-    self.assertEqual(frames, ["HELLO", "ST"])
-    self.assertEqual(data, bytearray())
-
   def test_consume_leading_ascii_frame(self):
-    buffer = bytearray(b"\x02ST\x03\x00\rXYZ")
+    buffer = bytearray(TecanInfinite200ProBackend._frame_ascii_command("ST") + b"XYZ")
     consumed, text = _consume_leading_ascii_frame(buffer)
     self.assertTrue(consumed)
     self.assertEqual(text, "ST")
