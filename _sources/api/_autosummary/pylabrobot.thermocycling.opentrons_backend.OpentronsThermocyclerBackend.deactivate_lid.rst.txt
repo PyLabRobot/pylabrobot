@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons\_backend.OpentronsThermocyclerBackend.deactivate\_lid
+========================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons_backend
+
+.. automethod:: OpentronsThermocyclerBackend.deactivate_lid

@@ -1,0 +1,361 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "fc3ebf5f",
+   "metadata": {},
+   "source": [
+    "# Inheco SCILA storage unit\n",
+    "\n",
+    "4 plate incubator"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "201cd7c5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload\n",
+    "%autoreload 2"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "474289aa",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.storage.inheco.scila.soap import soap_encode, soap_decode, XSI\n",
+    "from pylabrobot.storage.inheco.scila.scila import SCILABackend\n",
+    "scila = SCILABackend(scila_ip=\"169.254.1.117\")\n",
+    "await scila.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "da156d46",
+   "metadata": {},
+   "source": [
+    "## Status requests"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "d5dc6eda",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'idle'"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_status()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "faaef501",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'Empty'"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_liquid_level()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "5bc58e44",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{'Drawer1': 'Closed',\n",
+       " 'Drawer2': 'Opened',\n",
+       " 'Drawer3': 'Closed',\n",
+       " 'Drawer4': 'Closed'}"
+      ]
+     },
+     "execution_count": 5,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_drawer_positions()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "6e7b7e2a",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{'H2O': 'Opened', 'CO2 Normal': 'Opened', 'CO2 Boost': 'Closed'}"
+      ]
+     },
+     "execution_count": 6,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_valve_status()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "0b4dd0ce",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'NOK'"
+      ]
+     },
+     "execution_count": 7,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_co2_flow_status()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "d30745a8",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'Closed'"
+      ]
+     },
+     "execution_count": 8,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_drawer_position(3)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e5c47abe",
+   "metadata": {},
+   "source": [
+    "## Movement\n",
+    "\n",
+    "Only one drawer can be open at a time. When a drawer is opened and you try to open another drawer, an error is raised."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "63ea94b0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await scila.open_drawer(2)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "3d1bca31",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await scila.close_drawer(2)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f6d1452a",
+   "metadata": {},
+   "source": [
+    "## Temperature control\n",
+    "\n",
+    "There is one temperature for all drawers."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "f88c9c83",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "24.28"
+      ]
+     },
+     "execution_count": 11,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_current_temperature()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "cc2f6063",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await scila.set_temperature(37.0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "5f04d0ef",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "37.0"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_target_temperature()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "id": "02a60f32",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "24.3"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_current_temperature()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "id": "470241e1",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "True"
+      ]
+     },
+     "execution_count": 15,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_temperature_control_enabled()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "id": "5881c2ce",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await scila.deactivate_temperature_control()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "id": "ac8ad797",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "False"
+      ]
+     },
+     "execution_count": 17,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await scila.get_temperature_control_enabled()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.24"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

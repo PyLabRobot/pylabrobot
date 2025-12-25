@@ -1,0 +1,6 @@
+pylabrobot.resources.TubeRack.at
+================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TubeRack.at

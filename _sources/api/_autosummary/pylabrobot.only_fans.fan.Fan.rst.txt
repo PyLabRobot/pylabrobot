@@ -1,0 +1,34 @@
+﻿pylabrobot.only\_fans.fan.Fan
+=============================
+
+.. currentmodule:: pylabrobot.only_fans.fan
+
+.. autoclass:: Fan
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Fan.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Fan.__init__
+      ~Fan.deserialize
+      ~Fan.serialize
+      ~Fan.setup
+      ~Fan.stop
+      ~Fan.turn_off
+      ~Fan.turn_on
+   
+   

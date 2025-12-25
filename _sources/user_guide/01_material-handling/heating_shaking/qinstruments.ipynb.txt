@@ -1,0 +1,260 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# QInstruments BioShake\n",
+    "\n",
+    "The QInstruments BioShake is a series of heater-cooler-shaker machines that enables:\n",
+    "- heating & cooling,\n",
+    "- locking & unlocking, and\n",
+    "- (orbital) shaking\n",
+    "\n",
+    "...of plates, depending on the model.\n",
+    "\n",
+    "Because all models share the same firmware, the table below lists every model supported by this backend, as well as what features they support. If a feature is called on a model that doesn't support it (e.g. shaking on a Heatplate), then a 'not supported' error will be rasied.\n",
+    "\n",
+    "| Model Name                 | Shaking (rpm) | Plate Lock | Heating | Active Cooling |\n",
+    "|----------------------|---------------|------------|---------|----------------|\n",
+    "| BioShake Q1          | 200-3000      | ✔️         | ✔️       | ✔️              |\n",
+    "| BioShake Q2          | 200-3000      | ✔️         | ✔️       | ✔️              |\n",
+    "| BioShake 3000        | 200-3000      | ❌         | ❌       | ❌              |\n",
+    "| BioShake 3000 elm    | 200-3000      | ✔️         | ❌       | ❌              |\n",
+    "| BioShake 3000 elm DWP| 200-3000      | ✔️         | ❌       | ❌              |\n",
+    "| BioShake D30 elm     | 200-2000      | ✔️         | ❌       | ❌              |\n",
+    "| BioShake 5000 elm    | 200-5000      | ✔️         | ❌       | ❌              |\n",
+    "| BioShake 3000-T      | 200-3000      | ❌         | ✔️       | ❌              |\n",
+    "| BioShake 3000-T elm  | 200-3000      | ✔️         | ✔️       | ❌              |\n",
+    "| BioShake D30-T elm   | 200-2000      | ✔️         | ✔️       | ❌              |\n",
+    "| Heatplate            | none          | ❌         | ✔️       | ❌              |\n",
+    "| ColdPlate            | none          | ❌         | ✔️       | ✔️              |\n",
+    "\n",
+    "\n",
+    "Check out the [BioShake integration manual](https://www.qinstruments.com/fileadmin/Article/All/integration-manual-en-1-8-0.pdf) for more information (or this [manual](https://www.qinstruments.com/fileadmin/Article/MANUALS/Integration-manual-en.pdf) for the Q1 and Q2 models, specifically.)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "\n",
+    "## Setup Instructions (Physical)\n",
+    "\n",
+    "Please refer to the above manuals for instructions on connecting the BioShake devices to the computer. They can be connected via RS232 or USB-A port and must be plugged into a 24 VDC power supply."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Usage"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.heating_shaking import HeaterShaker\n",
+    "from pylabrobot.heating_shaking import BioShake\n",
+    "from pylabrobot.resources.coordinate import Coordinate\n",
+    "\n",
+    "str_port = \"COM1\"  # Replace with the actual port connected to your computer\n",
+    "backend = BioShake(port=str_port)\n",
+    "hs = HeaterShaker(\n",
+    "  name=\"BioShake\",\n",
+    "  size_x=0,  # TODO: physical size\n",
+    "  size_y=0,  # TODO: physical size\n",
+    "  size_z=0,  # TODO: physical size\n",
+    "  child_location=Coordinate(0, 0, 0),  # TODO: physical size\n",
+    "  backend=backend)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "When calling `setup`, the user has the option to home the device or not. By default, the device will reset (clearing any error it's stuck in) before moving to the home zero position and locks in place. This process should take no longer than 30 seconds."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.setup(skip_home=False) # Or 'True' if you wish to skip the process"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Temperature Control\n",
+    "\n",
+    "For models that support temperature control, please use the following call functions:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.set_temperature(temperature=37) # Temperature in degrees C"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.get_temperature() # Returns temperature in degrees C"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.deactivate() # Stop temperature control"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Shaking Control"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For models that support shaking and/or plate locking, please use the following call functions:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.lock_plate()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.unlock_plate()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "BioShake supports acceleration for shaking and deceleration for stopping. Acceleration and deceleration correspond to the seconds it takes till it reaches full speed. The default value is 0, where it starts and stops at normal velocity. Any value higher will result in a slow acceleration/deceleration."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.shake(speed=500, acceleration=0)  # speed in rpm"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.stop_shaking(deceleration=5)  # Stop shaking"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Closing Connection to Machine"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.stop()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Using Multiple BioShake Devices"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "When using multiple BioShake devices, you may call them in batches."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import asyncio\n",
+    "\n",
+    "\n",
+    "async def setup_and_shake(hs):\n",
+    "  await hs.setup(skip_home=False)\n",
+    "  await hs.shake(speed=500)\n",
+    "\n",
+    "await asyncio.gather(\n",
+    "  setup_and_shake(hs1),\n",
+    "  setup_and_shake(hs2),\n",
+    "  setup_and_shake(hs3),\n",
+    "  setup_and_shake(hs4),\n",
+    ")"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.15"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
