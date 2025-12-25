@@ -47,7 +47,7 @@ def byonoy_a96a_illumination_unit(
 def byonoy_a96a_detection_unit(
   name: str,
   model: str = "Byonoy A96A Detection Unit",
-) -> ResourceHolder:
+) -> Resource:
   """Create a Byonoy A96A detection unit `ResourceHolder`.
 
   The detection unit is modeled as a fixed-size rectangular prism. The
@@ -82,7 +82,7 @@ def byonoy_a96a_detection_unit(
   )
 
 
-def byonoy_a96a_parking_unit(name: str) -> ResourceHolder:
+def byonoy_a96a_parking_unit(name: str) -> Resource:
   """Create a Byonoy A96A parking unit `ResourceHolder`.
 
   This is equivalent to `byonoy_a96a_detection_unit(...)` but with the model
