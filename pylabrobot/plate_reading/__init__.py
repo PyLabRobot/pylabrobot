@@ -19,3 +19,4 @@ from .standard import (
   ImagingResult,
   Objective,
 )
+from .tecan_infinite_backend import TecanInfinite200ProBackend, TecanScanConfig
