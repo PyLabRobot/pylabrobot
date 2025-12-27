@@ -65,3 +65,7 @@ class Coordinate:
   def rotated(self, rotation: Rotation) -> Coordinate:
     """Rotate the coordinate by the given rotation around the origin."""
     return Coordinate(*matrix_vector_multiply_3x3(rotation.get_rotation_matrix(), self.vector()))
+
+  def copy(self) -> Coordinate:
+    """Return a copy of the coordinate."""
+    return Coordinate(self.x, self.y, self.z)
