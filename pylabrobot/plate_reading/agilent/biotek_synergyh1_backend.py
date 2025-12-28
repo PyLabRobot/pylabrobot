@@ -5,7 +5,7 @@ from typing import Optional
 
 from pylibftdi import FtdiError
 
-from pylabrobot.plate_reading.agilent_biotek_backend import BioTekPlateReaderBackend
+from pylabrobot.pylabrobot.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 
 logger = logging.getLogger(__name__)
 

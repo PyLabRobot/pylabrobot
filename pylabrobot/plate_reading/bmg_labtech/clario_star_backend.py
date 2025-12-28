@@ -20,7 +20,7 @@ from pylabrobot import utils
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
 
-from .backend import PlateReaderBackend
+from ..backend import PlateReaderBackend
 
 if sys.version_info >= (3, 8):
   from typing import Literal
