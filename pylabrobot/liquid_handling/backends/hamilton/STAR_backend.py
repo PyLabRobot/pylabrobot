@@ -9123,6 +9123,297 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return result_probed_z_height
 
+  async def move_tip_to_liquid_surface_using_plld_and_optional_clld(
+    self,
+    channel_idx: int,  # 0-based indexing of channels!
+    lowest_immers_pos: float = 99.98,  # mm
+    start_pos_search: Optional[float] = None,  # mm
+    channel_speed_above_start_pos_search: float = 120.0,  # mm/sec
+    channel_speed: float = 10.0,  # mm
+    channel_acceleration: float = 800.0,  # mm/sec**2
+    z_drive_current_limit: int = 3,  # unknown unit
+    tip_has_filter: bool = False,
+    dispense_drive_speed: float = 5.0,  # mm/sec
+    dispense_drive_acceleration: float = 0.2,  # mm/sec**2
+    dispense_drive_max_speed: float = 14.5,  # mm/sec
+    dispense_drive_current_limit: int = 3,  # unknown unit
+    clld_detection_edge: int = 10,
+    clld_detection_drop: int = 2,
+    plld_detection_edge: int = 30,
+    plld_detection_drop: int = 10,
+    lld_mode: Optional[LLDMode] = None,
+    plld_mode: Optional[PressureLLDMode] = None,
+    max_delta_plld_clld: float = 5.0,  # mm
+    plld_foam_detection_drop: int = 30,
+    plld_foam_detection_edge_tolerance: int = 30,
+    plld_foam_ad_values: int = 30,  # unknown unit
+    plld_foam_search_speed: float = 10.0,  # mm/sec
+    dispense_back_plld_volume: Optional[float] = None,  # uL
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: float = 2.0,  # mm
+  ):
+    """Move a channel tip to the liquid surface using pressure LLD (pLLD) and optionally capacitive LLD (cLLD).
+
+    This command performs a downward liquid-level detection (LLD) search on the specified 0-indexed channel.
+    Depending on `lld_mode`, the instrument runs pressure LLD only (PRESSURE) or a combined mode (DUAL) that
+    uses both pressure and capacitive signals. The search starts at `start_pos_search` (or a computed safe
+    start height if None) and will not go below `lowest_immers_pos`.
+
+    Positions are specified in millimetres relative to the deck coordinate system used by this API. Internally,
+    the method queries the mounted tip length, applies a fixed fitting depth (8 mm), and converts the resulting
+    positions and speeds into the instrument “increment” units expected by the channel Z-drive and dispensing drive.
+    After detection, the channel performs the configured post-detection motion given by
+    `post_detection_trajectory` and `post_detection_dist`.
+
+    All numeric parameters are validated against instrument-supported ranges (assertions). A tip must be mounted
+    on the target channel.
+
+    Args:
+      channel_idx: Channel index (0-based).
+      lowest_immers_pos: Lowest allowed search position in mm (hard stop). Defaults to 99.98.
+      start_pos_search: Search start position in mm. If None, computed from the tip length and safe head top position.
+      channel_speed_above_start_pos_search: Z-drive speed above the start position (mm/s).
+      channel_speed: Z-drive search speed (mm/s).
+      channel_acceleration: Z-drive acceleration (mm/s^2).
+      z_drive_current_limit: Z-drive current limit (instrument units; 0-7).
+
+      tip_has_filter: Whether the mounted tip has a filter (bool).
+
+      dispense_drive_speed: Dispensing drive speed (mm/s).
+      dispense_drive_acceleration: Dispensing drive acceleration (mm/s^2).
+      dispense_drive_max_speed: Dispensing drive max speed (mm/s).
+      dispense_drive_current_limit: Dispensing drive current limit (instrument units; 0-7).
+
+      clld_detection_edge: cLLD edge steepness threshold (0-1023).
+      clld_detection_drop: cLLD drop/offset after detection (0-1023).
+      plld_detection_edge: pLLD edge steepness threshold (0-1023).
+      plld_detection_drop: pLLD drop/offset after detection (0-1023).
+
+      lld_mode: LLD mode (PRESSURE or DUAL). If None, defaults to PRESSURE.
+      plld_mode: Pressure LLD mode (LIQUID or FOAM). If None, defaults to LIQUID.
+      max_delta_plld_clld: Max allowed delta between pLLD and cLLD detection positions (mm).
+
+      plld_foam_detection_drop: Foam detection drop (0-1023).
+      plld_foam_detection_edge_tolerance: Foam detection edge tolerance (0-1023).
+      plld_foam_ad_values: Foam AD values (instrument units; 0-4999).
+      plld_foam_search_speed: Foam search speed (mm/s).
+
+      dispense_back_plld_volume: Optional dispense-back volume after pLLD detection (uL). If None, disabled.
+      post_detection_trajectory: Post-detection movement mode (0 or 1).
+      post_detection_dist: Post-detection movement distance (mm).
+
+    Raises:
+      ValueError: If `channel_idx` is not an int or is out of range.
+      RuntimeError: If no tip is mounted on `channel_idx`.
+      AssertionError: If any parameter is outside the instrument-supported range.
+
+    Returns:
+      None
+    """
+
+    # Preconditions checks
+    # Ensure valid channel index
+    if not isinstance(channel_idx, int) or not (0 <= channel_idx <= self.num_channels - 1):
+      raise ValueError(f"channel_idx must be in [0, {self.num_channels - 1}], is {channel_idx}")
+
+    # Ensure tip is mounted
+    tip_presence = await self.request_tip_presence()
+    if not tip_presence[channel_idx]:
+      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
+
+    # Correct for tip length + fitting depth
+    tip_len = await self.request_tip_len_on_channel(channel_idx)
+
+    fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
+    safe_head_top_z_pos = 334.7
+
+    if start_pos_search is None:
+      start_pos_search = safe_head_top_z_pos - tip_len + fitting_depth
+
+    channel_head_start_pos = start_pos_search + tip_len - fitting_depth
+    safe_head_bottom_z_pos = 99.98 + tip_len - fitting_depth + 0.5  # add 0.5 mm safety margin
+
+    if lld_mode is None:
+      lld_mode = self.LLDMode.PRESSURE
+
+    if plld_mode is None:
+      plld_mode = self.PressureLLDMode.LIQUID
+
+    if dispense_back_plld_volume is None:
+      dispense_back_plld_volume_mode = 0
+      dispense_back_plld_volume_increments = 0
+    else:
+      dispense_back_plld_volume_mode = 1
+      dispense_back_plld_volume_increments = STARBackend.dispensing_drive_vol_to_increment(
+        dispense_back_plld_volume
+      )
+
+    # Conversions to machine units
+    lowest_immers_pos_increments = STARBackend.mm_to_z_drive_increment(lowest_immers_pos)
+    start_pos_search_increments = STARBackend.mm_to_z_drive_increment(channel_head_start_pos)
+
+    channel_speed_above_start_pos_search_increments = STARBackend.mm_to_z_drive_increment(
+      channel_speed_above_start_pos_search
+    )
+    channel_speed_increments = STARBackend.mm_to_z_drive_increment(channel_speed)
+    channel_acceleration_thousand_increments = STARBackend.mm_to_z_drive_increment(
+      channel_acceleration / 1000
+    )
+
+    dispense_drive_speed_increments = STARBackend.dispensing_drive_mm_to_increment(
+      dispense_drive_speed
+    )
+    dispense_drive_acceleration_increments = STARBackend.dispensing_drive_mm_to_increment(
+      dispense_drive_acceleration
+    )
+    dispense_drive_max_speed_increments = STARBackend.dispensing_drive_mm_to_increment(
+      dispense_drive_max_speed
+    )
+
+    post_detection_dist_increments = STARBackend.mm_to_z_drive_increment(post_detection_dist)
+    max_delta_plld_clld_increments = STARBackend.mm_to_z_drive_increment(max_delta_plld_clld)
+
+    plld_foam_search_speed_increments = STARBackend.mm_to_z_drive_increment(plld_foam_search_speed)
+
+    # Machine-compatibility parameter checks
+    assert tip_has_filter in [True, False], "tip_has_filter must be a boolean"
+
+    assert lld_mode in [self.LLDMode.PRESSURE, self.LLDMode.DUAL], (
+      f"lld_mode must be either LLDMode.PRESSURE ({self.LLDMode.PRESSURE}) or "
+      + f"LLDMode.DUAL ({self.LLDMode.DUAL}), is {lld_mode}"
+    )
+    assert plld_mode in [self.PressureLLDMode.LIQUID, self.PressureLLDMode.FOAM], (
+      f"plld_mode must be either PressureLLDMode.LIQUID ({self.PressureLLDMode.LIQUID}) or "
+      + f"PressureLLDMode.FOAM ({self.PressureLLDMode.FOAM}), is {plld_mode}"
+    )
+
+    assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
+      f"Lowest immersion position must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
+      + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+    )
+    assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
+      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
+      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
+    )
+    assert 20 <= channel_speed_above_start_pos_search_increments <= 15_000, (
+      f"Speed above start position of LLD search must be between \n"
+      + f"{STARBackend.z_drive_increment_to_mm(20)} and "
+      + f"{STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is "
+      + f"{channel_speed_above_start_pos_search} mm/sec"
+    )
+    assert 20 <= channel_speed_increments <= 15_000, (
+      f"LLD search speed must be between \n{STARBackend.z_drive_increment_to_mm(20)}"
+      + f"and {STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
+    )
+    assert 5 <= channel_acceleration_thousand_increments <= 150, (
+      f"Channel acceleration must be between \n{STARBackend.z_drive_increment_to_mm(5*1_000)} "
+      + f" and {STARBackend.z_drive_increment_to_mm(150*1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
+    )
+    assert (
+      0 <= z_drive_current_limit <= 7
+    ), f"Z-drive current limit must be between 0 and 7, is {z_drive_current_limit}"
+
+    assert 20 <= dispense_drive_speed_increments <= 13_500, (
+      f"Dispensing drive speed must be between \n"
+      + f"{STARBackend.dispensing_drive_increment_to_mm(20)} and "
+      + f"{STARBackend.dispensing_drive_increment_to_mm(13_500)} mm/sec, is {dispense_drive_speed} mm/sec"
+    )
+    assert 1 <= dispense_drive_acceleration_increments <= 100, (
+      f"Dispensing drive acceleration must be between \n"
+      + f"{STARBackend.dispensing_drive_increment_to_mm(1)} and "
+      + f"{STARBackend.dispensing_drive_increment_to_mm(100)} mm/sec**2, is {dispense_drive_acceleration} mm/sec**2"
+    )
+    assert 20 <= dispense_drive_max_speed_increments <= 13_500, (
+      f"Dispensing drive max speed must be between \n"
+      + f"{STARBackend.dispensing_drive_increment_to_mm(20)} and "
+      + f"{STARBackend.dispensing_drive_increment_to_mm(13_500)} mm/sec, is {dispense_drive_max_speed} mm/sec"
+    )
+    assert (
+      0 <= dispense_drive_current_limit <= 7
+    ), f"Dispensing drive current limit must be between 0 and 7, is {dispense_drive_current_limit}"
+
+    assert (
+      0 <= clld_detection_edge <= 1_023
+    ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
+    assert (
+      0 <= clld_detection_drop <= 1_023
+    ), "Offset after capacitive LLD edge detection must be between 0 and 1023"
+    assert (
+      0 <= plld_detection_edge <= 1_023
+    ), "Edge steepness at pressure LLD detection must be between 0 and 1023"
+    assert (
+      0 <= plld_detection_drop <= 1_023
+    ), "Offset after pressure LLD edge detection must be between 0 and 1023"
+
+    assert 0 <= max_delta_plld_clld_increments <= 9_999, (
+      "Maximum allowed difference between pressure LLD and capacitive LLD detection z-positions "
+      + f"must be between 0 and {STARBackend.z_drive_increment_to_mm(9_999)} mm,"
+      + f" is {max_delta_plld_clld} mm"
+    )
+
+    assert (
+      0 <= plld_foam_detection_drop <= 1_023
+    ), f"Pressure LLD foam detection drop must be between 0 and 1023, is {plld_foam_detection_drop}"
+    assert 0 <= plld_foam_detection_edge_tolerance <= 1_023, (
+      f"Pressure LLD foam detection edge tolerance must be between 0 and 1023, "
+      + f"is {plld_foam_detection_edge_tolerance}"
+    )
+    assert (
+      0 <= plld_foam_ad_values <= 4_999
+    ), f"Pressure LLD foam AD values must be between 0 and 4999, is {plld_foam_ad_values}"
+    assert 20 <= plld_foam_search_speed_increments <= 13_500, (
+      f"Pressure LLD foam search speed must be between \n"
+      + f"{STARBackend.z_drive_increment_to_mm(20)} and "
+      + f"{STARBackend.z_drive_increment_to_mm(13_500)} mm/sec, is {plld_foam_search_speed} mm/sec"
+    )
+
+    assert dispense_back_plld_volume_mode in [0, 1], (
+      "dispense_back_plld_volume_mode must be either 0 ('normal') or 1 "
+      + "('dispense back dispense_back_plld_volume'), "
+      + f"is {dispense_back_plld_volume_mode}"
+    )
+
+    assert 0 <= dispense_back_plld_volume_increments <= 26_666, (
+      "Dispense back pressure LLD volume must be between \n0"
+      + f" and {STARBackend.z_drive_increment_to_mm(26_666)} uL, is {dispense_back_plld_volume} mm"
+    )
+
+    assert 0 <= post_detection_dist_increments <= 9_999, (
+      "Post cLLD-detection movement distance must be between \n0"
+      + f" and {STARBackend.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
+    )
+
+    await self.send_command(
+      module=STARBackend.channel_id(channel_idx),
+      command="ZE",
+      zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
+      zc=f"{start_pos_search_increments:05}",  # Start position of LLD search [increment]
+      zi=f"{post_detection_dist_increments:04}",  # Distance to move up after detection [increment]
+      zj=post_detection_trajectory,  # Movement of the channel after contacting surface
+      gf=str(int(tip_has_filter)),  # Tip has filter
+      gt=f"{clld_detection_edge:04}",  # Edge steepness at capacitive LLD detection
+      gl=f"{clld_detection_drop:04}",  # Offset after capacitive LLD edge detection
+      gu=f"{plld_detection_edge:04}",  # Edge steepness at pressure LLD detection
+      gn=f"{plld_detection_drop:04}",  # Offset after pressure LLD edge detection
+      gm="0" if lld_mode == self.LLDMode.PRESSURE else "1",  # LLD mode
+      gz=f"{max_delta_plld_clld_increments:04}",  # Max allowed delta between pLLD and cLLD
+      cj=str(plld_mode.value),  # Pressure LLD mode
+      co=f"{plld_foam_detection_drop:04}",  # Pressure LLD foam detection drop
+      cp=f"{plld_foam_detection_edge_tolerance:04}",  # Pressure LLD foam detection edge tolerance
+      cq=f"{plld_foam_ad_values:04}",  # Pressure LLD foam AD values
+      cl=f"{plld_foam_search_speed_increments:05}",  # Pressure LLD foam search speed
+      cc=str(dispense_back_plld_volume_mode),  # Dispense back pLLD volume mode
+      cd=f"{dispense_back_plld_volume_increments:05}",  # Dispense back pressure LLD volume
+      zv=f"{channel_speed_above_start_pos_search_increments:05}",  # Speed above start pos search
+      zl=f"{channel_speed_increments:05}",  # Speed of channel movement
+      zr=f"{channel_acceleration_thousand_increments:03}",  # Acceleration [1000 increment/second^2]
+      zw=f"{z_drive_current_limit}",  # Z-drive current limit
+      dl=f"{dispense_drive_speed_increments:04}",  # Dispensing drive speed
+      dr=f"{dispense_drive_acceleration_increments:04}",  # Dispensing drive acceleration
+      dv=f"{dispense_drive_max_speed_increments:04}",  # Dispensing
+      dw=f"{dispense_drive_current_limit}",  # Dispensing drive current limit
+    )
+
   async def request_probe_z_position(self, channel_idx: int) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
     resp = await self.send_command(
