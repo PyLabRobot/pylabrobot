@@ -8655,6 +8655,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   y_drive_mm_per_increment = 0.046302082
   z_drive_mm_per_increment = 0.01072765
 
+  dispensing_drive_vol_per_increment = 0.046876  # uL / increment
+  dispensing_drive_mm_per_increment = 0.002734375
+
   @staticmethod
   def mm_to_y_drive_increment(value_mm: float) -> int:
     return round(value_mm / STARBackend.y_drive_mm_per_increment)
@@ -8670,6 +8673,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   @staticmethod
   def z_drive_increment_to_mm(value_increments: int) -> float:
     return round(value_increments * STARBackend.z_drive_mm_per_increment, 2)
+
+  # Dispensing drive conversions
+  # --- uL <-> increments ---
+  @staticmethod
+  def dispensing_drive_vol_to_increment(value_uL: float) -> int:
+    return round(value_uL / STARBackend.dispensing_drive_vol_per_increment)
+
+  @staticmethod
+  def dispensing_drive_increment_to_volume(value_increment: int) -> float:
+    return round(value_increment * STARBackend.dispensing_drive_vol_per_increment, 1)
+
+  # --- mm <-> increments ---
+  @staticmethod
+  def dispensing_drive_mm_to_increment(value_mm: float) -> int:
+    return round(value_mm / STARBackend.dispensing_drive_mm_per_increment)
+
+  @staticmethod
+  def dispensing_drive_increment_to_mm(value_increment: int) -> float:
+    return round(value_increment * STARBackend.dispensing_drive_mm_per_increment, 3)
+
+  # --- uL <-> mm ---
+  @staticmethod
+  def dispensing_drive_vol_to_mm(value_uL: float) -> float:
+    inc = STARBackend.dispensing_drive_vol_to_increment(value_uL)
+    return STARBackend.dispensing_drive_increment_to_mm(inc)
+
+  @staticmethod
+  def dispensing_drive_mm_to_vol(value_mm: float) -> float:
+    inc = STARBackend.dispensing_drive_mm_to_increment(value_mm)
+    return STARBackend.dispensing_drive_increment_to_volume(inc)
 
   async def clld_probe_x_position_using_channel(
     self,
@@ -8915,15 +8948,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert (
       0 <= detection_edge <= 1_0234
     ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
-    assert current_limit_int in [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-    ], f"Current limit must be in [1, 2, 3, 4, 5, 6, 7], is {channel_speed} mm/sec"
+    assert (
+      0 <= current_limit_int <= 7
+    ), f"Current limit must be in [0, 1, 2, 3, 4, 5, 6, 7], is {channel_speed} mm/sec"
 
     # Move channel for cLLD (Note: does not return detected y-position!)
     await self.send_command(
