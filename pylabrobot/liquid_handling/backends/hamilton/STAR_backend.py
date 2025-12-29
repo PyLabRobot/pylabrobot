@@ -9389,7 +9389,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
       zc=f"{start_pos_search_increments:05}",  # Start position of LLD search [increment]
       zi=f"{post_detection_dist_increments:04}",  # Distance to move up after detection [increment]
-      zj=post_detection_trajectory,  # Movement of the channel after contacting surface
+      zj=f"{post_detection_trajectory:01}",  # Movement of the channel after contacting surface
       gf=str(int(tip_has_filter)),  # Tip has filter
       gt=f"{clld_detection_edge:04}",  # Edge steepness at capacitive LLD detection
       gl=f"{clld_detection_drop:04}",  # Offset after capacitive LLD edge detection
@@ -9408,9 +9408,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zl=f"{channel_speed_increments:05}",  # Speed of channel movement
       zr=f"{channel_acceleration_thousand_increments:03}",  # Acceleration [1000 increment/second^2]
       zw=f"{z_drive_current_limit}",  # Z-drive current limit
-      dl=f"{dispense_drive_speed_increments:04}",  # Dispensing drive speed
-      dr=f"{dispense_drive_acceleration_increments:04}",  # Dispensing drive acceleration
-      dv=f"{dispense_drive_max_speed_increments:04}",  # Dispensing
+      dl=f"{dispense_drive_speed_increments:05}",  # Dispensing drive speed
+      dr=f"{dispense_drive_acceleration_increments:03}",  # Dispensing drive acceleration
+      dv=f"{dispense_drive_max_speed_increments:05}",  # Dispensing
       dw=f"{dispense_drive_current_limit}",  # Dispensing drive current limit
     )
 
