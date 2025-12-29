@@ -9296,7 +9296,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
     )
     assert 20 <= channel_speed_above_start_pos_search_increments <= 15_000, (
-      f"Speed above start position of LLD search must be between \n"
+      "Speed above start position of LLD search must be between \n"
       + f"{STARBackend.z_drive_increment_to_mm(20)} and "
       + f"{STARBackend.z_drive_increment_to_mm(15_000)} mm/sec, is "
       + f"{channel_speed_above_start_pos_search} mm/sec"
@@ -9314,17 +9314,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ), f"Z-drive current limit must be between 0 and 7, is {z_drive_current_limit}"
 
     assert 20 <= dispense_drive_speed_increments <= 13_500, (
-      f"Dispensing drive speed must be between \n"
+      "Dispensing drive speed must be between \n"
       + f"{STARBackend.dispensing_drive_increment_to_mm(20)} and "
       + f"{STARBackend.dispensing_drive_increment_to_mm(13_500)} mm/sec, is {dispense_drive_speed} mm/sec"
     )
     assert 1 <= dispense_drive_acceleration_increments <= 100, (
-      f"Dispensing drive acceleration must be between \n"
+      "Dispensing drive acceleration must be between \n"
       + f"{STARBackend.dispensing_drive_increment_to_mm(1)} and "
       + f"{STARBackend.dispensing_drive_increment_to_mm(100)} mm/sec**2, is {dispense_drive_acceleration} mm/sec**2"
     )
     assert 20 <= dispense_drive_max_speed_increments <= 13_500, (
-      f"Dispensing drive max speed must be between \n"
+      "Dispensing drive max speed must be between \n"
       + f"{STARBackend.dispensing_drive_increment_to_mm(20)} and "
       + f"{STARBackend.dispensing_drive_increment_to_mm(13_500)} mm/sec, is {dispense_drive_max_speed} mm/sec"
     )
@@ -9355,14 +9355,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       0 <= plld_foam_detection_drop <= 1_023
     ), f"Pressure LLD foam detection drop must be between 0 and 1023, is {plld_foam_detection_drop}"
     assert 0 <= plld_foam_detection_edge_tolerance <= 1_023, (
-      f"Pressure LLD foam detection edge tolerance must be between 0 and 1023, "
+      "Pressure LLD foam detection edge tolerance must be between 0 and 1023, "
       + f"is {plld_foam_detection_edge_tolerance}"
     )
     assert (
       0 <= plld_foam_ad_values <= 4_999
     ), f"Pressure LLD foam AD values must be between 0 and 4999, is {plld_foam_ad_values}"
     assert 20 <= plld_foam_search_speed_increments <= 13_500, (
-      f"Pressure LLD foam search speed must be between \n"
+      "Pressure LLD foam search speed must be between \n"
       + f"{STARBackend.z_drive_increment_to_mm(20)} and "
       + f"{STARBackend.z_drive_increment_to_mm(13_500)} mm/sec, is {plld_foam_search_speed} mm/sec"
     )
