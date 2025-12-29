@@ -256,9 +256,12 @@ class Resource:
         "This operation is not currently supported."
       )
 
-    return self.get_absolute_location(x=x, y=y, z=z) - other.get_absolute_location(
-      x="l", y="f", z="b"
+    other_absolute_lfb = (
+      other.get_absolute_location(x="l", y="f", z="b")
+      if other.location is not None
+      else Coordinate(0, 0, 0)
     )
+    return self.get_absolute_location(x=x, y=y, z=z) - other_absolute_lfb
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
@@ -391,6 +394,10 @@ class Resource:
       msg = " ".join(msgs)
       raise ValueError(msg)
 
+    # Prevent cycles (dropping an ancestor into its own subtree)
+    if self.is_in_subtree_of(resource):
+      raise ValueError(f"Cannot drop '{resource.name}' onto '{self.name}': would create a cycle.")
+
   def get_root(self) -> Resource:
     """Get the root of the resource tree."""
     if self.parent is None:
@@ -512,6 +519,12 @@ class Resource:
     """Return a copy of this resource at the given location."""
     new_resource = self.copy()
     new_resource.location = location
+    return new_resource
+
+  def named(self, name: str) -> Self:
+    """Return a copy of this resource with the given name."""
+    new_resource = self.copy()
+    new_resource.name = name
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
@@ -828,3 +841,24 @@ class Resource:
     for resource in self.children:
       highest_point = max(highest_point, resource.get_highest_known_point())
     return highest_point
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    """Validate whether `resource` may be dropped onto this resource.
+
+    Non-mutating preflight check used before assignment (e.g., drag/drop, LiquidHandler).
+    Enforces generic tree/assignment rules (reassign semantics, root name conflicts, no cycles).
+    Override in subclasses (and call `super()`) to add domain-specific constraints.
+
+    Raises:
+      ValueError: If the drop/assignment is not allowed.
+    """
+    # Baseline validity checks for attaching `resource` under `self`
+    # (delegated to `_check_assignment` to stay consistent as rules evolve).
+    self._check_assignment(resource=resource, reassign=reassign)
+
+    # Subclasses can add stricter “drop rules” here.
+    # Examples:
+    # - Enforce placement/geometry constraints (must fit, no overlaps, valid coordinates)
+    # - Enforce state/permission rules (locked, read-only, etc.)
+    # Base `Resource` does not impose any of those extra rules beyond the generic
+    # assignment safety checks.

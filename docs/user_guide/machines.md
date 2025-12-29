@@ -107,12 +107,13 @@ tr > td:nth-child(5) { width: 15%; }
 | Thermo Fisher Scientific | Cytomat 5C | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / [OEM](https://www.thermofisher.com/order/catalog/product/51031526) |
 | Thermo/Liconic | Heraeus Cytomat | <span class="badge badge-heating">heating</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/01_material-handling/incubators/cytomat.html) / OEM? |
 | Inheco | Incubator Shaker (MTP/DWP) | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | Mostly | [OEM](https://www.inheco.com/incubator-shaker.html) |
+| Inheco | SCILA | <span class="badge badge-heating">heating</span><span class="badge badge-shaking">shaking</span> | Mostly | [OEM](https://www.inheco.com/scila.html) |
 
 ### Peelers
 
 | Manufacturer | Machine | PLR-Support | Links |
 |--------------|---------|-------------|--------|
-| Azenta Life Sciences | XPeel | WIP | [OEM](https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel) |
+| Azenta Life Sciences | XPeel | Full | [OEM](https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel) |
 
 ### Sealers
 
