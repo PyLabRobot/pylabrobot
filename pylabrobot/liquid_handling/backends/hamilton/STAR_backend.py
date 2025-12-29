@@ -9014,14 +9014,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Preconditions checks
-    # Ensure tip is mounted
-    if not (await self.request_tip_presence())[channel_idx]:
-      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
-
     # Ensure valid channel index
     if not isinstance(channel_idx, int) or not (0 <= channel_idx <= self.num_channels - 1):
       raise ValueError(f"channel_idx must be in [0, {self.num_channels - 1}], is {channel_idx}")
 
+    # Ensure tip is mounted
+    tip_presence = await self.request_tip_presence()
+    if not tip_presence[channel_idx]:
+      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
     # Correct for tip length + fitting depth
     tip_len = await self.request_tip_len_on_channel(channel_idx)
 
