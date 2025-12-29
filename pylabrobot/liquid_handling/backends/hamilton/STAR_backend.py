@@ -9032,7 +9032,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       start_pos_search = 334.7 - tip_len + fitting_depth
 
     channel_head_start_pos = start_pos_search + tip_len - fitting_depth
-    safe_head_bottom_z_pos = 99.98 + tip_len - fitting_depth + 0.5 # add 0.5 mm safety margin
+    safe_head_bottom_z_pos = 99.98 + tip_len - fitting_depth + 0.5  # add 0.5 mm safety margin
 
     # Conversions & machine-compatibility check of parameters
     lowest_immers_pos_increments = STARBackend.mm_to_z_drive_increment(lowest_immers_pos)
