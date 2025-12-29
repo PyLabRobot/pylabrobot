@@ -9029,7 +9029,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     safe_head_top_z_pos = 334.7
 
     if start_pos_search is None:
-      start_pos_search = 334.7 - tip_len + fitting_depth
+      start_pos_search = safe_head_top_z_pos - tip_len + fitting_depth
 
     channel_head_start_pos = start_pos_search + tip_len - fitting_depth
     safe_head_bottom_z_pos = 99.98 + tip_len - fitting_depth + 0.5  # add 0.5 mm safety margin
