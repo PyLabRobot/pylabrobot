@@ -9019,7 +9019,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise RuntimeError(f"No tip mounted on channel {channel_idx}")
 
     # Ensure valid channel index
-    if (not 0 <= channel_idx <= self.num_channels - 1) and isinstance(channel_idx, int):
+    if not isinstance(channel_idx, int) or not (0 <= channel_idx <= self.num_channels - 1):
       raise ValueError(f"channel_idx must be in [0, {self.num_channels - 1}], is {channel_idx}")
 
     # Correct for tip length + fitting depth
