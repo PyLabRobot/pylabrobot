@@ -1667,6 +1667,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     DUAL = 3
     Z_TOUCH_OFF = 4
 
+  class PressureLLDMode(enum.Enum):
+    """Pressure liquid level detection mode."""
+
+    LIQUID = 0
+    FOAM = 1
+
   async def probe_liquid_heights(
     self,
     containers: List[Container],
