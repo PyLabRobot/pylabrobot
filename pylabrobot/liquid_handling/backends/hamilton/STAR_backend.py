@@ -9375,7 +9375,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 0 <= dispense_back_plld_volume_increments <= 26_666, (
       "Dispense back pressure LLD volume must be between \n0"
-      + f" and {STARBackend.z_drive_increment_to_mm(26_666)} uL, is {dispense_back_plld_volume} mm"
+      + f" and {STARBackend.dispensing_drive_increment_to_volume(26_666)} uL, is {dispense_back_plld_volume} uL"
     )
 
     assert 0 <= post_detection_dist_increments <= 9_999, (
