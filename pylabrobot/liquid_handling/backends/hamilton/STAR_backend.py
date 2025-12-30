@@ -9491,7 +9491,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       f"Lowest LLD search position (given {lowest_immers_pos} mm) must be "
       + f"lower than start position of LLD search (given {start_pos_search} mm)"
     )
-    assert safe_tip_bottom_z_pos <= lowest_immers_pos <= safe_tip_top_z_pos-1, (
+    assert safe_tip_bottom_z_pos <= lowest_immers_pos <= safe_tip_top_z_pos - 1, (
       f"Lowest LLD search must be between \n{safe_tip_bottom_z_pos}"
       + f" and {safe_tip_top_z_pos}-1 mm, is {lowest_immers_pos} mm "
       + f"({tip_len=} mm)"
@@ -9524,21 +9524,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dispense_back_plld_volume=dispense_back_plld_volume,
       post_detection_trajectory=post_detection_trajectory,
       post_detection_dist=post_detection_dist,
-    )    
+    )
 
     if plld_mode == self.PressureLLDMode.FOAM:
-      resp_tip_mm = [
-        round(z_pos - tip_len + fitting_depth, 2) for z_pos in resp_probe_mm
-      ]
+      resp_tip_mm = [round(z_pos - tip_len + fitting_depth, 2) for z_pos in resp_probe_mm]
     else:
-      resp_tip_mm = [
-        round(resp_probe_mm[0] - tip_len + fitting_depth, 2),
-        0.0
-        ]
+      resp_tip_mm = [round(resp_probe_mm[0] - tip_len + fitting_depth, 2), 0.0]
 
     return resp_tip_mm
 
-  
   async def request_probe_z_position(self, channel_idx: int) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
     resp = await self.send_command(
