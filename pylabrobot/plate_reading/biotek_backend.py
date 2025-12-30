@@ -1,6 +1,6 @@
 import warnings
 
-from .agilent.biotek_backend import BioTekPlateReaderBackend
+from .agilent.biotek_backend import BioTekPlateReaderBackend  # noqa: F401
 
 warnings.warn(
   "pylabrobot.plate_reading.biotek_backend is deprecated and will be removed in a future release. "
