@@ -2,7 +2,7 @@ import math
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
-from pylabrobot.pylabrobot.plate_reading.molecular_devices.backend import (
+from pylabrobot.plate_reading.molecular_devices.backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,

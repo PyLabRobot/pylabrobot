@@ -8,8 +8,8 @@ import warnings
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
 
+from pylabrobot.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.plate_reading.backend import ImagerBackend
-from pylabrobot.pylabrobot.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 from pylabrobot.resources import Plate
 
 try:
