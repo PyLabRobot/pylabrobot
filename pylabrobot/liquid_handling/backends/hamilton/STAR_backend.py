@@ -1718,12 +1718,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # detect liquid heights
     current_absolute_liquid_heights = await asyncio.gather(
       *[
-        self.move_z_drive_to_liquid_surface_using_clld(
+        self._move_z_drive_to_liquid_surface_using_clld(
           channel_idx=channel,
           lowest_immers_pos=container.get_absolute_location("c", "c", "cavity_bottom").z
           + tip.total_tip_length
           - tip.fitting_depth,
-          start_pos_search=container.get_absolute_location("c", "c", "t").z + 5,
+          start_pos_search=container.get_absolute_location("c", "c", "t").z
+          + 5
+          + tip.total_tip_length
+          - tip.fitting_depth,
         )
         for channel, container, tip in zip(use_channels, containers, tips)
       ]
@@ -8970,7 +8973,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return round(material_y_pos, 1)
 
-  async def move_z_drive_to_liquid_surface_using_clld(
+  async def _move_z_drive_to_liquid_surface_using_clld(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm
@@ -9018,25 +9021,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not isinstance(channel_idx, int) or not (0 <= channel_idx <= self.num_channels - 1):
       raise ValueError(f"channel_idx must be in [0, {self.num_channels - 1}], is {channel_idx}")
 
-    # Ensure tip is mounted
-    tip_presence = await self.request_tip_presence()
-    if not tip_presence[channel_idx]:
-      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
-    # Correct for tip length + fitting depth
-    tip_len = await self.request_tip_len_on_channel(channel_idx)
-
-    fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
-    safe_head_top_z_pos = 334.7
-
-    if start_pos_search is None:
-      start_pos_search = safe_head_top_z_pos - tip_len + fitting_depth
-
-    channel_head_start_pos = start_pos_search + tip_len - fitting_depth
-    safe_head_bottom_z_pos = 99.98 + tip_len - fitting_depth + 0.5  # add 0.5 mm safety margin
-
     # Conversions & machine-compatibility check of parameters
     lowest_immers_pos_increments = STARBackend.mm_to_z_drive_increment(lowest_immers_pos)
-    start_pos_search_increments = STARBackend.mm_to_z_drive_increment(channel_head_start_pos)
+    start_pos_search_increments = STARBackend.mm_to_z_drive_increment(start_pos_search)
     channel_speed_increments = STARBackend.mm_to_z_drive_increment(channel_speed)
     channel_acceleration_thousand_increments = STARBackend.mm_to_z_drive_increment(
       channel_acceleration / 1000
@@ -9046,10 +9033,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
       f"Lowest immersion position must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
       + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
-    )
-    assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
-      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
-      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
     )
     assert 20 <= channel_speed_increments <= 15_000, (
       f"LLD search speed must be between \n{STARBackend.z_drive_increment_to_mm(20)}"
@@ -9096,31 +9079,80 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     post_detection_dist: float = 2.0,  # mm
     move_channels_to_save_pos_after: bool = False,
   ) -> float:
-    """Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
-    using the channels 'capacitive Liquid Level Detection' (cLLD) capabilities.
-    N.B.: this means only conductive materials can be probed!
+    """Probe the liquid surface Z-height using a channel's capacitive LLD (cLLD).
+
+    Uses the specified channel to perform a downward cLLD search and returns the
+    last liquid level detected by the instrument for that channel.
+
+    This helper is responsible for:
+      - Ensuring a tip is mounted on the chosen channel.
+      - Reading the mounted tip length and applying the fixed fitting depth (8 mm)
+        to convert *tip-referenced* Z positions (C0-style coordinates) into the
+        channel Z-drive coordinates required by the firmware `ZL` cLLD command.
+      - Optionally moving channels to a Z-safe position after probing.
+
+    Note:
+      cLLD requires a conductive target (e.g., conductive liquid / surface).
 
     Args:
-      channel_idx: The index of the channel to use for probing. Backmost channel = 0.
-      lowest_immers_pos: The lowest immersion position in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
-      start_pos_lld_search: The start position for z-touch search in mm. This is the position of the channel, NOT including the tip length (as C0 commands do). So you have to add the total_tip_length - fitting_depth.
-      channel_speed: The speed of channel movement in mm/sec.
-      channel_acceleration: The acceleration of the channel in mm/sec**2.
-      detection_edge: The edge steepness at capacitive LLD detection.
-      detection_drop: The offset after capacitive LLD edge detection.
-      post_detection_trajectory (0, 1): Movement of the channel up (1) or down (0) after contacting the surface.
-      post_detection_dist: Distance to move into the trajectory after detection in mm.
-      move_channels_to_save_pos_after: Flag to move channels to a safe position after operation.
+      channel_idx: Channel index to probe with (0-based; backmost channel = 0).
+      lowest_immers_pos: Lowest allowed search position in mm, expressed in the
+        *tip-referenced* coordinate system (i.e., the position you would use for
+        commands that include tip length). Internally converted to channel Z-drive
+        coordinates before issuing `ZL`.
+      start_pos_search: Start position for the cLLD search in mm, expressed in the
+        *tip-referenced* coordinate system. Internally converted to channel Z-drive
+        coordinates before issuing `ZL`.
+      channel_speed: Search speed in mm/s. Defaults to 10.0.
+      channel_acceleration: Search acceleration in mm/s^2. Defaults to 800.0.
+      detection_edge: Edge steepness threshold for cLLD detection (0–1023). Defaults to 10.
+      detection_drop: Offset applied after cLLD edge detection (0–1023). Defaults to 2.
+      post_detection_trajectory: Firmware post-detection move mode (0 or 1). Defaults to 1.
+      post_detection_dist: Distance in mm to move after detection (interpreted per trajectory).
+        Defaults to 2.0.
+      move_channels_to_save_pos_after: If True, moves all channels to a Z-safe position
+        after the probing sequence completes.
+
+    Raises:
+      RuntimeError: If no tip is mounted on `channel_idx`.
+      AssertionError: If the computed start position is outside the allowed safe range.
+      STARFirmwareError: If the firmware reports an error during cLLD (channels are moved
+        to Z-safe before re-raising).
 
     Returns:
-      The detected Z-height in mm.
+      The detected liquid surface Z-height in mm as reported by `request_pip_height_last_lld()`
+      for `channel_idx`.
     """
 
+    # Ensure tip is mounted
+    tip_presence = await self.request_tip_presence()
+    if not tip_presence[channel_idx]:
+      raise RuntimeError(f"No tip mounted on channel {channel_idx}")
+    # Correct for tip length + fitting depth
+    tip_len = await self.request_tip_len_on_channel(channel_idx)
+
+    fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
+    safe_head_top_z_pos = 334.7
+
+    if start_pos_search is None:
+      start_pos_search = safe_head_top_z_pos - tip_len + fitting_depth
+
+    channel_head_start_pos = round(start_pos_search + tip_len - fitting_depth, 2)
+    safe_head_bottom_z_pos = round(99.98 + tip_len - fitting_depth, 2)
+    lowest_immers_pos_corrected = round(lowest_immers_pos + tip_len - fitting_depth, 2)
+
+    assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
+      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
+      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm\n"
+      + f" because tip_lenght-fitting_depth = {tip_len - fitting_depth} mm +"
+      + f" start_pos_search = {start_pos_search} mm"
+    )
+
     try:
-      await self.move_z_drive_to_liquid_surface_using_clld(
+      await self._move_z_drive_to_liquid_surface_using_clld(
         channel_idx=channel_idx,
-        lowest_immers_pos=lowest_immers_pos,
-        start_pos_search=start_pos_search,
+        lowest_immers_pos=lowest_immers_pos_corrected,
+        start_pos_search=channel_head_start_pos,
         channel_speed=channel_speed,
         channel_acceleration=channel_acceleration,
         detection_edge=detection_edge,
