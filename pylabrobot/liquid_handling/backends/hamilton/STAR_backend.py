@@ -9123,7 +9123,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return result_probed_z_height
 
-  async def _plld_or_dual_clld_probe_z_height_using_channel(
+  async def _plld_or_dual_probe_z_height_using_channel(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm of the head_probe!
@@ -9159,6 +9159,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Notes:
       - This command is implemented  via the PX command module, i.e. it is parallelisable!
       - lowest_immers_pos & start_pos_search refer to the head_probe z-coordinate (not the tip)!
+      - The return values represent head_probe z-positions (not the tip) in mm!
 
     Args:
         lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
@@ -9188,8 +9189,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         post_detection_dist: Post-detection movement distance (mm). Default 2.0.
 
     Returns:
-        list[float]: Two Z-drive positions (mm), meaning depends on the selected pressure sub-mode:
-            - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0.0]
+        list[int]: Two z-coordinates (mm), head_probe, meaning depends on the selected pressure sub-mode:
+            - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0]
             - Two-detection modes/PressureLLDMode.FOAM:    [first_detection_pos, liquid_level_pos]
     """
 
@@ -9385,18 +9386,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dw=f"{dispense_drive_current_limit}",
     )
 
-    resp_mm = [
+    resp_probe_mm = [
       STARBackend.z_drive_increment_to_mm(int(return_val))
       for return_val in resp_raw.split("if")[-1].split()
     ]
 
-    return resp_mm
+    return resp_probe_mm
 
-  async def plld_or_dual_clld_probe_z_height_using_channel(
+  async def plld_or_dual_probe_z_height_using_channel(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm
-    start_pos_search: float = 334.7,  # mm
+    start_pos_search: Optional[float] = None,  # mm
     channel_speed_above_start_pos_search: float = 120.0,  # mm/sec
     channel_speed: float = 10.0,  # mm
     channel_acceleration: float = 800.0,  # mm/sec**2
@@ -9420,7 +9421,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dispense_back_plld_volume: Optional[float] = None,  # uL
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
-  ):
+  ) -> List[float]:
     """Detect liquid level using either (1) pressured-based or
       (2) pressure AND capacitive liquid level detection (LLD).
       + (a) with foam detection sub-mode or (b) without foam detection sub-mode.
@@ -9428,6 +9429,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Notes:
       - This command is implemented  via BOTH the PX and C0 command modules, i.e. it is NOT parallelisable!
       - lowest_immers_pos & start_pos_search refer to the tip z-coordinate (not the head_probe)!
+      - The return values represent tip z-positions (not the head_probe) in mm!
 
     Args:
         lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
@@ -9457,7 +9459,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         post_detection_dist: Post-detection movement distance (mm). Default 2.0.
 
     Returns:
-        list[float]: Two Z-drive positions (mm), meaning depends on the selected pressure sub-mode:
+        list[int]: Two z-coordinates (mm), tip, meaning depends on the selected pressure sub-mode:
             - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0.0]
             - Two-detection modes/PressureLLDMode.FOAM:    [first_detection_pos, liquid_level_pos]
     """
@@ -9474,6 +9476,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     safe_tip_bottom_z_pos = 99.98
     safe_tip_top_z_pos = safe_head_top_z_pos - tip_len + fitting_depth
 
+    if start_pos_search is None:
+      start_pos_search = safe_tip_top_z_pos  # mm,
+
     channel_head_start_pos = round(start_pos_search + tip_len - fitting_depth, 2)
     lowest_immers_pos_corrected = round(lowest_immers_pos + tip_len - fitting_depth, 2)
 
@@ -9482,8 +9487,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f" and {safe_tip_top_z_pos} mm, is {start_pos_search} mm "
       + f"({safe_head_top_z_pos=}, {tip_len=} mm)"
     )
+    assert lowest_immers_pos < start_pos_search, (
+      f"Lowest LLD search position (given {lowest_immers_pos} mm) must be "
+      + f"lower than start position of LLD search (given {start_pos_search} mm)"
+    )
+    assert safe_tip_bottom_z_pos <= lowest_immers_pos <= safe_tip_top_z_pos-1, (
+      f"Lowest LLD search must be between \n{safe_tip_bottom_z_pos}"
+      + f" and {safe_tip_top_z_pos}-1 mm, is {lowest_immers_pos} mm "
+      + f"({tip_len=} mm)"
+    )
 
-    resp_mm = await self._plld_or_dual_clld_probe_z_height_using_channel(
+    resp_probe_mm = await self._plld_or_dual_probe_z_height_using_channel(
       channel_idx=channel_idx,
       lowest_immers_pos=lowest_immers_pos_corrected,
       start_pos_search=channel_head_start_pos,
@@ -9510,10 +9524,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dispense_back_plld_volume=dispense_back_plld_volume,
       post_detection_trajectory=post_detection_trajectory,
       post_detection_dist=post_detection_dist,
-    )
+    )    
 
-    return resp_mm
+    if plld_mode == self.PressureLLDMode.FOAM:
+      resp_tip_mm = [
+        round(z_pos - tip_len + fitting_depth, 2) for z_pos in resp_probe_mm
+      ]
+    else:
+      resp_tip_mm = [
+        round(resp_probe_mm[0] - tip_len + fitting_depth, 2),
+        0.0
+        ]
 
+    return resp_tip_mm
+
+  
   async def request_probe_z_position(self, channel_idx: int) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
     resp = await self.send_command(
