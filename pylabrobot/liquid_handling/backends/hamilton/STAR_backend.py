@@ -9133,19 +9133,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
     safe_head_top_z_pos = 334.7
+    safe_tip_bottom_z_pos = 99.98
+    safet_tip_top_z_pos = safe_head_top_z_pos - tip_len + fitting_depth
 
     if start_pos_search is None:
       start_pos_search = safe_head_top_z_pos - tip_len + fitting_depth
 
     channel_head_start_pos = round(start_pos_search + tip_len - fitting_depth, 2)
-    safe_head_bottom_z_pos = round(99.98 + tip_len - fitting_depth, 2)
+    safe_head_bottom_z_pos = round(safe_tip_bottom_z_pos + tip_len - fitting_depth, 2)
     lowest_immers_pos_corrected = round(lowest_immers_pos + tip_len - fitting_depth, 2)
 
     assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
-      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
-      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm\n"
-      + f" because tip_length-fitting_depth = {tip_len - fitting_depth} mm +"
-      + f" start_pos_search = {start_pos_search} mm"
+      f"Start position of LLD search must be between \n{safe_tip_bottom_z_pos}"
+      + f" and {safet_tip_top_z_pos} mm, is {start_pos_search} mm "
+      + f" ({safe_head_top_z_pos=}mm, {tip_len=} mm)"
     )
 
     try:
