@@ -9230,8 +9230,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if start_pos_search is None:
       start_pos_search = safe_head_top_z_pos - tip_len + fitting_depth
 
-    channel_head_start_pos = start_pos_search + tip_len - fitting_depth
-    safe_head_bottom_z_pos = 99.98 + tip_len - fitting_depth + 0.5  # add 0.5 mm safety margin
+    channel_head_start_pos = round(start_pos_search + tip_len - fitting_depth, 2)
+    safe_head_bottom_z_pos = round(99.98 + tip_len - fitting_depth + 0.5, 2)  # add 0.5 mm safety margin
 
     if lld_mode is None:
       lld_mode = self.LLDMode.PRESSURE
@@ -9293,7 +9293,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
       f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
-      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
+      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm because tip length "
+      + f"- fitting depth is {tip_len - fitting_depth} mm and start_pos_search is {start_pos_search} mm"
     )
     assert 20 <= channel_speed_above_start_pos_search_increments <= 15_000, (
       "Speed above start position of LLD search must be between \n"
@@ -9414,7 +9415,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dw=f"{dispense_drive_current_limit}",
     )
 
-    return resp_raw
+    resp_mm = [
+        STARBackend.z_drive_increment_to_mm(int(return_val))
+        for return_val in 
+        resp_raw.split("if")[-1].split()
+    ]
+
+    return resp_mm
 
   async def request_probe_z_position(self, channel_idx: int) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
