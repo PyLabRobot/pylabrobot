@@ -9123,7 +9123,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return result_probed_z_height
 
-  async def move_tip_to_liquid_surface_using_plld_and_optional_clld(
+  async def plld_and_optional_clld_probe_z_height_using_channel(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm
@@ -9142,8 +9142,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     plld_detection_edge: int = 30,
     plld_detection_drop: int = 10,
     lld_mode: Optional[LLDMode] = None,
-    plld_mode: Optional[PressureLLDMode] = None,
     max_delta_plld_clld: float = 5.0,  # mm
+    plld_mode: Optional[PressureLLDMode] = None,
     plld_foam_detection_drop: int = 30,
     plld_foam_detection_edge_tolerance: int = 30,
     plld_foam_ad_values: int = 30,  # unknown unit
@@ -9383,36 +9383,38 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f" and {STARBackend.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
     )
 
-    await self.send_command(
+    resp_raw = await self.send_command(
       module=STARBackend.channel_id(channel_idx),
       command="ZE",
-      zh=f"{lowest_immers_pos_increments:05}",  # Lowest immersion position [increment]
-      zc=f"{start_pos_search_increments:05}",  # Start position of LLD search [increment]
-      zi=f"{post_detection_dist_increments:04}",  # Distance to move up after detection [increment]
-      zj=f"{post_detection_trajectory:01}",  # Movement of the channel after contacting surface
-      gf=str(int(tip_has_filter)),  # Tip has filter
-      gt=f"{clld_detection_edge:04}",  # Edge steepness at capacitive LLD detection
-      gl=f"{clld_detection_drop:04}",  # Offset after capacitive LLD edge detection
-      gu=f"{plld_detection_edge:04}",  # Edge steepness at pressure LLD detection
-      gn=f"{plld_detection_drop:04}",  # Offset after pressure LLD edge detection
-      gm="0" if lld_mode == self.LLDMode.PRESSURE else "1",  # LLD mode
-      gz=f"{max_delta_plld_clld_increments:04}",  # Max allowed delta between pLLD and cLLD
-      cj=str(plld_mode.value),  # Pressure LLD mode
-      co=f"{plld_foam_detection_drop:04}",  # Pressure LLD foam detection drop
-      cp=f"{plld_foam_detection_edge_tolerance:04}",  # Pressure LLD foam detection edge tolerance
-      cq=f"{plld_foam_ad_values:04}",  # Pressure LLD foam AD values
-      cl=f"{plld_foam_search_speed_increments:05}",  # Pressure LLD foam search speed
-      cc=str(dispense_back_plld_volume_mode),  # Dispense back pLLD volume mode
-      cd=f"{dispense_back_plld_volume_increments:05}",  # Dispense back pressure LLD volume
-      zv=f"{channel_speed_above_start_pos_search_increments:05}",  # Speed above start pos search
-      zl=f"{channel_speed_increments:05}",  # Speed of channel movement
-      zr=f"{channel_acceleration_thousand_increments:03}",  # Acceleration [1000 increment/second^2]
-      zw=f"{z_drive_current_limit}",  # Z-drive current limit
-      dl=f"{dispense_drive_speed_increments:05}",  # Dispensing drive speed
-      dr=f"{dispense_drive_acceleration_increments:03}",  # Dispensing drive acceleration
-      dv=f"{dispense_drive_max_speed_increments:05}",  # Dispensing
-      dw=f"{dispense_drive_current_limit}",  # Dispensing drive current limit
+      zh=f"{lowest_immers_pos_increments:05}",
+      zc=f"{start_pos_search_increments:05}",
+      zi=f"{post_detection_dist_increments:04}",
+      zj=f"{post_detection_trajectory:01}",
+      gf=str(int(tip_has_filter)),
+      gt=f"{clld_detection_edge:04}",
+      gl=f"{clld_detection_drop:04}",
+      gu=f"{plld_detection_edge:04}",
+      gn=f"{plld_detection_drop:04}",
+      gm="0" if lld_mode == self.LLDMode.PRESSURE else "1",
+      gz=f"{max_delta_plld_clld_increments:04}",
+      cj=str(plld_mode.value),
+      co=f"{plld_foam_detection_drop:04}",
+      cp=f"{plld_foam_detection_edge_tolerance:04}",
+      cq=f"{plld_foam_ad_values:04}", 
+      cl=f"{plld_foam_search_speed_increments:05}", 
+      cc=str(dispense_back_plld_volume_mode),
+      cd=f"{dispense_back_plld_volume_increments:05}",
+      zv=f"{channel_speed_above_start_pos_search_increments:05}",  
+      zl=f"{channel_speed_increments:05}",
+      zr=f"{channel_acceleration_thousand_increments:03}",
+      zw=f"{z_drive_current_limit}",
+      dl=f"{dispense_drive_speed_increments:05}",
+      dr=f"{dispense_drive_acceleration_increments:03}",
+      dv=f"{dispense_drive_max_speed_increments:05}",
+      dw=f"{dispense_drive_current_limit}",
     )
+
+    return resp_raw
 
   async def request_probe_z_position(self, channel_idx: int) -> float:
     """Request the z-position of the channel probe (EXCLUDING the tip)"""
