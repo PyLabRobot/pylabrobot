@@ -1724,9 +1724,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           + tip.total_tip_length
           - tip.fitting_depth,
           start_pos_search=container.get_absolute_location("c", "c", "t").z
-          + 5
           + tip.total_tip_length
-          - tip.fitting_depth,
+          - tip.fitting_depth
+          + 5,
         )
         for channel, container, tip in zip(use_channels, containers, tips)
       ]
@@ -9033,6 +9033,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
       f"Lowest immersion position must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
       + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+    )
+    assert 9_320 <= start_pos_search_increments <= 31_200, (
+      f"Start position of LLD search must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
+      + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {start_pos_search} mm"
     )
     assert 20 <= channel_speed_increments <= 15_000, (
       f"LLD search speed must be between \n{STARBackend.z_drive_increment_to_mm(20)}"
