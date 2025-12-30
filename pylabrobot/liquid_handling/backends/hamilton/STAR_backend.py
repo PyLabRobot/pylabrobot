@@ -8977,7 +8977,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm
-    start_pos_search: Optional[float] = None,  # mm
+    start_pos_search: float = 334.7,  # mm
     channel_speed: float = 10.0,  # mm
     channel_acceleration: float = 800.0,  # mm/sec**2
     detection_edge: int = 10,
@@ -9144,7 +9144,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
       f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
       + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm\n"
-      + f" because tip_lenght-fitting_depth = {tip_len - fitting_depth} mm +"
+      + f" because tip_length-fitting_depth = {tip_len - fitting_depth} mm +"
       + f" start_pos_search = {start_pos_search} mm"
     )
 
