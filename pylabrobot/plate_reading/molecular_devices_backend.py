@@ -2,7 +2,7 @@ import warnings
 
 from .molecular_devices.backend import (  # noqa: F401s
   MolecularDevicesBackend,
-  MolecularDevicesSetting,
+  MolecularDevicesSettings,
 )
 
 warnings.warn(
