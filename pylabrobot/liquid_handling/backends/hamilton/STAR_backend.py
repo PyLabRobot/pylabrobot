@@ -8863,7 +8863,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       start_pos_search: Initial y-position for the search (in mm). If not set, defaults to the current channel y-position.
       end_pos_search: Final y-position for the search (in mm). If not set, defaults to the maximum safe travel range.
       channel_speed: Channel movement speed during probing (mm/sec). Defaults to 10.0 mm/sec.
-      channel_acceleration_int: Acceleration ramp setting [1-4], where the physical acceleration is `value * 5,000 steps/sec²`. Defaults to 4.
+      channel_acceleration_int: Acceleration ramp setting [1-4], where the physical acceleration is `value * 5,000 steps/sec**2`. Defaults to 4.
       detection_edge: Edge steepness for capacitive detection [0-1024]. Defaults to 10.
       current_limit_int: Current limit setting [1-7]. Defaults to 7.
       post_detection_dist: Retraction distance after detection (in mm). Defaults to 2.0 mm.
@@ -9123,7 +9123,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return result_probed_z_height
 
-  async def _plld_probe_z_height_using_channel(
+  async def _search_for_surface_using_plld(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm of the head_probe!
@@ -9131,12 +9131,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_speed_above_start_pos_search: float = 120.0,  # mm/sec
     channel_speed: float = 10.0,  # mm
     channel_acceleration: float = 800.0,  # mm/sec**2
-    z_drive_current_limit: int = 3,  # unknown unit
+    z_drive_current_limit: int = 3,
     tip_has_filter: bool = False,
     dispense_drive_speed: float = 5.0,  # mm/sec
     dispense_drive_acceleration: float = 0.2,  # mm/sec**2
     dispense_drive_max_speed: float = 14.5,  # mm/sec
-    dispense_drive_current_limit: int = 3,  # unknown unit
+    dispense_drive_current_limit: int = 3,
     plld_detection_edge: int = 30,
     plld_detection_drop: int = 10,
     clld_verification: bool = False,  # cLLD Verification feature
@@ -9152,50 +9152,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
   ):
-    """Detect liquid level using pressured-based liquid level detection (pLLD)
-      (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
-      (b) without foam detection sub-mode.
+    """Search a surface using pressured-based liquid level detection (pLLD)
+    (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
+    (b) without foam detection sub-mode.
 
     Notes:
-      - This command is implemented  via the PX command module, i.e. it IS parallelisable!
-      - lowest_immers_pos & start_pos_search refer to the head_probe z-coordinate (not the tip)!
-      - The return values represent head_probe z-positions (not the tip) in mm!
+    - This command is implemented  via the PX command module, i.e. it IS parallelisable
+    - lowest_immers_pos & start_pos_search refer to the head_probe z-coordinate (not the tip)
+    - The return values represent head_probe z-positions (not the tip) in mm
 
     Args:
-        lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
-        start_pos_search: Z position where the search begins (mm). Default 334.7.
-        channel_speed_above_start_pos_search: Z speed above the start position (mm/s). Default 120.0.
-        channel_speed: Z search speed (mm/s). Default 10.0.
-        channel_acceleration: Z acceleration (mm/s²). Default 800.0.
-        z_drive_current_limit: Z drive current limit (instrument units). Default 3.
-        tip_has_filter: Whether a filter tip is mounted. Default False.
-        dispense_drive_speed: Dispense drive speed (mm/s). Default 5.0.
-        dispense_drive_acceleration: Dispense drive acceleration (mm/s²). Default 0.2.
-        dispense_drive_max_speed: Dispense drive max speed (mm/s). Default 14.5.
-        dispense_drive_current_limit: Dispense drive current limit (instrument units). Default 3.
-        plld_detection_edge: Pressure detection edge threshold. Default 30.
-        plld_detection_drop: Pressure detection drop threshold. Default 10.
-        clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
-          measurement itself cannot be retrieved. Instead it can be used for other applications, including
-          (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
-          (2) detection of foam (more easily triggers cLLD), if desired causing and error.
-          This activates all cLLD-specific arguments. Default False.
-        max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
-        clld_detection_edge: Capacitive detection edge threshold. Default 10.
-        clld_detection_drop: Capacitive detection drop threshold. Default 2.
-        plld_mode: Pressure-detection sub-mode (instrument-defined). Default None.
-        plld_foam_detection_drop: Foam detection drop threshold. Default 30.
-        plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
-        plld_foam_ad_values: Foam AD values (instrument units). Default 30.
-        plld_foam_search_speed: Foam search speed (mm/s). Default 10.0.
-        dispense_back_plld_volume: Optional dispense-back volume after detection (µL). Default None.
-        post_detection_trajectory: Post-detection movement pattern selector. Default 1.
-        post_detection_dist: Post-detection movement distance (mm). Default 2.0.
+      lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
+      start_pos_search: Z position where the search begins (mm). Default 334.7.
+      channel_speed_above_start_pos_search: Z speed above the start position (mm/s). Default 120.0.
+      channel_speed: Z search speed (mm/s). Default 10.0.
+      channel_acceleration: Z acceleration (mm/s**2). Default 800.0.
+      z_drive_current_limit: Z drive current limit (instrument units). Default 3.
+      tip_has_filter: Whether a filter tip is mounted. Default False.
+      dispense_drive_speed: Dispense drive speed (mm/s). Default 5.0.
+      dispense_drive_acceleration: Dispense drive acceleration (mm/s**2). Default 0.2.
+      dispense_drive_max_speed: Dispense drive max speed (mm/s). Default 14.5.
+      dispense_drive_current_limit: Dispense drive current limit (instrument units). Default 3.
+      plld_detection_edge: Pressure detection edge threshold. Default 30.
+      plld_detection_drop: Pressure detection drop threshold. Default 10.
+      clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
+        measurement itself cannot be retrieved. Instead it can be used for other applications, including
+        (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
+        (2) detection of foam (more easily triggers cLLD), if desired causing and error.
+        This activates all cLLD-specific arguments. Default False.
+      max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
+      clld_detection_edge: Capacitive detection edge threshold. Default 10.
+      clld_detection_drop: Capacitive detection drop threshold. Default 2.
+      plld_mode: Pressure-detection sub-mode (instrument-defined). Default None.
+      plld_foam_detection_drop: Foam detection drop threshold. Default 30.
+      plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
+      plld_foam_ad_values: Foam AD values (instrument units). Default 30.
+      plld_foam_search_speed: Foam search speed (mm/s). Default 10.0.
+      dispense_back_plld_volume: Optional dispense-back volume after detection (µL). Default None.
+      post_detection_trajectory: Post-detection movement pattern selector. Default 1.
+      post_detection_dist: Post-detection movement distance (mm). Default 2.0.
 
     Returns:
-        list[int]: Two z-coordinates (mm), head_probe, meaning depends on the selected pressure sub-mode:
-            - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0]
-            - Two-detection modes/PressureLLDMode.FOAM:    [first_detection_pos, liquid_level_pos]
+      Two z-coordinates (mm), head_probe, meaning depends on the selected pressure sub-mode:
+      - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0]
+      - Two-detection modes/PressureLLDMode.FOAM: [first_detection_pos, liquid_level_pos]
     """
 
     # Preconditions checks
@@ -9386,6 +9386,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dv=f"{dispense_drive_max_speed_increments:05}",
       dw=f"{dispense_drive_current_limit}",
     )
+    assert resp_raw is not None
 
     resp_probe_mm = [
       STARBackend.z_drive_increment_to_mm(int(return_val))
@@ -9402,12 +9403,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     channel_speed_above_start_pos_search: float = 120.0,  # mm/sec
     channel_speed: float = 10.0,  # mm
     channel_acceleration: float = 800.0,  # mm/sec**2
-    z_drive_current_limit: int = 3,  # unknown unit
+    z_drive_current_limit: int = 3,
     tip_has_filter: bool = False,
     dispense_drive_speed: float = 5.0,  # mm/sec
     dispense_drive_acceleration: float = 0.2,  # mm/sec**2
     dispense_drive_max_speed: float = 14.5,  # mm/sec
-    dispense_drive_current_limit: int = 3,  # unknown unit
+    dispense_drive_current_limit: int = 3,
     plld_detection_edge: int = 30,
     plld_detection_drop: int = 10,
     clld_verification: bool = False,  # cLLD Verification feature
@@ -9424,50 +9425,49 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     post_detection_dist: float = 2.0,  # mm
   ) -> List[float]:
     """Detect liquid level using pressured-based liquid level detection (pLLD)
-      (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
-      (b) without foam detection sub-mode.
+    (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
+    (b) without foam detection sub-mode.
 
     Notes:
-      - This command is implemented  via BOTH the PX and C0 command modules,
-        i.e. it is NOT parallelisable!
-      - lowest_immers_pos & start_pos_search refer to the tip z-coordinate (not the head_probe)!
-      - The return values represent tip z-positions (not the head_probe) in mm!
+    - This command is implemented  via BOTH the PX and C0 command modules, i.e. it is NOT parallelisable!
+    - lowest_immers_pos & start_pos_search refer to the tip z-coordinate (not the head_probe)!
+    - The return values represent tip z-positions (not the head_probe) in mm!
 
     Args:
-        lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
-        start_pos_search: Z position where the search begins (mm). Default 334.7.
-        channel_speed_above_start_pos_search: Z speed above the start position (mm/s). Default 120.0.
-        channel_speed: Z search speed (mm/s). Default 10.0.
-        channel_acceleration: Z acceleration (mm/s²). Default 800.0.
-        z_drive_current_limit: Z drive current limit (instrument units). Default 3.
-        tip_has_filter: Whether a filter tip is mounted. Default False.
-        dispense_drive_speed: Dispense drive speed (mm/s). Default 5.0.
-        dispense_drive_acceleration: Dispense drive acceleration (mm/s²). Default 0.2.
-        dispense_drive_max_speed: Dispense drive max speed (mm/s). Default 14.5.
-        dispense_drive_current_limit: Dispense drive current limit (instrument units). Default 3.
-        plld_detection_edge: Pressure detection edge threshold. Default 30.
-        plld_detection_drop: Pressure detection drop threshold. Default 10.
-        clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
-          measurement itself cannot be retrieved. Instead it can be used for other applications, including
-          (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
-          (2) detection of foam (more easily triggers cLLD), if desired causing and error.
-          This activates all cLLD-specific arguments. Default False.
-        clld_detection_edge: Capacitive detection edge threshold. Default 10.
-        clld_detection_drop: Capacitive detection drop threshold. Default 2.
-        max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
-        plld_mode: Pressure-detection sub-mode (instrument-defined). Default None.
-        plld_foam_detection_drop: Foam detection drop threshold. Default 30.
-        plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
-        plld_foam_ad_values: Foam AD values (instrument units). Default 30.
-        plld_foam_search_speed: Foam search speed (mm/s). Default 10.0.
-        dispense_back_plld_volume: Optional dispense-back volume after detection (µL). Default None.
-        post_detection_trajectory: Post-detection movement pattern selector. Default 1.
-        post_detection_dist: Post-detection movement distance (mm). Default 2.0.
+      lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
+      start_pos_search: Z position where the search begins (mm). Default 334.7.
+      channel_speed_above_start_pos_search: Z speed above the start position (mm/s). Default 120.0.
+      channel_speed: Z search speed (mm/s). Default 10.0.
+      channel_acceleration: Z acceleration (mm/s**2). Default 800.0.
+      z_drive_current_limit: Z drive current limit (instrument units). Default 3.
+      tip_has_filter: Whether a filter tip is mounted. Default False.
+      dispense_drive_speed: Dispense drive speed (mm/s). Default 5.0.
+      dispense_drive_acceleration: Dispense drive acceleration (mm/s**2). Default 0.2.
+      dispense_drive_max_speed: Dispense drive max speed (mm/s). Default 14.5.
+      dispense_drive_current_limit: Dispense drive current limit (instrument units). Default 3.
+      plld_detection_edge: Pressure detection edge threshold. Default 30.
+      plld_detection_drop: Pressure detection drop threshold. Default 10.
+      clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
+        measurement itself cannot be retrieved. Instead it can be used for other applications, including
+        (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
+        (2) detection of foam (more easily triggers cLLD), if desired causing and error.
+        This activates all cLLD-specific arguments. Default False.
+      clld_detection_edge: Capacitive detection edge threshold. Default 10.
+      clld_detection_drop: Capacitive detection drop threshold. Default 2.
+      max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
+      plld_mode: Pressure-detection sub-mode (instrument-defined). Default None.
+      plld_foam_detection_drop: Foam detection drop threshold. Default 30.
+      plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
+      plld_foam_ad_values: Foam AD values (instrument units). Default 30.
+      plld_foam_search_speed: Foam search speed (mm/s). Default 10.0.
+      dispense_back_plld_volume: Optional dispense-back volume after detection (µL). Default None.
+      post_detection_trajectory: Post-detection movement pattern selector. Default 1.
+      post_detection_dist: Post-detection movement distance (mm). Default 2.0.
 
     Returns:
-        list[int]: Two z-coordinates (mm), tip, meaning depends on the selected pressure sub-mode:
-            - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0.0]
-            - Two-detection modes/PressureLLDMode.FOAM:    [first_detection_pos, liquid_level_pos]
+      Two z-coordinates (mm), tip, meaning depends on the selected pressure sub-mode:
+      - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0.0]
+      - Two-detection modes/PressureLLDMode.FOAM: [first_detection_pos, liquid_level_pos]
     """
     # Ensure tip is mounted
     tip_presence = await self.request_tip_presence()
@@ -9483,27 +9483,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     safe_tip_top_z_pos = safe_head_top_z_pos - tip_len + fitting_depth
 
     if start_pos_search is None:
-      start_pos_search = safe_tip_top_z_pos  # mm,
+      start_pos_search = safe_tip_top_z_pos
 
     channel_head_start_pos = round(start_pos_search + tip_len - fitting_depth, 2)
     lowest_immers_pos_corrected = round(lowest_immers_pos + tip_len - fitting_depth, 2)
 
-    assert safe_tip_bottom_z_pos <= start_pos_search <= safe_tip_top_z_pos, (
-      f"Start position of LLD search must be between \n{safe_tip_bottom_z_pos}"
-      + f" and {safe_tip_top_z_pos} mm, is {start_pos_search} mm "
-      + f"({safe_head_top_z_pos=}, {tip_len=} mm)"
-    )
-    assert lowest_immers_pos < start_pos_search, (
-      f"Lowest LLD search position (given {lowest_immers_pos} mm) must be "
-      + f"lower than start position of LLD search (given {start_pos_search} mm)"
-    )
-    assert safe_tip_bottom_z_pos <= lowest_immers_pos <= safe_tip_top_z_pos - 1, (
-      f"Lowest LLD search must be between \n{safe_tip_bottom_z_pos}"
-      + f" and {safe_tip_top_z_pos}-1 mm, is {lowest_immers_pos} mm "
-      + f"({tip_len=} mm)"
-    )
-
-    resp_probe_mm = await self._plld_probe_z_height_using_channel(
+    resp_probe_mm = await self._search_for_surface_using_plld(
       channel_idx=channel_idx,
       lowest_immers_pos=lowest_immers_pos_corrected,
       start_pos_search=channel_head_start_pos,
