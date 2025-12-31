@@ -9123,7 +9123,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return result_probed_z_height
 
-  async def _plld_or_dual_probe_z_height_using_channel(
+  async def _plld_probe_z_height_using_channel(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm of the head_probe!
@@ -9137,27 +9137,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dispense_drive_acceleration: float = 0.2,  # mm/sec**2
     dispense_drive_max_speed: float = 14.5,  # mm/sec
     dispense_drive_current_limit: int = 3,  # unknown unit
-    clld_detection_edge: int = 10,
-    clld_detection_drop: int = 2,
     plld_detection_edge: int = 30,
     plld_detection_drop: int = 10,
-    lld_mode: Optional[LLDMode] = None,
-    max_delta_plld_clld: float = 5.0,  # mm
-    plld_mode: Optional[PressureLLDMode] = None,
-    plld_foam_detection_drop: int = 30,
-    plld_foam_detection_edge_tolerance: int = 30,
-    plld_foam_ad_values: int = 30,  # unknown unit
-    plld_foam_search_speed: float = 10.0,  # mm/sec
+    clld_verification: bool = False,  # cLLD Verification feature
+    clld_detection_edge: int = 10,  # cLLD Verification feature
+    clld_detection_drop: int = 2,  # cLLD Verification feature
+    max_delta_plld_clld: float = 5.0,  # cLLD Verification feature; mm
+    plld_mode: Optional[PressureLLDMode] = None,  # Foam feature
+    plld_foam_detection_drop: int = 30,  # Foam feature
+    plld_foam_detection_edge_tolerance: int = 30,  # Foam feature
+    plld_foam_ad_values: int = 30,  # Foam feature; unknown unit
+    plld_foam_search_speed: float = 10.0,  # Foam feature; mm/sec
     dispense_back_plld_volume: Optional[float] = None,  # uL
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
   ):
-    """Detect liquid level using either (1) pressured-based or
-      (2) pressure AND capacitive liquid level detection (LLD).
-      + (a) with foam detection sub-mode or (b) without foam detection sub-mode.
+    """Detect liquid level using pressured-based liquid level detection (pLLD)
+      (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
+      (b) without foam detection sub-mode.
 
     Notes:
-      - This command is implemented  via the PX command module, i.e. it is parallelisable!
+      - This command is implemented  via the PX command module, i.e. it IS parallelisable!
       - lowest_immers_pos & start_pos_search refer to the head_probe z-coordinate (not the tip)!
       - The return values represent head_probe z-positions (not the tip) in mm!
 
@@ -9173,12 +9173,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         dispense_drive_acceleration: Dispense drive acceleration (mm/s²). Default 0.2.
         dispense_drive_max_speed: Dispense drive max speed (mm/s). Default 14.5.
         dispense_drive_current_limit: Dispense drive current limit (instrument units). Default 3.
-        clld_detection_edge: Capacitive detection edge threshold. Default 10.
-        clld_detection_drop: Capacitive detection drop threshold. Default 2.
         plld_detection_edge: Pressure detection edge threshold. Default 30.
         plld_detection_drop: Pressure detection drop threshold. Default 10.
-        lld_mode: Pressure-only vs dual (pressure + capacitive) behaviour. Default None.
+        clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
+          measurement itself cannot be retrieved. Instead it can be used for other applications, including
+          (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
+          (2) detection of foam (more easily triggers cLLD), if desired causing and error.
+          This activates all cLLD-specific arguments. Default False.
         max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
+        clld_detection_edge: Capacitive detection edge threshold. Default 10.
+        clld_detection_drop: Capacitive detection drop threshold. Default 2.
         plld_mode: Pressure-detection sub-mode (instrument-defined). Default None.
         plld_foam_detection_drop: Foam detection drop threshold. Default 30.
         plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
@@ -9198,9 +9202,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Ensure valid channel index
     if not isinstance(channel_idx, int) or not (0 <= channel_idx <= self.num_channels - 1):
       raise ValueError(f"channel_idx must be in [0, {self.num_channels - 1}], is {channel_idx}")
-
-    if lld_mode is None:
-      lld_mode = self.LLDMode.PRESSURE
 
     if plld_mode is None:
       plld_mode = self.PressureLLDMode.LIQUID
@@ -9253,10 +9254,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert tip_has_filter in [True, False], "tip_has_filter must be a boolean"
 
-    assert lld_mode in [self.LLDMode.PRESSURE, self.LLDMode.DUAL], (
-      f"lld_mode must be either LLDMode.PRESSURE ({self.LLDMode.PRESSURE}) or "
-      + f"LLDMode.DUAL ({self.LLDMode.DUAL}), is {lld_mode}"
-    )
+    assert isinstance(
+      clld_verification, bool
+    ), f"clld_verification must be a boolean, is {clld_verification}"
+
     assert plld_mode in [self.PressureLLDMode.LIQUID, self.PressureLLDMode.FOAM], (
       f"plld_mode must be either PressureLLDMode.LIQUID ({self.PressureLLDMode.LIQUID}) or "
       + f"PressureLLDMode.FOAM ({self.PressureLLDMode.FOAM}), is {plld_mode}"
@@ -9367,7 +9368,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       gl=f"{clld_detection_drop:04}",
       gu=f"{plld_detection_edge:04}",
       gn=f"{plld_detection_drop:04}",
-      gm="0" if lld_mode == self.LLDMode.PRESSURE else "1",
+      gm=str(int(clld_verification)),
       gz=f"{max_delta_plld_clld_increments:04}",
       cj=str(plld_mode.value),
       co=f"{plld_foam_detection_drop:04}",
@@ -9393,7 +9394,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp_probe_mm
 
-  async def plld_or_dual_probe_z_height_using_channel(
+  async def plld_probe_z_height_using_channel(
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,  # mm
@@ -9407,27 +9408,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dispense_drive_acceleration: float = 0.2,  # mm/sec**2
     dispense_drive_max_speed: float = 14.5,  # mm/sec
     dispense_drive_current_limit: int = 3,  # unknown unit
-    clld_detection_edge: int = 10,
-    clld_detection_drop: int = 2,
     plld_detection_edge: int = 30,
     plld_detection_drop: int = 10,
-    lld_mode: Optional[LLDMode] = None,
-    max_delta_plld_clld: float = 5.0,  # mm
-    plld_mode: Optional[PressureLLDMode] = None,
-    plld_foam_detection_drop: int = 30,
-    plld_foam_detection_edge_tolerance: int = 30,
-    plld_foam_ad_values: int = 30,  # unknown unit
-    plld_foam_search_speed: float = 10.0,  # mm/sec
+    clld_verification: bool = False,  # cLLD Verification feature
+    clld_detection_edge: int = 10,  # cLLD Verification feature
+    clld_detection_drop: int = 2,  # cLLD Verification feature
+    max_delta_plld_clld: float = 5.0,  # cLLD Verification feature; mm
+    plld_mode: Optional[PressureLLDMode] = None,  # Foam feature
+    plld_foam_detection_drop: int = 30,  # Foam feature
+    plld_foam_detection_edge_tolerance: int = 30,  # Foam feature
+    plld_foam_ad_values: int = 30,  # Foam feature; unknown unit
+    plld_foam_search_speed: float = 10.0,  # Foam feature; mm/sec
     dispense_back_plld_volume: Optional[float] = None,  # uL
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
   ) -> List[float]:
-    """Detect liquid level using either (1) pressured-based or
-      (2) pressure AND capacitive liquid level detection (LLD).
-      + (a) with foam detection sub-mode or (b) without foam detection sub-mode.
+    """Detect liquid level using pressured-based liquid level detection (pLLD)
+      (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
+      (b) without foam detection sub-mode.
 
     Notes:
-      - This command is implemented  via BOTH the PX and C0 command modules, i.e. it is NOT parallelisable!
+      - This command is implemented  via BOTH the PX and C0 command modules,
+        i.e. it is NOT parallelisable!
       - lowest_immers_pos & start_pos_search refer to the tip z-coordinate (not the head_probe)!
       - The return values represent tip z-positions (not the head_probe) in mm!
 
@@ -9443,11 +9445,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         dispense_drive_acceleration: Dispense drive acceleration (mm/s²). Default 0.2.
         dispense_drive_max_speed: Dispense drive max speed (mm/s). Default 14.5.
         dispense_drive_current_limit: Dispense drive current limit (instrument units). Default 3.
-        clld_detection_edge: Capacitive detection edge threshold. Default 10.
-        clld_detection_drop: Capacitive detection drop threshold. Default 2.
         plld_detection_edge: Pressure detection edge threshold. Default 30.
         plld_detection_drop: Pressure detection drop threshold. Default 10.
-        lld_mode: Pressure-only vs dual (pressure + capacitive) behaviour. Default None.
+        clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
+          measurement itself cannot be retrieved. Instead it can be used for other applications, including
+          (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
+          (2) detection of foam (more easily triggers cLLD), if desired causing and error.
+          This activates all cLLD-specific arguments. Default False.
+        clld_detection_edge: Capacitive detection edge threshold. Default 10.
+        clld_detection_drop: Capacitive detection drop threshold. Default 2.
         max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
         plld_mode: Pressure-detection sub-mode (instrument-defined). Default None.
         plld_foam_detection_drop: Foam detection drop threshold. Default 30.
@@ -9497,7 +9503,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f"({tip_len=} mm)"
     )
 
-    resp_probe_mm = await self._plld_or_dual_probe_z_height_using_channel(
+    resp_probe_mm = await self._plld_probe_z_height_using_channel(
       channel_idx=channel_idx,
       lowest_immers_pos=lowest_immers_pos_corrected,
       start_pos_search=channel_head_start_pos,
@@ -9510,11 +9516,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dispense_drive_acceleration=dispense_drive_acceleration,
       dispense_drive_max_speed=dispense_drive_max_speed,
       dispense_drive_current_limit=dispense_drive_current_limit,
-      clld_detection_edge=clld_detection_edge,
-      clld_detection_drop=clld_detection_drop,
       plld_detection_edge=plld_detection_edge,
       plld_detection_drop=plld_detection_drop,
-      lld_mode=lld_mode,
+      clld_verification=clld_verification,
+      clld_detection_edge=clld_detection_edge,
+      clld_detection_drop=clld_detection_drop,
       max_delta_plld_clld=max_delta_plld_clld,
       plld_mode=plld_mode,
       plld_foam_detection_drop=plld_foam_detection_drop,
