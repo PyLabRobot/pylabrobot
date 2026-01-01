@@ -37,9 +37,7 @@ class HID(IOBase):
     self._executor: Optional[ThreadPoolExecutor] = None
 
     if get_capture_or_validation_active():
-      raise RuntimeError(
-        "Cannot create a new HID object while capture or validation is active"
-        )
+      raise RuntimeError("Cannot create a new HID object while capture or validation is active")
 
   async def setup(self):
     """
@@ -55,15 +53,12 @@ class HID(IOBase):
     # --- 1. Enumerate all HID devices ---
     all_devices = hid.enumerate()
     matching = [
-      d for d in all_devices
-      if d.get("vendor_id") == self.vid and d.get("product_id") == self.pid
+      d for d in all_devices if d.get("vendor_id") == self.vid and d.get("product_id") == self.pid
     ]
 
     # --- 2. No devices found ---
     if not matching:
-      raise RuntimeError(
-        f"No HID devices found for VID=0x{self.vid:04X}, PID=0x{self.pid:04X}."
-        )
+      raise RuntimeError(f"No HID devices found for VID=0x{self.vid:04X}, PID=0x{self.pid:04X}.")
 
     # --- 3. Serial number specified: must match exactly 1 ---
     if self.serial_number is not None:
