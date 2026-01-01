@@ -37,15 +37,73 @@ class HID(IOBase):
     self._executor: Optional[ThreadPoolExecutor] = None
 
     if get_capture_or_validation_active():
-      raise RuntimeError("Cannot create a new HID object while capture or validation is active")
+      raise RuntimeError(
+        "Cannot create a new HID object while capture or validation is active"
+        )
 
   async def setup(self):
+    """
+    Sets up the HID device by enumerating connected devices, matching the specified
+    VID, PID, and optional serial number, and opening a connection to the device.
+    """
     if not USE_HID:
       raise RuntimeError(
-        f"This backend requires the `hid` package to be installed. Import error: {_HID_IMPORT_ERROR}"
+        "This backend requires the `hid` package to be installed."
+        f" Import error: {_HID_IMPORT_ERROR}"
       )
-    self.device = hid.Device(vid=self.vid, pid=self.pid, serial=self.serial_number)
+
+    # --- 1. Enumerate all HID devices ---
+    all_devices = hid.enumerate()
+    matching = [
+      d for d in all_devices
+      if d.get("vendor_id") == self.vid and d.get("product_id") == self.pid
+    ]
+
+    # --- 2. No devices found ---
+    if not matching:
+      raise RuntimeError(
+        f"No HID devices found for VID=0x{self.vid:04X}, PID=0x{self.pid:04X}."
+        )
+
+    # --- 3. Serial number specified: must match exactly 1 ---
+    if self.serial_number is not None:
+      matching_sn = [d for d in matching if d.get("serial_number") == self.serial_number]
+
+      if not matching_sn:
+        raise RuntimeError(
+          f"No HID devices found with VID=0x{self.vid:04X}, PID=0x{self.pid:04X}, "
+          f"serial={self.serial_number}."
+        )
+
+      if len(matching_sn) > 1:
+        # Extremely unlikely, but must follow serial semantics
+        raise RuntimeError(
+          f"Multiple HID devices found with identical serial number "
+          f"{self.serial_number} for VID/PID {self.vid}:{self.pid}. "
+          "Ambiguous; cannot continue."
+        )
+
+      chosen = matching_sn[0]
+
+    # --- 4. Serial number not specified: require exactly one device ---
+    else:
+      if len(matching) > 1:
+        raise RuntimeError(
+          f"Multiple HID devices detected for VID=0x{self.vid:04X}, "
+          f"PID=0x{self.pid:04X}.\n"
+          f"Serial numbers: {[d.get('serial_number') for d in matching]}\n"
+          "Please specify `serial_number=` explicitly."
+        )
+      chosen = matching[0]
+
+    # --- 5. Open the device ---
+    self.device = hid.Device(
+      path=chosen["path"]  # safer than vid/pid/serial triple
+    )
     self._executor = ThreadPoolExecutor(max_workers=1)
+
+    self.device_info = chosen
+
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
 
@@ -107,8 +165,9 @@ class HID(IOBase):
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _read)
-    logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
-    capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
+    if len(r.hex()) != 0:
+      logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
+      capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
     return cast(bytes, r)
 
   def serialize(self):
