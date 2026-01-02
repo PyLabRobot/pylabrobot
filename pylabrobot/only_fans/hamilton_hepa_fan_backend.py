@@ -99,7 +99,7 @@ class HamiltonHepaFanBackend(FanBackend):
       # Always disconnect on handshake failure
       try:
         await self.io.stop()
-      except:
+      except Exception:
         pass
       raise RuntimeError(f"Device handshake failed: {e}") from e
 
