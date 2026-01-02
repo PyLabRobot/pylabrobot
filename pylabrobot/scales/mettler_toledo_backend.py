@@ -152,14 +152,13 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   From the docs:
 
-    "If several commands are sent in succession without waiting for the corresponding responses, it
-    is possible that the weigh module/balance confuses the sequence of command processing or ignores
-    entire commands."
+    "If several commands are sent in succession without waiting for the corresponding
+    responses, it is possible that the weigh module/balance confuses the sequence of
+    command processing or ignores entire commands."
   """
 
-  def __init__(self, port: str) -> None:
-    self.port = port
-    self.io = Serial(self.port, baudrate=9600, timeout=1)
+  def __init__(self, port: Optional[str] = None, vid: int = 0x0403, pid: int = 0x6001):
+    self.io = Serial(port, vid=vid, pid=pid, baudrate=9600, timeout=1)
 
   async def setup(self) -> None:
     await self.io.setup()
@@ -171,7 +170,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     await self.io.stop()
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "port": self.port}
+    return {**super().serialize(), "port": self.io.port}
 
   async def send_command(self, command: str, timeout: int = 60) -> MettlerToledoResponse:
     """Send a command to the scale and receive the response.
