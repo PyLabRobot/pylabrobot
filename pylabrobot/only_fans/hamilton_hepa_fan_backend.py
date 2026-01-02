@@ -15,11 +15,14 @@ driver.USB_PID_LIST.append(0xAC11)  # i.e. 44049
 class HamiltonHepaFanBackend(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""
 
-  def __init__(self, vid=0x0856, pid=0xAC11, serial_number=None, device_id=None):
-    self.vid = vid
-    self.pid = pid
-    self.serial_number = serial_number
-    self.io = FTDI(device_id=device_id)
+  def __init__(self, vid=0x0856, pid=0xAC11, device_id=None):    
+    self.io = FTDI(
+      device_id=device_id,
+      vid=vid, 
+      pid=pid,
+      product_substring="USOPTL4",
+      vendor_substring=None
+      )
 
   async def setup(self):
     await self.io.setup()

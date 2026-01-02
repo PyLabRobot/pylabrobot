@@ -29,23 +29,16 @@ else:
 
 logger = logging.getLogger("pylabrobot")
 
-# Make pylibftdi scan the CLARIOstar VID:PID
-# appears as ID 0403:bb68 Future Technology Devices International Limited CLARIOstar
-
-# if HAS_PYLIBFTDI:
-#   driver.USB_VID_LIST.append(0x0403)  # i.e. 1027
-#   driver.USB_PID_LIST.append(0xBB68)  # i.e. 47976
-
 
 class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
-  def __init__(self, device_id: Optional[str] = None):
+  def __init__(self,  vid=0x0403, pid=0xbb68, device_id: Optional[str] = None):
     self.io = FTDI(
       device_id=device_id,
-      vid=0x0403, 
-      pid=0xbb68,
+      vid=vid, 
+      pid=pid,
       product_substring='CLARIOstar',
       vendor_substring="BMG"
       )
