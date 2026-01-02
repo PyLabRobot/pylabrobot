@@ -34,14 +34,10 @@ class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
-  def __init__(self,  vid=0x0403, pid=0xbb68, device_id: Optional[str] = None):
+  def __init__(self, vid=0x0403, pid=0xBB68, device_id: Optional[str] = None):
     self.io = FTDI(
-      device_id=device_id,
-      vid=vid, 
-      pid=pid,
-      product_substring='CLARIOstar',
-      vendor_substring="BMG"
-      )
+      device_id=device_id, vid=vid, pid=pid, product_substring="CLARIOstar", vendor_substring="BMG"
+    )
 
   async def setup(self):
     await self.io.setup()
