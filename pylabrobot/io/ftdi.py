@@ -3,7 +3,7 @@ import ctypes
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from io import IOBase
-from typing import Awaitable, Callable, Optional, cast
+from typing import Optional, cast
 
 try:
   from pylibftdi import Device, Driver, FtdiError, LibraryMissingError
