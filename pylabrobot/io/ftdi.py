@@ -41,15 +41,14 @@ class FTDI(IOBase):
   Thin wrapper around pylibftdi with intelligent device resolution.
 
   Supports hierarchical device identification:
-  1. VID:PID (model-level) - works for single device of that model
-  2. VID:PID + product/vendor substring matching
-  3. VID:PID + device_id/serial (instance-level) - required when multiple identical devices
+  1. device_id (direct) - serial number or device index for explicit connection
+  2. VID:PID (model-level) - works for single device of that model
+  3. VID:PID + product/vendor substring matching for verification
 
   Args:
-      device_id: Serial number for direct connection (legacy/explicit mode)
+      device_id: Device identifier (serial number like '430-2621' or index like '0')
       vid: USB Vendor ID (hex, e.g., 0x0403)
       pid: USB Product ID (hex, e.g., 0xbb68)
-      serial_number: Serial number (alternative to device_id)
       product_substring: Expected substring in product name for validation
       vendor_substring: Expected substring in vendor name for validation
       handshake_fn: Optional async function to verify device identity after connection
@@ -60,7 +59,6 @@ class FTDI(IOBase):
     device_id: Optional[str] = None,
     vid: Optional[int] = None,
     pid: Optional[int] = None,
-    serial_number: Optional[str] = None,
     product_substring: Optional[str] = None,
     vendor_substring: Optional[str] = None,
     handshake_fn: Optional[Callable[["FTDI"], Awaitable[bool]]] = None,
@@ -69,20 +67,16 @@ class FTDI(IOBase):
       global _FTDI_ERROR
       raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_ERROR}")
 
-    # Normalize inputs
-    if device_id:
-      serial_number = device_id
-
+    self._device_id = device_id
     self._vid = vid
     self._pid = pid
-    self._serial_number = serial_number
     self._product_substring = product_substring
     self._vendor_substring = vendor_substring
     self._handshake_fn = handshake_fn
 
     # Validate inputs
-    if not serial_number and not (vid and pid):
-      raise ValueError("Must specify either device_id/serial_number or both vid and pid.")
+    if not device_id and not (vid and pid):
+      raise ValueError("Must specify either device_id or both vid and pid.")
 
     # Will be resolved in setup()
     self._resolved_serial: Optional[str] = None
@@ -160,11 +154,11 @@ class FTDI(IOBase):
         score += 50
         logger.debug(f"Vendor substring '{self._vendor_substring}' matched")
 
-    # Exact serial match
-    if self._serial_number and device_info.get("serial"):
-      if self._serial_number == device_info["serial"]:
-        score += 1000  # Exact serial match wins everything
-        logger.debug(f"Exact serial match: {self._serial_number}")
+    # Exact device_id match (could be serial or index)
+    if self._device_id and device_info.get("serial"):
+      if self._device_id == device_info["serial"]:
+        score += 1000  # Exact match wins everything
+        logger.debug(f"Exact device_id match: {self._device_id}")
 
     # Penalize devices without serial numbers (less reliable)
     if not device_info.get("serial"):
@@ -178,9 +172,9 @@ class FTDI(IOBase):
     Resolve which device to connect to based on criteria.
     Returns the device_id to use (serial number preferred, device index as fallback).
     """
-    # Scenario 1: device_id/serial_number provided explicitly
-    if self._serial_number:
-      logger.info(f"Using explicitly provided serial number: {self._serial_number}")
+    # Scenario 1: device_id provided explicitly
+    if self._device_id:
+      logger.info(f"Using explicitly provided device_id: {self._device_id}")
 
       # Verify the device exists and matches our expectations
       if self._vid is not None and self._pid is not None:
@@ -190,16 +184,16 @@ class FTDI(IOBase):
         # Find device with matching serial
         matching_device = None
         for dev in usb_devices:
-          if dev.get("serial") == self._serial_number:
+          if dev.get("serial") == self._device_id:
             matching_device = dev
             break
 
         if matching_device is None:
           # Device not found with expected VID:PID
           raise RuntimeError(
-            f"Device with serial '{self._serial_number}' not found with "
+            f"Device with device_id '{self._device_id}' not found with "
             f"VID:PID {self._vid:04x}:{self._pid:04x}. "
-            "Is the device connected? Did the serial number change?"
+            "Is the device connected? Did the device_id change?"
           )
 
         # Verify against product substring if provided
@@ -207,7 +201,7 @@ class FTDI(IOBase):
           product = matching_device.get("product", "")
           if product and self._product_substring.lower() not in product.lower():
             logger.warning(
-              f"Device serial '{self._serial_number}' found but product name "
+              f"Device device_id '{self._device_id}' found but product name "
               f"'{product}' does not contain expected substring '{self._product_substring}'. "
               "Device may not be the expected model."
             )
@@ -221,7 +215,7 @@ class FTDI(IOBase):
           vendor = matching_device.get("manufacturer", "")
           if vendor and self._vendor_substring.lower() not in vendor.lower():
             logger.warning(
-              f"Device serial '{self._serial_number}' found but manufacturer "
+              f"Device device_id '{self._device_id}' found but manufacturer "
               f"'{vendor}' does not contain expected substring '{self._vendor_substring}'. "
               "Device may not be from the expected vendor."
             )
@@ -232,16 +226,15 @@ class FTDI(IOBase):
 
         logger.info(
           f"✓ Device verification successful: {matching_device.get('manufacturer')} "
-          f"{matching_device.get('product')} (Serial: {self._serial_number}, "
+          f"{matching_device.get('product')} (device_id: {self._device_id}, "
           f"VID:PID {self._vid:04x}:{self._pid:04x})"
         )
       else:
         logger.info(
-          f"Using serial number without VID:PID verification (not provided): "
-          f"{self._serial_number}"
+          f"Using device_id without VID:PID verification (not provided): " f"{self._device_id}"
         )
 
-      return self._serial_number
+      return self._device_id
 
     # Scenario 2: Need to find device by VID:PID
     if self._vid is None or self._pid is None:
@@ -336,7 +329,8 @@ class FTDI(IOBase):
           for score, dev in scored_devices
         ]
       )
-      + f"\n\nPlease specify the serial number explicitly using device_id or serial_number parameter."
+      + f"\n\nPlease specify the device_id parameter explicitly with the serial number "
+      f"of the desired device (e.g., device_id='430-2621')."
     )
 
   async def setup(self):
