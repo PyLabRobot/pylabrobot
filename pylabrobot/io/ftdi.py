@@ -281,7 +281,7 @@ class FTDI(IOBase):
     for score, dev in scored_devices:
       logger.debug(
         f"  Score {score}: {dev.get('manufacturer')} {dev.get('product')} "
-        f"(Serial: {dev.get('serial')})"
+        f"(Serial number: {dev.get('serial')})"
       )
 
     # Check if we have a clear winner
@@ -303,7 +303,7 @@ class FTDI(IOBase):
 
       logger.info(
         f"Single device found: {winner.get('manufacturer')} {winner.get('product')} "
-        f"(Serial: {serial})"
+        f"(Serial number: {serial})"
       )
       return serial
 
@@ -327,7 +327,7 @@ class FTDI(IOBase):
 
       logger.info(
         f"Selected device with score {top_score}: "
-        f"{winner.get('manufacturer')} {winner.get('product')} (Serial: {serial})"
+        f"{winner.get('manufacturer')} {winner.get('product')} (Serial number: {serial})"
       )
       return serial
 
@@ -339,7 +339,7 @@ class FTDI(IOBase):
       + "\n".join(
         [
           f"  - {dev.get('manufacturer')} {dev.get('product')} "
-          f"(Serial: {dev.get('serial')}, Score: {score})"
+          f"(Serial number: {dev.get('serial')}, Score: {score})"
           for score, dev in scored_devices
         ]
       )
