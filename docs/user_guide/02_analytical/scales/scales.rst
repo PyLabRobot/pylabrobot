@@ -38,8 +38,8 @@ Resets the scale's reading to zero while accounting for the weight of a containe
 already on the scale.
 This is essential when you want to measure only the weight of material being added to a 
 container, ignoring the container's own weight.
-For example, when dispensing liquid into a beaker, you would first place the empty beaker on 
-the scale, tare it, and then measure only the liquid's weight.
+For example, when dispensing liquid into a beaker, you would first place the beaker on 
+the scale, tare it, and then measure only the weight of any additional liquid added.
 
 .. image:: img/scale_1_tare_example.png
    :alt: Tare operation example
@@ -50,7 +50,7 @@ the scale, tare it, and then measure only the liquid's weight.
 
 Retrieves the current weight measurement from the scale.
 When you place an item on a scale or add material to a container, the scale doesn't instantly 
-settle on a final value—there's a brief period of oscillation as the measurement stabilizes. 
+settle on a final value - there's a brief period of oscillation as the measurement stabilizes. 
 This is due to physical factors like vibrations, air currents, or the mechanical settling of 
 the weighing mechanism.
 
