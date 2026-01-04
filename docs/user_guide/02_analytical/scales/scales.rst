@@ -11,6 +11,8 @@ This section focuses on the practical aspects you need to automate weighing oper
 - how to implement the core scale operations,
 - how to handle device-specific settings and limitations.
 
+------------------------------------------
+
 Core Scale Methods
 ------------------
 
@@ -25,6 +27,10 @@ baseline "empty" reading.
 You typically zero a scale at the start of a workflow or when you've removed all items 
 from the platform and want to reset to true zero.
 
+.. image:: img/scale_0_zero_example.png
+   :alt: Zero operation example
+   :align: center
+
 ``tare()``
 ~~~~~~~~~~
 
@@ -35,6 +41,10 @@ container, ignoring the container's own weight.
 For example, when dispensing liquid into a beaker, you would first place the empty beaker on 
 the scale, tare it, and then measure only the liquid's weight.
 
+.. image:: img/scale_1_tare_example.png
+   :alt: Tare operation example
+   :align: center
+
 ``read_weight()``
 ~~~~~~~~~~~~~~~~~
 
@@ -44,28 +54,51 @@ settle on a final value—there's a brief period of oscillation as the measureme
 This is due to physical factors like vibrations, air currents, or the mechanical settling of 
 the weighing mechanism.
 
-Depending on the scale model and your needs, you may read:
+.. image:: img/scale_2_read_measurement_example.png
+   :alt: Read weight operation example
+   :align: center
 
-- **Immediate readings**:
-  The current value at the moment you query it, which may still be fluctuating.
-  For example, if you query the scale while it's still settling, you might get readings like 
-  10.23g, 10.25g, 10.24g in quick succession.
+------------------------------------------
 
-- **Stable readings**:
-  A value that has been determined to be no longer changing within defined stability criteria.
-  Stability can be detected either by the scale's firmware (where the internal electronics monitor 
-  consecutive readings and only report when fluctuations fall below a threshold) or by PyLabRobot 
-  at a higher software level through repeated polling.
+Understanding the ``timeout`` Parameter
+--------------------------------------------
 
-**When to use stable readings**:
-In automated workflows where accuracy matters - such as formulation, analytical chemistry, or 
-quality control - you should wait for stable readings.
-Attempting to use an unstable reading could result in incorrect measurements, failed 
-experiments, or out-of-spec products.
+All three core methods (``zero()``, ``tare()``, and ``read_weight()``) accept a ``timeout`` 
+parameter that controls how the scale handles measurement stability.
 
-**When immediate readings might suffice**:
-For monitoring dynamic processes (like continuous dispensing) or when you need rapid feedback 
-and can tolerate small variations, immediate readings may be appropriate.
+**Available timeout modes:**
+
+- ``timeout="stable"`` - Wait for a stable reading
+  
+  The scale will wait indefinitely until the measurement stabilizes. Stability is detected 
+  either by the scale's firmware (which monitors consecutive readings internally) or by 
+  PyLabRobot polling repeatedly until fluctuations fall below a threshold.
+  
+  Use this when accuracy is critical: formulation, analytical chemistry, quality control.
+
+- ``timeout=0`` - Read immediately
+  
+  Returns the current value without waiting, even if still fluctuating. You might get 
+  different values like 10.23g, 10.25g, 10.24g in quick succession.
+  
+  Use this for monitoring dynamic processes or when you need rapid feedback and can 
+  tolerate small variations.
+
+- ``timeout=n`` (seconds) - Wait up to n seconds
+  
+  Attempts to get a stable reading within the specified time. If the reading stabilizes 
+  before the timeout, it returns immediately. Otherwise, it returns the current value 
+  after n seconds (which may still be unstable).
+  
+  Use this as a compromise between accuracy and speed, or to prevent indefinite waiting.
+
+**Example usage:**
+
+.. code-block:: python
+
+   await scale.zero(timeout="stable")      # Wait for stability
+   await scale.tare(timeout=5)             # Wait max 5 seconds
+   weight_g = await scale.read_weight(timeout=0)  # Read immediately
 
 
 ------------------------------------------
