@@ -22,12 +22,12 @@ class ScaleBackend(MachineBackend, metaclass=ABCMeta):
   # Deprecated: for backward compatibility
   async def get_weight(self) -> float:
     """Deprecated: Use read_weight() instead.
-    
+
     Get the weight in grams"""
     import warnings
+
     warnings.warn(
-      "get_weight() is deprecated and will be removed in 2026-03. "
-      "Use read_weight() instead.",
+      "get_weight() is deprecated and will be removed in 2026-03. " "Use read_weight() instead.",
       DeprecationWarning,
       stacklevel=2,
     )
