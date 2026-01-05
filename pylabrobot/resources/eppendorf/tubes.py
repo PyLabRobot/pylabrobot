@@ -1,9 +1,9 @@
 """Resource definitions for Eppendorf tubes."""
 
+import warnings
+
 from pylabrobot.resources.tube import Tube, TubeBottomType
 from pylabrobot.utils.interpolation import interpolate_1d
-
-import warnings
 
 # --------------------------------------------------------------------------- #
 # 1.5 mL Eppendorf Tubes
@@ -25,7 +25,7 @@ def Eppendorf_DNA_LoBind_1_5ml_Vb(name: str, model="Eppendorf_DNA_LoBind_1_5ml_V
     "Eppendorf_DNA_LoBind_1_5ml_Vb is deprecated and will be removed in 2026-04. "
     "Use eppendorf_tube_1500uL_Vb instead.",
     DeprecationWarning,
-    stacklevel=2
+    stacklevel=2,
   )
   return eppendorf_tube_1500uL_Vb(name=name)
 
@@ -44,7 +44,7 @@ def Eppendorf_Protein_LoBind_1_5ml_Vb(name: str) -> Tube:
     "Eppendorf_Protein_LoBind_1_5ml_Vb is deprecated and will be removed in 2026-04. "
     "Use eppendorf_tube_1500uL_Vb instead.",
     DeprecationWarning,
-    stacklevel=2
+    stacklevel=2,
   )
   return eppendorf_tube_1500uL_Vb(name=name)
 
@@ -130,8 +130,8 @@ _eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements = {
   4000.0: 41.009,
   4500.0: 44.175,
   5000.0: 47.509,
-  5500.0: 50.675
- }
+  5500.0: 50.675,
+}
 _eppendorf_tube_5mL_Vb_snapcap_volume_to_height_measurements = {
   v: k for k, v in _eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements.items()
 }
