@@ -1,22 +1,46 @@
 Scales
 ======   
 
-Automated scales are simple but essential devices in laboratory automation. While they 
-may seem straightforward, proper integration requires understanding their core capabilities 
-and how to interact with them programmatically.
+Automated scales are essential precision instruments in laboratory automation, providing 
+gravimetric measurements for liquid handling verification, formulation, and analytical workflows.
 
-This section focuses on the practical aspects you need to automate weighing operations:
+While conceptually simple, proper integration requires understanding how scales handle zeroing, 
+taring, and measurement stability.
 
-- how to connect to the device (typically serial/USB-serial),
-- how to implement the core scale operations,
-- how to handle device-specific settings and limitations.
+This section covers:
+
+- Core scale features: ``zero()``, ``tare()``, and ``read_weight()``
+- Understanding how scales calculate displayed weight
+- Connecting to scales via serial interfaces
+- Handling measurement stability and timeout parameters
+- Device-specific configuration and limitations
+
+
 
 ------------------------------------------
 
-Core Scale Methods
-------------------
+How Scales Calculate Weight
+----------------------------
 
-Every automated scale in PyLabRobot must implement at least three fundamental methods:
+Understanding how scales calculate the displayed weight helps clarify the difference between 
+``zero()`` and ``tare()``:
+
+**Displayed Weight = (Current Sensor Reading - Zero Point) - Tare Weight**
+
+- **Zero Point**: The baseline sensor reading when you call ``zero()`` with an empty platform
+- **Tare Weight**: The container weight stored in memory when you call ``tare()``
+- **Current Sensor Reading**: The actual load currently on the weighing platform
+
+**Important**: Neither ``zero()`` nor ``tare()`` restores the scale's capacity. If your scale 
+has a maximum capacity of 220g and you zero it with 5g already on the platform, you can only 
+add 215g more before reaching the limit.
+
+------------------------------------------
+
+Core Scale Features
+-------------------
+
+Every automated scale in PyLabRobot must implement at least three fundamental machine features (implemented as frontend methods):
 
 ``zero()``
 ~~~~~~~~~~
