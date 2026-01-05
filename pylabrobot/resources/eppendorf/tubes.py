@@ -145,7 +145,7 @@ def _compute_volume_from_height_eppendorf_tube_5mL_Vb_snapcap(h: float) -> float
   if h < 0:
     raise ValueError("Height must be ≥ 0 mm.")
   if h > 55.4 * 1.05:
-    raise ValueError(f"Height {h} is too large for Eppendorf_tube_5mL_Vb_snapcap.")
+    raise ValueError(f"Height {h} is too large for eppendorf_tube_5mL_Vb_snapcap.")
 
   vol_ul = interpolate_1d(
     h, _eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements, bounds_handling="error"
