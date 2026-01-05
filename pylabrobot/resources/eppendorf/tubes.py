@@ -1,6 +1,9 @@
-""""""
+"""Resource definitions for Eppendorf tubes."""
+
 from pylabrobot.resources.tube import Tube, TubeBottomType
 from pylabrobot.utils.interpolation import interpolate_1d
+
+import warnings
 
 # --------------------------------------------------------------------------- #
 # 1.5 mL Eppendorf Tubes
@@ -10,43 +13,52 @@ from pylabrobot.utils.interpolation import interpolate_1d
 def Eppendorf_DNA_LoBind_1_5ml_Vb(name: str, model="Eppendorf_DNA_LoBind_1_5ml_Vb") -> Tube:
   """1.5 mL round-bottom snap-cap Eppendorf tube.
 
+  .. deprecated:: Will be removed in 2026-04
+      Use :func:`eppendorf_tube_1500uL_Vb` instead.
+
   cat. no.: 022431021 (Eppendorf™ DNA LoBind™ Tubes)
 
   - bottom_type=TubeBottomType.V
   - snap-cap lid
   """
-  diameter = 10.33  # measured
-  return Tube(
-    name=name,
-    size_x=diameter,
-    size_y=diameter,
-    size_z=39.5,  # measured
-    model="Eppendorf_DNA_LoBind_1_5ml_Vb",
-    max_volume=1_400,
-    material_z_thickness=0.8,  # measured
+  warnings.warn(
+    "Eppendorf_DNA_LoBind_1_5ml_Vb is deprecated and will be removed in 2026-04. "
+    "Use eppendorf_tube_1500uL_Vb instead.",
+    DeprecationWarning,
+    stacklevel=2
   )
+  return eppendorf_tube_1500uL_Vb(name=name)
 
 
 def Eppendorf_Protein_LoBind_1_5ml_Vb(name: str) -> Tube:
   """1.5 mL round-bottom screw-cap Eppendorf tube.
 
+  .. deprecated:: Will be removed in 2026-04
+      Use :func:`eppendorf_tube_1500uL_Vb` instead.
+
   cat. no.: 022431081 (Eppendorf™ Protein LoBind™ Tubes)
 
   Same as Eppendorf_DNA_LoBind_1_5ml_Vb
   """
-  return Eppendorf_DNA_LoBind_1_5ml_Vb(name=name, model="Eppendorf_Protein_LoBind_1_5ml_Vb")
+  warnings.warn(
+    "Eppendorf_Protein_LoBind_1_5ml_Vb is deprecated and will be removed in 2026-04. "
+    "Use eppendorf_tube_1500uL_Vb instead.",
+    DeprecationWarning,
+    stacklevel=2
+  )
+  return eppendorf_tube_1500uL_Vb(name=name)
 
 
 def eppendorf_tube_1500uL_Vb(name: str) -> Tube:
   """Eppendorf cat. no.: 022363204
 
-  1.5 mL or 1_500 uL snap-cap Eppendorf tube with V-bottom.
+  1.5 mL or 1_500 uL snap-cap Eppendorf tube with V-bottom;
+  nickname: the original "Eppi".
 
   - Colour: transparent
   - alternative cat. no.:
     - 022431021: DNA LoBind®
     - 022431081: Protein LoBind®
-
   - Material: Polypropylene
   - Sterilized: ?
   - Autoclavable: Yes ("when open (121 °C, 20 min)")
@@ -68,8 +80,8 @@ def eppendorf_tube_1500uL_Vb(name: str) -> Tube:
     max_volume=1_500,  # units: ul
     material_z_thickness=1.3,
     bottom_type=TubeBottomType.V,
-    # compute_volume_from_height=_compute_volume_from_height_eppendorf_tube_1500uL_Vb,
-    # compute_height_from_volume=_compute_height_from_volume_eppendorf_tube_1500uL_Vb,
+    # compute_volume_from_height=_compute_volume_from_height_eppendorf_tube_1500uL_Vb, TODO
+    # compute_height_from_volume=_compute_height_from_volume_eppendorf_tube_1500uL_Vb, TODO
   )
 
 
