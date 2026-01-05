@@ -114,23 +114,24 @@ def Eppendorf_DNA_LoBind_2ml_Ub(name: str) -> Tube:
 
 _eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements = {
   0.0: 0.0,
-  3.5: 10.0,
-  4.7: 50.0,
-  4.7: 100.0,
-  4.7: 200.0,
-  4.7: 400.0,
-  4.7: 600.0,
-  4.7: 800.0,
-  4.7: 1000.0,
-  4.8: 1_200.0,
-  5.2: 1_500.0,
-  5.6: 2_000.0,
-  6.0: 3_000.0,
-  6.3: 4_000.0,
-  6.7: 4_500.0,
-  6.8: 5_000.0,
-  7.2: 5_500.0,
-}
+  5.0: 1.342,
+  10.0: 1.875,
+  50.0: 4.975,
+  100.0: 6.975,
+  200.0: 9.909,
+  400.0: 13.742,
+  600.0: 16.242,
+  800.0: 18.375,
+  1000.0: 20.142,
+  1200.0: 21.809,
+  1500.0: 23.842,
+  2000.0: 27.242,
+  3000.0: 34.242,
+  4000.0: 41.009,
+  4500.0: 44.175,
+  5000.0: 47.509,
+  5500.0: 50.675
+ }
 _eppendorf_tube_5mL_Vb_snapcap_volume_to_height_measurements = {
   v: k for k, v in _eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements.items()
 }
@@ -192,7 +193,7 @@ def eppendorf_tube_5mL_Vb_snapcap(name: str) -> Tube:
     size_z=56.7,
     model=eppendorf_tube_5mL_Vb_snapcap.__name__,
     max_volume=5_000,  # units: ul
-    material_z_thickness=1.3,
+    material_z_thickness=1.2,
     bottom_type=TubeBottomType.V,
     compute_volume_from_height=_compute_volume_from_height_eppendorf_tube_5mL_Vb_snapcap,
     compute_height_from_volume=_compute_height_from_volume_eppendorf_tube_5mL_Vb_snapcap,
