@@ -144,11 +144,11 @@ def _compute_volume_from_height_eppendorf_tube_5mL_Vb_snapcap(h: float) -> float
   """
   if h < 0:
     raise ValueError("Height must be ≥ 0 mm.")
-  if h > 55.4 * 1.05:
+  if h > 55.4 * 1.05:  # well cavity height + 5% tolerance
     raise ValueError(f"Height {h} is too large for eppendorf_tube_5mL_Vb_snapcap.")
 
   vol_ul = interpolate_1d(
-    h, _eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements, bounds_handling="error"
+    h, data=_eppendorf_tube_5mL_Vb_snapcap_height_to_volume_measurements, bounds_handling="error"
   )
   return round(max(0.0, vol_ul), 3)
 
@@ -162,7 +162,9 @@ def _compute_height_from_volume_eppendorf_tube_5mL_Vb_snapcap(volume_ul: float) 
     raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
 
   h_mm = interpolate_1d(
-    volume_ul, _eppendorf_tube_5mL_Vb_snapcap_volume_to_height_measurements, bounds_handling="error"
+    volume_ul,
+    data=_eppendorf_tube_5mL_Vb_snapcap_volume_to_height_measurements,
+    bounds_handling="error",
   )
   return round(max(0.0, h_mm), 3)
 
