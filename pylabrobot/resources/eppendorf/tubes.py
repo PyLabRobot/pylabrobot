@@ -66,7 +66,7 @@ def eppendorf_tube_1500uL_Vb(name: str) -> Tube:
   - Thermal resistance: ?
   - Sealing options: na
   - Centrifugation safety: Maximum safety and stability for centrifugation up to 25,000 x g
-  - Total volume = 5_000 ul
+  - Total volume = 1_500 ul
   - URL: https://www.eppendorf.com/us-en/Products/Lab-Consumables/Lab-Tubes/Eppibr-Eppendorf-Safe-Lock-Tubes-p-022363204
   - technical drawing: ./engineering_diagrams/Eppendorf_5mL_snapcap_tube.pdf
   """
