@@ -6093,6 +6093,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10 CoRe 96 Head commands --------------
 
+  async def request_96head_firmware_version(self):
+    """Request CoRe 96 Head firmware version"""
+    return await self.send_command(
+        module="H0",
+        command="RF"
+    )
+
   # -------------- 3.10.1 Initialization --------------
 
   async def initialize_core_96_head(
@@ -6121,15 +6128,121 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ze=f"{round(z_position_at_the_command_end*10):04}",
     )
 
+  async def request_core_96_head_initialization_status(self) -> bool:
+    # not available in the C0 docs, so get from module H0 itself instead
+    response = await self.send_command(module="H0", command="QW", fmt="qw#")
+    return bool(response.get("qw", 0) == 1)  # type?
+
+  # -------------- 3.10.2 CoRe 96 Head Movements --------------
+
+  # Conversion factors for CoRe 96 Head
+  head96_z_drive_mm_to_increments = 0.005 
+  head96_y_drive_mm_to_increments = 0.015625 
+  head96_dispensing_drive_mm_to_increments = 0.001025641026 
+  head96_dispensing_drive_uL_to_increments = 0.019340933 
+  head96_squeezer_drive_mm_to_increments = 0.0002086672009 
+
   async def move_core_96_to_safe_position(self):
     """Move CoRe 96 Head to Z save position"""
 
     return await self.send_command(module="C0", command="EV")
 
-  async def request_core_96_head_initialization_status(self) -> bool:
-    # not available in the C0 docs, so get from module H0 itself instead
-    response = await self.send_command(module="H0", command="QW", fmt="qw#")
-    return bool(response.get("qw", 0) == 1)  # type?
+  async def move_96head_y(
+    self,
+    y: float,
+    speed: float = 300.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15
+    ):
+    """"""
+    
+    assert self.core96_head_installed, "requires 96 head to be installed"
+
+    fversion = await self.request_96head_firmware_version()
+    # The speed firmware parameter upper limit has changed over time, machine appears
+    # to have been allowed to be faster(?), details unknown
+    year_matches = re.search(r"\b\d{4}\b", fversion)
+    if year_matches is not None:
+      year = int(year_matches.group())
+      if year <= 2021:
+        y_speed_upper_limit = 390.625 # mm == 25_000 increments
+      else:
+        y_speed_upper_limit = 625.0 # mm == 40_000 increments
+    
+    assert 93.75 <= y <= 562.5, "y_position must be between 93.75 and 562.5"
+    assert 0.78125 <= speed <= y_speed_upper_limit, (
+        f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec. "
+        f"Possible discrepancy due to firmware changes; you have version: `{fversion}`"
+        "\nRecommendation: remove all objects from the deck, and carefully"
+        "assess what is your 96-head's firmware `y_speed_upper_limit`, "
+        "and contribute that information back to PyLabRobot :)"
+    )
+    assert 78.125 <= acceleration <= 781.25, "acceleration must be between 78.125 and 781.25 mm/sec**2"
+    assert isinstance(current_protection_limiter, int) and (0 <= current_protection_limiter <= 15), (
+        "current_protection_limiter must be between 0 and 15 (units unknown)"
+    )
+
+    y_increment = round(y / self.head96_y_drive_mm_to_increments)
+    speed_increment = round(speed / self.head96_y_drive_mm_to_increments)
+    acceleration_increment = round(acceleration / self.head96_y_drive_mm_to_increments)
+        
+    resp = await self.send_command(
+        module="H0",
+        command="YA",
+        ya=f"{y_increment:05}",
+        yv=f"{speed_increment:05}",
+        yr=f"{acceleration_increment:05}",
+        yw=f"{current_protection_limiter:02}"
+        )
+
+    return resp
+
+  async def move_96head_z(
+    self,
+    z: float,
+    speed: float = 80.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15
+    ):
+
+    assert self.core96_head_installed, "requires 96 head to be installed"
+
+    fversion = await self.request_96head_firmware_version()
+    # The acceleration firmware parameter has changed over time, changed from 
+    # old:acceleration*1000 to new:acceleration, upper limit has remained 100_000 increments
+    # but firmware representation has changed
+    year_matches = re.search(r"\b\d{4}\b", fversion)
+    if year_matches is not None:
+      year = int(year_matches.group())
+      if year >= 2021:
+        acceleration_multiplier = 1
+      else:
+        acceleration_multiplier = 100 # TODO: identify the exact firmware change date
+    
+    assert 180.5 <= z <= 342.5, "z_position must be between 180.5 and 342.5"
+    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
+    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    assert isinstance(current_protection_limiter, int) and (0 <= current_protection_limiter <= 15), (
+        "current_protection_limiter must be between 0 and 15 (units unknown)"
+    )
+
+    z_increment = round(z / self.head96_z_drive_mm_to_increments)
+    speed_increment = round(speed / self.head96_z_drive_mm_to_increments)
+    acceleration_increment = round(acceleration / self.head96_z_drive_mm_to_increments * acceleration_multiplier)
+    
+    resp = await self.send_command(
+        module="H0",
+        command="ZA",
+        za=f"{z_increment:05}",
+        zv=f"{speed_increment:05}",
+        zr=f"{acceleration_increment:06}",
+        zw=f"{current_protection_limiter:02}"
+        )
+
+    return resp
+
+
+
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
