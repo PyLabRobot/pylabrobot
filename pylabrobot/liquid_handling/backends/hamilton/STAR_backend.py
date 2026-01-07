@@ -6227,11 +6227,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def move_core_96_to_safe_position(self):
     """Move CoRe 96 Head to Z safe position."""
     warnings.warn(
-     "move_core_96_to_safe_position is deprecated. Use move_96head_to_z_safety instead. "
-     "This method will be removed in 2026-04",  # TODO: remove 2026-04
-     DeprecationWarning,
-     stacklevel=2
-   )
+      "move_core_96_to_safe_position is deprecated. Use move_96head_to_z_safety instead. "
+      "This method will be removed in 2026-04",  # TODO: remove 2026-04
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.move_96head_to_z_safety()
 
   async def move_96head_to_z_safety(self):
@@ -6368,7 +6368,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(
       module="H0",
       command="ZA",
-      za=f"{z_increment:05}", 
+      za=f"{z_increment:05}",
       zv=f"{speed_increment:05}",
       zr=f"{acceleration_increment:06}",
       zw=f"{current_protection_limiter:02}",
