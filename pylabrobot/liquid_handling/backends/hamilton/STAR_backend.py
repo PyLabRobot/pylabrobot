@@ -6284,7 +6284,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
     assert 0.78125 <= speed <= y_speed_upper_limit, (
       f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware year {fw_year}. "
-      f"Your firmware version: {self.installations['96head']['fw_version_raw']}. "
+      f"Your firmware version: {self.installations['96head']['fw_version']}. "
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
     )

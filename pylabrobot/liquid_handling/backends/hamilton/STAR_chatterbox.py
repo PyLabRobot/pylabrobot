@@ -63,7 +63,6 @@ class STARChatterboxBackend(STARBackend):
     # Mock firmware information for 96-head if installed
     if self.core96_head_installed and not skip_core96_head:
       self.installations["96head"] = {
-        "fw_version_raw": "v2023-01-01",
         "fw_version": "2023-01-01",
         "fw_year": 2023,
       }
