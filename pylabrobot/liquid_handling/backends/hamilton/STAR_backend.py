@@ -7046,7 +7046,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.move_autoload_to_safe_z_position()
 
   async def move_autoload_to_safe_z_position(self):
-    """Move autoload' carrier handling wheel to safe Z position"""
+    """Move autoload carrier handling wheel to safe Z position"""
 
     return await self.send_command(module="C0", command="IV")
 
