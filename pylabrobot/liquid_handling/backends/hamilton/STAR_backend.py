@@ -1358,7 +1358,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Parse a response from the machine."""
     return parse_star_fw_string(resp, fmt)
 
-  def _parse_firmware_version_year(self, fw_version: str) -> int | None:
+  def _parse_firmware_version_year(self, fw_version: str) -> Optional[int]:
     """Extract year from firmware version string.
 
     Args:
@@ -1405,7 +1405,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
-    self.installations = {}
+    self.installations: dict[str, dict[str, Any]] = {}
 
     initialized = await self.request_instrument_initialization_status()
 
