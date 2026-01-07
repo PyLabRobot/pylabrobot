@@ -11,7 +11,7 @@ class STARChatterboxBackend(STARBackend):
 
   def __init__(self, num_channels: int = 8, core96_head_installed: bool = True):
     """Initialize a chatter box backend.
-    
+
     Args:
       num_channels: Number of pipetting channels (default: 8)
       core96_head_installed: Whether the CoRe 96 head is installed (default: True)
@@ -52,14 +52,14 @@ class STARChatterboxBackend(STARBackend):
     # Use bitwise operations to check specific bits
     self.iswap_installed = bool(xl_value & 0b10)  # Check bit 1
     self.core96_head_installed = bool(xl_value & 0b100)  # Check bit 2
-    
+
     # Parse autoload from kb configuration byte
     configuration_data1 = bin(conf["kb"]).split("b")[-1].zfill(8)
     autoload_configuration_byte = configuration_data1[-4]
     self.autoload_installed = autoload_configuration_byte == "1"
-    
+
     self.installations = {}
-    
+
     # Mock firmware information for 96-head if installed
     if self.core96_head_installed and not skip_core96_head:
       self.installations["96head"] = {
@@ -73,10 +73,10 @@ class STARChatterboxBackend(STARBackend):
 
   async def request_machine_configuration(self):
     """Return mock machine configuration data.
-    
+
     Configuration byte `kb` is directly copied from a STARlet with 8-channel pipettor,
     iSWAP, and autoload installed.
-    
+
     Bit mapping for kb:
       Bit 0: PIP Type (0=300µL, 1=1000µL)
       Bit 1: ISWAP (0=none, 1=installed)
@@ -86,7 +86,7 @@ class STARChatterboxBackend(STARBackend):
       Bit 5: Wash station 2 (0=none, 1=installed)
       Bit 6: Temp. controlled carrier 1 (0=none, 1=installed)
       Bit 7: Temp. controlled carrier 2 (0=none, 1=installed)
-    
+
     Returns:
       Dict with configuration parameters: kb (config byte), kp (num channels), id (command ID)
     """
@@ -94,9 +94,9 @@ class STARChatterboxBackend(STARBackend):
 
   async def request_extended_configuration(self):
     """Return mock extended configuration data.
-    
+
     Extended configuration is dynamically generated based on __init__ parameters.
-    
+
     Returns:
       Dict with extended configuration parameters including xl byte for module detection.
     """
@@ -108,7 +108,7 @@ class STARChatterboxBackend(STARBackend):
     if self._core96_head_installed:
       xl_value |= 0b100  # Add 96-head (bit 2)
     # Result: xl = 6 (0b110) if 96-head installed, 2 (0b10) if not
-    
+
     self._extended_conf = {
       "ka": 65537,
       "ke": 0,
@@ -138,7 +138,7 @@ class STARChatterboxBackend(STARBackend):
   async def request_iswap_initialization_status(self) -> bool:
     """Return mock iSWAP initialization status."""
     return True
-  
+
   async def request_96head_firmware_version(self) -> str:
     """Return mock 96-head firmware version."""
     return "v2023-01-01"
