@@ -7024,19 +7024,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="II")
 
   async def move_auto_load_to_z_save_position(self):
-    """Move auto load to Z save position"""
+    """Deprecated - use `move_autoload_to_safe_z_position` instead."""
 
     warnings.warn(  # TODO: remove 2025-02
       "`move_auto_load_to_z_save_position` is deprecated and will be "
-      "removed in 2025-02 use `move_autoload_to_save_z_position` instead.",
+      "removed in 2025-02 use `move_autoload_to_safe_z_position` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
 
-    return await self.move_autoload_to_save_z_position()
+    return await self.move_autoload_to_safe_z_position()
 
   async def move_autoload_to_save_z_position(self):
-    """Move auto load to Z save position"""
+    """Deprecated - use `move_autoload_to_safe_z_position` instead."""
+    warnings.warn(  # TODO: remove 2025-02
+      "`move_autoload_to_saVe_z_position` is deprecated and will be "
+      "removed in 2025-02 use `move_autoload_to_safe_z_position` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.move_autoload_to_safe_z_position()
+
+  async def move_autoload_to_safe_z_position(self):
+    """Move autoload carrier handling wheel to safe Z position"""
 
     return await self.send_command(module="C0", command="IV")
 
@@ -7229,7 +7239,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     assert 1 <= track <= 54, "track must be between 1 and 54"
 
-    await self.move_autoload_to_save_z_position()
+    await self.move_autoload_to_safe_z_position()
 
     track_no_as_safe_str = str(track).zfill(2)
     return await self.send_command(module="I0", command="XP", xp=track_no_as_safe_str)
@@ -7240,7 +7250,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Identify max number of x positions for your liquid handler
     max_x_pos = str(self.extended_conf["xt"]).zfill(2)
 
-    await self.move_autoload_to_save_z_position()
+    await self.move_autoload_to_safe_z_position()
 
     # Park autoload to max x position available
     return await self.send_command(module="I0", command="XP", xp=max_x_pos)
@@ -7263,7 +7273,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           cp=str(carrier_end_rail).zfill(2),
         )
       except Exception as e:
-        await self.move_autoload_to_save_z_position()
+        await self.move_autoload_to_safe_z_position()
         raise RuntimeError(
           f"Failed to take carrier at rail {carrier_end_rail} " f"out to autoload belt: {e}"
         )
@@ -7391,7 +7401,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     except Exception as e:
       if carrier_barcode_reading:
-        await self.move_autoload_to_save_z_position()
+        await self.move_autoload_to_safe_z_position()
         raise RuntimeError(
           f"Failed to load carrier at rail {carrier_end_rail} " f"and scan barcode: {e}"
         )
@@ -7415,7 +7425,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         command="CA",
       )
     except Exception as e:
-      await self.move_autoload_to_save_z_position()
+      await self.move_autoload_to_safe_z_position()
       raise RuntimeError(f"Failed to unload carrier after barcode scanning: {e}")
 
     return resp
@@ -7494,7 +7504,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         cv=reading_speed_str,  # Carrier reading speed [mm/sec]/
       )
     except Exception as e:
-      await self.move_autoload_to_save_z_position()
+      await self.move_autoload_to_safe_z_position()
       raise RuntimeError(f"Failed to load carrier from autoload belt: {e}")
 
     if park_autoload_after:
