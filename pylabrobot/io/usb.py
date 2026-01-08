@@ -118,7 +118,11 @@ class USB(IOBase):
     )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
-      USBCommand(device_id=self._unique_id, action="write", data=data.decode("unicode_escape"))
+      USBCommand(
+        device_id=self._unique_id,
+        action="write",
+        data=data.decode("unicode_escape", errors="backslashreplace"),
+      )
     )
 
   def _read_packet(self) -> Optional[bytearray]:
@@ -180,7 +184,11 @@ class USB(IOBase):
 
         logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, resp)
         capturer.record(
-          USBCommand(device_id=self._unique_id, action="read", data=resp.decode("unicode_escape"))
+          USBCommand(
+            device_id=self._unique_id,
+            action="read",
+            data=resp.decode("unicode_escape", errors="backslashreplace"),
+          )
         )
         return resp
 
@@ -414,8 +422,9 @@ class USBValidator(USB):
       and next_command.action == "write"
     ):
       raise ValidationError("next command is not write")
-    if not next_command.data == data.decode("unicode_escape"):
-      align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
+    decoded = data.decode("unicode_escape", errors="backslashreplace")
+    if not next_command.data == decoded:
+      align_sequences(expected=next_command.data, actual=decoded)
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, timeout: Optional[float] = None) -> bytes:
