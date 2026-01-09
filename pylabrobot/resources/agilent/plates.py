@@ -6,7 +6,7 @@ from pylabrobot.resources.height_volume_functions import (
 )
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.well import Well, WellBottomType
+from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
 
 def _compute_volume_from_height_agilent_96_wellplate_150uL_Vb(
@@ -109,3 +109,31 @@ def agilent_96_wellplate_150uL_Ub(name: str) -> Plate:
     DeprecationWarning,
   )
   return agilent_96_wellplate_150uL_Vb(name)
+
+def Agilent_2_reservoir_144ml_Vb(name: str) -> Plate:
+  """Agilent 2 Reservoir 144mL V bottom
+  Part Number: 203852-100
+  - Max Volume: 144 mL
+  Spec: https://www.agilent.com/cs/library/datasheets/public/ds-cell-analysis-5994-4426en-agilent.pdf
+  """
+  return Plate(
+    name=name,
+    size_x=127.76, #plate dimension
+    size_y=85.47,
+    size_z=44.04,
+    model="Agilent_2_reservoir_144mL_Vb",
+    ordered_items=create_ordered_items_2d(Well,
+      num_items_x=2, #num of wells in x
+      num_items_y=1, #num of wells in y
+      dx=10.66, #space from left side of well to the left side of the plate (i.e. space from plate to well)
+      dy=7.12, #space from bottom side of well to the bottom side of the plate
+      dz=2.54,  #space from bottom of plate to bottom of well
+      item_dx=54, #space between wells in x-axis
+      item_dy=0, #space between wells in y-axis; set to 0 because only 1 row
+      size_x=53.22, #well length
+      size_y=71.23, #well width
+      size_z=39.22, #well depth
+      bottom_type=WellBottomType.V,
+      cross_section_type=CrossSectionType.RECTANGLE,
+      material_z_thickness=1.15
+      ))
