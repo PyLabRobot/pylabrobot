@@ -6117,7 +6117,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.10 96-Head commands --------------
 
   async def request_96head_firmware_version(self):
-    """Request 96 Head firmware version"""
+    """Request 96 Head firmware version
+    (MEM-READ command)
+    """
     return await self.send_command(module="H0", command="RF")
 
   # -------------- 3.10.1 Initialization --------------
@@ -6235,7 +6237,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.move_96head_to_z_safety()
 
   async def move_96head_to_z_safety(self):
-    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
+    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm.
+    (ACTION command)
+    """
     return await self.send_command(module="C0", command="EV")
 
   # TODO: async def move_96head_x()
@@ -6248,6 +6252,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_protection_limiter: int = 15,
   ):
     """Move the 96-head to a specified Y-axis coordinate.
+    (ACTION command)
 
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
@@ -6319,6 +6324,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_protection_limiter: int = 15,
   ):
     """Move the 96-head to a specified Z-axis coordinate.
+    (ACTION command)
 
     Args:
       z: Target Z coordinate in mm. Valid range: [180.5, 342.5]
@@ -7067,6 +7073,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
     """Move STAR(let) 96-Head to defined Coordinate
+    (ACTION command)
 
     Args:
       coordinate: Coordinate of A1 in mm
@@ -7165,6 +7172,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_96head_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
+    (MEM-READ command)
 
     Returns:
       Coordinate: x, y, z in mm

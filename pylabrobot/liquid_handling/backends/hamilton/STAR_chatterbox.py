@@ -67,11 +67,29 @@ class STARChatterboxBackend(STARBackend):
         "fw_year": 2023,
       }
 
-  async def request_tip_presence(self):
-    return list(range(self.num_channels))
+  async def request_tip_presence(self, mock_presence: Optional[List[bool]] = None) -> List[int]:
+    """Check mock tip presence with optional list for user-modifiable tip presence.
+    (Mock MEM-READ command)
+    Args:
+      mock_presence: Optional list indicating tip presence for each channel.
+        1 indicates tip present, 0 indicates no tip.
+
+    Default: all tips present.
+
+    Returns:
+      List of integers indicating tip presence for each channel.
+    """
+    if mock_presence is None:
+      return [1 for channel_idx in range(self.num_channels)]
+
+    assert (
+      len(mock_presence) == self.num_channels
+    ), "Length of mock_presence must match number of channels."
+    return mock_presence
 
   async def request_machine_configuration(self):
     """Return mock machine configuration data.
+    (Mock MEM-READ command)
 
     Configuration byte `kb` is directly copied from a STARlet with 8-channel pipettor,
     iSWAP, and autoload installed.
