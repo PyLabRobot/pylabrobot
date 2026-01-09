@@ -67,7 +67,7 @@ class STARChatterboxBackend(STARBackend):
         "fw_year": 2023,
       }
 
-  async def request_tip_presence(self, mock_presence: Optional[List[bool]] = None) -> List[int]:
+  async def request_tip_presence(self, mock_presence: Optional[List[int]] = None) -> List[int]:
     """Check mock tip presence with optional list for user-modifiable tip presence.
     (Mock MEM-READ command)
     Args:
