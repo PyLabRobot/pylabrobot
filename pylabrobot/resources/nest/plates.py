@@ -173,10 +173,10 @@ def nest_12_troughplate_15000uL_Vb(name: str) -> Plate:
       **well_kwargs,
     ),
   )
-  
-  
+
+
 def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
-  """NEST Cat. No. 503062 
+  """NEST Cat. No. 503062
   Spec: http://manage-en.nestscientificusa.com/Resource/File/2023/02/13/NEST-Deep-Well-Plates.pdf
   """
   return Plate(
