@@ -110,6 +110,7 @@ def agilent_96_wellplate_150uL_Ub(name: str) -> Plate:
   )
   return agilent_96_wellplate_150uL_Vb(name)
 
+
 def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
   """Agilent 2 Reservoir 144mL V bottom
   Part Number: 203852-100
@@ -118,22 +119,24 @@ def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
   """
   return Plate(
     name=name,
-    size_x=127.76, #from spec
-    size_y=85.47, #from spec
-    size_z=44.04, #from spec
+    size_x=127.76,  # from spec
+    size_y=85.47,  # from spec
+    size_z=44.04,  # from spec
     model="Agilent_2_reservoir_144mL_Vb",
-    ordered_items=create_ordered_items_2d(Well,
-      num_items_x=2, #from spec
-      num_items_y=1, #from spec
-      dx=10.66, #from spec
-      dy=7.12, #from spec
-      dz=2.54,  #from spec
-      item_dx=54, #from spec
-      item_dy=0, #from spec
-      size_x=53.22, #from spec
-      size_y=71.23, #from spec
-      size_z=39.22, #from spec
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=2,  # from spec
+      num_items_y=1,  # from spec
+      dx=10.66,  # from spec
+      dy=7.12,  # from spec
+      dz=2.54,  # from spec
+      item_dx=54,  # from spec
+      item_dy=0,  # from spec
+      size_x=53.22,  # from spec
+      size_y=71.23,  # from spec
+      size_z=39.22,  # from spec
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.RECTANGLE,
-      material_z_thickness=1.15
-      ))
+      material_z_thickness=1.15,
+    ),
+  )
