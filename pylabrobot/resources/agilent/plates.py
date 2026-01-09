@@ -110,7 +110,7 @@ def agilent_96_wellplate_150uL_Ub(name: str) -> Plate:
   )
   return agilent_96_wellplate_150uL_Vb(name)
 
-def Agilent_2_reservoir_144ml_Vb(name: str) -> Plate:
+def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
   """Agilent 2 Reservoir 144mL V bottom
   Part Number: 203852-100
   - Max Volume: 144 mL
@@ -118,21 +118,21 @@ def Agilent_2_reservoir_144ml_Vb(name: str) -> Plate:
   """
   return Plate(
     name=name,
-    size_x=127.76, #plate dimension
-    size_y=85.47,
-    size_z=44.04,
+    size_x=127.76, #from spec
+    size_y=85.47, #from spec
+    size_z=44.04, #from spec
     model="Agilent_2_reservoir_144mL_Vb",
     ordered_items=create_ordered_items_2d(Well,
-      num_items_x=2, #num of wells in x
-      num_items_y=1, #num of wells in y
-      dx=10.66, #space from left side of well to the left side of the plate (i.e. space from plate to well)
-      dy=7.12, #space from bottom side of well to the bottom side of the plate
-      dz=2.54,  #space from bottom of plate to bottom of well
-      item_dx=54, #space between wells in x-axis
-      item_dy=0, #space between wells in y-axis; set to 0 because only 1 row
-      size_x=53.22, #well length
-      size_y=71.23, #well width
-      size_z=39.22, #well depth
+      num_items_x=2, #from spec
+      num_items_y=1, #from spec
+      dx=10.66, #from spec
+      dy=7.12, #from spec
+      dz=2.54,  #from spec
+      item_dx=54, #from spec
+      item_dy=0, #from spec
+      size_x=53.22, #from spec
+      size_y=71.23, #from spec
+      size_z=39.22, #from spec
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.RECTANGLE,
       material_z_thickness=1.15
