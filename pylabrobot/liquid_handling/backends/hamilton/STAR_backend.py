@@ -9188,7 +9188,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
       plld_foam_ad_values: Foam AD values (instrument units). Default 30.
       plld_foam_search_speed: Foam search speed (mm/s). Default 10.0.
-      dispense_back_plld_volume: Optional dispense-back volume after detection (µL). Default None.
+      dispense_back_plld_volume: Optional dispense-back volume after detection (uL). Default None.
       post_detection_trajectory: Post-detection movement pattern selector. Default 1.
       post_detection_dist: Post-detection movement distance (mm). Default 2.0.
 
@@ -9460,7 +9460,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
       plld_foam_ad_values: Foam AD values (instrument units). Default 30.
       plld_foam_search_speed: Foam search speed (mm/s). Default 10.0.
-      dispense_back_plld_volume: Optional dispense-back volume after detection (µL). Default None.
+      dispense_back_plld_volume: Optional dispense-back volume after detection (uL). Default None.
       post_detection_trajectory: Post-detection movement pattern selector. Default 1.
       post_detection_dist: Post-detection movement distance (mm). Default 2.0.
 
