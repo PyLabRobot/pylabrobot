@@ -9266,7 +9266,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       clld_verification: Activates cLLD sensing concurrently with the pressure probing. Note: cLLD
         measurement itself cannot be retrieved. Instead it can be used for other applications, including
         (1) verification of the surface level detected by pLLD based on max_delta_plld_clld,
-        (2) detection of foam (more easily triggers cLLD), if desired causing and error.
+        (2) detection of foam (more easily triggers cLLD), if desired, causing an error.
         This activates all cLLD-specific arguments. Default False.
       max_delta_plld_clld: Max allowed delta between pressure/capacitive detections (mm). Default 5.0.
       clld_detection_edge: Capacitive detection edge threshold. Default 10.
