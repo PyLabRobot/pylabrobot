@@ -8683,31 +8683,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # Dispensing drive conversions
   # --- uL <-> increments ---
   @staticmethod
-  def dispensing_drive_vol_to_increment(value_uL: float) -> int:
-    return round(value_uL / STARBackend.dispensing_drive_vol_per_increment)
+  def dispensing_drive_vol_to_increment(volume: float) -> int:
+    return round(volume / STARBackend.dispensing_drive_vol_per_increment)
 
   @staticmethod
-  def dispensing_drive_increment_to_volume(value_increment: int) -> float:
-    return round(value_increment * STARBackend.dispensing_drive_vol_per_increment, 1)
+  def dispensing_drive_increment_to_volume(position_increment: int) -> float:
+    return round(position_increment * STARBackend.dispensing_drive_vol_per_increment, 1)
 
   # --- mm <-> increments ---
   @staticmethod
-  def dispensing_drive_mm_to_increment(value_mm: float) -> int:
-    return round(value_mm / STARBackend.dispensing_drive_mm_per_increment)
+  def dispensing_drive_mm_to_increment(position_mm: float) -> int:
+    return round(position_mm / STARBackend.dispensing_drive_mm_per_increment)
 
   @staticmethod
-  def dispensing_drive_increment_to_mm(value_increment: int) -> float:
-    return round(value_increment * STARBackend.dispensing_drive_mm_per_increment, 3)
+  def dispensing_drive_increment_to_mm(position_increment: int) -> float:
+    return round(position_increment * STARBackend.dispensing_drive_mm_per_increment, 3)
 
   # --- uL <-> mm ---
   @staticmethod
-  def dispensing_drive_vol_to_mm(value_uL: float) -> float:
-    inc = STARBackend.dispensing_drive_vol_to_increment(value_uL)
+  def dispensing_drive_vol_to_mm(vol: float) -> float:
+    inc = STARBackend.dispensing_drive_vol_to_increment(vol)
     return STARBackend.dispensing_drive_increment_to_mm(inc)
 
   @staticmethod
-  def dispensing_drive_mm_to_vol(value_mm: float) -> float:
-    inc = STARBackend.dispensing_drive_mm_to_increment(value_mm)
+  def dispensing_drive_mm_to_vol(position_mm: float) -> float:
+    inc = STARBackend.dispensing_drive_mm_to_increment(position_mm)
     return STARBackend.dispensing_drive_increment_to_volume(inc)
 
   async def clld_probe_x_position_using_channel(
