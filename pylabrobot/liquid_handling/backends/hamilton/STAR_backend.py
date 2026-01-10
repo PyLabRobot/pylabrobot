@@ -1358,6 +1358,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Parse a response from the machine."""
     return parse_star_fw_string(resp, fmt)
 
+  def _parse_firmware_version_year(self, fw_version: str) -> Optional[int]:
+    """Extract year from firmware version string.
+
+    Args:
+        fw_version: Firmware version string (e.g., "v2021.03.15" or "2023_Q2_v1.4")
+
+    Returns:
+        Extracted 4-digit year or None if not found.
+    """
+    year_match = re.search(r"\b(20\d{2})\b", fw_version)
+    return int(year_match.group(1)) if year_match else None
+
   async def setup(
     self,
     skip_instrument_initialization=False,
@@ -1393,6 +1405,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
+    self.installations: dict[str, dict[str, Any]] = {}
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -1436,12 +1449,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     async def set_up_core96_head():
       if self.core96_head_installed and not skip_core96_head:
+        # Initialize 96-head
         core96_head_initialized = await self.request_core_96_head_initialization_status()
         if not core96_head_initialized:
           await self.initialize_core_96_head(
             trash96=self.deck.get_trash_area96(),
             z_position_at_the_command_end=self._channel_traversal_height,
           )
+
+        # Cache firmware version for version-specific behavior
+        raw_fw_version = await self.request_96head_firmware_version()
+        fw_year = self._parse_firmware_version_year(raw_fw_version)
+
+        self.installations["96head"] = {
+          "fw_version": raw_fw_version,
+          "fw_year": fw_year,
+        }
 
     async def set_up_arm_modules():
       await set_up_pip()
@@ -6090,7 +6113,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:OD)
   # TODO:(command:OT)
 
-  # -------------- 3.10 CoRe 96 Head commands --------------
+  # -------------- 3.10 96-Head commands --------------
+
+  async def request_96head_firmware_version(self):
+    """Request 96 Head firmware version
+    (MEM-READ command)
+    """
+    return await self.send_command(module="H0", command="RF")
 
   # -------------- 3.10.1 Initialization --------------
 
@@ -6120,15 +6149,237 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ze=f"{round(z_position_at_the_command_end*10):04}",
     )
 
-  async def move_core_96_to_safe_position(self):
-    """Move CoRe 96 Head to Z save position"""
-
-    return await self.send_command(module="C0", command="EV")
-
   async def request_core_96_head_initialization_status(self) -> bool:
     # not available in the C0 docs, so get from module H0 itself instead
     response = await self.send_command(module="H0", command="QW", fmt="qw#")
     return bool(response.get("qw", 0) == 1)  # type?
+
+  # -------------- 3.10.2 96-Head Movements --------------
+
+  # Conversion factors for 96-Head (mm per increment)
+  _head96_z_drive_mm_per_increment = 0.005
+  _head96_y_drive_mm_per_increment = 0.015625
+  _head96_dispensing_drive_mm_per_increment = 0.001025641026
+  _head96_dispensing_drive_uL_per_increment = 0.019340933
+  _head96_squeezer_drive_mm_per_increment = 0.0002086672009
+
+  # Z-axis conversions
+
+  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to Z-axis hardware increments for 96-head."""
+    return round(value_mm / self._head96_z_drive_mm_per_increment)
+
+  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert Z-axis hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
+
+  # Y-axis conversions
+
+  def _head96_y_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to Y-axis hardware increments for 96-head."""
+    return round(value_mm / self._head96_y_drive_mm_per_increment)
+
+  def _head96_y_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert Y-axis hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
+
+  # Dispensing drive conversions (mm and µL)
+
+  def _head96_dispensing_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to dispensing drive hardware increments for 96-head."""
+    return round(value_mm / self._head96_dispensing_drive_mm_per_increment)
+
+  def _head96_dispensing_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert dispensing drive hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_dispensing_drive_mm_per_increment, 2)
+
+  def _head96_dispensing_drive_uL_to_increment(self, value_uL: float) -> int:
+    """Convert µL to dispensing drive hardware increments for 96-head."""
+    return round(value_uL / self._head96_dispensing_drive_uL_per_increment)
+
+  def _head96_dispensing_drive_increment_to_uL(self, value_increments: int) -> float:
+    """Convert dispensing drive hardware increments to µL for 96-head."""
+    return round(value_increments * self._head96_dispensing_drive_uL_per_increment, 2)
+
+  def _head96_dispensing_drive_mm_to_uL(self, value_mm: float) -> float:
+    """Convert dispensing drive mm to µL for 96-head."""
+    # Convert mm -> increment -> µL
+    increment = self._head96_dispensing_drive_mm_to_increment(value_mm)
+    return self._head96_dispensing_drive_increment_to_uL(increment)
+
+  def _head96_dispensing_drive_uL_to_mm(self, value_uL: float) -> float:
+    """Convert dispensing drive µL to mm for 96-head."""
+    # Convert µL -> increment -> mm
+    increment = self._head96_dispensing_drive_uL_to_increment(value_uL)
+    return self._head96_dispensing_drive_increment_to_mm(increment)
+
+  # Squeezer drive conversions
+
+  def _head96_squeezer_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to squeezer drive hardware increments for 96-head."""
+    return round(value_mm / self._head96_squeezer_drive_mm_per_increment)
+
+  def _head96_squeezer_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert squeezer drive hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_squeezer_drive_mm_per_increment, 2)
+
+  # Movement commands
+
+  async def move_core_96_to_safe_position(self):
+    """Move CoRe 96 Head to Z safe position."""
+    warnings.warn(
+      "move_core_96_to_safe_position is deprecated. Use move_96head_to_z_safety instead. "
+      "This method will be removed in 2026-04",  # TODO: remove 2026-04
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.move_96head_to_z_safety()
+
+  async def move_96head_to_z_safety(self):
+    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm.
+    (ACTION command)
+    """
+    return await self.send_command(module="C0", command="EV")
+
+  # TODO: async def move_96head_x()
+
+  async def move_96head_y(
+    self,
+    y: float,
+    speed: float = 300.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15,
+  ):
+    """Move the 96-head to a specified Y-axis coordinate.
+    (ACTION command)
+
+    Args:
+      y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
+      speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]. Default: 300.0
+      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 781.25]. Default: 300.0
+      current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+
+    Returns:
+      Response from the hardware command.
+
+    Raises:
+      AssertionError: If 96-head not installed, firmware info missing, or parameters out of range.
+
+    Note:
+      Maximum speed varies by firmware version:
+      - Pre-2021: 390.625 mm/sec (25,000 increments)
+      - 2021+: 625.0 mm/sec (40,000 increments)
+      The exact firmware version introducing this change is undocumented.
+    """
+    # Validate 96-head installation and firmware info availability
+    assert self.core96_head_installed, "requires 96-head to be installed"
+    assert (
+      "96head" in self.installations and self.installations["96head"]["fw_year"] is not None
+    ), "requires 96-head firmware year information for safe operation"
+
+    fw_year = self.installations["96head"]["fw_year"]
+
+    # Determine speed limit based on firmware version
+    # Pre-2021 firmware appears to have lower speed capability or safety limits
+    # TODO: Verify exact firmware version and investigate the reason for this change
+    y_speed_upper_limit = 390.625 if fw_year <= 2021 else 625.0  # mm/sec
+
+    # Validate parameters before hardware communication
+    assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
+    assert 0.78125 <= speed <= y_speed_upper_limit, (
+      f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware year {fw_year}. "
+      f"Your firmware version: {self.installations['96head']['fw_version']}. "
+      "If this limit seems incorrect, please test cautiously with an empty deck and report "
+      "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
+    )
+    assert (
+      78.125 <= acceleration <= 781.25
+    ), "acceleration must be between 78.125 and 781.25 mm/sec**2"
+    assert isinstance(current_protection_limiter, int) and (
+      0 <= current_protection_limiter <= 15
+    ), "current_protection_limiter must be an integer between 0 and 15"
+
+    # Convert mm-based parameters to hardware increments using conversion methods
+    y_increment = self._head96_y_drive_mm_to_increment(y)
+    speed_increment = self._head96_y_drive_mm_to_increment(speed)
+    acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
+
+    resp = await self.send_command(
+      module="H0",
+      command="YA",
+      ya=f"{y_increment:05}",
+      yv=f"{speed_increment:05}",
+      yr=f"{acceleration_increment:05}",
+      yw=f"{current_protection_limiter:02}",
+    )
+
+    return resp
+
+  async def move_96head_z(
+    self,
+    z: float,
+    speed: float = 80.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15,
+  ):
+    """Move the 96-head to a specified Z-axis coordinate.
+    (ACTION command)
+
+    Args:
+      z: Target Z coordinate in mm. Valid range: [180.5, 342.5]
+      speed: Movement speed in mm/sec. Valid range: [0.25, 100.0]. Default: 80.0
+      acceleration: Movement acceleration in mm/sec². Valid range: [25.0, 500.0]. Default: 300.0
+      current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+
+    Returns:
+      Response from the hardware command.
+
+    Raises:
+      AssertionError: If 96-head not installed, firmware info missing, or parameters out of range.
+
+    Note:
+      Firmware versions from 2021+ use 1:1 acceleration scaling, while pre-2021 versions
+      use 100x scaling. Both maintain a 100,000 increment upper limit.
+    """
+    # Validate 96-head installation and firmware info availability
+    assert self.core96_head_installed, "requires 96-head to be installed"
+    assert (
+      "96head" in self.installations and self.installations["96head"]["fw_year"] is not None
+    ), "requires 96-head firmware year information for safe operation"
+
+    fw_year = self.installations["96head"]["fw_year"]
+
+    # Validate parameters before hardware communication
+    assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"
+    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
+    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    assert isinstance(current_protection_limiter, int) and (
+      0 <= current_protection_limiter <= 15
+    ), "current_protection_limiter must be an integer between 0 and 15"
+
+    # Determine acceleration scaling based on firmware version
+    # Pre-2021 firmware: acceleration parameter is multiplied by 100
+    # 2021+ firmware: acceleration parameter is 1:1 with increment/sec**2
+    # TODO: identify exact firmware version that introduced this change
+    acceleration_multiplier = 1 if fw_year >= 2021 else 100
+
+    # Convert mm-based parameters to hardware increments
+    z_increment = self._head96_z_drive_mm_to_increment(z)
+    speed_increment = self._head96_z_drive_mm_to_increment(speed)
+    acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
+    )
+
+    resp = await self.send_command(
+      module="H0",
+      command="ZA",
+      za=f"{z_increment:05}",
+      zv=f"{speed_increment:05}",
+      zr=f"{acceleration_increment:06}",
+      zw=f"{current_protection_limiter:02}",
+    )
+
+    return resp
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
@@ -6821,6 +7072,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
     """Move STAR(let) 96-Head to defined Coordinate
+    (ACTION command)
 
     Args:
       coordinate: Coordinate of A1 in mm
@@ -6919,6 +7171,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def request_96head_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
+    (MEM-READ command)
 
     Returns:
       Coordinate: x, y, z in mm
