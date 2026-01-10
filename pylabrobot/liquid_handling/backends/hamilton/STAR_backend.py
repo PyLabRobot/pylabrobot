@@ -17,6 +17,7 @@ from typing import (
   Literal,
   Optional,
   Sequence,
+  Tuple,
   Type,
   TypeVar,
   Union,
@@ -9238,7 +9239,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dispense_back_plld_volume: Optional[float] = None,  # uL
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
-  ):
+  ) -> Tuple[float, float]:
     """Search a surface using pressured-based liquid level detection (pLLD)
     (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
     (b) without foam detection sub-mode.
@@ -9281,8 +9282,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Returns:
       Two z-coordinates (mm), head_probe, meaning depends on the selected pressure sub-mode:
-      - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0]
-      - Two-detection modes/PressureLLDMode.FOAM: [first_detection_pos, liquid_level_pos]
+      - Single-detection modes/PressureLLDMode.LIQUID: (liquid_level_pos, 0)
+      - Two-detection modes/PressureLLDMode.FOAM: (first_detection_pos, liquid_level_pos)
     """
 
     # Preconditions checks
@@ -9472,6 +9473,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dr=f"{dispense_drive_acceleration_increments:03}",
       dv=f"{dispense_drive_max_speed_increments:05}",
       dw=f"{dispense_drive_current_limit}",
+      read_timeout=max(self.read_timeout, 120),  # it can take long (>30s)
     )
     assert resp_raw is not None
 
@@ -9480,7 +9482,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for return_val in resp_raw.split("if")[-1].split()
     ]
 
-    return resp_probe_mm
+    # return depending on mode
+    return (
+      (resp_probe_mm[0], 0)
+      if plld_mode == self.PressureLLDMode.LIQUID
+      else (resp_probe_mm[0], resp_probe_mm[1])
+    )
 
   async def plld_probe_z_height_using_channel(
     self,
@@ -9511,7 +9518,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
     move_channels_to_safe_pos_after: bool = False,
-  ) -> List[float]:
+  ) -> Tuple[float, float]:
     """Detect liquid level using pressured-based liquid level detection (pLLD)
     (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
     (b) without foam detection sub-mode.
@@ -9554,8 +9561,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Returns:
       Two z-coordinates (mm), tip, meaning depends on the selected pressure sub-mode:
-      - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0.0]
-      - Two-detection modes/PressureLLDMode.FOAM: [first_detection_pos, liquid_level_pos]
+      - Single-detection modes/PressureLLDMode.LIQUID: (liquid_level_pos, 0)
+      - Two-detection modes/PressureLLDMode.FOAM: (first_detection_pos, liquid_level_pos)
     """
 
     # Ensure tip is mounted
@@ -9590,44 +9597,49 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"Start position of LLD search must be between \n{lowest_immers_pos} and {safe_tip_top_z_pos} mm, is {start_pos_search} mm"
       )
 
-    resp_probe_mm = await self._search_for_surface_using_plld(
-      channel_idx=channel_idx,
-      lowest_immers_pos=lowest_immers_pos_head_space,
-      start_pos_search=channel_head_start_pos,
-      channel_speed_above_start_pos_search=channel_speed_above_start_pos_search,
-      channel_speed=channel_speed,
-      channel_acceleration=channel_acceleration,
-      z_drive_current_limit=z_drive_current_limit,
-      tip_has_filter=tip_has_filter,
-      dispense_drive_speed=dispense_drive_speed,
-      dispense_drive_acceleration=dispense_drive_acceleration,
-      dispense_drive_max_speed=dispense_drive_max_speed,
-      dispense_drive_current_limit=dispense_drive_current_limit,
-      plld_detection_edge=plld_detection_edge,
-      plld_detection_drop=plld_detection_drop,
-      clld_verification=clld_verification,
-      clld_detection_edge=clld_detection_edge,
-      clld_detection_drop=clld_detection_drop,
-      max_delta_plld_clld=max_delta_plld_clld,
-      plld_mode=plld_mode,
-      plld_foam_detection_drop=plld_foam_detection_drop,
-      plld_foam_detection_edge_tolerance=plld_foam_detection_edge_tolerance,
-      plld_foam_ad_values=plld_foam_ad_values,
-      plld_foam_search_speed=plld_foam_search_speed,
-      dispense_back_plld_volume=dispense_back_plld_volume,
-      post_detection_trajectory=post_detection_trajectory,
-      post_detection_dist=post_detection_dist,
-    )
+    try:
+      resp_probe_mm = await self._search_for_surface_using_plld(
+        channel_idx=channel_idx,
+        lowest_immers_pos=lowest_immers_pos_head_space,
+        start_pos_search=channel_head_start_pos,
+        channel_speed_above_start_pos_search=channel_speed_above_start_pos_search,
+        channel_speed=channel_speed,
+        channel_acceleration=channel_acceleration,
+        z_drive_current_limit=z_drive_current_limit,
+        tip_has_filter=tip_has_filter,
+        dispense_drive_speed=dispense_drive_speed,
+        dispense_drive_acceleration=dispense_drive_acceleration,
+        dispense_drive_max_speed=dispense_drive_max_speed,
+        dispense_drive_current_limit=dispense_drive_current_limit,
+        plld_detection_edge=plld_detection_edge,
+        plld_detection_drop=plld_detection_drop,
+        clld_verification=clld_verification,
+        clld_detection_edge=clld_detection_edge,
+        clld_detection_drop=clld_detection_drop,
+        max_delta_plld_clld=max_delta_plld_clld,
+        plld_mode=plld_mode,
+        plld_foam_detection_drop=plld_foam_detection_drop,
+        plld_foam_detection_edge_tolerance=plld_foam_detection_edge_tolerance,
+        plld_foam_ad_values=plld_foam_ad_values,
+        plld_foam_search_speed=plld_foam_search_speed,
+        dispense_back_plld_volume=dispense_back_plld_volume,
+        post_detection_trajectory=post_detection_trajectory,
+        post_detection_dist=post_detection_dist,
+      )
+    except STARFirmwareError:
+      await self.move_all_channels_in_z_safety()
+      raise
 
     if plld_mode == self.PressureLLDMode.FOAM:
-      resp_tip_mm = [
-        round(z_pos - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2) for z_pos in resp_probe_mm
-      ]
+      resp_tip_mm = (
+        round(resp_probe_mm[0] - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2),
+        round(resp_probe_mm[1] - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2),
+      )
     else:
-      resp_tip_mm = [
+      resp_tip_mm = (
         round(resp_probe_mm[0] - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2),
         0.0,
-      ]
+      )
 
     if move_channels_to_safe_pos_after:
       await self.move_all_channels_in_z_safety()
