@@ -9521,8 +9521,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     - The return values represent tip z-positions (not the head_probe) in mm!
 
     Args:
-      lowest_immers_pos: Lowest allowed Z during the search (mm). Default 99.98.
-      start_pos_search: Z position where the search begins (mm). Default 334.7.
+      lowest_immers_pos: Lowest allowed search position in mm, expressed in the *tip-referenced* coordinate system (i.e., the position you would use for commands that include tip length). Internally converted to channel Z-drive coordinates before issuing `ZL`.
+      start_pos_search: Start position for the cLLD search in mm, expressed in the *tip-referenced* coordinate system. Internally converted to channel Z-drive coordinates before issuing `ZL`. If None, the highest safe position is used based on tip length.
       channel_speed_above_start_pos_search: Z speed above the start position (mm/s). Default 120.0.
       channel_speed: Z search speed (mm/s). Default 10.0.
       channel_acceleration: Z acceleration (mm/s**2). Default 800.0.
@@ -9556,28 +9556,42 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       - Single-detection modes/PressureLLDMode.LIQUID: [liquid_level_pos, 0.0]
       - Two-detection modes/PressureLLDMode.FOAM: [first_detection_pos, liquid_level_pos]
     """
+
     # Ensure tip is mounted
     tip_presence = await self.request_tip_presence()
     if not tip_presence[channel_idx]:
       raise RuntimeError(f"No tip mounted on channel {channel_idx}")
 
-    # Correct for tip length + fitting depth
+    # Compute the highest position the tip can start the search from based on the known highest head position
     tip_len = await self.request_tip_len_on_channel(channel_idx)
-
-    fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
-    safe_head_top_z_pos = 334.7
-    safe_tip_bottom_z_pos = 99.98
-    safe_tip_top_z_pos = safe_head_top_z_pos - tip_len + fitting_depth
+    safe_tip_top_z_pos = (
+      STARBackend.MAXIMUM_CHANNEL_Z_POSITION - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    )  # head space -> tip space
 
     if start_pos_search is None:
       start_pos_search = safe_tip_top_z_pos
 
-    channel_head_start_pos = round(start_pos_search + tip_len - fitting_depth, 2)
-    lowest_immers_pos_corrected = round(lowest_immers_pos + tip_len - fitting_depth, 2)
+    # Check if lowest_immers_pos is allowed
+    if lowest_immers_pos < STARBackend.MINIMUM_CHANNEL_Z_POSITION:
+      raise ValueError(f"lowest_immers_pos must be at least 99.98 mm but is {lowest_immers_pos} mm")
+
+    # Correct for tip length + fitting depth (low level command is in head space, we are in tip space)
+    lowest_immers_pos_head_space = (
+      lowest_immers_pos + tip_len - STARBackend.DEFAULT_TIP_FITTING_DEPTH
+    )  # tip space -> head space
+    channel_head_start_pos = round(
+      start_pos_search + tip_len - STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2
+    )
+
+    # Check that start position is within allowed range
+    if not (lowest_immers_pos <= start_pos_search <= safe_tip_top_z_pos):
+      raise ValueError(
+        f"Start position of LLD search must be between \n{lowest_immers_pos} and {safe_tip_top_z_pos} mm, is {start_pos_search} mm"
+      )
 
     resp_probe_mm = await self._search_for_surface_using_plld(
       channel_idx=channel_idx,
-      lowest_immers_pos=lowest_immers_pos_corrected,
+      lowest_immers_pos=lowest_immers_pos_head_space,
       start_pos_search=channel_head_start_pos,
       channel_speed_above_start_pos_search=channel_speed_above_start_pos_search,
       channel_speed=channel_speed,
@@ -9605,9 +9619,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     if plld_mode == self.PressureLLDMode.FOAM:
-      resp_tip_mm = [round(z_pos - tip_len + fitting_depth, 2) for z_pos in resp_probe_mm]
+      resp_tip_mm = [
+        round(z_pos - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2) for z_pos in resp_probe_mm
+      ]
     else:
-      resp_tip_mm = [round(resp_probe_mm[0] - tip_len + fitting_depth, 2), 0.0]
+      resp_tip_mm = [
+        round(resp_probe_mm[0] - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2),
+        0.0,
+      ]
 
     return resp_tip_mm
 
