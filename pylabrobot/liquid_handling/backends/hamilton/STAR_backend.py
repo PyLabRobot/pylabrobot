@@ -8962,7 +8962,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f", is {channel_speed} mm/sec"
     )
     assert (
-      0 <= detection_edge <= 1_0234
+      0 <= detection_edge <= 1_023
     ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
     assert (
       0 <= current_limit_int <= 7
