@@ -9510,6 +9510,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dispense_back_plld_volume: Optional[float] = None,  # uL
     post_detection_trajectory: Literal[0, 1] = 1,
     post_detection_dist: float = 2.0,  # mm
+    move_channels_to_safe_pos_after: bool = False,
   ) -> List[float]:
     """Detect liquid level using pressured-based liquid level detection (pLLD)
     (1) with or (2) without additional cLLD verification, and (a) with foam detection sub-mode or
@@ -9627,6 +9628,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         round(resp_probe_mm[0] - tip_len + STARBackend.DEFAULT_TIP_FITTING_DEPTH, 2),
         0.0,
       ]
+
+    if move_channels_to_safe_pos_after:
+      await self.move_all_channels_in_z_safety()
 
     return resp_tip_mm
 
