@@ -9071,7 +9071,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
     channel_idx: int,  # 0-based indexing of channels!
     lowest_immers_pos: float = 99.98,
-    channel_tip_start_pos: Optional[float] = None,
+    start_pos_search: Optional[float] = None,
     channel_speed: float = 10.0,
     channel_acceleration: float = 800.0,
     detection_edge: int = 10,
@@ -9098,7 +9098,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       channel_idx: Channel index to probe with (0-based; backmost channel = 0).
       lowest_immers_pos: Lowest allowed search position in mm, expressed in the *tip-referenced* coordinate system (i.e., the position you would use for commands that include tip length). Internally converted to channel Z-drive coordinates before issuing `ZL`.
-      channel_tip_start_pos: Start position for the cLLD search in mm, expressed in the *tip-referenced* coordinate system. Internally converted to channel Z-drive coordinates before issuing `ZL`. If None, the highest safe position is used based on tip length.
+      start_pos_search: Start position for the cLLD search in mm, expressed in the *tip-referenced* coordinate system. Internally converted to channel Z-drive coordinates before issuing `ZL`. If None, the highest safe position is used based on tip length.
       channel_speed: Search speed in mm/s. Defaults to 10.0.
       channel_acceleration: Search acceleration in mm/s^2. Defaults to 800.0.
       detection_edge: Edge steepness threshold for cLLD detection (0-1023). Defaults to 10.
@@ -9127,8 +9127,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
     safe_tip_top_z_pos = safe_head_top_z_pos - tip_len + fitting_depth  # head space -> tip space
 
-    if channel_tip_start_pos is None:
-      channel_tip_start_pos = safe_tip_top_z_pos
+    if start_pos_search is None:
+      start_pos_search = safe_tip_top_z_pos
 
     # Check if lowest_immers_pos is allowed
     minimum_allowed_lowest_immers_pos = 99.98  # mm
@@ -9139,12 +9139,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lowest_immers_pos_head_space = (
       lowest_immers_pos + tip_len - fitting_depth
     )  # tip space -> head space
-    channel_head_start_pos = round(channel_tip_start_pos + tip_len - fitting_depth, 2)
+    channel_head_start_pos = round(start_pos_search + tip_len - fitting_depth, 2)
 
     # Check that start position is within allowed range
-    if not (lowest_immers_pos <= channel_tip_start_pos <= safe_tip_top_z_pos):
+    if not (lowest_immers_pos <= start_pos_search <= safe_tip_top_z_pos):
       raise ValueError(
-        f"Start position of LLD search must be between \n{lowest_immers_pos} and {safe_tip_top_z_pos} mm, is {channel_tip_start_pos} mm "
+        f"Start position of LLD search must be between \n{lowest_immers_pos} and {safe_tip_top_z_pos} mm, is {start_pos_search} mm "
       )
 
     try:
