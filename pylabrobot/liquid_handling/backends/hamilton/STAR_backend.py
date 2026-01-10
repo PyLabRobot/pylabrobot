@@ -9115,7 +9115,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       detection_drop: Offset applied after cLLD edge detection (0-1023). Defaults to 2.
       post_detection_trajectory: Firmware post-detection move mode (0 or 1). Defaults to 1.
       post_detection_dist: Distance in mm to move after detection (interpreted per trajectory).  Defaults to 2.0.
-      move_channels_to_save_pos_after: If True, moves all channels to a Z-safe position after the probing sequence completes.
+      move_channels_to_safe_pos_after: If True, moves all channels to a Z-safe position after the probing sequence completes.
 
     Raises:
       RuntimeError: If no tip is mounted on `channel_idx`.
