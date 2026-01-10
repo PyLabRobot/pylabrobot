@@ -9351,10 +9351,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       + f"PressureLLDMode.FOAM ({self.PressureLLDMode.FOAM}), is {plld_mode}"
     )
 
-    assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{STARBackend.z_drive_increment_to_mm(9_320)}"
-      + f" and {STARBackend.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
-    )
 
     assert 20 <= channel_speed_above_start_pos_search_increments <= 15_000, (
       "Speed above start position of LLD search must be between \n"
