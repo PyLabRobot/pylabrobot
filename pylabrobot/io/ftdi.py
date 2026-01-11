@@ -150,8 +150,8 @@ class FTDI(IOBase):
 
   async def setup(self):
     """Initialize the FTDI device connection with device resolution."""
-    if not self.dev.closed:
-      self.dev.close()
+    if self._dev is not None and not self._dev.closed:
+      self._dev.close()
     try:
       # Resolve which device to connect to
       self._device_id = self._resolve_device_serial()
