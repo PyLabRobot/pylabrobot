@@ -15,7 +15,6 @@ class HamiltonHepaFanBackend(FanBackend):
     self.io = FTDI(device_id=device_id, vid=0x0856, pid=0xAC11)
 
   async def setup(self):
-    # 1. Open and configure connection
     await self.io.setup()
     await self.io.set_baudrate(9600)
     await self.io.set_line_property(8, 0, 0)  # 8N1
@@ -24,78 +23,11 @@ class HamiltonHepaFanBackend(FanBackend):
     await self.io.set_dtr(True)
     await self.io.set_rts(True)
 
-    # 2. Verify device identity (handshake)
-    await self._handshake()
-
-    # 3. Continue with device initialization
     await self.send(b"\x55\xc1\x01\x02\x23\x4b")
     await self.send(b"\x55\xc1\x01\x08\x08\x6a")
     await self.send(b"\x55\xc1\x01\x09\x6a\x09")
     await self.send(b"\x55\xc1\x01\x0a\x2f\x4f")
     await self.send(b"\x15\x61\x01\x8a")
-
-  async def _handshake(self):
-    """
-    Verify that the connected device is actually a Hamilton HEPA fan.
-
-    Sends an identification query and checks the response pattern.
-    Disconnects immediately if verification fails to prevent sending
-    commands to the wrong device.
-
-    Raises:
-        RuntimeError: If device does not respond as expected
-    """
-    try:
-      # Purge any stale data
-      await self.io.usb_purge_rx_buffer()
-      await self.io.usb_purge_tx_buffer()
-
-      # Send identification query
-      await self.io.write(b"\x15\x61\x01\x8a")
-      await asyncio.sleep(0.1)
-
-      # Read response with timeout
-      response = b""
-      timeout = 1.0
-      start = asyncio.get_event_loop().time()
-      while asyncio.get_event_loop().time() - start < timeout:
-        try:
-          chunk = await self.io.read(1)
-          if chunk:
-            response += chunk
-          else:
-            break
-        except:
-          break
-        await asyncio.sleep(0.01)
-
-      logger.info(
-        f"Hamilton HEPA Fan handshake response: "
-        f"{response.hex() if response else 'empty'} (length: {len(response)})"
-      )
-
-      # Verify response
-      if len(response) == 0:
-        await self.io.stop()
-        raise RuntimeError(
-          "Device handshake failed: No response from device. "
-          "This may not be a Hamilton HEPA fan or device is malfunctioning."
-        )
-
-      # Optional: Add more specific response validation here
-      # if response[0] != 0x11 or response[1] != 0x61:
-      #     await self.io.stop()
-      #     raise RuntimeError(f"Unexpected response pattern: {response.hex()}")
-
-      logger.info("✓ Device handshake successful - Hamilton HEPA fan confirmed")
-
-    except Exception as e:
-      # Always disconnect on handshake failure
-      try:
-        await self.io.stop()
-      except Exception:
-        pass
-      raise RuntimeError(f"Device handshake failed: {e}") from e
 
   async def turn_on(self, intensity):  # Speed is an integer percent between 0 and 100
     if int(intensity) != intensity or not 0 <= intensity <= 100:
