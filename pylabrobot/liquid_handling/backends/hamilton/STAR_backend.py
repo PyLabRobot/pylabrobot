@@ -1792,7 +1792,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     immersion_depth_2nd_section: Optional[List[float]] = None,
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     min_z_endpos: Optional[float] = None,
-    liquid_surfaces_no_lld: Optional[List[float]] = None,
+    liquid_surface_no_lld: Optional[List[float]] = None,
     # PLR:
     probe_liquid_height: bool = False,
     auto_surface_following_distance: bool = False,
@@ -1803,6 +1803,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_cycles: Optional[List[int]] = None,
     mix_speed: Optional[List[float]] = None,
     immersion_depth_direction: Optional[List[int]] = None,
+    liquid_surfaces_no_lld: Optional[List[float]] = None,
   ):
     """Aspirate liquid from the specified channels.
 
@@ -1873,6 +1874,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "out of the liquid.",
         DeprecationWarning,
       )
+
+    if liquid_surfaces_no_lld is not None:
+      warnings.warn(
+        "The liquid_surfaces_no_lld parameter is deprecated and will be removed in the future. "
+        "Use liquid_surface_no_lld instead.",
+        DeprecationWarning,
+      )
+      liquid_surface_no_lld = liquid_surface_no_lld or liquid_surfaces_no_lld
     # # # delete # # #
 
     self.ensure_can_reach_position(use_channels, ops, "aspirate")
@@ -2021,7 +2030,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       liquid_heights = [op.liquid_height or 0 for op in ops]
 
-    liquid_surfaces_no_lld = liquid_surfaces_no_lld or [
+    liquid_surfaces_no_lld = liquid_surface_no_lld or [
       wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
     ]
 
