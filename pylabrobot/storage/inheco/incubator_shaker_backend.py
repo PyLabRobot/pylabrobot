@@ -145,8 +145,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     port: Optional[str] = None,
     write_timeout: float = 5.0,
     read_timeout: float = 10.0,
-    vid: str = "0403",
-    pid: str = "6001",
+    vid: int = 0x0403,
+    pid: int = 0x6001,
   ):
     super().__init__()
 
