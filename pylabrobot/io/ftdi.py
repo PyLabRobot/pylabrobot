@@ -38,7 +38,7 @@ class FTDICommand(Command):
 
 
 class FTDI(IOBase):
-  """Thin wrapper around pylibftdi with intelligent device resolution and logging.
+  """Thin wrapper around pylibftdi with device resolution and logging.
 
   Finds devices based on the following parameters:
   1. device_id - serial number or device index for explicit connection
@@ -149,7 +149,9 @@ class FTDI(IOBase):
     return device_serial_number
 
   async def setup(self):
-    """Initialize the FTDI device connection with intelligent device resolution."""
+    """Initialize the FTDI device connection with device resolution."""
+    if not self.dev.closed:
+      self.dev.close()
     try:
       # Resolve which device to connect to
       self._device_id = self._resolve_device_serial()
