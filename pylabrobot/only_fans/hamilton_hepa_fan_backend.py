@@ -1,11 +1,8 @@
 import asyncio
-import logging
 
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import FanBackend
-
-logger = logging.getLogger(__name__)
 
 
 class HamiltonHepaFanBackend(FanBackend):

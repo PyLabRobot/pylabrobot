@@ -41,7 +41,7 @@ class FTDI(IOBase):
   """Thin wrapper around pylibftdi with device resolution and logging.
 
   Finds devices based on the following parameters:
-  1. device_id - serial number or device index for explicit connection
+  1. device_id - serial number for explicit connection
   2. VID:PID - works for single device of that model
 
   If no devices match, an error is raised.
@@ -89,7 +89,7 @@ class FTDI(IOBase):
     If no devices match, an error is raised.
     If multiple devices match the criteria, an error is raised.
 
-    We have to use pyusb to list devices, as pylibftdi does not provide a way to list devices (it will simply open the first matching device).
+    We have to use pyusb to list devices, as pylibftdi does not provide a way to list devices with custom vid/pid.
 
     Returns:
       The serial number of the resolved device.
