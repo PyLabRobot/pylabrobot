@@ -1,25 +1,15 @@
 import asyncio
 
-# Make pylibftdi scan the Hamilton HEPA Fan VID:PID
-# appears as ID 0856:ac11 B&B Electronics Model USOPTL4
-from pylibftdi import driver
-
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import FanBackend
-
-driver.USB_VID_LIST.append(0x0856)  # i.e. 2134
-driver.USB_PID_LIST.append(0xAC11)  # i.e. 44049
 
 
 class HamiltonHepaFanBackend(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""
 
-  def __init__(self, vid=0x0856, pid=0xAC11, serial_number=None, device_id=None):
-    self.vid = vid
-    self.pid = pid
-    self.serial_number = serial_number
-    self.io = FTDI(device_id=device_id)
+  def __init__(self, device_id=None):
+    self.io = FTDI(device_id=device_id, vid=0x0856, pid=0xAC11)
 
   async def setup(self):
     await self.io.setup()
