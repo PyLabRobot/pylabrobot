@@ -363,7 +363,7 @@ class VSpinBackend(CentrifugeBackend):
 
     resp = await self._send_command(bytes.fromhex("aa020e10"))
     if len(resp) == 0:
-      raise IOError("Empty status from centrifuge")
+      raise IOError("Empty status from centrifuge. Is the machine on?")
     return resp
 
   async def get_bucket_locked(self) -> bool:
