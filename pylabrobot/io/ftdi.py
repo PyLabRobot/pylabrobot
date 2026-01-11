@@ -30,10 +30,23 @@ class FTDICommand(Command):
 class FTDI(IOBase):
   """Thin wrapper around pylibftdi to include PLR logging (for io testing)."""
 
-  def __init__(self, device_id: Optional[str] = None):
+  def __init__(
+    self, device_id: Optional[str] = None, vid: Optional[int] = None, pid: Optional[int] = None
+  ):
+    """Create an FTDI object.
+
+    If there are multiple devices matching the given parameters, an error will be raised when
+    attempting to open the device. You can use `vid` and `pid` to narrow down the search, and
+    `device_id` to select a specific device by its serial number.
+
+    Args:
+      device_id: The device ID (serial number) of the FTDI device to connect to.
+      vid: The vendor ID of the FTDI device to connect to.
+      pid: The product ID of the FTDI device to connect to.
+    """
     if HAS_PYLIBFTDI:
       try:
-        self._dev = Device(lazy_open=True, device_id=device_id)
+        self._dev = Device(lazy_open=True, device_id=device_id, vid=vid, pid=pid)
       except LibraryMissingError as e:
         global _FTDI_ERROR
         _FTDI_ERROR = e
