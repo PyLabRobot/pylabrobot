@@ -1796,6 +1796,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     mix_cycles: Optional[List[int]] = None,
     mix_speed: Optional[List[float]] = None,
     immersion_depth_direction: Optional[List[int]] = None,
+    liquid_surfaces_no_lld: Optional[List[float]] = None,
   ):
     """Aspirate liquid from the specified channels.
 
@@ -1866,6 +1867,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "out of the liquid.",
         DeprecationWarning,
       )
+
+    if liquid_surfaces_no_lld is not None:
+      warnings.warn(
+        "The liquid_surfaces_no_lld parameter is deprecated and will be removed in the future. "
+        "Use liquid_surface_no_lld instead.",
+        DeprecationWarning,
+      )
+      liquid_surface_no_lld = liquid_surface_no_lld or liquid_surfaces_no_lld
     # # # delete # # #
 
     self.ensure_can_reach_position(use_channels, ops, "aspirate")
