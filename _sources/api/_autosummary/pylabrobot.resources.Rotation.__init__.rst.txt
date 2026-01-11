@@ -1,0 +1,6 @@
+pylabrobot.resources.Rotation.\_\_init\_\_
+==========================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Rotation.__init__

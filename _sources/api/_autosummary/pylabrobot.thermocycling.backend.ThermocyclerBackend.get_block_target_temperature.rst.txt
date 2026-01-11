@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.backend.ThermocyclerBackend.get\_block\_target\_temperature
+====================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.backend
+
+.. automethod:: ThermocyclerBackend.get_block_target_temperature

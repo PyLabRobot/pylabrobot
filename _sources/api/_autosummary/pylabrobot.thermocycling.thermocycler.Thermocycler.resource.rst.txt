@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.resource
+===========================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. autoproperty:: Thermocycler.resource

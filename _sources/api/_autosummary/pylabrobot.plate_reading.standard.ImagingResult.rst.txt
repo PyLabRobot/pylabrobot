@@ -1,0 +1,30 @@
+﻿pylabrobot.plate\_reading.standard.ImagingResult
+================================================
+
+.. currentmodule:: pylabrobot.plate_reading.standard
+
+.. autoclass:: ImagingResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ImagingResult.images
+      ~ImagingResult.exposure_time
+      ~ImagingResult.focal_height
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ImagingResult.__init__
+   
+   
