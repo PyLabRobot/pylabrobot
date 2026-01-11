@@ -6,19 +6,10 @@ import sys
 import time
 from typing import Dict, List, Optional, Tuple, Union
 
-from pylabrobot.resources.well import Well
-
-try:
-  from pylibftdi import driver
-
-  HAS_PYLIBFTDI = True
-except ImportError as e:
-  HAS_PYLIBFTDI = False
-  _FTDI_IMPORT_ERROR = e
-
 from pylabrobot import utils
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.well import Well
 
 from ..backend import PlateReaderBackend
 
@@ -34,10 +25,8 @@ class CLARIOstarBackend(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
-  def __init__(self, vid=0x0403, pid=0xBB68, device_id: Optional[str] = None):
-    self.io = FTDI(
-      device_id=device_id, vid=vid, pid=pid, product_substring="CLARIOstar", vendor_substring="BMG"
-    )
+  def __init__(self, device_id: Optional[str] = None):
+    self.io = FTDI(device_id=device_id, vid=0x0403, pid=0xBB68)
 
   async def setup(self):
     await self.io.setup()

@@ -11,14 +11,8 @@ logger = logging.getLogger(__name__)
 class HamiltonHepaFanBackend(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""
 
-  def __init__(self, vid=0x0856, pid=0xAC11, device_id=None):
-    self.io = FTDI(
-      device_id=device_id,
-      vid=vid,
-      pid=pid,
-      product_substring="USOPTL4",
-      vendor_substring="B&B",
-    )
+  def __init__(self, device_id=None):
+    self.io = FTDI(device_id=device_id, vid=0x0856, pid=0xAC11)
 
   async def setup(self):
     # 1. Open and configure connection
