@@ -250,8 +250,8 @@ def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> 
     ),
     with_tips=with_tips,
   )
-  
-  
+
+
 def hamilton_96_tiprack_300uL_filter_ultrawide(name: str, with_tips: bool = True) -> TipRack:
   """Hamilton cat. no.: 235449 (1.55 mm oriface, non-sterile)
   Hamilton name: 'STF'
