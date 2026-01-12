@@ -143,8 +143,8 @@ def slim_standard_volume_tip_with_filter(name: Optional[str] = None) -> Hamilton
     pickup_method=TipPickupMethod.OUT_OF_RACK,
   )
   
-def wide_standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Wide bore standard volume tip with a filter"""
+def ultrawide_standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
+  """Ultra wide bore (1.55 mm) standard volume tip with a filter"""
   return HamiltonTip(
     name=name,
     has_filter=True,

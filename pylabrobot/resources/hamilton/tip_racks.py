@@ -18,8 +18,8 @@ from .tip_creators import (
   standard_volume_tip_no_filter,
   standard_volume_tip_with_filter,
   ultrawide_high_volume_tip_with_filter,
+  ultrawide_standard_volume_tip_with_filter,
   wide_high_volume_tip_with_filter,
-  wide_standard_volume_tip_with_filter
 )
 
 # # # # # # # # # # 10 ul Tips # # # # # # # # # #
@@ -252,8 +252,8 @@ def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> 
   )
   
   
-def hamilton_96_tiprack_300uL_filter_wide(name: str, with_tips: bool = True) -> TipRack:
-  """Hamilton cat. no.: 235449 (1.55mm oriface, non-sterile)
+def hamilton_96_tiprack_300uL_filter_ultrawide(name: str, with_tips: bool = True) -> TipRack:
+  """Hamilton cat. no.: 235449 (1.55 mm oriface, non-sterile)
   Hamilton name: 'STF'
   Tip Rack with 96x 300ul Wide Bore Standard Volume Tip with filter"""
   return TipRack(
@@ -261,7 +261,7 @@ def hamilton_96_tiprack_300uL_filter_wide(name: str, with_tips: bool = True) -> 
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=hamilton_96_tiprack_300uL_filter_wide.__name__,
+    model=hamilton_96_tiprack_300uL_filter_ultrawide.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -273,7 +273,7 @@ def hamilton_96_tiprack_300uL_filter_wide(name: str, with_tips: bool = True) -> 
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=wide_standard_volume_tip_with_filter,
+      make_tip=ultrawide_standard_volume_tip_with_filter,
     ),
     with_tips=with_tips,
   )
