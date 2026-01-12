@@ -125,6 +125,12 @@ class FTDI(IOBase):
 
       candidates.append(device)
 
+    logger.debug(
+      f"FTDI device resolution: found {len(candidates)} candidates for "
+      f"VID:PID {self._vid}:{self._pid}, device_id {self._device_id}: "
+      f"{[usb.util.get_string(d, d.iSerialNumber) for d in candidates]}"
+    )
+
     vid_string = f"{self._vid:04x}" if self._vid is not None else "any"
     pid_string = f"{self._pid:04x}" if self._pid is not None else "any"
 
