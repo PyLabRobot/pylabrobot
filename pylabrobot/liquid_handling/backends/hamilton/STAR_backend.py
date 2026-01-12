@@ -6243,6 +6243,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # TODO: async def move_96head_x()
 
+  async def park_96head(
+    self,
+    y_speed: float = 300.0,
+    y_acceleration: float = 300.0,
+    y_current_protection_limiter: int = 15,
+    z_speed: float = 80.0,
+    z_acceleration: float = 300.0,
+    z_current_protection_limiter: int = 15,
+    ):
+    """Park the 96-head.
+    (ACTION command)
+    """
+    
+    assert self.core96_head_installed, "requires 96-head to be installed"
+
+
+
+
+
+    return await self.send_command(
+      module="H0",
+      command="MO"
+      )
+
   async def move_96head_y(
     self,
     y: float,
