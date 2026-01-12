@@ -157,7 +157,7 @@ class FTDI(IOBase):
       self._device_id = self._resolve_device_serial()
 
       # Create and open device
-      self._dev = Device(lazy_open=True, device_id=self.device_id)
+      self._dev = Device(lazy_open=True, device_id=self.device_id, pid=self._pid, vid=self._vid)
       self._dev.open()
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:
