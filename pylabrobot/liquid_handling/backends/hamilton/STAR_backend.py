@@ -1466,6 +1466,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           "fw_year": fw_year,
         }
 
+        configuration_96head = await self.request_96head_configuration()
+        self.installations["96head"][
+          "clot_monitoring_clld"] = bool(int(configuration_96head[0]))
+        self.installations["96head"][
+          "stop_disc_type"] = STARBackend._96HEAD_STOP_DISC_TYPE[configuration_96head[1]]
+        self.installations["96head"][
+          "instrument_type"] = STARBackend._96HEAD_INSTRUMENT_TYPE[configuration_96head[2]]      
+        
+        head96_type = await self.request_96head_type()
+        self.installations["96head"][
+          "type"] = head96_type
+
+        
     async def set_up_arm_modules():
       await set_up_pip()
       await set_up_iswap()
@@ -6121,6 +6134,53 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     return await self.send_command(module="H0", command="RF")
 
+  _96HEAD_STOP_DISC_TYPE = {
+      "0": "core_i",
+      "1": "core_ii",
+  }
+
+  _96HEAD_INSTRUMENT_TYPE = {
+      "0": "legacy",
+      "1": "FM-STAR",
+  }
+
+  async def request_96head_configuration(self) -> List[str]:
+    """Request the 96-head configuration (raw) using the QU command.
+
+    The instrument returns a sequence of positional tokens. This method returns
+    those tokens without decoding them, but the following indices are currently
+    understood:
+
+        - index 0: clot_monitoring_with_clld
+        - index 1: stop_disc_type (codes: 0=core_i, 1=core_ii)
+        - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
+        - indices 3..9: reservable positions (positions 4..10)
+
+    Returns:
+        List[str]: Raw positional tokens extracted from the QU response (the
+            portion after the last ``"au"`` marker).
+    """
+    resp = await self.send_command(module="H0", command="QU")
+    return resp.split("au")[-1].split()
+
+  async def request_96head_type(self):
+    """Send QG and return the 96-head type as a human-readable string."""
+
+    type_96head_map = {
+        0: "Low volume head",
+        1: "High volume head",
+        2: "96 head II",
+        3: "96 head TADM",
+    }
+
+    resp = await self.send_command(
+      module="H0",
+      command="QG",
+        fmt="qg#"
+      )
+
+    return type_96head_map.get(resp["qg"], "unknown")
+
   # -------------- 3.10.1 Initialization --------------
 
   async def initialize_core_96_head(
@@ -6165,61 +6225,61 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # Z-axis conversions
 
-  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _96head_z_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to Z-axis hardware increments for 96-head."""
     return round(value_mm / self._head96_z_drive_mm_per_increment)
 
-  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _96head_z_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert Z-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
 
   # Y-axis conversions
 
-  def _head96_y_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _96head_y_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to Y-axis hardware increments for 96-head."""
     return round(value_mm / self._head96_y_drive_mm_per_increment)
 
-  def _head96_y_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _96head_y_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert Y-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
 
   # Dispensing drive conversions (mm and µL)
 
-  def _head96_dispensing_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _96head_dispensing_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to dispensing drive hardware increments for 96-head."""
     return round(value_mm / self._head96_dispensing_drive_mm_per_increment)
 
-  def _head96_dispensing_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _96head_dispensing_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert dispensing drive hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_dispensing_drive_mm_per_increment, 2)
 
-  def _head96_dispensing_drive_uL_to_increment(self, value_uL: float) -> int:
+  def _96head_dispensing_drive_uL_to_increment(self, value_uL: float) -> int:
     """Convert µL to dispensing drive hardware increments for 96-head."""
     return round(value_uL / self._head96_dispensing_drive_uL_per_increment)
 
-  def _head96_dispensing_drive_increment_to_uL(self, value_increments: int) -> float:
+  def _96head_dispensing_drive_increment_to_uL(self, value_increments: int) -> float:
     """Convert dispensing drive hardware increments to µL for 96-head."""
     return round(value_increments * self._head96_dispensing_drive_uL_per_increment, 2)
 
-  def _head96_dispensing_drive_mm_to_uL(self, value_mm: float) -> float:
+  def _96head_dispensing_drive_mm_to_uL(self, value_mm: float) -> float:
     """Convert dispensing drive mm to µL for 96-head."""
     # Convert mm -> increment -> µL
-    increment = self._head96_dispensing_drive_mm_to_increment(value_mm)
-    return self._head96_dispensing_drive_increment_to_uL(increment)
+    increment = self._96head_dispensing_drive_mm_to_increment(value_mm)
+    return self._96head_dispensing_drive_increment_to_uL(increment)
 
-  def _head96_dispensing_drive_uL_to_mm(self, value_uL: float) -> float:
+  def _96head_dispensing_drive_uL_to_mm(self, value_uL: float) -> float:
     """Convert dispensing drive µL to mm for 96-head."""
     # Convert µL -> increment -> mm
-    increment = self._head96_dispensing_drive_uL_to_increment(value_uL)
-    return self._head96_dispensing_drive_increment_to_mm(increment)
+    increment = self._96head_dispensing_drive_uL_to_increment(value_uL)
+    return self._96head_dispensing_drive_increment_to_mm(increment)
 
   # Squeezer drive conversions
 
-  def _head96_squeezer_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _96head_squeezer_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to squeezer drive hardware increments for 96-head."""
-    return round(value_mm / self._head96_squeezer_drive_mm_per_increment)
+    return round(value_mm / self._96head_squeezer_drive_mm_per_increment)
 
-  def _head96_squeezer_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _96head_squeezer_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert squeezer drive hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_squeezer_drive_mm_per_increment, 2)
 
@@ -6245,22 +6305,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def park_96head(
     self,
-    y_speed: float = 300.0,
-    y_acceleration: float = 300.0,
-    y_current_protection_limiter: int = 15,
-    z_speed: float = 80.0,
-    z_acceleration: float = 300.0,
-    z_current_protection_limiter: int = 15,
     ):
     """Park the 96-head.
     (ACTION command)
+
+    Uses firmware default speeds and accelerations.
     """
     
     assert self.core96_head_installed, "requires 96-head to be installed"
-
-
-
-
 
     return await self.send_command(
       module="H0",
@@ -6324,9 +6376,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ), "current_protection_limiter must be an integer between 0 and 15"
 
     # Convert mm-based parameters to hardware increments using conversion methods
-    y_increment = self._head96_y_drive_mm_to_increment(y)
-    speed_increment = self._head96_y_drive_mm_to_increment(speed)
-    acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
+    y_increment = self._96head_y_drive_mm_to_increment(y)
+    speed_increment = self._96head_y_drive_mm_to_increment(speed)
+    acceleration_increment = self._96head_y_drive_mm_to_increment(acceleration)
 
     resp = await self.send_command(
       module="H0",
@@ -6388,10 +6440,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_multiplier = 1 if fw_year >= 2021 else 100
 
     # Convert mm-based parameters to hardware increments
-    z_increment = self._head96_z_drive_mm_to_increment(z)
-    speed_increment = self._head96_z_drive_mm_to_increment(speed)
+    z_increment = self._96head_z_drive_mm_to_increment(z)
+    speed_increment = self._96head_z_drive_mm_to_increment(speed)
     acceleration_increment = round(
-      self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
+      self._96head_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
     )
 
     resp = await self.send_command(
