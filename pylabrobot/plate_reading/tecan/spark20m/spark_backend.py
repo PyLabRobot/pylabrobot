@@ -73,7 +73,7 @@ class SparkBackend(PlateReaderBackend):
 
   async def setup(self) -> None:
     """Set up the plate reader."""
-    self.reader.connect()
+    await self.reader.connect()
     await self.config.init_module()
     await self.data.turn_all_interval_messages_off()
 

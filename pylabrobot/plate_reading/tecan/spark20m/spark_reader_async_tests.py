@@ -1,6 +1,6 @@
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 # Import the module under test
 from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import (
@@ -12,78 +12,70 @@ from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import (
 
 class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    # Patch usb.core and usb.util inside the module
-    self.usb_core_patcher = patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.usb.core"
-    )
-    self.usb_util_patcher = patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.usb.util"
-    )
-
-    self.mock_usb_core = self.usb_core_patcher.start()
-    self.mock_usb_util = self.usb_util_patcher.start()
-
-    # Setup MockUSBError
-    class MockUSBError(Exception):
-      def __init__(self, errno=None, *args):
-        super().__init__(*args)
-        self.errno = errno
-
-    self.mock_usb_core.USBError = MockUSBError
+    # Patch USB class
+    self.usb_patcher = patch("pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.USB")
+    self.mock_usb_class = self.usb_patcher.start()
 
     self.reader = SparkReaderAsync()
 
   async def asyncTearDown(self):
-    self.usb_core_patcher.stop()
-    self.usb_util_patcher.stop()
+    self.usb_patcher.stop()
 
   async def test_connect_success(self):
-    # Mock device
-    mock_dev = MagicMock()
-    mock_dev.idProduct = SparkDevice.PLATE_TRANSPORT.value
-    mock_dev.is_kernel_driver_active.return_value = True
-    mock_dev.serial_number = "TEST_SERIAL"
+    # Create a mock USB instance
+    mock_usb_instance = AsyncMock()
+    self.mock_usb_class.return_value = mock_usb_instance
 
-    # Mock configuration and endpoints
-    mock_cfg = {(0, 0): MagicMock()}
-    mock_dev.get_active_configuration.return_value = mock_cfg
+    await self.reader.connect()
 
-    self.mock_usb_core.find.return_value = iter([mock_dev])
-    self.mock_usb_util.find_descriptor.side_effect = ["ep_out", "ep_in", "ep_in1", "ep_int"]
+    # Verify USB initialized for known devices (we iterate all SparkDevices)
+    # Just check for one of them
+    self.assertTrue(self.mock_usb_class.call_count >= 1)
 
-    self.reader.connect()
-
+    # Check that it's in devices
+    # Note: connect iterates all enum members. If all succeed, all are in devices.
+    # We mock success for all.
     self.assertIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
-    self.assertEqual(self.reader.devices[SparkDevice.PLATE_TRANSPORT], mock_dev)
-    mock_dev.detach_kernel_driver.assert_called_with(0)
-    # Check set_configuration calls: 0, 0, 1
-    # mock_dev.set_configuration.assert_has_calls([call(0), call(0), call(1)]) # Code calls it multiple times?
-    # Code:
-    # d.set_configuration() (no args?) -> Wait, existing code: d.set_configuration(), then d.set_configuration(0), d.set_configuration(0), d.set_configuration(1)
-    # Let's just check it was called.
-    self.assertTrue(mock_dev.set_configuration.called)
+    self.assertEqual(self.reader.devices[SparkDevice.PLATE_TRANSPORT], mock_usb_instance)
+
+    mock_usb_instance.setup.assert_awaited()
 
   async def test_connect_no_devices(self):
-    self.mock_usb_core.find.return_value = iter([])
-    with self.assertRaisesRegex(ValueError, "No devices found"):
-      self.reader.connect()
-
-  async def test_connect_unknown_device(self):
-    mock_dev = MagicMock()
-    mock_dev.idProduct = 0xFFFF  # Unknown PID
-    self.mock_usb_core.find.return_value = iter([mock_dev])
+    # USB raising RuntimeError means device not found
+    self.mock_usb_class.side_effect = RuntimeError("Device not found")
 
     with self.assertRaisesRegex(ValueError, "Failed to connect to any known Spark devices"):
-      self.reader.connect()
+      await self.reader.connect()
+
+  async def test_connect_usb_error(self):
+    # Device 1: Fails with Exception (not RuntimeError)
+    # Device 2: Succeeds
+
+    # We need side_effect for the constructor to return different mocks or raise exceptions
+    # based on input arguments (id_product).
+
+    mock_usb_success = AsyncMock()
+
+    def side_effect(id_vendor, id_product, configuration_callback=None):
+      if id_product == SparkDevice.PLATE_TRANSPORT.value:
+        raise Exception("Some USB Error")
+      if id_product == SparkDevice.ABSORPTION.value:
+        return mock_usb_success
+      raise RuntimeError("Not found")  # Others not found
+
+    self.mock_usb_class.side_effect = side_effect
+
+    await self.reader.connect()
+
+    # Device 1 should not be in devices
+    self.assertNotIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
+    # Device 2 should be in devices
+    self.assertIn(SparkDevice.ABSORPTION, self.reader.devices)
 
   async def test_send_command(self):
     # Setup connected device
-    mock_dev = MagicMock()
-    mock_ep_out = MagicMock()
-    mock_ep_out.write = MagicMock()  # sync write
-
+    mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
-    self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {SparkEndpoint.BULK_OUT: mock_ep_out}
 
     # Mock calculate_checksum to return a predictable value
     with patch.object(self.reader, "_calculate_checksum", return_value=0x99):
@@ -95,21 +87,13 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     # Payload: b"CMD"
     # Checksum: 0x99
     expected_msg = bytes([0x01, 0x00, 0x00, 0x03]) + b"CMD" + bytes([0x99])
-    mock_ep_out.write.assert_called_with(expected_msg)
+
+    mock_dev.write_to_endpoint.assert_awaited_with(SparkEndpoint.BULK_OUT.value, expected_msg)
     self.assertEqual(self.reader.seq_num, 1)
 
   async def test_send_command_device_not_connected(self):
     success = await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION)
     self.assertFalse(success)
-
-  async def test_usb_read(self):
-    mock_ep = MagicMock()
-    mock_ep.read = MagicMock(return_value=b"data")
-
-    data = await self.reader._usb_read(mock_ep, timeout=100)
-
-    self.assertEqual(data, b"data")
-    mock_ep.read.assert_called_with(mock_ep.wMaxPacketSize, timeout=100)
 
   async def test_get_response_success(self):
     # Mock parse_single_spark_packet
@@ -127,11 +111,11 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_response_busy_then_ready(self):
     # This tests the retry loop
-    mock_ep = MagicMock()
-    self.reader.cur_in_endpoint = mock_ep
+    mock_reader = AsyncMock()
+    self.reader.cur_reader = mock_reader
+    self.reader.cur_endpoint_addr = 0x81
 
-    # Mock _usb_read to return data on retry
-    with patch.object(self.reader, "_usb_read", new_callable=AsyncMock) as mock_read, patch(
+    with patch(
       "pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.parse_single_spark_packet"
     ) as mock_parse:
       # Sequence of parse results:
@@ -142,7 +126,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
         {"type": "RespReady", "payload": "done"},
       ]
 
-      mock_read.return_value = b"retry_data"
+      mock_reader.read_from_endpoint.return_value = b"retry_data"
 
       read_task: asyncio.Future = asyncio.Future()
       read_task.set_result(b"initial_data")
@@ -151,14 +135,13 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
       self.assertEqual(parsed, {"type": "RespReady", "payload": "done"})
       self.assertIn("msg1", self.reader.msgs)
-      # Should have called _usb_read once for the retry
-      mock_read.assert_called_once()
+
+      # Should have called read_from_endpoint once for the retry
+      mock_reader.read_from_endpoint.assert_awaited()
 
   async def test_reading_context_manager(self):
-    mock_dev = MagicMock()
-    mock_ep = MagicMock()
+    mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
-    self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {SparkEndpoint.INTERRUPT_IN: mock_ep}
 
     with patch.object(self.reader, "init_read") as mock_init_read, patch.object(
       self.reader, "get_response", new_callable=AsyncMock
@@ -171,94 +154,59 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       async with self.reader.reading(SparkDevice.PLATE_TRANSPORT):
         pass
 
-      mock_init_read.assert_called_with(mock_ep, 512, 2000)
+      mock_init_read.assert_called_with(
+        SparkDevice.PLATE_TRANSPORT, SparkEndpoint.INTERRUPT_IN, 512, 2000
+      )
       mock_get_resp.assert_awaited()
 
   async def test_start_background_read(self):
-    mock_dev = MagicMock()
-    mock_ep = MagicMock()
-    # Ensure wMaxPacketSize is set
-    mock_ep.wMaxPacketSize = 64
-    # Ensure bEndpointAddress is set for logging
-    mock_ep.bEndpointAddress = 0x81
-
+    mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
-    self.reader.endpoints[SparkDevice.PLATE_TRANSPORT] = {SparkEndpoint.INTERRUPT_IN: mock_ep}
 
-    # Mock _usb_read
-    with patch.object(self.reader, "_usb_read", new_callable=AsyncMock) as mock_read:
-      # Return some data then block or raise CancelledError
-      # Note: The background reader catches CancelledError and exits.
-      # We need to simulate:
-      # 1. Read successful data
-      # 2. Read successful data
-      # 3. Raise CancelledError (simulating task cancellation or just ending the loop via exception injection)
+    # Mock read_from_endpoint
+    # We need to simulate:
+    # 1. Read successful data
+    # 2. Read successful data
+    # 3. Raise CancelledError (simulating task cancellation)
 
-      async def side_effect(*args, **kwargs):
-        if mock_read.call_count == 1:
-          return b"data1"
-        elif mock_read.call_count == 2:
-          return b"data2"
-        else:
-          # Stall until cancelled
-          await asyncio.sleep(10)
-          return None
+    async def side_effect(*args, **kwargs):
+      if mock_dev.read_from_endpoint.call_count == 1:
+        return b"data1"
+      elif mock_dev.read_from_endpoint.call_count == 2:
+        return b"data2"
+      else:
+        # Stall until cancelled
+        await asyncio.sleep(10)
+        return None
 
-      mock_read.side_effect = side_effect
+    mock_dev.read_from_endpoint.side_effect = side_effect
 
-      task, stop_event, results = await self.reader.start_background_read(
-        SparkDevice.PLATE_TRANSPORT
-      )
+    task, stop_event, results = await self.reader.start_background_read(SparkDevice.PLATE_TRANSPORT)
 
-      self.assertIsNotNone(task)
+    self.assertIsNotNone(task)
 
-      # Let it run to collect data
-      await asyncio.sleep(0.5)  # Wait for 2 reads (0.2 sleep in loop)
+    # Let it run to collect data
+    await asyncio.sleep(0.5)  # Wait for 2 reads (0.2 sleep in loop)
 
-      stop_event.set()
-      task.cancel()
-      try:
-        await task
-      except asyncio.CancelledError:
-        pass
+    stop_event.set()
+    task.cancel()
+    try:
+      await task
+    except asyncio.CancelledError:
+      pass
 
-      self.assertIn(b"data1", results)
-      self.assertIn(b"data2", results)
+    self.assertIn(b"data1", results)
+    self.assertIn(b"data2", results)
 
   async def test_close(self):
-    mock_dev = MagicMock()
+    mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
 
     await self.reader.close()
 
     self.assertEqual(self.reader.devices, {})
-    # Ensure dispose_resources called on the mocked module
-    self.mock_usb_util.dispose_resources.assert_called_with(mock_dev)
-
-  async def test_connect_usb_error(self):
-    # Device 1: Fails
-    mock_dev1 = MagicMock()
-    mock_dev1.idProduct = SparkDevice.PLATE_TRANSPORT.value
-    mock_dev1.is_kernel_driver_active.return_value = False
-    # Raise USBError on set_configuration
-    mock_dev1.set_configuration.side_effect = self.mock_usb_core.USBError(None, "Error")
-
-    # Device 2: Succeeds
-    mock_dev2 = MagicMock()
-    mock_dev2.idProduct = SparkDevice.ABSORPTION.value
-    mock_dev2.is_kernel_driver_active.return_value = False
-    mock_dev2.get_active_configuration.return_value = {(0, 0): MagicMock()}
-
-    self.mock_usb_core.find.return_value = iter([mock_dev1, mock_dev2])
-    # Simplify descriptor finding for all calls
-    self.mock_usb_util.find_descriptor.return_value = MagicMock()
-
-    self.reader.connect()
-
-    # Device 1 should not be in devices
-    self.assertNotIn(SparkDevice.PLATE_TRANSPORT, self.reader.devices)
-    # Device 2 should be in devices
-    self.assertIn(SparkDevice.ABSORPTION, self.reader.devices)
+    # Ensure stop called on the mocked USB device
+    mock_dev.stop.assert_awaited()
 
   async def test_get_response_error(self):
     with patch(

@@ -2,9 +2,11 @@ import asyncio
 import contextlib
 import logging
 from enum import Enum
+from typing import Optional
 
 import usb.core
-import usb.util
+
+from pylabrobot.io.usb import USB
 
 from .spark_packet_parser import parse_single_spark_packet
 
@@ -30,68 +32,49 @@ class SparkReaderAsync:
   def __init__(self, vid=VENDOR_ID):
     self.vid = vid
     self.devices = {}
-    self.endpoints = {}
     self.seq_num = 0
     self.lock = asyncio.Lock()
     self.msgs = []
+    self.cur_reader: Optional[USB] = None
+    self.cur_endpoint_addr: Optional[int] = None
 
-  def connect(self):
-    found_devices = list(usb.core.find(find_all=True, idVendor=self.vid))
-    if not found_devices:
-      raise ValueError(f"No devices found for VID={hex(self.vid)}")
+  async def connect(self):
+    logging.info(f"Scanning for devices with VID={hex(self.vid)}...")
 
-    logging.info(f"Found {len(found_devices)} devices with VID={hex(self.vid)}.")
-
-    for d in found_devices:
-      device_type = None
-      try:
-        device_type = SparkDevice(d.idProduct)
-      except ValueError:
-        logging.warning(f"Unknown device type with PID={hex(d.idProduct)}")
-        continue
-
+    for device_type in SparkDevice:
       if device_type in self.devices:
-        logging.warning(f"Duplicate device type {device_type} found. Skipping.")
         continue
 
       try:
-        if d.is_kernel_driver_active(0):
-          logging.debug(f"Detaching kernel driver from {device_type.name} interface 0")
-          d.detach_kernel_driver(0)
-      except usb.core.USBError as e:
-        logging.error(f"Error detaching kernel driver from {device_type.name}: {e}")
 
-      try:
-        d.set_configuration()
-        cfg = d.get_active_configuration()
-        intf = cfg[(0, 0)]
+        def configure(dev):
+          try:
+            if dev.is_kernel_driver_active(0):
+              logging.debug(f"Detaching kernel driver from {device_type.name} interface 0")
+              dev.detach_kernel_driver(0)
+          except usb.core.USBError as e:
+            logging.error(f"Error detaching kernel driver from {device_type.name}: {e}")
 
-        ep_bulk_out = usb.util.find_descriptor(intf, bEndpointAddress=SparkEndpoint.BULK_OUT.value)
-        ep_bulk_in = usb.util.find_descriptor(intf, bEndpointAddress=SparkEndpoint.BULK_IN.value)
-        ep_bulk_in1 = usb.util.find_descriptor(intf, bEndpointAddress=SparkEndpoint.BULK_IN1.value)
-        ep_interrupt_in = usb.util.find_descriptor(
-          intf, bEndpointAddress=SparkEndpoint.INTERRUPT_IN.value
-        )
-        self.devices[device_type] = d
-        self.endpoints[device_type] = {
-          SparkEndpoint.BULK_OUT: ep_bulk_out,
-          SparkEndpoint.BULK_IN: ep_bulk_in,
-          SparkEndpoint.BULK_IN1: ep_bulk_in1,
-          SparkEndpoint.INTERRUPT_IN: ep_interrupt_in,
-        }
-        # Note: calling set_configuration(0) twice before switching to configuration 1
-        # is intentional. Some Tecan Spark devices require a double reset to config 0
-        # to reliably accept configuration 1 after startup.
-        d.set_configuration(0)
-        d.set_configuration(0)
-        d.set_configuration(1)
+          # Note: calling set_configuration(0) twice before switching to configuration 1
+          # is intentional. Some Tecan Spark devices require a double reset to config 0
+          # to reliably accept configuration 1 after startup.
+          dev.set_configuration(0)
+          dev.set_configuration(0)
+          dev.set_configuration(1)
 
-        logging.info(
-          f"Successfully configured {device_type.name} (PID: {hex(d.idProduct)} SN: {d.serial_number})"
+        reader = USB(
+          id_vendor=self.vid,
+          id_product=device_type.value,
+          configuration_callback=configure,
         )
 
-      except usb.core.USBError as e:
-        logging.error(f"USBError configuring {device_type.name}: {e}")
+        await reader.setup()
+        self.devices[device_type] = reader
+        logging.info(f"Successfully configured {device_type.name}")
+
+      except RuntimeError:
+        # Device not found
+        pass
       except Exception as e:
         logging.error(f"Error configuring {device_type.name}: {e}")
 
@@ -106,21 +89,13 @@ class SparkReaderAsync:
       checksum ^= byte
     return checksum
 
-  async def _usb_read(self, endpoint, timeout, count=None):
-    if count is None:
-      count = endpoint.wMaxPacketSize
-    return await asyncio.to_thread(endpoint.read, count, timeout=timeout)
-
-  async def _usb_write(self, endpoint, data):
-    return await asyncio.to_thread(endpoint.write, data)
-
   async def send_command(self, command_str, device_type=SparkDevice.PLATE_TRANSPORT):
     if device_type not in self.devices:
       logging.error(f"Device type {device_type} not connected.")
       return False
 
-    endpoints = self.endpoints[device_type]
-    ep_bulk_out = endpoints[SparkEndpoint.BULK_OUT]
+    reader = self.devices[device_type]
+    endpoint_addr = SparkEndpoint.BULK_OUT.value
 
     async with self.lock:
       logging.debug(f"Sending to {device_type.name}: {command_str}")
@@ -132,20 +107,23 @@ class SparkReaderAsync:
       self.seq_num = (self.seq_num + 1) % 256
 
       try:
-        await self._usb_write(ep_bulk_out, message)
+        await reader.write_to_endpoint(endpoint_addr, message)
         logging.debug(f"Sent message to {device_type.name}: {message.hex()}")
         return True
-      except usb.core.USBError as e:
-        logging.error(f"USB error sending command to {device_type.name}: {e}")
-        return False
       except Exception as e:
         logging.error(f"Error sending command to {device_type.name}: {e}", exc_info=True)
         return False
 
-  def init_read(self, in_endpoint, count=512, read_timeout=2000):
-    logging.debug(f"Initiating read task on {hex(in_endpoint.bEndpointAddress)}...")
-    self.cur_in_endpoint = in_endpoint
-    return asyncio.create_task(self._usb_read(in_endpoint, read_timeout, count))
+  def init_read(self, device_type, endpoint, count=512, read_timeout=2000):
+    logging.debug(f"Initiating read task on {device_type.name} ep {hex(endpoint.value)}...")
+    self.cur_reader = self.devices[device_type]
+    self.cur_endpoint_addr = endpoint.value
+    # Convert read_timeout from milliseconds to seconds for USB class.
+    return asyncio.create_task(
+      self.cur_reader.read_from_endpoint(
+        self.cur_endpoint_addr, size=count, timeout=read_timeout / 1000.0
+      )
+    )
 
   async def get_response(self, read_task, timeout=2000, attempts=10000):
     try:
@@ -169,7 +147,13 @@ class SparkReaderAsync:
         try:
           await asyncio.sleep(0.01)
           logging.debug(f"Still busy, retrying... attempts left: {attempts}")
-          resp = await self._usb_read(self.cur_in_endpoint, 20, 512)
+          if self.cur_reader is None or self.cur_endpoint_addr is None:
+            raise RuntimeError("Current reader or endpoint not set")
+
+          resp = await self.cur_reader.read_from_endpoint(
+            self.cur_endpoint_addr, size=512, timeout=0.02
+          )
+
           if resp:
             logging.debug(f"Read task completed ({len(resp)} bytes): {bytes(resp).hex()}")
             parsed = parse_single_spark_packet(bytes(resp))
@@ -178,11 +162,8 @@ class SparkReaderAsync:
               self.msgs.append(parsed["payload"])
             elif parsed.get("type") == "RespError":
               raise Exception(parsed)
-        except usb.core.USBError as e:
-          if e.errno == 110:  # Timeout
-            await asyncio.sleep(0.1)
-          else:
-            logging.error(f"USB error in get_response: {e}")
+        except Exception as e:
+          logging.error(f"Error in get_response retry: {e}")
 
       return parsed
 
@@ -208,11 +189,7 @@ class SparkReaderAsync:
     if device_type not in self.devices:
       raise ValueError(f"Device type {device_type} not connected.")
 
-    ep = self.endpoints[device_type].get(endpoint)
-    if not ep:
-      raise ValueError(f"Endpoint {endpoint} not found for {device_type.name}.")
-
-    read_task = self.init_read(ep, count, read_timeout)
+    read_task = self.init_read(device_type, endpoint, count, read_timeout)
     await asyncio.sleep(0.01)  # Short delay to ensure the read task starts
 
     response_task = asyncio.create_task(self.get_response(read_task))
@@ -239,31 +216,24 @@ class SparkReaderAsync:
       logging.error(f"Device type {device_type} not connected.")
       return None, None, None
 
-    ep = self.endpoints[device_type].get(endpoint)
-    if not ep:
-      logging.error(f"Endpoint {endpoint} not found for {device_type.name}.")
-      return None, None, None
-
+    reader = self.devices[device_type]
     stop_event = asyncio.Event()
     results = []
 
     async def background_reader():
       logging.info(
-        f"Starting background reader for {device_type.name} {endpoint.name} (0x{ep.bEndpointAddress:02x})"
+        f"Starting background reader for {device_type.name} {endpoint.name} (0x{endpoint.value:02x})"
       )
       while not stop_event.is_set():
         await asyncio.sleep(0.2)  # Avoid tight loop
         try:
-          data = await self._usb_read(ep, read_timeout, 1024)
+          # timeout in seconds
+          data = await reader.read_from_endpoint(
+            endpoint.value, size=1024, timeout=read_timeout / 1000.0
+          )
           if data:
             results.append(bytes(data))
             logging.debug(f"Background read {len(data)} bytes: {bytes(data).hex()}")
-        except usb.core.USBError as e:
-          if e.errno == 110:  # Timeout
-            pass
-          else:
-            logging.error(f"USB error in background reader: {e}")
-            await asyncio.sleep(0.1)  # Avoid tight loop on other errors
         except asyncio.CancelledError:
           logging.info("Background reader cancelled.")
           break
@@ -276,11 +246,10 @@ class SparkReaderAsync:
     return task, stop_event, results
 
   async def close(self):
-    for device_type, device in self.devices.items():
+    for device_type, reader in self.devices.items():
       try:
-        await asyncio.to_thread(usb.util.dispose_resources, device)
+        await reader.stop()
         logging.info(f"{device_type.name} resources released.")
       except Exception as e:
         logging.error(f"Error closing {device_type.name}: {e}")
     self.devices = {}
-    self.endpoints = {}

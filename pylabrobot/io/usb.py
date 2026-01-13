@@ -3,7 +3,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
@@ -51,6 +51,7 @@ class USB(IOBase):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
   ):
     """Initialize an io.USB object.
 
@@ -63,6 +64,8 @@ class USB(IOBase):
       packet_read_timeout: The timeout for reading packets from the machine in seconds.
       read_timeout: The timeout for reading from the machine in seconds.
       write_timeout: The timeout for writing to the machine in seconds.
+      configuration_callback: A callback that takes the device object as an argument and performs
+        any necessary configuration. If `None`, `dev.set_configuration()` is called.
     """
 
     super().__init__()
@@ -82,8 +85,9 @@ class USB(IOBase):
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
     self.write_timeout = write_timeout
+    self.configuration_callback = configuration_callback
 
-    self.dev: Optional["usb.core.Device"] = None  # TODO: make this a property
+    self.dev: Optional[usb.core.Device] = None  # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
@@ -114,12 +118,41 @@ class USB(IOBase):
       raise RuntimeError("Call setup() first.")
     await loop.run_in_executor(
       self._executor,
-      lambda: dev.write(write_endpoint, data, timeout=timeout),
+      lambda: dev.write(
+        write_endpoint, data, timeout=int(timeout * 1000)
+      ),  # PyUSB expects timeout in milliseconds
     )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
       USBCommand(device_id=self._unique_id, action="write", data=data.decode("unicode_escape"))
     )
+
+  async def write_to_endpoint(
+    self, endpoint: int, data: bytes, timeout: Optional[float] = None
+  ) -> None:
+    """Write data to a specific endpoint.
+
+    Args:
+      endpoint: The endpoint address to write to.
+      data: The data to write.
+      timeout: The timeout for writing to the device in seconds. If `None`, use the default timeout
+        (specified by the `write_timeout` attribute).
+    """
+
+    assert self.dev is not None, "Device not connected."
+    dev = self.dev
+
+    if timeout is None:
+      timeout = self.write_timeout
+
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+
+    await loop.run_in_executor(
+      self._executor, lambda: dev.write(endpoint, data, timeout=int(timeout * 1000))
+    )
+    logger.log(LOG_LEVEL_IO, "%s write to ep 0x%02x: %s", self._unique_id, endpoint, data)
 
   def _read_packet(self) -> Optional[bytearray]:
     """Read a packet from the machine.
@@ -190,6 +223,55 @@ class USB(IOBase):
     if self._executor is None or self.dev is None:
       raise RuntimeError("Call setup() first.")
     return await loop.run_in_executor(self._executor, read_or_timeout)
+
+  async def read_from_endpoint(
+    self, endpoint: int, size: Optional[int] = None, timeout: Optional[float] = None
+  ) -> Optional[bytes]:
+    """Read data from a specific endpoint.
+
+    Args:
+      endpoint: The endpoint address to read from.
+      size: The number of bytes to read. If `None`, read up to the max packet size.
+      timeout: The timeout for reading from the device in seconds. If `None`, use the default
+        timeout (specified by the `read_timeout` attribute).
+    """
+
+    assert self.dev is not None, "Device not connected."
+    dev = self.dev
+
+    if timeout is None:
+      timeout = self.read_timeout
+
+    if size is None:
+      # find endpoint object to get max packet size
+      # this is slow, but we can't do much else without knowing the size
+      # assuming endpoint is in the active interface
+      cfg = dev.get_active_configuration()
+      intf = cfg[(0, 0)]
+      ep = usb.util.find_descriptor(
+        intf,
+        custom_match=lambda e: e.bEndpointAddress == endpoint,
+      )
+      if ep is None:
+        raise ValueError(f"Endpoint 0x{endpoint:02x} not found.")
+      size = ep.wMaxPacketSize
+
+    loop = asyncio.get_running_loop()
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+
+    try:
+      res = await loop.run_in_executor(
+        self._executor,
+        lambda: dev.read(endpoint, size, timeout=int(timeout * 1000)),
+      )
+      if res is not None:
+        return bytes(res)
+      return None
+    except usb.core.USBError as e:
+      if e.errno == 110:  # Timeout
+        return None
+      raise e
 
   def get_available_devices(self) -> List["usb.core.Device"]:
     """Get a list of available devices that match the specified vendor and product IDs, and serial
@@ -323,7 +405,10 @@ class USB(IOBase):
 
     # set the active configuration. With no arguments, the first
     # configuration will be the active one
-    self.dev.set_configuration()
+    if self.configuration_callback is not None:
+      self.configuration_callback(self.dev)
+    else:
+      self.dev.set_configuration()
 
     cfg = self.dev.get_active_configuration()
     intf = cfg[(0, 0)]
@@ -350,7 +435,7 @@ class USB(IOBase):
     while self._read_packet() is not None:
       pass
 
-    self._executor = ThreadPoolExecutor(max_workers=1)
+    self._executor = ThreadPoolExecutor(max_workers=16)
 
   async def stop(self):
     """Close the USB connection to the machine."""
@@ -391,6 +476,7 @@ class USBValidator(USB):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
   ):
     super().__init__(
       id_vendor=id_vendor,
@@ -400,6 +486,7 @@ class USBValidator(USB):
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
+      configuration_callback=configuration_callback,
     )
     self.cr = cr
 
@@ -418,6 +505,25 @@ class USBValidator(USB):
       align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
+  async def write_to_endpoint(
+    self, endpoint: int, data: bytes, timeout: Optional[float] = None
+  ) -> None:
+    next_command = USBCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "usb"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "write_to_endpoint"
+    ):
+      raise ValidationError("next command is not write_to_endpoint")
+
+    expected_endpoint_str, expected_data_str = next_command.data.split(" ", 1)
+    if not int(expected_endpoint_str) == endpoint:
+      raise ValidationError(f"Endpoint mismatch: expected {expected_endpoint_str}, got {endpoint}")
+
+    if not expected_data_str == data.decode("unicode_escape"):
+      align_sequences(expected=expected_data_str, actual=data.decode("unicode_escape"))
+      raise ValidationError("Data mismatch: difference was written to stdout.")
+
   async def read(self, timeout: Optional[float] = None) -> bytes:
     next_command = USBCommand(**self.cr.next_command())
     if not (
@@ -427,6 +533,23 @@ class USBValidator(USB):
     ):
       raise ValidationError("next command is not read")
     return next_command.data.encode()
+
+  async def read_from_endpoint(
+    self, endpoint: int, size: Optional[int] = None, timeout: Optional[float] = None
+  ) -> Optional[bytes]:
+    next_command = USBCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "usb"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "read_from_endpoint"
+    ):
+      raise ValidationError("next command is not read_from_endpoint")
+
+    expected_endpoint_str, expected_data_str = next_command.data.split(" ", 1)
+    if not int(expected_endpoint_str) == endpoint:
+      raise ValidationError(f"Endpoint mismatch: expected {expected_endpoint_str}, got {endpoint}")
+
+    return expected_data_str.encode("latin1")
 
   def ctrl_transfer(
     self,
