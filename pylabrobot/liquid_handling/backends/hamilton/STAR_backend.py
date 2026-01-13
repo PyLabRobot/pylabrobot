@@ -1759,7 +1759,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Get tip lengths
     tip_lengths = [
-      await self.request_tip_length_per_channel(channel_idx=idx) for idx in use_channels
+      await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels
     ]
 
     # Default LLD mode == capacitive LLD
@@ -1853,18 +1853,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               dispense_drive_speed=5.0,
               plld_mode=self.PressureLLDMode.LIQUID,
               clld_verification=False,
-              post_detection_distance=0.0,
+              post_detection_dist=0.0,
             )
             for channel, container, tip_len in zip(use_channels, containers, tip_lengths)
           ]
         )
 
+      # Get heights for ALL channels (indexed 0 to self.num_channels-1)
       current_absolute_liquid_heights = await self.request_pip_height_last_lld()  # type: ignore
 
-      for idx, height in current_absolute_liquid_heights.items():
+      # Extract only the heights for channels we use
+      for ch_idx in use_channels:
+        height = current_absolute_liquid_heights[ch_idx]
         if n == 0:
-          measured_absolute_heights_per_channel[idx] = []
-        measured_absolute_heights_per_channel[idx].append(height)
+          measured_absolute_heights_per_channel[ch_idx] = []
+        measured_absolute_heights_per_channel[ch_idx].append(height)
 
     if minimum_traverse_height_at_end_of_command is None:
       await self.move_all_channels_in_z_safety()
@@ -1882,21 +1885,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       await self.position_channels_in_z_direction(positions)
 
-    filtered_absolute_liquid_heights = [
-      measured_absolute_heights_per_channel[idx] for idx in use_channels
+    ordered_absolute_liquid_heights = [
+      measured_absolute_heights_per_channel[ch_idx] for ch_idx in use_channels
     ]
 
     relative_to_well = [
       [
         round(single_measurement - resource.get_absolute_location("c", "c", "cavity_bottom").z, 2)
-        for single_measurement in filtered_absolute_liquid_heights[i]
+        for single_measurement in ordered_absolute_liquid_heights[i]
       ]
       for i, resource in enumerate(containers)
     ]
 
     if return_mean:
       result = []
-      for heights in filtered_absolute_liquid_heights:
+      for heights in ordered_absolute_liquid_heights:
         valid_heights = [h for h in heights if h is not None]
         if valid_heights:
           result.append(round(sum(valid_heights) / len(valid_heights), 2))
