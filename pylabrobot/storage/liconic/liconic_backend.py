@@ -51,13 +51,13 @@ class LiconicBackend(IncubatorBackend):
       stopbits=serial.STOPBITS_ONE,
       write_timeout=1,
       timeout=1,
-      rtscts=True,
+      rtscts=False,
     )
 
     self.co2_installed: Optional[bool] = None
     self.n2_installed: Optional[bool] = None
 
-  async def setup_plc(self) -> Serial:
+  async def setup(self) -> Serial:
     """
     1. Open serial port (9600 8E1, RTS/CTS) via the Serial wrapper.
     2. Send >200 ms break, wait 150 ms, flush buffers.
@@ -85,10 +85,10 @@ class LiconicBackend(IncubatorBackend):
       await self.io_plc.stop()
       raise TimeoutError(f"No CC response from Liconic PLC within {self.init_timeout} seconds")
 
-    await self.io.write(b"ST 1801\r")
-    resp = await self.io.readline()
+    await self.io_plc.write(b"ST 1801\r")
+    resp = await self.io_plc.readline()
     if resp.strip() != b"OK":
-      await self.io.stop()
+      await self.io_plc.stop()
       raise RuntimeError(f"Unexpected reply to ST 1801: {resp!r}")
 
     deadline = time.time() + self.start_timeout
@@ -101,6 +101,10 @@ class LiconicBackend(IncubatorBackend):
 
     await self.io_plc.stop()
     raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds")
+
+  async def stop(self):
+    await self.io_plc.stop()
+    await self.io_bcr.stop()
 
   async def stop_plc(self):
     await self.io_plc.stop()
@@ -249,7 +253,7 @@ class LiconicBackend(IncubatorBackend):
     start = time.time()
     deadline = start + timeout
     while time.time() < deadline:
-      resp = await self._send_command("RD 1915")
+      resp = await self._send_command_plc("RD 1915")
       if resp == "1":
         return
       await asyncio.sleep(0.1)
