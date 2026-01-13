@@ -20,6 +20,10 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.MockReaderClass = self.reader_patcher.start()
     self.mock_reader = self.MockReaderClass.return_value
 
+    self.mock_reader.connect = AsyncMock()
+    self.mock_reader.close = AsyncMock()
+    self.mock_reader.send_command = AsyncMock(return_value=True)
+
     # Mock reading context manager
     self.mock_reading_cm = MagicMock()
     self.mock_reading_cm.__aenter__ = AsyncMock()
