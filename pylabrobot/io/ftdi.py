@@ -52,6 +52,8 @@ class FTDI(IOBase):
     return self._dev
 
   async def setup(self):
+    if not self.dev.closed:
+      self.dev.close()
     try:
       self.dev.open()
     except FtdiError as e:
