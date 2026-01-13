@@ -105,6 +105,25 @@ InhecoIncubatorUnitType = Literal[
 ]
 
 
+def requires_incubator_shaker(
+  func: Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]],
+) -> Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]]:
+  @wraps(func)
+  async def wrapper(
+    self: "InhecoIncubatorShakerStackBackend", *args: P.args, **kwargs: P.kwargs
+  ) -> R:
+    name = getattr(func, "__name__", func.__class__.__name__)
+    stack_index = cast(int, kwargs.get("stack_index", 0))
+    incubator_type = self.unit_composition[stack_index]
+
+    if "shaker" not in incubator_type:
+      raise RuntimeError(f"{name}() requires a shaker-capable model (got {incubator_type!r}).")
+
+    return await func(self, *args, **kwargs)
+
+  return wrapper
+
+
 class InhecoIncubatorShakerStackBackend(MachineBackend):
   """Interface for Inheco Incubator Shaker stack machines.
 
@@ -126,8 +145,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     port: Optional[str] = None,
     write_timeout: float = 5.0,
     read_timeout: float = 10.0,
-    vid: str = "0403",
-    pid: str = "6001",
+    vid: int = 0x0403,
+    pid: int = 0x6001,
   ):
     super().__init__()
 
@@ -913,25 +932,6 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       await asyncio.sleep(interval_s)
 
   # # # Shaking Features # # #
-
-  @staticmethod
-  def requires_incubator_shaker(
-    func: Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]],
-  ) -> Callable[Concatenate["InhecoIncubatorShakerStackBackend", P], Awaitable[R]]:
-    @wraps(func)
-    async def wrapper(
-      self: "InhecoIncubatorShakerStackBackend", *args: P.args, **kwargs: P.kwargs
-    ) -> R:
-      name = getattr(func, "__name__", func.__class__.__name__)
-      stack_index = cast(int, kwargs.get("stack_index", 0))
-      incubator_type = self.unit_composition[stack_index]
-
-      if "shaker" not in incubator_type:
-        raise RuntimeError(f"{name}() requires a shaker-capable model (got {incubator_type!r}).")
-
-      return await func(self, *args, **kwargs)
-
-    return wrapper
 
   @requires_incubator_shaker
   async def request_shaker_frequency_x(self, stack_index: int, selector: int = 0) -> float:
