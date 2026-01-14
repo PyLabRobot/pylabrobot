@@ -1875,7 +1875,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       positions = {ch: minimum_traverse_height_at_end_of_command for ch in use_channels}
 
       for ch_idx in unused_channels:
-        if bool(tip_presence[ch_idx]):  # Might be used in next probing (save time)
+        if tip_presence[ch_idx]:  # Might be used in next probing (save time)
           positions[ch_idx] = minimum_traverse_height_at_end_of_command
         else:  # No tip, move to maximum z
           positions[ch_idx] = self.MAXIMUM_CHANNEL_Z_POSITION
