@@ -42,6 +42,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     while time.time() < deadline:
       response = await self.send_command("RMOTOR")
       if response.strip() == "MOTORON":
+        print("Barcode scanner motor is ON.")
         break
       elif response.strip() == "MOTOROFF":
         raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
