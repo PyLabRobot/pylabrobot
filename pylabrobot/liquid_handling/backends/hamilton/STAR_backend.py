@@ -1797,7 +1797,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ]
     if len(set(x_pos)) > 1:
       raise NotImplementedError(
-        "probe_liquid_heights is not YET supported for multiple x positions."  # TODO: implement
+        "probe_liquid_heights is not yet supported for multiple x positions."  # TODO: implement
       )
     await self.move_channel_x(0, x_pos[0])
 
