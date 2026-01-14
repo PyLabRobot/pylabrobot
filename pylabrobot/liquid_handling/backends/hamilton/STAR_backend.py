@@ -70,7 +70,6 @@ from pylabrobot.resources import (
   TipRack,
   TipSpot,
   Well,
-  standard_volume_tip_with_filter,
 )
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology
 from pylabrobot.resources.errors import (
@@ -1758,9 +1757,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ), "All specified channels must have tips attached."
 
     # Get tip lengths
-    tip_lengths = [
-      await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels
-    ]
+    tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
     # Default LLD mode == capacitive LLD
     if lld_mode is None:
@@ -1905,7 +1902,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           result.append(round(sum(valid_heights) / len(valid_heights), 2))
         else:
           result.append(None)
-      return result # List[float]
+      return result  # List[float]
 
     return relative_to_well  # List[List[float]]
 
