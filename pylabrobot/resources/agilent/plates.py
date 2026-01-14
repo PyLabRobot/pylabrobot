@@ -127,9 +127,9 @@ def Agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
       Well,
       num_items_x=2,  # from spec
       num_items_y=1,  # from spec
-      dx=10.66,  # from spec
-      dy=7.12,  # from spec
-      dz=2.54,  # from spec
+      dx=10.66,  # measured
+      dy=7.12,  # measured
+      dz=2.54,  # measured
       item_dx=54,  # from spec
       item_dy=0,  # from spec
       size_x=53.22,  # from spec
