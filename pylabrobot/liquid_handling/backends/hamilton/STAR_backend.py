@@ -2267,8 +2267,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
-        minimum_height=minimum_height,
-        min_z_endpos=minimum_height,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
