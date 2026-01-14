@@ -206,7 +206,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.STAR = STARBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.MagicMock()
+    self.STAR.io = unittest.mock.AsyncMock()
     self.STAR.io.setup = unittest.mock.AsyncMock()
     self.STAR.io.write = unittest.mock.MagicMock()
     self.STAR.io.read = unittest.mock.MagicMock()

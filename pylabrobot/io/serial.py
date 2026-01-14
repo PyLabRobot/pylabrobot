@@ -37,8 +37,8 @@ class Serial(IOBase):
   def __init__(
     self,
     port: Optional[str] = None,
-    vid: Optional[str] = None,
-    pid: Optional[str] = None,
+    vid: Optional[int] = None,
+    pid: Optional[int] = None,
     baudrate: int = 9600,
     bytesize: int = 8,  # serial.EIGHTBITS
     parity: str = "N",  # serial.PARITY_NONE
