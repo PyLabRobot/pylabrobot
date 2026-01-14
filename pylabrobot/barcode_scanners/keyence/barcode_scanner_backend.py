@@ -1,3 +1,4 @@
+import asyncio
 from pylabrobot.barcode_scanners.backend import (
   BarcodeScannerBackend,
   BarcodeScannerError,
@@ -12,6 +13,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
   default_baudrate = 9600
   serial_messaging_encoding = "ascii"
   init_timeout = 1.0  # seconds
+  poll_interval = 0.2  # seconds
 
   def __init__(self, serial_port: str,):
     super().__init__()
@@ -45,6 +47,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
         break
       elif response.strip() == "MOTOROFF":
         raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
+      await asyncio.sleep(self.poll_interval)
     else:
       raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: " \
       "Timeout waiting for motor to turn on.")
