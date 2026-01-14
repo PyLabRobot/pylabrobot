@@ -1754,7 +1754,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_presence = await self.request_tip_presence()
     assert all(
-      bool(tip_presence[idx]) for idx in use_channels
+      tip_presence[idx] for idx in use_channels
     ), "All specified channels must have tips attached."
 
     # Get tip lengths
@@ -1766,11 +1766,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if lld_mode is None:
       lld_mode = self.LLDMode(1)
 
-    # Validate individual modes
     assert lld_mode in [
       self.LLDMode(1),
       self.LLDMode(2),
     ], f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}"
+
     # Validate matching parameter lengths
     assert len(containers) == len(use_channels) == len(resource_offsets) == len(tip_lengths), (
       "Length of containers, use_channels, resource_offsets and tip_lengths must match."
@@ -1786,7 +1786,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       positions = {ch: minimum_traverse_height_at_beginning_of_command for ch in use_channels}
 
       for ch_idx in unused_channels:
-        if bool(tip_presence[ch_idx]):  # Might be used in next probing (save time)
+        if tip_presence[ch_idx]:  # Might be used in next probing (save time)
           positions[ch_idx] = minimum_traverse_height_at_beginning_of_command
         else:  # No tip, move to maximum z
           positions[ch_idx] = self.MAXIMUM_CHANNEL_Z_POSITION
@@ -1862,7 +1862,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # Get heights for ALL channels (indexed 0 to self.num_channels-1)
       current_absolute_liquid_heights = await self.request_pip_height_last_lld()  # type: ignore
 
-      # Extract only the heights for channels we use
+      # Extract only the heights for channels used
       for ch_idx in use_channels:
         height = current_absolute_liquid_heights[ch_idx]
         if n == 0:
@@ -1905,7 +1905,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           result.append(round(sum(valid_heights) / len(valid_heights), 2))
         else:
           result.append(None)
-      return result
+      return result # List[float]
 
     return relative_to_well  # List[List[float]]
 
