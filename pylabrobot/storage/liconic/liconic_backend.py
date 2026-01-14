@@ -10,7 +10,7 @@ from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.backend import IncubatorBackend
-from pylabrobot.barcode_scanners.keyence.barcode_scanner_backend import KeyenceBarcodeScannerBackend
+from pylabrobot.barcode_scanners.keyence import KeyenceBarcodeScannerBackend
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class LiconicBackend(IncubatorBackend):
     super().__init__()
 
     self.barcode_installed: Optional[bool] = barcode_installed
+    self.barcode_port: Optional[str] = barcode_port
 
     self.io_plc = Serial(
       port=port,
@@ -46,6 +47,7 @@ class LiconicBackend(IncubatorBackend):
     self.co2_installed: Optional[bool] = None
     self.n2_installed: Optional[bool] = None
 
+  # Function to setup serial connection with Liconic PLC
   async def setup(self) -> Serial:
     """
     1. Open serial port (9600 8E1, RTS/CTS) via the Serial wrapper.
@@ -93,35 +95,25 @@ class LiconicBackend(IncubatorBackend):
 
   async def stop(self):
     await self.io_plc.stop()
-    await self.io_bcr.stop()
 
-  async def setup_bcr(self) -> Serial:
+  async def setup_bcr(self, barcode_installed: bool, barcode_port: str) -> KeyenceBarcodeScannerBackend:
     """
     Setup barcode reader serial connection.
     Liconic uses the Keyence BL-1300 barcode reader in older systems and BL-600HA in newer systems.
     1. Open serial port (9600 7E1, RTS/CTS) via the Serial wrapper.
-    2. Send >200 ms break, wait 150 ms,
     """
+
+    if not barcode_installed:
+      raise RuntimeError("Liconic instance initialized with barcode scanner as false")
+    elif barcode_port is None:
+      raise RuntimeError("Liconic instance initialized with barcode scanner but no port provided")
+    else:
+      self.io_bcr = KeyenceBarcodeScannerBackend(serial_port=barcode_port)
+
     try:
       await self.io_bcr.setup()
-    except serial.SerialException as e:
-      raise RuntimeError(f"Could not open {self.io_bcr.port}: {e}")
-
-    await self.io_bcr.send_break(duration=0.2)  # >100 ms required
-    await asyncio.sleep(0.15)
-    await self.io_bcr.reset_input_buffer()
-    await self.io_bcr.reset_output_buffer()
-
-    await self.io_bcr.write(b"RMOTOR\r")
-    deadline = time.time() + self.start_timeout
-    while time.time() < deadline:
-      resp = await self.io_bcr.readline()
-      if resp.strip() == b"MOTORON":
-        return self.io_bcr
-      await asyncio.sleep(self.poll_interval)
-
-    await self.io_bcr.stop()
-    raise TimeoutError(f"Barcode reader did not respond with MOTORON within {self.start_timeout} seconds")
+    except Exception as e:
+      raise RuntimeError(f"Could not setup barcode reader on {barcode_port}: {e}")
 
   async def stop_bcr(self):
     await self.io_bcr.stop()
