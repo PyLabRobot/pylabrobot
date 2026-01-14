@@ -19,6 +19,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_300uL_filter_slim,
+  hamilton_96_tiprack_300uL_filter_ultrawide,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
   hamilton_96_tiprack_1000uL_filter_ultrawide,
@@ -43,6 +44,7 @@ class HamiltonTipSpotTests(unittest.TestCase):
     check_tip_spot_h1(hamilton_96_tiprack_300uL_filter(name="tr"), common_tip_rack_loc)
     check_tip_spot_h1(hamilton_96_tiprack_300uL(name="tr"), common_tip_rack_loc)
     check_tip_spot_h1(hamilton_96_tiprack_300uL_filter_slim(name="tr"), common_tip_rack_loc)
+    check_tip_spot_h1(hamilton_96_tiprack_300uL_filter_ultrawide(name="tr"), common_tip_rack_loc)
     check_tip_spot_h1(hamilton_96_tiprack_1000uL_filter(name="tr"), common_tip_rack_loc)
     check_tip_spot_h1(hamilton_96_tiprack_1000uL(name="tr"), common_tip_rack_loc)
     check_tip_spot_h1(hamilton_96_tiprack_1000uL_filter_wide(name="tr"), common_tip_rack_loc)
