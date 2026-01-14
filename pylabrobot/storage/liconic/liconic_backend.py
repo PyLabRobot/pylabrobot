@@ -10,6 +10,7 @@ from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.backend import IncubatorBackend
+from pylabrobot.barcode_scanners.keyence.barcode_scanner_backend import KeyenceBarcodeScannerBackend
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,11 @@ class LiconicBackend(IncubatorBackend):
   start_timeout = 15.0
   poll_interval = 0.2
 
-  def __init__(self, port: str):
+  def __init__(self, port: str, barcode_installed: Optional[bool] = None, barcode_port: Optional[str] = None):
     super().__init__()
+
+    self.barcode_installed: Optional[bool] = barcode_installed
+
     self.io_plc = Serial(
       port=port,
       baudrate=self.default_baud,
@@ -37,21 +41,6 @@ class LiconicBackend(IncubatorBackend):
       write_timeout=1,
       timeout=1,
       rtscts=True,
-    )
-
-    self.barcode_installed: Optional[bool] = None
-
-    # BL-1300 Barcode reader factory default serial communication settings
-    # should be the same factory default for the BL-600HA and BL-1300 models
-    self.io_bcr = Serial(
-      port=port,
-      baudrate=self.default_baud,
-      bytesize=serial.SEVENBITS,
-      parity=serial.PARITY_EVEN,
-      stopbits=serial.STOPBITS_ONE,
-      write_timeout=1,
-      timeout=1,
-      rtscts=False,
     )
 
     self.co2_installed: Optional[bool] = None
@@ -105,9 +94,6 @@ class LiconicBackend(IncubatorBackend):
   async def stop(self):
     await self.io_plc.stop()
     await self.io_bcr.stop()
-
-  async def stop_plc(self):
-    await self.io_plc.stop()
 
   async def setup_bcr(self) -> Serial:
     """
