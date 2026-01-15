@@ -1,8 +1,20 @@
+"""Module defining tube containers."""
+
+import enum
 import warnings
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.liquid import Liquid
+
+
+class TubeBottomType(enum.Enum):
+  """Enum for the type of bottom of a tube."""
+
+  FLAT = "flat"
+  U = "U"
+  V = "V"
+  UNKNOWN = "unknown"
 
 
 class Tube(Container):
@@ -22,6 +34,7 @@ class Tube(Container):
     material_z_thickness: Optional[float] = None,
     category: str = "tube",
     model: Optional[str] = None,
+    bottom_type: Union[TubeBottomType, str] = TubeBottomType.UNKNOWN,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
@@ -36,6 +49,8 @@ class Tube(Container):
       max_volume: Maximum volume of the tube.
       category: Category of the tube.
     """
+    if isinstance(bottom_type, str):
+      bottom_type = TubeBottomType(bottom_type)
 
     super().__init__(
       name=name,

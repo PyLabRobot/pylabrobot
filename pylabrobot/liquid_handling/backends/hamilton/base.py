@@ -100,6 +100,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       task.fut.set_exception(RuntimeError("Stopping HamiltonLiquidHandler."))
     self._waiting_tasks.clear()
     self._tth2tti.clear()
+    await self.io.stop()
 
   def serialize(self) -> dict:
     usb_serialized = self.io.serialize()
