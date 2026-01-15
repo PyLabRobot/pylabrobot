@@ -64,6 +64,13 @@ PyHamilton is a Windows only interface to Hamilton's VENUS.
 :target: https://www.alpaqua.com/
 ```
 
+```{image} /img/supported_by/logo_brooks.png
+:alt: Brooks
+:class: company
+:target: https://www.preciseflexrobots.com/
+```
+
+
 ## Used by
 
 ```{image} /img/used_by/logo_mit.jpg

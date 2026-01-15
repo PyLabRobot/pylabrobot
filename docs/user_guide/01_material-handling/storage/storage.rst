@@ -141,3 +141,4 @@ Combined Retrieval & Access Summary
 
    cytomat
    inheco/incubator_shaker
+   inheco/scila

@@ -5,7 +5,7 @@ from typing import Optional
 
 from pylibftdi import FtdiError
 
-from pylabrobot.plate_reading.agilent_biotek_backend import BioTekPlateReaderBackend
+from pylabrobot.plate_reading.agilent.biotek_backend import BioTekPlateReaderBackend
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,9 @@ class SynergyH1Backend(BioTekPlateReaderBackend):
 
     deadline = time.time() + timeout
     buf = bytearray()
+
+    retries = 0
+    max_retries = 3
 
     while True:
       if time.time() > deadline:
@@ -62,9 +65,17 @@ class SynergyH1Backend(BioTekPlateReaderBackend):
           return full
 
       except FtdiError as e:
+        retries += 1
         logger.warning(
           f"{self.__class__.__name__} transient FtdiError while reading: %s — retrying", e
         )
+
+        if retries >= max_retries:
+          logger.warning(
+            f"{self.__class__.__name__} too many FtdiError retries ({max_retries}) — stopping", e
+          )
+          raise
+
         await asyncio.sleep(0.05)
         continue
       except Exception:
