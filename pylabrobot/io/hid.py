@@ -33,7 +33,7 @@ class HID(IOBase):
     self.pid = pid
     self.serial_number = serial_number
     self.device: Optional[hid.Device] = None
-    self._unique_id = f"{vid or 'any'}:{pid or 'any'}:{serial_number}"
+    self._unique_id = f"{vid}:{pid}:{serial_number}"
     self._executor: Optional[ThreadPoolExecutor] = None
 
     if get_capture_or_validation_active():
@@ -55,8 +55,7 @@ class HID(IOBase):
     candidates = [
       d
       for d in all_devices
-      if (self.vid is None or d.get("vendor_id") == self.vid)
-      and (self.pid is None or d.get("product_id") == self.pid)
+      if (d.get("vendor_id") == self.vid) and (d.get("product_id") == self.pid)
     ]
 
     # --- 2. No devices found ---
@@ -100,8 +99,6 @@ class HID(IOBase):
       path=chosen["path"]  # safer than vid/pid/serial triple
     )
     self._executor = ThreadPoolExecutor(max_workers=1)
-
-    self.device_info = chosen
 
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
@@ -164,7 +161,7 @@ class HID(IOBase):
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
     r = await loop.run_in_executor(self._executor, _read)
-    if len(r.hex()) != 0:
+    if len(r) > 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
       capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.hex()))
     return cast(bytes, r)
