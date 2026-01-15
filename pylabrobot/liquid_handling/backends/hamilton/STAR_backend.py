@@ -7765,7 +7765,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       bit_pattern=[False] * 54,
       blink_pattern=[False] * 54,
     )
-    print(f"\n✓ All carriers successfully loaded and detected!\n")
+    print("\n✓ All carriers successfully loaded and detected!\n")
 
   async def unload_carrier(
     self,
