@@ -13,13 +13,13 @@ from typing import Dict, List, Optional, TypeVar, Union
 from pylabrobot.resources.coordinate import Coordinate
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.commands import HamiltonCommand
-from pylabrobot.liquid_handling.backends.hamilton.messages import (
+from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
     HoiParams,
     HoiParamsParser,
 )
-from pylabrobot.liquid_handling.backends.hamilton.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.protocol import (
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
     HamiltonProtocol,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import TCPBackend
