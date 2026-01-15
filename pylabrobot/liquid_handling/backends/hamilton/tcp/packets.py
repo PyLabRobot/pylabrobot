@@ -17,7 +17,6 @@ from dataclasses import dataclass
 
 from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
 
-
 # Hamilton protocol version
 HAMILTON_PROTOCOL_VERSION_MAJOR = 3
 HAMILTON_PROTOCOL_VERSION_MINOR = 0
@@ -25,355 +24,370 @@ HAMILTON_PROTOCOL_VERSION_MINOR = 0
 
 @dataclass(frozen=True)
 class Address:
-    """Hamilton network address (module_id, node_id, object_id)."""
-    module: int  # u16
-    node: int    # u16
-    object: int  # u16
+  """Hamilton network address (module_id, node_id, object_id)."""
 
-    def pack(self) -> bytes:
-        """Serialize address to 6 bytes."""
-        return Wire.write().u16(self.module).u16(self.node).u16(self.object).finish()
+  module: int  # u16
+  node: int  # u16
+  object: int  # u16
 
-    @classmethod
-    def unpack(cls, data: bytes) -> 'Address':
-        """Deserialize address from bytes."""
-        r = Wire.read(data)
-        return cls(module=r.u16(), node=r.u16(), object=r.u16())
+  def pack(self) -> bytes:
+    """Serialize address to 6 bytes."""
+    return Wire.write().u16(self.module).u16(self.node).u16(self.object).finish()
 
-    def __str__(self) -> str:
-        return f"{self.module}:{self.node}:{self.object}"
+  @classmethod
+  def unpack(cls, data: bytes) -> "Address":
+    """Deserialize address from bytes."""
+    r = Wire.read(data)
+    return cls(module=r.u16(), node=r.u16(), object=r.u16())
+
+  def __str__(self) -> str:
+    return f"{self.module}:{self.node}:{self.object}"
 
 
 @dataclass
 class IpPacket:
-    """Hamilton IpPacket2 - Transport layer.
+  """Hamilton IpPacket2 - Transport layer.
 
-    Structure:
-        Bytes 00-01: size (2)
-        Bytes 02:    protocol (1)
-        Bytes 03:    version byte (major.minor)
-        Bytes 04-05: options_length (2)
-        Bytes 06+:   options (x bytes)
-        Bytes:       payload
-    """
-    protocol: int  # Protocol identifier (6=OBJECT_DISCOVERY, 7=INITIALIZATION)
-    payload: bytes
-    options: bytes = b''
+  Structure:
+      Bytes 00-01: size (2)
+      Bytes 02:    protocol (1)
+      Bytes 03:    version byte (major.minor)
+      Bytes 04-05: options_length (2)
+      Bytes 06+:   options (x bytes)
+      Bytes:       payload
+  """
 
-    def pack(self) -> bytes:
-        """Serialize IP packet."""
-        # Calculate size: protocol(1) + version(1) + opts_len(2) + options + payload
-        packet_size = 1 + 1 + 2 + len(self.options) + len(self.payload)
+  protocol: int  # Protocol identifier (6=OBJECT_DISCOVERY, 7=INITIALIZATION)
+  payload: bytes
+  options: bytes = b""
 
-        return (Wire.write()
-                .u16(packet_size)
-                .u8(self.protocol)
-                .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
-                .u16(len(self.options))
-                .raw_bytes(self.options)
-                .raw_bytes(self.payload)
-                .finish())
+  def pack(self) -> bytes:
+    """Serialize IP packet."""
+    # Calculate size: protocol(1) + version(1) + opts_len(2) + options + payload
+    packet_size = 1 + 1 + 2 + len(self.options) + len(self.payload)
 
-    @classmethod
-    def unpack(cls, data: bytes) -> 'IpPacket':
-        """Deserialize IP packet."""
-        r = Wire.read(data)
-        _size = r.u16()  # Read but unused
-        protocol = r.u8()
-        major, minor = r.version_byte()
+    return (
+      Wire.write()
+      .u16(packet_size)
+      .u8(self.protocol)
+      .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
+      .u16(len(self.options))
+      .raw_bytes(self.options)
+      .raw_bytes(self.payload)
+      .finish()
+    )
 
-        # Validate version
-        if major != HAMILTON_PROTOCOL_VERSION_MAJOR or minor != HAMILTON_PROTOCOL_VERSION_MINOR:
-            # Warning but not fatal
-            pass
+  @classmethod
+  def unpack(cls, data: bytes) -> "IpPacket":
+    """Deserialize IP packet."""
+    r = Wire.read(data)
+    _size = r.u16()  # Read but unused
+    protocol = r.u8()
+    major, minor = r.version_byte()
 
-        opts_len = r.u16()
-        options = r.raw_bytes(opts_len) if opts_len > 0 else b''
-        payload = r.remaining()
+    # Validate version
+    if major != HAMILTON_PROTOCOL_VERSION_MAJOR or minor != HAMILTON_PROTOCOL_VERSION_MINOR:
+      # Warning but not fatal
+      pass
 
-        return cls(protocol=protocol, payload=payload, options=options)
+    opts_len = r.u16()
+    options = r.raw_bytes(opts_len) if opts_len > 0 else b""
+    payload = r.remaining()
+
+    return cls(protocol=protocol, payload=payload, options=options)
 
 
 @dataclass
 class HarpPacket:
-    """Hamilton HarpPacket2 - Protocol layer.
+  """Hamilton HarpPacket2 - Protocol layer.
 
-    Structure:
-        Bytes 00-05: src address (module, node, object)
-        Bytes 06-11: dst address (module, node, object)
-        Byte  12:    sequence number
-        Byte  13:    reserved
-        Byte  14:    protocol (2=HOI, 3=Registration)
-        Byte  15:    action
-        Bytes 16-17: message length
-        Bytes 18-19: options length
-        Bytes 20+:   options
-        Bytes:       version byte (major.minor)
-        Byte:        reserved2
-        Bytes:       payload
+  Structure:
+      Bytes 00-05: src address (module, node, object)
+      Bytes 06-11: dst address (module, node, object)
+      Byte  12:    sequence number
+      Byte  13:    reserved
+      Byte  14:    protocol (2=HOI, 3=Registration)
+      Byte  15:    action
+      Bytes 16-17: message length
+      Bytes 18-19: options length
+      Bytes 20+:   options
+      Bytes:       version byte (major.minor)
+      Byte:        reserved2
+      Bytes:       payload
+  """
+
+  src: Address
+  dst: Address
+  seq: int
+  protocol: int  # 2=HOI, 3=Registration
+  action_code: int  # Base action code (0-15)
+  payload: bytes
+  options: bytes = b""
+  response_required: bool = True  # Controls bit 4 of action byte
+
+  @property
+  def action(self) -> int:
+    """Compute action byte from action_code and response_required flag.
+
+    Returns:
+        Action byte with bit 4 set if response required
     """
-    src: Address
-    dst: Address
-    seq: int
-    protocol: int  # 2=HOI, 3=Registration
-    action_code: int  # Base action code (0-15)
-    payload: bytes
-    options: bytes = b''
-    response_required: bool = True  # Controls bit 4 of action byte
+    return self.action_code | (0x10 if self.response_required else 0x00)
 
-    @property
-    def action(self) -> int:
-        """Compute action byte from action_code and response_required flag.
+  def pack(self) -> bytes:
+    """Serialize HARP packet."""
+    # Message length includes: src(6) + dst(6) + seq(1) + reserved(1) + protocol(1) +
+    #   action(1) + msg_len(2) + opts_len(2) + options + version(1) + reserved2(1) + payload
+    # = 20 (fixed header) + options + version + reserved2 + payload
+    msg_len = 20 + len(self.options) + 1 + 1 + len(self.payload)
 
-        Returns:
-            Action byte with bit 4 set if response required
-        """
-        return self.action_code | (0x10 if self.response_required else 0x00)
+    return (
+      Wire.write()
+      .raw_bytes(self.src.pack())
+      .raw_bytes(self.dst.pack())
+      .u8(self.seq)
+      .u8(0)  # reserved
+      .u8(self.protocol)
+      .u8(self.action)  # Uses computed property
+      .u16(msg_len)
+      .u16(len(self.options))
+      .raw_bytes(self.options)
+      .u8(0)  # version byte - C# DLL uses 0, not 3.0
+      .u8(0)  # reserved2
+      .raw_bytes(self.payload)
+      .finish()
+    )
 
-    def pack(self) -> bytes:
-        """Serialize HARP packet."""
-        # Message length includes: src(6) + dst(6) + seq(1) + reserved(1) + protocol(1) +
-        #   action(1) + msg_len(2) + opts_len(2) + options + version(1) + reserved2(1) + payload
-        # = 20 (fixed header) + options + version + reserved2 + payload
-        msg_len = 20 + len(self.options) + 1 + 1 + len(self.payload)
+  @classmethod
+  def unpack(cls, data: bytes) -> "HarpPacket":
+    """Deserialize HARP packet."""
+    r = Wire.read(data)
 
-        return (Wire.write()
-                .raw_bytes(self.src.pack())
-                .raw_bytes(self.dst.pack())
-                .u8(self.seq)
-                .u8(0)  # reserved
-                .u8(self.protocol)
-                .u8(self.action)  # Uses computed property
-                .u16(msg_len)
-                .u16(len(self.options))
-                .raw_bytes(self.options)
-                .u8(0)  # version byte - C# DLL uses 0, not 3.0
-                .u8(0)  # reserved2
-                .raw_bytes(self.payload)
-                .finish())
+    # Parse addresses
+    src = Address.unpack(r.raw_bytes(6))
+    dst = Address.unpack(r.raw_bytes(6))
 
-    @classmethod
-    def unpack(cls, data: bytes) -> 'HarpPacket':
-        """Deserialize HARP packet."""
-        r = Wire.read(data)
+    seq = r.u8()
+    _reserved = r.u8()  # Read but unused
+    protocol = r.u8()
+    action_byte = r.u8()
+    _msg_len = r.u16()  # Read but unused
+    opts_len = r.u16()
 
-        # Parse addresses
-        src = Address.unpack(r.raw_bytes(6))
-        dst = Address.unpack(r.raw_bytes(6))
+    options = r.raw_bytes(opts_len) if opts_len > 0 else b""
+    _version = r.u8()  # version byte (C# DLL uses 0) - Read but unused
+    _reserved2 = r.u8()  # Read but unused
+    payload = r.remaining()
 
-        seq = r.u8()
-        _reserved = r.u8()  # Read but unused
-        protocol = r.u8()
-        action_byte = r.u8()
-        _msg_len = r.u16()  # Read but unused
-        opts_len = r.u16()
+    # Decompose action byte into action_code and response_required flag
+    action_code = action_byte & 0x0F
+    response_required = bool(action_byte & 0x10)
 
-        options = r.raw_bytes(opts_len) if opts_len > 0 else b''
-        _version = r.u8()  # version byte (C# DLL uses 0) - Read but unused
-        _reserved2 = r.u8()  # Read but unused
-        payload = r.remaining()
-
-        # Decompose action byte into action_code and response_required flag
-        action_code = action_byte & 0x0F
-        response_required = bool(action_byte & 0x10)
-
-        return cls(
-            src=src,
-            dst=dst,
-            seq=seq,
-            protocol=protocol,
-            action_code=action_code,
-            payload=payload,
-            options=options,
-            response_required=response_required
-        )
+    return cls(
+      src=src,
+      dst=dst,
+      seq=seq,
+      protocol=protocol,
+      action_code=action_code,
+      payload=payload,
+      options=options,
+      response_required=response_required,
+    )
 
 
 @dataclass
 class HoiPacket:
-    """Hamilton HoiPacket2 - HOI application layer.
+  """Hamilton HoiPacket2 - HOI application layer.
 
-    Structure:
-        Byte  00:    interface_id
-        Byte  01:    action
-        Bytes 02-03: action_id
-        Byte  04:    version byte (major.minor)
-        Byte  05:    number of fragments
-        Bytes 06+:   DataFragments
+  Structure:
+      Byte  00:    interface_id
+      Byte  01:    action
+      Bytes 02-03: action_id
+      Byte  04:    version byte (major.minor)
+      Byte  05:    number of fragments
+      Bytes 06+:   DataFragments
 
-    Note: params must be DataFragment-wrapped (use HoiParams to build).
+  Note: params must be DataFragment-wrapped (use HoiParams to build).
+  """
+
+  interface_id: int
+  action_code: int  # Base action code (0-15)
+  action_id: int
+  params: bytes  # Already DataFragment-wrapped via HoiParams
+  response_required: bool = False  # Controls bit 4 of action byte
+
+  @property
+  def action(self) -> int:
+    """Compute action byte from action_code and response_required flag.
+
+    Returns:
+        Action byte with bit 4 set if response required
     """
-    interface_id: int
-    action_code: int  # Base action code (0-15)
-    action_id: int
-    params: bytes  # Already DataFragment-wrapped via HoiParams
-    response_required: bool = False  # Controls bit 4 of action byte
+    return self.action_code | (0x10 if self.response_required else 0x00)
 
-    @property
-    def action(self) -> int:
-        """Compute action byte from action_code and response_required flag.
+  def pack(self) -> bytes:
+    """Serialize HOI packet."""
+    num_fragments = self._count_fragments(self.params)
 
-        Returns:
-            Action byte with bit 4 set if response required
-        """
-        return self.action_code | (0x10 if self.response_required else 0x00)
+    return (
+      Wire.write()
+      .u8(self.interface_id)
+      .u8(self.action)  # Uses computed property
+      .u16(self.action_id)
+      .u8(0)  # version byte - always 0 for HOI packets (not 0x30!)
+      .u8(num_fragments)
+      .raw_bytes(self.params)
+      .finish()
+    )
 
-    def pack(self) -> bytes:
-        """Serialize HOI packet."""
-        num_fragments = self._count_fragments(self.params)
+  @classmethod
+  def unpack(cls, data: bytes) -> "HoiPacket":
+    """Deserialize HOI packet."""
+    r = Wire.read(data)
 
-        return (Wire.write()
-                .u8(self.interface_id)
-                .u8(self.action)  # Uses computed property
-                .u16(self.action_id)
-                .u8(0)  # version byte - always 0 for HOI packets (not 0x30!)
-                .u8(num_fragments)
-                .raw_bytes(self.params)
-                .finish())
+    interface_id = r.u8()
+    action_byte = r.u8()
+    action_id = r.u16()
+    major, minor = r.version_byte()
+    _num_fragments = r.u8()  # Read but unused
+    params = r.remaining()
 
-    @classmethod
-    def unpack(cls, data: bytes) -> 'HoiPacket':
-        """Deserialize HOI packet."""
-        r = Wire.read(data)
+    # Decompose action byte into action_code and response_required flag
+    action_code = action_byte & 0x0F
+    response_required = bool(action_byte & 0x10)
 
-        interface_id = r.u8()
-        action_byte = r.u8()
-        action_id = r.u16()
-        major, minor = r.version_byte()
-        _num_fragments = r.u8()  # Read but unused
-        params = r.remaining()
+    return cls(
+      interface_id=interface_id,
+      action_code=action_code,
+      action_id=action_id,
+      params=params,
+      response_required=response_required,
+    )
 
-        # Decompose action byte into action_code and response_required flag
-        action_code = action_byte & 0x0F
-        response_required = bool(action_byte & 0x10)
+  @staticmethod
+  def _count_fragments(data: bytes) -> int:
+    """Count DataFragments in params.
 
-        return cls(
-            interface_id=interface_id,
-            action_code=action_code,
-            action_id=action_id,
-            params=params,
-            response_required=response_required
-        )
+    Each DataFragment has format: [type_id:1][flags:1][length:2][data:n]
+    """
+    if len(data) == 0:
+      return 0
 
-    @staticmethod
-    def _count_fragments(data: bytes) -> int:
-        """Count DataFragments in params.
+    count = 0
+    offset = 0
 
-        Each DataFragment has format: [type_id:1][flags:1][length:2][data:n]
-        """
-        if len(data) == 0:
-            return 0
+    while offset < len(data):
+      if offset + 4 > len(data):
+        break  # Not enough bytes for a fragment header
 
-        count = 0
-        offset = 0
+      # Read fragment length
+      fragment_length = struct.unpack("<H", data[offset + 2 : offset + 4])[0]
 
-        while offset < len(data):
-            if offset + 4 > len(data):
-                break  # Not enough bytes for a fragment header
+      # Skip this fragment: header(4) + data(fragment_length)
+      offset += 4 + fragment_length
+      count += 1
 
-            # Read fragment length
-            fragment_length = struct.unpack('<H', data[offset+2:offset+4])[0]
-
-            # Skip this fragment: header(4) + data(fragment_length)
-            offset += 4 + fragment_length
-            count += 1
-
-        return count
+    return count
 
 
 @dataclass
 class RegistrationPacket:
-    """Hamilton RegistrationPacket2 - Registration protocol payload.
+  """Hamilton RegistrationPacket2 - Registration protocol payload.
 
-    Structure:
-        Bytes 00-01: action code (2)
-        Bytes 02-03: response code (2)
-        Byte  04:    version byte (DLL uses 0x00, not 0x30)
-        Byte  05:    reserved
-        Bytes 06-11: req address (module, node, object)
-        Bytes 12-17: res address (module, node, object)
-        Bytes 18-19: options length (2)
-        Bytes 20+:   options
-    """
-    action_code: int
-    response_code: int
-    req_address: Address
-    res_address: Address
-    options: bytes = b''
+  Structure:
+      Bytes 00-01: action code (2)
+      Bytes 02-03: response code (2)
+      Byte  04:    version byte (DLL uses 0x00, not 0x30)
+      Byte  05:    reserved
+      Bytes 06-11: req address (module, node, object)
+      Bytes 12-17: res address (module, node, object)
+      Bytes 18-19: options length (2)
+      Bytes 20+:   options
+  """
 
-    def pack(self) -> bytes:
-        """Serialize Registration packet."""
-        return (Wire.write()
-                .u16(self.action_code)
-                .u16(self.response_code)
-                .u8(0)  # version byte - DLL uses 0.0, not 3.0
-                .u8(0)  # reserved
-                .raw_bytes(self.req_address.pack())
-                .raw_bytes(self.res_address.pack())
-                .u16(len(self.options))
-                .raw_bytes(self.options)
-                .finish())
+  action_code: int
+  response_code: int
+  req_address: Address
+  res_address: Address
+  options: bytes = b""
 
-    @classmethod
-    def unpack(cls, data: bytes) -> 'RegistrationPacket':
-        """Deserialize Registration packet."""
-        r = Wire.read(data)
+  def pack(self) -> bytes:
+    """Serialize Registration packet."""
+    return (
+      Wire.write()
+      .u16(self.action_code)
+      .u16(self.response_code)
+      .u8(0)  # version byte - DLL uses 0.0, not 3.0
+      .u8(0)  # reserved
+      .raw_bytes(self.req_address.pack())
+      .raw_bytes(self.res_address.pack())
+      .u16(len(self.options))
+      .raw_bytes(self.options)
+      .finish()
+    )
 
-        action_code = r.u16()
-        response_code = r.u16()
-        _version = r.u8()  # version byte (DLL uses 0, not packed 3.0) - Read but unused
-        _reserved = r.u8()  # Read but unused
-        req_address = Address.unpack(r.raw_bytes(6))
-        res_address = Address.unpack(r.raw_bytes(6))
-        opts_len = r.u16()
-        options = r.raw_bytes(opts_len) if opts_len > 0 else b''
+  @classmethod
+  def unpack(cls, data: bytes) -> "RegistrationPacket":
+    """Deserialize Registration packet."""
+    r = Wire.read(data)
 
-        return cls(
-            action_code=action_code,
-            response_code=response_code,
-            req_address=req_address,
-            res_address=res_address,
-            options=options
-        )
+    action_code = r.u16()
+    response_code = r.u16()
+    _version = r.u8()  # version byte (DLL uses 0, not packed 3.0) - Read but unused
+    _reserved = r.u8()  # Read but unused
+    req_address = Address.unpack(r.raw_bytes(6))
+    res_address = Address.unpack(r.raw_bytes(6))
+    opts_len = r.u16()
+    options = r.raw_bytes(opts_len) if opts_len > 0 else b""
+
+    return cls(
+      action_code=action_code,
+      response_code=response_code,
+      req_address=req_address,
+      res_address=res_address,
+      options=options,
+    )
 
 
 @dataclass
 class ConnectionPacket:
-    """Hamilton ConnectionPacket - Connection initialization payload.
+  """Hamilton ConnectionPacket - Connection initialization payload.
 
-    Used for Protocol 7 (INITIALIZATION). Has a different structure than
-    HARP-based packets - uses raw parameter encoding, NOT DataFragments.
+  Used for Protocol 7 (INITIALIZATION). Has a different structure than
+  HARP-based packets - uses raw parameter encoding, NOT DataFragments.
 
-    Structure:
-        Byte  00:    version
-        Byte  01:    message_id
-        Byte  02:    count (number of parameters)
-        Byte  03:    unknown
-        Bytes 04+:   raw parameters [id|type|reserved|value] repeated
+  Structure:
+      Byte  00:    version
+      Byte  01:    message_id
+      Byte  02:    count (number of parameters)
+      Byte  03:    unknown
+      Bytes 04+:   raw parameters [id|type|reserved|value] repeated
+  """
+
+  params: bytes  # Raw format (NOT DataFragments)
+
+  def pack_into_ip(self) -> bytes:
+    """Build complete IP packet for connection initialization.
+
+    Returns full IP packet with protocol=7.
     """
-    params: bytes  # Raw format (NOT DataFragments)
+    # Connection packet size: just the params (frame is included in params)
+    packet_size = 1 + 1 + 2 + len(self.params)
 
-    def pack_into_ip(self) -> bytes:
-        """Build complete IP packet for connection initialization.
+    return (
+      Wire.write()
+      .u16(packet_size)
+      .u8(7)  # INITIALIZATION protocol
+      .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
+      .u16(0)  # options_length
+      .raw_bytes(self.params)
+      .finish()
+    )
 
-        Returns full IP packet with protocol=7.
-        """
-        # Connection packet size: just the params (frame is included in params)
-        packet_size = 1 + 1 + 2 + len(self.params)
+  @classmethod
+  def unpack_from_ip_payload(cls, data: bytes) -> "ConnectionPacket":
+    """Extract ConnectionPacket from IP packet payload.
 
-        return (Wire.write()
-                .u16(packet_size)
-                .u8(7)  # INITIALIZATION protocol
-                .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
-                .u16(0)  # options_length
-                .raw_bytes(self.params)
-                .finish())
-
-    @classmethod
-    def unpack_from_ip_payload(cls, data: bytes) -> 'ConnectionPacket':
-        """Extract ConnectionPacket from IP packet payload.
-
-        Assumes IP header has already been parsed.
-        """
-        return cls(params=data)
-
+    Assumes IP header has already been parsed.
+    """
+    return cls(params=data)
