@@ -28,12 +28,12 @@ class HIDCommand(Command):
 
 
 class HID(IOBase):
-  def __init__(self, vid=0x03EB, pid=0x2023, serial_number: Optional[str] = None):
+  def __init__(self, vid: int, pid: int, serial_number: Optional[str] = None):
     self.vid = vid
     self.pid = pid
     self.serial_number = serial_number
     self.device: Optional[hid.Device] = None
-    self._unique_id = f"{vid}:{pid}:{serial_number}"
+    self._unique_id = f"{vid or 'any'}:{pid or 'any'}:{serial_number}"
     self._executor: Optional[ThreadPoolExecutor] = None
 
     if get_capture_or_validation_active():
@@ -52,44 +52,48 @@ class HID(IOBase):
 
     # --- 1. Enumerate all HID devices ---
     all_devices = hid.enumerate()
-    matching = [
-      d for d in all_devices if d.get("vendor_id") == self.vid and d.get("product_id") == self.pid
+    candidates = [
+      d
+      for d in all_devices
+      if (self.vid is None or d.get("vendor_id") == self.vid)
+      and (self.pid is None or d.get("product_id") == self.pid)
     ]
 
     # --- 2. No devices found ---
-    if not matching:
-      raise RuntimeError(f"No HID devices found for VID=0x{self.vid:04X}, PID=0x{self.pid:04X}.")
+    if len(candidates) == 0:
+      formatted_vid = f"0x{self.vid:04X}" if self.vid is not None else "any"
+      formatted_pid = f"0x{self.pid:04X}" if self.pid is not None else "any"
+      raise RuntimeError(f"No HID devices found for VID={formatted_vid}, PID={formatted_pid}.")
 
     # --- 3. Serial number specified: must match exactly 1 ---
     if self.serial_number is not None:
-      matching_sn = [d for d in matching if d.get("serial_number") == self.serial_number]
+      candidates = [d for d in candidates if d.get("serial_number") == self.serial_number]
 
-      if not matching_sn:
+      if len(candidates) == 0:
         raise RuntimeError(
           f"No HID devices found with VID=0x{self.vid:04X}, PID=0x{self.pid:04X}, "
           f"serial={self.serial_number}."
         )
 
-      if len(matching_sn) > 1:
-        # Extremely unlikely, but must follow serial semantics
+      if len(candidates) > 1:
         raise RuntimeError(
           f"Multiple HID devices found with identical serial number "
           f"{self.serial_number} for VID/PID {self.vid}:{self.pid}. "
           "Ambiguous; cannot continue."
         )
 
-      chosen = matching_sn[0]
+      chosen = candidates[0]
 
     # --- 4. Serial number not specified: require exactly one device ---
     else:
-      if len(matching) > 1:
+      if len(candidates) > 1:
         raise RuntimeError(
           f"Multiple HID devices detected for VID=0x{self.vid:04X}, "
           f"PID=0x{self.pid:04X}.\n"
-          f"Serial numbers: {[d.get('serial_number') for d in matching]}\n"
+          f"Serial numbers: {[d.get('serial_number') for d in candidates]}\n"
           "Please specify `serial_number=` explicitly."
         )
-      chosen = matching[0]
+      chosen = candidates[0]
 
     # --- 5. Open the device ---
     self.device = hid.Device(
