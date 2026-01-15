@@ -17,6 +17,7 @@ from typing import (
   Literal,
   Optional,
   Sequence,
+  Tuple,
   Type,
   TypeVar,
   Union,
@@ -83,7 +84,10 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
+from pylabrobot.resources.hamilton.hamilton_decks import (
+  HamiltonCoreGrippers,
+  rails_for_x_coordinate,
+)
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
@@ -7618,22 +7622,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: If no carriers are found on the deck.
     """
     # Extract carriers from deck children with start and end rail positions
-    track_width = 22.5
-    carrier_rails = []  # List of (start_rail, end_rail) tuples
+    carrier_rails: List[Tuple[int, int]] = []  # List of (start_rail, end_rail) tuples
 
     for child in self.deck.children:
       if isinstance(child, Carrier):
         # Get x coordinate relative to deck
         carrier_x = child.get_location_wrt(self.deck).x
-        carrier_start_rail = int((carrier_x - 100.0) / track_width) + 1
-        carrier_end_rail = int((carrier_x - 100.0 + child.get_absolute_size_x()) / track_width)
+        carrier_start_rail = rails_for_x_coordinate(carrier_x)
+        carrier_end_rail = rails_for_x_coordinate(carrier_x - 100.0 + child.get_absolute_size_x())
 
         # Verify rails are valid
         carrier_start_rail = max(1, min(carrier_start_rail, 54))
         if 1 <= carrier_end_rail <= 54:
           carrier_rails.append((carrier_start_rail, carrier_end_rail))
 
-    if not carrier_rails:
+    if len(carrier_rails) == 0:
       raise ValueError("No carriers found on deck. Assign carriers to the deck.")
 
     # Extract end rails for comparison with detected rails
@@ -7644,7 +7647,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     detected_rails = set(await self.request_presence_of_carriers_on_deck())
     missing_end_rails = sorted(set(expected_end_rails) - detected_rails)
 
-    if not missing_end_rails:
+    if len(missing_end_rails) == 0:
       logger.info(f"All carriers detected at end rail positions: {expected_end_rails}")
       # Turn off all indicators
       await self.set_loading_indicators(

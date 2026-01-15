@@ -29,7 +29,7 @@ STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
 
 
-def _rails_for_x_coordinate(x: float) -> int:
+def rails_for_x_coordinate(x: float) -> int:
   """Convert an x coordinate to a rail identifier."""
   return int((x - 100.0) / _RAILS_WIDTH) + 1
 
@@ -302,7 +302,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print rail
       if depth == 0:
-        rails = _rails_for_x_coordinate(resource.get_location_wrt(self).x)
+        rails = rails_for_x_coordinate(resource.get_location_wrt(self).x)
         r_summary += f"({rails})".ljust(rail_column_length)
       else:
         r_summary += " " * rail_column_length
