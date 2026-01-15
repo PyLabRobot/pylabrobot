@@ -119,16 +119,23 @@ class FTDI(IOBase):
       elif self._pid is not None and device.idProduct != self._pid:
         continue
 
+      # check device_id (serial number) if provided
       device_serial_number = usb.util.get_string(device, device.iSerialNumber)
       if self._device_id is not None and device_serial_number != self._device_id:
         continue
 
+      # device matches all specified criteria
       candidates.append(device)
 
+    connected_devices_string = ", ".join(
+      [
+        f"{usb.util.get_string(d, d.iSerialNumber)} (VID:PID {d.idVendor:04x}:{d.idProduct:04x})"
+        for d in usb.core.find(find_all=True)
+      ]
+    )
     logger.debug(
       f"FTDI device resolution: found {len(candidates)} candidates for "
-      f"VID:PID {self._vid}:{self._pid}, device_id {self._device_id}: "
-      f"{[usb.util.get_string(d, d.iSerialNumber) for d in candidates]}"
+      f"VID:PID {self._vid}:{self._pid}, device_id {self._device_id}: " + connected_devices_string
     )
 
     vid_string = f"{self._vid:04x}" if self._vid is not None else "any"
@@ -139,6 +146,7 @@ class FTDI(IOBase):
         f"No FTDI devices found with specified criteria: "
         f"VID:PID {vid_string}:{pid_string}, "
         f"device_id {self._device_id}. "
+        "Connected devices: " + connected_devices_string
       )
 
     if len(candidates) > 1:
