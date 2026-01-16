@@ -15,11 +15,37 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
-from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
+from pylabrobot.io.binary import Reader, Writer
 
 # Hamilton protocol version
 HAMILTON_PROTOCOL_VERSION_MAJOR = 3
 HAMILTON_PROTOCOL_VERSION_MINOR = 0
+
+
+def encode_version_byte(major: int, minor: int) -> int:
+  """Pack Hamilton version byte (two 4-bit fields packed into one byte).
+
+  Args:
+    major: Major version (0-15, stored in upper 4 bits)
+    minor: Minor version (0-15, stored in lower 4 bits)
+  """
+  if not 0 <= major <= 15:
+    raise ValueError(f"major version must be 0-15, got {major}")
+  if not 0 <= minor <= 15:
+    raise ValueError(f"minor version must be 0-15, got {minor}")
+  version_byte = (minor & 0xF) | ((major & 0xF) << 4)
+  return version_byte
+
+
+def decode_version_byte(version_bite: int) -> tuple[int, int]:
+  """Decode Hamilton version byte and return (major, minor).
+
+  Returns:
+    Tuple of (major_version, minor_version), each 0-15
+  """
+  minor = version_bite & 0xF
+  major = (version_bite >> 4) & 0xF
+  return (major, minor)
 
 
 @dataclass(frozen=True)
@@ -32,12 +58,12 @@ class Address:
 
   def pack(self) -> bytes:
     """Serialize address to 6 bytes."""
-    return Wire.write().u16(self.module).u16(self.node).u16(self.object).finish()
+    return Writer().u16(self.module).u16(self.node).u16(self.object).finish()
 
   @classmethod
   def unpack(cls, data: bytes) -> "Address":
     """Deserialize address from bytes."""
-    r = Wire.read(data)
+    r = Reader(data)
     return cls(module=r.u16(), node=r.u16(), object=r.u16())
 
   def __str__(self) -> str:
@@ -67,10 +93,10 @@ class IpPacket:
     packet_size = 1 + 1 + 2 + len(self.options) + len(self.payload)
 
     return (
-      Wire.write()
+      Writer()
       .u16(packet_size)
       .u8(self.protocol)
-      .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
+      .u8(encode_version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR))
       .u16(len(self.options))
       .raw_bytes(self.options)
       .raw_bytes(self.payload)
@@ -80,10 +106,10 @@ class IpPacket:
   @classmethod
   def unpack(cls, data: bytes) -> "IpPacket":
     """Deserialize IP packet."""
-    r = Wire.read(data)
+    r = Reader(data)
     _size = r.u16()  # Read but unused
     protocol = r.u8()
-    major, minor = r.version_byte()
+    major, minor = decode_version_byte(r.u8())
 
     # Validate version
     if major != HAMILTON_PROTOCOL_VERSION_MAJOR or minor != HAMILTON_PROTOCOL_VERSION_MINOR:
@@ -142,7 +168,7 @@ class HarpPacket:
     msg_len = 20 + len(self.options) + 1 + 1 + len(self.payload)
 
     return (
-      Wire.write()
+      Writer()
       .raw_bytes(self.src.pack())
       .raw_bytes(self.dst.pack())
       .u8(self.seq)
@@ -161,7 +187,7 @@ class HarpPacket:
   @classmethod
   def unpack(cls, data: bytes) -> "HarpPacket":
     """Deserialize HARP packet."""
-    r = Wire.read(data)
+    r = Reader(data)
 
     # Parse addresses
     src = Address.unpack(r.raw_bytes(6))
@@ -230,7 +256,7 @@ class HoiPacket:
     num_fragments = self._count_fragments(self.params)
 
     return (
-      Wire.write()
+      Writer()
       .u8(self.interface_id)
       .u8(self.action)  # Uses computed property
       .u16(self.action_id)
@@ -243,12 +269,12 @@ class HoiPacket:
   @classmethod
   def unpack(cls, data: bytes) -> "HoiPacket":
     """Deserialize HOI packet."""
-    r = Wire.read(data)
+    r = Reader(data)
 
     interface_id = r.u8()
     action_byte = r.u8()
     action_id = r.u16()
-    major, minor = r.version_byte()
+    major, minor = decode_version_byte(r.u8())
     _num_fragments = r.u8()  # Read but unused
     params = r.remaining()
 
@@ -314,7 +340,7 @@ class RegistrationPacket:
   def pack(self) -> bytes:
     """Serialize Registration packet."""
     return (
-      Wire.write()
+      Writer()
       .u16(self.action_code)
       .u16(self.response_code)
       .u8(0)  # version byte - DLL uses 0.0, not 3.0
@@ -329,7 +355,7 @@ class RegistrationPacket:
   @classmethod
   def unpack(cls, data: bytes) -> "RegistrationPacket":
     """Deserialize Registration packet."""
-    r = Wire.read(data)
+    r = Reader(data)
 
     action_code = r.u16()
     response_code = r.u16()
@@ -375,10 +401,10 @@ class ConnectionPacket:
     packet_size = 1 + 1 + 2 + len(self.params)
 
     return (
-      Wire.write()
+      Writer()
       .u16(packet_size)
       .u8(7)  # INITIALIZATION protocol
-      .version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR)
+      .u8(encode_version_byte(HAMILTON_PROTOCOL_VERSION_MAJOR, HAMILTON_PROTOCOL_VERSION_MINOR))
       .u16(0)  # options_length
       .raw_bytes(self.params)
       .finish()

@@ -1,18 +1,17 @@
-"""Hamilton TCP wire protocol - primitive byte serialization.
+"""Primitive byte de/serialization. Nice wrapper around struct packing/unpacking.
 
 This module provides low-level byte serialization/deserialization without any
-protocol-specific wrapping. DataFragment headers, Registration options, and
-Connection parameters are handled by higher-level modules.
+protocol-specific wrapping.
 
 Example:
-    # Writing
-    data = Wire.write().u8(1).u16(100).string("test").finish()
+  # Writing
+  data = Writer().u8(1).u16(100).string("test").finish()
 
-    # Reading
-    reader = Wire.read(data)
-    val1 = reader.u8()
-    val2 = reader.u16()
-    val3 = reader.string()
+  # Reading
+  reader = Reader(data)
+  val1 = reader.u8()
+  val2 = reader.u16()
+  val3 = reader.string()
 """
 
 from __future__ import annotations
@@ -22,10 +21,9 @@ from io import BytesIO
 
 
 class Writer:
-  """Raw byte writer for Hamilton protocol primitives.
+  """Raw byte writer.
 
-  Provides fluent interface for building byte sequences. All integers use
-  little-endian encoding per Hamilton specification.
+  Provides fluent interface for building byte sequences. All integers use little-endian encoding.
   """
 
   def __init__(self):
@@ -33,57 +31,41 @@ class Writer:
 
   def u8(self, value: int) -> "Writer":
     """Write unsigned 8-bit integer (0-255)."""
-    if not 0 <= value <= 255:
-      raise ValueError(f"u8 value must be 0-255, got {value}")
     self._buffer.write(struct.pack("<B", value))
     return self
 
   def u16(self, value: int) -> "Writer":
     """Write unsigned 16-bit integer (little-endian)."""
-    if not 0 <= value <= 65535:
-      raise ValueError(f"u16 value must be 0-65535, got {value}")
     self._buffer.write(struct.pack("<H", value))
     return self
 
   def u32(self, value: int) -> "Writer":
     """Write unsigned 32-bit integer (little-endian)."""
-    if not 0 <= value <= 4294967295:
-      raise ValueError(f"u32 value must be 0-4294967295, got {value}")
     self._buffer.write(struct.pack("<I", value))
     return self
 
   def u64(self, value: int) -> "Writer":
     """Write unsigned 64-bit integer (little-endian)."""
-    if not 0 <= value <= 18446744073709551615:
-      raise ValueError("u64 value out of range")
     self._buffer.write(struct.pack("<Q", value))
     return self
 
   def i8(self, value: int) -> "Writer":
     """Write signed 8-bit integer (-128 to 127)."""
-    if not -128 <= value <= 127:
-      raise ValueError(f"i8 value must be -128 to 127, got {value}")
     self._buffer.write(struct.pack("<b", value))
     return self
 
   def i16(self, value: int) -> "Writer":
     """Write signed 16-bit integer (little-endian)."""
-    if not -32768 <= value <= 32767:
-      raise ValueError(f"i16 value must be -32768 to 32767, got {value}")
     self._buffer.write(struct.pack("<h", value))
     return self
 
   def i32(self, value: int) -> "Writer":
     """Write signed 32-bit integer (little-endian)."""
-    if not -2147483648 <= value <= 2147483647:
-      raise ValueError("i32 value out of range")
     self._buffer.write(struct.pack("<i", value))
     return self
 
   def i64(self, value: int) -> "Writer":
     """Write signed 64-bit integer (little-endian)."""
-    if not -9223372036854775808 <= value <= 9223372036854775807:
-      raise ValueError("i64 value out of range")
     self._buffer.write(struct.pack("<q", value))
     return self
 
@@ -108,33 +90,15 @@ class Writer:
     self._buffer.write(value)
     return self
 
-  def version_byte(self, major: int, minor: int) -> "Writer":
-    """Write Hamilton version byte (two 4-bit fields packed into one byte).
-
-    Args:
-        major: Major version (0-15, stored in upper 4 bits)
-        minor: Minor version (0-15, stored in lower 4 bits)
-
-    Returns:
-        Self for method chaining
-    """
-    if not 0 <= major <= 15:
-      raise ValueError(f"major version must be 0-15, got {major}")
-    if not 0 <= minor <= 15:
-      raise ValueError(f"minor version must be 0-15, got {minor}")
-    version_byte = (minor & 0xF) | ((major & 0xF) << 4)
-    return self.u8(version_byte)
-
   def finish(self) -> bytes:
     """Return the built byte sequence."""
     return self._buffer.getvalue()
 
 
 class Reader:
-  """Raw byte reader for Hamilton protocol primitives.
+  """Raw byte reader.
 
-  Reads primitive values from byte sequences. All integers use little-endian
-  encoding per Hamilton specification.
+  Reads primitive values from byte sequences. All integers use little-endian encoding.
   """
 
   def __init__(self, data: bytes):
@@ -242,17 +206,6 @@ class Reader:
     self._offset += n
     return value
 
-  def version_byte(self) -> tuple[int, int]:
-    """Read Hamilton version byte and return (major, minor).
-
-    Returns:
-        Tuple of (major_version, minor_version), each 0-15
-    """
-    version_byte = self.u8()
-    minor = version_byte & 0xF
-    major = (version_byte >> 4) & 0xF
-    return (major, minor)
-
   def remaining(self) -> bytes:
     """Return all remaining unread bytes."""
     remaining = self._data[self._offset :]
@@ -266,17 +219,3 @@ class Reader:
   def offset(self) -> int:
     """Get current read offset."""
     return self._offset
-
-
-class Wire:
-  """Factory for creating Writer and Reader instances."""
-
-  @staticmethod
-  def write() -> Writer:
-    """Create a new Writer for building byte sequences."""
-    return Writer()
-
-  @staticmethod
-  def read(data: bytes) -> Reader:
-    """Create a new Reader for parsing byte sequences."""
-    return Reader(data)

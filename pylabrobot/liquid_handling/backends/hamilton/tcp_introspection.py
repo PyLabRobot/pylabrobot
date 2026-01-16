@@ -11,10 +11,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-from pylabrobot.liquid_handling.backends.hamilton.commands import HamiltonCommand
-from pylabrobot.liquid_handling.backends.hamilton.messages import HoiParams, HoiParamsParser
-from pylabrobot.liquid_handling.backends.hamilton.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.protocol import HamiltonDataType, HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams, HoiParamsParser
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
+  HamiltonDataType,
+  HamiltonProtocol,
+)
 
 logger = logging.getLogger(__name__)
 
