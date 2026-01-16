@@ -1798,7 +1798,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Detect liquid heights
-    measured_absolute_heights_per_channel: Dict[int, List[float]] = {ch: [] for ch in use_channels}
+    absolute_heights_measurements: Dict[int, List[float]] = {ch: [] for ch in use_channels}
 
     lowest_immers_positions = [
       container.get_absolute_location("c", "c", "cavity_bottom").z
@@ -1814,73 +1814,73 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for container, tip_len in zip(containers, tip_lengths)
     ]
 
-    for _ in range(n_replicates):
-      if lld_mode == self.LLDMode.GAMMA:
-        await asyncio.gather(
-          *[
-            self._move_z_drive_to_liquid_surface_using_clld(
-              channel_idx=channel,
-              lowest_immers_pos=lip,
-              start_pos_search=sps,
-              channel_speed=search_speed,
-            )
-            for channel, lip, sps in zip(use_channels, lowest_immers_positions, start_pos_searches)
-          ]
-        )
+    try:
+      for _ in range(n_replicates):
+        if lld_mode == self.LLDMode.GAMMA:
+          await asyncio.gather(
+            *[
+              self._move_z_drive_to_liquid_surface_using_clld(
+                channel_idx=channel,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
+                channel_speed=search_speed,
+              )
+              for channel, lip, sps in zip(
+                use_channels, lowest_immers_positions, start_pos_searches
+              )
+            ]
+          )
 
+        else:
+          await asyncio.gather(
+            *[
+              self._search_for_surface_using_plld(
+                channel_idx=channel,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
+                channel_speed=search_speed,
+                dispense_drive_speed=5.0,
+                plld_mode=self.PressureLLDMode.LIQUID,
+                clld_verification=False,
+                post_detection_dist=0.0,
+              )
+              for channel, lip, sps in zip(
+                use_channels, lowest_immers_positions, start_pos_searches
+              )
+            ]
+          )
+
+        # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
+        current_absolute_liquid_heights = await self.request_pip_height_last_lld()
+        for ch_idx in use_channels:
+          height = current_absolute_liquid_heights[ch_idx]
+          absolute_heights_measurements[ch_idx].append(height)
+    finally:
+      if minimum_traverse_height_at_end_of_command is None:
+        await self.move_all_channels_in_z_safety()
       else:
-        await asyncio.gather(
-          *[
-            self._search_for_surface_using_plld(
-              channel_idx=channel,
-              lowest_immers_pos=lip,
-              start_pos_search=sps,
-              channel_speed=search_speed,
-              dispense_drive_speed=5.0,
-              plld_mode=self.PressureLLDMode.LIQUID,
-              clld_verification=False,
-              post_detection_dist=0.0,
-            )
-            for channel, lip, sps in zip(use_channels, lowest_immers_positions, start_pos_searches)
-          ]
-        )
+        # Again, use traversal height for channels with tips, max z for those without
+        positions = {
+          ch: (
+            minimum_traverse_height_at_end_of_command
+            if tip_presence[ch]
+            else self.MAXIMUM_CHANNEL_Z_POSITION
+          )
+          for ch in range(self.num_channels)
+        }
+        await self.position_channels_in_z_direction(positions)
 
-      # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
-      current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-      for ch_idx in use_channels:
-        height = current_absolute_liquid_heights[ch_idx]
-        measured_absolute_heights_per_channel[ch_idx].append(height)
-
-    if minimum_traverse_height_at_end_of_command is None:
-      await self.move_all_channels_in_z_safety()
-    else:
-      # Again, use traversal height for channels with tips, max z for those without
-      positions = {
-        ch: (
-          minimum_traverse_height_at_end_of_command
-          if tip_presence[ch]
-          else self.MAXIMUM_CHANNEL_Z_POSITION
-        )
-        for ch in range(self.num_channels)
-      }
-      await self.position_channels_in_z_direction(positions)
-
-    ordered_absolute_liquid_heights = [
-      measured_absolute_heights_per_channel[ch_idx] for ch_idx in use_channels
+    absolute_liquid_heights = [  # average by channel
+      sum(absolute_heights_measurements[ch]) / len(absolute_heights_measurements[ch])
+      for ch in use_channels
     ]
 
     relative_to_well = [
-      [
-        round(single_measurement - resource.get_absolute_location("c", "c", "cavity_bottom").z, 2)
-        for single_measurement in ordered_absolute_liquid_heights[i]
-      ]
-      for i, resource in enumerate(containers)
+      absolute_liquid_height - resource.get_absolute_location("c", "c", "cavity_bottom").z
+      for resource, absolute_liquid_height in zip(containers, absolute_liquid_heights)
     ]
 
-    return [
-      sum(channel_heights) / len(channel_heights)
-      for channel_heights in ordered_absolute_liquid_heights
-    ]
+    return relative_to_well
 
   async def probe_liquid_volumes(
     self,
