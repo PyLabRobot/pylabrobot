@@ -1,0 +1,6 @@
+pylabrobot.resources.Resource.at
+================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Resource.at

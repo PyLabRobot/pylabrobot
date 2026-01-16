@@ -1,0 +1,6 @@
+pylabrobot.shaking.shaker.Shaker.named
+======================================
+
+.. currentmodule:: pylabrobot.shaking.shaker
+
+.. automethod:: Shaker.named

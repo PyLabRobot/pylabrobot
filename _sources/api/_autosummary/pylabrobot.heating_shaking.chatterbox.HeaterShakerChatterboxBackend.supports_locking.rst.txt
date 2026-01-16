@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.chatterbox.HeaterShakerChatterboxBackend.supports\_locking
+======================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.chatterbox
+
+.. autoproperty:: HeaterShakerChatterboxBackend.supports_locking

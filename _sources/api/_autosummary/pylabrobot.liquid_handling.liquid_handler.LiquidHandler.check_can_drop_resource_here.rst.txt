@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.liquid\_handler.LiquidHandler.check\_can\_drop\_resource\_here
+==========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.liquid_handler
+
+.. automethod:: LiquidHandler.check_can_drop_resource_here

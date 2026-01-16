@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.get\_location\_wrt
+=====================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.get_location_wrt

@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.temperature\_controller.TemperatureController.check\_can\_drop\_resource\_here
+==================================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.temperature_controller
+
+.. automethod:: TemperatureController.check_can_drop_resource_here

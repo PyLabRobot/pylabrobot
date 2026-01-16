@@ -1,0 +1,6 @@
+pylabrobot.shaking.chatterbox.ShakerChatterboxBackend.deserialize
+=================================================================
+
+.. currentmodule:: pylabrobot.shaking.chatterbox
+
+.. automethod:: ShakerChatterboxBackend.deserialize
