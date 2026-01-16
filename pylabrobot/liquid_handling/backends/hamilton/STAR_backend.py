@@ -1677,13 +1677,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def probe_liquid_heights(
     self,
     containers: List[Container],
-    use_channels: List[int],
+    use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
-    minimum_traverse_height_at_beginning_of_command: Optional[float] = None,
-    minimum_traverse_height_at_end_of_command: Optional[float] = None,
     n_replicates: int = 1,
+    move_to_z_safety_after: bool = True,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -1694,16 +1693,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use for probing (0-indexed).
-      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for
-        single containers with odd channel counts to avoid center dividers. Defaults to
-        container centers.
+      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts to avoid center dividers. Defaults to container centers.
       lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based. Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
-      minimum_traverse_height_at_beginning_of_command: Z-height in mm to position all channels
-        before probing. If None, moves to safety height.
-      minimum_traverse_height_at_end_of_command: Z-height in mm to position all channels after
-        probing. If None, moves to safety height.
       n_replicates: Number of measurements per channel. Default 1.
+      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
 
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
@@ -1720,15 +1714,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
     """
 
-    # Validate parameters.
-    if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
-      raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
-
-    if not len(containers) == len(use_channels) == len(resource_offsets) == len(tip_lengths):
-      raise ValueError(
-        "Length of containers, use_channels, resource_offsets and tip_lengths must match."
-        f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)} and {len(tip_lengths)}."
-      )
+    if use_channels is None:
+      use_channels = list(range(len(containers)))
 
     # Handle tip positioning ... if SINGLE container instance
     if resource_offsets is None:
@@ -1747,6 +1734,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     resource_offsets = resource_offsets or [Coordinate.zero()] * len(containers)
 
+    # Validate parameters.
+    if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
+      raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
+
+    if not len(containers) == len(use_channels) == len(resource_offsets):
+      raise ValueError(
+        "Length of containers, use_channels, resource_offsets and tip_lengths must match."
+        f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)}."
+      )
+
     # Make sure we have tips on all channels and know their lengths
     tip_presence = await self.request_tip_presence()
     if not all(tip_presence[idx] for idx in use_channels):
@@ -1755,19 +1752,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
     # Move channels to safe Z height before starting
-    if minimum_traverse_height_at_beginning_of_command is None:
-      await self.move_all_channels_in_z_safety()
-    else:
-      # Use traversal height for channels with tips, max z for those without
-      positions = {
-        ch: (
-          minimum_traverse_height_at_beginning_of_command
-          if tip_presence[ch]
-          else self.MAXIMUM_CHANNEL_Z_POSITION
-        )
-        for ch in range(self.num_channels)
-      }
-      await self.position_channels_in_z_direction(positions)
+    await self.move_all_channels_in_z_safety()
 
     # Check if all channels are on the same x position, then move there
     x_pos = [
@@ -1847,20 +1832,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         for ch_idx in use_channels:
           height = current_absolute_liquid_heights[ch_idx]
           absolute_heights_measurements[ch_idx].append(height)
-    finally:
-      if minimum_traverse_height_at_end_of_command is None:
-        await self.move_all_channels_in_z_safety()
-      else:
-        # Again, use traversal height for channels with tips, max z for those without
-        positions = {
-          ch: (
-            minimum_traverse_height_at_end_of_command
-            if tip_presence[ch]
-            else self.MAXIMUM_CHANNEL_Z_POSITION
-          )
-          for ch in range(self.num_channels)
-        }
-        await self.position_channels_in_z_direction(positions)
+    except:
+      await self.move_all_channels_in_z_safety()
+      raise
 
     # Compute average heights per channel and convert to relative to well bottom
     absolute_liquid_heights = [
@@ -1873,6 +1847,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for resource, absolute_liquid_height in zip(containers, absolute_liquid_heights)
     ]
 
+    if move_to_z_safety_after:
+      await self.move_all_channels_in_z_safety()
+
     return relative_to_well
 
   async def probe_liquid_volumes(
@@ -1882,9 +1859,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resource_offsets: Optional[List[Coordinate]] = None,
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
-    minimum_traverse_height_at_beginning_of_command: Optional[float] = None,
-    minimum_traverse_height_at_end_of_command: Optional[float] = None,
     n_replicates: int = 3,
+    move_to_z_safety_after: bool = True,
   ) -> List[float]:
     """Probe liquid volumes in containers by measuring heights and converting to volumes.
 
@@ -1898,9 +1874,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts. Defaults to container centers.
       lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.  Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
-      minimum_traverse_height_at_beginning_of_command: Z-height in mm to position all channels before probing. If None, moves to safety height.
-      minimum_traverse_height_at_end_of_command: Z-height in mm to position all channels after probing. If None, moves to safety height.
       n_replicates: Number of measurements per channel. Default 3.
+      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
 
     Returns:
       Volumes in each container (uL).
@@ -1927,9 +1902,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       resource_offsets=resource_offsets,
       lld_mode=lld_mode,
       search_speed=search_speed,
-      minimum_traverse_height_at_beginning_of_command=minimum_traverse_height_at_beginning_of_command,
-      minimum_traverse_height_at_end_of_command=minimum_traverse_height_at_end_of_command,
       n_replicates=n_replicates,
+      move_to_z_safety_after=move_to_z_safety_after,
     )
 
     return [
