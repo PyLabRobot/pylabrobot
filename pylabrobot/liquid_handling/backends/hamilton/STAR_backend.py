@@ -1707,7 +1707,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       NotImplementedError: If channels require different X positions.
 
     Notes:
-      - All containers must support height-volume functions
       - All specified channels must have tips attached
       - All channels must be at the same X position (single-row operation)
       - For single containers with odd channel counts, Y-offsets are applied to avoid
@@ -1882,13 +1881,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Raises:
       ValueError: If any container doesn't support height-to-volume conversion (raised by probe_liquid_heights).
-      AssertionError: If channels lack tips or parameter lengths mismatch.
       NotImplementedError: If channels require different X positions.
-      KeyError: If LLD fails to return heights for requested channels.
 
     Notes:
     - Delegates all motion, LLD, validation, and safety logic to probe_liquid_heights
-    - Volume calculation uses Container.compute_volume_from_height()
+    - All containers must support height-volume functions. Volume calculation uses Container.compute_volume_from_height()
     """
 
     if any(not resource.supports_compute_height_volume_functions() for resource in containers):
