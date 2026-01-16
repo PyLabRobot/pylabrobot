@@ -44,11 +44,16 @@ class LiconicBackend(IncubatorBackend):
       rtscts=True,
     )
 
+    if barcode_installed:
+      if not barcode_port:
+        raise ValueError("barcode_port must also be provided if barcode is installed")
+      self.io_bcr = KeyenceBarcodeScannerBackend(serial_port=barcode_port)
+
     self.co2_installed: Optional[bool] = None
     self.n2_installed: Optional[bool] = None
 
   # Function to setup serial connection with Liconic PLC
-  async def setup(self) -> Serial:
+  async def setup(self):
     """
     1. Open serial port (9600 8E1, RTS/CTS) via the Serial wrapper.
     2. Send >200 ms break, wait 150 ms, flush buffers.
@@ -87,36 +92,23 @@ class LiconicBackend(IncubatorBackend):
       await self.io_plc.write(b"RD 1915\r")
       flag = await self.io_plc.readline()
       if flag.strip() == b"1":
-        return self.io_plc
+        break
       await asyncio.sleep(self.poll_interval)
+    else:
+      await self.io_plc.stop()
+      raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds")
 
-    await self.io_plc.stop()
-    raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds")
+    if self.io_bcr is not None:
+      try:
+        await self.io_bcr.setup()
+      except Exception as e:
+        await self.io_bcr.stop()
+        raise RuntimeError(f"Could not setup barcode reader on {self.barcode_port}: {e}")
 
   async def stop(self):
     await self.io_plc.stop()
-
-  async def setup_bcr(self, barcode_installed: bool, barcode_port: str) -> KeyenceBarcodeScannerBackend:
-    """
-    Setup barcode reader serial connection.
-    Liconic uses the Keyence BL-1300 barcode reader in older systems and BL-600HA in newer systems.
-    1. Open serial port (9600 7E1, RTS/CTS) via the Serial wrapper.
-    """
-
-    if not barcode_installed:
-      raise RuntimeError("Liconic instance initialized with barcode scanner as false")
-    elif barcode_port is None:
-      raise RuntimeError("Liconic instance initialized with barcode scanner but no port provided")
-    else:
-      self.io_bcr = KeyenceBarcodeScannerBackend(serial_port=barcode_port)
-
-    try:
-      await self.io_bcr.setup()
-    except Exception as e:
-      raise RuntimeError(f"Could not setup barcode reader on {barcode_port}: {e}")
-
-  async def stop_bcr(self):
-    await self.io_bcr.stop()
+    if self.io_bcr is not None:
+      await self.io_bcr.stop()
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
