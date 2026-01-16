@@ -1706,16 +1706,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       n_replicates: Number of measurements per channel. Default 1.
 
     Returns:
-      If return_mean=True: List[float] of mean heights (mm from cavity bottom), ordered by
-        use_channels. None for failed detections.
-      If return_mean=False: List[List[float]] of all replicate heights per channel, ordered
-        by use_channels. None for individual failed measurements.
+      Mean of measured liquid heights for each container (mm from cavity bottom).
 
     Raises:
-      ValueError: If containers don't support height-volume calculations.
-      AssertionError: If channels lack tips or parameter lengths mismatch.
+      RuntimeError: If channels lack tips.
       NotImplementedError: If channels require different X positions.
-      KeyError: If LLD fails to return heights for requested channels.
 
     Notes:
       - All containers must support height-volume functions
@@ -1725,14 +1720,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
     """
 
-    # Validate that all containers support height<->volume functions
-    if any(not resource.supports_compute_height_volume_functions() for resource in containers):
+    # Validate parameters.
+    if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
+      raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
+
+    if not len(containers) == len(use_channels) == len(resource_offsets) == len(tip_lengths):
       raise ValueError(
-        "probe_liquid_heights can only be used with containers that support height<->volume functions."
+        "Length of containers, use_channels, resource_offsets and tip_lengths must match."
+        f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)} and {len(tip_lengths)}."
       )
 
+    # Handle tip positioning ... if SINGLE container instance
     if resource_offsets is None:
-      # Handle tip positioning ... if SINGLE container instance
       if len(set(containers)) == 1:
         resource_offsets = get_wide_single_resource_liquid_op_offsets(
           resource=containers[0], num_channels=len(containers)
@@ -1748,21 +1747,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     resource_offsets = resource_offsets or [Coordinate.zero()] * len(containers)
 
+    # Make sure we have tips on all channels and know their lengths
     tip_presence = await self.request_tip_presence()
     if not all(tip_presence[idx] for idx in use_channels):
       raise RuntimeError("All specified channels must have tips attached.")
 
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
-    if lld_mode not in [self.LLDMode.GAMMA, self.LLDMode.PRESSURE]:
-      raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
-
-    # Validate matching parameter lengths
-    assert len(containers) == len(use_channels) == len(resource_offsets) == len(tip_lengths), (
-      "Length of containers, use_channels, resource_offsets and tip_lengths must match."
-      f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)} and {len(tip_lengths)}."
-    )
-
+    # Move channels to safe Z height before starting
     if minimum_traverse_height_at_beginning_of_command is None:
       await self.move_all_channels_in_z_safety()
     else:
@@ -1788,7 +1780,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     await self.move_channel_x(0, x_pos[0])
 
-    # move channels to above their y positions
+    # Move channels to their y positions
     y_pos = [
       resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + offset.y
       for resource, offset in zip(containers, resource_offsets)
@@ -1870,7 +1862,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         }
         await self.position_channels_in_z_direction(positions)
 
-    absolute_liquid_heights = [  # average by channel
+    # Compute average heights per channel and convert to relative to well bottom
+    absolute_liquid_heights = [
       sum(absolute_heights_measurements[ch]) / len(absolute_heights_measurements[ch])
       for ch in use_channels
     ]
@@ -1910,7 +1903,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       n_replicates: Number of measurements per channel. Default 3.
 
     Returns:
-      Mean volumes (uL), ordered by use_channels.
+      Volumes in each container (uL).
 
     Raises:
       ValueError: If any container doesn't support height-to-volume conversion (raised by probe_liquid_heights).
@@ -1922,6 +1915,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     - Delegates all motion, LLD, validation, and safety logic to probe_liquid_heights
     - Volume calculation uses Container.compute_volume_from_height()
     """
+
+    if any(not resource.supports_compute_height_volume_functions() for resource in containers):
+      raise ValueError(
+        "probe_liquid_volumes can only be used with containers that support height<->volume functions."
+      )
 
     liquid_heights = await self.probe_liquid_heights(
       containers=containers,
