@@ -37,19 +37,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pylabrobot.liquid_handling.backends.hamilton.packets import (
+from pylabrobot.io.binary import Reader, Writer
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
   Address,
   HarpPacket,
   HoiPacket,
   IpPacket,
   RegistrationPacket,
 )
-from pylabrobot.liquid_handling.backends.hamilton.protocol import (
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   HamiltonDataType,
   HarpTransportableProtocol,
   RegistrationOptionType,
 )
-from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
 
 # ============================================================================
 # HOI PARAMETER ENCODING - DataFragment wrapping for HOI protocol
@@ -94,71 +94,71 @@ class HoiParams:
         data: Fragment data bytes
         flags: Fragment flags (default: 0, but BOOL_ARRAY uses 0x01)
     """
-    fragment = Wire.write().u8(type_id).u8(flags).u16(len(data)).raw_bytes(data).finish()
+    fragment = Writer().u8(type_id).u8(flags).u16(len(data)).raw_bytes(data).finish()
     self._fragments.append(fragment)
     return self
 
   # Scalar integer types
   def i8(self, value: int) -> "HoiParams":
     """Add signed 8-bit integer parameter."""
-    data = Wire.write().i8(value).finish()
+    data = Writer().i8(value).finish()
     return self._add_fragment(HamiltonDataType.I8, data)
 
   def i16(self, value: int) -> "HoiParams":
     """Add signed 16-bit integer parameter."""
-    data = Wire.write().i16(value).finish()
+    data = Writer().i16(value).finish()
     return self._add_fragment(HamiltonDataType.I16, data)
 
   def i32(self, value: int) -> "HoiParams":
     """Add signed 32-bit integer parameter."""
-    data = Wire.write().i32(value).finish()
+    data = Writer().i32(value).finish()
     return self._add_fragment(HamiltonDataType.I32, data)
 
   def i64(self, value: int) -> "HoiParams":
     """Add signed 64-bit integer parameter."""
-    data = Wire.write().i64(value).finish()
+    data = Writer().i64(value).finish()
     return self._add_fragment(HamiltonDataType.I64, data)
 
   def u8(self, value: int) -> "HoiParams":
     """Add unsigned 8-bit integer parameter."""
-    data = Wire.write().u8(value).finish()
+    data = Writer().u8(value).finish()
     return self._add_fragment(HamiltonDataType.U8, data)
 
   def u16(self, value: int) -> "HoiParams":
     """Add unsigned 16-bit integer parameter."""
-    data = Wire.write().u16(value).finish()
+    data = Writer().u16(value).finish()
     return self._add_fragment(HamiltonDataType.U16, data)
 
   def u32(self, value: int) -> "HoiParams":
     """Add unsigned 32-bit integer parameter."""
-    data = Wire.write().u32(value).finish()
+    data = Writer().u32(value).finish()
     return self._add_fragment(HamiltonDataType.U32, data)
 
   def u64(self, value: int) -> "HoiParams":
     """Add unsigned 64-bit integer parameter."""
-    data = Wire.write().u64(value).finish()
+    data = Writer().u64(value).finish()
     return self._add_fragment(HamiltonDataType.U64, data)
 
   # Floating-point types
   def f32(self, value: float) -> "HoiParams":
     """Add 32-bit float parameter."""
-    data = Wire.write().f32(value).finish()
+    data = Writer().f32(value).finish()
     return self._add_fragment(HamiltonDataType.F32, data)
 
   def f64(self, value: float) -> "HoiParams":
     """Add 64-bit double parameter."""
-    data = Wire.write().f64(value).finish()
+    data = Writer().f64(value).finish()
     return self._add_fragment(HamiltonDataType.F64, data)
 
   # String and bool
   def string(self, value: str) -> "HoiParams":
     """Add null-terminated string parameter."""
-    data = Wire.write().string(value).finish()
+    data = Writer().string(value).finish()
     return self._add_fragment(HamiltonDataType.STRING, data)
 
   def bool_value(self, value: bool) -> "HoiParams":
     """Add boolean parameter."""
-    data = Wire.write().u8(1 if value else 0).finish()
+    data = Writer().u8(1 if value else 0).finish()
     return self._add_fragment(HamiltonDataType.BOOL, data)
 
   # Array types
@@ -167,7 +167,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.i8(val)
     return self._add_fragment(HamiltonDataType.I8_ARRAY, writer.finish())
@@ -177,7 +177,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.i16(val)
     return self._add_fragment(HamiltonDataType.I16_ARRAY, writer.finish())
@@ -187,7 +187,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.i32(val)
     return self._add_fragment(HamiltonDataType.I32_ARRAY, writer.finish())
@@ -197,7 +197,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.i64(val)
     return self._add_fragment(HamiltonDataType.I64_ARRAY, writer.finish())
@@ -207,7 +207,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.u8(val)
     return self._add_fragment(HamiltonDataType.U8_ARRAY, writer.finish())
@@ -217,7 +217,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.u16(val)
     return self._add_fragment(HamiltonDataType.U16_ARRAY, writer.finish())
@@ -227,7 +227,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.u32(val)
     return self._add_fragment(HamiltonDataType.U32_ARRAY, writer.finish())
@@ -237,7 +237,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.u64(val)
     return self._add_fragment(HamiltonDataType.U64_ARRAY, writer.finish())
@@ -247,7 +247,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.f32(val)
     return self._add_fragment(HamiltonDataType.F32_ARRAY, writer.finish())
@@ -257,7 +257,7 @@ class HoiParams:
 
     Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.f64(val)
     return self._add_fragment(HamiltonDataType.F64_ARRAY, writer.finish())
@@ -269,7 +269,7 @@ class HoiParams:
 
     Note: BOOL_ARRAY uses flags=0x01 in the DataFragment header (unlike other types which use 0x00).
     """
-    writer = Wire.write()
+    writer = Writer()
     for val in values:
       writer.u8(1 if val else 0)
     return self._add_fragment(HamiltonDataType.BOOL_ARRAY, writer.finish(), flags=0x01)
@@ -279,7 +279,7 @@ class HoiParams:
 
     Format: [count:4][str0\0][str1\0]...
     """
-    writer = Wire.write().u32(len(values))
+    writer = Writer().u32(len(values))
     for val in values:
       writer.string(val)
     return self._add_fragment(HamiltonDataType.STRING_ARRAY, writer.finish())
@@ -316,7 +316,7 @@ class HoiParamsParser:
       raise ValueError(f"Insufficient data for DataFragment header at offset {self._offset}")
 
     # Parse DataFragment header
-    reader = Wire.read(self._data[self._offset :])
+    reader = Reader(self._data[self._offset :])
     type_id = reader.u8()
     _flags = reader.u8()  # Read but unused
     length = reader.u16()
@@ -340,7 +340,7 @@ class HoiParamsParser:
 
   def _parse_value(self, type_id: int, data: bytes) -> Any:
     """Parse value based on type_id using dispatch table."""
-    reader = Wire.read(data)
+    reader = Reader(data)
 
     # Dispatch table for scalar types
     scalar_parsers = {
@@ -687,8 +687,8 @@ class RegistrationMessage:
     """
     # Registration option format: [option_id:1][length:1][data...]
     # For HARP_PROTOCOL_REQUEST (option 5): data is [protocol:1][request_id:1]
-    data = Wire.write().u8(protocol).u8(request_id).finish()
-    option = Wire.write().u8(option_type).u8(len(data)).raw_bytes(data).finish()
+    data = Writer().u8(protocol).u8(request_id).finish()
+    option = Writer().u8(option_type).u8(len(data)).raw_bytes(data).finish()
     self.options.extend(option)
     return self
 
@@ -782,7 +782,7 @@ class InitMessage:
     # Frame: [version:1][message_id:1][count:1][unknown:1]
     # Parameters: [id:1][type:1][reserved:2][value:2] repeated
     params = (
-      Wire.write()
+      Writer()
       # Frame
       .u8(0)  # version
       .u8(0)  # message_id
@@ -810,7 +810,7 @@ class InitMessage:
     packet_size = 1 + 1 + 2 + len(params)  # protocol + version + opts_len + params
 
     return (
-      Wire.write()
+      Writer()
       .u16(packet_size)
       .u8(self.ip_protocol)
       .u8(self.protocol_version)
@@ -848,7 +848,7 @@ class InitResponse:
         Parsed InitResponse with connection parameters
     """
     # Skip IP header (size + protocol + version + opts_len = 6 bytes)
-    parser = Wire.read(data[6:])
+    parser = Reader(data[6:])
 
     # Parse frame
     _version = parser.u8()  # Read but unused

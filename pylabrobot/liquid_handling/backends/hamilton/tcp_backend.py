@@ -11,9 +11,10 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
-from pylabrobot.liquid_handling.backends.hamilton.commands import HamiltonCommand
-from pylabrobot.liquid_handling.backends.hamilton.messages import (
+from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
   ErrorResponse,
   InitMessage,
@@ -23,13 +24,12 @@ from pylabrobot.liquid_handling.backends.hamilton.messages import (
   ResponseParser,
   SuccessResponse,
 )
-from pylabrobot.liquid_handling.backends.hamilton.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.protocol import (
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   HoiRequestId,
   RegistrationActionCode,
   RegistrationOptionType,
 )
-from pylabrobot.liquid_handling.backends.hamilton.wire import Wire
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class ErrorParser:
       raise ValueError("Error response too short")
 
     # Parse error structure (simplified)
-    error_code = Wire.read(data).u32()
+    error_code = Reader(data).u32()
     error_message = data[4:].decode("utf-8", errors="replace")
 
     return HamiltonError(
@@ -269,7 +269,7 @@ class TCPBackend(Socket):
     """
     # Read packet size (2 bytes, little-endian)
     size_data = await self.read_exact(2)
-    packet_size = Wire.read(size_data).u16()
+    packet_size = Reader(size_data).u16()
 
     # Read packet payload
     payload_data = await self.read_exact(packet_size)
@@ -353,7 +353,7 @@ class TCPBackend(Socket):
     # Read response directly (blocking - safe because this is first communication)
     # Read packet size (2 bytes, little-endian)
     size_data = await self.read_exact(2)
-    packet_size = Wire.read(size_data).u16()
+    packet_size = Reader(size_data).u16()
 
     # Read packet payload
     payload_data = await self.read_exact(packet_size)
@@ -487,7 +487,7 @@ class TCPBackend(Socket):
       return objects
 
     # Parse options: [option_id:1][length:1][data:x]
-    reader = Wire.read(options_data)
+    reader = Reader(options_data)
 
     while reader.has_remaining():
       option_id = reader.u8()

@@ -9,14 +9,14 @@ from __future__ import annotations
 import inspect
 from typing import Optional
 
-from pylabrobot.liquid_handling.backends.hamilton.messages import (
+from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandMessage,
   CommandResponse,
   HoiParams,
   SuccessResponse,
 )
-from pylabrobot.liquid_handling.backends.hamilton.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.protocol import HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
 
 
 class HamiltonCommand:
