@@ -2171,11 +2171,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if any(op.liquid_height is not None for op in ops):
         raise ValueError("Cannot use probe_liquid_height when liquid heights are set.")
 
-      if len(set(x_positions)) > 1:
-        raise ValueError(
-          "probe_liquid_height can only be used when all operations are in the same x position."
-        )
-
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
