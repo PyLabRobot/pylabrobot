@@ -50,3 +50,8 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def stop_shaking(self):
     pass
+
+  @abstractmethod
+  async def scan_barcode(self, m: int, n: int, pitch: int, plt_count: int):
+    """Scan barcode at given position with specified pitch and timeout."""
+    pass

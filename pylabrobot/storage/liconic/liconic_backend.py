@@ -205,8 +205,8 @@ class LiconicBackend(IncubatorBackend):
     """
     cmd = command.strip() + "\r"
     logger.debug(f"Sending command to Barcode Reader: {cmd!r}")
-    await self.io_bcr.write(cmd.encode(self.serial_message_encoding))
-    resp = (await self.io_bcr.read(128)).decode(self.serial_message_encoding)
+    resp = await self.io_bcr.send_command(cmd)
+    #resp = (await self.io_bcr.read(128)).decode(self.serial_message_encoding)
     if not resp:
       raise RuntimeError(f"No response from Barcode Reader for command {command!r}")
     resp = resp.strip()
@@ -262,3 +262,17 @@ class LiconicBackend(IncubatorBackend):
     """ Stop shaking. Using command RS 1913 """
     await self._send_command_plc("RS 1913")
     await self._wait_ready()
+
+  async def scan_barcode(self, cassette: int, position: int, pitch: int, plate_count: int) -> str:
+    """ Scan a barcode using the internal barcode reader. Using command LON """
+    if not self.barcode_installed:
+      raise RuntimeError("Barcode reader not installed in this incubator instance")
+
+    await self._send_command_plc(f"WR DM0 {cassette}") # carousel number
+    await self._send_command_plc(f"WR DM23 {pitch}")   # pitch of plate in mm
+    await self._send_command_plc(f"WR DM25 {plate_count}") # plate
+    await self._send_command_plc(f"WR DM5 {position}") # plate position in carousel
+    await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
+
+    barcode = await self._send_command_bcr("LON")
+    print(f"Scanned barcode: {barcode}")

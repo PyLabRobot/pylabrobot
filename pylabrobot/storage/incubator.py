@@ -151,6 +151,9 @@ class Incubator(Machine, Resource):
   async def stop_shaking(self):
     await self.backend.stop_shaking()
 
+  async def scan_barcode(self, m: int, n: int, pitch: int, plt_count: int):
+    await self.backend.scan_barcode(cassette=m, position=n, pitch=pitch, plate_count=plt_count)
+
   def summary(self) -> str:
     def create_pretty_table(header, *columns) -> str:
       col_widths = [
