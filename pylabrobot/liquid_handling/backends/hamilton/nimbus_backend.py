@@ -72,15 +72,11 @@ class NimbusTipType(enum.IntEnum):
   SLIM_CORE_300UL = 36  # "SLIM CO-RE Tip 300ul"
 
 
-def _get_tip_type_from_tip(
-  tip: Tip,
-) -> (
-  int
-):  # TODO: Map these to Hamilton Tip Rack Resources rather than inferring from tip characteristics
+def _get_tip_type_from_tip(tip: Tip) -> int:
   """Map Tip object characteristics to Hamilton tip type integer.
 
   Args:
-    tip: Tip object with volume and filter information.
+    tip: Tip object with volume and filter information. Must be a HamiltonTip.
 
   Returns:
     Hamilton tip type integer value.
@@ -88,32 +84,30 @@ def _get_tip_type_from_tip(
   Raises:
     ValueError: If tip characteristics don't match any known tip type.
   """
-  # Match based on volume and filter
-  if tip.maximal_volume <= 15:  # 10ul tip
-    if tip.has_filter:
-      return NimbusTipType.LOW_VOLUME_10UL_FILTER
-    else:
-      return NimbusTipType.LOW_VOLUME_10UL
-  elif tip.maximal_volume <= 60:  # 50ul tip
-    if tip.has_filter:
-      return NimbusTipType.TIP_50UL_FILTER
-    else:
-      return NimbusTipType.TIP_50UL
-  elif tip.maximal_volume <= 500:  # 300ul tip (increased threshold to catch 360µL filtered tips)
-    if tip.has_filter:
-      return NimbusTipType.STANDARD_300UL_FILTER
-    else:
-      return NimbusTipType.STANDARD_300UL
-  elif tip.maximal_volume <= 1100:  # 1000ul tip
-    if tip.has_filter:
-      return NimbusTipType.HIGH_VOLUME_1000UL_FILTER
-    else:
-      return NimbusTipType.HIGH_VOLUME_1000UL
-  else:
-    raise ValueError(
-      f"Cannot determine tip type for tip with volume {tip.maximal_volume}µL "
-      f"and filter={tip.has_filter}. No matching Hamilton tip type found."
+
+  if not isinstance(tip, HamiltonTip):
+    raise ValueError("Tip must be a HamiltonTip to determine tip type.")
+
+  if tip.tip_size == TipSize.LOW_VOLUME:  # 10ul tip
+    return NimbusTipType.LOW_VOLUME_10UL_FILTER if tip.has_filter else NimbusTipType.LOW_VOLUME_10UL
+
+  if tip.tip_size == TipSize.STANDARD_VOLUME and tip.maximal_volume < 60:  # 50ul tip
+    return NimbusTipType.TIP_50UL_FILTER if tip.has_filter else NimbusTipType.TIP_50UL
+
+  if tip.tip_size == TipSize.STANDARD_VOLUME:  # 300ul tip
+    return NimbusTipType.STANDARD_300UL_FILTER if tip.has_filter else NimbusTipType.STANDARD_300UL
+
+  if tip.tip_size == TipSize.HIGH_VOLUME:  # 1000ul tip
+    return (
+      NimbusTipType.HIGH_VOLUME_1000UL_FILTER
+      if tip.has_filter
+      else NimbusTipType.HIGH_VOLUME_1000UL
     )
+
+  raise ValueError(
+    f"Cannot determine tip type for tip with volume {tip.maximal_volume}uL "
+    f"and filter={tip.has_filter}. No matching Hamilton tip type found."
+  )
 
 
 # ============================================================================
@@ -212,13 +206,13 @@ class InitializeSmartRoll(HamiltonCommand):
     """Initialize InitializeSmartRoll command.
 
     Args:
-        dest: Destination address (NimbusCore)
-        x_positions: X positions in 0.01mm units
-        y_positions: Y positions in 0.01mm units
-        z_start_positions: Z start positions in 0.01mm units
-        z_stop_positions: Z stop positions in 0.01mm units
-        z_final_positions: Z final positions in 0.01mm units
-        roll_distances: Roll distances in 0.01mm units
+      dest: Destination address (NimbusCore)
+      x_positions: X positions in 0.01mm units
+      y_positions: Y positions in 0.01mm units
+      z_start_positions: Z start positions in 0.01mm units
+      z_stop_positions: Z stop positions in 0.01mm units
+      z_final_positions: Z final positions in 0.01mm units
+      roll_distances: Roll distances in 0.01mm units
     """
     super().__init__(dest)
     self.x_positions = x_positions
@@ -329,12 +323,12 @@ class SetChannelConfiguration(HamiltonCommand):
     """Initialize SetChannelConfiguration command.
 
     Args:
-        dest: Destination address (Pipette)
-        channel: Channel number (1-based)
-        indexes: List of configuration indexes (e.g., [1, 3, 4])
+      dest: Destination address (Pipette)
+      channel: Channel number (1-based)
+      indexes: List of configuration indexes (e.g., [1, 3, 4])
         1: Tip Recognition, 2: Aspirate and clot monitoring pLLD,
         3: Aspirate monitoring with cLLD, 4: Clot monitoring with cLLD
-        enables: List of enable flags (e.g., [True, False, False, False])
+      enables: List of enable flags (e.g., [True, False, False, False])
     """
     super().__init__(dest)
     self.channel = channel
@@ -390,14 +384,14 @@ class PickupTips(HamiltonCommand):
     """Initialize PickupTips command.
 
     Args:
-        dest: Destination address (Pipette)
-        tips_used: Tip pattern (1 for active channels, 0 for inactive)
-        x_positions: X positions in 0.01mm units
-        y_positions: Y positions in 0.01mm units
-        traverse_height: Traverse height in 0.01mm units
-        z_start_positions: Z start positions in 0.01mm units
-        z_stop_positions: Z stop positions in 0.01mm units
-        tip_types: Tip type integers for each channel
+      dest: Destination address (Pipette)
+      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      x_positions: X positions in 0.01mm units
+      y_positions: Y positions in 0.01mm units
+      traverse_height: Traverse height in 0.01mm units
+      z_start_positions: Z start positions in 0.01mm units
+      z_stop_positions: Z stop positions in 0.01mm units
+      tip_types: Tip type integers for each channel
     """
     super().__init__(dest)
     self.tips_used = tips_used
@@ -450,15 +444,15 @@ class DropTips(HamiltonCommand):
     """Initialize DropTips command.
 
     Args:
-        dest: Destination address (Pipette)
-        tips_used: Tip pattern (1 for active channels, 0 for inactive)
-        x_positions: X positions in 0.01mm units
-        y_positions: Y positions in 0.01mm units
-        traverse_height: Traverse height in 0.01mm units
-        z_start_positions: Z start positions in 0.01mm units
-        z_stop_positions: Z stop positions in 0.01mm units
-        z_final_positions: Z final positions in 0.01mm units
-        default_waste: If True, drop to default waste (positions may be ignored)
+      dest: Destination address (Pipette)
+      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      x_positions: X positions in 0.01mm units
+      y_positions: Y positions in 0.01mm units
+      traverse_height: Traverse height in 0.01mm units
+      z_start_positions: Z start positions in 0.01mm units
+      z_stop_positions: Z stop positions in 0.01mm units
+      z_final_positions: Z final positions in 0.01mm units
+      default_waste: If True, drop to default waste (positions may be ignored)
     """
     super().__init__(dest)
     self.tips_used = tips_used
@@ -513,15 +507,15 @@ class DropTipsRoll(HamiltonCommand):
     """Initialize DropTipsRoll command.
 
     Args:
-        dest: Destination address (Pipette)
-        tips_used: Tip pattern (1 for active channels, 0 for inactive)
-        x_positions: X positions in 0.01mm units
-        y_positions: Y positions in 0.01mm units
-        traverse_height: Traverse height in 0.01mm units
-        z_start_positions: Z start positions in 0.01mm units
-        z_stop_positions: Z stop positions in 0.01mm units
-        z_final_positions: Z final positions in 0.01mm units
-        roll_distances: Roll distance for each channel in 0.01mm units
+      dest: Destination address (Pipette)
+      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      x_positions: X positions in 0.01mm units
+      y_positions: Y positions in 0.01mm units
+      traverse_height: Traverse height in 0.01mm units
+      z_start_positions: Z start positions in 0.01mm units
+      z_stop_positions: Z stop positions in 0.01mm units
+      z_final_positions: Z final positions in 0.01mm units
+      roll_distances: Roll distance for each channel in 0.01mm units
     """
     super().__init__(dest)
     self.tips_used = tips_used
@@ -569,8 +563,8 @@ class EnableADC(HamiltonCommand):
     """Initialize EnableADC command.
 
     Args:
-        dest: Destination address (Pipette)
-        tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      dest: Destination address (Pipette)
+      tips_used: Tip pattern (1 for active channels, 0 for inactive)
     """
     super().__init__(dest)
     self.tips_used = tips_used
@@ -601,8 +595,8 @@ class DisableADC(HamiltonCommand):
     """Initialize DisableADC command.
 
     Args:
-        dest: Destination address (Pipette)
-        tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      dest: Destination address (Pipette)
+      tips_used: Tip pattern (1 for active channels, 0 for inactive)
     """
     super().__init__(dest)
     self.tips_used = tips_used
@@ -635,9 +629,9 @@ class GetChannelConfiguration(HamiltonCommand):
     """Initialize GetChannelConfiguration command.
 
     Args:
-        dest: Destination address (Pipette)
-        channel: Channel number (1-based)
-        indexes: List of configuration indexes (e.g., [2] for "Aspirate monitoring with cLLD")
+      dest: Destination address (Pipette)
+      channel: Channel number (1-based)
+      indexes: List of configuration indexes (e.g., [2] for "Aspirate monitoring with cLLD")
     """
     super().__init__(dest)
     self.channel = channel
@@ -706,40 +700,40 @@ class Aspirate(HamiltonCommand):
     """Initialize Aspirate command.
 
     Args:
-        dest: Destination address (Pipette)
-        aspirate_type: Aspirate type for each channel (List[i16])
-        tips_used: Tip pattern (1 for active channels, 0 for inactive)
-        x_positions: X positions in 0.01mm units
-        y_positions: Y positions in 0.01mm units
-        traverse_height: Traverse height in 0.01mm units
-        liquid_seek_height: Liquid seek height for each channel in 0.01mm units
-        liquid_surface_height: Liquid surface height for each channel in 0.01mm units
-        submerge_depth: Submerge depth for each channel in 0.01mm units
-        follow_depth: Follow depth for each channel in 0.01mm units
-        z_min_position: Z minimum position for each channel in 0.01mm units
-        clot_check_height: Clot check height for each channel in 0.01mm units
-        z_final: Z final position in 0.01mm units
-        liquid_exit_speed: Liquid exit speed for each channel in 0.1µL/s units
-        blowout_volume: Blowout volume for each channel in 0.1µL units
-        prewet_volume: Prewet volume for each channel in 0.1µL units
-        aspirate_volume: Aspirate volume for each channel in 0.1µL units
-        transport_air_volume: Transport air volume for each channel in 0.1µL units
-        aspirate_speed: Aspirate speed for each channel in 0.1µL/s units
-        settling_time: Settling time for each channel in 0.1s units
-        mix_volume: Mix volume for each channel in 0.1µL units
-        mix_cycles: Mix cycles for each channel
-        mix_position: Mix position for each channel in 0.01mm units
-        mix_follow_distance: Mix follow distance for each channel in 0.01mm units
-        mix_speed: Mix speed for each channel in 0.1µL/s units
-        tube_section_height: Tube section height for each channel in 0.01mm units
-        tube_section_ratio: Tube section ratio for each channel
-        lld_mode: LLD mode for each channel (List[i16])
-        capacitive_lld_sensitivity: Capacitive LLD sensitivity for each channel (List[i16])
-        pressure_lld_sensitivity: Pressure LLD sensitivity for each channel (List[i16])
-        lld_height_difference: LLD height difference for each channel in 0.01mm units
-        tadm_enabled: TADM enabled flag
-        limit_curve_index: Limit curve index for each channel
-        recording_mode: Recording mode (u16)
+      dest: Destination address (Pipette)
+      aspirate_type: Aspirate type for each channel (List[i16])
+      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      x_positions: X positions in 0.01mm units
+      y_positions: Y positions in 0.01mm units
+      traverse_height: Traverse height in 0.01mm units
+      liquid_seek_height: Liquid seek height for each channel in 0.01mm units
+      liquid_surface_height: Liquid surface height for each channel in 0.01mm units
+      submerge_depth: Submerge depth for each channel in 0.01mm units
+      follow_depth: Follow depth for each channel in 0.01mm units
+      z_min_position: Z minimum position for each channel in 0.01mm units
+      clot_check_height: Clot check height for each channel in 0.01mm units
+      z_final: Z final position in 0.01mm units
+      liquid_exit_speed: Liquid exit speed for each channel in 0.1uL/s units
+      blowout_volume: Blowout volume for each channel in 0.1uL units
+      prewet_volume: Prewet volume for each channel in 0.1uL units
+      aspirate_volume: Aspirate volume for each channel in 0.1uL units
+      transport_air_volume: Transport air volume for each channel in 0.1uL units
+      aspirate_speed: Aspirate speed for each channel in 0.1uL/s units
+      settling_time: Settling time for each channel in 0.1s units
+      mix_volume: Mix volume for each channel in 0.1uL units
+      mix_cycles: Mix cycles for each channel
+      mix_position: Mix position for each channel in 0.01mm units
+      mix_follow_distance: Mix follow distance for each channel in 0.01mm units
+      mix_speed: Mix speed for each channel in 0.1uL/s units
+      tube_section_height: Tube section height for each channel in 0.01mm units
+      tube_section_ratio: Tube section ratio for each channel
+      lld_mode: LLD mode for each channel (List[i16])
+      capacitive_lld_sensitivity: Capacitive LLD sensitivity for each channel (List[i16])
+      pressure_lld_sensitivity: Pressure LLD sensitivity for each channel (List[i16])
+      lld_height_difference: LLD height difference for each channel in 0.01mm units
+      tadm_enabled: TADM enabled flag
+      limit_curve_index: Limit curve index for each channel
+      recording_mode: Recording mode (u16)
     """
     super().__init__(dest)
     self.aspirate_type = aspirate_type
@@ -869,40 +863,40 @@ class Dispense(HamiltonCommand):
     """Initialize Dispense command.
 
     Args:
-        dest: Destination address (Pipette)
-        dispense_type: Dispense type for each channel (List[i16])
-        tips_used: Tip pattern (1 for active channels, 0 for inactive)
-        x_positions: X positions in 0.01mm units
-        y_positions: Y positions in 0.01mm units
-        traverse_height: Traverse height in 0.01mm units
-        liquid_seek_height: Liquid seek height for each channel in 0.01mm units
-        dispense_height: Dispense height for each channel in 0.01mm units
-        submerge_depth: Submerge depth for each channel in 0.01mm units
-        follow_depth: Follow depth for each channel in 0.01mm units
-        z_min_position: Z minimum position for each channel in 0.01mm units
-        z_final: Z final position in 0.01mm units
-        liquid_exit_speed: Liquid exit speed for each channel in 0.1µL/s units
-        transport_air_volume: Transport air volume for each channel in 0.1µL units
-        dispense_volume: Dispense volume for each channel in 0.1µL units
-        stop_back_volume: Stop back volume for each channel in 0.1µL units
-        blowout_volume: Blowout volume for each channel in 0.1µL units
-        dispense_speed: Dispense speed for each channel in 0.1µL/s units
-        cutoff_speed: Cutoff speed for each channel in 0.1µL/s units
-        settling_time: Settling time for each channel in 0.1s units
-        mix_volume: Mix volume for each channel in 0.1µL units
-        mix_cycles: Mix cycles for each channel
-        mix_position: Mix position for each channel in 0.01mm units
-        mix_follow_distance: Mix follow distance for each channel in 0.01mm units
-        mix_speed: Mix speed for each channel in 0.1µL/s units
-        touch_off_distance: Touch off distance in 0.01mm units
-        dispense_offset: Dispense offset for each channel in 0.01mm units
-        tube_section_height: Tube section height for each channel in 0.01mm units
-        tube_section_ratio: Tube section ratio for each channel
-        lld_mode: LLD mode for each channel (List[i16])
-        capacitive_lld_sensitivity: Capacitive LLD sensitivity for each channel (List[i16])
-        tadm_enabled: TADM enabled flag
-        limit_curve_index: Limit curve index for each channel
-        recording_mode: Recording mode (u16)
+      dest: Destination address (Pipette)
+      dispense_type: Dispense type for each channel (List[i16])
+      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      x_positions: X positions in 0.01mm units
+      y_positions: Y positions in 0.01mm units
+      traverse_height: Traverse height in 0.01mm units
+      liquid_seek_height: Liquid seek height for each channel in 0.01mm units
+      dispense_height: Dispense height for each channel in 0.01mm units
+      submerge_depth: Submerge depth for each channel in 0.01mm units
+      follow_depth: Follow depth for each channel in 0.01mm units
+      z_min_position: Z minimum position for each channel in 0.01mm units
+      z_final: Z final position in 0.01mm units
+      liquid_exit_speed: Liquid exit speed for each channel in 0.1uL/s units
+      transport_air_volume: Transport air volume for each channel in 0.1uL units
+      dispense_volume: Dispense volume for each channel in 0.1uL units
+      stop_back_volume: Stop back volume for each channel in 0.1uL units
+      blowout_volume: Blowout volume for each channel in 0.1uL units
+      dispense_speed: Dispense speed for each channel in 0.1uL/s units
+      cutoff_speed: Cutoff speed for each channel in 0.1uL/s units
+      settling_time: Settling time for each channel in 0.1s units
+      mix_volume: Mix volume for each channel in 0.1uL units
+      mix_cycles: Mix cycles for each channel
+      mix_position: Mix position for each channel in 0.01mm units
+      mix_follow_distance: Mix follow distance for each channel in 0.01mm units
+      mix_speed: Mix speed for each channel in 0.1uL/s units
+      touch_off_distance: Touch off distance in 0.01mm units
+      dispense_offset: Dispense offset for each channel in 0.01mm units
+      tube_section_height: Tube section height for each channel in 0.01mm units
+      tube_section_ratio: Tube section ratio for each channel
+      lld_mode: LLD mode for each channel (List[i16])
+      capacitive_lld_sensitivity: Capacitive LLD sensitivity for each channel (List[i16])
+      tadm_enabled: TADM enabled flag
+      limit_curve_index: Limit curve index for each channel
+      recording_mode: Recording mode (u16)
     """
     super().__init__(dest)
     self.dispense_type = dispense_type
@@ -998,9 +992,7 @@ class NimbusBackend(HamiltonTCPBackend):
   and LiquidHandlerBackend (for liquid handling interface).
 
   Attributes:
-      setup_finished: Whether the backend has been set up.
-      _num_channels: Cached number of channels (queried from instrument).
-      _door_lock_available: Whether door lock is available on this instrument.
+    _door_lock_available: Whether door lock is available on this instrument.
   """
 
   def __init__(
@@ -1015,16 +1007,14 @@ class NimbusBackend(HamiltonTCPBackend):
     """Initialize Nimbus backend.
 
     Args:
-        host: Hamilton instrument IP address
-        port: Hamilton instrument port (default: 2000)
-        read_timeout: Read timeout in seconds
-        write_timeout: Write timeout in seconds
-        buffer_size: Buffer size (kept for compatibility)
-        auto_reconnect: Enable automatic reconnection
-        max_reconnect_attempts: Maximum reconnection attempts
+      host: Hamilton instrument IP address
+      port: Hamilton instrument port (default: 2000)
+      read_timeout: Read timeout in seconds
+      write_timeout: Write timeout in seconds
+      auto_reconnect: Enable automatic reconnection
+      max_reconnect_attempts: Maximum reconnection attempts
     """
-    HamiltonTCPBackend.__init__(
-      self,
+    super().__init__(
       host=host,
       port=port,
       read_timeout=read_timeout,
@@ -1032,7 +1022,6 @@ class NimbusBackend(HamiltonTCPBackend):
       auto_reconnect=auto_reconnect,
       max_reconnect_attempts=max_reconnect_attempts,
     )
-    LiquidHandlerBackend.__init__(self)
 
     self._num_channels: Optional[int] = None
     self._pipette_address: Optional[Address] = None
@@ -1055,7 +1044,8 @@ class NimbusBackend(HamiltonTCPBackend):
     8. Optionally unlocks door after initialization
 
     Args:
-        unlock_door: If True, unlock door after initialization (default: False)
+      unlock_door: If True, unlock door after initialization (default: False)
+      force_initialize: If True, force initialization even if already initialized
     """
     # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
     await HamiltonTCPBackend.setup(self)
@@ -1180,8 +1170,6 @@ class NimbusBackend(HamiltonTCPBackend):
       except Exception as e:
         logger.warning(f"Failed to unlock door: {e}")
 
-    self.setup_finished = True
-
   async def _discover_instrument_objects(self):
     """Discover instrument-specific objects using introspection."""
     introspection = HamiltonIntrospection(self)
@@ -1236,10 +1224,8 @@ class NimbusBackend(HamiltonTCPBackend):
   async def park(self):
     """Park the instrument.
 
-    This command moves the instrument to its parked position.
-
     Raises:
-        RuntimeError: If NimbusCore address was not discovered during setup.
+      RuntimeError: If NimbusCore address was not discovered during setup.
     """
     if self._nimbus_core_address is None:
       raise RuntimeError("NimbusCore address not discovered. Call setup() first.")
@@ -1255,11 +1241,10 @@ class NimbusBackend(HamiltonTCPBackend):
     """Check if the door is locked.
 
     Returns:
-        True if door is locked, False if unlocked.
+      True if door is locked, False if unlocked.
 
     Raises:
-        RuntimeError: If door lock is not available on this instrument,
-            or if setup() has not been called yet.
+      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
     """
     if self._door_lock_address is None:
       raise RuntimeError(
@@ -1277,8 +1262,7 @@ class NimbusBackend(HamiltonTCPBackend):
     """Lock the door.
 
     Raises:
-        RuntimeError: If door lock is not available on this instrument,
-            or if setup() has not been called yet.
+      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
     """
     if self._door_lock_address is None:
       raise RuntimeError(
@@ -1296,8 +1280,7 @@ class NimbusBackend(HamiltonTCPBackend):
     """Unlock the door.
 
     Raises:
-        RuntimeError: If door lock is not available on this instrument,
-            or if setup() has not been called yet.
+      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
     """
     if self._door_lock_address is None:
       raise RuntimeError(
@@ -1314,7 +1297,6 @@ class NimbusBackend(HamiltonTCPBackend):
   async def stop(self):
     """Stop the backend and close connection."""
     await HamiltonTCPBackend.stop(self)
-    self.setup_finished = False
 
   def _build_waste_position_params(
     self,
@@ -1328,19 +1310,19 @@ class NimbusBackend(HamiltonTCPBackend):
     """Build waste position parameters for InitializeSmartRoll or DropTipsRoll.
 
     Args:
-        use_channels: List of channel indices to use
-        traverse_height: Traverse height in mm
-        z_start_offset: Z start position in mm (absolute, optional, calculated from waste position)
-        z_stop_offset: Z stop position in mm (absolute, optional, calculated from waste position)
-        z_final_offset: Z final position in mm (absolute, optional, defaults to traverse_height)
-        roll_distance: Roll distance in mm (optional, defaults to 9.0 mm)
+      use_channels: List of channel indices to use
+      traverse_height: Traverse height in mm
+      z_start_offset: Z start position in mm (absolute, optional, calculated from waste position)
+      z_stop_offset: Z stop position in mm (absolute, optional, calculated from waste position)
+      z_final_offset: Z final position in mm (absolute, optional, defaults to traverse_height)
+      roll_distance: Roll distance in mm (optional, defaults to 9.0 mm)
 
     Returns:
-        Dictionary with x_positions, y_positions, z_start_positions, z_stop_positions,
-        z_final_positions, roll_distances (all in 0.01mm units as lists matching num_channels)
+      Dictionary with x_positions, y_positions, z_start_positions, z_stop_positions,
+      z_final_positions, roll_distances (all in 0.01mm units as lists matching num_channels)
 
     Raises:
-        RuntimeError: If deck is not set or waste position not found
+      RuntimeError: If deck is not set or waste position not found
     """
     if self._deck is None:
       raise RuntimeError("Deck must be set before building waste position parameters")
@@ -1464,15 +1446,15 @@ class NimbusBackend(HamiltonTCPBackend):
     - z_stop_offset: Calculated as max(resource Z) + max(tip total_tip_length - tip fitting_depth)
 
     Args:
-        ops: List of Pickup operations, one per channel
-        use_channels: List of channel indices to use
-        traverse_height: Traverse height in mm (optional, defaults to deck z_max)
-        z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
-        z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
+      ops: List of Pickup operations, one per channel
+      use_channels: List of channel indices to use
+      traverse_height: Traverse height in mm (optional, defaults to deck z_max)
+      z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
+      z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
 
     Raises:
-        RuntimeError: If pipette address or deck is not set
-        ValueError: If deck is not a NimbusDeck and traverse_height is not provided
+      RuntimeError: If pipette address or deck is not set
+      ValueError: If deck is not a NimbusDeck and traverse_height is not provided
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
@@ -1645,18 +1627,18 @@ class NimbusBackend(HamiltonTCPBackend):
     - roll_distance: Defaults to 9.0 mm for waste positions
 
     Args:
-        ops: List of Drop operations, one per channel
-        use_channels: List of channel indices to use
-        default_waste: For DropTips command, if True, drop to default waste (positions may be ignored)
-        traverse_height: Traverse height in mm (optional, defaults to 146.0 mm)
-        z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
-        z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
-        z_final_offset: Z final position in mm (absolute, optional, calculated from resources)
-        roll_distance: Roll distance in mm (optional, defaults to 9.0 mm for waste positions)
+      ops: List of Drop operations, one per channel
+      use_channels: List of channel indices to use
+      default_waste: For DropTips command, if True, drop to default waste (positions may be ignored)
+      traverse_height: Traverse height in mm (optional, defaults to 146.0 mm)
+      z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
+      z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
+      z_final_offset: Z final position in mm (absolute, optional, calculated from resources)
+      roll_distance: Roll distance in mm (optional, defaults to 9.0 mm for waste positions)
 
     Raises:
-        RuntimeError: If pipette address or deck is not set
-        ValueError: If operations mix waste and regular resources
+      RuntimeError: If pipette address or deck is not set
+      ValueError: If operations mix waste and regular resources
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
@@ -1841,42 +1823,36 @@ class NimbusBackend(HamiltonTCPBackend):
     transport_air_volume: Optional[List[float]] = None,
     prewet_volume: Optional[List[float]] = None,
     liquid_exit_speed: Optional[List[float]] = None,
-    mix_volume: Optional[List[float]] = None,
-    mix_cycles: Optional[List[int]] = None,
-    mix_speed: Optional[List[float]] = None,
     mix_position: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
-    tadm_enabled: Optional[bool] = None,
+    tadm_enabled: bool = False,
   ):
     """Aspirate liquid from the specified resource using pip.
 
     Args:
-        ops: List of SingleChannelAspiration operations, one per channel
-        use_channels: List of channel indices to use
-        adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
-        lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
-        liquid_seek_height: Relative offset from well bottom for LLD search start position (mm).
-            This is a RELATIVE OFFSET, not an absolute coordinate. The instrument adds this to
-            z_min_position (well bottom) to determine where to start the LLD search.
-            If None, defaults to the well's size_z (depth), meaning "start search at top of well".
-            When provided, should be a list of offsets in mm, one per channel.
-        immersion_depth: Depth to submerge into liquid (mm), default: [0.0] * n
-        surface_following_distance: Distance to follow liquid surface (mm), default: [0.0] * n
-        capacitive_lld_sensitivity: cLLD sensitivity (1-4), default: [0] * n
-        pressure_lld_sensitivity: pLLD sensitivity (1-4), default: [0] * n
-        settling_time: Settling time (s), default: [1.0] * n
-        transport_air_volume: Transport air volume (µL), default: [5.0] * n
-        prewet_volume: Prewet volume (µL), default: [0.0] * n
-        liquid_exit_speed: Liquid exit speed (µL/s), default: [20.0] * n
-        mix_volume: Mix volume (µL). Extracted from op.mix if available, else default: [0.0] * n
-        mix_cycles: Mix cycles. Extracted from op.mix if available, else default: [0] * n
-        mix_speed: Mix speed (µL/s). Extracted from op.mix if available, else default: [0.0] * n
-        mix_position: Mix position relative to liquid (mm), default: [0.0] * n
-        limit_curve_index: Limit curve index, default: [0] * n
-        tadm_enabled: TADM enabled flag, default: False
+      ops: List of SingleChannelAspiration operations, one per channel
+      use_channels: List of channel indices to use
+      adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
+      lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
+      liquid_seek_height: Relative offset from well bottom for LLD search start position (mm).
+        This is a RELATIVE OFFSET, not an absolute coordinate. The instrument adds this to
+        z_min_position (well bottom) to determine where to start the LLD search.
+        If None, defaults to the well's size_z (depth), meaning "start search at top of well".
+        When provided, should be a list of offsets in mm, one per channel.
+      immersion_depth: Depth to submerge into liquid (mm), default: [0.0] * n
+      surface_following_distance: Distance to follow liquid surface (mm), default: [0.0] * n
+      capacitive_lld_sensitivity: cLLD sensitivity (1-4), default: [0] * n
+      pressure_lld_sensitivity: pLLD sensitivity (1-4), default: [0] * n
+      settling_time: Settling time (s), default: [1.0] * n
+      transport_air_volume: Transport air volume (uL), default: [5.0] * n
+      prewet_volume: Prewet volume (uL), default: [0.0] * n
+      liquid_exit_speed: Liquid exit speed (uL/s), default: [20.0] * n
+      mix_position: Mix position relative to liquid (mm), default: [0.0] * n
+      limit_curve_index: Limit curve index, default: [0] * n
+      tadm_enabled: TADM enabled flag, default: False
 
     Raises:
-        RuntimeError: If pipette address or deck is not set
+      RuntimeError: If pipette address or deck is not set
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
@@ -2015,7 +1991,7 @@ class NimbusBackend(HamiltonTCPBackend):
     z_min_positions_mm = well_bottoms_hamilton.copy()
 
     # Extract volumes and speeds from operations
-    volumes = [op.volume for op in ops]  # in µL
+    volumes = [op.volume for op in ops]  # in uL
     # flow_rate should not be None - if it is, it's an error (no hardcoded fallback)
     flow_rates: List[float] = []
     for op in ops:
@@ -2024,116 +2000,59 @@ class NimbusBackend(HamiltonTCPBackend):
       flow_rates.append(op.flow_rate)
     blowout_volumes = [
       op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
-    ]  # in µL, default 40
+    ]  # in uL, default 40
 
-    # Extract mix parameters from op.mix if available
-    mix_volumes_from_op: List[float] = []
-    mix_cycles_from_op: List[int] = []
-    mix_speeds_from_op: List[float] = []
+    # Extract mix parameters from op.mix if available. Otherwise use None.
+    mix_volume: List[float] = []
+    mix_cycles: List[int] = []
+    mix_speed: List[float] = []
     for op in ops:
-      if hasattr(op, "mix") and op.mix is not None:
-        mix_volumes_from_op.append(op.mix.volume if hasattr(op.mix, "volume") else 0.0)
-        mix_cycles_from_op.append(op.mix.repetitions if hasattr(op.mix, "repetitions") else 0)
-        # If mix has flow_rate, use it; otherwise default to aspirate speed
-        if hasattr(op.mix, "flow_rate") and op.mix.flow_rate is not None:
-          mix_speeds_from_op.append(op.mix.flow_rate)
-        else:
-          # Default to aspirate speed (flow_rate) when mix speed not specified
-          if op.flow_rate is None:
-            raise ValueError(f"flow_rate cannot be None for operation {op}")
-          mix_speeds_from_op.append(op.flow_rate)
+      if op.mix is not None:
+        mix_volume.append(op.mix.volume)
+        mix_cycles.append(op.mix.repetitions)
+        mix_speed.append(op.mix.flow_rate)
       else:
-        mix_volumes_from_op.append(0.0)
-        mix_cycles_from_op.append(0)
-        # Default to aspirate speed (flow_rate) when no mix operation
-        if op.flow_rate is None:
-          raise ValueError(f"flow_rate cannot be None for operation {op}")
-        mix_speeds_from_op.append(op.flow_rate)
+        mix_volume.append(0.0)
+        mix_cycles.append(0)
+        mix_speed.append(0.0)
 
     # ========================================================================
     # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
     # ========================================================================
 
-    # LLD mode: default to [0] * n (OFF)
     lld_mode = fill_in_defaults(lld_mode, [0] * n)
-
-    # Immersion depth: default to [0.0] * n
     immersion_depth = fill_in_defaults(immersion_depth, [0.0] * n)
-
-    # Surface following distance: default to [0.0] * n
     surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
-
-    # LLD sensitivities: default to [0] * n
     capacitive_lld_sensitivity = fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
     pressure_lld_sensitivity = fill_in_defaults(pressure_lld_sensitivity, [0] * n)
-
-    # Settling time: default to [1.0] * n (from log: 10 in 0.1s units = 1.0s)
     settling_time = fill_in_defaults(settling_time, [1.0] * n)
-
-    # Transport air volume: default to [5.0] * n (from log: 50 in 0.1µL units = 5.0 µL)
     transport_air_volume = fill_in_defaults(transport_air_volume, [5.0] * n)
-
-    # Prewet volume: default to [0.0] * n
     prewet_volume = fill_in_defaults(prewet_volume, [0.0] * n)
-
-    # Liquid exit speed: default to [20.0] * n (from log: 200 in 0.1µL/s units = 20.0 µL/s)
     liquid_exit_speed = fill_in_defaults(liquid_exit_speed, [20.0] * n)
-
-    # Mix parameters: use op.mix if available, else use kwargs/defaults
-    mix_volume = fill_in_defaults(mix_volume, mix_volumes_from_op)
-    mix_cycles = fill_in_defaults(mix_cycles, mix_cycles_from_op)
-    # mix_speed defaults to aspirate_speed (flow_rates) if not specified
-    # This matches the log file behavior where mix_speed = aspirate_speed even when mix_volume = 0
-    if mix_speed is None:
-      mix_speed = flow_rates.copy()  # Default to aspirate speed
-    else:
-      mix_speed = fill_in_defaults(mix_speed, mix_speeds_from_op)
     mix_position = fill_in_defaults(mix_position, [0.0] * n)
-
-    # Limit curve index: default to [0] * n
     limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
-
-    # TADM enabled: default to False
-    if tadm_enabled is None:
-      tadm_enabled = False
 
     # ========================================================================
     # CONVERT UNITS AND BUILD FULL ARRAYS
+    # Hamilton uses units of 0.1uL and 0.1mm and 0.1s etc. for most parameters
+    # Some are in 0.01.
+    # PLR units are uL, mm, s etc.
     # ========================================================================
 
-    # Convert volumes: µL → 0.1µL units (multiply by 10)
     aspirate_volumes = [int(round(vol * 10)) for vol in volumes]
     blowout_volumes_units = [int(round(vol * 10)) for vol in blowout_volumes]
-
-    # Convert speeds: µL/s → 0.1µL/s units (multiply by 10)
     aspirate_speeds = [int(round(fr * 10)) for fr in flow_rates]
-
-    # Convert heights: mm → 0.01mm units (multiply by 100)
     liquid_seek_height_units = [int(round(h * 100)) for h in liquid_seek_height]
     liquid_surface_height_units = [int(round(h * 100)) for h in liquid_surface_heights_mm]
     immersion_depth_units = [int(round(d * 100)) for d in immersion_depth]
     surface_following_distance_units = [int(round(d * 100)) for d in surface_following_distance]
     z_min_position_units = [int(round(z * 100)) for z in z_min_positions_mm]
-
-    # Convert settling time: s → 0.1s units (multiply by 10)
     settling_time_units = [int(round(t * 10)) for t in settling_time]
-
-    # Convert transport air volume: µL → 0.1µL units (multiply by 10)
     transport_air_volume_units = [int(round(v * 10)) for v in transport_air_volume]
-
-    # Convert prewet volume: µL → 0.1µL units (multiply by 10)
     prewet_volume_units = [int(round(v * 10)) for v in prewet_volume]
-
-    # Convert liquid exit speed: µL/s → 0.1µL/s units (multiply by 10)
     liquid_exit_speed_units = [int(round(s * 10)) for s in liquid_exit_speed]
-
-    # Convert mix volume: µL → 0.1µL units (multiply by 10)
     mix_volume_units = [int(round(v * 10)) for v in mix_volume]
-
-    # Convert mix speed: µL/s → 0.1µL/s units (multiply by 10)
     mix_speed_units = [int(round(s * 10)) for s in mix_speed]
-
-    # Convert mix position: mm → 0.01mm units (multiply by 100)
     mix_position_units = [int(round(p * 100)) for p in mix_position]
 
     # Build arrays for all channels (pad with 0s for inactive channels)
@@ -2254,45 +2173,39 @@ class NimbusBackend(HamiltonTCPBackend):
     transport_air_volume: Optional[List[float]] = None,
     prewet_volume: Optional[List[float]] = None,
     liquid_exit_speed: Optional[List[float]] = None,
-    mix_volume: Optional[List[float]] = None,
-    mix_cycles: Optional[List[int]] = None,
-    mix_speed: Optional[List[float]] = None,
     mix_position: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
-    tadm_enabled: Optional[bool] = None,
+    tadm_enabled: bool = False,
     cutoff_speed: Optional[List[float]] = None,
     stop_back_volume: Optional[List[float]] = None,
-    touch_off_distance: Optional[float] = None,
+    touch_off_distance: float = 0.0,
     dispense_offset: Optional[List[float]] = None,
   ):
     """Dispense liquid from the specified resource using pip.
 
     Args:
-        ops: List of SingleChannelDispense operations, one per channel
-        use_channels: List of channel indices to use
-        adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
-        lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
-        liquid_seek_height: Override calculated LLD search height (mm). If None, calculated from well_bottom + resource size
-        immersion_depth: Depth to submerge into liquid (mm), default: [0.0] * n
-        surface_following_distance: Distance to follow liquid surface (mm), default: [0.0] * n
-        capacitive_lld_sensitivity: cLLD sensitivity (1-4), default: [0] * n
-        settling_time: Settling time (s), default: [1.0] * n
-        transport_air_volume: Transport air volume (µL), default: [5.0] * n
-        prewet_volume: Prewet volume (µL), default: [0.0] * n
-        liquid_exit_speed: Liquid exit speed (µL/s), default: [20.0] * n
-        mix_volume: Mix volume (µL). Extracted from op.mix if available, else default: [0.0] * n
-        mix_cycles: Mix cycles. Extracted from op.mix if available, else default: [0] * n
-        mix_speed: Mix speed (µL/s). Extracted from op.mix if available, else default: [0.0] * n
-        mix_position: Mix position relative to liquid (mm), default: [0.0] * n
-        limit_curve_index: Limit curve index, default: [0] * n
-        tadm_enabled: TADM enabled flag, default: False
-        cutoff_speed: Cutoff speed (µL/s), default: [25.0] * n
-        stop_back_volume: Stop back volume (µL), default: [0.0] * n
-        touch_off_distance: Touch off distance (mm), default: 0.0
-        dispense_offset: Dispense offset (mm), default: [0.0] * n
+      ops: List of SingleChannelDispense operations, one per channel
+      use_channels: List of channel indices to use
+      adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
+      lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
+      liquid_seek_height: Override calculated LLD search height (mm). If None, calculated from well_bottom + resource size
+      immersion_depth: Depth to submerge into liquid (mm), default: [0.0] * n
+      surface_following_distance: Distance to follow liquid surface (mm), default: [0.0] * n
+      capacitive_lld_sensitivity: cLLD sensitivity (1-4), default: [0] * n
+      settling_time: Settling time (s), default: [1.0] * n
+      transport_air_volume: Transport air volume (uL), default: [5.0] * n
+      prewet_volume: Prewet volume (uL), default: [0.0] * n
+      liquid_exit_speed: Liquid exit speed (uL/s), default: [20.0] * n
+      mix_position: Mix position relative to liquid (mm), default: [0.0] * n
+      limit_curve_index: Limit curve index, default: [0] * n
+      tadm_enabled: TADM enabled flag, default: False
+      cutoff_speed: Cutoff speed (uL/s), default: [25.0] * n
+      stop_back_volume: Stop back volume (uL), default: [0.0] * n
+      touch_off_distance: Touch off distance (mm), default: 0.0
+      dispense_offset: Dispense offset (mm), default: [0.0] * n
 
     Raises:
-        RuntimeError: If pipette address or deck is not set
+      RuntimeError: If pipette address or deck is not set
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
@@ -2431,7 +2344,7 @@ class NimbusBackend(HamiltonTCPBackend):
     z_min_positions_mm = well_bottoms_hamilton.copy()
 
     # Extract volumes and speeds from operations
-    volumes = [op.volume for op in ops]  # in µL
+    volumes = [op.volume for op in ops]  # in uL
     # flow_rate should not be None - if it is, it's an error (no hardcoded fallback)
     flow_rates: List[float] = []
     for op in ops:
@@ -2440,136 +2353,65 @@ class NimbusBackend(HamiltonTCPBackend):
       flow_rates.append(op.flow_rate)
     blowout_volumes = [
       op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
-    ]  # in µL, default 40
+    ]  # in uL, default 40
 
     # Extract mix parameters from op.mix if available
-    mix_volumes_from_op: List[float] = []
-    mix_cycles_from_op: List[int] = []
-    mix_speeds_from_op: List[float] = []
+    mix_volume: List[float] = []
+    mix_cycles: List[int] = []
+    mix_speed: List[float] = []
     for op in ops:
-      if hasattr(op, "mix") and op.mix is not None:
-        mix_volumes_from_op.append(op.mix.volume if hasattr(op.mix, "volume") else 0.0)
-        mix_cycles_from_op.append(op.mix.repetitions if hasattr(op.mix, "repetitions") else 0)
-        # If mix has flow_rate, use it; otherwise default to dispense speed
-        if hasattr(op.mix, "flow_rate") and op.mix.flow_rate is not None:
-          mix_speeds_from_op.append(op.mix.flow_rate)
-        else:
-          # Default to dispense speed (flow_rate) when mix speed not specified
-          if op.flow_rate is None:
-            raise ValueError(f"flow_rate cannot be None for operation {op}")
-          mix_speeds_from_op.append(op.flow_rate)
+      if op.mix is not None:
+        mix_volume.append(op.mix.volume if hasattr(op.mix, "volume") else 0.0)
+        mix_cycles.append(op.mix.repetitions if hasattr(op.mix, "repetitions") else 0)
+        mix_speed.append(op.mix.flow_rate)
       else:
-        mix_volumes_from_op.append(0.0)
-        mix_cycles_from_op.append(0)
-        # Default to dispense speed (flow_rate) when no mix operation
-        if op.flow_rate is None:
-          raise ValueError(f"flow_rate cannot be None for operation {op}")
-        mix_speeds_from_op.append(op.flow_rate)
+        mix_volume.append(0.0)
+        mix_cycles.append(0)
+        mix_speed.append(0.0)
 
     # ========================================================================
     # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
     # ========================================================================
 
-    # LLD mode: default to [0] * n (OFF)
     lld_mode = fill_in_defaults(lld_mode, [0] * n)
-
-    # Immersion depth: default to [0.0] * n
     immersion_depth = fill_in_defaults(immersion_depth, [0.0] * n)
-
-    # Surface following distance: default to [0.0] * n
     surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
-
-    # LLD sensitivities: default to [0] * n
     capacitive_lld_sensitivity = fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
-
-    # Settling time: default to [1.0] * n (from log: 10 in 0.1s units = 1.0s)
     settling_time = fill_in_defaults(settling_time, [1.0] * n)
-
-    # Transport air volume: default to [5.0] * n (from log: 50 in 0.1µL units = 5.0 µL)
     transport_air_volume = fill_in_defaults(transport_air_volume, [5.0] * n)
-
-    # Prewet volume: default to [0.0] * n
     prewet_volume = fill_in_defaults(prewet_volume, [0.0] * n)
-
-    # Liquid exit speed: default to [20.0] * n (from log: 200 in 0.1µL/s units = 20.0 µL/s)
     liquid_exit_speed = fill_in_defaults(liquid_exit_speed, [20.0] * n)
-
-    # Mix parameters: use op.mix if available, else use kwargs/defaults
-    mix_volume = fill_in_defaults(mix_volume, mix_volumes_from_op)
-    mix_cycles = fill_in_defaults(mix_cycles, mix_cycles_from_op)
-    # mix_speed defaults to dispense_speed (flow_rates) if not specified
-    # This matches the log file behavior where mix_speed = dispense_speed even when mix_volume = 0
-    if mix_speed is None:
-      mix_speed = flow_rates.copy()  # Default to dispense speed
-    else:
-      mix_speed = fill_in_defaults(mix_speed, mix_speeds_from_op)
     mix_position = fill_in_defaults(mix_position, [0.0] * n)
-
-    # Limit curve index: default to [0] * n
     limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
-
-    # TADM enabled: default to False
-    if tadm_enabled is None:
-      tadm_enabled = False
-
-    # Dispense-specific parameters
     cutoff_speed = fill_in_defaults(cutoff_speed, [25.0] * n)
     stop_back_volume = fill_in_defaults(stop_back_volume, [0.0] * n)
     dispense_offset = fill_in_defaults(dispense_offset, [0.0] * n)
 
-    # Touch off distance: default to 0.0 (not a list)
-    if touch_off_distance is None:
-      touch_off_distance = 0.0
-
     # ========================================================================
     # CONVERT UNITS AND BUILD FULL ARRAYS
+    # Hamilton uses units of 0.1uL and 0.1mm and 0.1s etc. for most parameters
+    # Some are in 0.01.
+    # PLR units are uL, mm, s etc.
     # ========================================================================
 
-    # Convert volumes: µL → 0.1µL units (multiply by 10)
     dispense_volumes = [int(round(vol * 10)) for vol in volumes]
     blowout_volumes_units = [int(round(vol * 10)) for vol in blowout_volumes]
-
-    # Convert speeds: µL/s → 0.1µL/s units (multiply by 10)
     dispense_speeds = [int(round(fr * 10)) for fr in flow_rates]
-
-    # Convert heights: mm → 0.01mm units (multiply by 100)
     liquid_seek_height_units = [int(round(h * 100)) for h in liquid_seek_height]
     dispense_height_units = [int(round(h * 100)) for h in dispense_heights_mm]
     immersion_depth_units = [int(round(d * 100)) for d in immersion_depth]
     surface_following_distance_units = [int(round(d * 100)) for d in surface_following_distance]
     z_min_position_units = [int(round(z * 100)) for z in z_min_positions_mm]
-
-    # Convert settling time: s → 0.1s units (multiply by 10)
     settling_time_units = [int(round(t * 10)) for t in settling_time]
-
-    # Convert transport air volume: µL → 0.1µL units (multiply by 10)
     transport_air_volume_units = [int(round(v * 10)) for v in transport_air_volume]
-
-    # Convert prewet volume: µL → 0.1µL units (multiply by 10)
     prewet_volume_units = [int(round(v * 10)) for v in prewet_volume]
-
-    # Convert liquid exit speed: µL/s → 0.1µL/s units (multiply by 10)
     liquid_exit_speed_units = [int(round(s * 10)) for s in liquid_exit_speed]
-
-    # Convert mix volume: µL → 0.1µL units (multiply by 10)
     mix_volume_units = [int(round(v * 10)) for v in mix_volume]
-
-    # Convert mix speed: µL/s → 0.1µL/s units (multiply by 10)
     mix_speed_units = [int(round(s * 10)) for s in mix_speed]
-
-    # Convert mix position: mm → 0.01mm units (multiply by 100)
     mix_position_units = [int(round(p * 100)) for p in mix_position]
-
-    # Convert cutoff speed: µL/s → 0.1µL/s units (multiply by 10)
     cutoff_speed_units = [int(round(s * 10)) for s in cutoff_speed]
-
-    # Convert stop back volume: µL → 0.1µL units (multiply by 10)
     stop_back_volume_units = [int(round(v * 10)) for v in stop_back_volume]
-
-    # Convert dispense offset: mm → 0.01mm units (multiply by 100)
     dispense_offset_units = [int(round(o * 100)) for o in dispense_offset]
-
-    # Convert touch off distance: mm → 0.01mm units (multiply by 100)
     touch_off_distance_units = int(round(touch_off_distance * 100))
 
     # Build arrays for all channels (pad with 0s for inactive channels)
@@ -2678,42 +2520,35 @@ class NimbusBackend(HamiltonTCPBackend):
       raise
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
-    """Pick up tips from the specified resource using CoRe 96."""
     raise NotImplementedError("pick_up_tips96 not yet implemented")
 
   async def drop_tips96(self, drop: DropTipRack):
-    """Drop tips to the specified resource using CoRe 96."""
     raise NotImplementedError("drop_tips96 not yet implemented")
 
   async def aspirate96(self, aspiration: MultiHeadAspirationPlate | MultiHeadAspirationContainer):
-    """Aspirate from all wells in 96 well plate."""
     raise NotImplementedError("aspirate96 not yet implemented")
 
   async def dispense96(self, dispense: MultiHeadDispensePlate | MultiHeadDispenseContainer):
-    """Dispense to all wells in 96 well plate."""
     raise NotImplementedError("dispense96 not yet implemented")
 
   async def pick_up_resource(self, pickup: ResourcePickup):
-    """Pick up a resource like a plate or a lid using the integrated robotic arm."""
     raise NotImplementedError("pick_up_resource not yet implemented")
 
   async def move_picked_up_resource(self, move: ResourceMove):
-    """Move a picked up resource like a plate or a lid using the integrated robotic arm."""
     raise NotImplementedError("move_picked_up_resource not yet implemented")
 
   async def drop_resource(self, drop: ResourceDrop):
-    """Drop a resource like a plate or a lid using the integrated robotic arm."""
     raise NotImplementedError("drop_resource not yet implemented")
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     """Check if the tip can be picked up by the specified channel.
 
     Args:
-        channel_idx: Channel index (0-based)
-        tip: Tip object to check
+      channel_idx: Channel index (0-based)
+      tip: Tip object to check
 
     Returns:
-        True if the tip can be picked up, False otherwise
+      True if the tip can be picked up, False otherwise
     """
     # Only Hamilton tips are supported
     if not isinstance(tip, HamiltonTip):
