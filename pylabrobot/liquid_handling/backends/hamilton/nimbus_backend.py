@@ -8,10 +8,14 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Dict, List, Optional, TypeVar, Union
+from typing import Dict, List, Optional, Union
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+  HamiltonIntrospection,
+)
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   HoiParams,
   HoiParamsParser,
@@ -21,9 +25,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   HamiltonProtocol,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPBackend
-from pylabrobot.liquid_handling.backends.hamilton.tcp_introspection import (
-  HamiltonIntrospection,
-)
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -47,38 +48,6 @@ from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
-
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-
-def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
-  """Util for converting an argument to the appropriate format for low level methods.
-
-  Args:
-      val: Optional list of values (None means use default)
-      default: Default list of values
-
-  Returns:
-      List of values with defaults filled in
-
-  Raises:
-      ValueError: If val is provided but length doesn't match default length
-  """
-  # if the val is None, use the default.
-  if val is None:
-    return default
-  # if the val is a list, it must be of the correct length.
-  if len(val) != len(default):
-    raise ValueError(f"Value length must equal num operations ({len(default)}), but is {len(val)}")
-  # replace None values in list with default values.
-  val = [v if v is not None else d for v, d in zip(val, default)]
-  # the value is ready to be used.
-  return val
 
 
 # ============================================================================
@@ -111,13 +80,13 @@ def _get_tip_type_from_tip(
   """Map Tip object characteristics to Hamilton tip type integer.
 
   Args:
-      tip: Tip object with volume and filter information.
+    tip: Tip object with volume and filter information.
 
   Returns:
-      Hamilton tip type integer value.
+    Hamilton tip type integer value.
 
   Raises:
-      ValueError: If tip characteristics don't match any known tip type.
+    ValueError: If tip characteristics don't match any known tip type.
   """
   # Match based on volume and filter
   if tip.maximal_volume <= 15:  # 10ul tip
@@ -1040,7 +1009,6 @@ class NimbusBackend(HamiltonTCPBackend):
     port: int = 2000,
     read_timeout: float = 30.0,
     write_timeout: float = 30.0,
-    buffer_size: int = 1024,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
   ):
@@ -1061,7 +1029,6 @@ class NimbusBackend(HamiltonTCPBackend):
       port=port,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
-      buffer_size=buffer_size,
       auto_reconnect=auto_reconnect,
       max_reconnect_attempts=max_reconnect_attempts,
     )
@@ -1151,7 +1118,7 @@ class NimbusBackend(HamiltonTCPBackend):
       try:
         # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
         # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
-        for channel in range(1, self._num_channels + 1):
+        for channel in range(1, self.num_channels + 1):
           await self.send_command(
             SetChannelConfiguration(
               dest=self._pipette_address,
@@ -1160,7 +1127,7 @@ class NimbusBackend(HamiltonTCPBackend):
               enables=[True, False, False, False],
             )
           )
-        logger.info(f"Channel configuration set for {self._num_channels} channels")
+        logger.info(f"Channel configuration set for {self.num_channels} channels")
       except Exception as e:
         logger.error(f"Failed to set channel configuration: {e}")
         raise
@@ -1169,7 +1136,7 @@ class NimbusBackend(HamiltonTCPBackend):
       try:
         # Build waste position parameters using helper method
         # Use all channels (0 to num_channels-1) for setup
-        all_channels = list(range(self._num_channels))
+        all_channels = list(range(self.num_channels))
         traverse_height = (
           146.0  # TODO: Access deck z_max property properly instead of hardcoded literal
         )
@@ -2084,47 +2051,47 @@ class NimbusBackend(HamiltonTCPBackend):
         mix_speeds_from_op.append(op.flow_rate)
 
     # ========================================================================
-    # ADVANCED PARAMETERS: Fill in defaults using _fill_in_defaults()
+    # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
     # ========================================================================
 
     # LLD mode: default to [0] * n (OFF)
-    lld_mode = _fill_in_defaults(lld_mode, [0] * n)
+    lld_mode = fill_in_defaults(lld_mode, [0] * n)
 
     # Immersion depth: default to [0.0] * n
-    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
+    immersion_depth = fill_in_defaults(immersion_depth, [0.0] * n)
 
     # Surface following distance: default to [0.0] * n
-    surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
+    surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
 
     # LLD sensitivities: default to [0] * n
-    capacitive_lld_sensitivity = _fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
-    pressure_lld_sensitivity = _fill_in_defaults(pressure_lld_sensitivity, [0] * n)
+    capacitive_lld_sensitivity = fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
+    pressure_lld_sensitivity = fill_in_defaults(pressure_lld_sensitivity, [0] * n)
 
     # Settling time: default to [1.0] * n (from log: 10 in 0.1s units = 1.0s)
-    settling_time = _fill_in_defaults(settling_time, [1.0] * n)
+    settling_time = fill_in_defaults(settling_time, [1.0] * n)
 
     # Transport air volume: default to [5.0] * n (from log: 50 in 0.1µL units = 5.0 µL)
-    transport_air_volume = _fill_in_defaults(transport_air_volume, [5.0] * n)
+    transport_air_volume = fill_in_defaults(transport_air_volume, [5.0] * n)
 
     # Prewet volume: default to [0.0] * n
-    prewet_volume = _fill_in_defaults(prewet_volume, [0.0] * n)
+    prewet_volume = fill_in_defaults(prewet_volume, [0.0] * n)
 
     # Liquid exit speed: default to [20.0] * n (from log: 200 in 0.1µL/s units = 20.0 µL/s)
-    liquid_exit_speed = _fill_in_defaults(liquid_exit_speed, [20.0] * n)
+    liquid_exit_speed = fill_in_defaults(liquid_exit_speed, [20.0] * n)
 
     # Mix parameters: use op.mix if available, else use kwargs/defaults
-    mix_volume = _fill_in_defaults(mix_volume, mix_volumes_from_op)
-    mix_cycles = _fill_in_defaults(mix_cycles, mix_cycles_from_op)
+    mix_volume = fill_in_defaults(mix_volume, mix_volumes_from_op)
+    mix_cycles = fill_in_defaults(mix_cycles, mix_cycles_from_op)
     # mix_speed defaults to aspirate_speed (flow_rates) if not specified
     # This matches the log file behavior where mix_speed = aspirate_speed even when mix_volume = 0
     if mix_speed is None:
       mix_speed = flow_rates.copy()  # Default to aspirate speed
     else:
-      mix_speed = _fill_in_defaults(mix_speed, mix_speeds_from_op)
-    mix_position = _fill_in_defaults(mix_position, [0.0] * n)
+      mix_speed = fill_in_defaults(mix_speed, mix_speeds_from_op)
+    mix_position = fill_in_defaults(mix_position, [0.0] * n)
 
     # Limit curve index: default to [0] * n
-    limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
+    limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
 
     # TADM enabled: default to False
     if tadm_enabled is None:
@@ -2500,55 +2467,55 @@ class NimbusBackend(HamiltonTCPBackend):
         mix_speeds_from_op.append(op.flow_rate)
 
     # ========================================================================
-    # ADVANCED PARAMETERS: Fill in defaults using _fill_in_defaults()
+    # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
     # ========================================================================
 
     # LLD mode: default to [0] * n (OFF)
-    lld_mode = _fill_in_defaults(lld_mode, [0] * n)
+    lld_mode = fill_in_defaults(lld_mode, [0] * n)
 
     # Immersion depth: default to [0.0] * n
-    immersion_depth = _fill_in_defaults(immersion_depth, [0.0] * n)
+    immersion_depth = fill_in_defaults(immersion_depth, [0.0] * n)
 
     # Surface following distance: default to [0.0] * n
-    surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
+    surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
 
     # LLD sensitivities: default to [0] * n
-    capacitive_lld_sensitivity = _fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
+    capacitive_lld_sensitivity = fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
 
     # Settling time: default to [1.0] * n (from log: 10 in 0.1s units = 1.0s)
-    settling_time = _fill_in_defaults(settling_time, [1.0] * n)
+    settling_time = fill_in_defaults(settling_time, [1.0] * n)
 
     # Transport air volume: default to [5.0] * n (from log: 50 in 0.1µL units = 5.0 µL)
-    transport_air_volume = _fill_in_defaults(transport_air_volume, [5.0] * n)
+    transport_air_volume = fill_in_defaults(transport_air_volume, [5.0] * n)
 
     # Prewet volume: default to [0.0] * n
-    prewet_volume = _fill_in_defaults(prewet_volume, [0.0] * n)
+    prewet_volume = fill_in_defaults(prewet_volume, [0.0] * n)
 
     # Liquid exit speed: default to [20.0] * n (from log: 200 in 0.1µL/s units = 20.0 µL/s)
-    liquid_exit_speed = _fill_in_defaults(liquid_exit_speed, [20.0] * n)
+    liquid_exit_speed = fill_in_defaults(liquid_exit_speed, [20.0] * n)
 
     # Mix parameters: use op.mix if available, else use kwargs/defaults
-    mix_volume = _fill_in_defaults(mix_volume, mix_volumes_from_op)
-    mix_cycles = _fill_in_defaults(mix_cycles, mix_cycles_from_op)
+    mix_volume = fill_in_defaults(mix_volume, mix_volumes_from_op)
+    mix_cycles = fill_in_defaults(mix_cycles, mix_cycles_from_op)
     # mix_speed defaults to dispense_speed (flow_rates) if not specified
     # This matches the log file behavior where mix_speed = dispense_speed even when mix_volume = 0
     if mix_speed is None:
       mix_speed = flow_rates.copy()  # Default to dispense speed
     else:
-      mix_speed = _fill_in_defaults(mix_speed, mix_speeds_from_op)
-    mix_position = _fill_in_defaults(mix_position, [0.0] * n)
+      mix_speed = fill_in_defaults(mix_speed, mix_speeds_from_op)
+    mix_position = fill_in_defaults(mix_position, [0.0] * n)
 
     # Limit curve index: default to [0] * n
-    limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
+    limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
 
     # TADM enabled: default to False
     if tadm_enabled is None:
       tadm_enabled = False
 
     # Dispense-specific parameters
-    cutoff_speed = _fill_in_defaults(cutoff_speed, [25.0] * n)
-    stop_back_volume = _fill_in_defaults(stop_back_volume, [0.0] * n)
-    dispense_offset = _fill_in_defaults(dispense_offset, [0.0] * n)
+    cutoff_speed = fill_in_defaults(cutoff_speed, [25.0] * n)
+    stop_back_volume = fill_in_defaults(stop_back_volume, [0.0] * n)
+    dispense_offset = fill_in_defaults(dispense_offset, [0.0] * n)
 
     # Touch off distance: default to 0.0 (not a list)
     if touch_off_distance is None:

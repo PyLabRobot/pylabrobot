@@ -21,7 +21,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
 
 logger = logging.getLogger(__name__)
 
-
 # ============================================================================
 # TYPE RESOLUTION HELPERS
 # ============================================================================
@@ -588,7 +587,7 @@ class HamiltonIntrospection:
     """Initialize introspection API.
 
     Args:
-        backend: TCPBackend instance
+      backend: TCPBackend instance
     """
     self.backend = backend
 
@@ -596,10 +595,10 @@ class HamiltonIntrospection:
     """Get object metadata.
 
     Args:
-        address: Object address to query
+      address: Object address to query
 
     Returns:
-        Object metadata
+      Object metadata
     """
     command = GetObjectCommand(address)
     response = await self.backend.send_command(command)
@@ -616,11 +615,11 @@ class HamiltonIntrospection:
     """Get method signature.
 
     Args:
-        address: Object address
-        method_index: Method index to query
+      address: Object address
+      method_index: Method index to query
 
     Returns:
-        Method signature
+      Method signature
     """
     command = GetMethodCommand(address, method_index)
     response = await self.backend.send_command(command)
@@ -640,11 +639,11 @@ class HamiltonIntrospection:
     """Get subobject address.
 
     Args:
-        address: Parent object address
-        subobject_index: Subobject index
+      address: Parent object address
+      subobject_index: Subobject index
 
     Returns:
-        Subobject address
+      Subobject address
     """
     command = GetSubobjectAddressCommand(address, subobject_index)
     response = await self.backend.send_command(command)
@@ -657,10 +656,10 @@ class HamiltonIntrospection:
     """Get available interfaces.
 
     Args:
-        address: Object address
+      address: Object address
 
     Returns:
-        List of interface information
+      List of interface information
     """
     command = GetInterfacesCommand(address)
     response = await self.backend.send_command(command)
@@ -676,11 +675,11 @@ class HamiltonIntrospection:
     """Get enum definitions.
 
     Args:
-        address: Object address
-        interface_id: Interface ID
+      address: Object address
+      interface_id: Interface ID
 
     Returns:
-        List of enum definitions
+      List of enum definitions
     """
     command = GetEnumsCommand(address, interface_id)
     response = await self.backend.send_command(command)
@@ -694,11 +693,11 @@ class HamiltonIntrospection:
     """Get struct definitions.
 
     Args:
-        address: Object address
-        interface_id: Interface ID
+      address: Object address
+      interface_id: Interface ID
 
     Returns:
-        List of struct definitions
+      List of struct definitions
     """
     command = GetStructsCommand(address, interface_id)
     response = await self.backend.send_command(command)
@@ -714,10 +713,10 @@ class HamiltonIntrospection:
     """Get all methods for an object.
 
     Args:
-        address: Object address
+      address: Object address
 
     Returns:
-        List of all method signatures
+      List of all method signatures
     """
     # First get object info to know how many methods there are
     object_info = await self.get_object(address)
@@ -736,10 +735,10 @@ class HamiltonIntrospection:
     """Recursively discover object hierarchy.
 
     Args:
-        root_address: Root object address
+      root_address: Root object address
 
     Returns:
-        Nested dictionary of discovered objects
+      Nested dictionary of discovered objects
     """
     hierarchy = {}
 
@@ -777,10 +776,10 @@ class HamiltonIntrospection:
     """Discover all objects starting from root addresses.
 
     Args:
-        root_addresses: List of root addresses to start discovery from
+      root_addresses: List of root addresses to start discovery from
 
     Returns:
-        Dictionary mapping address strings to discovered hierarchies
+      Dictionary mapping address strings to discovered hierarchies
     """
     all_objects = {}
 
@@ -798,7 +797,7 @@ class HamiltonIntrospection:
     """Print method signatures in a readable format.
 
     Args:
-        methods: List of MethodInfo objects to print
+      methods: List of MethodInfo objects to print
     """
     print("Method Signatures:")
     print("=" * 50)
@@ -811,7 +810,7 @@ class HamiltonIntrospection:
     """Print struct definitions in a readable format.
 
     Args:
-        structs: List of StructInfo objects to print
+      structs: List of StructInfo objects to print
     """
     print("Struct Definitions:")
     print("=" * 50)
@@ -823,11 +822,11 @@ class HamiltonIntrospection:
     """Filter methods by name pattern.
 
     Args:
-        methods: List of MethodInfo objects to filter
-        name_pattern: Name pattern to search for (case-insensitive)
+      methods: List of MethodInfo objects to filter
+      name_pattern: Name pattern to search for (case-insensitive)
 
     Returns:
-        List of methods matching the name pattern
+      List of methods matching the name pattern
     """
     return [method for method in methods if name_pattern.lower() in method.name.lower()]
 
@@ -837,10 +836,10 @@ class HamiltonIntrospection:
     """Filter methods by interface ID.
 
     Args:
-        methods: List of MethodInfo objects to filter
-        interface_id: Interface ID to filter by
+      methods: List of MethodInfo objects to filter
+      interface_id: Interface ID to filter by
 
     Returns:
-        List of methods from the specified interface
+      List of methods from the specified interface
     """
     return [method for method in methods if method.interface_id == interface_id]

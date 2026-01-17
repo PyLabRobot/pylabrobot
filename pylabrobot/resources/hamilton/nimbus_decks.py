@@ -20,11 +20,6 @@ from pylabrobot.serializer import serialize
 logger = logging.getLogger("pylabrobot")
 
 
-# ============================================================================
-# DECK CLASS
-# ============================================================================
-
-
 class NimbusDeck(HamiltonDeck):
   """Hamilton Nimbus deck.
 
@@ -217,10 +212,10 @@ class NimbusDeck(HamiltonDeck):
     Useful when sending commands to hardware that expects Hamilton coordinates.
 
     Args:
-        coord: PyLabRobot coordinate (relative to deck origin)
+      coord: PyLabRobot coordinate (relative to deck origin)
 
     Returns:
-        Hamilton coordinate
+      Hamilton coordinate
     """
     # Convert to absolute coordinate (relative to deck's PyLabRobot origin)
     # Deck always sets location during initialization, so it's never None
@@ -249,10 +244,10 @@ class NimbusDeck(HamiltonDeck):
     Useful when reading config files or parsing hardware responses.
 
     Args:
-        coord: Hamilton coordinate
+      coord: Hamilton coordinate
 
     Returns:
-        PyLabRobot coordinate (relative to deck origin)
+      PyLabRobot coordinate (relative to deck origin)
     """
     # Convert to PyLabRobot coordinate system (absolute)
     # X and Z remain the same relative to their origins
