@@ -20,7 +20,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
   HamiltonProtocol,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import TCPBackend
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPBackend
 from pylabrobot.liquid_handling.backends.hamilton.tcp_introspection import (
   HamiltonIntrospection,
 )
@@ -1021,7 +1021,7 @@ class Dispense(HamiltonCommand):
 # ============================================================================
 
 
-class NimbusBackend(TCPBackend, LiquidHandlerBackend):
+class NimbusBackend(HamiltonTCPBackend):
   """Backend for Hamilton Nimbus liquid handling instruments.
 
   This backend uses TCP communication with the Hamilton protocol to control
@@ -1055,7 +1055,7 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         auto_reconnect: Enable automatic reconnection
         max_reconnect_attempts: Maximum reconnection attempts
     """
-    TCPBackend.__init__(
+    HamiltonTCPBackend.__init__(
       self,
       host=host,
       port=port,
@@ -1092,7 +1092,7 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
         unlock_door: If True, unlock door after initialization (default: False)
     """
     # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
-    await TCPBackend.setup(self)
+    await HamiltonTCPBackend.setup(self)
 
     # Ensure deck is set
     assert self._deck is not None, "Deck must be set before setup"
@@ -1348,7 +1348,7 @@ class NimbusBackend(TCPBackend, LiquidHandlerBackend):
 
   async def stop(self):
     """Stop the backend and close connection."""
-    await TCPBackend.stop(self)
+    await HamiltonTCPBackend.stop(self)
     self.setup_finished = False
 
   def _build_waste_position_params(

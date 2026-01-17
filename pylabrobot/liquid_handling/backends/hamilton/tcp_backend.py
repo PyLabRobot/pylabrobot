@@ -13,6 +13,7 @@ from typing import Dict, Optional
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
@@ -64,8 +65,11 @@ class ErrorParser:
     )
 
 
-class TCPBackend(Socket):
+class HamiltonTCPBackend(LiquidHandlerBackend):
   """Base backend for all Hamilton TCP instruments.
+
+  Hamilton TCP instruments include the Nimbus and the Prep, using Hoi and Harp.
+  STAR and Vantage use the other Hamilton protocol that works over USB.
 
   This class provides:
   - Connection management via Socket (wrapped with state tracking)
@@ -84,7 +88,6 @@ class TCPBackend(Socket):
     port: int,
     read_timeout: float = 30.0,
     write_timeout: float = 30.0,
-    buffer_size: int = 1024,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
   ):
@@ -95,11 +98,11 @@ class TCPBackend(Socket):
         port: Hamilton instrument port (usually 50007)
         read_timeout: Read timeout in seconds
         write_timeout: Write timeout in seconds
-        buffer_size: Buffer size (not used by Socket, kept for compatibility)
         auto_reconnect: Enable automatic reconnection
         max_reconnect_attempts: Maximum reconnection attempts
     """
-    super().__init__(
+
+    self.io = Socket(
       host=host,
       port=port,
       read_timeout=read_timeout,
@@ -112,7 +115,6 @@ class TCPBackend(Socket):
     self._reconnect_attempts = 0
     self.auto_reconnect = auto_reconnect
     self.max_reconnect_attempts = max_reconnect_attempts
-    self.buffer_size = buffer_size  # Kept for compatibility, not used by Socket
 
     # Hamilton-specific state
     self._client_id: Optional[int] = None
@@ -127,22 +129,22 @@ class TCPBackend(Socket):
     """Ensure connection is healthy before operations."""
     if self._connection_state != "connected":
       if self.auto_reconnect:
-        logger.info(f"{self._unique_id} Connection not established, attempting to reconnect...")
+        logger.info(f"{self.io._unique_id} Connection not established, attempting to reconnect...")
         await self._reconnect()
       else:
         raise ConnectionError(
-          f"{self._unique_id} Connection not established and auto-reconnect disabled"
+          f"{self.io._unique_id} Connection not established and auto-reconnect disabled"
         )
 
   async def _reconnect(self):
     """Attempt to reconnect with exponential backoff."""
     if not self.auto_reconnect:
-      raise ConnectionError(f"{self._unique_id} Auto-reconnect disabled")
+      raise ConnectionError(f"{self.io._unique_id} Auto-reconnect disabled")
 
     for attempt in range(self.max_reconnect_attempts):
       try:
         logger.info(
-          f"{self._unique_id} Reconnection attempt {attempt + 1}/{self.max_reconnect_attempts}"
+          f"{self.io._unique_id} Reconnection attempt {attempt + 1}/{self.max_reconnect_attempts}"
         )
 
         # Clean up existing connection
@@ -159,17 +161,17 @@ class TCPBackend(Socket):
         # Attempt to reconnect
         await self.setup()
         self._reconnect_attempts = 0
-        logger.info(f"{self._unique_id} Reconnection successful")
+        logger.info(f"{self.io._unique_id} Reconnection successful")
         return
 
       except Exception as e:
         self._last_error = e
-        logger.warning(f"{self._unique_id} Reconnection attempt {attempt + 1} failed: {e}")
+        logger.warning(f"{self.io._unique_id} Reconnection attempt {attempt + 1} failed: {e}")
 
     # All reconnection attempts failed
     self._connection_state = "disconnected"
     raise ConnectionError(
-      f"{self._unique_id} Failed to reconnect after {self.max_reconnect_attempts} attempts"
+      f"{self.io._unique_id} Failed to reconnect after {self.max_reconnect_attempts} attempts"
     )
 
   async def write(self, data: bytes, timeout: Optional[float] = None):
@@ -182,7 +184,7 @@ class TCPBackend(Socket):
     await self._ensure_connected()
 
     try:
-      await super().write(data, timeout=timeout)
+      await self.io.write(data, timeout=timeout)
       self._connection_state = "connected"
     except (ConnectionError, OSError, TimeoutError) as e:
       self._connection_state = "disconnected"
@@ -202,7 +204,7 @@ class TCPBackend(Socket):
     await self._ensure_connected()
 
     try:
-      data = await super().read(num_bytes, timeout=timeout)
+      data = await self.io.read(num_bytes, timeout=timeout)
       self._connection_state = "connected"
       return data
     except (ConnectionError, OSError, TimeoutError) as e:
@@ -226,7 +228,7 @@ class TCPBackend(Socket):
     await self._ensure_connected()
 
     try:
-      data = await super().read_exact(num_bytes, timeout=timeout)
+      data = await self.io.read_exact(num_bytes, timeout=timeout)
       self._connection_state = "connected"
       return data
     except (ConnectionError, OSError, TimeoutError) as e:
@@ -267,6 +269,7 @@ class TCPBackend(Socket):
         TimeoutError: If no message received within timeout
         ValueError: If protocol type is unknown
     """
+
     # Read packet size (2 bytes, little-endian)
     size_data = await self.read_exact(2)
     packet_size = Reader(size_data).u16()
@@ -313,8 +316,10 @@ class TCPBackend(Socket):
     3. Protocol 3 registration
     4. Discover objects via Protocol 3 introspection
     """
+
     # Step 1: Establish TCP connection
-    await super().setup()
+    await self.io.setup()
+
     # Set connection state after successful connection
     self._connection_state = "connected"
     self._last_error = None
@@ -588,7 +593,7 @@ class TCPBackend(Socket):
   async def stop(self):
     """Stop the backend and close connection."""
     try:
-      await super().stop()
+      await self.io.stop()
     except Exception as e:
       logger.warning(f"Error during stop: {e}")
     finally:
