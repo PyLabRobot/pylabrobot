@@ -94,12 +94,12 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     """Initialize Hamilton TCP backend.
 
     Args:
-        host: Hamilton instrument IP address
-        port: Hamilton instrument port (usually 50007)
-        read_timeout: Read timeout in seconds
-        write_timeout: Write timeout in seconds
-        auto_reconnect: Enable automatic reconnection
-        max_reconnect_attempts: Maximum reconnection attempts
+      host: Hamilton instrument IP address
+      port: Hamilton instrument port (usually 50007)
+      read_timeout: Read timeout in seconds
+      write_timeout: Write timeout in seconds
+      auto_reconnect: Enable automatic reconnection
+      max_reconnect_attempts: Maximum reconnection attempts
     """
 
     self.io = Socket(
@@ -178,8 +178,8 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     """Write data to the socket with connection state tracking.
 
     Args:
-        data: The data to write.
-        timeout: The timeout for writing to the server in seconds. If `None`, use the default timeout.
+      data: The data to write.
+      timeout: The timeout for writing to the server in seconds. If `None`, use the default timeout.
     """
     await self._ensure_connected()
 
@@ -195,11 +195,11 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     """Read data from the socket with connection state tracking.
 
     Args:
-        num_bytes: Maximum number of bytes to read. Defaults to 128.
-        timeout: The timeout for reading from the server in seconds. If `None`, use the default timeout.
+      num_bytes: Maximum number of bytes to read. Defaults to 128.
+      timeout: The timeout for reading from the server in seconds. If `None`, use the default timeout.
 
     Returns:
-        The data read from the socket.
+      The data read from the socket.
     """
     await self._ensure_connected()
 
@@ -216,14 +216,14 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     """Read exactly num_bytes with connection state tracking.
 
     Args:
-        num_bytes: The exact number of bytes to read.
-        timeout: The timeout for reading from the server in seconds. If `None`, use the default timeout.
+      num_bytes: The exact number of bytes to read.
+      timeout: The timeout for reading from the server in seconds. If `None`, use the default timeout.
 
     Returns:
-        Exactly num_bytes of data.
+      Exactly num_bytes of data.
 
     Raises:
-        ConnectionError: If the connection is closed before num_bytes are read.
+      ConnectionError: If the connection is closed before num_bytes are read.
     """
     await self._ensure_connected()
 
@@ -262,12 +262,12 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     also checks the HARP protocol field to dispatch correctly.
 
     Returns:
-        Union[RegistrationResponse, CommandResponse]: Parsed response
+      Union[RegistrationResponse, CommandResponse]: Parsed response
 
     Raises:
-        ConnectionError: If connection is lost
-        TimeoutError: If no message received within timeout
-        ValueError: If protocol type is unknown
+      ConnectionError: If connection is lost
+      TimeoutError: If no message received within timeout
+      ValueError: If protocol type is unknown
     """
 
     # Read packet size (2 bytes, little-endian)
@@ -479,10 +479,10 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     as a packed list of u16 values.
 
     Args:
-        response: Parsed RegistrationResponse
+      response: Parsed RegistrationResponse
 
     Returns:
-        List of discovered object addresses
+      List of discovered object addresses
     """
     objects: list[Address] = []
     options_data = response.registration.options
@@ -520,10 +520,10 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     """Allocate next sequence number for destination.
 
     Args:
-        dest_address: Destination object address
+      dest_address: Destination object address
 
     Returns:
-        Next sequence number for this destination
+      Next sequence number for this destination
     """
     current = self._sequence_numbers.get(dest_address, 0)
     next_seq = (current + 1) % 256  # Wrap at 8 bits (1 byte)
@@ -537,15 +537,15 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     Uses backend's client_address assigned during Protocol 7 initialization.
 
     Args:
-        command: Hamilton command to execute
-        timeout: Maximum time to wait for response
+      command: Hamilton command to execute
+      timeout: Maximum time to wait for response
 
     Returns:
-        Parsed response dictionary
+      Parsed response dictionary
 
     Raises:
-        TimeoutError: If no response received within timeout
-        HamiltonError: If command returned an error
+      TimeoutError: If no response received within timeout
+      HamiltonError: If command returned an error
     """
     # Set source address with smart fallback
     if command.source_address is None:

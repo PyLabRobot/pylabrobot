@@ -1072,7 +1072,6 @@ class NimbusBackend(HamiltonTCPBackend):
     self._door_lock_address: Optional[Address] = None
     self._nimbus_core_address: Optional[Address] = None
     self._is_initialized: Optional[bool] = None
-    self._tips_present: Optional[List[int]] = None
     self._channel_configurations: Optional[Dict[int, Dict[int, bool]]] = None
 
   async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
@@ -1119,7 +1118,6 @@ class NimbusBackend(HamiltonTCPBackend):
     try:
       tip_status = await self.send_command(IsTipPresent(self._pipette_address))
       tip_present = tip_status.get("tip_present", [])
-      self._tips_present = tip_present
       logger.info(f"Tip presence: {tip_present}")
     except Exception as e:
       logger.warning(f"Failed to query tip presence: {e}")

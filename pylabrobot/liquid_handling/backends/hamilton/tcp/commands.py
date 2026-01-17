@@ -62,7 +62,7 @@ class HamiltonCommand:
     """Initialize Hamilton command.
 
     Args:
-        dest: Destination address for this command
+      dest: Destination address for this command
     """
     if self.protocol is None:
       raise ValueError(f"{self.__class__.__name__} must define protocol")
@@ -85,13 +85,12 @@ class HamiltonCommand:
     assigned in __init__ before calling this method.
 
     Args:
-        exclude: Set of parameter names to exclude from logging.
-                Defaults to {'self', 'dest'}.
+      exclude: Set of parameter names to exclude from logging. Defaults to {'self', 'dest'}.
 
     Note:
-        This method must be called from within __init__ after super().__init__()
-        and after explicit attribute assignments to access the calling frame's
-        local variables.
+      This method must be called from within __init__ after super().__init__()
+      and after explicit attribute assignments to access the calling frame's
+      local variables.
     """
     exclude = exclude or {"self", "dest"}
     # Use type(self).__init__ to avoid mypy error about accessing __init__ on instance
@@ -126,7 +125,7 @@ class HamiltonCommand:
     Return a HoiParams object (not bytes!).
 
     Returns:
-        HoiParams object with command parameters
+      HoiParams object with command parameters
     """
     return HoiParams()
 
@@ -141,7 +140,7 @@ class HamiltonCommand:
     array truncation).
 
     Returns:
-        Dictionary of parameter names to values (empty dict if _assign_params() not called)
+      Dictionary of parameter names to values (empty dict if _assign_params() not called)
     """
     return self._log_params
 
@@ -151,12 +150,12 @@ class HamiltonCommand:
     """Build complete Hamilton message using CommandMessage.
 
     Args:
-        src: Source address (uses self.source_address if None)
-        seq: Sequence number (uses self.sequence_number if None)
-        response_required: Whether a response is expected
+      src: Source address (uses self.source_address if None)
+      seq: Sequence number (uses self.sequence_number if None)
+      response_required: Whether a response is expected
 
     Returns:
-        Complete packet bytes ready to send over TCP
+      Complete packet bytes ready to send over TCP
     """
     # Use instance attributes if not provided
     source = src if src is not None else self.source_address
@@ -196,10 +195,10 @@ class HamiltonCommand:
     directly calls parse_response_parameters for efficiency.
 
     Args:
-        response: Typed SuccessResponse from ResponseParser
+      response: Typed SuccessResponse from ResponseParser
 
     Returns:
-        Dictionary with parsed response data
+      Dictionary with parsed response data
     """
     return self.parse_response_parameters(response.raw_params)
 
@@ -207,10 +206,10 @@ class HamiltonCommand:
     """Parse response from CommandResponse (legacy interface).
 
     Args:
-        message: Parsed CommandResponse from messages.py
+      message: Parsed CommandResponse from messages.py
 
     Returns:
-        Dictionary with parsed response data
+      Dictionary with parsed response data
     """
     # Extract HOI parameters and parse using command-specific logic
     return self.parse_response_parameters(message.hoi_params)
@@ -222,9 +221,9 @@ class HamiltonCommand:
     Override this method in subclasses to parse command-specific responses.
 
     Args:
-        data: Raw bytes from HOI fragments field
+      data: Raw bytes from HOI fragments field
 
     Returns:
-        Dictionary with parsed response data
+      Dictionary with parsed response data
     """
     raise NotImplementedError(f"{cls.__name__} must implement parse_response_parameters()")

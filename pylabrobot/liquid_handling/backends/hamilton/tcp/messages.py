@@ -22,14 +22,14 @@ implemented here for efficiency since it's exclusively used by HOI messages.
 This preserves the conceptual separation while optimizing implementation.
 
 Example:
-    # Build and send
-    msg = CommandMessage(dest, interface_id=0, method_id=42)
-    msg.add_i32(100)
-    packet_bytes = msg.build(src, seq=1)
+  # Build and send
+  msg = CommandMessage(dest, interface_id=0, method_id=42)
+  msg.add_i32(100)
+  packet_bytes = msg.build(src, seq=1)
 
-    # Parse response
-    response = CommandResponse.from_bytes(received_bytes)
-    params = response.hoi_params
+  # Parse response
+  response = CommandResponse.from_bytes(received_bytes)
+  params = response.hoi_params
 """
 
 from __future__ import annotations
@@ -71,14 +71,14 @@ class HoiParams:
   the possibility of forgetting to add DataFragment headers.
 
   Example:
-      params = (HoiParams()
-                .i32(100)
-                .string("test")
-                .u32_array([1, 2, 3])
-                .build())
+    Creates concatenated DataFragments:
+    [0x03|0x00|0x04|0x00|100][0x0F|0x00|0x05|0x00|"test\0"][0x1C|0x00|...array...]
 
-      # Creates concatenated DataFragments:
-      # [0x03|0x00|0x04|0x00|100][0x0F|0x00|0x05|0x00|"test\0"][0x1C|0x00|...array...]
+    params = (HoiParams()
+              .i32(100)
+              .string("test")
+              .u32_array([1, 2, 3])
+              .build())
   """
 
   def __init__(self):
@@ -90,9 +90,9 @@ class HoiParams:
     Creates: [type_id:1][flags:1][length:2][data:n]
 
     Args:
-        type_id: Data type ID
-        data: Fragment data bytes
-        flags: Fragment flags (default: 0, but BOOL_ARRAY uses 0x01)
+      type_id: Data type ID
+      data: Fragment data bytes
+      flags: Fragment flags (default: 0, but BOOL_ARRAY uses 0x01)
     """
     fragment = Writer().u8(type_id).u8(flags).u16(len(data)).raw_bytes(data).finish()
     self._fragments.append(fragment)
@@ -307,10 +307,10 @@ class HoiParamsParser:
     """Parse the next DataFragment and return (type_id, value).
 
     Returns:
-        Tuple of (type_id, parsed_value)
+      Tuple of (type_id, parsed_value)
 
     Raises:
-        ValueError: If data is malformed or insufficient
+      ValueError: If data is malformed or insufficient
     """
     if self._offset + 4 > len(self._data):
       raise ValueError(f"Insufficient data for DataFragment header at offset {self._offset}")
@@ -448,7 +448,7 @@ class HoiParamsParser:
     """Parse all remaining DataFragments.
 
     Returns:
-        List of (type_id, value) tuples
+      List of (type_id, value) tuples
     """
     results = []
     while self.has_remaining():
@@ -485,12 +485,12 @@ class CommandMessage:
     """Initialize command message.
 
     Args:
-        dest: Destination object address
-        interface_id: Interface ID (typically 0 for main interface, 1 for extended)
-        method_id: Method/action ID to invoke
-        action_code: HOI action code (default 3=COMMAND_REQUEST)
-        harp_protocol: HARP protocol identifier (default 2=HOI2)
-        ip_protocol: IP protocol identifier (default 6=OBJECT_DISCOVERY)
+      dest: Destination object address
+      interface_id: Interface ID (typically 0 for main interface, 1 for extended)
+      method_id: Method/action ID to invoke
+      action_code: HOI action code (default 3=COMMAND_REQUEST)
+      harp_protocol: HARP protocol identifier (default 2=HOI2)
+      ip_protocol: IP protocol identifier (default 6=OBJECT_DISCOVERY)
     """
     self.dest = dest
     self.interface_id = interface_id
@@ -584,10 +584,10 @@ class CommandMessage:
     round-trip serialization.
 
     Args:
-        params: HoiParams object with pre-built parameters
+      params: HoiParams object with pre-built parameters
 
     Returns:
-        Self for method chaining
+      Self for method chaining
     """
     self.params = params
     return self
@@ -602,13 +602,13 @@ class CommandMessage:
     """Build complete IP[HARP[HOI]] packet.
 
     Args:
-        src: Source address (client address)
-        seq: Sequence number for this request
-        harp_response_required: Set bit 4 in HARP action byte (default True)
-        hoi_response_required: Set bit 4 in HOI action byte (default False)
+      src: Source address (client address)
+      seq: Sequence number for this request
+      harp_response_required: Set bit 4 in HARP action byte (default True)
+      hoi_response_required: Set bit 4 in HOI action byte (default False)
 
     Returns:
-        Complete packet bytes ready to send over TCP
+      Complete packet bytes ready to send over TCP
     """
     # Build HOI - it handles its own action byte construction
     hoi = HoiPacket(
@@ -643,9 +643,9 @@ class RegistrationMessage:
   objects, and capabilities on the Hamilton instrument.
 
   Example:
-      msg = RegistrationMessage(dest, action_code=12)
-      msg.add_registration_option(RegistrationOptionType.HARP_PROTOCOL_REQUEST, protocol=2, request_id=1)
-      packet_bytes = msg.build(src, req_addr, res_addr, seq=1)
+    msg = RegistrationMessage(dest, action_code=12)
+    msg.add_registration_option(RegistrationOptionType.HARP_PROTOCOL_REQUEST, protocol=2, request_id=1)
+    packet_bytes = msg.build(src, req_addr, res_addr, seq=1)
   """
 
   def __init__(
@@ -659,11 +659,11 @@ class RegistrationMessage:
     """Initialize registration message.
 
     Args:
-        dest: Destination address (typically 0:0:65534 for registration service)
-        action_code: Registration action code (e.g., 12=HARP_PROTOCOL_REQUEST)
-        response_code: Response code (default 0=no error)
-        harp_protocol: HARP protocol identifier (default 3=Registration)
-        ip_protocol: IP protocol identifier (default 6=OBJECT_DISCOVERY)
+      dest: Destination address (typically 0:0:65534 for registration service)
+      action_code: Registration action code (e.g., 12=HARP_PROTOCOL_REQUEST)
+      response_code: Response code (default 0=no error)
+      harp_protocol: HARP protocol identifier (default 3=Registration)
+      ip_protocol: IP protocol identifier (default 6=OBJECT_DISCOVERY)
     """
     self.dest = dest
     self.action_code = action_code
@@ -678,12 +678,12 @@ class RegistrationMessage:
     """Add a registration packet option.
 
     Args:
-        option_type: Type of registration option (from RegistrationOptionType enum)
-        protocol: For HARP_PROTOCOL_REQUEST: protocol type (2=HOI, default)
-        request_id: For HARP_PROTOCOL_REQUEST: what to discover (1=root, 2=global)
+      option_type: Type of registration option (from RegistrationOptionType enum)
+      protocol: For HARP_PROTOCOL_REQUEST: protocol type (2=HOI, default)
+      request_id: For HARP_PROTOCOL_REQUEST: what to discover (1=root, 2=global)
 
     Returns:
-        Self for method chaining
+      Self for method chaining
     """
     # Registration option format: [option_id:1][length:1][data...]
     # For HARP_PROTOCOL_REQUEST (option 5): data is [protocol:1][request_id:1]
@@ -704,15 +704,15 @@ class RegistrationMessage:
     """Build complete IP[HARP[Registration]] packet.
 
     Args:
-        src: Source address (client address)
-        req_addr: Request address (for registration context)
-        res_addr: Response address (for registration context)
-        seq: Sequence number for this request
-        harp_action_code: HARP action code (default 3=COMMAND_REQUEST)
-        harp_response_required: Whether response required (default True)
+      src: Source address (client address)
+      req_addr: Request address (for registration context)
+      res_addr: Response address (for registration context)
+      seq: Sequence number for this request
+      harp_action_code: HARP action code (default 3=COMMAND_REQUEST)
+      harp_response_required: Whether response required (default True)
 
     Returns:
-        Complete packet bytes ready to send over TCP
+      Complete packet bytes ready to send over TCP
     """
     # Build Registration packet
     reg = RegistrationPacket(
@@ -748,8 +748,8 @@ class InitMessage:
   has a different structure than HARP-based messages.
 
   Example:
-      msg = InitMessage(timeout=30)
-      packet_bytes = msg.build()
+    msg = InitMessage(timeout=30)
+    packet_bytes = msg.build()
   """
 
   def __init__(
@@ -762,10 +762,10 @@ class InitMessage:
     """Initialize connection message.
 
     Args:
-        timeout: Connection timeout in seconds (default 30)
-        connection_type: Connection type (default 1=standard)
-        protocol_version: Protocol version byte (default 0x30=3.0)
-        ip_protocol: IP protocol identifier (default 7=INITIALIZATION)
+      timeout: Connection timeout in seconds (default 30)
+      connection_type: Connection type (default 1=standard)
+      protocol_version: Protocol version byte (default 0x30=3.0)
+      ip_protocol: IP protocol identifier (default 7=INITIALIZATION)
     """
     self.timeout = timeout
     self.connection_type = connection_type
@@ -776,7 +776,7 @@ class InitMessage:
     """Build complete IP[Connection] packet.
 
     Returns:
-        Complete packet bytes ready to send over TCP
+      Complete packet bytes ready to send over TCP
     """
     # Build raw connection parameters (NOT DataFragments)
     # Frame: [version:1][message_id:1][count:1][unknown:1]
@@ -842,10 +842,10 @@ class InitResponse:
     """Parse initialization response.
 
     Args:
-        data: Raw bytes from TCP socket
+      data: Raw bytes from TCP socket
 
     Returns:
-        Parsed InitResponse with connection parameters
+      Parsed InitResponse with connection parameters
     """
     # Skip IP header (size + protocol + version + opts_len = 6 bytes)
     parser = Reader(data[6:])
@@ -896,10 +896,10 @@ class RegistrationResponse:
     """Parse registration response.
 
     Args:
-        data: Raw bytes from TCP socket
+      data: Raw bytes from TCP socket
 
     Returns:
-        Parsed RegistrationResponse with all layers
+      Parsed RegistrationResponse with all layers
     """
     ip = IpPacket.unpack(data)
     harp = HarpPacket.unpack(ip.payload)
@@ -930,13 +930,13 @@ class CommandResponse:
     """Parse command response.
 
     Args:
-        data: Raw bytes from TCP socket
+      data: Raw bytes from TCP socket
 
     Returns:
-        Parsed CommandResponse with all layers
+      Parsed CommandResponse with all layers
 
     Raises:
-        ValueError: If response is not HOI protocol
+      ValueError: If response is not HOI protocol
     """
     ip = IpPacket.unpack(data)
     harp = HarpPacket.unpack(ip.payload)
@@ -1012,13 +1012,13 @@ class ResponseParser:
     """Parse CommandResponse and dispatch based on HOI action code.
 
     Args:
-        cmd_response: Parsed CommandResponse from network
+      cmd_response: Parsed CommandResponse from network
 
     Returns:
-        Typed HoiResponse (SuccessResponse or ErrorResponse)
+      Typed HoiResponse (SuccessResponse or ErrorResponse)
 
     Raises:
-        ValueError: If action code is unexpected
+      ValueError: If action code is unexpected
     """
     from .protocol import Hoi2Action
 
@@ -1050,11 +1050,11 @@ class ResponseParser:
     DataFragment encoding. Return the raw payload as hex for debugging.
 
     Args:
-        cmd_response: Raw command response
-        action: HOI action code
+      cmd_response: Raw command response
+      action: HOI action code
 
     Returns:
-        ErrorResponse with error details
+      ErrorResponse with error details
     """
     # Error responses don't follow standard DataFragment format
     # Just return the raw data as hex for inspection

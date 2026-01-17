@@ -75,12 +75,12 @@ class IpPacket:
   """Hamilton IpPacket2 - Transport layer.
 
   Structure:
-      Bytes 00-01: size (2)
-      Bytes 02:    protocol (1)
-      Bytes 03:    version byte (major.minor)
-      Bytes 04-05: options_length (2)
-      Bytes 06+:   options (x bytes)
-      Bytes:       payload
+  Bytes 00-01: size (2)
+  Bytes 02:    protocol (1)
+  Bytes 03:    version byte (major.minor)
+  Bytes 04-05: options_length (2)
+  Bytes 06+:   options (x bytes)
+  Bytes:       payload
   """
 
   protocol: int  # Protocol identifier (6=OBJECT_DISCOVERY, 7=INITIALIZATION)
@@ -128,18 +128,18 @@ class HarpPacket:
   """Hamilton HarpPacket2 - Protocol layer.
 
   Structure:
-      Bytes 00-05: src address (module, node, object)
-      Bytes 06-11: dst address (module, node, object)
-      Byte  12:    sequence number
-      Byte  13:    reserved
-      Byte  14:    protocol (2=HOI, 3=Registration)
-      Byte  15:    action
-      Bytes 16-17: message length
-      Bytes 18-19: options length
-      Bytes 20+:   options
-      Bytes:       version byte (major.minor)
-      Byte:        reserved2
-      Bytes:       payload
+  Bytes 00-05: src address (module, node, object)
+  Bytes 06-11: dst address (module, node, object)
+  Byte  12:    sequence number
+  Byte  13:    reserved
+  Byte  14:    protocol (2=HOI, 3=Registration)
+  Byte  15:    action
+  Bytes 16-17: message length
+  Bytes 18-19: options length
+  Bytes 20+:   options
+  Bytes:       version byte (major.minor)
+  Byte:        reserved2
+  Bytes:       payload
   """
 
   src: Address
@@ -156,7 +156,7 @@ class HarpPacket:
     """Compute action byte from action_code and response_required flag.
 
     Returns:
-        Action byte with bit 4 set if response required
+      Action byte with bit 4 set if response required
     """
     return self.action_code | (0x10 if self.response_required else 0x00)
 
@@ -247,7 +247,7 @@ class HoiPacket:
     """Compute action byte from action_code and response_required flag.
 
     Returns:
-        Action byte with bit 4 set if response required
+      Action byte with bit 4 set if response required
     """
     return self.action_code | (0x10 if self.response_required else 0x00)
 
@@ -383,11 +383,11 @@ class ConnectionPacket:
   HARP-based packets - uses raw parameter encoding, NOT DataFragments.
 
   Structure:
-      Byte  00:    version
-      Byte  01:    message_id
-      Byte  02:    count (number of parameters)
-      Byte  03:    unknown
-      Bytes 04+:   raw parameters [id|type|reserved|value] repeated
+  Byte  00:    version
+  Byte  01:    message_id
+  Byte  02:    count (number of parameters)
+  Byte  03:    unknown
+  Bytes 04+:   raw parameters [id|type|reserved|value] repeated
   """
 
   params: bytes  # Raw format (NOT DataFragments)
