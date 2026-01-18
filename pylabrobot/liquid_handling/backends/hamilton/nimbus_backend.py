@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
@@ -198,8 +198,8 @@ class InitializeSmartRoll(HamiltonCommand):
     dest: Address,
     x_positions: List[int],
     y_positions: List[int],
-    z_start_positions: List[int],
-    z_stop_positions: List[int],
+    begin_tip_deposit_process: List[int],
+    end_tip_deposit_process: List[int],
     z_final_positions: List[int],
     roll_distances: List[int],
   ):
@@ -209,16 +209,16 @@ class InitializeSmartRoll(HamiltonCommand):
       dest: Destination address (NimbusCore)
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
-      z_start_positions: Z start positions in 0.01mm units
-      z_stop_positions: Z stop positions in 0.01mm units
+      begin_tip_deposit_process: Z start positions in 0.01mm units
+      end_tip_deposit_process: Z stop positions in 0.01mm units
       z_final_positions: Z final positions in 0.01mm units
       roll_distances: Roll distances in 0.01mm units
     """
     super().__init__(dest)
     self.x_positions = x_positions
     self.y_positions = y_positions
-    self.z_start_positions = z_start_positions
-    self.z_stop_positions = z_stop_positions
+    self.begin_tip_deposit_process = begin_tip_deposit_process
+    self.end_tip_deposit_process = end_tip_deposit_process
     self.z_final_positions = z_final_positions
     self.roll_distances = roll_distances
     self._assign_params()
@@ -229,8 +229,8 @@ class InitializeSmartRoll(HamiltonCommand):
       HoiParams()
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
-      .i32_array(self.z_start_positions)
-      .i32_array(self.z_stop_positions)
+      .i32_array(self.begin_tip_deposit_process)
+      .i32_array(self.end_tip_deposit_process)
       .i32_array(self.z_final_positions)
       .i32_array(self.roll_distances)
     )
@@ -377,8 +377,8 @@ class PickupTips(HamiltonCommand):
     x_positions: List[int],
     y_positions: List[int],
     traverse_height: int,
-    z_start_positions: List[int],
-    z_stop_positions: List[int],
+    begin_tip_pick_up_process: List[int],
+    end_tip_pick_up_process: List[int],
     tip_types: List[int],
   ):
     """Initialize PickupTips command.
@@ -389,8 +389,8 @@ class PickupTips(HamiltonCommand):
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
       traverse_height: Traverse height in 0.01mm units
-      z_start_positions: Z start positions in 0.01mm units
-      z_stop_positions: Z stop positions in 0.01mm units
+      begin_tip_pick_up_process: Z start positions in 0.01mm units
+      end_tip_pick_up_process: Z stop positions in 0.01mm units
       tip_types: Tip type integers for each channel
     """
     super().__init__(dest)
@@ -398,8 +398,8 @@ class PickupTips(HamiltonCommand):
     self.x_positions = x_positions
     self.y_positions = y_positions
     self.traverse_height = traverse_height
-    self.z_start_positions = z_start_positions
-    self.z_stop_positions = z_stop_positions
+    self.begin_tip_pick_up_process = begin_tip_pick_up_process
+    self.end_tip_pick_up_process = end_tip_pick_up_process
     self.tip_types = tip_types
     self._assign_params()
 
@@ -411,8 +411,8 @@ class PickupTips(HamiltonCommand):
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
       .i32(self.traverse_height)
-      .i32_array(self.z_start_positions)
-      .i32_array(self.z_stop_positions)
+      .i32_array(self.begin_tip_pick_up_process)
+      .i32_array(self.end_tip_pick_up_process)
       .u16_array(self.tip_types)
     )
 
@@ -436,8 +436,8 @@ class DropTips(HamiltonCommand):
     x_positions: List[int],
     y_positions: List[int],
     traverse_height: int,
-    z_start_positions: List[int],
-    z_stop_positions: List[int],
+    begin_tip_deposit_process: List[int],
+    end_tip_deposit_process: List[int],
     z_final_positions: List[int],
     default_waste: bool,
   ):
@@ -449,8 +449,8 @@ class DropTips(HamiltonCommand):
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
       traverse_height: Traverse height in 0.01mm units
-      z_start_positions: Z start positions in 0.01mm units
-      z_stop_positions: Z stop positions in 0.01mm units
+      begin_tip_deposit_process: Z start positions in 0.01mm units
+      end_tip_deposit_process: Z stop positions in 0.01mm units
       z_final_positions: Z final positions in 0.01mm units
       default_waste: If True, drop to default waste (positions may be ignored)
     """
@@ -459,8 +459,8 @@ class DropTips(HamiltonCommand):
     self.x_positions = x_positions
     self.y_positions = y_positions
     self.traverse_height = traverse_height
-    self.z_start_positions = z_start_positions
-    self.z_stop_positions = z_stop_positions
+    self.begin_tip_deposit_process = begin_tip_deposit_process
+    self.end_tip_deposit_process = end_tip_deposit_process
     self.z_final_positions = z_final_positions
     self.default_waste = default_waste
     self._assign_params()
@@ -473,8 +473,8 @@ class DropTips(HamiltonCommand):
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
       .i32(self.traverse_height)
-      .i32_array(self.z_start_positions)
-      .i32_array(self.z_stop_positions)
+      .i32_array(self.begin_tip_deposit_process)
+      .i32_array(self.end_tip_deposit_process)
       .i32_array(self.z_final_positions)
       .bool_value(self.default_waste)
     )
@@ -499,8 +499,8 @@ class DropTipsRoll(HamiltonCommand):
     x_positions: List[int],
     y_positions: List[int],
     traverse_height: int,
-    z_start_positions: List[int],
-    z_stop_positions: List[int],
+    begin_tip_deposit_process: List[int],
+    end_tip_deposit_process: List[int],
     z_final_positions: List[int],
     roll_distances: List[int],
   ):
@@ -512,8 +512,8 @@ class DropTipsRoll(HamiltonCommand):
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
       traverse_height: Traverse height in 0.01mm units
-      z_start_positions: Z start positions in 0.01mm units
-      z_stop_positions: Z stop positions in 0.01mm units
+      begin_tip_deposit_process: Z start positions in 0.01mm units
+      end_tip_deposit_process: Z stop positions in 0.01mm units
       z_final_positions: Z final positions in 0.01mm units
       roll_distances: Roll distance for each channel in 0.01mm units
     """
@@ -522,8 +522,8 @@ class DropTipsRoll(HamiltonCommand):
     self.x_positions = x_positions
     self.y_positions = y_positions
     self.traverse_height = traverse_height
-    self.z_start_positions = z_start_positions
-    self.z_stop_positions = z_stop_positions
+    self.begin_tip_deposit_process = begin_tip_deposit_process
+    self.end_tip_deposit_process = end_tip_deposit_process
     self.z_final_positions = z_final_positions
     self.roll_distances = roll_distances
     self._assign_params()
@@ -536,8 +536,8 @@ class DropTipsRoll(HamiltonCommand):
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
       .i32(self.traverse_height)
-      .i32_array(self.z_start_positions)
-      .i32_array(self.z_stop_positions)
+      .i32_array(self.begin_tip_deposit_process)
+      .i32_array(self.end_tip_deposit_process)
       .i32_array(self.z_final_positions)
       .i32_array(self.roll_distances)
     )
@@ -1048,10 +1048,7 @@ class NimbusBackend(HamiltonTCPBackend):
       force_initialize: If True, force initialization even if already initialized
     """
     # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration)
-    await HamiltonTCPBackend.setup(self)
-
-    # Ensure deck is set
-    assert self._deck is not None, "Deck must be set before setup"
+    await super().setup()
 
     # Discover instrument objects
     await self._discover_instrument_objects()
@@ -1132,11 +1129,16 @@ class NimbusBackend(HamiltonTCPBackend):
         )
 
         # Use same logic as DropTipsRoll: z_start = waste_z + 4.0mm, z_stop = waste_z, z_final = traverse_height
-        waste_params = self._build_waste_position_params(
+        (
+          x_positions_full,
+          y_positions_full,
+          begin_tip_deposit_process_full,
+          end_tip_deposit_process_full,
+          z_final_positions_full,
+          roll_distances_full,
+        ) = self._build_waste_position_params(
           use_channels=all_channels,
           traverse_height=traverse_height,
-          z_start_offset=None,  # Will be calculated as waste_z + 4.0mm
-          z_stop_offset=None,  # Will be calculated as waste_z
           z_final_offset=None,  # Will default to traverse_height
           roll_distance=None,  # Will default to 9.0mm
         )
@@ -1144,12 +1146,12 @@ class NimbusBackend(HamiltonTCPBackend):
         await self.send_command(
           InitializeSmartRoll(
             dest=self._nimbus_core_address,
-            x_positions=waste_params["x_positions"],
-            y_positions=waste_params["y_positions"],
-            z_start_positions=waste_params["z_start_positions"],
-            z_stop_positions=waste_params["z_stop_positions"],
-            z_final_positions=waste_params["z_final_positions"],
-            roll_distances=waste_params["roll_distances"],
+            x_positions=x_positions_full,
+            y_positions=y_positions_full,
+            begin_tip_deposit_process=begin_tip_deposit_process_full,
+            end_tip_deposit_process=end_tip_deposit_process_full,
+            z_final_positions=z_final_positions_full,
+            roll_distances=roll_distances_full,
           )
         )
         logger.info("NimbusCore initialized with InitializeSmartRoll successfully")
@@ -1302,33 +1304,26 @@ class NimbusBackend(HamiltonTCPBackend):
     self,
     use_channels: List[int],
     traverse_height: float,
-    z_start_offset: Optional[float] = None,
-    z_stop_offset: Optional[float] = None,
     z_final_offset: Optional[float] = None,
     roll_distance: Optional[float] = None,
-  ) -> dict:
+  ) -> Tuple[List[int], List[int], List[int], List[int], List[int], List[int]]:
     """Build waste position parameters for InitializeSmartRoll or DropTipsRoll.
 
     Args:
       use_channels: List of channel indices to use
       traverse_height: Traverse height in mm
-      z_start_offset: Z start position in mm (absolute, optional, calculated from waste position)
-      z_stop_offset: Z stop position in mm (absolute, optional, calculated from waste position)
       z_final_offset: Z final position in mm (absolute, optional, defaults to traverse_height)
       roll_distance: Roll distance in mm (optional, defaults to 9.0 mm)
 
     Returns:
-      Dictionary with x_positions, y_positions, z_start_positions, z_stop_positions,
-      z_final_positions, roll_distances (all in 0.01mm units as lists matching num_channels)
+      x_positions, y_positions, begin_tip_deposit_process_full, end_tip_deposit_process_full, z_final_positions, roll_distances (all in 0.01mm units as lists matching num_channels)
 
     Raises:
       RuntimeError: If deck is not set or waste position not found
     """
-    if self._deck is None:
-      raise RuntimeError("Deck must be set before building waste position parameters")
 
     # Validate we have a NimbusDeck for coordinate conversion
-    if not isinstance(self._deck, NimbusDeck):
+    if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
 
     # Extract coordinates for each channel
@@ -1339,22 +1334,22 @@ class NimbusBackend(HamiltonTCPBackend):
     for channel_idx in use_channels:
       # Get waste position from deck based on channel index
       # Use waste_type attribute from deck to construct waste position name
-      if not hasattr(self._deck, "waste_type") or self._deck.waste_type is None:
+      if not hasattr(self.deck, "waste_type") or self.deck.waste_type is None:
         raise RuntimeError(
           f"Deck does not have waste_type attribute or waste_type is None. "
           f"Cannot determine waste position name for channel {channel_idx}."
         )
-      waste_pos_name = f"{self._deck.waste_type}_{channel_idx + 1}"
+      waste_pos_name = f"{self.deck.waste_type}_{channel_idx + 1}"
       try:
-        waste_pos = self._deck.get_resource(waste_pos_name)
-        abs_location = waste_pos.get_absolute_location()
+        waste_pos = self.deck.get_resource(waste_pos_name)
+        abs_location = waste_pos.get_location_wrt(self.deck)
       except Exception as e:
         raise RuntimeError(
           f"Failed to get waste position {waste_pos_name} for channel {channel_idx}: {e}"
         )
 
       # Convert to Hamilton coordinates (returns in mm)
-      hamilton_coord = self._deck.to_hamilton_coordinate(abs_location)
+      hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
 
       x_positions_mm.append(hamilton_coord.x)
       y_positions_mm.append(hamilton_coord.y)
@@ -1368,64 +1363,48 @@ class NimbusBackend(HamiltonTCPBackend):
     max_z_hamilton = max(z_positions_mm)  # Highest waste position Z in Hamilton coordinates
     waste_z_hamilton = max_z_hamilton
 
-    if z_start_offset is None:
-      # Calculate from waste position: start above waste position
-      z_start_absolute_mm = waste_z_hamilton + 4.0  # Start 4mm above waste position
-    else:
-      z_start_absolute_mm = z_start_offset
+    # Calculate from waste position: start above waste position
+    z_start_absolute_mm = waste_z_hamilton + 4.0  # Start 4mm above waste position
 
-    if z_stop_offset is None:
-      # Calculate from waste position: stop at waste position
-      z_stop_absolute_mm = waste_z_hamilton  # Stop at waste position
-    else:
-      z_stop_absolute_mm = z_stop_offset
+    # Calculate from waste position: stop at waste position
+    z_stop_absolute_mm = waste_z_hamilton  # Stop at waste position
 
     if z_final_offset is None:
-      z_final_offset_mm = traverse_height  # Use traverse height as final position
-    else:
-      z_final_offset_mm = z_final_offset
+      z_final_offset = traverse_height  # Use traverse height as final position
 
     if roll_distance is None:
-      roll_distance_mm = 9.0  # Default roll distance from log
-    else:
-      roll_distance_mm = roll_distance
+      roll_distance = 9.0  # Default roll distance from log
 
     # Use absolute Z positions (same for all channels)
-    z_start_positions = [int(round(z_start_absolute_mm * 100))] * len(
-      use_channels
-    )  # Absolute Z start position
-    z_stop_positions = [int(round(z_stop_absolute_mm * 100))] * len(
-      use_channels
-    )  # Absolute Z stop position
-    z_final_positions = [int(round(z_final_offset_mm * 100))] * len(
-      use_channels
-    )  # Absolute Z final position
-    roll_distances = [int(round(roll_distance_mm * 100))] * len(use_channels)
+    begin_tip_deposit_process = [int(round(z_start_absolute_mm * 100))] * len(use_channels)
+    end_tip_deposit_process = [int(round(z_stop_absolute_mm * 100))] * len(use_channels)
+    z_final_positions = [int(round(z_final_offset * 100))] * len(use_channels)
+    roll_distances = [int(round(roll_distance * 100))] * len(use_channels)
 
     # Ensure arrays match num_channels length (with zeros for inactive channels)
     x_positions_full = [0] * self.num_channels
     y_positions_full = [0] * self.num_channels
-    z_start_positions_full = [0] * self.num_channels
-    z_stop_positions_full = [0] * self.num_channels
+    begin_tip_deposit_process_full = [0] * self.num_channels
+    end_tip_deposit_process_full = [0] * self.num_channels
     z_final_positions_full = [0] * self.num_channels
     roll_distances_full = [0] * self.num_channels
 
     for i, channel_idx in enumerate(use_channels):
       x_positions_full[channel_idx] = x_positions[i]
       y_positions_full[channel_idx] = y_positions[i]
-      z_start_positions_full[channel_idx] = z_start_positions[i]
-      z_stop_positions_full[channel_idx] = z_stop_positions[i]
+      begin_tip_deposit_process_full[channel_idx] = begin_tip_deposit_process[i]
+      end_tip_deposit_process_full[channel_idx] = end_tip_deposit_process[i]
       z_final_positions_full[channel_idx] = z_final_positions[i]
       roll_distances_full[channel_idx] = roll_distances[i]
 
-    return {
-      "x_positions": x_positions_full,
-      "y_positions": y_positions_full,
-      "z_start_positions": z_start_positions_full,
-      "z_stop_positions": z_stop_positions_full,
-      "z_final_positions": z_final_positions_full,
-      "roll_distances": roll_distances_full,
-    }
+    return (
+      x_positions_full,
+      y_positions_full,
+      begin_tip_deposit_process_full,
+      end_tip_deposit_process_full,
+      z_final_positions_full,
+      roll_distances_full,
+    )
 
   # ============== Abstract methods from LiquidHandlerBackend ==============
 
@@ -1434,11 +1413,10 @@ class NimbusBackend(HamiltonTCPBackend):
     ops: List[Pickup],
     use_channels: List[int],
     traverse_height: float = 146.0,  # TODO: Access deck z_max property properly instead of hardcoded literal
-    z_start_offset: Optional[float] = None,
-    z_stop_offset: Optional[float] = None,
   ):
     """Pick up tips from the specified resource.
 
+    TODO: evaluate this doc:
     Z positions and traverse height are calculated from the resource locations and tip
     properties if not explicitly provided:
     - traverse_height: Uses deck z_max if not provided
@@ -1449,8 +1427,6 @@ class NimbusBackend(HamiltonTCPBackend):
       ops: List of Pickup operations, one per channel
       use_channels: List of channel indices to use
       traverse_height: Traverse height in mm (optional, defaults to deck z_max)
-      z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
-      z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
 
     Raises:
       RuntimeError: If pipette address or deck is not set
@@ -1458,11 +1434,9 @@ class NimbusBackend(HamiltonTCPBackend):
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
-    if self._deck is None:
-      raise RuntimeError("Deck must be set before pick_up_tips")
 
     # Validate we have a NimbusDeck for coordinate conversion
-    if not isinstance(self._deck, NimbusDeck):
+    if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
 
     # Extract coordinates and tip types for each operation
@@ -1473,7 +1447,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     for op in ops:
       # Get absolute location from resource
-      abs_location = op.resource.get_absolute_location()
+      abs_location = op.resource.get_location_wrt(self.deck)
       # Add offset
       final_location = Coordinate(
         x=abs_location.x + op.offset.x,
@@ -1481,7 +1455,7 @@ class NimbusBackend(HamiltonTCPBackend):
         z=abs_location.z + op.offset.z,
       )
       # Convert to Hamilton coordinates (returns in mm)
-      hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
+      hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
 
       x_positions_mm.append(hamilton_coord.x)
       y_positions_mm.append(hamilton_coord.y)
@@ -1512,40 +1486,31 @@ class NimbusBackend(HamiltonTCPBackend):
     # Calculate absolute Z positions in Hamilton coordinates
     # z_start: resource Z + total tip length (where tip pickup starts)
     # z_stop: resource Z + (tip length - fitting depth) (where tip pickup stops)
-    z_start_absolute_mm = max_z_hamilton + max_total_tip_length
-    z_stop_absolute_mm = max_z_hamilton + max_tip_length
+    begin_tip_pick_up_process_mm = max_z_hamilton + max_total_tip_length
+    end_tip_pick_up_process_mm = max_z_hamilton + max_tip_length
 
-    # Traverse height: use provided value (defaults to 146.0 mm from function signature)
-    traverse_height_mm = traverse_height
-
-    # Allow override of Z positions if explicitly provided
-    if z_start_offset is not None:
-      z_start_absolute_mm = z_start_offset
-    if z_stop_offset is not None:
-      z_stop_absolute_mm = z_stop_offset
+    # TODO: Traverse height: use default value
 
     # Convert to 0.01mm units
-    traverse_height_units = int(round(traverse_height_mm * 100))
+    traverse_height_units = int(round(traverse_height * 100))
 
     # For Z positions, use absolute positions (same for all channels)
-    z_start_positions = [int(round(z_start_absolute_mm * 100))] * len(
-      ops
-    )  # Absolute Z start position
-    z_stop_positions = [int(round(z_stop_absolute_mm * 100))] * len(ops)  # Absolute Z stop position
+    begin_tip_pick_up_process = [int(round(begin_tip_pick_up_process_mm * 100))] * len(ops)
+    end_tip_pick_up_process = [int(round(end_tip_pick_up_process_mm * 100))] * len(ops)
 
     # Ensure arrays match num_channels length (pad with 0s for inactive channels)
     # We need to map use_channels to the correct positions
     x_positions_full = [0] * self.num_channels
     y_positions_full = [0] * self.num_channels
-    z_start_positions_full = [0] * self.num_channels
-    z_stop_positions_full = [0] * self.num_channels
+    begin_tip_pick_up_process_full = [0] * self.num_channels
+    end_tip_pick_up_process_full = [0] * self.num_channels
     tip_types_full = [0] * self.num_channels
 
     for i, channel_idx in enumerate(use_channels):
       x_positions_full[channel_idx] = x_positions[i]
       y_positions_full[channel_idx] = y_positions[i]
-      z_start_positions_full[channel_idx] = z_start_positions[i]
-      z_stop_positions_full[channel_idx] = z_stop_positions[i]
+      begin_tip_pick_up_process_full[channel_idx] = begin_tip_pick_up_process[i]
+      end_tip_pick_up_process_full[channel_idx] = end_tip_pick_up_process[i]
       tip_types_full[channel_idx] = tip_types[i]
 
     # Create and send command
@@ -1555,8 +1520,8 @@ class NimbusBackend(HamiltonTCPBackend):
       x_positions=x_positions_full,
       y_positions=y_positions_full,
       traverse_height=traverse_height_units,
-      z_start_positions=z_start_positions_full,
-      z_stop_positions=z_stop_positions_full,
+      begin_tip_pick_up_process=begin_tip_pick_up_process_full,
+      end_tip_pick_up_process=end_tip_pick_up_process_full,
       tip_types=tip_types_full,
     )
 
@@ -1583,8 +1548,8 @@ class NimbusBackend(HamiltonTCPBackend):
     logger.info(f"  x_positions: {x_positions_full}")
     logger.info(f"  y_positions: {y_positions_full}")
     logger.info(f"  traverse_height: {traverse_height_units}")
-    logger.info(f"  z_start_positions: {z_start_positions_full}")
-    logger.info(f"  z_stop_positions: {z_stop_positions_full}")
+    logger.info(f"  begin_tip_pick_up_process_full: {begin_tip_pick_up_process_full}")
+    logger.info(f"  end_tip_pick_up_process_full: {end_tip_pick_up_process_full}")
     logger.info(f"  tip_types: {tip_types_full}")
     logger.info(f"  num_channels: {self.num_channels}")
 
@@ -1593,13 +1558,6 @@ class NimbusBackend(HamiltonTCPBackend):
       logger.info(f"Picked up tips on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to pick up tips: {e}")
-      logger.error(
-        f"Parameters sent: tips_used={tips_used}, "
-        f"x_positions={x_positions_full}, y_positions={y_positions_full}, "
-        f"traverse_height={traverse_height_units}, "
-        f"z_start_positions={z_start_positions_full}, "
-        f"z_stop_positions={z_stop_positions_full}, tip_types={tip_types_full}"
-      )
       raise
 
   async def drop_tips(
@@ -1608,8 +1566,6 @@ class NimbusBackend(HamiltonTCPBackend):
     use_channels: List[int],
     default_waste: bool = False,
     traverse_height: float = 146.0,  # TODO: Access deck z_max property properly instead of hardcoded literal
-    z_start_offset: Optional[float] = None,
-    z_stop_offset: Optional[float] = None,
     z_final_offset: Optional[float] = None,
     roll_distance: Optional[float] = None,
   ):
@@ -1619,6 +1575,7 @@ class NimbusBackend(HamiltonTCPBackend):
     - If resource is a waste position (Trash with category="waste_position"), uses DropTipsRoll
     - Otherwise, uses DropTips command
 
+    TODO: evaluate this doc:
     Z positions are calculated from resource locations if not explicitly provided:
     - traverse_height: Defaults to 146.0 mm (deck z_max)
     - z_start_offset: Calculated from resources (for waste: 135.39 mm, for regular: resource Z + offset)
@@ -1631,8 +1588,6 @@ class NimbusBackend(HamiltonTCPBackend):
       use_channels: List of channel indices to use
       default_waste: For DropTips command, if True, drop to default waste (positions may be ignored)
       traverse_height: Traverse height in mm (optional, defaults to 146.0 mm)
-      z_start_offset: Z start position in mm (absolute, optional, calculated from resources)
-      z_stop_offset: Z stop position in mm (absolute, optional, calculated from resources)
       z_final_offset: Z final position in mm (absolute, optional, calculated from resources)
       roll_distance: Roll distance in mm (optional, defaults to 9.0 mm for waste positions)
 
@@ -1642,18 +1597,13 @@ class NimbusBackend(HamiltonTCPBackend):
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
-    if self._deck is None:
-      raise RuntimeError("Deck must be set before drop_tips")
 
     # Validate we have a NimbusDeck for coordinate conversion
-    if not isinstance(self._deck, NimbusDeck):
+    if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
 
-    # Check if resources are waste positions (Trash objects with category="waste_position")
-    is_waste_positions = [
-      isinstance(op.resource, Trash) and getattr(op.resource, "category", None) == "waste_position"
-      for op in ops
-    ]
+    # Check if resources are waste positions (Trash objects)
+    is_waste_positions = [isinstance(op.resource, Trash) for op in ops]
 
     # Check if all operations are waste positions or all are regular
     all_waste = all(is_waste_positions)
@@ -1684,21 +1634,19 @@ class NimbusBackend(HamiltonTCPBackend):
     if all_waste:
       # Use DropTipsRoll for waste positions
       # Build waste position parameters using helper method
-      waste_params = self._build_waste_position_params(
+      (
+        x_positions_full,
+        y_positions_full,
+        begin_tip_deposit_process_full,
+        end_tip_deposit_process_full,
+        z_final_positions_full,
+        roll_distances_full,
+      ) = self._build_waste_position_params(
         use_channels=use_channels,
         traverse_height=traverse_height_mm,
-        z_start_offset=z_start_offset,
-        z_stop_offset=z_stop_offset,
         z_final_offset=z_final_offset,
         roll_distance=roll_distance,
       )
-
-      x_positions_full = waste_params["x_positions"]
-      y_positions_full = waste_params["y_positions"]
-      z_start_positions_full = waste_params["z_start_positions"]
-      z_stop_positions_full = waste_params["z_stop_positions"]
-      z_final_positions_full = waste_params["z_final_positions"]
-      roll_distances_full = waste_params["roll_distances"]
 
       # Create and send DropTipsRoll command
       command = DropTipsRoll(
@@ -1707,11 +1655,22 @@ class NimbusBackend(HamiltonTCPBackend):
         x_positions=x_positions_full,
         y_positions=y_positions_full,
         traverse_height=traverse_height_units,
-        z_start_positions=z_start_positions_full,
-        z_stop_positions=z_stop_positions_full,
+        begin_tip_deposit_process=begin_tip_deposit_process_full,
+        end_tip_deposit_process=end_tip_deposit_process_full,
         z_final_positions=z_final_positions_full,
         roll_distances=roll_distances_full,
       )
+
+      # Log parameters for debugging
+      logger.info("DropTipsRoll parameters:")
+      logger.info(f"  tips_used: {tips_used}")
+      logger.info(f"  x_positions: {x_positions_full}")
+      logger.info(f"  y_positions: {y_positions_full}")
+      logger.info(f"  traverse_height: {traverse_height_units}")
+      logger.info(f"  begin_tip_deposit_process: {begin_tip_deposit_process_full}")
+      logger.info(f"  end_tip_deposit_process: {end_tip_deposit_process_full}")
+      logger.info(f"  z_final_positions: {z_final_positions_full}")
+      logger.info(f"  roll_distances: {roll_distances_full}")
     else:
       # Use DropTips for regular resources
       # Extract coordinates for each operation
@@ -1721,7 +1680,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
       for i, op in enumerate(ops):
         # Get absolute location from resource
-        abs_location = op.resource.get_absolute_location()
+        abs_location = op.resource.get_location_wrt(self.deck)
 
         # Add offset
         final_location = Coordinate(
@@ -1730,7 +1689,7 @@ class NimbusBackend(HamiltonTCPBackend):
           z=abs_location.z + op.offset.z,
         )
         # Convert to Hamilton coordinates (returns in mm)
-        hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
+        hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
 
         x_positions_mm.append(hamilton_coord.x)
         y_positions_mm.append(hamilton_coord.y)
@@ -1744,18 +1703,8 @@ class NimbusBackend(HamiltonTCPBackend):
       max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
 
       # Z positions are absolute, not relative to resource position
-      # Calculate from resource locations if not provided
-      if z_start_offset is None:
-        # TODO: Calculate from resources properly (resource Z + offset)
-        z_start_absolute_mm = max_z_hamilton + 10.0  # Placeholder: resource Z + safety margin
-      else:
-        z_start_absolute_mm = z_start_offset
-
-      if z_stop_offset is None:
-        # TODO: Calculate from resources properly (resource Z + offset)
-        z_stop_absolute_mm = max_z_hamilton  # Placeholder: resource Z
-      else:
-        z_stop_absolute_mm = z_stop_offset
+      begin_tip_deposit_process_mm = max_z_hamilton + 10.0
+      end_tip_deposit_process_mm = max_z_hamilton
 
       if z_final_offset is None:
         z_final_offset_mm = traverse_height_mm  # Use traverse height as final position
@@ -1763,29 +1712,33 @@ class NimbusBackend(HamiltonTCPBackend):
         z_final_offset_mm = z_final_offset
 
       # Use absolute Z positions (same for all channels)
-      z_start_positions = [int(round(z_start_absolute_mm * 100))] * len(
-        ops
-      )  # Absolute Z start position
-      z_stop_positions = [int(round(z_stop_absolute_mm * 100))] * len(
-        ops
-      )  # Absolute Z stop position
-      z_final_positions = [int(round(z_final_offset_mm * 100))] * len(
-        ops
-      )  # Absolute Z final position
+      begin_tip_deposit_process = [int(round(begin_tip_deposit_process_mm * 100))] * len(ops)
+      end_tip_deposit_process = [int(round(end_tip_deposit_process_mm * 100))] * len(ops)
+      z_final_positions = [int(round(z_final_offset_mm * 100))] * len(ops)
 
       # Ensure arrays match num_channels length
       x_positions_full = [0] * self.num_channels
       y_positions_full = [0] * self.num_channels
-      z_start_positions_full = [0] * self.num_channels
-      z_stop_positions_full = [0] * self.num_channels
+      begin_tip_deposit_process_full = [0] * self.num_channels
+      end_tip_deposit_process_full = [0] * self.num_channels
       z_final_positions_full = [0] * self.num_channels
 
       for i, channel_idx in enumerate(use_channels):
         x_positions_full[channel_idx] = x_positions[i]
         y_positions_full[channel_idx] = y_positions[i]
-        z_start_positions_full[channel_idx] = z_start_positions[i]
-        z_stop_positions_full[channel_idx] = z_stop_positions[i]
+        begin_tip_deposit_process_full[channel_idx] = begin_tip_deposit_process[i]
+        end_tip_deposit_process_full[channel_idx] = end_tip_deposit_process[i]
         z_final_positions_full[channel_idx] = z_final_positions[i]
+
+      # Log parameters for debugging
+      logger.info("DropTips parameters:")
+      logger.info(f"  tips_used: {tips_used}")
+      logger.info(f"  x_positions: {x_positions_full}")
+      logger.info(f"  y_positions: {y_positions_full}")
+      logger.info(f"  traverse_height: {traverse_height_units}")
+      logger.info(f"  begin_tip_deposit_process_full: {begin_tip_deposit_process_full}")
+      logger.info(f"  end_tip_deposit_process_full: {end_tip_deposit_process_full}")
+      logger.info(f"  z_final_positions_full: {z_final_positions_full}")
 
       # Create and send DropTips command
       command = DropTips(
@@ -1794,8 +1747,8 @@ class NimbusBackend(HamiltonTCPBackend):
         x_positions=x_positions_full,
         y_positions=y_positions_full,
         traverse_height=traverse_height_units,
-        z_start_positions=z_start_positions_full,
-        z_stop_positions=z_stop_positions_full,
+        begin_tip_deposit_process=begin_tip_deposit_process_full,
+        end_tip_deposit_process=end_tip_deposit_process_full,
         z_final_positions=z_final_positions_full,
         default_waste=default_waste,
       )
@@ -1856,11 +1809,9 @@ class NimbusBackend(HamiltonTCPBackend):
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
-    if self._deck is None:
-      raise RuntimeError("Deck must be set before aspirate")
 
     # Validate we have a NimbusDeck for coordinate conversion
-    if not isinstance(self._deck, NimbusDeck):
+    if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
 
     n = len(ops)
@@ -1912,7 +1863,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     for op in ops:
       # Get absolute location from resource
-      abs_location = op.resource.get_absolute_location()
+      abs_location = op.resource.get_location_wrt(self.deck)
       # Add offset
       final_location = Coordinate(
         x=abs_location.x + op.offset.x,
@@ -1920,7 +1871,7 @@ class NimbusBackend(HamiltonTCPBackend):
         z=abs_location.z + op.offset.z,
       )
       # Convert to Hamilton coordinates (returns in mm)
-      hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
+      hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
 
       x_positions_mm.append(hamilton_coord.x)
       y_positions_mm.append(hamilton_coord.y)
@@ -1937,7 +1888,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # Calculate well_bottoms: resource Z + offset Z + material_z_thickness
     well_bottoms: List[float] = []
     for op in ops:
-      abs_location = op.resource.get_absolute_location()
+      abs_location = op.resource.get_location_wrt(self.deck)
       well_bottom = abs_location.z + op.offset.z
       if isinstance(op.resource, Container):
         well_bottom += op.resource.material_z_thickness
@@ -1946,13 +1897,13 @@ class NimbusBackend(HamiltonTCPBackend):
     # Convert well_bottoms to Hamilton coordinates
     well_bottoms_hamilton: List[float] = []
     for i, op in enumerate(ops):
-      abs_location = op.resource.get_absolute_location()
+      abs_location = op.resource.get_location_wrt(self.deck)
       well_bottom_location = Coordinate(
         x=abs_location.x + op.offset.x,
         y=abs_location.y + op.offset.y,
         z=well_bottoms[i],
       )
-      hamilton_coord = self._deck.to_hamilton_coordinate(well_bottom_location)
+      hamilton_coord = self.deck.to_hamilton_coordinate(well_bottom_location)
       well_bottoms_hamilton.append(hamilton_coord.z)
 
     # Calculate liquid_surface_height: well_bottom + (op.liquid_height or 0)
@@ -2209,11 +2160,9 @@ class NimbusBackend(HamiltonTCPBackend):
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
-    if self._deck is None:
-      raise RuntimeError("Deck must be set before dispense")
 
     # Validate we have a NimbusDeck for coordinate conversion
-    if not isinstance(self._deck, NimbusDeck):
+    if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
 
     n = len(ops)
@@ -2265,7 +2214,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     for op in ops:
       # Get absolute location from resource
-      abs_location = op.resource.get_absolute_location()
+      abs_location = op.resource.get_location_wrt(self.deck)
       # Add offset
       final_location = Coordinate(
         x=abs_location.x + op.offset.x,
@@ -2273,7 +2222,7 @@ class NimbusBackend(HamiltonTCPBackend):
         z=abs_location.z + op.offset.z,
       )
       # Convert to Hamilton coordinates (returns in mm)
-      hamilton_coord = self._deck.to_hamilton_coordinate(final_location)
+      hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
 
       x_positions_mm.append(hamilton_coord.x)
       y_positions_mm.append(hamilton_coord.y)
@@ -2290,7 +2239,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # Calculate well_bottoms: resource Z + offset Z + material_z_thickness
     well_bottoms: List[float] = []
     for op in ops:
-      abs_location = op.resource.get_absolute_location()
+      abs_location = op.resource.get_location_wrt(self.deck)
       well_bottom = abs_location.z + op.offset.z
       if isinstance(op.resource, Container):
         well_bottom += op.resource.material_z_thickness
@@ -2299,13 +2248,13 @@ class NimbusBackend(HamiltonTCPBackend):
     # Convert well_bottoms to Hamilton coordinates
     well_bottoms_hamilton: List[float] = []
     for i, op in enumerate(ops):
-      abs_location = op.resource.get_absolute_location()
+      abs_location = op.resource.get_location_wrt(self.deck)
       well_bottom_location = Coordinate(
         x=abs_location.x + op.offset.x,
         y=abs_location.y + op.offset.y,
         z=well_bottoms[i],
       )
-      hamilton_coord = self._deck.to_hamilton_coordinate(well_bottom_location)
+      hamilton_coord = self.deck.to_hamilton_coordinate(well_bottom_location)
       well_bottoms_hamilton.append(hamilton_coord.z)
 
     # Calculate dispense_height: well_bottom + (op.liquid_height or 0)
