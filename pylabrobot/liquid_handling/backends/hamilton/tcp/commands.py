@@ -188,7 +188,7 @@ class HamiltonCommand:
     # Build final packet
     return msg.build(source, sequence, harp_response_required=response_required)
 
-  def interpret_response(self, response: "SuccessResponse") -> dict:
+  def interpret_response(self, response: "SuccessResponse") -> Optional[dict]:
     """Interpret success response using typed response object.
 
     This is the new interface used by the backend. Default implementation
@@ -198,24 +198,12 @@ class HamiltonCommand:
       response: Typed SuccessResponse from ResponseParser
 
     Returns:
-      Dictionary with parsed response data
+      Dictionary with parsed response data, or None if no data to extract
     """
     return self.parse_response_parameters(response.raw_params)
 
-  def parse_response_from_message(self, message: CommandResponse) -> dict:
-    """Parse response from CommandResponse (legacy interface).
-
-    Args:
-      message: Parsed CommandResponse from messages.py
-
-    Returns:
-      Dictionary with parsed response data
-    """
-    # Extract HOI parameters and parse using command-specific logic
-    return self.parse_response_parameters(message.hoi_params)
-
   @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
+  def parse_response_parameters(cls, data: bytes) -> Optional[dict]:
     """Parse response parameters from HOI payload.
 
     Override this method in subclasses to parse command-specific responses.
@@ -224,6 +212,6 @@ class HamiltonCommand:
       data: Raw bytes from HOI fragments field
 
     Returns:
-      Dictionary with parsed response data
+      Dictionary with parsed response data, or None if no data to extract
     """
-    raise NotImplementedError(f"{cls.__name__} must implement parse_response_parameters()")
+    return None

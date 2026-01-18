@@ -127,11 +127,6 @@ class LockDoor(HamiltonCommand):
   def build_parameters(self) -> HoiParams:
     return HoiParams()
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse LockDoor response."""
-    return {"success": True}
-
 
 class UnlockDoor(HamiltonCommand):
   """Unlock door command (DoorLock at 1:1:268, interface_id=1, command_id=2)."""
@@ -142,11 +137,6 @@ class UnlockDoor(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     return HoiParams()
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse UnlockDoor response."""
-    return {"success": True}
 
 
 class IsDoorLocked(HamiltonCommand):
@@ -177,11 +167,6 @@ class PreInitializeSmart(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     return HoiParams()
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse PreInitializeSmart response."""
-    return {"success": True}
 
 
 class InitializeSmartRoll(HamiltonCommand):
@@ -231,11 +216,6 @@ class InitializeSmartRoll(HamiltonCommand):
       .i32_array(self.z_final_positions)
       .i32_array(self.roll_distances)
     )
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse InitializeSmartRoll response (void return)."""
-    return {"success": True}
 
 
 class IsInitialized(HamiltonCommand):
@@ -333,11 +313,6 @@ class SetChannelConfiguration(HamiltonCommand):
   def build_parameters(self) -> HoiParams:
     return HoiParams().u16(self.channel).i16_array(self.indexes).bool_array(self.enables)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse SetChannelConfiguration response (void return)."""
-    return {"success": True}
-
 
 class Park(HamiltonCommand):
   """Park command (NimbusCore at 1:1:48896, interface_id=1, command_id=3)."""
@@ -348,11 +323,6 @@ class Park(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     return HoiParams()
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse Park response."""
-    return {"success": True}
 
 
 class PickupTips(HamiltonCommand):
@@ -406,11 +376,6 @@ class PickupTips(HamiltonCommand):
       .i32_array(self.end_tip_pick_up_process)
       .u16_array(self.tip_types)
     )
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse PickupTips response (void return)."""
-    return {"success": True}
 
 
 class DropTips(HamiltonCommand):
@@ -469,11 +434,6 @@ class DropTips(HamiltonCommand):
       .bool_value(self.default_waste)
     )
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse DropTips response (void return)."""
-    return {"success": True}
-
 
 class DropTipsRoll(HamiltonCommand):
   """Drop tips with roll command (Pipette at 1:1:257, interface_id=1, command_id=82)."""
@@ -531,11 +491,6 @@ class DropTipsRoll(HamiltonCommand):
       .i32_array(self.roll_distances)
     )
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse DropTipsRoll response (void return)."""
-    return {"success": True}
-
 
 class EnableADC(HamiltonCommand):
   """Enable ADC command (Pipette at 1:1:257, interface_id=1, command_id=43)."""
@@ -562,11 +517,6 @@ class EnableADC(HamiltonCommand):
   def build_parameters(self) -> HoiParams:
     return HoiParams().u16_array(self.tips_used)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse EnableADC response (void return)."""
-    return {"success": True}
-
 
 class DisableADC(HamiltonCommand):
   """Disable ADC command (Pipette at 1:1:257, interface_id=1, command_id=44)."""
@@ -592,11 +542,6 @@ class DisableADC(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     return HoiParams().u16_array(self.tips_used)
-
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse DisableADC response (void return)."""
-    return {"success": True}
 
 
 class GetChannelConfiguration(HamiltonCommand):
@@ -795,11 +740,6 @@ class Aspirate(HamiltonCommand):
       .u16(self.recording_mode)
     )
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse Aspirate response (void return)."""
-    return {"success": True}
-
 
 class Dispense(HamiltonCommand):
   """Dispense command (Pipette at 1:1:257, interface_id=1, command_id=7)."""
@@ -957,11 +897,6 @@ class Dispense(HamiltonCommand):
       .u16(self.recording_mode)
     )
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse Dispense response (void return)."""
-    return {"success": True}
-
 
 # ============================================================================
 # MAIN BACKEND CLASS
@@ -1048,6 +983,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # Query channel configuration to get num_channels (use discovered address only)
     try:
       config = await self.send_command(GetChannelConfiguration_1(self._nimbus_core_address))
+      assert config is not None, "GetChannelConfiguration_1 command returned None"
       self._num_channels = config["channels"]
       logger.info(f"Channel configuration: {config['channels']} channels")
     except Exception as e:
@@ -1057,6 +993,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # Query tip presence (use discovered address only)
     try:
       tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+      assert tip_status is not None, "IsTipPresent command returned None"
       tip_present = tip_status.get("tip_present", [])
       logger.info(f"Tip presence: {tip_present}")
     except Exception as e:
@@ -1065,6 +1002,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # Query initialization status (use discovered address only)
     try:
       init_status = await self.send_command(IsInitialized(self._nimbus_core_address))
+      assert init_status is not None, "IsInitialized command returned None"
       self._is_initialized = init_status.get("initialized", False)
       logger.info(f"Instrument initialized: {self._is_initialized}")
     except Exception as e:
@@ -1263,6 +1201,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     try:
       status = await self.send_command(IsDoorLocked(self._door_lock_address))
+      assert status is not None, "IsDoorLocked command returned None"
       return bool(status["locked"])
     except Exception as e:
       logger.error(f"Failed to check door lock status: {e}")
@@ -1528,6 +1467,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # Check tip presence before picking up tips
     try:
       tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+      assert tip_status is not None, "IsTipPresent command returned None"
       tip_present = tip_status.get("tip_present", [])
       # Check if any channels we're trying to use already have tips
       channels_with_tips = [
@@ -1805,6 +1745,7 @@ class NimbusBackend(HamiltonTCPBackend):
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
         )
+        assert config is not None, "GetChannelConfiguration returned None"
         enabled = config["enabled"][0] if config["enabled"] else False
         if channel_num not in self._channel_configurations:
           self._channel_configurations[channel_num] = {}
@@ -2149,6 +2090,7 @@ class NimbusBackend(HamiltonTCPBackend):
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
         )
+        assert config is not None, "GetChannelConfiguration returned None"
         enabled = config["enabled"][0] if config["enabled"] else False
         if channel_num not in self._channel_configurations:
           self._channel_configurations[channel_num] = {}

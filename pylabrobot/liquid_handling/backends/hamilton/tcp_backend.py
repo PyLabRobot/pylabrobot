@@ -530,7 +530,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     self._sequence_numbers[dest_address] = next_seq
     return next_seq
 
-  async def send_command(self, command: HamiltonCommand, timeout: float = 10.0) -> dict:
+  async def send_command(self, command: HamiltonCommand, timeout: float = 10.0) -> Optional[dict]:
     """Send Hamilton command and wait for response.
 
     Sets source_address if not already set by caller (for testing).
@@ -541,7 +541,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       timeout: Maximum time to wait for response
 
     Returns:
-      Parsed response dictionary
+      Parsed response dictionary, or None if command has no information to extract
 
     Raises:
       TimeoutError: If no response received within timeout
