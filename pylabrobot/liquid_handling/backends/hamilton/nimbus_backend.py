@@ -125,7 +125,6 @@ class LockDoor(HamiltonCommand):
   command_id = 1
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for LockDoor command."""
     return HoiParams()
 
   @classmethod
@@ -142,7 +141,6 @@ class UnlockDoor(HamiltonCommand):
   command_id = 2
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for UnlockDoor command."""
     return HoiParams()
 
   @classmethod
@@ -160,7 +158,6 @@ class IsDoorLocked(HamiltonCommand):
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for IsDoorLocked command."""
     return HoiParams()
 
   @classmethod
@@ -179,7 +176,6 @@ class PreInitializeSmart(HamiltonCommand):
   command_id = 32
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for PreInitializeSmart command."""
     return HoiParams()
 
   @classmethod
@@ -226,7 +222,6 @@ class InitializeSmartRoll(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for InitializeSmartRoll command."""
     return (
       HoiParams()
       .i32_array(self.x_positions)
@@ -252,7 +247,6 @@ class IsInitialized(HamiltonCommand):
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for IsInitialized command."""
     return HoiParams()
 
   @classmethod
@@ -272,7 +266,6 @@ class IsTipPresent(HamiltonCommand):
   action_code = 0
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for IsTipPresent command."""
     return HoiParams()
 
   @classmethod
@@ -293,7 +286,6 @@ class GetChannelConfiguration_1(HamiltonCommand):
   action_code = 0
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for GetChannelConfiguration_1 command."""
     return HoiParams()
 
   @classmethod
@@ -339,7 +331,6 @@ class SetChannelConfiguration(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for SetChannelConfiguration command."""
     return HoiParams().u16(self.channel).i16_array(self.indexes).bool_array(self.enables)
 
   @classmethod
@@ -356,7 +347,6 @@ class Park(HamiltonCommand):
   command_id = 3
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for Park command."""
     return HoiParams()
 
   @classmethod
@@ -406,7 +396,6 @@ class PickupTips(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for PickupTips command."""
     return (
       HoiParams()
       .u16_array(self.tips_used)
@@ -468,7 +457,6 @@ class DropTips(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for DropTips command."""
     return (
       HoiParams()
       .u16_array(self.tips_used)
@@ -531,7 +519,6 @@ class DropTipsRoll(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for DropTipsRoll command."""
     return (
       HoiParams()
       .u16_array(self.tips_used)
@@ -573,7 +560,6 @@ class EnableADC(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for EnableADC command."""
     return HoiParams().u16_array(self.tips_used)
 
   @classmethod
@@ -605,7 +591,6 @@ class DisableADC(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for DisableADC command."""
     return HoiParams().u16_array(self.tips_used)
 
   @classmethod
@@ -641,7 +626,6 @@ class GetChannelConfiguration(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for GetChannelConfiguration command."""
     return HoiParams().u16(self.channel).i16_array(self.indexes)
 
   @classmethod
@@ -774,7 +758,6 @@ class Aspirate(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for Aspirate command."""
     return (
       HoiParams()
       .i16_array(self.aspirate_type)
@@ -937,7 +920,6 @@ class Dispense(HamiltonCommand):
     self._assign_params()
 
   def build_parameters(self) -> HoiParams:
-    """Build parameters for Dispense command."""
     return (
       HoiParams()
       .i16_array(self.dispense_type)
@@ -1031,6 +1013,8 @@ class NimbusBackend(HamiltonTCPBackend):
     self._nimbus_core_address: Optional[Address] = None
     self._is_initialized: Optional[bool] = None
     self._channel_configurations: Optional[Dict[int, Dict[int, bool]]] = None
+
+    self._channel_traversal_height: float = 146.0  # Default traversal height in mm
 
   async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
     """Set up the Nimbus backend.
@@ -1126,9 +1110,6 @@ class NimbusBackend(HamiltonTCPBackend):
         # Build waste position parameters using helper method
         # Use all channels (0 to num_channels-1) for setup
         all_channels = list(range(self.num_channels))
-        traverse_height = (
-          146.0  # TODO: Access deck z_max property properly instead of hardcoded literal
-        )
 
         # Use same logic as DropTipsRoll: z_start = waste_z + 4.0mm, z_stop = waste_z, z_final = traverse_height
         (
@@ -1140,7 +1121,6 @@ class NimbusBackend(HamiltonTCPBackend):
           roll_distances_full,
         ) = self._build_waste_position_params(
           use_channels=all_channels,
-          traverse_height=traverse_height,
           z_final_offset=None,  # Will default to traverse_height
           roll_distance=None,  # Will default to 9.0mm
         )
@@ -1238,6 +1218,19 @@ class NimbusBackend(HamiltonTCPBackend):
       raise RuntimeError("num_channels not set. Call setup() first to query from instrument.")
     return self._num_channels
 
+  def set_minimum_channel_traversal_height(self, traversal_height: float):
+    """Set the minimum traversal height for the channels.
+
+    This value will be used as the default value for the
+    `minimal_traverse_height_at_begin_of_command` and `minimal_height_at_command_end` parameters
+    for all commands, unless they are explicitly set in the command call.
+    """
+
+    if not 0 < traversal_height < 146:
+      raise ValueError(f"Traversal height must be between 0 and 146 mm (got {traversal_height})")
+
+    self._channel_traversal_height = traversal_height
+
   async def park(self):
     """Park the instrument.
 
@@ -1318,7 +1311,6 @@ class NimbusBackend(HamiltonTCPBackend):
   def _build_waste_position_params(
     self,
     use_channels: List[int],
-    traverse_height: float,
     z_final_offset: Optional[float] = None,
     roll_distance: Optional[float] = None,
   ) -> Tuple[List[int], List[int], List[int], List[int], List[int], List[int]]:
@@ -1326,7 +1318,6 @@ class NimbusBackend(HamiltonTCPBackend):
 
     Args:
       use_channels: List of channel indices to use
-      traverse_height: Traverse height in mm
       z_final_offset: Z final position in mm (absolute, optional, defaults to traverse_height)
       roll_distance: Roll distance in mm (optional, defaults to 9.0 mm)
 
@@ -1385,7 +1376,7 @@ class NimbusBackend(HamiltonTCPBackend):
     z_stop_absolute_mm = waste_z_hamilton  # Stop at waste position
 
     if z_final_offset is None:
-      z_final_offset = traverse_height  # Use traverse height as final position
+      z_final_offset = self._channel_traversal_height  # Use traverse height as final position
 
     if roll_distance is None:
       roll_distance = 9.0  # Default roll distance from log
@@ -1423,7 +1414,7 @@ class NimbusBackend(HamiltonTCPBackend):
     self,
     ops: List[Pickup],
     use_channels: List[int],
-    traverse_height: float = 146.0,  # TODO: Access deck z_max property properly instead of hardcoded literal
+    traverse_height: Optional[float] = None,
   ):
     """Pick up tips from the specified resource.
 
@@ -1437,7 +1428,7 @@ class NimbusBackend(HamiltonTCPBackend):
     Args:
       ops: List of Pickup operations, one per channel
       use_channels: List of channel indices to use
-      traverse_height: Traverse height in mm (optional, defaults to deck z_max)
+      traverse_height: Traverse height in mm (optional, defaults to _channel_traversal_height)
 
     Raises:
       RuntimeError: If pipette address or deck is not set
@@ -1500,7 +1491,9 @@ class NimbusBackend(HamiltonTCPBackend):
     begin_tip_pick_up_process_mm = max_z_hamilton + max_total_tip_length
     end_tip_pick_up_process_mm = max_z_hamilton + max_tip_length
 
-    # TODO: Traverse height: use default value
+    # Traverse height: use default value
+    if traverse_height is None:
+      traverse_height = self._channel_traversal_height
 
     # Convert to 0.01mm units
     traverse_height_units = int(round(traverse_height * 100))
@@ -1549,17 +1542,6 @@ class NimbusBackend(HamiltonTCPBackend):
       # If tip presence check fails, log warning but continue
       logger.warning(f"Could not check tip presence before pickup: {e}")
 
-    # Log parameters for debugging
-    logger.info("PickupTips parameters:")
-    logger.info(f"  tips_used: {tips_used}")
-    logger.info(f"  x_positions: {x_positions_full}")
-    logger.info(f"  y_positions: {y_positions_full}")
-    logger.info(f"  traverse_height: {traverse_height_units}")
-    logger.info(f"  begin_tip_pick_up_process_full: {begin_tip_pick_up_process_full}")
-    logger.info(f"  end_tip_pick_up_process_full: {end_tip_pick_up_process_full}")
-    logger.info(f"  tip_types: {tip_types_full}")
-    logger.info(f"  num_channels: {self.num_channels}")
-
     try:
       await self.send_command(command)
       logger.info(f"Picked up tips on channels {use_channels}")
@@ -1572,7 +1554,7 @@ class NimbusBackend(HamiltonTCPBackend):
     ops: List[Drop],
     use_channels: List[int],
     default_waste: bool = False,
-    traverse_height: float = 146.0,  # TODO: Access deck z_max property properly instead of hardcoded literal
+    traverse_height: Optional[float] = None,
     z_final_offset: Optional[float] = None,
     roll_distance: Optional[float] = None,
   ):
@@ -1584,7 +1566,6 @@ class NimbusBackend(HamiltonTCPBackend):
 
     TODO: evaluate this doc:
     Z positions are calculated from resource locations if not explicitly provided:
-    - traverse_height: Defaults to 146.0 mm (deck z_max)
     - z_start_offset: Calculated from resources (for waste: 135.39 mm, for regular: resource Z + offset)
     - z_stop_offset: Calculated from resources (for waste: 131.39 mm, for regular: resource Z + offset)
     - z_final_offset: Calculated from resources (defaults to traverse_height)
@@ -1594,7 +1575,7 @@ class NimbusBackend(HamiltonTCPBackend):
       ops: List of Drop operations, one per channel
       use_channels: List of channel indices to use
       default_waste: For DropTips command, if True, drop to default waste (positions may be ignored)
-      traverse_height: Traverse height in mm (optional, defaults to 146.0 mm)
+      traverse_height: Traverse height in mm (optional, defaults to self._channel_traversal_height)
       z_final_offset: Z final position in mm (absolute, optional, calculated from resources)
       roll_distance: Roll distance in mm (optional, defaults to 9.0 mm for waste positions)
 
@@ -1629,11 +1610,10 @@ class NimbusBackend(HamiltonTCPBackend):
         raise ValueError(f"Channel index {channel_idx} exceeds num_channels {self.num_channels}")
       tips_used[channel_idx] = 1
 
-    # Traverse height: use provided value (defaults to 146.0 mm from function signature)
-    traverse_height_mm = traverse_height
-
-    # Convert to 0.01mm units
-    traverse_height_units = int(round(traverse_height_mm * 100))
+    # Traverse height: use provided value (defaults to class attribute)
+    if traverse_height is None:
+      traverse_height = self._channel_traversal_height
+    traverse_height_units = round(traverse_height * 100)
 
     # Type annotation for command variable (can be either DropTips or DropTipsRoll)
     command: Union[DropTips, DropTipsRoll]
@@ -1650,12 +1630,10 @@ class NimbusBackend(HamiltonTCPBackend):
         roll_distances_full,
       ) = self._build_waste_position_params(
         use_channels=use_channels,
-        traverse_height=traverse_height_mm,
         z_final_offset=z_final_offset,
         roll_distance=roll_distance,
       )
 
-      # Create and send DropTipsRoll command
       command = DropTipsRoll(
         dest=self._pipette_address,
         tips_used=tips_used,
@@ -1668,16 +1646,6 @@ class NimbusBackend(HamiltonTCPBackend):
         roll_distances=roll_distances_full,
       )
 
-      # Log parameters for debugging
-      logger.info("DropTipsRoll parameters:")
-      logger.info(f"  tips_used: {tips_used}")
-      logger.info(f"  x_positions: {x_positions_full}")
-      logger.info(f"  y_positions: {y_positions_full}")
-      logger.info(f"  traverse_height: {traverse_height_units}")
-      logger.info(f"  begin_tip_deposit_process: {begin_tip_deposit_process_full}")
-      logger.info(f"  end_tip_deposit_process: {end_tip_deposit_process_full}")
-      logger.info(f"  z_final_positions: {z_final_positions_full}")
-      logger.info(f"  roll_distances: {roll_distances_full}")
     else:
       # Use DropTips for regular resources
       # Extract coordinates for each operation
@@ -1714,14 +1682,12 @@ class NimbusBackend(HamiltonTCPBackend):
       end_tip_deposit_process_mm = max_z_hamilton
 
       if z_final_offset is None:
-        z_final_offset_mm = traverse_height_mm  # Use traverse height as final position
-      else:
-        z_final_offset_mm = z_final_offset
+        z_final_offset = traverse_height  # Use traverse height as final position
 
       # Use absolute Z positions (same for all channels)
       begin_tip_deposit_process = [int(round(begin_tip_deposit_process_mm * 100))] * len(ops)
       end_tip_deposit_process = [int(round(end_tip_deposit_process_mm * 100))] * len(ops)
-      z_final_positions = [int(round(z_final_offset_mm * 100))] * len(ops)
+      z_final_positions = [int(round(z_final_offset * 100))] * len(ops)
 
       # Ensure arrays match num_channels length
       x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
@@ -1734,17 +1700,6 @@ class NimbusBackend(HamiltonTCPBackend):
       )
       z_final_positions_full = self._fill_by_channels(z_final_positions, use_channels, default=0)
 
-      # Log parameters for debugging
-      logger.info("DropTips parameters:")
-      logger.info(f"  tips_used: {tips_used}")
-      logger.info(f"  x_positions: {x_positions_full}")
-      logger.info(f"  y_positions: {y_positions_full}")
-      logger.info(f"  traverse_height: {traverse_height_units}")
-      logger.info(f"  begin_tip_deposit_process_full: {begin_tip_deposit_process_full}")
-      logger.info(f"  end_tip_deposit_process_full: {end_tip_deposit_process_full}")
-      logger.info(f"  z_final_positions_full: {z_final_positions_full}")
-
-      # Create and send DropTips command
       command = DropTips(
         dest=self._pipette_address,
         tips_used=tips_used,
@@ -1768,6 +1723,7 @@ class NimbusBackend(HamiltonTCPBackend):
     self,
     ops: List[SingleChannelAspiration],
     use_channels: List[int],
+    traverse_height: Optional[float] = None,
     adc_enabled: bool = False,
     # Advanced kwargs (Optional, default to zeros/nulls)
     lld_mode: Optional[List[int]] = None,
@@ -1789,6 +1745,7 @@ class NimbusBackend(HamiltonTCPBackend):
     Args:
       ops: List of SingleChannelAspiration operations, one per channel
       use_channels: List of channel indices to use
+      traverse_height: Traverse height in mm (optional, defaults to self._channel_traversal_height)
       adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
       lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
       liquid_seek_height: Relative offset from well bottom for LLD search start position (mm).
@@ -1885,9 +1842,10 @@ class NimbusBackend(HamiltonTCPBackend):
     x_positions = [int(round(x * 100)) for x in x_positions_mm]
     y_positions = [int(round(y * 100)) for y in y_positions_mm]
 
-    # Traverse height: use deck z_max or default 146.0 mm
-    traverse_height_mm = 146.0  # TODO: Access deck z_max property properly
-    traverse_height_units = int(round(traverse_height_mm * 100))
+    # Traverse height: use provided value or default
+    if traverse_height is None:
+      traverse_height = self._channel_traversal_height
+    traverse_height_units = round(traverse_height * 100)
 
     # Calculate well_bottoms: resource Z + offset Z + material_z_thickness
     well_bottoms: List[float] = []
@@ -2107,6 +2065,7 @@ class NimbusBackend(HamiltonTCPBackend):
     self,
     ops: List[SingleChannelDispense],
     use_channels: List[int],
+    traverse_height: Optional[float] = None,
     adc_enabled: bool = False,
     # Advanced kwargs (Optional, default to zeros/nulls)
     lld_mode: Optional[List[int]] = None,
@@ -2131,6 +2090,7 @@ class NimbusBackend(HamiltonTCPBackend):
     Args:
       ops: List of SingleChannelDispense operations, one per channel
       use_channels: List of channel indices to use
+      traverse_height: Traverse height in mm (optional, defaults to self._channel_traversal_height)
       adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
       lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
       liquid_seek_height: Override calculated LLD search height (mm). If None, calculated from well_bottom + resource size
@@ -2226,9 +2186,10 @@ class NimbusBackend(HamiltonTCPBackend):
     x_positions = [int(round(x * 100)) for x in x_positions_mm]
     y_positions = [int(round(y * 100)) for y in y_positions_mm]
 
-    # Traverse height: use deck z_max or default 146.0 mm
-    traverse_height_mm = 146.0  # TODO: Access deck z_max property properly
-    traverse_height_units = int(round(traverse_height_mm * 100))
+    # Traverse height: use provided value or default
+    if traverse_height is None:
+      traverse_height = self._channel_traversal_height
+    traverse_height_units = round(traverse_height * 100)
 
     # Calculate well_bottoms: resource Z + offset Z + material_z_thickness
     well_bottoms: List[float] = []
