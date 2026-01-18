@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, TypeVar, Union
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
@@ -48,6 +47,9 @@ from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
+
+
+T = TypeVar("T")
 
 
 # ============================================================================
@@ -1216,6 +1218,19 @@ class NimbusBackend(HamiltonTCPBackend):
     if self._door_lock_address is None:
       logger.info("DoorLock not available on this instrument")
 
+  def _fill_by_channels(self, values: List[T], use_channels: List[int], default: T) -> List[T]:
+    """Returns a full-length list of size `num_channels` where positions in `channels`
+    are filled from `values` in order; all others are `default`. Similar to one-hot encoding."""
+    if len(values) != len(use_channels):
+      raise ValueError(
+        f"values and channels must have same length (got {len(values)} vs {len(use_channels)})"
+      )
+
+    out = [default] * self.num_channels
+    for ch, v in zip(use_channels, values):
+      out[ch] = v
+    return out
+
   @property
   def num_channels(self) -> int:
     """The number of channels that the robot has."""
@@ -1382,20 +1397,16 @@ class NimbusBackend(HamiltonTCPBackend):
     roll_distances = [int(round(roll_distance * 100))] * len(use_channels)
 
     # Ensure arrays match num_channels length (with zeros for inactive channels)
-    x_positions_full = [0] * self.num_channels
-    y_positions_full = [0] * self.num_channels
-    begin_tip_deposit_process_full = [0] * self.num_channels
-    end_tip_deposit_process_full = [0] * self.num_channels
-    z_final_positions_full = [0] * self.num_channels
-    roll_distances_full = [0] * self.num_channels
-
-    for i, channel_idx in enumerate(use_channels):
-      x_positions_full[channel_idx] = x_positions[i]
-      y_positions_full[channel_idx] = y_positions[i]
-      begin_tip_deposit_process_full[channel_idx] = begin_tip_deposit_process[i]
-      end_tip_deposit_process_full[channel_idx] = end_tip_deposit_process[i]
-      z_final_positions_full[channel_idx] = z_final_positions[i]
-      roll_distances_full[channel_idx] = roll_distances[i]
+    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
+    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
+    begin_tip_deposit_process_full = self._fill_by_channels(
+      begin_tip_deposit_process, use_channels, default=0
+    )
+    end_tip_deposit_process_full = self._fill_by_channels(
+      end_tip_deposit_process, use_channels, default=0
+    )
+    z_final_positions_full = self._fill_by_channels(z_final_positions, use_channels, default=0)
+    roll_distances_full = self._fill_by_channels(roll_distances, use_channels, default=0)
 
     return (
       x_positions_full,
@@ -1499,19 +1510,15 @@ class NimbusBackend(HamiltonTCPBackend):
     end_tip_pick_up_process = [int(round(end_tip_pick_up_process_mm * 100))] * len(ops)
 
     # Ensure arrays match num_channels length (pad with 0s for inactive channels)
-    # We need to map use_channels to the correct positions
-    x_positions_full = [0] * self.num_channels
-    y_positions_full = [0] * self.num_channels
-    begin_tip_pick_up_process_full = [0] * self.num_channels
-    end_tip_pick_up_process_full = [0] * self.num_channels
-    tip_types_full = [0] * self.num_channels
-
-    for i, channel_idx in enumerate(use_channels):
-      x_positions_full[channel_idx] = x_positions[i]
-      y_positions_full[channel_idx] = y_positions[i]
-      begin_tip_pick_up_process_full[channel_idx] = begin_tip_pick_up_process[i]
-      end_tip_pick_up_process_full[channel_idx] = end_tip_pick_up_process[i]
-      tip_types_full[channel_idx] = tip_types[i]
+    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
+    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
+    begin_tip_pick_up_process_full = self._fill_by_channels(
+      begin_tip_pick_up_process, use_channels, default=0
+    )
+    end_tip_pick_up_process_full = self._fill_by_channels(
+      end_tip_pick_up_process, use_channels, default=0
+    )
+    tip_types_full = self._fill_by_channels(tip_types, use_channels, default=0)
 
     # Create and send command
     command = PickupTips(
@@ -1717,18 +1724,15 @@ class NimbusBackend(HamiltonTCPBackend):
       z_final_positions = [int(round(z_final_offset_mm * 100))] * len(ops)
 
       # Ensure arrays match num_channels length
-      x_positions_full = [0] * self.num_channels
-      y_positions_full = [0] * self.num_channels
-      begin_tip_deposit_process_full = [0] * self.num_channels
-      end_tip_deposit_process_full = [0] * self.num_channels
-      z_final_positions_full = [0] * self.num_channels
-
-      for i, channel_idx in enumerate(use_channels):
-        x_positions_full[channel_idx] = x_positions[i]
-        y_positions_full[channel_idx] = y_positions[i]
-        begin_tip_deposit_process_full[channel_idx] = begin_tip_deposit_process[i]
-        end_tip_deposit_process_full[channel_idx] = end_tip_deposit_process[i]
-        z_final_positions_full[channel_idx] = z_final_positions[i]
+      x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
+      y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
+      begin_tip_deposit_process_full = self._fill_by_channels(
+        begin_tip_deposit_process, use_channels, default=0
+      )
+      end_tip_deposit_process_full = self._fill_by_channels(
+        end_tip_deposit_process, use_channels, default=0
+      )
+      z_final_positions_full = self._fill_by_channels(z_final_positions, use_channels, default=0)
 
       # Log parameters for debugging
       logger.info("DropTips parameters:")
@@ -2007,52 +2011,42 @@ class NimbusBackend(HamiltonTCPBackend):
     mix_position_units = [int(round(p * 100)) for p in mix_position]
 
     # Build arrays for all channels (pad with 0s for inactive channels)
-    x_positions_full = [0] * self.num_channels
-    y_positions_full = [0] * self.num_channels
-    aspirate_volumes_full = [0] * self.num_channels
-    blowout_volumes_full = [0] * self.num_channels
-    aspirate_speeds_full = [0] * self.num_channels
-    liquid_seek_height_full = [0] * self.num_channels
-    liquid_surface_height_full = [0] * self.num_channels
-    immersion_depth_full = [0] * self.num_channels
-    surface_following_distance_full = [0] * self.num_channels
-    z_min_position_full = [0] * self.num_channels
-    settling_time_full = [0] * self.num_channels
-    transport_air_volume_full = [0] * self.num_channels
-    prewet_volume_full = [0] * self.num_channels
-    liquid_exit_speed_full = [0] * self.num_channels
-    mix_volume_full = [0] * self.num_channels
-    mix_cycles_full = [0] * self.num_channels
-    mix_speed_full = [0] * self.num_channels
-    mix_position_full = [0] * self.num_channels
-    capacitive_lld_sensitivity_full = [0] * self.num_channels
-    pressure_lld_sensitivity_full = [0] * self.num_channels
-    limit_curve_index_full = [0] * self.num_channels
-    lld_mode_full = [0] * self.num_channels
-
-    for i, channel_idx in enumerate(use_channels):
-      x_positions_full[channel_idx] = x_positions[i]
-      y_positions_full[channel_idx] = y_positions[i]
-      aspirate_volumes_full[channel_idx] = aspirate_volumes[i]
-      blowout_volumes_full[channel_idx] = blowout_volumes_units[i]
-      aspirate_speeds_full[channel_idx] = aspirate_speeds[i]
-      liquid_seek_height_full[channel_idx] = liquid_seek_height_units[i]
-      liquid_surface_height_full[channel_idx] = liquid_surface_height_units[i]
-      immersion_depth_full[channel_idx] = immersion_depth_units[i]
-      surface_following_distance_full[channel_idx] = surface_following_distance_units[i]
-      z_min_position_full[channel_idx] = z_min_position_units[i]
-      settling_time_full[channel_idx] = settling_time_units[i]
-      transport_air_volume_full[channel_idx] = transport_air_volume_units[i]
-      prewet_volume_full[channel_idx] = prewet_volume_units[i]
-      liquid_exit_speed_full[channel_idx] = liquid_exit_speed_units[i]
-      mix_volume_full[channel_idx] = mix_volume_units[i]
-      mix_cycles_full[channel_idx] = mix_cycles[i]
-      mix_speed_full[channel_idx] = mix_speed_units[i]
-      mix_position_full[channel_idx] = mix_position_units[i]
-      capacitive_lld_sensitivity_full[channel_idx] = capacitive_lld_sensitivity[i]
-      pressure_lld_sensitivity_full[channel_idx] = pressure_lld_sensitivity[i]
-      limit_curve_index_full[channel_idx] = limit_curve_index[i]
-      lld_mode_full[channel_idx] = lld_mode[i]
+    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
+    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
+    aspirate_volumes_full = self._fill_by_channels(aspirate_volumes, use_channels, default=0)
+    blowout_volumes_full = self._fill_by_channels(blowout_volumes_units, use_channels, default=0)
+    aspirate_speeds_full = self._fill_by_channels(aspirate_speeds, use_channels, default=0)
+    liquid_seek_height_full = self._fill_by_channels(
+      liquid_seek_height_units, use_channels, default=0
+    )
+    liquid_surface_height_full = self._fill_by_channels(
+      liquid_surface_height_units, use_channels, default=0
+    )
+    immersion_depth_full = self._fill_by_channels(immersion_depth_units, use_channels, default=0)
+    surface_following_distance_full = self._fill_by_channels(
+      surface_following_distance_units, use_channels, default=0
+    )
+    z_min_position_full = self._fill_by_channels(z_min_position_units, use_channels, default=0)
+    settling_time_full = self._fill_by_channels(settling_time_units, use_channels, default=0)
+    transport_air_volume_full = self._fill_by_channels(
+      transport_air_volume_units, use_channels, default=0
+    )
+    prewet_volume_full = self._fill_by_channels(prewet_volume_units, use_channels, default=0)
+    liquid_exit_speed_full = self._fill_by_channels(
+      liquid_exit_speed_units, use_channels, default=0
+    )
+    mix_volume_full = self._fill_by_channels(mix_volume_units, use_channels, default=0)
+    mix_cycles_full = self._fill_by_channels(mix_cycles, use_channels, default=0)
+    mix_speed_full = self._fill_by_channels(mix_speed_units, use_channels, default=0)
+    mix_position_full = self._fill_by_channels(mix_position_units, use_channels, default=0)
+    capacitive_lld_sensitivity_full = self._fill_by_channels(
+      capacitive_lld_sensitivity, use_channels, default=0
+    )
+    pressure_lld_sensitivity_full = self._fill_by_channels(
+      pressure_lld_sensitivity, use_channels, default=0
+    )
+    limit_curve_index_full = self._fill_by_channels(limit_curve_index, use_channels, default=0)
+    lld_mode_full = self._fill_by_channels(lld_mode, use_channels, default=0)
 
     # Default values for remaining parameters
     aspirate_type = [0] * self.num_channels
@@ -2364,56 +2358,40 @@ class NimbusBackend(HamiltonTCPBackend):
     touch_off_distance_units = int(round(touch_off_distance * 100))
 
     # Build arrays for all channels (pad with 0s for inactive channels)
-    x_positions_full = [0] * self.num_channels
-    y_positions_full = [0] * self.num_channels
-    dispense_volumes_full = [0] * self.num_channels
-    blowout_volumes_full = [0] * self.num_channels
-    dispense_speeds_full = [0] * self.num_channels
-    liquid_seek_height_full = [0] * self.num_channels
-    dispense_height_full = [0] * self.num_channels
-    immersion_depth_full = [0] * self.num_channels
-    surface_following_distance_full = [0] * self.num_channels
-    z_min_position_full = [0] * self.num_channels
-    settling_time_full = [0] * self.num_channels
-    transport_air_volume_full = [0] * self.num_channels
-    prewet_volume_full = [0] * self.num_channels
-    liquid_exit_speed_full = [0] * self.num_channels
-    mix_volume_full = [0] * self.num_channels
-    mix_cycles_full = [0] * self.num_channels
-    mix_speed_full = [0] * self.num_channels
-    mix_position_full = [0] * self.num_channels
-    capacitive_lld_sensitivity_full = [0] * self.num_channels
-    limit_curve_index_full = [0] * self.num_channels
-    lld_mode_full = [0] * self.num_channels
-    cutoff_speed_full = [0] * self.num_channels
-    stop_back_volume_full = [0] * self.num_channels
-    dispense_offset_full = [0] * self.num_channels
-
-    for i, channel_idx in enumerate(use_channels):
-      x_positions_full[channel_idx] = x_positions[i]
-      y_positions_full[channel_idx] = y_positions[i]
-      dispense_volumes_full[channel_idx] = dispense_volumes[i]
-      blowout_volumes_full[channel_idx] = blowout_volumes_units[i]
-      dispense_speeds_full[channel_idx] = dispense_speeds[i]
-      liquid_seek_height_full[channel_idx] = liquid_seek_height_units[i]
-      dispense_height_full[channel_idx] = dispense_height_units[i]
-      immersion_depth_full[channel_idx] = immersion_depth_units[i]
-      surface_following_distance_full[channel_idx] = surface_following_distance_units[i]
-      z_min_position_full[channel_idx] = z_min_position_units[i]
-      settling_time_full[channel_idx] = settling_time_units[i]
-      transport_air_volume_full[channel_idx] = transport_air_volume_units[i]
-      prewet_volume_full[channel_idx] = prewet_volume_units[i]
-      liquid_exit_speed_full[channel_idx] = liquid_exit_speed_units[i]
-      mix_volume_full[channel_idx] = mix_volume_units[i]
-      mix_cycles_full[channel_idx] = mix_cycles[i]
-      mix_speed_full[channel_idx] = mix_speed_units[i]
-      mix_position_full[channel_idx] = mix_position_units[i]
-      capacitive_lld_sensitivity_full[channel_idx] = capacitive_lld_sensitivity[i]
-      limit_curve_index_full[channel_idx] = limit_curve_index[i]
-      lld_mode_full[channel_idx] = lld_mode[i]
-      cutoff_speed_full[channel_idx] = cutoff_speed_units[i]
-      stop_back_volume_full[channel_idx] = stop_back_volume_units[i]
-      dispense_offset_full[channel_idx] = dispense_offset_units[i]
+    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
+    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
+    dispense_volumes_full = self._fill_by_channels(dispense_volumes, use_channels, default=0)
+    blowout_volumes_full = self._fill_by_channels(blowout_volumes_units, use_channels, default=0)
+    dispense_speeds_full = self._fill_by_channels(dispense_speeds, use_channels, default=0)
+    liquid_seek_height_full = self._fill_by_channels(
+      liquid_seek_height_units, use_channels, default=0
+    )
+    dispense_height_full = self._fill_by_channels(dispense_height_units, use_channels, default=0)
+    immersion_depth_full = self._fill_by_channels(immersion_depth_units, use_channels, default=0)
+    surface_following_distance_full = self._fill_by_channels(
+      surface_following_distance_units, use_channels, default=0
+    )
+    z_min_position_full = self._fill_by_channels(z_min_position_units, use_channels, default=0)
+    settling_time_full = self._fill_by_channels(settling_time_units, use_channels, default=0)
+    transport_air_volume_full = self._fill_by_channels(
+      transport_air_volume_units, use_channels, default=0
+    )
+    prewet_volume_full = self._fill_by_channels(prewet_volume_units, use_channels, default=0)
+    liquid_exit_speed_full = self._fill_by_channels(
+      liquid_exit_speed_units, use_channels, default=0
+    )
+    mix_volume_full = self._fill_by_channels(mix_volume_units, use_channels, default=0)
+    mix_cycles_full = self._fill_by_channels(mix_cycles, use_channels, default=0)
+    mix_speed_full = self._fill_by_channels(mix_speed_units, use_channels, default=0)
+    mix_position_full = self._fill_by_channels(mix_position_units, use_channels, default=0)
+    capacitive_lld_sensitivity_full = self._fill_by_channels(
+      capacitive_lld_sensitivity, use_channels, default=0
+    )
+    limit_curve_index_full = self._fill_by_channels(limit_curve_index, use_channels, default=0)
+    lld_mode_full = self._fill_by_channels(lld_mode, use_channels, default=0)
+    cutoff_speed_full = self._fill_by_channels(cutoff_speed_units, use_channels, default=0)
+    stop_back_volume_full = self._fill_by_channels(stop_back_volume_units, use_channels, default=0)
+    dispense_offset_full = self._fill_by_channels(dispense_offset_units, use_channels, default=0)
 
     # Default values for remaining parameters
     dispense_type = [0] * self.num_channels
