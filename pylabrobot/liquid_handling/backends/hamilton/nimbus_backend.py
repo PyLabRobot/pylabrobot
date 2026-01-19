@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Dict, List, Optional, Tuple, TypeVar, Union
+from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
@@ -33,6 +33,7 @@ from pylabrobot.liquid_handling.standard import (
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  PipettingOp,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
@@ -1349,6 +1350,68 @@ class NimbusBackend(HamiltonTCPBackend):
 
   # ============== Abstract methods from LiquidHandlerBackend ==============
 
+  def _compute_ops_xy_locations(
+    self, ops: Sequence[PipettingOp], use_channels: List[int]
+  ) -> Tuple[List[int], List[int]]:
+    """Compute X and Y positions in Hamilton coordinates for the given operations."""
+    if not isinstance(self.deck, NimbusDeck):
+      raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
+
+    x_positions_mm: List[float] = []
+    y_positions_mm: List[float] = []
+
+    for op in ops:
+      abs_location = op.resource.get_location_wrt(self.deck)
+      final_location = abs_location + op.offset
+      hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
+
+      x_positions_mm.append(hamilton_coord.x)
+      y_positions_mm.append(hamilton_coord.y)
+
+    # Convert positions to 0.01mm units (multiply by 100)
+    x_positions = [int(round(x * 100)) for x in x_positions_mm]
+    y_positions = [int(round(y * 100)) for y in y_positions_mm]
+
+    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
+    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
+
+    return x_positions_full, y_positions_full
+
+  def _compute_tip_handling_parameters(
+    self, ops: Sequence[Union[Pickup, Drop]], use_channels: List[int]
+  ):
+    if not isinstance(self.deck, NimbusDeck):
+      raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
+
+    z_positions_mm: List[float] = []
+    for op in ops:
+      abs_location = op.resource.get_location_wrt(self.deck)
+      hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
+      z_positions_mm.append(hamilton_coord.z)
+
+    # Calculate Z positions from resource locations and tip properties
+    # Similar to STAR backend: z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
+    max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
+    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
+    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
+
+    # Calculate absolute Z positions for pickup/drop start/stop in Hamilton coordinates
+    begin_tip_pick_up_process_mm = max_z_hamilton + max_total_tip_length
+    end_tip_pick_up_process_mm = max_z_hamilton + max_tip_length
+
+    # Convert to 0.01mm units
+    begin_tip_pick_up_process = [round(begin_tip_pick_up_process_mm * 100)] * len(ops)
+    end_tip_pick_up_process = [round(end_tip_pick_up_process_mm * 100)] * len(ops)
+
+    begin_tip_pick_up_process_full = self._fill_by_channels(
+      begin_tip_pick_up_process, use_channels, default=0
+    )
+    end_tip_pick_up_process_full = self._fill_by_channels(
+      end_tip_pick_up_process, use_channels, default=0
+    )
+
+    return begin_tip_pick_up_process_full, end_tip_pick_up_process_full
+
   async def pick_up_tips(
     self,
     ops: List[Pickup],
@@ -1380,90 +1443,6 @@ class NimbusBackend(HamiltonTCPBackend):
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
 
-    # Extract coordinates and tip types for each operation
-    x_positions_mm: List[float] = []
-    y_positions_mm: List[float] = []
-    z_positions_mm: List[float] = []
-    tip_types: List[int] = []
-
-    for op in ops:
-      # Get absolute location from resource
-      abs_location = op.resource.get_location_wrt(self.deck)
-      # Add offset
-      final_location = Coordinate(
-        x=abs_location.x + op.offset.x,
-        y=abs_location.y + op.offset.y,
-        z=abs_location.z + op.offset.z,
-      )
-      # Convert to Hamilton coordinates (returns in mm)
-      hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
-
-      x_positions_mm.append(hamilton_coord.x)
-      y_positions_mm.append(hamilton_coord.y)
-      z_positions_mm.append(hamilton_coord.z)
-
-      # Get tip type from tip object
-      tip_type = _get_tip_type_from_tip(op.tip)
-      tip_types.append(tip_type)
-
-    # Build tip pattern array (1 for active channels, 0 for inactive)
-    # Array length should match num_channels
-    tips_used = [0] * self.num_channels
-    for channel_idx in use_channels:
-      if channel_idx >= self.num_channels:
-        raise ValueError(f"Channel index {channel_idx} exceeds num_channels {self.num_channels}")
-      tips_used[channel_idx] = 1
-
-    # Convert positions to 0.01mm units (multiply by 100)
-    x_positions = [int(round(x * 100)) for x in x_positions_mm]
-    y_positions = [int(round(y * 100)) for y in y_positions_mm]
-
-    # Calculate Z positions from resource locations and tip properties
-    # Similar to STAR backend: z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
-    max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
-
-    # Calculate absolute Z positions in Hamilton coordinates
-    # z_start: resource Z + total tip length (where tip pickup starts)
-    # z_stop: resource Z + (tip length - fitting depth) (where tip pickup stops)
-    begin_tip_pick_up_process_mm = max_z_hamilton + max_total_tip_length
-    end_tip_pick_up_process_mm = max_z_hamilton + max_tip_length
-
-    # Traverse height: use default value
-    if traverse_height is None:
-      traverse_height = self._channel_traversal_height
-
-    # Convert to 0.01mm units
-    traverse_height_units = int(round(traverse_height * 100))
-
-    # For Z positions, use absolute positions (same for all channels)
-    begin_tip_pick_up_process = [int(round(begin_tip_pick_up_process_mm * 100))] * len(ops)
-    end_tip_pick_up_process = [int(round(end_tip_pick_up_process_mm * 100))] * len(ops)
-
-    # Ensure arrays match num_channels length (pad with 0s for inactive channels)
-    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
-    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
-    begin_tip_pick_up_process_full = self._fill_by_channels(
-      begin_tip_pick_up_process, use_channels, default=0
-    )
-    end_tip_pick_up_process_full = self._fill_by_channels(
-      end_tip_pick_up_process, use_channels, default=0
-    )
-    tip_types_full = self._fill_by_channels(tip_types, use_channels, default=0)
-
-    # Create and send command
-    command = PickupTips(
-      dest=self._pipette_address,
-      tips_used=tips_used,
-      x_positions=x_positions_full,
-      y_positions=y_positions_full,
-      traverse_height=traverse_height_units,
-      begin_tip_pick_up_process=begin_tip_pick_up_process_full,
-      end_tip_pick_up_process=end_tip_pick_up_process_full,
-      tip_types=tip_types_full,
-    )
-
     # Check tip presence before picking up tips
     try:
       tip_status = await self.send_command(IsTipPresent(self._pipette_address))
@@ -1481,6 +1460,35 @@ class NimbusBackend(HamiltonTCPBackend):
     except Exception as e:
       # If tip presence check fails, log warning but continue
       logger.warning(f"Could not check tip presence before pickup: {e}")
+
+    x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
+    begin_tip_pick_up_process, end_tip_pick_up_process = self._compute_tip_handling_parameters(
+      ops, use_channels
+    )
+
+    # Build tip pattern array (True for active channels, False for inactive)
+    tips_used = [int(ch in use_channels) for ch in range(self.num_channels)]
+
+    # Ensure arrays match num_channels length (pad with 0s for inactive channels)
+    tip_types = [_get_tip_type_from_tip(op.tip) for op in ops]
+    tip_types_full = self._fill_by_channels(tip_types, use_channels, default=0)
+
+    # Traverse height: use default value
+    if traverse_height is None:
+      traverse_height = self._channel_traversal_height
+    traverse_height_units = round(traverse_height * 100)  # Convert to 0.01mm units
+
+    # Create and send command
+    command = PickupTips(
+      dest=self._pipette_address,
+      tips_used=tips_used,
+      x_positions=x_positions_full,
+      y_positions=y_positions_full,
+      traverse_height=traverse_height_units,
+      begin_tip_pick_up_process=begin_tip_pick_up_process,
+      end_tip_pick_up_process=end_tip_pick_up_process,
+      tip_types=tip_types_full,
+    )
 
     try:
       await self.send_command(command)
@@ -1532,8 +1540,6 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Check if resources are waste positions (Trash objects)
     is_waste_positions = [isinstance(op.resource, Trash) for op in ops]
-
-    # Check if all operations are waste positions or all are regular
     all_waste = all(is_waste_positions)
     all_regular = not any(is_waste_positions)
 
@@ -1544,11 +1550,7 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
     # Build tip pattern array (1 for active channels, 0 for inactive)
-    tips_used = [0] * self.num_channels
-    for channel_idx in use_channels:
-      if channel_idx >= self.num_channels:
-        raise ValueError(f"Channel index {channel_idx} exceeds num_channels {self.num_channels}")
-      tips_used[channel_idx] = 1
+    tips_used = [int(ch in use_channels) for ch in range(self.num_channels)]
 
     # Traverse height: use provided value (defaults to class attribute)
     if traverse_height is None:
@@ -1587,57 +1589,16 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
     else:
-      # Use DropTips for regular resources
-      # Extract coordinates for each operation
-      x_positions_mm: List[float] = []
-      y_positions_mm: List[float] = []
-      z_positions_mm: List[float] = []
+      # Compute x and y positions, and tip handling parameters for regular resources
+      x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
+      begin_tip_deposit_process, end_tip_deposit_process = self._compute_tip_handling_parameters(
+        ops, use_channels
+      )
 
-      for i, op in enumerate(ops):
-        # Get absolute location from resource
-        abs_location = op.resource.get_location_wrt(self.deck)
-
-        # Add offset
-        final_location = Coordinate(
-          x=abs_location.x + op.offset.x,
-          y=abs_location.y + op.offset.y,
-          z=abs_location.z + op.offset.z,
-        )
-        # Convert to Hamilton coordinates (returns in mm)
-        hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
-
-        x_positions_mm.append(hamilton_coord.x)
-        y_positions_mm.append(hamilton_coord.y)
-        z_positions_mm.append(hamilton_coord.z)
-
-      # Convert positions to 0.01mm units (multiply by 100)
-      x_positions = [int(round(x * 100)) for x in x_positions_mm]
-      y_positions = [int(round(y * 100)) for y in y_positions_mm]
-
-      # Calculate Z positions from resource locations
-      max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
-
-      # Z positions are absolute, not relative to resource position
-      begin_tip_deposit_process_mm = max_z_hamilton + 10.0
-      end_tip_deposit_process_mm = max_z_hamilton
-
+      # Compute final Z positions. Use the traverse height if not provided. Fill to num_channels.
       if z_final_offset is None:
         z_final_offset = traverse_height  # Use traverse height as final position
-
-      # Use absolute Z positions (same for all channels)
-      begin_tip_deposit_process = [int(round(begin_tip_deposit_process_mm * 100))] * len(ops)
-      end_tip_deposit_process = [int(round(end_tip_deposit_process_mm * 100))] * len(ops)
-      z_final_positions = [int(round(z_final_offset * 100))] * len(ops)
-
-      # Ensure arrays match num_channels length
-      x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
-      y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
-      begin_tip_deposit_process_full = self._fill_by_channels(
-        begin_tip_deposit_process, use_channels, default=0
-      )
-      end_tip_deposit_process_full = self._fill_by_channels(
-        end_tip_deposit_process, use_channels, default=0
-      )
+      z_final_positions = [int(round(z_final_offset * 100))] * len(ops)  # in 0.01mm units
       z_final_positions_full = self._fill_by_channels(z_final_positions, use_channels, default=0)
 
       command = DropTips(
@@ -1646,8 +1607,8 @@ class NimbusBackend(HamiltonTCPBackend):
         x_positions=x_positions_full,
         y_positions=y_positions_full,
         traverse_height=traverse_height_units,
-        begin_tip_deposit_process=begin_tip_deposit_process_full,
-        end_tip_deposit_process=end_tip_deposit_process_full,
+        begin_tip_deposit_process=begin_tip_deposit_process,
+        end_tip_deposit_process=end_tip_deposit_process,
         z_final_positions=z_final_positions_full,
         default_waste=default_waste,
       )
@@ -1759,29 +1720,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # ========================================================================
 
     # Extract coordinates and convert to Hamilton coordinates
-    x_positions_mm: List[float] = []
-    y_positions_mm: List[float] = []
-    z_positions_mm: List[float] = []
-
-    for op in ops:
-      # Get absolute location from resource
-      abs_location = op.resource.get_location_wrt(self.deck)
-      # Add offset
-      final_location = Coordinate(
-        x=abs_location.x + op.offset.x,
-        y=abs_location.y + op.offset.y,
-        z=abs_location.z + op.offset.z,
-      )
-      # Convert to Hamilton coordinates (returns in mm)
-      hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
-
-      x_positions_mm.append(hamilton_coord.x)
-      y_positions_mm.append(hamilton_coord.y)
-      z_positions_mm.append(hamilton_coord.z)
-
-    # Convert positions to 0.01mm units (multiply by 100)
-    x_positions = [int(round(x * 100)) for x in x_positions_mm]
-    y_positions = [int(round(y * 100)) for y in y_positions_mm]
+    x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
 
     # Traverse height: use provided value or default
     if traverse_height is None:
@@ -1813,8 +1752,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # This is the fixed Z-height when LLD is OFF
     liquid_surface_heights_mm: List[float] = []
     for i, op in enumerate(ops):
-      liquid_height = getattr(op, "liquid_height", None) or 0.0
-      liquid_surface_height = well_bottoms_hamilton[i] + liquid_height
+      liquid_surface_height = well_bottoms_hamilton[i] + (op.liquid_height or 0)
       liquid_surface_heights_mm.append(liquid_surface_height)
 
     # Calculate liquid_seek_height if not provided as kwarg
@@ -1831,15 +1769,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # When provided as a kwarg, it should be a list of relative offsets in mm.
     # The instrument will internally add these to z_min_position to get absolute coordinates.
     if liquid_seek_height is None:
-      # Default: use well size_z as the offset (start search at top of well)
-      liquid_seek_height = []
-      for op in ops:
-        well_size_z = op.resource.get_absolute_size_z()
-        liquid_seek_height.append(well_size_z)
-    else:
-      # If provided, it's already a relative offset in mm, use as-is
-      # The instrument will add this to z_min_position internally
-      pass
+      liquid_seek_height = [op.resource.get_absolute_size_z() for op in ops]
 
     # Calculate z_min_position: default to well_bottom
     z_min_positions_mm = well_bottoms_hamilton.copy()
@@ -1857,18 +1787,9 @@ class NimbusBackend(HamiltonTCPBackend):
     ]  # in uL, default 40
 
     # Extract mix parameters from op.mix if available. Otherwise use None.
-    mix_volume: List[float] = []
-    mix_cycles: List[int] = []
-    mix_speed: List[float] = []
-    for op in ops:
-      if op.mix is not None:
-        mix_volume.append(op.mix.volume)
-        mix_cycles.append(op.mix.repetitions)
-        mix_speed.append(op.mix.flow_rate)
-      else:
-        mix_volume.append(0.0)
-        mix_cycles.append(0)
-        mix_speed.append(0.0)
+    mix_volume: List[float] = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles: List[int] = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
+    mix_speed: List[float] = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
 
     # ========================================================================
     # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
@@ -1910,8 +1831,6 @@ class NimbusBackend(HamiltonTCPBackend):
     mix_position_units = [int(round(p * 100)) for p in mix_position]
 
     # Build arrays for all channels (pad with 0s for inactive channels)
-    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
-    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
     aspirate_volumes_full = self._fill_by_channels(aspirate_volumes, use_channels, default=0)
     blowout_volumes_full = self._fill_by_channels(blowout_volumes_units, use_channels, default=0)
     aspirate_speeds_full = self._fill_by_channels(aspirate_speeds, use_channels, default=0)
@@ -2104,29 +2023,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # ========================================================================
 
     # Extract coordinates and convert to Hamilton coordinates
-    x_positions_mm: List[float] = []
-    y_positions_mm: List[float] = []
-    z_positions_mm: List[float] = []
-
-    for op in ops:
-      # Get absolute location from resource
-      abs_location = op.resource.get_location_wrt(self.deck)
-      # Add offset
-      final_location = Coordinate(
-        x=abs_location.x + op.offset.x,
-        y=abs_location.y + op.offset.y,
-        z=abs_location.z + op.offset.z,
-      )
-      # Convert to Hamilton coordinates (returns in mm)
-      hamilton_coord = self.deck.to_hamilton_coordinate(final_location)
-
-      x_positions_mm.append(hamilton_coord.x)
-      y_positions_mm.append(hamilton_coord.y)
-      z_positions_mm.append(hamilton_coord.z)
-
-    # Convert positions to 0.01mm units (multiply by 100)
-    x_positions = [int(round(x * 100)) for x in x_positions_mm]
-    y_positions = [int(round(y * 100)) for y in y_positions_mm]
+    x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
 
     # Traverse height: use provided value or default
     if traverse_height is None:
@@ -2158,8 +2055,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # This is the fixed Z-height when LLD is OFF
     dispense_heights_mm: List[float] = []
     for i, op in enumerate(ops):
-      liquid_height = getattr(op, "liquid_height", None) or 0.0
-      dispense_height = well_bottoms_hamilton[i] + liquid_height
+      dispense_height = well_bottoms_hamilton[i] + (op.liquid_height or 0)
       dispense_heights_mm.append(dispense_height)
 
     # Calculate liquid_seek_height if not provided as kwarg
@@ -2176,15 +2072,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # When provided as a kwarg, it should be a list of relative offsets in mm.
     # The instrument will internally add these to z_min_position to get absolute coordinates.
     if liquid_seek_height is None:
-      # Default: use well size_z as the offset (start search at top of well)
-      liquid_seek_height = []
-      for op in ops:
-        well_size_z = op.resource.get_absolute_size_z()
-        liquid_seek_height.append(well_size_z)
-    else:
-      # If provided, it's already a relative offset in mm, use as-is
-      # The instrument will add this to z_min_position internally
-      pass
+      liquid_seek_height = [op.resource.get_absolute_size_z() for op in ops]
 
     # Calculate z_min_position: default to well_bottom
     z_min_positions_mm = well_bottoms_hamilton.copy()
@@ -2202,18 +2090,9 @@ class NimbusBackend(HamiltonTCPBackend):
     ]  # in uL, default 40
 
     # Extract mix parameters from op.mix if available
-    mix_volume: List[float] = []
-    mix_cycles: List[int] = []
-    mix_speed: List[float] = []
-    for op in ops:
-      if op.mix is not None:
-        mix_volume.append(op.mix.volume if hasattr(op.mix, "volume") else 0.0)
-        mix_cycles.append(op.mix.repetitions if hasattr(op.mix, "repetitions") else 0)
-        mix_speed.append(op.mix.flow_rate)
-      else:
-        mix_volume.append(0.0)
-        mix_cycles.append(0)
-        mix_speed.append(0.0)
+    mix_volume: List[float] = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
+    mix_cycles: List[int] = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
+    mix_speed: List[float] = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
 
     # ========================================================================
     # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
@@ -2261,8 +2140,6 @@ class NimbusBackend(HamiltonTCPBackend):
     touch_off_distance_units = int(round(touch_off_distance * 100))
 
     # Build arrays for all channels (pad with 0s for inactive channels)
-    x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
-    y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
     dispense_volumes_full = self._fill_by_channels(dispense_volumes, use_channels, default=0)
     blowout_volumes_full = self._fill_by_channels(blowout_volumes_units, use_channels, default=0)
     dispense_speeds_full = self._fill_by_channels(dispense_speeds, use_channels, default=0)

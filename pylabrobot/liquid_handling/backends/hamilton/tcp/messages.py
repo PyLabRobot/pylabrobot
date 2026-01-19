@@ -1032,7 +1032,7 @@ class ResponseParser:
       Hoi2Action.INVALID_ACTION_RESPONSE,
     ):
       return self._parse_error(cmd_response, action)
-    elif action in (Hoi2Action.STATUS_RESPONSE, Hoi2Action.COMMAND_RESPONSE):
+    if action in (Hoi2Action.STATUS_RESPONSE, Hoi2Action.COMMAND_RESPONSE):
       return SuccessResponse(
         action=action,
         interface_id=cmd_response.hoi.interface_id,
@@ -1040,8 +1040,7 @@ class ResponseParser:
         raw_params=cmd_response.hoi.params,
         response_required=cmd_response.hoi.response_required,
       )
-    else:
-      raise ValueError(f"Unexpected HOI action: {action} (0x{action:02x})")
+    raise ValueError(f"Unexpected HOI action: {action} (0x{action:02x})")
 
   def _parse_error(self, cmd_response: CommandResponse, action: int) -> ErrorResponse:
     """Parse error response.
