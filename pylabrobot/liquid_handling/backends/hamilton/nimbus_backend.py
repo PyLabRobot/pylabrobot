@@ -1727,33 +1727,18 @@ class NimbusBackend(HamiltonTCPBackend):
       traverse_height = self._channel_traversal_height
     traverse_height_units = round(traverse_height * 100)
 
-    # Calculate well_bottoms: resource Z + offset Z + material_z_thickness
-    well_bottoms: List[float] = []
+    # Calculate well_bottoms: resource Z + offset Z + material_z_thickness in Hamilton coords
+    well_bottoms = []
     for op in ops:
-      abs_location = op.resource.get_location_wrt(self.deck)
-      well_bottom = abs_location.z + op.offset.z
+      abs_location = op.resource.get_location_wrt(self.deck) + op.offset
       if isinstance(op.resource, Container):
-        well_bottom += op.resource.material_z_thickness
-      well_bottoms.append(well_bottom)
-
-    # Convert well_bottoms to Hamilton coordinates
-    well_bottoms_hamilton: List[float] = []
-    for i, op in enumerate(ops):
-      abs_location = op.resource.get_location_wrt(self.deck)
-      well_bottom_location = Coordinate(
-        x=abs_location.x + op.offset.x,
-        y=abs_location.y + op.offset.y,
-        z=well_bottoms[i],
-      )
-      hamilton_coord = self.deck.to_hamilton_coordinate(well_bottom_location)
-      well_bottoms_hamilton.append(hamilton_coord.z)
+        abs_location.z += op.resource.material_z_thickness
+      hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
+      well_bottoms.append(hamilton_coord.z)
 
     # Calculate liquid_surface_height: well_bottom + (op.liquid_height or 0)
     # This is the fixed Z-height when LLD is OFF
-    liquid_surface_heights_mm: List[float] = []
-    for i, op in enumerate(ops):
-      liquid_surface_height = well_bottoms_hamilton[i] + (op.liquid_height or 0)
-      liquid_surface_heights_mm.append(liquid_surface_height)
+    liquid_surface_heights_mm = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
 
     # Calculate liquid_seek_height if not provided as kwarg
     #
@@ -1772,7 +1757,7 @@ class NimbusBackend(HamiltonTCPBackend):
       liquid_seek_height = [op.resource.get_absolute_size_z() for op in ops]
 
     # Calculate z_min_position: default to well_bottom
-    z_min_positions_mm = well_bottoms_hamilton.copy()
+    z_min_positions_mm = well_bottoms.copy()
 
     # Extract volumes and speeds from operations
     volumes = [op.volume for op in ops]  # in uL
@@ -2030,33 +2015,18 @@ class NimbusBackend(HamiltonTCPBackend):
       traverse_height = self._channel_traversal_height
     traverse_height_units = round(traverse_height * 100)
 
-    # Calculate well_bottoms: resource Z + offset Z + material_z_thickness
-    well_bottoms: List[float] = []
+    # Calculate well_bottoms: resource Z + offset Z + material_z_thickness in Hamilton coords
+    well_bottoms = []
     for op in ops:
-      abs_location = op.resource.get_location_wrt(self.deck)
-      well_bottom = abs_location.z + op.offset.z
+      abs_location = op.resource.get_location_wrt(self.deck) + op.offset
       if isinstance(op.resource, Container):
-        well_bottom += op.resource.material_z_thickness
-      well_bottoms.append(well_bottom)
-
-    # Convert well_bottoms to Hamilton coordinates
-    well_bottoms_hamilton: List[float] = []
-    for i, op in enumerate(ops):
-      abs_location = op.resource.get_location_wrt(self.deck)
-      well_bottom_location = Coordinate(
-        x=abs_location.x + op.offset.x,
-        y=abs_location.y + op.offset.y,
-        z=well_bottoms[i],
-      )
-      hamilton_coord = self.deck.to_hamilton_coordinate(well_bottom_location)
-      well_bottoms_hamilton.append(hamilton_coord.z)
+        abs_location.z += op.resource.material_z_thickness
+      hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
+      well_bottoms.append(hamilton_coord.z)
 
     # Calculate dispense_height: well_bottom + (op.liquid_height or 0)
     # This is the fixed Z-height when LLD is OFF
-    dispense_heights_mm: List[float] = []
-    for i, op in enumerate(ops):
-      dispense_height = well_bottoms_hamilton[i] + (op.liquid_height or 0)
-      dispense_heights_mm.append(dispense_height)
+    dispense_heights_mm = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
 
     # Calculate liquid_seek_height if not provided as kwarg
     #
@@ -2075,7 +2045,7 @@ class NimbusBackend(HamiltonTCPBackend):
       liquid_seek_height = [op.resource.get_absolute_size_z() for op in ops]
 
     # Calculate z_min_position: default to well_bottom
-    z_min_positions_mm = well_bottoms_hamilton.copy()
+    z_min_positions_mm = well_bottoms.copy()
 
     # Extract volumes and speeds from operations
     volumes = [op.volume for op in ops]  # in uL
