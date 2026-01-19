@@ -316,11 +316,6 @@ class GetObjectCommand(HamiltonCommand):
   def __init__(self, object_address: Address):
     super().__init__(object_address)
 
-  def build_parameters(self) -> HoiParams:
-    """Build parameters for get_object command."""
-    # No parameters needed for get_object
-    return HoiParams()
-
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
     """Parse get_object response."""
@@ -464,11 +459,6 @@ class GetInterfacesCommand(HamiltonCommand):
 
   def __init__(self, object_address: Address):
     super().__init__(object_address)
-
-  def build_parameters(self) -> HoiParams:
-    """Build parameters for get_interfaces command."""
-    # No parameters needed
-    return HoiParams()
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:

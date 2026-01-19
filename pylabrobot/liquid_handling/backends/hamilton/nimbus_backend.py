@@ -125,9 +125,6 @@ class LockDoor(HamiltonCommand):
   interface_id = 1
   command_id = 1
 
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
-
 
 class UnlockDoor(HamiltonCommand):
   """Unlock door command (DoorLock at 1:1:268, interface_id=1, command_id=2)."""
@@ -135,9 +132,6 @@ class UnlockDoor(HamiltonCommand):
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 2
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
 
 
 class IsDoorLocked(HamiltonCommand):
@@ -147,9 +141,6 @@ class IsDoorLocked(HamiltonCommand):
   interface_id = 1
   command_id = 3
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
@@ -165,9 +156,6 @@ class PreInitializeSmart(HamiltonCommand):
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 32
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
 
 
 class InitializeSmartRoll(HamiltonCommand):
@@ -226,9 +214,6 @@ class IsInitialized(HamiltonCommand):
   command_id = 14
   action_code = 0  # Must be 0 (STATUS_REQUEST), default is 3 (COMMAND_REQUEST)
 
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
-
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
     """Parse IsInitialized response."""
@@ -244,9 +229,6 @@ class IsTipPresent(HamiltonCommand):
   interface_id = 1
   command_id = 16
   action_code = 0
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
@@ -264,9 +246,6 @@ class GetChannelConfiguration_1(HamiltonCommand):
   interface_id = 1
   command_id = 15
   action_code = 0
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
@@ -319,9 +298,6 @@ class Park(HamiltonCommand):
   protocol = HamiltonProtocol.OBJECT_DISCOVERY
   interface_id = 1
   command_id = 3
-
-  def build_parameters(self) -> HoiParams:
-    return HoiParams()
 
 
 class PickupTips(HamiltonCommand):
