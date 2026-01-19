@@ -263,6 +263,140 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc("RS 1913")
     await self._wait_ready()
 
+  async def get_set_temperature(self) -> float:
+    """ Get the set value temperature of the incubator in degrees Celsius."""
+    resp = await self._send_command_plc("RD DM890")
+    try:
+      temp_value = int(resp)
+      temperature = temp_value / 10.0
+      return temperature
+    except ValueError:
+      raise RuntimeError(f"Invalid set temperature value received from incubator: {resp!r}")
+
+  async def set_humidity(self, humidity: float):
+    """ Set the humidity of the incubator in percentage (%)."""
+    humidity_val = int(humidity * 10)
+    await self._send_command_plc(f"WR DM893 {str(humidity_val).zfill(5)}")
+    await self._wait_ready()
+
+  async def get_humidity(self) -> float:
+    """ Get the actual humidity of the incubator in percentage (%)."""
+    resp = await self._send_command_plc("RD DM983")
+    try:
+      humidity_value = int(resp)
+      humidity = humidity_value / 10.0
+      return humidity
+    except ValueError:
+      raise RuntimeError(f"Invalid humidity value received from incubator: {resp!r}")
+
+  async def get_set_humidity(self) -> float:
+    """ Get the set value humidity of the incubator in percentage (%)."""
+    resp = await self._send_command_plc("RD DM893")
+    try:
+      humidity_value = int(resp)
+      humidity = humidity_value / 10.0
+      return humidity
+    except ValueError:
+      raise RuntimeError(f"Invalid set humidity value received from incubator: {resp!r}")
+
+  async def set_co2_level(self, co2_level: float):
+    """ Set the CO2 level of the incubator in 1/100% vol. percentage (%) 500 = 5.0 % ."""
+    co2_val = int(co2_level * 100)
+    await self._send_command_plc(f"WR DM894 {str(co2_val).zfill(5)}")
+    await self._wait_ready()
+
+  async def get_co2_level(self) -> float:
+    """ Get the CO2 level of the incubator in percentage (%)."""
+    resp = await self._send_command_plc("RD DM984")
+    try:
+      co2_value = int(resp)
+      co2 = co2_value / 100.0
+      return co2
+    except ValueError:
+      raise RuntimeError(f"Invalid co2 value received from incubator: {resp!r}")
+
+  async def get_set_co2_level(self) -> float:
+    """ Get the set value CO2 level of the incubator in percentage (%)."""
+    resp = await self._send_command_plc("RD DM894")
+    try:
+      co2_set_value = int(resp)
+      co2 = co2_set_value / 100.0
+      return co2
+    except ValueError:
+      raise RuntimeError(f"Invalid co2 set value received from incubator: {resp!r}")
+
+  async def set_n2_level(self, n2_level: float):
+    """ Set the N2 level of the incubator in percentage (%)."""
+    n2_val = int(n2_level * 100)
+    await self._send_command_plc(f"WR DM895 {str(n2_val).zfill(5)}")
+
+  async def get_n2_level(self) -> float:
+    """ Get the N2 level of the incubator in percentage (%)."""
+    resp = await self._send_command_plc("RD DM985")
+    try:
+      n2_value = int(resp)
+      n2 = n2_value / 100.0
+      return n2
+    except ValueError:
+      raise RuntimeError(f"Invalid N2 value received from incubator: {resp!r}")
+
+  async def get_set_n2_level(self) -> float:
+    """ Get the set value N2 level of the incubator in percentage (%)."""
+    resp = await self._send_command_plc("RD DM895")
+    try:
+      n2_set_value = int(resp)
+      n2 = n2_set_value / 100.0
+      return n2
+    except ValueError:
+      raise RuntimeError(f"Invalid N2 set value received from incubator: {resp!r}")
+
+  # UNTESTED
+  # Unsure what RD 1912 returns (is 1 home or swapped?)
+  async def turn_swap_station(self, home: bool):
+    """ Turn the swap station of the incubator. If home is True, turn to home position."""
+    resp = await self._send_command_plc("RD 1912")
+    if home and resp == "1":
+      await self._send_command_plc("RS 1912")
+    else:
+      await self._send_command_plc("ST 1912")
+
+  # UNTESTED
+  # Used in HT units only
+  async def check_shovel_sensor(self) -> bool:
+    """ First need to activate shovel transfer sensor deactivated by default, wait 0.1 seconds
+      and then Check if the shovel plate sensor is activated."""
+    await self._send_command_plc("ST 1911")
+    asyncio.sleep(0.1)
+    resp = await self._send_command_plc("RD 1812")
+    if resp == "1":
+      return True
+    elif resp == "0":
+      return False
+    else:
+      raise RuntimeError(f"Unexpected response from incubator read shovel sensor: {resp!r}")
+
+  # UNTESTED
+  async def check_transfer_sensor(self) -> bool:
+    """ Check if the transfer plate sensor is activated."""
+    resp = await self._send_command_plc("RD 1813")
+    if resp == "1":
+      return True
+    elif resp == "0":
+      return False
+    else:
+      raise RuntimeError(f"Unexpected response from read transfer station sensor: {resp!r}")
+
+  # UNTESTED
+  async def check_second_transfer_sensor(self) -> bool:
+    """ Check if the second transfer plate sensor is activated."""
+    resp = await self._send_command_plc("RD 1807")
+    if resp == "1":
+      return True
+    elif resp == "0":
+      return False
+    else:
+      raise RuntimeError(f"Unexpected response from read 2nd transfer station sensor: {resp!r}")
+
   async def scan_barcode(self, cassette: int, position: int, pitch: int, plate_count: int) -> str:
     """ Scan a barcode using the internal barcode reader. Using command LON """
     if not self.barcode_installed:

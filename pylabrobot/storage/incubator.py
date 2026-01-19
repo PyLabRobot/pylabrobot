@@ -210,3 +210,61 @@ class Incubator(Machine, Resource):
       category=data["category"],
       model=data["model"],
     )
+
+  """ Methods added for Liconic incubator options."""
+
+  async def get_set_temperature(self) -> float:
+    """ Get the set value temperature of the incubator in degrees Celsius."""
+    return await self.backend.get_set_temperature()
+
+  async def set_humidity(self, humidity: float):
+    """ Set the humidity of the incubator in percentage (%)."""
+    return await self.backend.set_humidity(humidity)
+
+  async def get_humidity(self) -> float:
+    """ Get the humidity of the incubator in percentage (%)."""
+    return await self.backend.get_humidity()
+
+  async def get_set_humidity(self) -> float:
+    """ Get the set value humidity of the incubator in percentage (%)."""
+    return await self.backend.get_set_humidity()
+
+  async def set_co2_level(self, co2_level: float):
+    """ Set the CO2 level of the incubator in percentage (%)."""
+    return await self.backend.set_co2_level(co2_level)
+
+  async def get_co2_level(self) -> float:
+    """ Get the CO2 level of the incubator in percentage (%)."""
+    return await self.backend.get_co2_level()
+
+  async def get_set_co2_level(self) -> float:
+    """ Get the set value CO2 level of the incubator in percentage (%)."""
+    return await self.backend.get_set_co2_level()
+
+  async def set_n2_level(self, n2_level: float):
+    """ Set the N2 level of the incubator in percentage (%)."""
+    return await self.backend.set_n2_level(n2_level)
+
+  async def get_n2_level(self) -> float:
+    """ Get the N2 level of the incubator in percentage (%)."""
+    return await self.backend.get_n2_level()
+
+  async def get_set_n2_level(self) -> float:
+    """ Get the set value N2 level of the incubator in percentage (%)."""
+    return await self.backend.get_set_n2_level()
+
+  async def turn_swap_station(self, home: bool):
+    """ Turn the swap station of the incubator. If home is True, turn to home position."""
+    return await self.backend.turn_swap_station(home)
+
+  async def check_shovel_sensor(self) -> bool:
+    """ Check if the shovel plate sensor is activated."""
+    return await self.backend.check_shovel_sensor()
+
+  async def check_transfer_sensor(self) -> bool:
+    """ Check if the transfer plate sensor is activated."""
+    return await self.backend.check_transfer_sensor()
+
+  async def check_second_transfer_sensor(self) -> bool:
+    """ Check if the second transfer plate sensor is activated."""
+    return await self.backend.check_second_transfer_sensor()
