@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
@@ -22,8 +22,8 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   InitResponse,
   RegistrationMessage,
   RegistrationResponse,
-  ResponseParser,
   SuccessResponse,
+  parse_response,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
@@ -110,8 +110,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     )
 
     # Connection state tracking (wrapping Socket)
-    self._connection_state = "disconnected"
-    self._last_error: Optional[Exception] = None
+    self._connected = False
     self._reconnect_attempts = 0
     self.auto_reconnect = auto_reconnect
     self.max_reconnect_attempts = max_reconnect_attempts
@@ -127,14 +126,13 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
   async def _ensure_connected(self):
     """Ensure connection is healthy before operations."""
-    if self._connection_state != "connected":
-      if self.auto_reconnect:
-        logger.info(f"{self.io._unique_id} Connection not established, attempting to reconnect...")
-        await self._reconnect()
-      else:
+    if not self._connected:
+      if not self.auto_reconnect:
         raise ConnectionError(
           f"{self.io._unique_id} Connection not established and auto-reconnect disabled"
         )
+      logger.info(f"{self.io._unique_id} Connection not established, attempting to reconnect...")
+      await self._reconnect()
 
   async def _reconnect(self):
     """Attempt to reconnect with exponential backoff."""
@@ -165,11 +163,10 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
         return
 
       except Exception as e:
-        self._last_error = e
         logger.warning(f"{self.io._unique_id} Reconnection attempt {attempt + 1} failed: {e}")
 
     # All reconnection attempts failed
-    self._connection_state = "disconnected"
+    self._connected = False
     raise ConnectionError(
       f"{self.io._unique_id} Failed to reconnect after {self.max_reconnect_attempts} attempts"
     )
@@ -185,10 +182,9 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     try:
       await self.io.write(data, timeout=timeout)
-      self._connection_state = "connected"
-    except (ConnectionError, OSError, TimeoutError) as e:
-      self._connection_state = "disconnected"
-      self._last_error = e
+      self._connected = True
+    except (ConnectionError, OSError, TimeoutError):
+      self._connected = False
       raise
 
   async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
@@ -205,11 +201,10 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     try:
       data = await self.io.read(num_bytes, timeout=timeout)
-      self._connection_state = "connected"
+      self._connected = True
       return data
-    except (ConnectionError, OSError, TimeoutError) as e:
-      self._connection_state = "disconnected"
-      self._last_error = e
+    except (ConnectionError, OSError, TimeoutError):
+      self._connected = False
       raise
 
   async def read_exact(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
@@ -229,29 +224,18 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     try:
       data = await self.io.read_exact(num_bytes, timeout=timeout)
-      self._connection_state = "connected"
+      self._connected = True
       return data
-    except (ConnectionError, OSError, TimeoutError) as e:
-      self._connection_state = "disconnected"
-      self._last_error = e
+    except (ConnectionError, OSError, TimeoutError):
+      self._connected = False
       raise
-
-  @property
-  def connection_state(self) -> str:
-    """Get the current connection state."""
-    return self._connection_state
 
   @property
   def is_connected(self) -> bool:
     """Check if the connection is currently established."""
-    return self._connection_state == "connected"
+    return self._connected
 
-  @property
-  def last_error(self) -> Optional[Exception]:
-    """Get the last connection error."""
-    return self._last_error
-
-  async def _read_one_message(self):
+  async def _read_one_message(self) -> Union[RegistrationResponse, CommandResponse]:
     """Read one complete Hamilton packet and parse based on protocol.
 
     Hamilton packets are length-prefixed:
@@ -297,15 +281,14 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       if harp_protocol == 2:
         # HARP Protocol 2: HOI2
         return CommandResponse.from_bytes(complete_data)
-      elif harp_protocol == 3:
+      if harp_protocol == 3:
         # HARP Protocol 3: Registration2
         return RegistrationResponse.from_bytes(complete_data)
-      else:
-        logger.warning(f"Unknown HARP protocol: {harp_protocol}, attempting CommandResponse parse")
-        return CommandResponse.from_bytes(complete_data)
-    else:
-      logger.warning(f"Unknown IP protocol: {ip_protocol}, attempting CommandResponse parse")
+      logger.warning(f"Unknown HARP protocol: {harp_protocol}, attempting CommandResponse parse")
       return CommandResponse.from_bytes(complete_data)
+
+    logger.warning(f"Unknown IP protocol: {ip_protocol}, attempting CommandResponse parse")
+    return CommandResponse.from_bytes(complete_data)
 
   async def setup(self):
     """Initialize Hamilton connection and discover objects.
@@ -321,8 +304,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     await self.io.setup()
 
     # Set connection state after successful connection
-    self._connection_state = "connected"
-    self._last_error = None
+    self._connected = True
     self._reconnect_attempts = 0
 
     # Step 2: Initialize connection (Protocol 7)
@@ -574,10 +556,10 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     # Read response (timeout handled by TCP layer)
     response_message = await self._read_one_message()
+    assert isinstance(response_message, CommandResponse)
 
     # Parse response with type dispatch
-    parser = ResponseParser()
-    hoi_response = parser.parse(response_message)
+    hoi_response = parse_response(response_message)
 
     # Handle errors
     if isinstance(hoi_response, ErrorResponse):
@@ -597,7 +579,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     except Exception as e:
       logger.warning(f"Error during stop: {e}")
     finally:
-      self._connection_state = "disconnected"
+      self._connected = False
     logger.info("Hamilton backend stopped")
 
   def serialize(self) -> dict:

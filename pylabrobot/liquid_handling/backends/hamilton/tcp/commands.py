@@ -195,7 +195,7 @@ class HamiltonCommand:
     directly calls parse_response_parameters for efficiency.
 
     Args:
-      response: Typed SuccessResponse from ResponseParser
+      response: Typed SuccessResponse from parse_response
 
     Returns:
       Dictionary with parsed response data, or None if no data to extract

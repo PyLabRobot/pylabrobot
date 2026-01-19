@@ -996,76 +996,72 @@ class ErrorResponse(HoiResponse):
   error_message: str
 
 
-class ResponseParser:
-  """Parse CommandResponse into typed HoiResponse objects.
+def parse_response(cmd_response: CommandResponse) -> HoiResponse:
+  """Parse CommandResponse and dispatch based on HOI action code.
 
   Provides action-based dispatch with automatic error detection.
 
   Example:
-      parser = ResponseParser()
-      response = parser.parse(command_response)
+      response = parse_response(command_response)
       if isinstance(response, ErrorResponse):
           raise RuntimeError(f"Error {response.error_code}: {response.error_message}")
+
+  Args:
+    cmd_response: Parsed CommandResponse from network
+
+  Returns:
+    Typed HoiResponse (SuccessResponse or ErrorResponse)
+
+  Raises:
+    ValueError: If action code is unexpected
   """
+  from .protocol import Hoi2Action
 
-  def parse(self, cmd_response: CommandResponse) -> HoiResponse:
-    """Parse CommandResponse and dispatch based on HOI action code.
+  # Get action code (lower 4 bits)
+  action = Hoi2Action(cmd_response.hoi.action_code)
 
-    Args:
-      cmd_response: Parsed CommandResponse from network
-
-    Returns:
-      Typed HoiResponse (SuccessResponse or ErrorResponse)
-
-    Raises:
-      ValueError: If action code is unexpected
-    """
-    from .protocol import Hoi2Action
-
-    # Get action code (lower 4 bits)
-    action = Hoi2Action(cmd_response.hoi.action_code)
-
-    # Dispatch based on action type
-    if action in (
-      Hoi2Action.STATUS_EXCEPTION,
-      Hoi2Action.COMMAND_EXCEPTION,
-      Hoi2Action.INVALID_ACTION_RESPONSE,
-    ):
-      return self._parse_error(cmd_response, action)
-    if action in (Hoi2Action.STATUS_RESPONSE, Hoi2Action.COMMAND_RESPONSE):
-      return SuccessResponse(
-        action=action,
-        interface_id=cmd_response.hoi.interface_id,
-        action_id=cmd_response.hoi.action_id,
-        raw_params=cmd_response.hoi.params,
-        response_required=cmd_response.hoi.response_required,
-      )
-    raise ValueError(f"Unexpected HOI action: {action} (0x{action:02x})")
-
-  def _parse_error(self, cmd_response: CommandResponse, action: int) -> ErrorResponse:
-    """Parse error response.
-
-    Error responses may have custom formats that don't follow standard
-    DataFragment encoding. Return the raw payload as hex for debugging.
-
-    Args:
-      cmd_response: Raw command response
-      action: HOI action code
-
-    Returns:
-      ErrorResponse with error details
-    """
-    # Error responses don't follow standard DataFragment format
-    # Just return the raw data as hex for inspection
-    error_code = action  # Use action code as error code
-    error_message = f"Error response (action={action:#x}): {cmd_response.hoi.params.hex()}"
-
-    return ErrorResponse(
+  # Dispatch based on action type
+  if action in (
+    Hoi2Action.STATUS_EXCEPTION,
+    Hoi2Action.COMMAND_EXCEPTION,
+    Hoi2Action.INVALID_ACTION_RESPONSE,
+  ):
+    return _parse_error_response(cmd_response, action)
+  if action in (Hoi2Action.STATUS_RESPONSE, Hoi2Action.COMMAND_RESPONSE):
+    return SuccessResponse(
       action=action,
       interface_id=cmd_response.hoi.interface_id,
       action_id=cmd_response.hoi.action_id,
       raw_params=cmd_response.hoi.params,
       response_required=cmd_response.hoi.response_required,
-      error_code=error_code,
-      error_message=error_message,
     )
+  raise ValueError(f"Unexpected HOI action: {action} (0x{action:02x})")
+
+
+def _parse_error_response(cmd_response: CommandResponse, action: int) -> ErrorResponse:
+  """Parse error response.
+
+  Error responses may have custom formats that don't follow standard
+  DataFragment encoding. Return the raw payload as hex for debugging.
+
+  Args:
+    cmd_response: Raw command response
+    action: HOI action code
+
+  Returns:
+    ErrorResponse with error details
+  """
+  # Error responses don't follow standard DataFragment format
+  # Just return the raw data as hex for inspection
+  error_code = action  # Use action code as error code
+  error_message = f"Error response (action={action:#x}): {cmd_response.hoi.params.hex()}"
+
+  return ErrorResponse(
+    action=action,
+    interface_id=cmd_response.hoi.interface_id,
+    action_id=cmd_response.hoi.action_id,
+    raw_params=cmd_response.hoi.params,
+    response_required=cmd_response.hoi.response_required,
+    error_code=error_code,
+    error_message=error_message,
+  )
