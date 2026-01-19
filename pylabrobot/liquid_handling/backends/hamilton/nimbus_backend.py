@@ -205,7 +205,6 @@ class InitializeSmartRoll(HamiltonCommand):
     self.end_tip_deposit_process = end_tip_deposit_process
     self.z_final_positions = z_final_positions
     self.roll_distances = roll_distances
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return (
@@ -309,7 +308,6 @@ class SetChannelConfiguration(HamiltonCommand):
     self.channel = channel
     self.indexes = indexes
     self.enables = enables
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return HoiParams().u16(self.channel).i16_array(self.indexes).bool_array(self.enables)
@@ -364,7 +362,6 @@ class PickupTips(HamiltonCommand):
     self.begin_tip_pick_up_process = begin_tip_pick_up_process
     self.end_tip_pick_up_process = end_tip_pick_up_process
     self.tip_types = tip_types
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return (
@@ -420,7 +417,6 @@ class DropTips(HamiltonCommand):
     self.end_tip_deposit_process = end_tip_deposit_process
     self.z_final_positions = z_final_positions
     self.default_waste = default_waste
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return (
@@ -477,7 +473,6 @@ class DropTipsRoll(HamiltonCommand):
     self.end_tip_deposit_process = end_tip_deposit_process
     self.z_final_positions = z_final_positions
     self.roll_distances = roll_distances
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return (
@@ -513,7 +508,6 @@ class EnableADC(HamiltonCommand):
     """
     super().__init__(dest)
     self.tips_used = tips_used
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return HoiParams().u16_array(self.tips_used)
@@ -539,7 +533,6 @@ class DisableADC(HamiltonCommand):
     """
     super().__init__(dest)
     self.tips_used = tips_used
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return HoiParams().u16_array(self.tips_used)
@@ -569,7 +562,6 @@ class GetChannelConfiguration(HamiltonCommand):
     super().__init__(dest)
     self.channel = channel
     self.indexes = indexes
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return HoiParams().u16(self.channel).i16_array(self.indexes)
@@ -701,7 +693,6 @@ class Aspirate(HamiltonCommand):
     self.tadm_enabled = tadm_enabled
     self.limit_curve_index = limit_curve_index
     self.recording_mode = recording_mode
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return (
@@ -858,7 +849,6 @@ class Dispense(HamiltonCommand):
     self.tadm_enabled = tadm_enabled
     self.limit_curve_index = limit_curve_index
     self.recording_mode = recording_mode
-    self._assign_params()
 
   def build_parameters(self) -> HoiParams:
     return (

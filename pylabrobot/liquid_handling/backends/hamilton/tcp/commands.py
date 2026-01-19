@@ -75,48 +75,6 @@ class HamiltonCommand:
     self.dest_address = dest  # Alias for compatibility
     self.sequence_number = 0
     self.source_address: Optional[Address] = None
-    self._log_params: dict = {}  # Initialize empty - will be populated by _assign_params() if called
-
-  def _assign_params(self, exclude: Optional[set] = None):
-    """Build logging dict from __init__ parameters.
-
-    This method inspects the __init__ signature and builds a dict of
-    parameter values for logging purposes. Attributes should be explicitly
-    assigned in __init__ before calling this method.
-
-    Args:
-      exclude: Set of parameter names to exclude from logging. Defaults to {'self', 'dest'}.
-
-    Note:
-      This method must be called from within __init__ after super().__init__()
-      and after explicit attribute assignments to access the calling frame's
-      local variables.
-    """
-    exclude = exclude or {"self", "dest"}
-    # Use type(self).__init__ to avoid mypy error about accessing __init__ on instance
-    sig = inspect.signature(type(self).__init__)
-    current_frame = inspect.currentframe()
-    if current_frame is None:
-      # Frame inspection failed, return empty dict
-      self._log_params = {}
-      return
-    frame = current_frame.f_back
-    if frame is None:
-      # No calling frame, return empty dict
-      self._log_params = {}
-      return
-
-    # Build params dict for logging (no assignments - attributes should be set explicitly)
-    params = {}
-    frame_locals = frame.f_locals
-    for param_name in sig.parameters:
-      if param_name not in exclude:
-        if param_name in frame_locals:
-          value = frame_locals[param_name]
-          params[param_name] = value
-
-    # Store for logging
-    self._log_params = params
 
   def build_parameters(self) -> HoiParams:
     """Build HOI parameters for this command.
@@ -132,17 +90,22 @@ class HamiltonCommand:
   def get_log_params(self) -> dict:
     """Get parameters to log for this command.
 
-    Returns the params dict built by _assign_params() during __init__.
-    This eliminates duplicate signature inspection and provides efficient
-    access to logged parameters.
+    Lazily computes the parameters by inspecting the __init__ signature
+    and reading current attribute values from self.
 
     Subclasses can override to customize formatting (e.g., unit conversions,
     array truncation).
 
     Returns:
-      Dictionary of parameter names to values (empty dict if _assign_params() not called)
+      Dictionary of parameter names to values
     """
-    return self._log_params
+    exclude = {"self", "dest"}
+    sig = inspect.signature(type(self).__init__)
+    params = {}
+    for param_name in sig.parameters:
+      if param_name not in exclude and hasattr(self, param_name):
+        params[param_name] = getattr(self, param_name)
+    return params
 
   def build(
     self, src: Optional[Address] = None, seq: Optional[int] = None, response_required: bool = True
