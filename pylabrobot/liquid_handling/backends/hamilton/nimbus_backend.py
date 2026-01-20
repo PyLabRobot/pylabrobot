@@ -1302,7 +1302,7 @@ class NimbusBackend(HamiltonTCPBackend):
     # Use absolute Z positions (same for all channels)
     begin_tip_deposit_process = [round(z_start_absolute_mm * 100)] * len(use_channels)
     end_tip_deposit_process = [round(z_stop_absolute_mm * 100)] * len(use_channels)
-    z_position_at_end_of_a_command = [round(z_position_at_end_of_a_command * 100)] * len(
+    z_position_at_end_of_a_command_list = [round(z_position_at_end_of_a_command * 100)] * len(
       use_channels
     )
     roll_distances = [round(roll_distance * 100)] * len(use_channels)
@@ -1317,7 +1317,7 @@ class NimbusBackend(HamiltonTCPBackend):
       end_tip_deposit_process, use_channels, default=0
     )
     z_position_at_end_of_a_command_full = self._fill_by_channels(
-      z_position_at_end_of_a_command, use_channels, default=0
+      z_position_at_end_of_a_command_list, use_channels, default=0
     )
     roll_distances_full = self._fill_by_channels(roll_distances, use_channels, default=0)
 
@@ -1583,15 +1583,15 @@ class NimbusBackend(HamiltonTCPBackend):
 
       # Compute final Z positions. Use the traverse height if not provided. Fill to num_channels.
       if z_position_at_end_of_a_command is None:
-        z_position_at_end_of_a_command = (
+        z_position_at_end_of_a_command_value = (
           minimum_traverse_height_at_beginning_of_a_command  # Use traverse height as final position
         )
-      z_position_at_end_of_a_command = [round(z_position_at_end_of_a_command * 100)] * len(
-        ops
-      )  # in 0.01mm units
-      z_position_at_end_of_a_command_full = self._fill_by_channels(
-        z_position_at_end_of_a_command, use_channels, default=0
-      )
+        z_position_at_end_of_a_command_list = [
+          round(z_position_at_end_of_a_command_value * 100)
+        ] * len(ops)  # in 0.01mm units
+        z_position_at_end_of_a_command_full = self._fill_by_channels(
+          z_position_at_end_of_a_command_list, use_channels, default=0
+        )
 
       command = DropTips(
         dest=self._pipette_address,
