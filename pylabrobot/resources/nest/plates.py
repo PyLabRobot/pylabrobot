@@ -191,9 +191,9 @@ def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
       size_x=8.0,  # from spec (inner well width)
       size_y=8.0,  # from spec (inner well length)
       size_z=39.30,  # from spec
-      dx=9,  # measured
-      dy=7.5,  # measured
-      dz=2.3,  # measured
+      dx=10.05,  # from spec
+      dy=7.05,  # from spec
+      dz=2.55,  # from spec
       material_z_thickness=0.8,  # measured
       item_dx=9.0,  # from spec
       item_dy=9.0,  # from spec
