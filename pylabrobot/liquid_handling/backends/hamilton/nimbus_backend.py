@@ -42,7 +42,6 @@ from pylabrobot.liquid_handling.standard import (
 )
 from pylabrobot.resources import Tip
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.trash import Trash

@@ -450,7 +450,6 @@ class TestHoiParams(unittest.TestCase):
     self.assertEqual(params[4:8], b"\x02\x00\x00\x00")  # count = 2
 
   def test_method_chaining(self):
-    params = HoiParams().i32(1).string("test").bool_value(True).build()
     self.assertEqual(HoiParams().i32(1).string("test").bool_value(True).count(), 3)
 
   def test_count(self):
@@ -538,52 +537,50 @@ class TestHoiParamsParser(unittest.TestCase):
 
   def test_roundtrip_all_types(self):
     """Test that all types can be built and parsed correctly."""
-    original_values = {
-      "i8": -100,
-      "i16": -1000,
-      "i32": -100000,
-      "i64": -10000000000,
-      "u8": 200,
-      "u16": 50000,
-      "u32": 3000000000,
-      "u64": 10000000000000,
-      "f32": 3.14,
-      "f64": 3.141592653589793,
-      "string": "hello world",
-      "bool": True,
-    }
+    i8_val = -100
+    i16_val = -1000
+    i32_val = -100000
+    i64_val = -10000000000
+    u8_val = 200
+    u16_val = 50000
+    u32_val = 3000000000
+    u64_val = 10000000000000
+    f32_val = 3.14
+    f64_val = 3.141592653589793
+    string_val = "hello world"
+    bool_val = True
 
     builder = HoiParams()
-    builder.i8(original_values["i8"])
-    builder.i16(original_values["i16"])
-    builder.i32(original_values["i32"])
-    builder.i64(original_values["i64"])
-    builder.u8(original_values["u8"])
-    builder.u16(original_values["u16"])
-    builder.u32(original_values["u32"])
-    builder.u64(original_values["u64"])
-    builder.f32(original_values["f32"])
-    builder.f64(original_values["f64"])
-    builder.string(original_values["string"])
-    builder.bool_value(original_values["bool"])
+    builder.i8(i8_val)
+    builder.i16(i16_val)
+    builder.i32(i32_val)
+    builder.i64(i64_val)
+    builder.u8(u8_val)
+    builder.u16(u16_val)
+    builder.u32(u32_val)
+    builder.u64(u64_val)
+    builder.f32(f32_val)
+    builder.f64(f64_val)
+    builder.string(string_val)
+    builder.bool_value(bool_val)
 
     params = builder.build()
     parser = HoiParamsParser(params)
     results = parser.parse_all()
 
     self.assertEqual(len(results), 12)
-    self.assertEqual(results[0][1], original_values["i8"])
-    self.assertEqual(results[1][1], original_values["i16"])
-    self.assertEqual(results[2][1], original_values["i32"])
-    self.assertEqual(results[3][1], original_values["i64"])
-    self.assertEqual(results[4][1], original_values["u8"])
-    self.assertEqual(results[5][1], original_values["u16"])
-    self.assertEqual(results[6][1], original_values["u32"])
-    self.assertEqual(results[7][1], original_values["u64"])
-    self.assertAlmostEqual(results[8][1], original_values["f32"], places=5)
-    self.assertAlmostEqual(results[9][1], original_values["f64"], places=10)
-    self.assertEqual(results[10][1], original_values["string"])
-    self.assertEqual(results[11][1], original_values["bool"])
+    self.assertEqual(results[0][1], i8_val)
+    self.assertEqual(results[1][1], i16_val)
+    self.assertEqual(results[2][1], i32_val)
+    self.assertEqual(results[3][1], i64_val)
+    self.assertEqual(results[4][1], u8_val)
+    self.assertEqual(results[5][1], u16_val)
+    self.assertEqual(results[6][1], u32_val)
+    self.assertEqual(results[7][1], u64_val)
+    self.assertAlmostEqual(results[8][1], f32_val, places=5)
+    self.assertAlmostEqual(results[9][1], f64_val, places=10)
+    self.assertEqual(results[10][1], string_val)
+    self.assertEqual(results[11][1], bool_val)
 
 
 class TestCommandMessage(unittest.TestCase):

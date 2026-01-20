@@ -6,7 +6,7 @@ and liquid handling operations.
 
 import unittest
 import unittest.mock
-from typing import List, Optional
+from typing import Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import (
   Aspirate,
@@ -45,7 +45,6 @@ from pylabrobot.resources.corning.plates import Cor_96_wellplate_360ul_Fb
 from pylabrobot.resources.hamilton import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
 from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
-from pylabrobot.resources.trash import Trash
 
 
 class TestNimbusTipType(unittest.TestCase):
@@ -613,7 +612,7 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = _setup_backend()
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send
+    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
 
   def _get_command(self, cmd_type):
     for call in self.mock_send.call_args_list:
@@ -680,7 +679,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.deck = NimbusDeck()
     self.backend = _setup_backend_with_deck(self.deck)
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send
+    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
 
     self.tip_rack = hamilton_96_tiprack_300uL("tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=1)
