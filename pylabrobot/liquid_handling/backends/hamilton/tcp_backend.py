@@ -17,16 +17,14 @@ from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
-  ErrorResponse,
   InitMessage,
   InitResponse,
   RegistrationMessage,
   RegistrationResponse,
-  SuccessResponse,
-  parse_response,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
+  Hoi2Action,
   HoiRequestId,
   RegistrationActionCode,
   RegistrationOptionType,
@@ -442,6 +440,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     # Read response
     response = await self._read_one_message()
+    assert isinstance(response, RegistrationResponse)
 
     logger.debug(f"[DISCOVER_ROOT] Received response: {len(response.raw_bytes)} bytes")
 
@@ -558,19 +557,18 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     response_message = await self._read_one_message()
     assert isinstance(response_message, CommandResponse)
 
-    # Parse response with type dispatch
-    hoi_response = parse_response(response_message)
+    # Check for error actions
+    action = Hoi2Action(response_message.hoi.action_code)
+    if action in (
+      Hoi2Action.STATUS_EXCEPTION,
+      Hoi2Action.COMMAND_EXCEPTION,
+      Hoi2Action.INVALID_ACTION_RESPONSE,
+    ):
+      error_message = f"Error response (action={action:#x}): {response_message.hoi.params.hex()}"
+      logger.error(f"Hamilton error {action}: {error_message}")
+      raise RuntimeError(f"Hamilton error {action}: {error_message}")
 
-    # Handle errors
-    if isinstance(hoi_response, ErrorResponse):
-      logger.error(f"Hamilton error {hoi_response.error_code}: {hoi_response.error_message}")
-      raise RuntimeError(f"Hamilton error {hoi_response.error_code}: {hoi_response.error_message}")
-
-    # Let command interpret success response
-    # Type narrowing: we know it's SuccessResponse after ErrorResponse check
-    if not isinstance(hoi_response, SuccessResponse):
-      raise RuntimeError(f"Unexpected response type: {type(hoi_response)}")
-    return command.interpret_response(hoi_response)
+    return command.interpret_response(response_message)
 
   async def stop(self):
     """Stop the backend and close connection."""

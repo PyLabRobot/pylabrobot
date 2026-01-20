@@ -13,7 +13,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandMessage,
   CommandResponse,
   HoiParams,
-  SuccessResponse,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
@@ -151,19 +150,19 @@ class HamiltonCommand:
     # Build final packet
     return msg.build(source, sequence, harp_response_required=response_required)
 
-  def interpret_response(self, response: "SuccessResponse") -> Optional[dict]:
-    """Interpret success response using typed response object.
+  def interpret_response(self, response: CommandResponse) -> Optional[dict]:
+    """Interpret success response.
 
     This is the new interface used by the backend. Default implementation
     directly calls parse_response_parameters for efficiency.
 
     Args:
-      response: Typed SuccessResponse from parse_response
+      response: CommandResponse from network
 
     Returns:
       Dictionary with parsed response data, or None if no data to extract
     """
-    return self.parse_response_parameters(response.raw_params)
+    return self.parse_response_parameters(response.hoi.params)
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> Optional[dict]:
