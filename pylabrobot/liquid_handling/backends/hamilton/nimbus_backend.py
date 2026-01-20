@@ -1268,8 +1268,8 @@ class NimbusBackend(HamiltonTCPBackend):
       z_positions_mm.append(hamilton_coord.z)
 
     # Convert positions to 0.01mm units (multiply by 100)
-    x_positions = [int(round(x * 100)) for x in x_positions_mm]
-    y_positions = [int(round(y * 100)) for y in y_positions_mm]
+    x_positions = [round(x * 100) for x in x_positions_mm]
+    y_positions = [round(y * 100) for y in y_positions_mm]
 
     # Calculate Z positions from waste position coordinates
     max_z_hamilton = max(z_positions_mm)  # Highest waste position Z in Hamilton coordinates
@@ -1288,10 +1288,10 @@ class NimbusBackend(HamiltonTCPBackend):
       roll_distance = 9.0  # Default roll distance from log
 
     # Use absolute Z positions (same for all channels)
-    begin_tip_deposit_process = [int(round(z_start_absolute_mm * 100))] * len(use_channels)
-    end_tip_deposit_process = [int(round(z_stop_absolute_mm * 100))] * len(use_channels)
-    z_final_positions = [int(round(z_final_offset * 100))] * len(use_channels)
-    roll_distances = [int(round(roll_distance * 100))] * len(use_channels)
+    begin_tip_deposit_process = [round(z_start_absolute_mm * 100)] * len(use_channels)
+    end_tip_deposit_process = [round(z_stop_absolute_mm * 100)] * len(use_channels)
+    z_final_positions = [round(z_final_offset * 100)] * len(use_channels)
+    roll_distances = [round(roll_distance * 100)] * len(use_channels)
 
     # Ensure arrays match num_channels length (with zeros for inactive channels)
     x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
@@ -1335,8 +1335,8 @@ class NimbusBackend(HamiltonTCPBackend):
       y_positions_mm.append(hamilton_coord.y)
 
     # Convert positions to 0.01mm units (multiply by 100)
-    x_positions = [int(round(x * 100)) for x in x_positions_mm]
-    y_positions = [int(round(y * 100)) for y in y_positions_mm]
+    x_positions = [round(x * 100) for x in x_positions_mm]
+    y_positions = [round(y * 100) for y in y_positions_mm]
 
     x_positions_full = self._fill_by_channels(x_positions, use_channels, default=0)
     y_positions_full = self._fill_by_channels(y_positions, use_channels, default=0)
@@ -1564,7 +1564,7 @@ class NimbusBackend(HamiltonTCPBackend):
       # Compute final Z positions. Use the traverse height if not provided. Fill to num_channels.
       if z_final_offset is None:
         z_final_offset = traverse_height  # Use traverse height as final position
-      z_final_positions = [int(round(z_final_offset * 100))] * len(ops)  # in 0.01mm units
+      z_final_positions = [round(z_final_offset * 100)] * len(ops)  # in 0.01mm units
       z_final_positions_full = self._fill_by_channels(z_final_positions, use_channels, default=0)
 
       command = DropTips(
@@ -1765,21 +1765,21 @@ class NimbusBackend(HamiltonTCPBackend):
     # PLR units are uL, mm, s etc.
     # ========================================================================
 
-    aspirate_volumes = [int(round(vol * 10)) for vol in volumes]
-    blowout_volumes_units = [int(round(vol * 10)) for vol in blowout_volumes]
-    aspirate_speeds = [int(round(fr * 10)) for fr in flow_rates]
-    liquid_seek_height_units = [int(round(h * 100)) for h in liquid_seek_height]
-    liquid_surface_height_units = [int(round(h * 100)) for h in liquid_surface_heights_mm]
-    immersion_depth_units = [int(round(d * 100)) for d in immersion_depth]
-    surface_following_distance_units = [int(round(d * 100)) for d in surface_following_distance]
-    z_min_position_units = [int(round(z * 100)) for z in z_min_positions_mm]
-    settling_time_units = [int(round(t * 10)) for t in settling_time]
-    transport_air_volume_units = [int(round(v * 10)) for v in transport_air_volume]
-    prewet_volume_units = [int(round(v * 10)) for v in prewet_volume]
-    liquid_exit_speed_units = [int(round(s * 10)) for s in liquid_exit_speed]
-    mix_volume_units = [int(round(v * 10)) for v in mix_volume]
-    mix_speed_units = [int(round(s * 10)) for s in mix_speed]
-    mix_position_units = [int(round(p * 100)) for p in mix_position]
+    aspirate_volumes = [round(vol * 10) for vol in volumes]
+    blowout_volumes_units = [round(vol * 10) for vol in blowout_volumes]
+    aspirate_speeds = [round(fr * 10) for fr in flow_rates]
+    liquid_seek_height_units = [round(h * 100) for h in liquid_seek_height]
+    liquid_surface_height_units = [round(h * 100) for h in liquid_surface_heights_mm]
+    immersion_depth_units = [round(d * 100) for d in immersion_depth]
+    surface_following_distance_units = [round(d * 100) for d in surface_following_distance]
+    z_min_position_units = [round(z * 100) for z in z_min_positions_mm]
+    settling_time_units = [round(t * 10) for t in settling_time]
+    transport_air_volume_units = [round(v * 10) for v in transport_air_volume]
+    prewet_volume_units = [round(v * 10) for v in prewet_volume]
+    liquid_exit_speed_units = [round(s * 10) for s in liquid_exit_speed]
+    mix_volume_units = [round(v * 10) for v in mix_volume]
+    mix_speed_units = [round(s * 10) for s in mix_speed]
+    mix_position_units = [round(p * 100) for p in mix_position]
 
     # Build arrays for all channels (pad with 0s for inactive channels)
     aspirate_volumes_full = self._fill_by_channels(aspirate_volumes, use_channels, default=0)
@@ -2055,25 +2055,25 @@ class NimbusBackend(HamiltonTCPBackend):
     # PLR units are uL, mm, s etc.
     # ========================================================================
 
-    dispense_volumes = [int(round(vol * 10)) for vol in volumes]
-    blowout_volumes_units = [int(round(vol * 10)) for vol in blowout_volumes]
-    dispense_speeds = [int(round(fr * 10)) for fr in flow_rates]
-    liquid_seek_height_units = [int(round(h * 100)) for h in liquid_seek_height]
-    dispense_height_units = [int(round(h * 100)) for h in dispense_heights_mm]
-    immersion_depth_units = [int(round(d * 100)) for d in immersion_depth]
-    surface_following_distance_units = [int(round(d * 100)) for d in surface_following_distance]
-    z_min_position_units = [int(round(z * 100)) for z in z_min_positions_mm]
-    settling_time_units = [int(round(t * 10)) for t in settling_time]
-    transport_air_volume_units = [int(round(v * 10)) for v in transport_air_volume]
-    prewet_volume_units = [int(round(v * 10)) for v in prewet_volume]
-    liquid_exit_speed_units = [int(round(s * 10)) for s in liquid_exit_speed]
-    mix_volume_units = [int(round(v * 10)) for v in mix_volume]
-    mix_speed_units = [int(round(s * 10)) for s in mix_speed]
-    mix_position_units = [int(round(p * 100)) for p in mix_position]
-    cutoff_speed_units = [int(round(s * 10)) for s in cutoff_speed]
-    stop_back_volume_units = [int(round(v * 10)) for v in stop_back_volume]
-    dispense_offset_units = [int(round(o * 100)) for o in dispense_offset]
-    touch_off_distance_units = int(round(touch_off_distance * 100))
+    dispense_volumes = [round(vol * 10) for vol in volumes]
+    blowout_volumes_units = [round(vol * 10) for vol in blowout_volumes]
+    dispense_speeds = [round(fr * 10) for fr in flow_rates]
+    liquid_seek_height_units = [round(h * 100) for h in liquid_seek_height]
+    dispense_height_units = [round(h * 100) for h in dispense_heights_mm]
+    immersion_depth_units = [round(d * 100) for d in immersion_depth]
+    surface_following_distance_units = [round(d * 100) for d in surface_following_distance]
+    z_min_position_units = [round(z * 100) for z in z_min_positions_mm]
+    settling_time_units = [round(t * 10) for t in settling_time]
+    transport_air_volume_units = [round(v * 10) for v in transport_air_volume]
+    prewet_volume_units = [round(v * 10) for v in prewet_volume]
+    liquid_exit_speed_units = [round(s * 10) for s in liquid_exit_speed]
+    mix_volume_units = [round(v * 10) for v in mix_volume]
+    mix_speed_units = [round(s * 10) for s in mix_speed]
+    mix_position_units = [round(p * 100) for p in mix_position]
+    cutoff_speed_units = [round(s * 10) for s in cutoff_speed]
+    stop_back_volume_units = [round(v * 10) for v in stop_back_volume]
+    dispense_offset_units = [round(o * 100) for o in dispense_offset]
+    touch_off_distance_units = round(touch_off_distance * 100)
 
     # Build arrays for all channels (pad with 0s for inactive channels)
     dispense_volumes_full = self._fill_by_channels(dispense_volumes, use_channels, default=0)
