@@ -142,11 +142,11 @@ class HamiltonCommand:
       dest=self.dest,
       interface_id=self.interface_id,
       method_id=self.command_id,
+      params=params,
       action_code=self.action_code,
       harp_protocol=self.harp_protocol,
       ip_protocol=self.ip_protocol,
     )
-    msg.set_params(params)
 
     # Build final packet
     return msg.build(source, sequence, harp_response_required=response_required)

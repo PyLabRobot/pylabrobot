@@ -478,6 +478,7 @@ class CommandMessage:
     dest: Address,
     interface_id: int,
     method_id: int,
+    params: HoiParams,
     action_code: int = 3,  # Default: COMMAND_REQUEST
     harp_protocol: int = 2,  # Default: HOI2
     ip_protocol: int = 6,  # Default: OBJECT_DISCOVERY
@@ -495,26 +496,10 @@ class CommandMessage:
     self.dest = dest
     self.interface_id = interface_id
     self.method_id = method_id
+    self.params = params
     self.action_code = action_code
     self.harp_protocol = harp_protocol
     self.ip_protocol = ip_protocol
-    self.params = HoiParams()
-
-  def set_params(self, params: HoiParams) -> "CommandMessage":
-    """Set HOI parameters directly from a HoiParams object.
-
-    This method allows efficient parameter transfer without serializing
-    and parsing. Used internally by HamiltonCommand to avoid wasteful
-    round-trip serialization.
-
-    Args:
-      params: HoiParams object with pre-built parameters
-
-    Returns:
-      Self for method chaining
-    """
-    self.params = params
-    return self
 
   def build(
     self,
