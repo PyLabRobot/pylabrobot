@@ -29,7 +29,7 @@ Example:
 
   # Parse response
   response = CommandResponse.from_bytes(received_bytes)
-  params = response.hoi_params
+  params = response.hoi.params
 """
 
 from __future__ import annotations
@@ -861,8 +861,3 @@ class CommandResponse:
   def sequence_number(self) -> int:
     """Get sequence number from HARP layer."""
     return self.harp.seq
-
-  @property
-  def hoi_params(self) -> bytes:
-    """Get HOI parameters (DataFragment-wrapped)."""
-    return self.hoi.params

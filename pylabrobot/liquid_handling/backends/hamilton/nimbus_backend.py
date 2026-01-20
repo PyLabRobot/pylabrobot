@@ -172,7 +172,7 @@ class InitializeSmartRoll(HamiltonCommand):
     y_positions: List[int],
     begin_tip_deposit_process: List[int],
     end_tip_deposit_process: List[int],
-    z_final_positions: List[int],
+    z_position_at_end_of_a_command: List[int],
     roll_distances: List[int],
   ):
     """Initialize InitializeSmartRoll command.
@@ -183,7 +183,7 @@ class InitializeSmartRoll(HamiltonCommand):
       y_positions: Y positions in 0.01mm units
       begin_tip_deposit_process: Z start positions in 0.01mm units
       end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_final_positions: Z final positions in 0.01mm units
+      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
       roll_distances: Roll distances in 0.01mm units
     """
     super().__init__(dest)
@@ -191,7 +191,7 @@ class InitializeSmartRoll(HamiltonCommand):
     self.y_positions = y_positions
     self.begin_tip_deposit_process = begin_tip_deposit_process
     self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_final_positions = z_final_positions
+    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
     self.roll_distances = roll_distances
 
   def build_parameters(self) -> HoiParams:
@@ -201,7 +201,7 @@ class InitializeSmartRoll(HamiltonCommand):
       .i32_array(self.y_positions)
       .i32_array(self.begin_tip_deposit_process)
       .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_final_positions)
+      .i32_array(self.z_position_at_end_of_a_command)
       .i32_array(self.roll_distances)
     )
 
@@ -310,10 +310,10 @@ class PickupTips(HamiltonCommand):
   def __init__(
     self,
     dest: Address,
-    tips_used: List[int],
+    channels_involved: List[int],
     x_positions: List[int],
     y_positions: List[int],
-    traverse_height: int,
+    minimum_traverse_height_at_beginning_of_a_command: int,
     begin_tip_pick_up_process: List[int],
     end_tip_pick_up_process: List[int],
     tip_types: List[int],
@@ -322,19 +322,21 @@ class PickupTips(HamiltonCommand):
 
     Args:
       dest: Destination address (Pipette)
-      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
-      traverse_height: Traverse height in 0.01mm units
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
       begin_tip_pick_up_process: Z start positions in 0.01mm units
       end_tip_pick_up_process: Z stop positions in 0.01mm units
       tip_types: Tip type integers for each channel
     """
     super().__init__(dest)
-    self.tips_used = tips_used
+    self.channels_involved = channels_involved
     self.x_positions = x_positions
     self.y_positions = y_positions
-    self.traverse_height = traverse_height
+    self.minimum_traverse_height_at_beginning_of_a_command = (
+      minimum_traverse_height_at_beginning_of_a_command
+    )
     self.begin_tip_pick_up_process = begin_tip_pick_up_process
     self.end_tip_pick_up_process = end_tip_pick_up_process
     self.tip_types = tip_types
@@ -342,10 +344,10 @@ class PickupTips(HamiltonCommand):
   def build_parameters(self) -> HoiParams:
     return (
       HoiParams()
-      .u16_array(self.tips_used)
+      .u16_array(self.channels_involved)
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
-      .i32(self.traverse_height)
+      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
       .i32_array(self.begin_tip_pick_up_process)
       .i32_array(self.end_tip_pick_up_process)
       .u16_array(self.tip_types)
@@ -362,48 +364,50 @@ class DropTips(HamiltonCommand):
   def __init__(
     self,
     dest: Address,
-    tips_used: List[int],
+    channels_involved: List[int],
     x_positions: List[int],
     y_positions: List[int],
-    traverse_height: int,
+    minimum_traverse_height_at_beginning_of_a_command: int,
     begin_tip_deposit_process: List[int],
     end_tip_deposit_process: List[int],
-    z_final_positions: List[int],
+    z_position_at_end_of_a_command: List[int],
     default_waste: bool,
   ):
     """Initialize DropTips command.
 
     Args:
       dest: Destination address (Pipette)
-      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
-      traverse_height: Traverse height in 0.01mm units
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
       begin_tip_deposit_process: Z start positions in 0.01mm units
       end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_final_positions: Z final positions in 0.01mm units
+      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
       default_waste: If True, drop to default waste (positions may be ignored)
     """
     super().__init__(dest)
-    self.tips_used = tips_used
+    self.channels_involved = channels_involved
     self.x_positions = x_positions
     self.y_positions = y_positions
-    self.traverse_height = traverse_height
+    self.minimum_traverse_height_at_beginning_of_a_command = (
+      minimum_traverse_height_at_beginning_of_a_command
+    )
     self.begin_tip_deposit_process = begin_tip_deposit_process
     self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_final_positions = z_final_positions
+    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
     self.default_waste = default_waste
 
   def build_parameters(self) -> HoiParams:
     return (
       HoiParams()
-      .u16_array(self.tips_used)
+      .u16_array(self.channels_involved)
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
-      .i32(self.traverse_height)
+      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
       .i32_array(self.begin_tip_deposit_process)
       .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_final_positions)
+      .i32_array(self.z_position_at_end_of_a_command)
       .bool_value(self.default_waste)
     )
 
@@ -418,48 +422,50 @@ class DropTipsRoll(HamiltonCommand):
   def __init__(
     self,
     dest: Address,
-    tips_used: List[int],
+    channels_involved: List[int],
     x_positions: List[int],
     y_positions: List[int],
-    traverse_height: int,
+    minimum_traverse_height_at_beginning_of_a_command: int,
     begin_tip_deposit_process: List[int],
     end_tip_deposit_process: List[int],
-    z_final_positions: List[int],
+    z_position_at_end_of_a_command: List[int],
     roll_distances: List[int],
   ):
     """Initialize DropTipsRoll command.
 
     Args:
       dest: Destination address (Pipette)
-      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
-      traverse_height: Traverse height in 0.01mm units
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
       begin_tip_deposit_process: Z start positions in 0.01mm units
       end_tip_deposit_process: Z stop positions in 0.01mm units
-      z_final_positions: Z final positions in 0.01mm units
+      z_position_at_end_of_a_command: Z position at end of command in 0.01mm units
       roll_distances: Roll distance for each channel in 0.01mm units
     """
     super().__init__(dest)
-    self.tips_used = tips_used
+    self.channels_involved = channels_involved
     self.x_positions = x_positions
     self.y_positions = y_positions
-    self.traverse_height = traverse_height
+    self.minimum_traverse_height_at_beginning_of_a_command = (
+      minimum_traverse_height_at_beginning_of_a_command
+    )
     self.begin_tip_deposit_process = begin_tip_deposit_process
     self.end_tip_deposit_process = end_tip_deposit_process
-    self.z_final_positions = z_final_positions
+    self.z_position_at_end_of_a_command = z_position_at_end_of_a_command
     self.roll_distances = roll_distances
 
   def build_parameters(self) -> HoiParams:
     return (
       HoiParams()
-      .u16_array(self.tips_used)
+      .u16_array(self.channels_involved)
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
-      .i32(self.traverse_height)
+      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
       .i32_array(self.begin_tip_deposit_process)
       .i32_array(self.end_tip_deposit_process)
-      .i32_array(self.z_final_positions)
+      .i32_array(self.z_position_at_end_of_a_command)
       .i32_array(self.roll_distances)
     )
 
@@ -474,19 +480,19 @@ class EnableADC(HamiltonCommand):
   def __init__(
     self,
     dest: Address,
-    tips_used: List[int],
+    channels_involved: List[int],
   ):
     """Initialize EnableADC command.
 
     Args:
       dest: Destination address (Pipette)
-      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
     """
     super().__init__(dest)
-    self.tips_used = tips_used
+    self.channels_involved = channels_involved
 
   def build_parameters(self) -> HoiParams:
-    return HoiParams().u16_array(self.tips_used)
+    return HoiParams().u16_array(self.channels_involved)
 
 
 class DisableADC(HamiltonCommand):
@@ -499,19 +505,19 @@ class DisableADC(HamiltonCommand):
   def __init__(
     self,
     dest: Address,
-    tips_used: List[int],
+    channels_involved: List[int],
   ):
     """Initialize DisableADC command.
 
     Args:
       dest: Destination address (Pipette)
-      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
     """
     super().__init__(dest)
-    self.tips_used = tips_used
+    self.channels_involved = channels_involved
 
   def build_parameters(self) -> HoiParams:
-    return HoiParams().u16_array(self.tips_used)
+    return HoiParams().u16_array(self.channels_involved)
 
 
 class GetChannelConfiguration(HamiltonCommand):
@@ -564,34 +570,34 @@ class Aspirate(HamiltonCommand):
     self,
     dest: Address,
     aspirate_type: List[int],
-    tips_used: List[int],
+    channels_involved: List[int],
     x_positions: List[int],
     y_positions: List[int],
-    traverse_height: int,
-    liquid_seek_height: List[int],
-    liquid_surface_height: List[int],
-    submerge_depth: List[int],
-    follow_depth: List[int],
-    z_min_position: List[int],
-    clot_check_height: List[int],
-    z_final: int,
-    liquid_exit_speed: List[int],
-    blowout_volume: List[int],
-    prewet_volume: List[int],
+    minimum_traverse_height_at_beginning_of_a_command: int,
+    lld_search_height: List[int],
+    liquid_height: List[int],
+    immersion_depth: List[int],
+    surface_following_distance: List[int],
+    minimum_height: List[int],
+    clot_detection_height: List[int],
+    min_z_endpos: int,
+    swap_speed: List[int],
+    blow_out_air_volume: List[int],
+    pre_wetting_volume: List[int],
     aspirate_volume: List[int],
     transport_air_volume: List[int],
-    aspirate_speed: List[int],
+    aspiration_speed: List[int],
     settling_time: List[int],
     mix_volume: List[int],
     mix_cycles: List[int],
-    mix_position: List[int],
-    mix_follow_distance: List[int],
+    mix_position_from_liquid_surface: List[int],
+    mix_surface_following_distance: List[int],
     mix_speed: List[int],
     tube_section_height: List[int],
     tube_section_ratio: List[int],
     lld_mode: List[int],
-    capacitive_lld_sensitivity: List[int],
-    pressure_lld_sensitivity: List[int],
+    gamma_lld_sensitivity: List[int],
+    dp_lld_sensitivity: List[int],
     lld_height_difference: List[int],
     tadm_enabled: bool,
     limit_curve_index: List[int],
@@ -602,34 +608,34 @@ class Aspirate(HamiltonCommand):
     Args:
       dest: Destination address (Pipette)
       aspirate_type: Aspirate type for each channel (List[i16])
-      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
-      traverse_height: Traverse height in 0.01mm units
-      liquid_seek_height: Liquid seek height for each channel in 0.01mm units
-      liquid_surface_height: Liquid surface height for each channel in 0.01mm units
-      submerge_depth: Submerge depth for each channel in 0.01mm units
-      follow_depth: Follow depth for each channel in 0.01mm units
-      z_min_position: Z minimum position for each channel in 0.01mm units
-      clot_check_height: Clot check height for each channel in 0.01mm units
-      z_final: Z final position in 0.01mm units
-      liquid_exit_speed: Liquid exit speed for each channel in 0.1uL/s units
-      blowout_volume: Blowout volume for each channel in 0.1uL units
-      prewet_volume: Prewet volume for each channel in 0.1uL units
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
+      lld_search_height: LLD search height for each channel in 0.01mm units
+      liquid_height: Liquid height for each channel in 0.01mm units
+      immersion_depth: Immersion depth for each channel in 0.01mm units
+      surface_following_distance: Surface following distance for each channel in 0.01mm units
+      minimum_height: Minimum height for each channel in 0.01mm units
+      clot_detection_height: Clot detection height for each channel in 0.01mm units
+      min_z_endpos: Minimum Z end position in 0.01mm units
+      swap_speed: Swap speed (on leaving liquid) for each channel in 0.1uL/s units
+      blow_out_air_volume: Blowout volume for each channel in 0.1uL units
+      pre_wetting_volume: Pre-wetting volume for each channel in 0.1uL units
       aspirate_volume: Aspirate volume for each channel in 0.1uL units
       transport_air_volume: Transport air volume for each channel in 0.1uL units
-      aspirate_speed: Aspirate speed for each channel in 0.1uL/s units
+      aspiration_speed: Aspirate speed for each channel in 0.1uL/s units
       settling_time: Settling time for each channel in 0.1s units
       mix_volume: Mix volume for each channel in 0.1uL units
       mix_cycles: Mix cycles for each channel
-      mix_position: Mix position for each channel in 0.01mm units
-      mix_follow_distance: Mix follow distance for each channel in 0.01mm units
+      mix_position_from_liquid_surface: Mix position from liquid surface for each channel in 0.01mm units
+      mix_surface_following_distance: Mix follow distance for each channel in 0.01mm units
       mix_speed: Mix speed for each channel in 0.1uL/s units
       tube_section_height: Tube section height for each channel in 0.01mm units
       tube_section_ratio: Tube section ratio for each channel
       lld_mode: LLD mode for each channel (List[i16])
-      capacitive_lld_sensitivity: Capacitive LLD sensitivity for each channel (List[i16])
-      pressure_lld_sensitivity: Pressure LLD sensitivity for each channel (List[i16])
+      gamma_lld_sensitivity: Gamma LLD sensitivity for each channel (List[i16])
+      dp_lld_sensitivity: DP LLD sensitivity for each channel (List[i16])
       lld_height_difference: LLD height difference for each channel in 0.01mm units
       tadm_enabled: TADM enabled flag
       limit_curve_index: Limit curve index for each channel
@@ -637,34 +643,36 @@ class Aspirate(HamiltonCommand):
     """
     super().__init__(dest)
     self.aspirate_type = aspirate_type
-    self.tips_used = tips_used
+    self.channels_involved = channels_involved
     self.x_positions = x_positions
     self.y_positions = y_positions
-    self.traverse_height = traverse_height
-    self.liquid_seek_height = liquid_seek_height
-    self.liquid_surface_height = liquid_surface_height
-    self.submerge_depth = submerge_depth
-    self.follow_depth = follow_depth
-    self.z_min_position = z_min_position
-    self.clot_check_height = clot_check_height
-    self.z_final = z_final
-    self.liquid_exit_speed = liquid_exit_speed
-    self.blowout_volume = blowout_volume
-    self.prewet_volume = prewet_volume
+    self.minimum_traverse_height_at_beginning_of_a_command = (
+      minimum_traverse_height_at_beginning_of_a_command
+    )
+    self.lld_search_height = lld_search_height
+    self.liquid_height = liquid_height
+    self.immersion_depth = immersion_depth
+    self.surface_following_distance = surface_following_distance
+    self.minimum_height = minimum_height
+    self.clot_detection_height = clot_detection_height
+    self.min_z_endpos = min_z_endpos
+    self.swap_speed = swap_speed
+    self.blow_out_air_volume = blow_out_air_volume
+    self.pre_wetting_volume = pre_wetting_volume
     self.aspirate_volume = aspirate_volume
     self.transport_air_volume = transport_air_volume
-    self.aspirate_speed = aspirate_speed
+    self.aspiration_speed = aspiration_speed
     self.settling_time = settling_time
     self.mix_volume = mix_volume
     self.mix_cycles = mix_cycles
-    self.mix_position = mix_position
-    self.mix_follow_distance = mix_follow_distance
+    self.mix_position_from_liquid_surface = mix_position_from_liquid_surface
+    self.mix_surface_following_distance = mix_surface_following_distance
     self.mix_speed = mix_speed
     self.tube_section_height = tube_section_height
     self.tube_section_ratio = tube_section_ratio
     self.lld_mode = lld_mode
-    self.capacitive_lld_sensitivity = capacitive_lld_sensitivity
-    self.pressure_lld_sensitivity = pressure_lld_sensitivity
+    self.gamma_lld_sensitivity = gamma_lld_sensitivity
+    self.dp_lld_sensitivity = dp_lld_sensitivity
     self.lld_height_difference = lld_height_difference
     self.tadm_enabled = tadm_enabled
     self.limit_curve_index = limit_curve_index
@@ -674,34 +682,34 @@ class Aspirate(HamiltonCommand):
     return (
       HoiParams()
       .i16_array(self.aspirate_type)
-      .u16_array(self.tips_used)
+      .u16_array(self.channels_involved)
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
-      .i32(self.traverse_height)
-      .i32_array(self.liquid_seek_height)
-      .i32_array(self.liquid_surface_height)
-      .i32_array(self.submerge_depth)
-      .i32_array(self.follow_depth)
-      .i32_array(self.z_min_position)
-      .i32_array(self.clot_check_height)
-      .i32(self.z_final)
-      .u32_array(self.liquid_exit_speed)
-      .u32_array(self.blowout_volume)
-      .u32_array(self.prewet_volume)
+      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
+      .i32_array(self.lld_search_height)
+      .i32_array(self.liquid_height)
+      .i32_array(self.immersion_depth)
+      .i32_array(self.surface_following_distance)
+      .i32_array(self.minimum_height)
+      .i32_array(self.clot_detection_height)
+      .i32(self.min_z_endpos)
+      .u32_array(self.swap_speed)
+      .u32_array(self.blow_out_air_volume)
+      .u32_array(self.pre_wetting_volume)
       .u32_array(self.aspirate_volume)
       .u32_array(self.transport_air_volume)
-      .u32_array(self.aspirate_speed)
+      .u32_array(self.aspiration_speed)
       .u32_array(self.settling_time)
       .u32_array(self.mix_volume)
       .u32_array(self.mix_cycles)
-      .i32_array(self.mix_position)
-      .i32_array(self.mix_follow_distance)
+      .i32_array(self.mix_position_from_liquid_surface)
+      .i32_array(self.mix_surface_following_distance)
       .u32_array(self.mix_speed)
       .i32_array(self.tube_section_height)
       .i32_array(self.tube_section_ratio)
       .i16_array(self.lld_mode)
-      .i16_array(self.capacitive_lld_sensitivity)
-      .i16_array(self.pressure_lld_sensitivity)
+      .i16_array(self.gamma_lld_sensitivity)
+      .i16_array(self.dp_lld_sensitivity)
       .i32_array(self.lld_height_difference)
       .bool_value(self.tadm_enabled)
       .u32_array(self.limit_curve_index)
@@ -720,35 +728,35 @@ class Dispense(HamiltonCommand):
     self,
     dest: Address,
     dispense_type: List[int],
-    tips_used: List[int],
+    channels_involved: List[int],
     x_positions: List[int],
     y_positions: List[int],
-    traverse_height: int,
-    liquid_seek_height: List[int],
-    dispense_height: List[int],
-    submerge_depth: List[int],
-    follow_depth: List[int],
-    z_min_position: List[int],
-    z_final: int,
-    liquid_exit_speed: List[int],
+    minimum_traverse_height_at_beginning_of_a_command: int,
+    lld_search_height: List[int],
+    liquid_height: List[int],
+    immersion_depth: List[int],
+    surface_following_distance: List[int],
+    minimum_height: List[int],
+    min_z_endpos: int,
+    swap_speed: List[int],
     transport_air_volume: List[int],
     dispense_volume: List[int],
     stop_back_volume: List[int],
-    blowout_volume: List[int],
+    blow_out_air_volume: List[int],
     dispense_speed: List[int],
-    cutoff_speed: List[int],
+    cut_off_speed: List[int],
     settling_time: List[int],
     mix_volume: List[int],
     mix_cycles: List[int],
-    mix_position: List[int],
-    mix_follow_distance: List[int],
+    mix_position_from_liquid_surface: List[int],
+    mix_surface_following_distance: List[int],
     mix_speed: List[int],
-    touch_off_distance: int,
+    side_touch_off_distance: int,
     dispense_offset: List[int],
     tube_section_height: List[int],
     tube_section_ratio: List[int],
     lld_mode: List[int],
-    capacitive_lld_sensitivity: List[int],
+    gamma_lld_sensitivity: List[int],
     tadm_enabled: bool,
     limit_curve_index: List[int],
     recording_mode: int,
@@ -758,70 +766,72 @@ class Dispense(HamiltonCommand):
     Args:
       dest: Destination address (Pipette)
       dispense_type: Dispense type for each channel (List[i16])
-      tips_used: Tip pattern (1 for active channels, 0 for inactive)
+      channels_involved: Tip pattern (1 for active channels, 0 for inactive)
       x_positions: X positions in 0.01mm units
       y_positions: Y positions in 0.01mm units
-      traverse_height: Traverse height in 0.01mm units
-      liquid_seek_height: Liquid seek height for each channel in 0.01mm units
-      dispense_height: Dispense height for each channel in 0.01mm units
-      submerge_depth: Submerge depth for each channel in 0.01mm units
-      follow_depth: Follow depth for each channel in 0.01mm units
-      z_min_position: Z minimum position for each channel in 0.01mm units
-      z_final: Z final position in 0.01mm units
-      liquid_exit_speed: Liquid exit speed for each channel in 0.1uL/s units
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in 0.01mm units
+      lld_search_height: LLD search height for each channel in 0.01mm units
+      liquid_height: Liquid height for each channel in 0.01mm units
+      immersion_depth: Immersion depth for each channel in 0.01mm units
+      surface_following_distance: Surface following distance for each channel in 0.01mm units
+      minimum_height: Minimum height for each channel in 0.01mm units
+      min_z_endpos: Minimum Z end position in 0.01mm units
+      swap_speed: Swap speed (on leaving liquid) for each channel in 0.1uL/s units
       transport_air_volume: Transport air volume for each channel in 0.1uL units
       dispense_volume: Dispense volume for each channel in 0.1uL units
       stop_back_volume: Stop back volume for each channel in 0.1uL units
-      blowout_volume: Blowout volume for each channel in 0.1uL units
+      blow_out_air_volume: Blowout volume for each channel in 0.1uL units
       dispense_speed: Dispense speed for each channel in 0.1uL/s units
-      cutoff_speed: Cutoff speed for each channel in 0.1uL/s units
+      cut_off_speed: Cut off speed for each channel in 0.1uL/s units
       settling_time: Settling time for each channel in 0.1s units
       mix_volume: Mix volume for each channel in 0.1uL units
       mix_cycles: Mix cycles for each channel
-      mix_position: Mix position for each channel in 0.01mm units
-      mix_follow_distance: Mix follow distance for each channel in 0.01mm units
+      mix_position_from_liquid_surface: Mix position from liquid surface for each channel in 0.01mm units
+      mix_surface_following_distance: Mix follow distance for each channel in 0.01mm units
       mix_speed: Mix speed for each channel in 0.1uL/s units
-      touch_off_distance: Touch off distance in 0.01mm units
+      side_touch_off_distance: Side touch off distance in 0.01mm units
       dispense_offset: Dispense offset for each channel in 0.01mm units
       tube_section_height: Tube section height for each channel in 0.01mm units
       tube_section_ratio: Tube section ratio for each channel
       lld_mode: LLD mode for each channel (List[i16])
-      capacitive_lld_sensitivity: Capacitive LLD sensitivity for each channel (List[i16])
+      gamma_lld_sensitivity: Gamma LLD sensitivity for each channel (List[i16])
       tadm_enabled: TADM enabled flag
       limit_curve_index: Limit curve index for each channel
       recording_mode: Recording mode (u16)
     """
     super().__init__(dest)
     self.dispense_type = dispense_type
-    self.tips_used = tips_used
+    self.channels_involved = channels_involved
     self.x_positions = x_positions
     self.y_positions = y_positions
-    self.traverse_height = traverse_height
-    self.liquid_seek_height = liquid_seek_height
-    self.dispense_height = dispense_height
-    self.submerge_depth = submerge_depth
-    self.follow_depth = follow_depth
-    self.z_min_position = z_min_position
-    self.z_final = z_final
-    self.liquid_exit_speed = liquid_exit_speed
+    self.minimum_traverse_height_at_beginning_of_a_command = (
+      minimum_traverse_height_at_beginning_of_a_command
+    )
+    self.lld_search_height = lld_search_height
+    self.liquid_height = liquid_height
+    self.immersion_depth = immersion_depth
+    self.surface_following_distance = surface_following_distance
+    self.minimum_height = minimum_height
+    self.min_z_endpos = min_z_endpos
+    self.swap_speed = swap_speed
     self.transport_air_volume = transport_air_volume
     self.dispense_volume = dispense_volume
     self.stop_back_volume = stop_back_volume
-    self.blowout_volume = blowout_volume
+    self.blow_out_air_volume = blow_out_air_volume
     self.dispense_speed = dispense_speed
-    self.cutoff_speed = cutoff_speed
+    self.cut_off_speed = cut_off_speed
     self.settling_time = settling_time
     self.mix_volume = mix_volume
     self.mix_cycles = mix_cycles
-    self.mix_position = mix_position
-    self.mix_follow_distance = mix_follow_distance
+    self.mix_position_from_liquid_surface = mix_position_from_liquid_surface
+    self.mix_surface_following_distance = mix_surface_following_distance
     self.mix_speed = mix_speed
-    self.touch_off_distance = touch_off_distance
+    self.side_touch_off_distance = side_touch_off_distance
     self.dispense_offset = dispense_offset
     self.tube_section_height = tube_section_height
     self.tube_section_ratio = tube_section_ratio
     self.lld_mode = lld_mode
-    self.capacitive_lld_sensitivity = capacitive_lld_sensitivity
+    self.gamma_lld_sensitivity = gamma_lld_sensitivity
     self.tadm_enabled = tadm_enabled
     self.limit_curve_index = limit_curve_index
     self.recording_mode = recording_mode
@@ -830,35 +840,35 @@ class Dispense(HamiltonCommand):
     return (
       HoiParams()
       .i16_array(self.dispense_type)
-      .u16_array(self.tips_used)
+      .u16_array(self.channels_involved)
       .i32_array(self.x_positions)
       .i32_array(self.y_positions)
-      .i32(self.traverse_height)
-      .i32_array(self.liquid_seek_height)
-      .i32_array(self.dispense_height)
-      .i32_array(self.submerge_depth)
-      .i32_array(self.follow_depth)
-      .i32_array(self.z_min_position)
-      .i32(self.z_final)
-      .u32_array(self.liquid_exit_speed)
+      .i32(self.minimum_traverse_height_at_beginning_of_a_command)
+      .i32_array(self.lld_search_height)
+      .i32_array(self.liquid_height)
+      .i32_array(self.immersion_depth)
+      .i32_array(self.surface_following_distance)
+      .i32_array(self.minimum_height)
+      .i32(self.min_z_endpos)
+      .u32_array(self.swap_speed)
       .u32_array(self.transport_air_volume)
       .u32_array(self.dispense_volume)
       .u32_array(self.stop_back_volume)
-      .u32_array(self.blowout_volume)
+      .u32_array(self.blow_out_air_volume)
       .u32_array(self.dispense_speed)
-      .u32_array(self.cutoff_speed)
+      .u32_array(self.cut_off_speed)
       .u32_array(self.settling_time)
       .u32_array(self.mix_volume)
       .u32_array(self.mix_cycles)
-      .i32_array(self.mix_position)
-      .i32_array(self.mix_follow_distance)
+      .i32_array(self.mix_position_from_liquid_surface)
+      .i32_array(self.mix_surface_following_distance)
       .u32_array(self.mix_speed)
-      .i32(self.touch_off_distance)
+      .i32(self.side_touch_off_distance)
       .i32_array(self.dispense_offset)
       .i32_array(self.tube_section_height)
       .i32_array(self.tube_section_ratio)
       .i16_array(self.lld_mode)
-      .i16_array(self.capacitive_lld_sensitivity)
+      .i16_array(self.gamma_lld_sensitivity)
       .bool_value(self.tadm_enabled)
       .u32_array(self.limit_curve_index)
       .u16(self.recording_mode)
@@ -1016,17 +1026,17 @@ class NimbusBackend(HamiltonTCPBackend):
         # Use all channels (0 to num_channels-1) for setup
         all_channels = list(range(self.num_channels))
 
-        # Use same logic as DropTipsRoll: z_start = waste_z + 4.0mm, z_stop = waste_z, z_final = traverse_height
+        # Use same logic as DropTipsRoll: z_start = waste_z + 4.0mm, z_stop = waste_z, z_position_at_end = minimum_traverse_height_at_beginning_of_a_command
         (
           x_positions_full,
           y_positions_full,
           begin_tip_deposit_process_full,
           end_tip_deposit_process_full,
-          z_final_positions_full,
+          z_position_at_end_of_a_command_full,
           roll_distances_full,
         ) = self._build_waste_position_params(
           use_channels=all_channels,
-          z_final_offset=None,  # Will default to traverse_height
+          z_position_at_end_of_a_command=None,  # Will default to minimum_traverse_height_at_beginning_of_a_command
           roll_distance=None,  # Will default to 9.0mm
         )
 
@@ -1037,7 +1047,7 @@ class NimbusBackend(HamiltonTCPBackend):
             y_positions=y_positions_full,
             begin_tip_deposit_process=begin_tip_deposit_process_full,
             end_tip_deposit_process=end_tip_deposit_process_full,
-            z_final_positions=z_final_positions_full,
+            z_position_at_end_of_a_command=z_position_at_end_of_a_command_full,
             roll_distances=roll_distances_full,
           )
         )
@@ -1217,18 +1227,18 @@ class NimbusBackend(HamiltonTCPBackend):
   def _build_waste_position_params(
     self,
     use_channels: List[int],
-    z_final_offset: Optional[float] = None,
+    z_position_at_end_of_a_command: Optional[float] = None,
     roll_distance: Optional[float] = None,
   ) -> Tuple[List[int], List[int], List[int], List[int], List[int], List[int]]:
     """Build waste position parameters for InitializeSmartRoll or DropTipsRoll.
 
     Args:
       use_channels: List of channel indices to use
-      z_final_offset: Z final position in mm (absolute, optional, defaults to traverse_height)
+      z_position_at_end_of_a_command: Z final position in mm (absolute, optional, defaults to minimum_traverse_height_at_beginning_of_a_command)
       roll_distance: Roll distance in mm (optional, defaults to 9.0 mm)
 
     Returns:
-      x_positions, y_positions, begin_tip_deposit_process_full, end_tip_deposit_process_full, z_final_positions, roll_distances (all in 0.01mm units as lists matching num_channels)
+      x_positions, y_positions, begin_tip_deposit_process_full, end_tip_deposit_process_full, z_position_at_end_of_a_command, roll_distances (all in 0.01mm units as lists matching num_channels)
 
     Raises:
       RuntimeError: If deck is not set or waste position not found
@@ -1281,8 +1291,10 @@ class NimbusBackend(HamiltonTCPBackend):
     # Calculate from waste position: stop at waste position
     z_stop_absolute_mm = waste_z_hamilton  # Stop at waste position
 
-    if z_final_offset is None:
-      z_final_offset = self._channel_traversal_height  # Use traverse height as final position
+    if z_position_at_end_of_a_command is None:
+      z_position_at_end_of_a_command = (
+        self._channel_traversal_height
+      )  # Use traverse height as final position
 
     if roll_distance is None:
       roll_distance = 9.0  # Default roll distance from log
@@ -1290,7 +1302,9 @@ class NimbusBackend(HamiltonTCPBackend):
     # Use absolute Z positions (same for all channels)
     begin_tip_deposit_process = [round(z_start_absolute_mm * 100)] * len(use_channels)
     end_tip_deposit_process = [round(z_stop_absolute_mm * 100)] * len(use_channels)
-    z_final_positions = [round(z_final_offset * 100)] * len(use_channels)
+    z_position_at_end_of_a_command = [round(z_position_at_end_of_a_command * 100)] * len(
+      use_channels
+    )
     roll_distances = [round(roll_distance * 100)] * len(use_channels)
 
     # Ensure arrays match num_channels length (with zeros for inactive channels)
@@ -1302,7 +1316,9 @@ class NimbusBackend(HamiltonTCPBackend):
     end_tip_deposit_process_full = self._fill_by_channels(
       end_tip_deposit_process, use_channels, default=0
     )
-    z_final_positions_full = self._fill_by_channels(z_final_positions, use_channels, default=0)
+    z_position_at_end_of_a_command_full = self._fill_by_channels(
+      z_position_at_end_of_a_command, use_channels, default=0
+    )
     roll_distances_full = self._fill_by_channels(roll_distances, use_channels, default=0)
 
     return (
@@ -1310,7 +1326,7 @@ class NimbusBackend(HamiltonTCPBackend):
       y_positions_full,
       begin_tip_deposit_process_full,
       end_tip_deposit_process_full,
-      z_final_positions_full,
+      z_position_at_end_of_a_command_full,
       roll_distances_full,
     )
 
@@ -1382,25 +1398,25 @@ class NimbusBackend(HamiltonTCPBackend):
     self,
     ops: List[Pickup],
     use_channels: List[int],
-    traverse_height: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """Pick up tips from the specified resource.
 
     TODO: evaluate this doc:
     Z positions and traverse height are calculated from the resource locations and tip
     properties if not explicitly provided:
-    - traverse_height: Uses deck z_max if not provided
+    - minimum_traverse_height_at_beginning_of_a_command: Uses deck z_max if not provided
     - z_start_offset: Calculated as max(resource Z) + max(tip total_tip_length)
     - z_stop_offset: Calculated as max(resource Z) + max(tip total_tip_length - tip fitting_depth)
 
     Args:
       ops: List of Pickup operations, one per channel
       use_channels: List of channel indices to use
-      traverse_height: Traverse height in mm (optional, defaults to _channel_traversal_height)
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in mm (optional, defaults to _channel_traversal_height)
 
     Raises:
       RuntimeError: If pipette address or deck is not set
-      ValueError: If deck is not a NimbusDeck and traverse_height is not provided
+      ValueError: If deck is not a NimbusDeck and minimum_traverse_height_at_beginning_of_a_command is not provided
     """
     if self._pipette_address is None:
       raise RuntimeError("Pipette address not discovered. Call setup() first.")
@@ -1433,24 +1449,26 @@ class NimbusBackend(HamiltonTCPBackend):
     )
 
     # Build tip pattern array (True for active channels, False for inactive)
-    tips_used = [int(ch in use_channels) for ch in range(self.num_channels)]
+    channels_involved = [int(ch in use_channels) for ch in range(self.num_channels)]
 
     # Ensure arrays match num_channels length (pad with 0s for inactive channels)
     tip_types = [_get_tip_type_from_tip(op.tip) for op in ops]
     tip_types_full = self._fill_by_channels(tip_types, use_channels, default=0)
 
     # Traverse height: use default value
-    if traverse_height is None:
-      traverse_height = self._channel_traversal_height
-    traverse_height_units = round(traverse_height * 100)  # Convert to 0.01mm units
+    if minimum_traverse_height_at_beginning_of_a_command is None:
+      minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
+    minimum_traverse_height_at_beginning_of_a_command_units = round(
+      minimum_traverse_height_at_beginning_of_a_command * 100
+    )  # Convert to 0.01mm units
 
     # Create and send command
     command = PickupTips(
       dest=self._pipette_address,
-      tips_used=tips_used,
+      channels_involved=channels_involved,
       x_positions=x_positions_full,
       y_positions=y_positions_full,
-      traverse_height=traverse_height_units,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command_units,
       begin_tip_pick_up_process=begin_tip_pick_up_process,
       end_tip_pick_up_process=end_tip_pick_up_process,
       tip_types=tip_types_full,
@@ -1468,8 +1486,8 @@ class NimbusBackend(HamiltonTCPBackend):
     ops: List[Drop],
     use_channels: List[int],
     default_waste: bool = False,
-    traverse_height: Optional[float] = None,
-    z_final_offset: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    z_position_at_end_of_a_command: Optional[float] = None,
     roll_distance: Optional[float] = None,
   ):
     """Drop tips to the specified resource.
@@ -1482,15 +1500,15 @@ class NimbusBackend(HamiltonTCPBackend):
     Z positions are calculated from resource locations if not explicitly provided:
     - z_start_offset: Calculated from resources (for waste: 135.39 mm, for regular: resource Z + offset)
     - z_stop_offset: Calculated from resources (for waste: 131.39 mm, for regular: resource Z + offset)
-    - z_final_offset: Calculated from resources (defaults to traverse_height)
+    - z_position_at_end_of_a_command: Calculated from resources (defaults to minimum_traverse_height_at_beginning_of_a_command)
     - roll_distance: Defaults to 9.0 mm for waste positions
 
     Args:
       ops: List of Drop operations, one per channel
       use_channels: List of channel indices to use
       default_waste: For DropTips command, if True, drop to default waste (positions may be ignored)
-      traverse_height: Traverse height in mm (optional, defaults to self._channel_traversal_height)
-      z_final_offset: Z final position in mm (absolute, optional, calculated from resources)
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in mm (optional, defaults to self._channel_traversal_height)
+      z_position_at_end_of_a_command: Z final position in mm (absolute, optional, calculated from resources)
       roll_distance: Roll distance in mm (optional, defaults to 9.0 mm for waste positions)
 
     Raises:
@@ -1516,12 +1534,14 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
     # Build tip pattern array (1 for active channels, 0 for inactive)
-    tips_used = [int(ch in use_channels) for ch in range(self.num_channels)]
+    channels_involved = [int(ch in use_channels) for ch in range(self.num_channels)]
 
     # Traverse height: use provided value (defaults to class attribute)
-    if traverse_height is None:
-      traverse_height = self._channel_traversal_height
-    traverse_height_units = round(traverse_height * 100)
+    if minimum_traverse_height_at_beginning_of_a_command is None:
+      minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
+    minimum_traverse_height_at_beginning_of_a_command_units = round(
+      minimum_traverse_height_at_beginning_of_a_command * 100
+    )
 
     # Type annotation for command variable (can be either DropTips or DropTipsRoll)
     command: Union[DropTips, DropTipsRoll]
@@ -1534,23 +1554,23 @@ class NimbusBackend(HamiltonTCPBackend):
         y_positions_full,
         begin_tip_deposit_process_full,
         end_tip_deposit_process_full,
-        z_final_positions_full,
+        z_position_at_end_of_a_command_full,
         roll_distances_full,
       ) = self._build_waste_position_params(
         use_channels=use_channels,
-        z_final_offset=z_final_offset,
+        z_position_at_end_of_a_command=z_position_at_end_of_a_command,
         roll_distance=roll_distance,
       )
 
       command = DropTipsRoll(
         dest=self._pipette_address,
-        tips_used=tips_used,
+        channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
-        traverse_height=traverse_height_units,
+        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command_units,
         begin_tip_deposit_process=begin_tip_deposit_process_full,
         end_tip_deposit_process=end_tip_deposit_process_full,
-        z_final_positions=z_final_positions_full,
+        z_position_at_end_of_a_command=z_position_at_end_of_a_command_full,
         roll_distances=roll_distances_full,
       )
 
@@ -1562,20 +1582,26 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
       # Compute final Z positions. Use the traverse height if not provided. Fill to num_channels.
-      if z_final_offset is None:
-        z_final_offset = traverse_height  # Use traverse height as final position
-      z_final_positions = [round(z_final_offset * 100)] * len(ops)  # in 0.01mm units
-      z_final_positions_full = self._fill_by_channels(z_final_positions, use_channels, default=0)
+      if z_position_at_end_of_a_command is None:
+        z_position_at_end_of_a_command = (
+          minimum_traverse_height_at_beginning_of_a_command  # Use traverse height as final position
+        )
+      z_position_at_end_of_a_command = [round(z_position_at_end_of_a_command * 100)] * len(
+        ops
+      )  # in 0.01mm units
+      z_position_at_end_of_a_command_full = self._fill_by_channels(
+        z_position_at_end_of_a_command, use_channels, default=0
+      )
 
       command = DropTips(
         dest=self._pipette_address,
-        tips_used=tips_used,
+        channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
-        traverse_height=traverse_height_units,
+        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command_units,
         begin_tip_deposit_process=begin_tip_deposit_process,
         end_tip_deposit_process=end_tip_deposit_process,
-        z_final_positions=z_final_positions_full,
+        z_position_at_end_of_a_command=z_position_at_end_of_a_command_full,
         default_waste=default_waste,
       )
 
@@ -1590,20 +1616,20 @@ class NimbusBackend(HamiltonTCPBackend):
     self,
     ops: List[SingleChannelAspiration],
     use_channels: List[int],
-    traverse_height: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     adc_enabled: bool = False,
     # Advanced kwargs (Optional, default to zeros/nulls)
     lld_mode: Optional[List[int]] = None,
-    liquid_seek_height: Optional[List[float]] = None,
+    lld_search_height: Optional[List[float]] = None,
     immersion_depth: Optional[List[float]] = None,
     surface_following_distance: Optional[List[float]] = None,
-    capacitive_lld_sensitivity: Optional[List[int]] = None,
-    pressure_lld_sensitivity: Optional[List[int]] = None,
+    gamma_lld_sensitivity: Optional[List[int]] = None,
+    dp_lld_sensitivity: Optional[List[int]] = None,
     settling_time: Optional[List[float]] = None,
     transport_air_volume: Optional[List[float]] = None,
-    prewet_volume: Optional[List[float]] = None,
-    liquid_exit_speed: Optional[List[float]] = None,
-    mix_position: Optional[List[float]] = None,
+    pre_wetting_volume: Optional[List[float]] = None,
+    swap_speed: Optional[List[float]] = None,
+    mix_position_from_liquid_surface: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
     tadm_enabled: bool = False,
   ):
@@ -1612,23 +1638,23 @@ class NimbusBackend(HamiltonTCPBackend):
     Args:
       ops: List of SingleChannelAspiration operations, one per channel
       use_channels: List of channel indices to use
-      traverse_height: Traverse height in mm (optional, defaults to self._channel_traversal_height)
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in mm (optional, defaults to self._channel_traversal_height)
       adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
       lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
-      liquid_seek_height: Relative offset from well bottom for LLD search start position (mm).
+      lld_search_height: Relative offset from well bottom for LLD search start position (mm).
         This is a RELATIVE OFFSET, not an absolute coordinate. The instrument adds this to
-        z_min_position (well bottom) to determine where to start the LLD search.
+        minimum_height (well bottom) to determine where to start the LLD search.
         If None, defaults to the well's size_z (depth), meaning "start search at top of well".
         When provided, should be a list of offsets in mm, one per channel.
       immersion_depth: Depth to submerge into liquid (mm), default: [0.0] * n
       surface_following_distance: Distance to follow liquid surface (mm), default: [0.0] * n
-      capacitive_lld_sensitivity: cLLD sensitivity (1-4), default: [0] * n
-      pressure_lld_sensitivity: pLLD sensitivity (1-4), default: [0] * n
+      gamma_lld_sensitivity: Gamma LLD sensitivity (1-4), default: [0] * n
+      dp_lld_sensitivity: DP LLD sensitivity (1-4), default: [0] * n
       settling_time: Settling time (s), default: [1.0] * n
       transport_air_volume: Transport air volume (uL), default: [5.0] * n
-      prewet_volume: Prewet volume (uL), default: [0.0] * n
-      liquid_exit_speed: Liquid exit speed (uL/s), default: [20.0] * n
-      mix_position: Mix position relative to liquid (mm), default: [0.0] * n
+      pre_wetting_volume: Pre-wetting volume (uL), default: [0.0] * n
+      swap_speed: Swap speed on leaving liquid (uL/s), default: [20.0] * n
+      mix_position_from_liquid_surface: Mix position from liquid surface (mm), default: [0.0] * n
       limit_curve_index: Limit curve index, default: [0] * n
       tadm_enabled: TADM enabled flag, default: False
 
@@ -1645,18 +1671,18 @@ class NimbusBackend(HamiltonTCPBackend):
     n = len(ops)
 
     # Build tip pattern array (1 for active channels, 0 for inactive)
-    tips_used = [0] * self.num_channels
+    channels_involved = [0] * self.num_channels
     for channel_idx in use_channels:
       if channel_idx >= self.num_channels:
         raise ValueError(f"Channel index {channel_idx} exceeds num_channels {self.num_channels}")
-      tips_used[channel_idx] = 1
+      channels_involved[channel_idx] = 1
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.send_command(EnableADC(self._pipette_address, tips_used))
+      await self.send_command(EnableADC(self._pipette_address, channels_involved))
       logger.info("Enabled ADC before aspirate")
     else:
-      await self.send_command(DisableADC(self._pipette_address, tips_used))
+      await self.send_command(DisableADC(self._pipette_address, channels_involved))
       logger.info("Disabled ADC before aspirate")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -1689,9 +1715,11 @@ class NimbusBackend(HamiltonTCPBackend):
     x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
 
     # Traverse height: use provided value or default
-    if traverse_height is None:
-      traverse_height = self._channel_traversal_height
-    traverse_height_units = round(traverse_height * 100)
+    if minimum_traverse_height_at_beginning_of_a_command is None:
+      minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
+    minimum_traverse_height_at_beginning_of_a_command_units = round(
+      minimum_traverse_height_at_beginning_of_a_command * 100
+    )
 
     # Calculate well_bottoms: resource Z + offset Z + material_z_thickness in Hamilton coords
     well_bottoms = []
@@ -1702,15 +1730,15 @@ class NimbusBackend(HamiltonTCPBackend):
       hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
       well_bottoms.append(hamilton_coord.z)
 
-    # Calculate liquid_surface_height: well_bottom + (op.liquid_height or 0)
+    # Calculate liquid_height: well_bottom + (op.liquid_height or 0)
     # This is the fixed Z-height when LLD is OFF
-    liquid_surface_heights_mm = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
+    liquid_heights_mm = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
 
-    # Calculate liquid_seek_height if not provided as kwarg
+    # Calculate lld_search_height if not provided as kwarg
     #
-    # IMPORTANT: liquid_seek_height is a RELATIVE OFFSET (in mm), not an absolute coordinate.
+    # IMPORTANT: lld_search_height is a RELATIVE OFFSET (in mm), not an absolute coordinate.
     # It represents the height offset from the well bottom where the LLD (Liquid Level Detection)
-    # search should start. The Hamilton instrument will add this offset to z_min_position
+    # search should start. The Hamilton instrument will add this offset to minimum_height
     # (well bottom) to determine the absolute Z position where the search begins.
     #
     # Default behavior: Use the well's size_z (depth) as the offset, which means
@@ -1718,12 +1746,12 @@ class NimbusBackend(HamiltonTCPBackend):
     # This is a reasonable default since we want to search from the top downward.
     #
     # When provided as a kwarg, it should be a list of relative offsets in mm.
-    # The instrument will internally add these to z_min_position to get absolute coordinates.
-    if liquid_seek_height is None:
-      liquid_seek_height = [op.resource.get_absolute_size_z() for op in ops]
+    # The instrument will internally add these to minimum_height to get absolute coordinates.
+    if lld_search_height is None:
+      lld_search_height = [op.resource.get_absolute_size_z() for op in ops]
 
-    # Calculate z_min_position: default to well_bottom
-    z_min_positions_mm = well_bottoms.copy()
+    # Calculate minimum_height: default to well_bottom
+    minimum_heights_mm = well_bottoms.copy()
 
     # Extract volumes and speeds from operations
     volumes = [op.volume for op in ops]  # in uL
@@ -1733,7 +1761,7 @@ class NimbusBackend(HamiltonTCPBackend):
       if op.flow_rate is None:
         raise ValueError(f"flow_rate cannot be None for operation {op}")
       flow_rates.append(op.flow_rate)
-    blowout_volumes = [
+    blow_out_air_volumes = [
       op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
     ]  # in uL, default 40
 
@@ -1749,13 +1777,13 @@ class NimbusBackend(HamiltonTCPBackend):
     lld_mode = fill_in_defaults(lld_mode, [0] * n)
     immersion_depth = fill_in_defaults(immersion_depth, [0.0] * n)
     surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
-    capacitive_lld_sensitivity = fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
-    pressure_lld_sensitivity = fill_in_defaults(pressure_lld_sensitivity, [0] * n)
+    gamma_lld_sensitivity = fill_in_defaults(gamma_lld_sensitivity, [0] * n)
+    dp_lld_sensitivity = fill_in_defaults(dp_lld_sensitivity, [0] * n)
     settling_time = fill_in_defaults(settling_time, [1.0] * n)
     transport_air_volume = fill_in_defaults(transport_air_volume, [5.0] * n)
-    prewet_volume = fill_in_defaults(prewet_volume, [0.0] * n)
-    liquid_exit_speed = fill_in_defaults(liquid_exit_speed, [20.0] * n)
-    mix_position = fill_in_defaults(mix_position, [0.0] * n)
+    pre_wetting_volume = fill_in_defaults(pre_wetting_volume, [0.0] * n)
+    swap_speed = fill_in_defaults(swap_speed, [20.0] * n)
+    mix_position_from_liquid_surface = fill_in_defaults(mix_position_from_liquid_surface, [0.0] * n)
     limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
 
     # ========================================================================
@@ -1766,62 +1794,64 @@ class NimbusBackend(HamiltonTCPBackend):
     # ========================================================================
 
     aspirate_volumes = [round(vol * 10) for vol in volumes]
-    blowout_volumes_units = [round(vol * 10) for vol in blowout_volumes]
-    aspirate_speeds = [round(fr * 10) for fr in flow_rates]
-    liquid_seek_height_units = [round(h * 100) for h in liquid_seek_height]
-    liquid_surface_height_units = [round(h * 100) for h in liquid_surface_heights_mm]
+    blow_out_air_volumes_units = [round(vol * 10) for vol in blow_out_air_volumes]
+    aspiration_speeds = [round(fr * 10) for fr in flow_rates]
+    lld_search_height_units = [round(h * 100) for h in lld_search_height]
+    liquid_height_units = [round(h * 100) for h in liquid_heights_mm]
     immersion_depth_units = [round(d * 100) for d in immersion_depth]
     surface_following_distance_units = [round(d * 100) for d in surface_following_distance]
-    z_min_position_units = [round(z * 100) for z in z_min_positions_mm]
+    minimum_height_units = [round(z * 100) for z in minimum_heights_mm]
     settling_time_units = [round(t * 10) for t in settling_time]
     transport_air_volume_units = [round(v * 10) for v in transport_air_volume]
-    prewet_volume_units = [round(v * 10) for v in prewet_volume]
-    liquid_exit_speed_units = [round(s * 10) for s in liquid_exit_speed]
+    pre_wetting_volume_units = [round(v * 10) for v in pre_wetting_volume]
+    swap_speed_units = [round(s * 10) for s in swap_speed]
     mix_volume_units = [round(v * 10) for v in mix_volume]
     mix_speed_units = [round(s * 10) for s in mix_speed]
-    mix_position_units = [round(p * 100) for p in mix_position]
+    mix_position_from_liquid_surface_units = [
+      round(p * 100) for p in mix_position_from_liquid_surface
+    ]
 
     # Build arrays for all channels (pad with 0s for inactive channels)
     aspirate_volumes_full = self._fill_by_channels(aspirate_volumes, use_channels, default=0)
-    blowout_volumes_full = self._fill_by_channels(blowout_volumes_units, use_channels, default=0)
-    aspirate_speeds_full = self._fill_by_channels(aspirate_speeds, use_channels, default=0)
-    liquid_seek_height_full = self._fill_by_channels(
-      liquid_seek_height_units, use_channels, default=0
+    blow_out_air_volumes_full = self._fill_by_channels(
+      blow_out_air_volumes_units, use_channels, default=0
     )
-    liquid_surface_height_full = self._fill_by_channels(
-      liquid_surface_height_units, use_channels, default=0
+    aspiration_speeds_full = self._fill_by_channels(aspiration_speeds, use_channels, default=0)
+    lld_search_height_full = self._fill_by_channels(
+      lld_search_height_units, use_channels, default=0
     )
+    liquid_height_full = self._fill_by_channels(liquid_height_units, use_channels, default=0)
     immersion_depth_full = self._fill_by_channels(immersion_depth_units, use_channels, default=0)
     surface_following_distance_full = self._fill_by_channels(
       surface_following_distance_units, use_channels, default=0
     )
-    z_min_position_full = self._fill_by_channels(z_min_position_units, use_channels, default=0)
+    minimum_height_full = self._fill_by_channels(minimum_height_units, use_channels, default=0)
     settling_time_full = self._fill_by_channels(settling_time_units, use_channels, default=0)
     transport_air_volume_full = self._fill_by_channels(
       transport_air_volume_units, use_channels, default=0
     )
-    prewet_volume_full = self._fill_by_channels(prewet_volume_units, use_channels, default=0)
-    liquid_exit_speed_full = self._fill_by_channels(
-      liquid_exit_speed_units, use_channels, default=0
+    pre_wetting_volume_full = self._fill_by_channels(
+      pre_wetting_volume_units, use_channels, default=0
     )
+    swap_speed_full = self._fill_by_channels(swap_speed_units, use_channels, default=0)
     mix_volume_full = self._fill_by_channels(mix_volume_units, use_channels, default=0)
     mix_cycles_full = self._fill_by_channels(mix_cycles, use_channels, default=0)
     mix_speed_full = self._fill_by_channels(mix_speed_units, use_channels, default=0)
-    mix_position_full = self._fill_by_channels(mix_position_units, use_channels, default=0)
-    capacitive_lld_sensitivity_full = self._fill_by_channels(
-      capacitive_lld_sensitivity, use_channels, default=0
+    mix_position_from_liquid_surface_full = self._fill_by_channels(
+      mix_position_from_liquid_surface_units, use_channels, default=0
     )
-    pressure_lld_sensitivity_full = self._fill_by_channels(
-      pressure_lld_sensitivity, use_channels, default=0
+    gamma_lld_sensitivity_full = self._fill_by_channels(
+      gamma_lld_sensitivity, use_channels, default=0
     )
+    dp_lld_sensitivity_full = self._fill_by_channels(dp_lld_sensitivity, use_channels, default=0)
     limit_curve_index_full = self._fill_by_channels(limit_curve_index, use_channels, default=0)
     lld_mode_full = self._fill_by_channels(lld_mode, use_channels, default=0)
 
     # Default values for remaining parameters
     aspirate_type = [0] * self.num_channels
-    clot_check_height = [0] * self.num_channels
-    z_final = traverse_height_units
-    mix_follow_distance = [0] * self.num_channels
+    clot_detection_height = [0] * self.num_channels
+    min_z_endpos = minimum_traverse_height_at_beginning_of_a_command_units
+    mix_surface_following_distance = [0] * self.num_channels
     tube_section_height = [0] * self.num_channels
     tube_section_ratio = [0] * self.num_channels
     lld_height_difference = [0] * self.num_channels
@@ -1831,34 +1861,34 @@ class NimbusBackend(HamiltonTCPBackend):
     command = Aspirate(
       dest=self._pipette_address,
       aspirate_type=aspirate_type,
-      tips_used=tips_used,
+      channels_involved=channels_involved,
       x_positions=x_positions_full,
       y_positions=y_positions_full,
-      traverse_height=traverse_height_units,
-      liquid_seek_height=liquid_seek_height_full,
-      liquid_surface_height=liquid_surface_height_full,
-      submerge_depth=immersion_depth_full,
-      follow_depth=surface_following_distance_full,
-      z_min_position=z_min_position_full,
-      clot_check_height=clot_check_height,
-      z_final=z_final,
-      liquid_exit_speed=liquid_exit_speed_full,
-      blowout_volume=blowout_volumes_full,
-      prewet_volume=prewet_volume_full,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command_units,
+      lld_search_height=lld_search_height_full,
+      liquid_height=liquid_height_full,
+      immersion_depth=immersion_depth_full,
+      surface_following_distance=surface_following_distance_full,
+      minimum_height=minimum_height_full,
+      clot_detection_height=clot_detection_height,
+      min_z_endpos=min_z_endpos,
+      swap_speed=swap_speed_full,
+      blow_out_air_volume=blow_out_air_volumes_full,
+      pre_wetting_volume=pre_wetting_volume_full,
       aspirate_volume=aspirate_volumes_full,
       transport_air_volume=transport_air_volume_full,
-      aspirate_speed=aspirate_speeds_full,
+      aspiration_speed=aspiration_speeds_full,
       settling_time=settling_time_full,
       mix_volume=mix_volume_full,
       mix_cycles=mix_cycles_full,
-      mix_position=mix_position_full,
-      mix_follow_distance=mix_follow_distance,
+      mix_position_from_liquid_surface=mix_position_from_liquid_surface_full,
+      mix_surface_following_distance=mix_surface_following_distance,
       mix_speed=mix_speed_full,
       tube_section_height=tube_section_height,
       tube_section_ratio=tube_section_ratio,
       lld_mode=lld_mode_full,
-      capacitive_lld_sensitivity=capacitive_lld_sensitivity_full,
-      pressure_lld_sensitivity=pressure_lld_sensitivity_full,
+      gamma_lld_sensitivity=gamma_lld_sensitivity_full,
+      dp_lld_sensitivity=dp_lld_sensitivity_full,
       lld_height_difference=lld_height_difference,
       tadm_enabled=tadm_enabled,
       limit_curve_index=limit_curve_index_full,
@@ -1876,24 +1906,23 @@ class NimbusBackend(HamiltonTCPBackend):
     self,
     ops: List[SingleChannelDispense],
     use_channels: List[int],
-    traverse_height: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     adc_enabled: bool = False,
     # Advanced kwargs (Optional, default to zeros/nulls)
     lld_mode: Optional[List[int]] = None,
-    liquid_seek_height: Optional[List[float]] = None,
+    lld_search_height: Optional[List[float]] = None,
     immersion_depth: Optional[List[float]] = None,
     surface_following_distance: Optional[List[float]] = None,
-    capacitive_lld_sensitivity: Optional[List[int]] = None,
+    gamma_lld_sensitivity: Optional[List[int]] = None,
     settling_time: Optional[List[float]] = None,
     transport_air_volume: Optional[List[float]] = None,
-    prewet_volume: Optional[List[float]] = None,
-    liquid_exit_speed: Optional[List[float]] = None,
-    mix_position: Optional[List[float]] = None,
+    swap_speed: Optional[List[float]] = None,
+    mix_position_from_liquid_surface: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
     tadm_enabled: bool = False,
-    cutoff_speed: Optional[List[float]] = None,
+    cut_off_speed: Optional[List[float]] = None,
     stop_back_volume: Optional[List[float]] = None,
-    touch_off_distance: float = 0.0,
+    side_touch_off_distance: float = 0.0,
     dispense_offset: Optional[List[float]] = None,
   ):
     """Dispense liquid from the specified resource using pip.
@@ -1901,23 +1930,22 @@ class NimbusBackend(HamiltonTCPBackend):
     Args:
       ops: List of SingleChannelDispense operations, one per channel
       use_channels: List of channel indices to use
-      traverse_height: Traverse height in mm (optional, defaults to self._channel_traversal_height)
+      minimum_traverse_height_at_beginning_of_a_command: Traverse height in mm (optional, defaults to self._channel_traversal_height)
       adc_enabled: If True, enable ADC (Automatic Drip Control), else disable (default: False)
       lld_mode: LLD mode (0=OFF, 1=cLLD, 2=pLLD, 3=DUAL), default: [0] * n
-      liquid_seek_height: Override calculated LLD search height (mm). If None, calculated from well_bottom + resource size
+      lld_search_height: Override calculated LLD search height (mm). If None, calculated from well_bottom + resource size
       immersion_depth: Depth to submerge into liquid (mm), default: [0.0] * n
       surface_following_distance: Distance to follow liquid surface (mm), default: [0.0] * n
-      capacitive_lld_sensitivity: cLLD sensitivity (1-4), default: [0] * n
+      gamma_lld_sensitivity: Gamma LLD sensitivity (1-4), default: [0] * n
       settling_time: Settling time (s), default: [1.0] * n
       transport_air_volume: Transport air volume (uL), default: [5.0] * n
-      prewet_volume: Prewet volume (uL), default: [0.0] * n
-      liquid_exit_speed: Liquid exit speed (uL/s), default: [20.0] * n
-      mix_position: Mix position relative to liquid (mm), default: [0.0] * n
+      swap_speed: Swap speed on leaving liquid (uL/s), default: [20.0] * n
+      mix_position_from_liquid_surface: Mix position from liquid surface (mm), default: [0.0] * n
       limit_curve_index: Limit curve index, default: [0] * n
       tadm_enabled: TADM enabled flag, default: False
-      cutoff_speed: Cutoff speed (uL/s), default: [25.0] * n
+      cut_off_speed: Cut off speed (uL/s), default: [25.0] * n
       stop_back_volume: Stop back volume (uL), default: [0.0] * n
-      touch_off_distance: Touch off distance (mm), default: 0.0
+      side_touch_off_distance: Side touch off distance (mm), default: 0.0
       dispense_offset: Dispense offset (mm), default: [0.0] * n
 
     Raises:
@@ -1933,18 +1961,18 @@ class NimbusBackend(HamiltonTCPBackend):
     n = len(ops)
 
     # Build tip pattern array (1 for active channels, 0 for inactive)
-    tips_used = [0] * self.num_channels
+    channels_involved = [0] * self.num_channels
     for channel_idx in use_channels:
       if channel_idx >= self.num_channels:
         raise ValueError(f"Channel index {channel_idx} exceeds num_channels {self.num_channels}")
-      tips_used[channel_idx] = 1
+      channels_involved[channel_idx] = 1
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.send_command(EnableADC(self._pipette_address, tips_used))
+      await self.send_command(EnableADC(self._pipette_address, channels_involved))
       logger.info("Enabled ADC before dispense")
     else:
-      await self.send_command(DisableADC(self._pipette_address, tips_used))
+      await self.send_command(DisableADC(self._pipette_address, channels_involved))
       logger.info("Disabled ADC before dispense")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -1977,9 +2005,11 @@ class NimbusBackend(HamiltonTCPBackend):
     x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
 
     # Traverse height: use provided value or default
-    if traverse_height is None:
-      traverse_height = self._channel_traversal_height
-    traverse_height_units = round(traverse_height * 100)
+    if minimum_traverse_height_at_beginning_of_a_command is None:
+      minimum_traverse_height_at_beginning_of_a_command = self._channel_traversal_height
+    minimum_traverse_height_at_beginning_of_a_command_units = round(
+      minimum_traverse_height_at_beginning_of_a_command * 100
+    )
 
     # Calculate well_bottoms: resource Z + offset Z + material_z_thickness in Hamilton coords
     well_bottoms = []
@@ -1990,15 +2020,15 @@ class NimbusBackend(HamiltonTCPBackend):
       hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
       well_bottoms.append(hamilton_coord.z)
 
-    # Calculate dispense_height: well_bottom + (op.liquid_height or 0)
+    # Calculate liquid_height: well_bottom + (op.liquid_height or 0)
     # This is the fixed Z-height when LLD is OFF
-    dispense_heights_mm = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
+    liquid_heights_mm = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
 
-    # Calculate liquid_seek_height if not provided as kwarg
+    # Calculate lld_search_height if not provided as kwarg
     #
-    # IMPORTANT: liquid_seek_height is a RELATIVE OFFSET (in mm), not an absolute coordinate.
+    # IMPORTANT: lld_search_height is a RELATIVE OFFSET (in mm), not an absolute coordinate.
     # It represents the height offset from the well bottom where the LLD (Liquid Level Detection)
-    # search should start. The Hamilton instrument will add this offset to z_min_position
+    # search should start. The Hamilton instrument will add this offset to minimum_height
     # (well bottom) to determine the absolute Z position where the search begins.
     #
     # Default behavior: Use the well's size_z (depth) as the offset, which means
@@ -2006,12 +2036,12 @@ class NimbusBackend(HamiltonTCPBackend):
     # This is a reasonable default since we want to search from the top downward.
     #
     # When provided as a kwarg, it should be a list of relative offsets in mm.
-    # The instrument will internally add these to z_min_position to get absolute coordinates.
-    if liquid_seek_height is None:
-      liquid_seek_height = [op.resource.get_absolute_size_z() for op in ops]
+    # The instrument will internally add these to minimum_height to get absolute coordinates.
+    if lld_search_height is None:
+      lld_search_height = [op.resource.get_absolute_size_z() for op in ops]
 
-    # Calculate z_min_position: default to well_bottom
-    z_min_positions_mm = well_bottoms.copy()
+    # Calculate minimum_height: default to well_bottom
+    minimum_heights_mm = well_bottoms.copy()
 
     # Extract volumes and speeds from operations
     volumes = [op.volume for op in ops]  # in uL
@@ -2021,7 +2051,7 @@ class NimbusBackend(HamiltonTCPBackend):
       if op.flow_rate is None:
         raise ValueError(f"flow_rate cannot be None for operation {op}")
       flow_rates.append(op.flow_rate)
-    blowout_volumes = [
+    blow_out_air_volumes = [
       op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
     ]  # in uL, default 40
 
@@ -2037,14 +2067,13 @@ class NimbusBackend(HamiltonTCPBackend):
     lld_mode = fill_in_defaults(lld_mode, [0] * n)
     immersion_depth = fill_in_defaults(immersion_depth, [0.0] * n)
     surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
-    capacitive_lld_sensitivity = fill_in_defaults(capacitive_lld_sensitivity, [0] * n)
+    gamma_lld_sensitivity = fill_in_defaults(gamma_lld_sensitivity, [0] * n)
     settling_time = fill_in_defaults(settling_time, [1.0] * n)
     transport_air_volume = fill_in_defaults(transport_air_volume, [5.0] * n)
-    prewet_volume = fill_in_defaults(prewet_volume, [0.0] * n)
-    liquid_exit_speed = fill_in_defaults(liquid_exit_speed, [20.0] * n)
-    mix_position = fill_in_defaults(mix_position, [0.0] * n)
+    swap_speed = fill_in_defaults(swap_speed, [20.0] * n)
+    mix_position_from_liquid_surface = fill_in_defaults(mix_position_from_liquid_surface, [0.0] * n)
     limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
-    cutoff_speed = fill_in_defaults(cutoff_speed, [25.0] * n)
+    cut_off_speed = fill_in_defaults(cut_off_speed, [25.0] * n)
     stop_back_volume = fill_in_defaults(stop_back_volume, [0.0] * n)
     dispense_offset = fill_in_defaults(dispense_offset, [0.0] * n)
 
@@ -2056,63 +2085,65 @@ class NimbusBackend(HamiltonTCPBackend):
     # ========================================================================
 
     dispense_volumes = [round(vol * 10) for vol in volumes]
-    blowout_volumes_units = [round(vol * 10) for vol in blowout_volumes]
+    blow_out_air_volumes_units = [round(vol * 10) for vol in blow_out_air_volumes]
     dispense_speeds = [round(fr * 10) for fr in flow_rates]
-    liquid_seek_height_units = [round(h * 100) for h in liquid_seek_height]
-    dispense_height_units = [round(h * 100) for h in dispense_heights_mm]
+    lld_search_height_units = [round(h * 100) for h in lld_search_height]
+    liquid_height_units = [round(h * 100) for h in liquid_heights_mm]
     immersion_depth_units = [round(d * 100) for d in immersion_depth]
     surface_following_distance_units = [round(d * 100) for d in surface_following_distance]
-    z_min_position_units = [round(z * 100) for z in z_min_positions_mm]
+    minimum_height_units = [round(z * 100) for z in minimum_heights_mm]
     settling_time_units = [round(t * 10) for t in settling_time]
     transport_air_volume_units = [round(v * 10) for v in transport_air_volume]
-    prewet_volume_units = [round(v * 10) for v in prewet_volume]
-    liquid_exit_speed_units = [round(s * 10) for s in liquid_exit_speed]
+    swap_speed_units = [round(s * 10) for s in swap_speed]
     mix_volume_units = [round(v * 10) for v in mix_volume]
     mix_speed_units = [round(s * 10) for s in mix_speed]
-    mix_position_units = [round(p * 100) for p in mix_position]
-    cutoff_speed_units = [round(s * 10) for s in cutoff_speed]
+    mix_position_from_liquid_surface_units = [
+      round(p * 100) for p in mix_position_from_liquid_surface
+    ]
+    cut_off_speed_units = [round(s * 10) for s in cut_off_speed]
     stop_back_volume_units = [round(v * 10) for v in stop_back_volume]
     dispense_offset_units = [round(o * 100) for o in dispense_offset]
-    touch_off_distance_units = round(touch_off_distance * 100)
+    side_touch_off_distance_units = round(side_touch_off_distance * 100)
 
     # Build arrays for all channels (pad with 0s for inactive channels)
     dispense_volumes_full = self._fill_by_channels(dispense_volumes, use_channels, default=0)
-    blowout_volumes_full = self._fill_by_channels(blowout_volumes_units, use_channels, default=0)
-    dispense_speeds_full = self._fill_by_channels(dispense_speeds, use_channels, default=0)
-    liquid_seek_height_full = self._fill_by_channels(
-      liquid_seek_height_units, use_channels, default=0
+    blow_out_air_volumes_full = self._fill_by_channels(
+      blow_out_air_volumes_units, use_channels, default=0
     )
-    dispense_height_full = self._fill_by_channels(dispense_height_units, use_channels, default=0)
+    dispense_speeds_full = self._fill_by_channels(dispense_speeds, use_channels, default=0)
+    lld_search_height_full = self._fill_by_channels(
+      lld_search_height_units, use_channels, default=0
+    )
+    liquid_height_full = self._fill_by_channels(liquid_height_units, use_channels, default=0)
     immersion_depth_full = self._fill_by_channels(immersion_depth_units, use_channels, default=0)
     surface_following_distance_full = self._fill_by_channels(
       surface_following_distance_units, use_channels, default=0
     )
-    z_min_position_full = self._fill_by_channels(z_min_position_units, use_channels, default=0)
+    minimum_height_full = self._fill_by_channels(minimum_height_units, use_channels, default=0)
     settling_time_full = self._fill_by_channels(settling_time_units, use_channels, default=0)
     transport_air_volume_full = self._fill_by_channels(
       transport_air_volume_units, use_channels, default=0
     )
-    prewet_volume_full = self._fill_by_channels(prewet_volume_units, use_channels, default=0)
-    liquid_exit_speed_full = self._fill_by_channels(
-      liquid_exit_speed_units, use_channels, default=0
-    )
+    swap_speed_full = self._fill_by_channels(swap_speed_units, use_channels, default=0)
     mix_volume_full = self._fill_by_channels(mix_volume_units, use_channels, default=0)
     mix_cycles_full = self._fill_by_channels(mix_cycles, use_channels, default=0)
     mix_speed_full = self._fill_by_channels(mix_speed_units, use_channels, default=0)
-    mix_position_full = self._fill_by_channels(mix_position_units, use_channels, default=0)
-    capacitive_lld_sensitivity_full = self._fill_by_channels(
-      capacitive_lld_sensitivity, use_channels, default=0
+    mix_position_from_liquid_surface_full = self._fill_by_channels(
+      mix_position_from_liquid_surface_units, use_channels, default=0
+    )
+    gamma_lld_sensitivity_full = self._fill_by_channels(
+      gamma_lld_sensitivity, use_channels, default=0
     )
     limit_curve_index_full = self._fill_by_channels(limit_curve_index, use_channels, default=0)
     lld_mode_full = self._fill_by_channels(lld_mode, use_channels, default=0)
-    cutoff_speed_full = self._fill_by_channels(cutoff_speed_units, use_channels, default=0)
+    cut_off_speed_full = self._fill_by_channels(cut_off_speed_units, use_channels, default=0)
     stop_back_volume_full = self._fill_by_channels(stop_back_volume_units, use_channels, default=0)
     dispense_offset_full = self._fill_by_channels(dispense_offset_units, use_channels, default=0)
 
     # Default values for remaining parameters
     dispense_type = [0] * self.num_channels
-    z_final = traverse_height_units
-    mix_follow_distance = [0] * self.num_channels
+    min_z_endpos = minimum_traverse_height_at_beginning_of_a_command_units
+    mix_surface_following_distance = [0] * self.num_channels
     tube_section_height = [0] * self.num_channels
     tube_section_ratio = [0] * self.num_channels
     recording_mode = 0
@@ -2121,35 +2152,35 @@ class NimbusBackend(HamiltonTCPBackend):
     command = Dispense(
       dest=self._pipette_address,
       dispense_type=dispense_type,
-      tips_used=tips_used,
+      channels_involved=channels_involved,
       x_positions=x_positions_full,
       y_positions=y_positions_full,
-      traverse_height=traverse_height_units,
-      liquid_seek_height=liquid_seek_height_full,
-      dispense_height=dispense_height_full,
-      submerge_depth=immersion_depth_full,
-      follow_depth=surface_following_distance_full,
-      z_min_position=z_min_position_full,
-      z_final=z_final,
-      liquid_exit_speed=liquid_exit_speed_full,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command_units,
+      lld_search_height=lld_search_height_full,
+      liquid_height=liquid_height_full,
+      immersion_depth=immersion_depth_full,
+      surface_following_distance=surface_following_distance_full,
+      minimum_height=minimum_height_full,
+      min_z_endpos=min_z_endpos,
+      swap_speed=swap_speed_full,
       transport_air_volume=transport_air_volume_full,
       dispense_volume=dispense_volumes_full,
       stop_back_volume=stop_back_volume_full,
-      blowout_volume=blowout_volumes_full,
+      blow_out_air_volume=blow_out_air_volumes_full,
       dispense_speed=dispense_speeds_full,
-      cutoff_speed=cutoff_speed_full,
+      cut_off_speed=cut_off_speed_full,
       settling_time=settling_time_full,
       mix_volume=mix_volume_full,
       mix_cycles=mix_cycles_full,
-      mix_position=mix_position_full,
-      mix_follow_distance=mix_follow_distance,
+      mix_position_from_liquid_surface=mix_position_from_liquid_surface_full,
+      mix_surface_following_distance=mix_surface_following_distance,
       mix_speed=mix_speed_full,
-      touch_off_distance=touch_off_distance_units,
+      side_touch_off_distance=side_touch_off_distance_units,
       dispense_offset=dispense_offset_full,
       tube_section_height=tube_section_height,
       tube_section_ratio=tube_section_ratio,
       lld_mode=lld_mode_full,
-      capacitive_lld_sensitivity=capacitive_lld_sensitivity_full,
+      gamma_lld_sensitivity=gamma_lld_sensitivity_full,
       tadm_enabled=tadm_enabled,
       limit_curve_index=limit_curve_index_full,
       recording_mode=recording_mode,
