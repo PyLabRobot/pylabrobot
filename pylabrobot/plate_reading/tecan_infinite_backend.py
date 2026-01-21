@@ -15,7 +15,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Protocol, Sequence, TextIO, Tuple
+from typing import Dict, List, Optional, Sequence, TextIO, Tuple
 
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -24,81 +24,6 @@ from pylabrobot.resources.well import Well
 
 logger = logging.getLogger(__name__)
 BIN_RE = re.compile(r"^(\d+),BIN:$")
-
-
-class InfiniteTransport(Protocol):
-  """Minimal transport required by the backend.
-
-  Implementations are expected to wrap PyUSB/libusbK.
-  """
-
-  async def open(self) -> None:
-    """Open the transport connection."""
-    ...
-
-  async def close(self) -> None:
-    """Close the transport connection."""
-    ...
-
-  async def write(self, data: bytes) -> None:
-    """Send raw data to the transport."""
-    ...
-
-  async def read(self, size: int) -> bytes:
-    """Read raw data from the transport."""
-    ...
-
-  async def reset(self) -> None:
-    """Reset the transport connection."""
-    ...
-
-
-class PyUSBInfiniteTransport(InfiniteTransport):
-  """Transport that reuses pylabrobot.io.usb.USB for Infinite communication."""
-
-  def __init__(
-    self,
-    vendor_id: int = 0x0C47,
-    product_id: int = 0x8007,
-    packet_read_timeout: int = 3,
-    read_timeout: int = 30,
-  ) -> None:
-    self._vendor_id = vendor_id
-    self._product_id = product_id
-    self._usb: Optional[USB] = None
-    self._packet_read_timeout = packet_read_timeout
-    self._read_timeout = read_timeout
-
-  async def open(self) -> None:
-    io = USB(
-      id_vendor=self._vendor_id,
-      id_product=self._product_id,
-      packet_read_timeout=self._packet_read_timeout,
-      read_timeout=self._read_timeout,
-    )
-    await io.setup()
-    self._usb = io
-
-  async def close(self) -> None:
-    if self._usb is not None:
-      await self._usb.stop()
-      self._usb = None
-
-  async def reset(self) -> None:
-    await self.close()
-    await asyncio.sleep(0.2)
-    await self.open()
-
-  async def write(self, data: bytes) -> None:
-    if self._usb is None or self._usb.write_endpoint is None:
-      raise RuntimeError("USB transport not opened.")
-    await self._usb.write(data)
-
-  async def read(self, size: int) -> bytes:
-    if self._usb is None:
-      raise RuntimeError("USB transport not opened.")
-    data = await self._usb.read(size=size)
-    return bytes(data)
 
 
 @dataclass
@@ -580,14 +505,21 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     ],
   }
 
+  VENDOR_ID = 0x0C47
+  PRODUCT_ID = 0x8007
+
   def __init__(
     self,
-    transport: Optional[InfiniteTransport] = None,
     scan_config: Optional[InfiniteScanConfig] = None,
     packet_log_path: Optional[str] = None,
   ) -> None:
     super().__init__()
-    self._transport = transport or PyUSBInfiniteTransport()
+    self.io = USB(
+      id_vendor=self.VENDOR_ID,
+      id_product=self.PRODUCT_ID,
+      packet_read_timeout=3,
+      read_timeout=30,
+    )
     self.config = scan_config or InfiniteScanConfig()
     self._setup_lock = asyncio.Lock()
     self._ready = False
@@ -611,7 +543,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     async with self._setup_lock:
       if self._ready:
         return
-      await self._transport.open()
+      await self.io.setup()
       await self._initialize_device()
       for mode in self._MODE_CAPABILITY_COMMANDS:
         if mode not in self._mode_capabilities:
@@ -623,7 +555,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       if not self._ready:
         return
       await self._cleanup_protocol()
-      await self._transport.close()
+      await self.io.stop()
       if self._packet_log_handle is not None:
         self._packet_log_handle.close()
         self._packet_log_handle = None
@@ -1054,7 +986,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
   async def _read_packet(self, size: int) -> bytes:
     try:
-      data = await self._transport.read(size)
+      data = await self.io.read(size=size)
     except TimeoutError:
       await self._recover_transport()
       raise
@@ -1064,14 +996,11 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
   async def _recover_transport(self) -> None:
     try:
-      await self._transport.reset()
+      await self.io.stop()
+      await asyncio.sleep(0.2)
+      await self.io.setup()
     except Exception:
-      try:
-        await self._transport.close()
-        await asyncio.sleep(0.2)
-        await self._transport.open()
-      except Exception:
-        return
+      return
     self._device_initialized = False
     self._mode_capabilities.clear()
     self._reset_stream_state()
@@ -1181,7 +1110,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
   ) -> List[str]:
     logger.debug("[tecan] >> %s", command)
     framed = self._frame_ascii_command(command)
-    await self._transport.write(framed)
+    await self.io.write(framed)
     await self._log_packet("out", framed, ascii_payload=command)
     if not read_response:
       return []
@@ -1398,5 +1327,4 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
 __all__ = [
   "TecanInfinite200ProBackend",
   "InfiniteScanConfig",
-  "PyUSBInfiniteTransport",
 ]
