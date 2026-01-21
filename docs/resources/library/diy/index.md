@@ -8,4 +8,5 @@ You can find find 3D printed parts under `resources/diy`.
 :maxdepth: 1
 
 grindbio
+davidnedrud
 ```

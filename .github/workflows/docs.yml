@@ -3,6 +3,8 @@ name: Build and Publish Documentation
 on:
   push:
     branches: main
+  pull_request:
+    branches: main
 
 jobs:
   build_docs:
@@ -40,6 +42,7 @@ jobs:
         run: make llm-docs
 
       - name: Commit generated documentation
+        if: github.event_name == 'push'
         run: |
           cd docs/build
           git init
@@ -51,6 +54,7 @@ jobs:
           git commit -m 'deploy docs'
 
       - name: Push to docs branch
+        if: github.event_name == 'push'
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

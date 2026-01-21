@@ -7,6 +7,7 @@ from pylabrobot.resources.height_volume_functions import (
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
+  CrossSectionType,
   Well,
   WellBottomType,
 )
@@ -170,5 +171,36 @@ def nest_12_troughplate_15000uL_Vb(name: str) -> Plate:
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
       **well_kwargs,
+    ),
+  )
+
+
+def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
+  """NEST Cat. No. 503062
+  Spec: http://manage-en.nestscientificusa.com/Resource/File/2023/02/13/NEST-Deep-Well-Plates.pdf
+  """
+  return Plate(
+    name=name,
+    size_x=127.1,  # from spec
+    size_y=85.10,  # from spec
+    size_z=41.85,  # from spec
+    lid=None,
+    model=NEST_96_wellplate_2200uL_Ub.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      size_x=8.0,  # from spec (inner well width)
+      size_y=8.0,  # from spec (inner well length)
+      size_z=39.30,  # from spec
+      dx=10.05,  # from spec
+      dy=7.05,  # from spec
+      dz=2.55,  # from spec
+      material_z_thickness=0.8,  # measured
+      item_dx=9.0,  # from spec
+      item_dy=9.0,  # from spec
+      num_items_x=12,  # from spec
+      num_items_y=8,  # from spec
+      cross_section_type=CrossSectionType.RECTANGLE,
+      bottom_type=WellBottomType.U,
+      max_volume=2200,  # from spec (2.2 mL)
     ),
   )

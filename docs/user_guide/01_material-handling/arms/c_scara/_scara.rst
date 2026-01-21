@@ -9,4 +9,4 @@ Selective Compliance Assembly Robot Arm (SCARA).
    :maxdepth: 1
    :hidden:
 
-   precise-flex-pf400/_precise-flex-pf400
+   precise-flex-pf400/hello-world

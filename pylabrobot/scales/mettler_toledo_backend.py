@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+import warnings
 from typing import List, Literal, Optional, Union
 
 from pylabrobot.io.serial import Serial
@@ -152,53 +153,36 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
   From the docs:
 
-    "If several commands are sent in succession without waiting for the corresponding responses, it
-    is possible that the weigh module/balance confuses the sequence of command processing or ignores
-    entire commands."
+    "If several commands are sent in succession without waiting for the corresponding
+    responses, it is possible that the weigh module/balance confuses the sequence of
+    command processing or ignores entire commands."
   """
 
-  def __init__(self, port: str) -> None:
-    self.port = port
-    self.io = Serial(self.port, baudrate=9600, timeout=1)
+  # === Constructor ===
+
+  def __init__(self, port: Optional[str] = None, vid: int = 0x0403, pid: int = 0x6001):
+    super().__init__()
+
+    self.io = Serial(port, vid=vid, pid=pid, baudrate=9600, timeout=1)
 
   async def setup(self) -> None:
+    # Core state
     await self.io.setup()
 
     # set output unit to grams
     await self.send_command("M21 0 0")
 
+    # Handshake: parse requested serial number
+    self.serial_number = await self.request_serial_number()
+    # TODO: verify serial number pattern
+
   async def stop(self) -> None:
     await self.io.stop()
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "port": self.port}
+    return {**super().serialize(), "port": self.io.port}
 
-  async def send_command(self, command: str, timeout: int = 60) -> MettlerToledoResponse:
-    """Send a command to the scale and receive the response.
-
-    Args:
-      timeout: The timeout in seconds.
-    """
-
-    await self.io.write(command.encode() + b"\r\n")
-
-    raw_response = b""
-    timeout_time = time.time() + timeout
-    while True:
-      raw_response = await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        raise TimeoutError("Timeout while waiting for response from scale.")
-      if raw_response != b"":
-        break
-    logger.debug("[scale] Received response: %s", raw_response)
-    response = raw_response.decode("utf-8").strip().split()
-
-    # parse basic errors
-    self._parse_basic_errors(response)
-
-    # mypy doesn't understand this
-    return response  # type: ignore
+  # === Response parsing ===
 
   def _parse_basic_errors(self, response: List[str]) -> None:
     """Helper function for parsing basic errors that are common to many commands. If an error is
@@ -257,146 +241,56 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       if code == "15":
         raise MettlerToledoError.adjustment_needed(from_terminal=from_terminal)
 
-  async def tare_stable(self) -> MettlerToledoResponse:
-    """Tare the scale when the weight is stable."""
-    return await self.send_command("T")
+  # === Command Layer ===
 
-  async def tare_immediately(self) -> MettlerToledoResponse:
-    """Tare the scale immediately."""
-    return await self.send_command("TI")
-
-  async def tare_timeout(self, timeout: float) -> MettlerToledoResponse:
-    """Tare the scale after a given timeout."""
-    # For some reason, this will always return a syntax error (ES), even though it should be allowed
-    # according to the docs.
-    timeout = int(timeout * 1000)  # convert to milliseconds
-    return await self.send_command(f"TC {timeout}")
-
-  async def tare(
-    self, timeout: Union[Literal["stable"], float, int] = "stable"
-  ) -> MettlerToledoResponse:
-    """High level function to tare the scale.
-
-    Args:
-      timeout: The timeout in seconds. If "stable", the scale will tare when the weight is stable.
-        If 0, the scale will tare immediately. If a float/int, the scale will tare after the given
-        timeout (in seconds).
-    """
-
-    if timeout == "stable":
-      # "Use T to tare the balance. The next stable weight value will be saved in the tare memory."
-      return await self.tare_stable()
-
-    if not isinstance(timeout, (float, int)):
-      raise TypeError("timeout must be a float or 'stable'")
-
-    if timeout < 0:
-      raise ValueError("timeout must be greater than or equal to 0")
-
-    if timeout == 0:
-      return await self.tare_immediately()
-    return await self.tare_timeout(timeout)
-
-  async def get_tare_weight(self) -> float:
-    """TA - Tare weight value Description
-    "Use TA to query the current tare value or preset a known tare value."
-    """
-
-    response = await self.send_command("TA")
-    tare = float(response[2])
-    unit = response[3]
-    assert unit == "g"  # this is the format we expect
-    return tare
-
-  async def clear_tare(self) -> MettlerToledoResponse:
-    """TAC - Clear tare weight value"""
-    return await self.send_command("TAC")
-
-  async def get_stable_weight(self) -> float:
-    """Get a stable weight value from the scale.
-
-    from the docs:
-
-    "Use S to send a stable weight value, along with the host unit, from the balance to the
-    connected communication partner via the interface. If the automatic door function is enabled and
-    a stable weight is requested the balance will open and close the balance's doors to achieve a
-    stable weight."
-    """
-
-    response = await self.send_command("S")
-    weight = float(response[2])
-    unit = response[3]
-    assert unit == "g"  # this is the format we expect
-    return weight
-
-  async def get_dynamic_weight(self, timeout: float) -> float:
-    """Get a stable weight value from the machine if possible within a given timeout, or return the
-    current weight value if not possible.
+  async def send_command(self, command: str, timeout: int = 60) -> MettlerToledoResponse:
+    """Send a command to the scale and receive the response.
 
     Args:
       timeout: The timeout in seconds.
     """
 
-    timeout = int(timeout * 1000)  # convert to milliseconds
+    await self.io.write(command.encode() + b"\r\n")
 
-    response = await self.send_command(f"SC {timeout}")
-    weight = float(response[2])
-    unit = response[3]
-    assert unit == "g"  # this is the format we expect
-    return weight
+    raw_response = b""
+    timeout_time = time.time() + timeout
+    while True:
+      raw_response = await self.io.readline()
+      await asyncio.sleep(0.001)
+      if time.time() > timeout_time:
+        raise TimeoutError("Timeout while waiting for response from scale.")
+      if raw_response != b"":
+        break
+    logger.debug("[scale] Received response: %s", raw_response)
+    response = raw_response.decode("utf-8").strip().split()
 
-  async def get_weight_value_immediately(self) -> float:
-    """Get a weight value immediately from the scale.
+    # parse basic errors
+    self._parse_basic_errors(response)
 
-    "Use SI to immediately send the current weight value, along with the host unit, from the balance
-    to the connected communication partner via the interface."
-    """
+    # mypy doesn't understand this
+    return response  # type: ignore
 
-    response = await self.send_command("SI")
-    weight = float(response[2])
-    assert response[3] == "g"  # this is the format we expect
-    return weight
+  # === Public high-level API ===
 
-  async def get_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
-    """High level function to get a weight value from the scale.
-
-    Args:
-      timeout: The timeout in seconds. If "stable", the scale will return a weight value when the
-        weight is stable. If 0, the scale will return a weight value immediately. If a float/int,
-        the scale will return a weight value after the given timeout (in seconds).
-    """
-
-    if timeout == "stable":
-      return await self.get_stable_weight()
-
-    if not isinstance(timeout, (float, int)):
-      raise TypeError("timeout must be a float or 'stable'")
-
-    if timeout < 0:
-      raise ValueError("timeout must be greater than or equal to 0")
-
-    if timeout == 0:
-      return await self.get_weight_value_immediately()
-
-    return await self.get_dynamic_weight(timeout)
-
-  async def get_serial_number(self) -> str:
-    """Get the serial number of the scale."""
+  async def request_serial_number(self) -> str:
+    """Get the serial number of the scale. (MEM-READ command)"""
     response = await self.send_command("I4")
     serial_number = response[2]
     serial_number = serial_number.replace('"', "")
     return serial_number
 
+  # # Zero commands # #
+
   async def zero_immediately(self) -> MettlerToledoResponse:
-    """Zero the scale immediately."""
+    """Zero the scale immediately. (ACTION command)"""
     return await self.send_command("ZI")
 
   async def zero_stable(self) -> MettlerToledoResponse:
-    """Zero the scale when the weight is stable."""
+    """Zero the scale when the weight is stable. (ACTION command)"""
     return await self.send_command("Z")
 
   async def zero_timeout(self, timeout: float) -> MettlerToledoResponse:
-    """Zero the scale after a given timeout."""
+    """Zero the scale after a given timeout. (ACTION command)"""
     # For some reason, this will always return a syntax error (ES), even though it should be allowed
     # according to the docs.
     timeout = int(timeout * 1000)
@@ -405,7 +299,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   async def zero(
     self, timeout: Union[Literal["stable"], float, int] = "stable"
   ) -> MettlerToledoResponse:
-    """High level function to zero the scale.
+    """High level function to zero the scale. (ACTION command)
 
     Args:
       timeout: The timeout in seconds. If "stable", the scale will zero when the weight is stable.
@@ -427,6 +321,135 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
 
     return await self.zero_timeout(timeout)
 
+  # # Tare commands # #
+
+  async def tare_stable(self) -> MettlerToledoResponse:
+    """Tare the scale when the weight is stable. (ACTION command)"""
+    return await self.send_command("T")
+
+  async def tare_immediately(self) -> MettlerToledoResponse:
+    """Tare the scale immediately. (ACTION command)"""
+    return await self.send_command("TI")
+
+  async def tare_timeout(self, timeout: float) -> MettlerToledoResponse:
+    """Tare the scale after a given timeout. (ACTION command)"""
+    # For some reason, this will always return a syntax error (ES), even though it should be allowed
+    # according to the docs.
+    timeout = int(timeout * 1000)  # convert to milliseconds
+    return await self.send_command(f"TC {timeout}")
+
+  async def tare(
+    self, timeout: Union[Literal["stable"], float, int] = "stable"
+  ) -> MettlerToledoResponse:
+    """High level function to tare the scale. (ACTION command)
+
+    Args:
+      timeout: The timeout in seconds. If "stable", the scale will tare when the weight is stable.
+        If 0, the scale will tare immediately. If a float/int, the scale will tare after the given
+        timeout (in seconds).
+    """
+
+    if timeout == "stable":
+      # "Use T to tare the balance. The next stable weight value will be saved in the tare memory."
+      return await self.tare_stable()
+
+    if not isinstance(timeout, (float, int)):
+      raise TypeError("timeout must be a float or 'stable'")
+
+    if timeout < 0:
+      raise ValueError("timeout must be greater than or equal to 0")
+
+    if timeout == 0:
+      return await self.tare_immediately()
+    return await self.tare_timeout(timeout)
+
+  # # Weight reading commands # #
+
+  async def request_tare_weight(self) -> float:
+    """Request tare weight value from scale's memory. (MEM-READ command)
+    "Use TA to query the current tare value or preset a known tare value."
+    """
+
+    response = await self.send_command("TA")
+    tare = float(response[2])
+    unit = response[3]
+    assert unit == "g"  # this is the format we expect
+    return tare
+
+  async def clear_tare(self) -> MettlerToledoResponse:
+    """TAC - Clear tare weight value (MEM-WRITE command)"""
+    return await self.send_command("TAC")
+
+  async def read_stable_weight(self) -> float:
+    """Read a stable weight value from the scale. (MEASUREMENT command)
+
+    from the docs:
+
+    "Use S to send a stable weight value, along with the host unit, from the balance to
+    the connected communication partner via the interface. If the automatic door function
+    is enabled and a stable weight is requested the balance will open and close the balance's
+    doors to achieve a stable weight."
+    """
+
+    response = await self.send_command("S")
+    weight = float(response[2])
+    unit = response[3]
+    assert unit == "g"  # this is the format we expect
+    return weight
+
+  async def read_dynamic_weight(self, timeout: float) -> float:
+    """Read a stable weight value from the machine within a given timeout, or
+    return the current weight value if not possible. (MEASUREMENT command)
+
+    Args:
+      timeout: The timeout in seconds.
+    """
+
+    timeout = int(timeout * 1000)  # convert to milliseconds
+
+    response = await self.send_command(f"SC {timeout}")
+    weight = float(response[2])
+    unit = response[3]
+    assert unit == "g"  # this is the format we expect
+    return weight
+
+  async def read_weight_value_immediately(self) -> float:
+    """Read a weight value immediately from the scale. (MEASUREMENT command)
+
+    "Use SI to immediately send the current weight value, along with the host unit, from the
+    balance to the connected communication partner via the interface."
+    """
+
+    response = await self.send_command("SI")
+    weight = float(response[2])
+    assert response[3] == "g"  # this is the format we expect
+    return weight
+
+  async def read_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
+    """High level function to read a weight value from the scale. (MEASUREMENT command)
+
+    Args:
+      timeout: The timeout in seconds. If "stable", the scale will return a weight value when the
+        weight is stable. If 0, the scale will return a weight value immediately. If a float/int,
+        the scale will return a weight value after the given timeout (in seconds).
+    """
+
+    if timeout == "stable":
+      return await self.read_stable_weight()
+
+    if not isinstance(timeout, (float, int)):
+      raise TypeError("timeout must be a float or 'stable'")
+
+    if timeout < 0:
+      raise ValueError("timeout must be greater than or equal to 0")
+
+    if timeout == 0:
+      return await self.read_weight_value_immediately()
+
+    return await self.read_dynamic_weight(timeout)
+
+  # Commands for (optional) display manipulation
+
   async def set_display_text(self, text: str) -> MettlerToledoResponse:
     """Set the display text of the scale. Return to the normal weight display with
     self.set_weight_display()."""
@@ -435,6 +458,69 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   async def set_weight_display(self) -> MettlerToledoResponse:
     """Return the display to the normal weight display."""
     return await self.send_command("DW")
+
+  # # # Deprecated alias with warning # # #
+
+  # # TODO: remove 2026-03 (giving people >2 months to update)
+
+  async def get_serial_number(self) -> str:
+    """Deprecated: Use request_serial_number() instead."""
+    warnings.warn(
+      "get_serial_number() is deprecated and will be removed in 2026-03. "
+      "Use request_serial_number() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.request_serial_number()
+
+  async def get_tare_weight(self) -> float:
+    """Deprecated: Use request_tare_weight() instead."""
+    warnings.warn(
+      "get_tare_weight() is deprecated and will be removed in 2026-03. "
+      "Use request_tare_weight() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.request_tare_weight()
+
+  async def get_stable_weight(self) -> float:
+    """Deprecated: Use read_stable_weight() instead."""
+    warnings.warn(
+      "get_stable_weight() is deprecated and will be removed in 2026-03. "
+      "Use read_stable_weight() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.read_stable_weight()
+
+  async def get_dynamic_weight(self, timeout: float) -> float:
+    """Deprecated: Use read_dynamic_weight() instead."""
+    warnings.warn(
+      "get_dynamic_weight() is deprecated and will be removed in 2026-03. "
+      "Use read_dynamic_weight() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.read_dynamic_weight(timeout)
+
+  async def get_weight_value_immediately(self) -> float:
+    """Deprecated: Use read_weight_value_immediately() instead."""
+    warnings.warn(
+      "get_weight_value_immediately() is deprecated and will be removed in 2026-03. "
+      "Use read_weight_value_immediately() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.read_weight_value_immediately()
+
+  async def get_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
+    """Deprecated: Use read_weight() instead."""
+    warnings.warn(
+      "get_weight() is deprecated and will be removed in 2026-03. " "Use read_weight() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.read_weight(timeout)
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)

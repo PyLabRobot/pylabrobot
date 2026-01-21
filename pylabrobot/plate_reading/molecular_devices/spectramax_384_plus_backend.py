@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Union
 
 from pylabrobot.resources.plate import Plate
 
-from .molecular_devices_backend import (
+from .backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,

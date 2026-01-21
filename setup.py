@@ -1,6 +1,7 @@
 from setuptools import find_packages, setup
 
-from pylabrobot.__version__ import __version__
+with open("pylabrobot/version.txt", "r", encoding="utf-8") as f:
+  __version__ = f.read().strip()
 
 with open("README.md", "r", encoding="utf-8") as f:
   long_description = f.read()
@@ -66,7 +67,7 @@ setup(
   long_description_content_type="text/markdown",
   install_requires=["typing_extensions"],
   url="https://github.com/pylabrobot/pylabrobot.git",
-  package_data={"pylabrobot": ["visualizer/*"]},
+  package_data={"pylabrobot": ["visualizer/*", "version.txt"]},
   extras_require={
     "fw": extras_fw,
     "http": extras_http,

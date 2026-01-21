@@ -1,4 +1,4 @@
-from .molecular_devices_backend import MolecularDevicesBackend
+from .backend import MolecularDevicesBackend
 
 
 class MolecularDevicesSpectraMaxM5Backend(MolecularDevicesBackend):

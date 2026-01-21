@@ -1,0 +1,355 @@
+import logging
+import time
+from dataclasses import dataclass
+from typing import List, Literal, Tuple
+
+import serial  # type: ignore
+
+from pylabrobot.io.serial import Serial
+from pylabrobot.peeling.backend import PeelerBackend
+
+
+class XPeelBackend(PeelerBackend):
+  """
+  Client for the Azenta Life Sciences Automated Plate Seal Remover (XPeel)
+  RS-232 interface. All commands use lowercase ASCII, begin with '*' and end
+  with <CR><LF>.
+  """
+
+  BAUDRATE = 9600
+  RESPONSE_TIMEOUT = 20.0
+
+  @dataclass(frozen=True)
+  class ErrorInfo:
+    code: int
+    description: str
+
+  _ERROR_DEFINITIONS = {
+    0: ErrorInfo(0, "No error"),
+    1: ErrorInfo(1, "Conveyor motor stalled"),
+    2: ErrorInfo(2, "Elevator motor stalled"),
+    3: ErrorInfo(3, "Take up spool stalled"),
+    4: ErrorInfo(4, "Seal not removed"),
+    5: ErrorInfo(5, "Illegal command"),
+    6: ErrorInfo(6, "No plate found (only when plate check is enabled)"),
+    7: ErrorInfo(7, "Out of tape or tape broke"),
+    8: ErrorInfo(8, "Parameters not saved"),
+    9: ErrorInfo(9, "Stop button pressed while running"),
+    10: ErrorInfo(10, "Seal sensor unplugged or broke"),
+    20: ErrorInfo(20, "Less than 30 seals left on supply roll"),
+    21: ErrorInfo(21, "Room for less than 30 seals on take-up spool"),
+    51: ErrorInfo(51, "Emergency stop: cover open or hardware problem"),
+    52: ErrorInfo(52, "Circuitry fault detected: remove power"),
+  }
+
+  def __init__(self, port: str, logger=None, timeout=None):
+    self.logger = logger or logging.getLogger(__name__)
+    self.port = port
+    self.response_timeout = timeout if timeout is not None else self.RESPONSE_TIMEOUT
+
+    self._serial_timeout = timeout if timeout is not None else self.response_timeout
+    self.io = Serial(
+      port=self.port,
+      baudrate=self.BAUDRATE,
+      bytesize=serial.EIGHTBITS,
+      parity=serial.PARITY_NONE,
+      stopbits=serial.STOPBITS_ONE,
+      timeout=self._serial_timeout,
+      write_timeout=self._serial_timeout,
+      rtscts=False,
+    )
+
+  async def setup(self):
+    await self.io.setup()
+
+  async def stop(self):
+    await self.io.stop()
+    self.logger.info("Serial interface closed.")
+
+  @classmethod
+  def describe_error(cls, code: int) -> str:
+    """
+    Translate an XPeel error/status code to a human-readable message.
+    """
+    info = cls._ERROR_DEFINITIONS.get(code)
+    if info:
+      return info.description
+    return f"Unknown error code {code}"
+
+  @classmethod
+  def parse_ready_line(cls, line: str):
+    """
+    Parse a ready line like '*ready:06,01,00' to extract the primary error code
+    and its description. Returns a tuple (code: int, description: str).
+    """
+    if not line.startswith("*ready:"):
+      return None
+    try:
+      # Expected format: *ready:CC,PP,TT (CC = error/condition code)
+      parts = line.split(":")[1].split(",")
+      code = int(parts[0])
+      return code, cls.describe_error(code)
+    except Exception:
+      return None
+
+  async def _send_command(
+    self, cmd, expect_ack=False, wait_for_ready=False, clear_buffer=True
+  ) -> List[str]:
+    """
+    Send a command and collect responses until *ready (optional) or timeout.
+
+    Returns a list of response lines (strings).
+    """
+    full_cmd = cmd if cmd.endswith("\r\n") else f"{cmd}\r\n"
+
+    if self.io is None:
+      raise RuntimeError("Serial interface not initialized; call setup() first.")
+
+    self.logger.debug(f"Sending command: {full_cmd.strip()}")
+    if clear_buffer:
+      await self.io.reset_input_buffer()
+    await self.io.write(full_cmd.encode("ascii"))
+
+    responses: List[str] = []
+    start = time.time()
+    while time.time() - start < self.response_timeout:
+      raw = await self.io.readline()
+      line = raw.decode("ascii", errors="ignore").strip()
+      if not line:
+        continue
+
+      display_line = line
+      if line.startswith("*ready:"):
+        parsed = self.parse_ready_line(line)
+        if parsed:
+          code, desc = parsed
+          display_line = f"{line} [{desc}]"
+
+      responses.append(display_line)
+      self.logger.info(f"Received: {display_line}")
+      print(f"Received: {display_line}")
+
+      if line.startswith("*ack"):
+        if not wait_for_ready:
+          break
+        continue
+
+      if wait_for_ready and line.startswith("*ready"):
+        break
+
+      if not wait_for_ready and not expect_ack:
+        break
+
+    if time.time() - start >= self.response_timeout:
+      self.logger.warning(
+        "Timed out waiting for response to %s after %.2fs",
+        full_cmd.strip(),
+        self.response_timeout,
+      )
+
+    return responses
+
+  async def get_status(self) -> Tuple[int, int, int]:
+    """
+    Request instrument status; returns *ready:XX,XX,XX.
+
+    The 'XX' fields refer to the three possible error codes from the error table that
+    occurred during the previous Automated Plate Peeler motion. The error codes
+    will remain in the ready response until another motion command is made or until a
+    restart command is sent. A single commanded action may accumulate up to three errors.
+    Since they are logged as they occur (left to right), any error code may appear in
+    any error field. Successful completion of any motion command will clear all three
+    error codes back to 00.
+    """
+    self.logger.debug("Requesting status...")
+    resp = await self._send_command("*stat")
+    return tuple([int(x) for x in resp[-1].split(":")[1].split(",")])  # type: ignore
+
+  async def get_version(self):
+    """Request firmware version."""
+    self.logger.debug("Requesting firmware version...")
+    return await self._send_command("*version")
+
+  async def reset(self):
+    """Request reset; instrument replies with ack then ready."""
+    self.logger.debug("Requesting reset...")
+    return await self._send_command("*reset", expect_ack=True, wait_for_ready=True)
+
+  async def restart(self):
+    """Request restart; instrument replies with ack then poweron/homing/ready."""
+    self.logger.debug("Requesting restart...")
+    return await self._send_command("*restart", expect_ack=True, wait_for_ready=True)
+
+  async def peel(
+    self,
+    begin_location: Literal[-2, 0, 2, 4] = 0,
+    fast: bool = False,
+    adhere_time: float = 2.5,
+  ):
+    """
+    Run an automated de-seal cycle.
+
+    Args:
+      begin_location: Begin peel location in mm relative to default (0). Must be one of: -2, 0, 2, 4.
+      fast: Use fast speed if True, slow if False.
+      adhere_time: Adhere time (seconds). Must be one of: 2.5, 5.0, 7.5, 10.0.
+    """
+
+    self.logger.debug(
+      f"Running peel with begin_location={begin_location}, fast={fast}, adhere_time={adhere_time}..."
+    )
+
+    if adhere_time not in {2.5, 5.0, 7.5, 10.0}:
+      raise ValueError("adhere_time must be one of: 2.5, 5.0, 7.5, 10.0")
+    if begin_location not in {-2, 0, 2, 4}:
+      raise ValueError("begin_location must be one of: -2, 0, 2, 4")
+
+    parameter_set = {
+      (-2, True): 1,
+      (-2, False): 2,
+      (0, True): 3,
+      (0, False): 4,
+      (2, True): 5,
+      (2, False): 6,
+      (4, True): 7,
+      (4, False): 8,
+    }.get((begin_location, fast), 9)
+
+    if parameter_set not in range(1, 10):
+      raise ValueError("parameter_set must be in 1-9")
+    cmd = f"*xpeel:{parameter_set}{adhere_time}"
+    return await self._send_command(
+      cmd,
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def seal_check(self) -> Literal["seal_detected", "no_seal", "plate_not_detected"]:
+    """
+    Check for seal presence; ready response encodes result.
+
+    Response:
+    *ready:XX,00,00<CR><LF> (XX=04 if seal detected, XX=00 if no seal present, XX=06 if plate not detected)
+    """
+    self.logger.debug("Checking for seal presence...")
+    resp = await self._send_command("*sealcheck", expect_ack=True, wait_for_ready=True)
+    ready_line = resp[-1]
+    parsed = self.parse_ready_line(ready_line)
+    if parsed is None:
+      raise RuntimeError(f"Could not parse ready line: {ready_line}")
+    code, _ = parsed
+    if code == 0:
+      return "no_seal"
+    if code == 4:
+      return "seal_detected"
+    if code == 6:
+      return "plate_not_detected"
+    raise RuntimeError(
+      f"Unexpected seal check code: {code}, interpreted as: {self.describe_error(code)}"
+    )
+
+  async def get_tape_remaining(self):
+    """
+    Query remaining tape.
+
+    Response:
+    *tape:SS,TT<CR><LF>
+
+    Where 'SS' times 10 is the number of “deseals” remaining on the supply spool and 'TT' times 10 is the
+    number of “deseals” that can be held on the space remaining on the take-up spool.
+    """
+    self.logger.debug("Querying remaining tape...")
+    resp = await self._send_command("*tapeleft", expect_ack=True, wait_for_ready=True)
+    tape_line = resp[-1]
+    parts = tape_line.split(":")[1].split(",")
+    supply_remaining = int(parts[0]) * 10
+    takeup_remaining = int(parts[1]) * 10
+    return supply_remaining, takeup_remaining
+
+  async def enable_plate_check(self, enabled=True):
+    """Enable or disable plate presence check."""
+    self.logger.debug(f"{'Enabling' if enabled else 'Disabling'} plate presence check...")
+    flag = "y" if enabled else "n"
+    return await self._send_command(
+      f"*platecheck:{flag}",
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def get_seal_sensor_status(self):
+    """Get seal sensor threshold value (0-999)"""
+    self.logger.debug("Getting seal sensor threshold status...")
+    return await self._send_command("*sealstat", expect_ack=True, wait_for_ready=True)
+
+  async def set_seal_threshold_upper(self, value: int):
+    """
+    Set the seal detected threshold value(0-999).
+    Sensor readings higher than this value will be considered as "seal not detected"
+    """
+    self.logger.debug(f"Setting upper seal sensor threshold to {value}...")
+    if not 0 <= value <= 999:
+      raise ValueError("value must be between 0 and 999")
+    return await self._send_command(
+      f"*sealhigher:{value:03d}",
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def set_seal_threshold_lower(self, value: int):
+    """
+    Set the seal detected threshold value(0-999).
+    Sensor readings higher than this value will be considered as "seal not detected"
+    """
+    self.logger.debug(f"Setting lower seal sensor threshold to {value}...")
+    if not 0 <= value <= 999:
+      raise ValueError("value must be between 0 and 999")
+    return await self._send_command(
+      f"*seallower:{value:03d}",
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def move_conveyor_out(self):
+    """Move conveyor out"""
+    self.logger.debug("Moving conveyor out...")
+    return await self._send_command(
+      "*moveout",
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def move_conveyor_in(self):
+    """Move conveyor in"""
+    self.logger.debug("Moving conveyor in...")
+    return await self._send_command(
+      "*movein",
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def move_elevator_down(self):
+    """Move elevator down"""
+    self.logger.debug("Moving elevator down...")
+    return await self._send_command(
+      "*movedown",
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def move_elevator_up(self):
+    """Move elevator up"""
+    self.logger.debug("Moving elevator up...")
+    return await self._send_command(
+      "*moveup",
+      expect_ack=True,
+      wait_for_ready=True,
+    )
+
+  async def advance_tape(self):
+    """Advance tape / move spool"""
+    self.logger.debug("Advancing tape/spool...")
+    return await self._send_command(
+      "*movespool",
+      expect_ack=True,
+      wait_for_ready=True,
+    )

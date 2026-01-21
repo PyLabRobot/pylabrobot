@@ -1,15 +1,40 @@
-from .agilent_biotek_backend import BioTekPlateReaderBackend
-from .agilent_biotek_cytation_backend import (
+from __future__ import annotations
+
+from typing import Any
+
+from .agilent import (
+  BioTekPlateReaderBackend,
   Cytation5Backend,
   Cytation5ImagingConfig,
   CytationBackend,
   CytationImagingConfig,
+  SynergyH1Backend,
 )
-from .agilent_biotek_synergyh1_backend import SynergyH1Backend
+from .bmg_labtech import CLARIOstarBackend
 from .chatterbox import PlateReaderChatterboxBackend
-from .clario_star_backend import CLARIOstarBackend
 from .image_reader import ImageReader
 from .imager import Imager
+from .molecular_devices import (
+  Calibrate,
+  CarriageSpeed,
+  KineticSettings,
+  MolecularDevicesBackend,
+  MolecularDevicesError,
+  MolecularDevicesFirmwareError,
+  MolecularDevicesHardwareError,
+  MolecularDevicesMotionError,
+  MolecularDevicesNVRAMError,
+  MolecularDevicesSettings,
+  MolecularDevicesSpectraMax384PlusBackend,
+  MolecularDevicesSpectraMaxM5Backend,
+  MolecularDevicesUnrecognizedCommandError,
+  PmtGain,
+  ReadMode,
+  ReadOrder,
+  ReadType,
+  ShakeSettings,
+  SpectrumSettings,
+)
 from .plate_reader import PlateReader
 from .standard import (
   Exposure,

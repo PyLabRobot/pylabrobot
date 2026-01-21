@@ -24,6 +24,6 @@ Backends
   :recursive:
 
     chatterbox.PlateReaderChatterboxBackend
-    clario_star_backend.CLARIOStarBackend
-    agilent_biotek_cytation_backend.CytationBackend
-    agilent_biotek_synergyh1_backend.SynergyH1Backend
+    bmg_labtech.clario_star_backend.CLARIOstarBackend
+    agilent.biotek_cytation_backend.CytationBackend
+    agilent.biotek_synergyh1_backend.SynergyH1Backend

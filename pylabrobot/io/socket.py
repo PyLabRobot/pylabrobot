@@ -157,7 +157,7 @@ class Socket(IOBase):
       except asyncio.TimeoutError as exc:
         logger.error("read timeout: %r", exc)
         raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-      logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data)
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
@@ -178,7 +178,7 @@ class Socket(IOBase):
       except asyncio.TimeoutError as exc:
         logger.error("readline timeout: %r", exc)
         raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-      logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
+      logger.log(LOG_LEVEL_IO, "[%s:%d] readline %s", self._host, self._port, data)
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
@@ -200,7 +200,7 @@ class Socket(IOBase):
       except asyncio.TimeoutError as exc:
         logger.error("readuntil timeout: %r", exc)
         raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
-      logger.log(LOG_LEVEL_IO, "[%s:%d] read %s", self._host, self._port, data.hex())
+      logger.log(LOG_LEVEL_IO, "[%s:%d] readuntil %s", self._host, self._port, data)
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
@@ -236,7 +236,7 @@ class Socket(IOBase):
         buf.extend(chunk)
 
       line = bytes(buf)
-      logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, line.hex())
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read_until_eof %s", self._host, self._port, line)
       capturer.record(
         SocketCommand(
           device_id=self._unique_id,
