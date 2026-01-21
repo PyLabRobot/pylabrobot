@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, TextIO, Tuple
 
+from pylabrobot.io.binary import Reader
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate
@@ -35,18 +36,6 @@ class InfiniteScanConfig:
   counts_per_mm_y: float = 1_000
 
 
-def _u16be(payload: bytes, offset: int) -> int:
-  return int.from_bytes(payload[offset : offset + 2], "big")
-
-
-def _u32be(payload: bytes, offset: int) -> int:
-  return int.from_bytes(payload[offset : offset + 4], "big")
-
-
-def _i32be(payload: bytes, offset: int) -> int:
-  return int.from_bytes(payload[offset : offset + 4], "big", signed=True)
-
-
 def _integration_value_to_seconds(value: int) -> float:
   return value / 1_000_000.0 if value >= 1000 else value / 1000.0
 
@@ -63,8 +52,8 @@ def _split_payload_and_trailer(marker: int, blob: bytes) -> Optional[Tuple[bytes
   if len(blob) != marker + 4:
     return None
   payload = blob[:marker]
-  trailer = blob[marker:]
-  return payload, (_u16be(trailer, 0), _u16be(trailer, 2))
+  trailer_reader = Reader(blob[marker:], little_endian=False)
+  return payload, (trailer_reader.u16(), trailer_reader.u16())
 
 
 @dataclass(frozen=True)
@@ -92,23 +81,23 @@ def _decode_abs_prepare(marker: int, blob: bytes) -> Optional[_AbsorbancePrepare
   payload, _ = split
   if len(payload) < 4 + 18:
     return None
-  ex = _u16be(payload, 2)
-  items_blob = payload[4:]
-  if len(items_blob) % 18 != 0:
+  if (len(payload) - 4) % 18 != 0:
     return None
+  reader = Reader(payload, little_endian=False)
+  reader.raw_bytes(2)  # skip first 2 bytes
+  ex = reader.u16()
   items: List[_AbsorbancePrepareItem] = []
-  for off in range(0, len(items_blob), 18):
-    item = items_blob[off : off + 18]
+  while reader.has_remaining():
     items.append(
       _AbsorbancePrepareItem(
-        ticker_overflows=_u32be(item, 0),
-        ticker_counter=_u16be(item, 4),
-        meas_gain=_u16be(item, 6),
-        meas_dark=_u16be(item, 8),
-        meas_bright=_u16be(item, 10),
-        ref_gain=_u16be(item, 12),
-        ref_dark=_u16be(item, 14),
-        ref_bright=_u16be(item, 16),
+        ticker_overflows=reader.u32(),
+        ticker_counter=reader.u16(),
+        meas_gain=reader.u16(),
+        meas_dark=reader.u16(),
+        meas_bright=reader.u16(),
+        ref_gain=reader.u16(),
+        ref_dark=reader.u16(),
+        ref_bright=reader.u16(),
       )
     )
   return _AbsorbancePrepare(ex=ex, items=items)
@@ -121,16 +110,16 @@ def _decode_abs_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[
   payload, _ = split
   if len(payload) < 4:
     return None
-  label = _u16be(payload, 0)
-  ex = _u16be(payload, 2)
-  off = 4
+  reader = Reader(payload, little_endian=False)
+  label = reader.u16()
+  ex = reader.u16()
   items: List[Tuple[int, int]] = []
-  while off + 10 <= len(payload):
-    meas = _u16be(payload, off + 6)
-    ref = _u16be(payload, off + 8)
+  while reader.offset() + 10 <= len(payload):
+    reader.raw_bytes(6)  # skip first 6 bytes of each item
+    meas = reader.u16()
+    ref = reader.u16()
     items.append((meas, ref))
-    off += 10
-  if off != len(payload):
+  if reader.offset() != len(payload):
     return None
   return label, ex, items
 
@@ -194,11 +183,18 @@ def _decode_flr_prepare(marker: int, blob: bytes) -> Optional[_FluorescencePrepa
   payload, _ = split
   if len(payload) != 18:
     return None
+  reader = Reader(payload, little_endian=False)
+  ex = reader.u16()
+  reader.raw_bytes(8)  # skip bytes 2-9
+  meas_dark = reader.u16()
+  reader.raw_bytes(2)  # skip bytes 12-13
+  ref_dark = reader.u16()
+  ref_bright = reader.u16()
   return _FluorescencePrepare(
-    ex=_u16be(payload, 0),
-    meas_dark=_u16be(payload, 10),
-    ref_dark=_u16be(payload, 14),
-    ref_bright=_u16be(payload, 16),
+    ex=ex,
+    meas_dark=meas_dark,
+    ref_dark=ref_dark,
+    ref_bright=ref_bright,
   )
 
 
@@ -211,17 +207,17 @@ def _decode_flr_data(
   payload, _ = split
   if len(payload) < 6:
     return None
-  label = _u16be(payload, 0)
-  ex = _u16be(payload, 2)
-  em = _u16be(payload, 4)
-  off = 6
+  reader = Reader(payload, little_endian=False)
+  label = reader.u16()
+  ex = reader.u16()
+  em = reader.u16()
   items: List[Tuple[int, int]] = []
-  while off + 10 <= len(payload):
-    meas = _u16be(payload, off + 6)
-    ref = _u16be(payload, off + 8)
+  while reader.offset() + 10 <= len(payload):
+    reader.raw_bytes(6)  # skip first 6 bytes of each item
+    meas = reader.u16()
+    ref = reader.u16()
     items.append((meas, ref))
-    off += 10
-  if off != len(payload):
+  if reader.offset() != len(payload):
     return None
   return label, ex, em, items
 
@@ -252,7 +248,9 @@ def _decode_lum_prepare(marker: int, blob: bytes) -> Optional[_LuminescencePrepa
   payload, _ = split
   if len(payload) != 10:
     return None
-  return _LuminescencePrepare(ref_dark=_i32be(payload, 6))
+  reader = Reader(payload, little_endian=False)
+  reader.raw_bytes(6)  # skip bytes 0-5
+  return _LuminescencePrepare(ref_dark=reader.i32())
 
 
 def _decode_lum_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[int]]]:
@@ -262,14 +260,14 @@ def _decode_lum_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[
   payload, _ = split
   if len(payload) < 4:
     return None
-  label = _u16be(payload, 0)
-  em = _u16be(payload, 2)
-  off = 4
+  reader = Reader(payload, little_endian=False)
+  label = reader.u16()
+  em = reader.u16()
   counts: List[int] = []
-  while off + 10 <= len(payload):
-    counts.append(_i32be(payload, off + 6))
-    off += 10
-  if off != len(payload):
+  while reader.offset() + 10 <= len(payload):
+    reader.raw_bytes(6)  # skip first 6 bytes of each item
+    counts.append(reader.i32())
+  if reader.offset() != len(payload):
     return None
   return label, em, counts
 
