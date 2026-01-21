@@ -638,32 +638,25 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     reads_number = max(1, int(self.config.flashes))
 
     await self._send_ascii("MODE ABS")
-
-    commands = [
-      "EXCITATION CLEAR",
-      "TIME CLEAR",
-      "GAIN CLEAR",
-      "READS CLEAR",
-      "POSITION CLEAR",
-      "MIRROR CLEAR",
-      f"EXCITATION 0,ABS,{wl_decitenth},{bw_decitenth},0",
-      f"EXCITATION 1,ABS,{wl_decitenth},{bw_decitenth},0",
-      f"READS 0,NUMBER={reads_number}",
-      f"READS 1,NUMBER={reads_number}",
-      "TIME 0,READDELAY=0",
-      "TIME 1,READDELAY=0",
-      "SCAN DIRECTION=ALTUP",
-      "#RATIO LABELS",
-      f"BEAM DIAMETER={self._capability_numeric('ABS', '#BEAM DIAMETER', 700)}",
-      "RATIO LABELS=1",
-      "PREPARE REF",
-    ]
-
-    for cmd in commands:
-      if cmd == "PREPARE REF":
-        await self._send_ascii(cmd, allow_timeout=True, read_response=False)
-      else:
-        await self._send_ascii(cmd, allow_timeout=True)
+    await self._send_ascii("EXCITATION CLEAR", allow_timeout=True)
+    await self._send_ascii("TIME CLEAR", allow_timeout=True)
+    await self._send_ascii("GAIN CLEAR", allow_timeout=True)
+    await self._send_ascii("READS CLEAR", allow_timeout=True)
+    await self._send_ascii("POSITION CLEAR", allow_timeout=True)
+    await self._send_ascii("MIRROR CLEAR", allow_timeout=True)
+    await self._send_ascii(f"EXCITATION 0,ABS,{wl_decitenth},{bw_decitenth},0", allow_timeout=True)
+    await self._send_ascii(f"EXCITATION 1,ABS,{wl_decitenth},{bw_decitenth},0", allow_timeout=True)
+    await self._send_ascii(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
+    await self._send_ascii(f"READS 1,NUMBER={reads_number}", allow_timeout=True)
+    await self._send_ascii("TIME 0,READDELAY=0", allow_timeout=True)
+    await self._send_ascii("TIME 1,READDELAY=0", allow_timeout=True)
+    await self._send_ascii("SCAN DIRECTION=ALTUP", allow_timeout=True)
+    await self._send_ascii("#RATIO LABELS", allow_timeout=True)
+    await self._send_ascii(
+      f"BEAM DIAMETER={self._capability_numeric('ABS', '#BEAM DIAMETER', 700)}", allow_timeout=True
+    )
+    await self._send_ascii("RATIO LABELS=1", allow_timeout=True)
+    await self._send_ascii("PREPARE REF", allow_timeout=True, read_response=False)
 
   def _auto_bandwidth(self, wavelength_nm: int) -> float:
     """Return bandwidth in nm based on Infinite M specification."""
@@ -748,43 +741,40 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._current_fluorescence_excitation = ex_decitenth
     self._current_fluorescence_emission = em_decitenth
     reads_number = max(1, int(self.config.flashes))
-    clear_cmds = [
-      "MODE FI.TOP",
-      "READS CLEAR",
-      "EXCITATION CLEAR",
-      "EMISSION CLEAR",
-      "TIME CLEAR",
-      "GAIN CLEAR",
-      "POSITION CLEAR",
-      "MIRROR CLEAR",
-    ]
-    configure_cmds = [
-      f"EXCITATION 0,FI,{ex_decitenth},50,0",
-      f"EMISSION 0,FI,{em_decitenth},200,0",
-      "TIME 0,INTEGRATION=20",
-      "TIME 0,LAG=0",
-      "TIME 0,READDELAY=0",
-      "GAIN 0,VALUE=100",
-      "POSITION 0,Z=20000",
-      f"BEAM DIAMETER={self._capability_numeric('FI.TOP', '#BEAM DIAMETER', 3000)}",
-      "SCAN DIRECTION=UP",
-      "RATIO LABELS=1",
-      f"READS 0,NUMBER={reads_number}",
-      f"EXCITATION 1,FI,{ex_decitenth},50,0",
-      f"EMISSION 1,FI,{em_decitenth},200,0",
-      "TIME 1,INTEGRATION=20",
-      "TIME 1,LAG=0",
-      "TIME 1,READDELAY=0",
-      "GAIN 1,VALUE=100",
-      "POSITION 1,Z=20000",
-      f"READS 1,NUMBER={reads_number}",
-    ]
+    beam_diameter = self._capability_numeric("FI.TOP", "#BEAM DIAMETER", 3000)
+
     # UI issues the entire FI configuration twice before PREPARE REF.
     for _ in range(2):
-      for cmd in clear_cmds:
-        await self._send_ascii(cmd, allow_timeout=True)
-      for cmd in configure_cmds:
-        await self._send_ascii(cmd, allow_timeout=True)
+      # clear commands
+      await self._send_ascii("MODE FI.TOP", allow_timeout=True)
+      await self._send_ascii("READS CLEAR", allow_timeout=True)
+      await self._send_ascii("EXCITATION CLEAR", allow_timeout=True)
+      await self._send_ascii("EMISSION CLEAR", allow_timeout=True)
+      await self._send_ascii("TIME CLEAR", allow_timeout=True)
+      await self._send_ascii("GAIN CLEAR", allow_timeout=True)
+      await self._send_ascii("POSITION CLEAR", allow_timeout=True)
+      await self._send_ascii("MIRROR CLEAR", allow_timeout=True)
+
+      # configure commands
+      await self._send_ascii(f"EXCITATION 0,FI,{ex_decitenth},50,0", allow_timeout=True)
+      await self._send_ascii(f"EMISSION 0,FI,{em_decitenth},200,0", allow_timeout=True)
+      await self._send_ascii("TIME 0,INTEGRATION=20", allow_timeout=True)
+      await self._send_ascii("TIME 0,LAG=0", allow_timeout=True)
+      await self._send_ascii("TIME 0,READDELAY=0", allow_timeout=True)
+      await self._send_ascii("GAIN 0,VALUE=100", allow_timeout=True)
+      await self._send_ascii("POSITION 0,Z=20000", allow_timeout=True)
+      await self._send_ascii(f"BEAM DIAMETER={beam_diameter}", allow_timeout=True)
+      await self._send_ascii("SCAN DIRECTION=UP", allow_timeout=True)
+      await self._send_ascii("RATIO LABELS=1", allow_timeout=True)
+      await self._send_ascii(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
+      await self._send_ascii(f"EXCITATION 1,FI,{ex_decitenth},50,0", allow_timeout=True)
+      await self._send_ascii(f"EMISSION 1,FI,{em_decitenth},200,0", allow_timeout=True)
+      await self._send_ascii("TIME 1,INTEGRATION=20", allow_timeout=True)
+      await self._send_ascii("TIME 1,LAG=0", allow_timeout=True)
+      await self._send_ascii("TIME 1,READDELAY=0", allow_timeout=True)
+      await self._send_ascii("GAIN 1,VALUE=100", allow_timeout=True)
+      await self._send_ascii("POSITION 1,Z=20000", allow_timeout=True)
+      await self._send_ascii(f"READS 1,NUMBER={reads_number}", allow_timeout=True)
     await self._send_ascii("PREPARE REF", allow_timeout=True, read_response=False)
 
   async def read_luminescence(
@@ -882,30 +872,23 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       0: _integration_value_to_seconds(3_000_000),
       1: _integration_value_to_seconds(1_000_000),
     }
-    commands = [
-      "READS CLEAR",
-      "EMISSION CLEAR",
-      "TIME CLEAR",
-      "GAIN CLEAR",
-      "POSITION CLEAR",
-      "MIRROR CLEAR",
-      "POSITION LUM,Z=14620",
-      "TIME 0,INTEGRATION=3000000",
-      f"READS 0,NUMBER={reads_number}",
-      "SCAN DIRECTION=UP",
-      "RATIO LABELS=1",
-      "EMISSION 1,EMPTY,0,0,0",
-      "TIME 1,INTEGRATION=1000000",
-      "TIME 1,READDELAY=0",
-      f"READS 1,NUMBER={reads_number}",
-      "#EMISSION ATTENUATION",
-      "PREPARE REF",
-    ]
-    for cmd in commands:
-      if cmd == "PREPARE REF":
-        await self._send_ascii(cmd, allow_timeout=True, read_response=False)
-      else:
-        await self._send_ascii(cmd, allow_timeout=True)
+    await self._send_ascii("READS CLEAR", allow_timeout=True)
+    await self._send_ascii("EMISSION CLEAR", allow_timeout=True)
+    await self._send_ascii("TIME CLEAR", allow_timeout=True)
+    await self._send_ascii("GAIN CLEAR", allow_timeout=True)
+    await self._send_ascii("POSITION CLEAR", allow_timeout=True)
+    await self._send_ascii("MIRROR CLEAR", allow_timeout=True)
+    await self._send_ascii("POSITION LUM,Z=14620", allow_timeout=True)
+    await self._send_ascii("TIME 0,INTEGRATION=3000000", allow_timeout=True)
+    await self._send_ascii(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
+    await self._send_ascii("SCAN DIRECTION=UP", allow_timeout=True)
+    await self._send_ascii("RATIO LABELS=1", allow_timeout=True)
+    await self._send_ascii("EMISSION 1,EMPTY,0,0,0", allow_timeout=True)
+    await self._send_ascii("TIME 1,INTEGRATION=1000000", allow_timeout=True)
+    await self._send_ascii("TIME 1,READDELAY=0", allow_timeout=True)
+    await self._send_ascii(f"READS 1,NUMBER={reads_number}", allow_timeout=True)
+    await self._send_ascii("#EMISSION ATTENUATION", allow_timeout=True)
+    await self._send_ascii("PREPARE REF", allow_timeout=True, read_response=False)
 
   def _group_by_row(self, wells: Sequence[Well]) -> List[Tuple[int, List[Well]]]:
     grouped: Dict[int, List[Well]] = {}
@@ -1039,15 +1022,18 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       self._active_mode = None
 
   async def _cleanup_protocol(self) -> None:
-    if not self._run_active and not self._active_step_loss_commands:
-      commands = ["KEYLOCK OFF", "ABSOLUTE MTP,IN"]
-    else:
-      commands = ["TERMINATE", *self._active_step_loss_commands, "KEYLOCK OFF", "ABSOLUTE MTP,IN"]
-    for cmd in commands:
+    async def send_cleanup_cmd(cmd: str) -> None:
       try:
         await self._send_ascii(cmd, allow_timeout=True, read_response=False)
       except Exception:
         logger.warning("Cleanup command failed: %s", cmd)
+
+    if self._run_active or self._active_step_loss_commands:
+      await send_cleanup_cmd("TERMINATE")
+      for cmd in self._active_step_loss_commands:
+        await send_cleanup_cmd(cmd)
+    await send_cleanup_cmd("KEYLOCK OFF")
+    await send_cleanup_cmd("ABSOLUTE MTP,IN")
     self._run_active = False
     self._active_step_loss_commands = []
     self._active_mode = None
