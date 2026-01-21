@@ -61,10 +61,10 @@ def _compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb(h: float):
   )
 
 
-# # # # # # # # # # Cor_Axy_96_SWP_500uL_Ub # # # # # # # # # #
+# # # # # # # # # # Cor_Axy_96_wellplate_500uL_Ub # # # # # # # # # #
 
 
-def Cor_Axy_96_SWP_500uL_Ub(name: str, with_lid: bool = False) -> Plate:
+def Cor_Axy_96_wellplate_500uL_Ub(name: str, with_lid: bool = False) -> Plate:
   """
   Axygen 96w Shallow Well Plate 500uL U Bottom
   - Product number: P-96-450V-C-S
@@ -80,7 +80,7 @@ def Cor_Axy_96_SWP_500uL_Ub(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,  # from spec
     size_y=86.0,  # from spec
     size_z=14.0,  # from spec
-    model="Cor_Axy_96_SWP_500uL_Ub",
+    model="Cor_Axy_96_wellplate_500uL_Ub",
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,  # from spec
