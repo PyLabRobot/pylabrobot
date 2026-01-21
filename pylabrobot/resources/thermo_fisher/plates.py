@@ -451,7 +451,7 @@ def Thermo_TS_Nalgene_reservoir_300mL_Fb(name: str) -> Plate:
       item_dy=0,  # from spec
       size_x=123.8,  # from spec
       size_y=82.1,  # from spec
-      size_z=39.9,  # from spec
+      size_z=39.9 - 3.3 - 1.15,  # from spec/calculated
       bottom_type=WellBottomType.FLAT,  # from spec
       cross_section_type=CrossSectionType.RECTANGLE,  # rectangle wells
       material_z_thickness=1.15,  # measured.
