@@ -97,9 +97,8 @@ class PyUSBInfiniteTransport(InfiniteTransport):
   async def read(self, size: int) -> bytes:
     if self._usb is None:
       raise RuntimeError("USB transport not opened.")
-    data = await self._usb.read()
-    b = bytes(data[:size])
-    return b
+    data = await self._usb.read(size=size)
+    return bytes(data)
 
 
 @dataclass
