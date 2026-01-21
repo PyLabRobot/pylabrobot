@@ -1,0 +1,255 @@
+import asyncio
+import contextlib
+import logging
+from enum import Enum
+from typing import Optional
+
+import usb.core
+
+from pylabrobot.io.usb import USB
+
+from .spark_packet_parser import parse_single_spark_packet
+
+# Tecan Spark
+VENDOR_ID = 0x0C47
+
+
+class SparkDevice(Enum):
+  FLUORESCENCE = 0x8027
+  ABSORPTION = 0x8026
+  LUMINESCENCE = 0x8022
+  PLATE_TRANSPORT = 0x8028
+
+
+class SparkEndpoint(Enum):
+  BULK_IN = 0x82
+  BULK_IN1 = 0x81
+  BULK_OUT = 0x01
+  INTERRUPT_IN = 0x83
+
+
+class SparkReaderAsync:
+  def __init__(self, vid=VENDOR_ID):
+    self.vid = vid
+    self.devices = {}
+    self.seq_num = 0
+    self.lock = asyncio.Lock()
+    self.msgs = []
+    self.cur_reader: Optional[USB] = None
+    self.cur_endpoint_addr: Optional[int] = None
+
+  async def connect(self):
+    logging.info(f"Scanning for devices with VID={hex(self.vid)}...")
+
+    for device_type in SparkDevice:
+      if device_type in self.devices:
+        continue
+
+      try:
+
+        def configure(dev):
+          try:
+            if dev.is_kernel_driver_active(0):
+              logging.debug(f"Detaching kernel driver from {device_type.name} interface 0")
+              dev.detach_kernel_driver(0)
+          except usb.core.USBError as e:
+            logging.error(f"Error detaching kernel driver from {device_type.name}: {e}")
+
+          # Note: calling set_configuration(0) twice before switching to configuration 1
+          # is intentional. Some Tecan Spark devices require a double reset to config 0
+          # to reliably accept configuration 1 after startup.
+          dev.set_configuration(0)
+          dev.set_configuration(0)
+          dev.set_configuration(1)
+
+        reader = USB(
+          id_vendor=self.vid,
+          id_product=device_type.value,
+          configuration_callback=configure,
+        )
+
+        await reader.setup()
+        self.devices[device_type] = reader
+        logging.info(f"Successfully configured {device_type.name}")
+
+      except RuntimeError:
+        # Device not found
+        pass
+      except Exception as e:
+        logging.error(f"Error configuring {device_type.name}: {e}")
+
+    if not self.devices:
+      raise ValueError(f"Failed to connect to any known Spark devices for VID={hex(self.vid)}")
+
+    logging.info(f"Successfully connected to {len(self.devices)} devices.")
+
+  def _calculate_checksum(self, data):
+    checksum = 0
+    for byte in data:
+      checksum ^= byte
+    return checksum
+
+  async def send_command(self, command_str, device_type=SparkDevice.PLATE_TRANSPORT):
+    if device_type not in self.devices:
+      logging.error(f"Device type {device_type} not connected.")
+      return False
+
+    reader = self.devices[device_type]
+    endpoint_addr = SparkEndpoint.BULK_OUT.value
+
+    async with self.lock:
+      logging.debug(f"Sending to {device_type.name}: {command_str}")
+      payload = command_str.encode("ascii")
+      payload_len = len(payload)
+
+      header = bytes([0x01, self.seq_num, 0x00, payload_len])
+      message = header + payload + bytes([self._calculate_checksum(header + payload)])
+      self.seq_num = (self.seq_num + 1) % 256
+
+      try:
+        await reader.write_to_endpoint(endpoint_addr, message)
+        logging.debug(f"Sent message to {device_type.name}: {message.hex()}")
+        return True
+      except Exception as e:
+        logging.error(f"Error sending command to {device_type.name}: {e}", exc_info=True)
+        return False
+
+  def init_read(self, device_type, endpoint, count=512, read_timeout=2000):
+    logging.debug(f"Initiating read task on {device_type.name} ep {hex(endpoint.value)}...")
+    self.cur_reader = self.devices[device_type]
+    self.cur_endpoint_addr = endpoint.value
+    # Convert read_timeout from milliseconds to seconds for USB class.
+    return asyncio.create_task(
+      self.cur_reader.read_from_endpoint(
+        self.cur_endpoint_addr, size=count, timeout=read_timeout / 1000.0
+      )
+    )
+
+  async def get_response(self, read_task, timeout=2000, attempts=10000):
+    try:
+      data = await read_task
+
+      if data is None:
+        logging.warning("Read task returned None")
+        return None
+
+      data_bytes = bytes(data)
+      logging.debug(f"Read task completed ({len(data_bytes)} bytes): {data_bytes.hex()}")
+      parsed = parse_single_spark_packet(data_bytes)
+
+      if parsed.get("type") == "RespMessage":
+        self.msgs.append(parsed["payload"])
+      elif parsed.get("type") == "RespError":
+        raise Exception(parsed)
+
+      while parsed.get("type") != "RespReady" and attempts > 0:
+        attempts -= 1
+        try:
+          await asyncio.sleep(0.01)
+          logging.debug(f"Still busy, retrying... attempts left: {attempts}")
+          if self.cur_reader is None or self.cur_endpoint_addr is None:
+            raise RuntimeError("Current reader or endpoint not set")
+
+          resp = await self.cur_reader.read_from_endpoint(
+            self.cur_endpoint_addr, size=512, timeout=0.02
+          )
+
+          if resp:
+            logging.debug(f"Read task completed ({len(resp)} bytes): {bytes(resp).hex()}")
+            parsed = parse_single_spark_packet(bytes(resp))
+            logging.debug(f"Parsed: {parsed}")
+            if parsed.get("type") == "RespMessage":
+              self.msgs.append(parsed["payload"])
+            elif parsed.get("type") == "RespError":
+              raise Exception(parsed)
+        except Exception as e:
+          logging.error(f"Error in get_response retry: {e}")
+
+      return parsed
+
+    except asyncio.CancelledError:
+      logging.warning("Read task was cancelled")
+      return None
+    except Exception as e:
+      logging.error(f"Error in get_response: {e}", exc_info=True)
+      return None
+
+  def clear_messages(self):
+    """Clear the list of recorded RespMessage payloads."""
+    self.msgs = []
+
+  @contextlib.asynccontextmanager
+  async def reading(
+    self,
+    device_type=SparkDevice.PLATE_TRANSPORT,
+    endpoint=SparkEndpoint.INTERRUPT_IN,
+    count=512,
+    read_timeout=2000,
+  ):
+    if device_type not in self.devices:
+      raise ValueError(f"Device type {device_type} not connected.")
+
+    read_task = self.init_read(device_type, endpoint, count, read_timeout)
+    await asyncio.sleep(0.01)  # Short delay to ensure the read task starts
+
+    response_task = asyncio.create_task(self.get_response(read_task))
+
+    try:
+      yield response_task
+    finally:
+      logging.debug(
+        f"Context manager exiting, awaiting read task for {device_type.name} {endpoint.name}"
+      )
+      if not response_task.done():
+        await response_task
+
+      try:
+        response = response_task.result()
+        logging.debug(f"Response from context manager read: {response}")
+      except Exception as e:
+        logging.debug(f"Response task exception: {e}")
+
+  async def start_background_read(
+    self, device_type, endpoint=SparkEndpoint.INTERRUPT_IN, read_timeout=100
+  ):
+    if device_type not in self.devices:
+      logging.error(f"Device type {device_type} not connected.")
+      return None, None, None
+
+    reader = self.devices[device_type]
+    stop_event = asyncio.Event()
+    results = []
+
+    async def background_reader():
+      logging.info(
+        f"Starting background reader for {device_type.name} {endpoint.name} (0x{endpoint.value:02x})"
+      )
+      while not stop_event.is_set():
+        await asyncio.sleep(0.2)  # Avoid tight loop
+        try:
+          # timeout in seconds
+          data = await reader.read_from_endpoint(
+            endpoint.value, size=1024, timeout=read_timeout / 1000.0
+          )
+          if data:
+            results.append(bytes(data))
+            logging.debug(f"Background read {len(data)} bytes: {bytes(data).hex()}")
+        except asyncio.CancelledError:
+          logging.info("Background reader cancelled.")
+          break
+        except Exception as e:
+          logging.error(f"Error in background reader: {e}", exc_info=True)
+          await asyncio.sleep(0.1)
+      logging.info(f"Stopping background reader for {device_type.name} {endpoint.name}")
+
+    task = asyncio.create_task(background_reader())
+    return task, stop_event, results
+
+  async def close(self):
+    for device_type, reader in self.devices.items():
+      try:
+        await reader.stop()
+        logging.info(f"{device_type.name} resources released.")
+      except Exception as e:
+        logging.error(f"Error closing {device_type.name}: {e}")
+    self.devices = {}
