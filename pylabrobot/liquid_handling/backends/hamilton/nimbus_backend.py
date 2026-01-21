@@ -1359,39 +1359,56 @@ class NimbusBackend(HamiltonTCPBackend):
     return x_positions_full, y_positions_full
 
   def _compute_tip_handling_parameters(
-    self, ops: Sequence[Union[Pickup, Drop]], use_channels: List[int]
+    self,
+    ops: Sequence[Union[Pickup, Drop]],
+    use_channels: List[int],
+    use_fixed_offset: bool = False,
+    fixed_offset_mm: float = 10.0,
   ):
+    """Calculate Z positions for tip pickup/drop operations.
+
+    Pickup (use_fixed_offset=False): Z based on tip length
+      z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
+    Drop (use_fixed_offset=True): Z based on fixed offset (matches VantageBackend default)
+      z_start = max_z + fixed_offset_mm (default 10.0mm), z_stop = max_z
+
+    Returns: (begin_position, end_position) in 0.01mm units
+    """
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
 
     z_positions_mm: List[float] = []
     for op in ops:
-      abs_location = op.resource.get_location_wrt(self.deck)
+      abs_location = op.resource.get_location_wrt(self.deck) + op.offset
       hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
       z_positions_mm.append(hamilton_coord.z)
 
-    # Calculate Z positions from resource locations and tip properties
-    # Similar to STAR backend: z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
     max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
-    # Calculate absolute Z positions for pickup/drop start/stop in Hamilton coordinates
-    begin_tip_pick_up_process_mm = max_z_hamilton + max_total_tip_length
-    end_tip_pick_up_process_mm = max_z_hamilton + max_tip_length
+    if use_fixed_offset:
+      # For drop operations: use fixed offsets relative to resource surface
+      begin_position_mm = max_z_hamilton + fixed_offset_mm
+      end_position_mm = max_z_hamilton
+    else:
+      # For pickup operations: use tip length
+      # Similar to STAR backend: z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
+      max_total_tip_length = max(op.tip.total_tip_length for op in ops)
+      max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
+      begin_position_mm = max_z_hamilton + max_total_tip_length
+      end_position_mm = max_z_hamilton + max_tip_length
 
     # Convert to 0.01mm units
-    begin_tip_pick_up_process = [round(begin_tip_pick_up_process_mm * 100)] * len(ops)
-    end_tip_pick_up_process = [round(end_tip_pick_up_process_mm * 100)] * len(ops)
+    begin_position = [round(begin_position_mm * 100)] * len(ops)
+    end_position = [round(end_position_mm * 100)] * len(ops)
 
-    begin_tip_pick_up_process_full = self._fill_by_channels(
-      begin_tip_pick_up_process, use_channels, default=0
+    begin_position_full = self._fill_by_channels(
+      begin_position, use_channels, default=0
     )
-    end_tip_pick_up_process_full = self._fill_by_channels(
-      end_tip_pick_up_process, use_channels, default=0
+    end_position_full = self._fill_by_channels(
+      end_position, use_channels, default=0
     )
 
-    return begin_tip_pick_up_process_full, end_tip_pick_up_process_full
+    return begin_position_full, end_position_full
 
   async def pick_up_tips(
     self,
@@ -1495,10 +1512,11 @@ class NimbusBackend(HamiltonTCPBackend):
     - If resource is a waste position (Trash with category="waste_position"), uses DropTipsRoll
     - Otherwise, uses DropTips command
 
-    TODO: evaluate this doc:
-    Z positions are calculated from resource locations if not explicitly provided:
-    - z_start_offset: Calculated from resources (for waste: 135.39 mm, for regular: resource Z + offset)
-    - z_stop_offset: Calculated from resources (for waste: 131.39 mm, for regular: resource Z + offset)
+    Z positions are calculated from resource locations:
+    - For waste positions: Fixed Z positions (135.39 mm start, 131.39 mm stop) via _build_waste_position_params
+    - For regular resources: Fixed offsets relative to resource surface (max_z + 10mm start, max_z stop)
+      Note: Z positions use fixed offsets, NOT tip length, because the tip is already mounted on the pipette.
+      This works for all tip sizes (300ul, 1000ul, etc.) without additional configuration.
     - z_position_at_end_of_a_command: Calculated from resources (defaults to minimum_traverse_height_at_beginning_of_a_command)
     - roll_distance: Defaults to 9.0 mm for waste positions
 
@@ -1574,10 +1592,12 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
     else:
-      # Compute x and y positions, and tip handling parameters for regular resources
+      # Compute x and y positions for regular resources
       x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
+
+      # Compute Z positions using fixed offsets (not tip length) for drop operations
       begin_tip_deposit_process, end_tip_deposit_process = self._compute_tip_handling_parameters(
-        ops, use_channels
+        ops, use_channels, use_fixed_offset=True
       )
 
       # Compute final Z positions. Use the traverse height if not provided. Fill to num_channels.
