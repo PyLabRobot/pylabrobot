@@ -38,6 +38,6 @@ Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| 'Thermo_TS_Nalgene_reservoir_300mL_Fb'<br>Part no.: 12001300 (non-sterile), 12001301 (sterile)<br>[manufacturer website](https://www.fishersci.com/shop/products/nalgene-disposable-polypropylene-robotic-reservoirs/12565571) | ![](img/thermo_fisher/Thermo_TS_Nalgene_reservoir_300mL_Fb.jpeg) | `Thermo_TS_Nalgene_reservoir_300mL_Fb` |
+| 'Thermo_TS_Nalgene_1_troughplate_300000uL_Fb'<br>Part no.: 12001300 (non-sterile), 12001301 (sterile)<br>[manufacturer website](https://www.fishersci.com/shop/products/nalgene-disposable-polypropylene-robotic-reservoirs/12565571) | ![](img/thermo_fisher/Thermo_TS_Nalgene_1_troughplate_300000uL_Fb.jpeg) | `Thermo_TS_Nalgene_1_troughplate_300000uL_Fb` |
 | 'thermo_nunc_1_troughplate_90000uL_Fb_omnitray'<br>Part no.: 165218, 140156, 242811, 264728 | ![](img/thermo_fisher/thermo_nunc_1_troughplate_90000uL_Fb_omnitray.jpg.avif) | `thermo_nunc_1_troughplate_90000uL_Fb_omnitray` |
 | 'ThermoFisherMatrixTrough8094'<br>Part no.: 8094<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/8094) | ![](img/thermo_fisher/ThermoFisherMatrixTrough8094.jpg.avif) | `ThermoFisherMatrixTrough8094` |
