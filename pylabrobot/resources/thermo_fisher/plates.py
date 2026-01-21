@@ -422,11 +422,12 @@ def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
     ),
   )
 
+
 # # # # # # # # # # Thermo_TS_Nunc_96_wellplate_300uL_Fb # # # # # # # # # #
 
 
 def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> Plate:
-  """ Thermo Scientific™ Nunc™ 96-Well Optical-Bottom Microplate, black, TC surface
+  """Thermo Scientific™ Nunc™ 96-Well Optical-Bottom Microplate, black, TC surface
   - Product Number: 165305
   - Max Volume: 400 uL
   - working volume: 50-300uL (in practice, although spec sheet says 50-200uL))
@@ -435,35 +436,37 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> P
   """
   return Plate(
     name=name,
-    size_x=127.76, #from spec
-    size_y=85.47, #from spec
-    size_z=14.86, #from spec
+    size_x=127.76,  # from spec
+    size_y=85.47,  # from spec
+    size_z=14.86,  # from spec
     model="Thermo_TS_Nunc_96_wellplate_300uL_Fb",
     lid=Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name + "_lid") if with_lid else None,
-    ordered_items=create_ordered_items_2d(Well,
-      num_items_x=12, #from spec
-      num_items_y=8, #from spec
-      dx=11.095, #from spec
-      dy=8.025, #from spec
-      dz=1.98,  #from spec
-      item_dx=9, #from spec
-      item_dy=9, #from spec
-      size_x=6.45, #from spec
-      size_y=6.45, #from spec
-      size_z=12.1, #from spec
-      bottom_type=WellBottomType.FLAT, #flat bottom wells
-      cross_section_type=CrossSectionType.CIRCLE, #circle wells
-      material_z_thickness=1.15 #from spec
-      ))
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,  # from spec
+      num_items_y=8,  # from spec
+      dx=11.095,  # from spec
+      dy=8.025,  # from spec
+      dz=1.98,  # from spec
+      item_dx=9,  # from spec
+      item_dy=9,  # from spec
+      size_x=6.45,  # from spec
+      size_y=6.45,  # from spec
+      size_z=12.1,  # from spec
+      bottom_type=WellBottomType.FLAT,  # flat bottom wells
+      cross_section_type=CrossSectionType.CIRCLE,  # circle wells
+      material_z_thickness=1.15,  # from spec
+    ),
+  )
 
 
 def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
   return Lid(
     name=name,
-    size_x=127.25, #from spec
-    size_y=85.3, #from spec
-    size_z=9.1, #from spec
-    nesting_z_height=16.7-14.86, #from spec: lid+plate_z - plate_z
-    model="Thermo_TS_Nunc_96_assay_300uL_Fb_Lid"
-  #raise NotImplementedError("This lid is not currently defined.")
+    size_x=127.25,  # from spec
+    size_y=85.3,  # from spec
+    size_z=9.1,  # from spec
+    nesting_z_height=16.7 - 14.86,  # from spec: lid+plate_z - plate_z
+    model="Thermo_TS_Nunc_96_assay_300uL_Fb_Lid",
+    # raise NotImplementedError("This lid is not currently defined.")
   )
