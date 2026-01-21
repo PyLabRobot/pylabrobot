@@ -467,5 +467,4 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
     size_z=9.1,  # from spec
     nesting_z_height=16.7 - 14.86,  # from spec: lid+plate_z - plate_z
     model="Thermo_TS_Nunc_96_assay_300uL_Fb_Lid",
-    # raise NotImplementedError("This lid is not currently defined.")
   )
