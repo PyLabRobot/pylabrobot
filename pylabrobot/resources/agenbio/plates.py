@@ -112,11 +112,27 @@ def AGenBio_4_troughplate_75000uL_Vb(name: str, lid: Optional[Lid] = None) -> Pl
 
 
 def AGenBio_4_troughplate_75000_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError("deprecated. use AGenBio_4_troughplate_75000uL_Vb instead")
+  """Deprecated. Use :func:`AGenBio_4_troughplate_75000uL_Vb` instead."""
+  import warnings
+
+  warnings.warn(
+    "AGenBio_4_troughplate_75000_Vb is deprecated. Use AGenBio_4_troughplate_75000uL_Vb instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return AGenBio_4_troughplate_75000uL_Vb(name=name, lid=lid)
 
 
 def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError("deprecated. use AGenBio_1_troughplate_190000uL_Fl instead")
+  """Deprecated. Use :func:`AGenBio_1_troughplate_190000uL_Fl` instead."""
+  import warnings
+
+  warnings.warn(
+    "AGenBio_1_wellplate_Fl is deprecated. Use AGenBio_1_troughplate_190000uL_Fl instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return AGenBio_1_troughplate_190000uL_Fl(name=name, lid=lid)
 
 
 def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
@@ -153,7 +169,7 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
     size_y=85.48,  # from spec
     size_z=44.2,  # measured
     lid=lid,
-    model=AGenBio_1_wellplate_Fl.__name__,
+    model=AGenBio_1_troughplate_190000uL_Fl.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,
