@@ -1,7 +1,20 @@
-from typing import Callable, List, Optional, Tuple
+"""Module defining tube containers."""
+
+import enum
+import warnings
+from typing import Callable, List, Optional, Tuple, Union
 
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.liquid import Liquid
+
+
+class TubeBottomType(enum.Enum):
+  """Enum for the type of bottom of a tube."""
+
+  FLAT = "flat"
+  U = "U"
+  V = "V"
+  UNKNOWN = "unknown"
 
 
 class Tube(Container):
@@ -21,6 +34,7 @@ class Tube(Container):
     material_z_thickness: Optional[float] = None,
     category: str = "tube",
     model: Optional[str] = None,
+    bottom_type: Union[TubeBottomType, str] = TubeBottomType.UNKNOWN,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
@@ -35,6 +49,8 @@ class Tube(Container):
       max_volume: Maximum volume of the tube.
       category: Category of the tube.
     """
+    if isinstance(bottom_type, str):
+      bottom_type = TubeBottomType(bottom_type)
 
     super().__init__(
       name=name,
@@ -53,15 +69,29 @@ class Tube(Container):
   def serialize(self) -> dict:
     return {**super().serialize(), "max_volume": self.max_volume}
 
+  def set_volume(self, volume: float):
+    """Set the volume in the tube.
+
+    (wraps :meth:`~.VolumeTracker.set_volume`)
+
+    Example:
+      Set the volume in a tube to 10 uL:
+
+      >>> tube.set_volume(10)
+    """
+
+    self.tracker.set_volume(volume)
+
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """Set the liquids in the tube.
 
-    (wraps :meth:`~.VolumeTracker.set_liquids`)
-
-    Example:
-      Set the liquids in a tube to 10 uL of water:
-
-      >>> tube.set_liquids([(Liquid.WATER, 10)])
+    Deprecated: use `set_volume` instead. This method will be removed in a future version.
     """
+
+    warnings.warn(
+      "`set_liquids` is deprecated and will be removed in a future version. Use `set_volume` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
 
     self.tracker.set_liquids(liquids)

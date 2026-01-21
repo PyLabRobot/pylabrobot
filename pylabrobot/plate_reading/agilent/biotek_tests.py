@@ -5,7 +5,7 @@ import unittest
 import unittest.mock
 from typing import Iterator
 
-from pylabrobot.plate_reading.biotek_backend import Cytation5Backend
+from pylabrobot.plate_reading.agilent.biotek_cytation_backend import CytationBackend
 from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb, CellVis_96_wellplate_350uL_Fb
 
 
@@ -18,7 +18,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   """Tests for the Cytation5Backend."""
 
   async def asyncSetUp(self):
-    self.backend = Cytation5Backend(timeout=0.1)
+    self.backend = CytationBackend(timeout=0.1)
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()

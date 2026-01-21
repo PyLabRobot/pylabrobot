@@ -75,6 +75,11 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
   True maximal volume capacity ~80 mL.
   Compatible with Trough_CAR_?? (194057 <- not yet integrated into PLR!).
   """
+  warnings.warn(
+    "hamilton_1_trough_60ml_Vb has a center support that can interfere with pipetting.\
+     If using an odd number of channels, use spread='custom' and define offsets for each channel to avoid collision."
+  )
+
   return Trough(
     name=name,
     size_x=19.0,
