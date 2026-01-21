@@ -454,8 +454,7 @@ def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> P
       size_y=6.45,  # from spec
       size_z=12.1,  # from spec
       bottom_type=WellBottomType.FLAT,  # flat bottom wells
-      cross_section_type=CrossSectionType.CIRCLE,  # circle wells
-      material_z_thickness=1.15,  # from spec
+      material_z_thickness=2.2,  # from spec
     ),
   )
 
