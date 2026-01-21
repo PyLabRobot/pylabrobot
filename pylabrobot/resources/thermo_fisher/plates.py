@@ -436,23 +436,24 @@ def Thermo_TS_Nalgene_reservoir_300mL_Fb(name: str) -> Plate:
   """
   return Plate(
     name=name,
-    size_x=127.8, #from spec
-    size_y=85.5, #from spec
-    size_z=39.9, #from spec
+    size_x=127.8,  # from spec
+    size_y=85.5,  # from spec
+    size_z=39.9,  # from spec
     model="Thermo_TS_Nalgene_reservoir_300mL_Fb",
-    ordered_items=create_ordered_items_2d(Well,
-      num_items_x=1, #from spec
-      num_items_y=1, #from spec
-      dx=(127.8-123.8)/2, #from spec
-      dy=(85.5-82.1)/2, #from spec
-      dz=3.3,  #from spec
-      item_dx=0, #from spec
-      item_dy=0, #from spec
-      size_x=123.8, #from spec
-      size_y=82.1, #from spec
-      size_z=39.9, #from spec
-      bottom_type=WellBottomType.FLAT, #from spec
-      cross_section_type=CrossSectionType.RECTANGLE, #rectangle wells
-      material_z_thickness=1.15 #measured.
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=1,  # from spec
+      num_items_y=1,  # from spec
+      dx=(127.8 - 123.8) / 2,  # from spec
+      dy=(85.5 - 82.1) / 2,  # from spec
+      dz=3.3,  # from spec
+      item_dx=0,  # from spec
+      item_dy=0,  # from spec
+      size_x=123.8,  # from spec
+      size_y=82.1,  # from spec
+      size_z=39.9,  # from spec
+      bottom_type=WellBottomType.FLAT,  # from spec
+      cross_section_type=CrossSectionType.RECTANGLE,  # rectangle wells
+      material_z_thickness=1.15,  # measured.
     ),
   )
