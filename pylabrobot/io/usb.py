@@ -116,6 +116,12 @@ class USB(IOBase):
       self._executor,
       lambda: dev.write(write_endpoint, data, timeout=timeout),
     )
+    if len(data) % write_endpoint.wMaxPacketSize == 0:
+      # send a zero-length packet to indicate the end of the transfer
+      await loop.run_in_executor(
+        self._executor,
+        lambda: dev.write(write_endpoint, b"", timeout=timeout),
+      )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
       USBCommand(
