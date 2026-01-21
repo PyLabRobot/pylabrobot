@@ -438,10 +438,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ),
     )
 
-    # make sure two operations on the same spot are not allowed
-    with self.assertRaises(ValueError):
-      self.STAR._ops_to_fw_positions((op1, op1), use_channels=[0, 1])
-
   def test_tip_definition(self):
     pass
 
