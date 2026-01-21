@@ -166,7 +166,7 @@ class USB(IOBase):
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
         timeout (specified by the `read_timeout` attribute).
       size: The maximum number of bytes to read. If `None`, read all available data until no
-        more packets arrive (original behavior).
+        more packets arrive.
     """
 
     assert self.read_endpoint is not None, "Device not connected."
