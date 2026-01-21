@@ -623,12 +623,12 @@ class TestTecanInfiniteScanGeometry(unittest.TestCase):
 
 
 class TestTecanInfiniteAscii(unittest.TestCase):
-  def test_frame_ascii_command(self):
-    framed = TecanInfinite200ProBackend._frame_ascii_command("A")
+  def test_frame_command(self):
+    framed = TecanInfinite200ProBackend._frame_command("A")
     self.assertEqual(framed, b"\x02A\x03\x00\x00\x01\x40\x0d")
 
   def test_consume_leading_ascii_frame(self):
-    buffer = bytearray(TecanInfinite200ProBackend._frame_ascii_command("ST") + b"XYZ")
+    buffer = bytearray(TecanInfinite200ProBackend._frame_command("ST") + b"XYZ")
     consumed, text = _consume_leading_ascii_frame(buffer)
     self.assertTrue(consumed)
     self.assertEqual(text, "ST")
