@@ -158,30 +158,67 @@ class LiconicBackend(IncubatorBackend):
 
   async def take_in_plate(self, plate: Plate, site: PlateHolder, read_barcode: Optional[bool]=False):
     """ Take in a plate from the loading tray to the incubator."""
-    m, n = self._site_to_m_n(site)
-    await self._send_command_plc(f"WR DM0 {m}") # carousel number
-    await self._send_command_plc(f"WR DM5 {n}") # plate position in carousel
+    m, n = self._site_to_m_n(site)                                              #Where is this supposed to come from??
+    await self._send_command_plc(f"WR DM0 {m}") # cassette number
+    await self._send_command_plc(f"WR DM5 {n}") # plate position in cassette
     await self._send_command_plc("ST 1904")  # plate from transfer station
     await self._wait_ready()
 
-    if self.barcode_installed and read_barcode:
+    if read_barcode:
+      await self.read_barcode_inline(m,n)
+
+    await self._send_command_plc("ST 1903")  # terminate access
+
+  async def move_position_to_position(self,
+                                      plate: Plate,
+                                      orig_site: PlateHolder,
+                                      dest_site: PlateHolder,
+                                      read_barcode: Optional[bool]=False):
+    """ Move plate from one internal position to another"""
+    orig_m, orig_n = self._site_to_m_n(orig_site) # origin cassette # and plate position #
+    dest_m, dest_n = self._site_to_m_n(dest_site) # destination cassette # and plate position #
+
+    await self._send_command_plc(f"WR DM 0 {orig_m}") # origin cassette #
+    await self._send_command_plc(f"WR DM 5 {orig_n}") # origin plate position #
+
+    if read_barcode:
+      await self.read_barcode_inline(orig_m,orig_n)
+
+    await self._send_command_plc("ST 1908") # pick plate from origin position
+
+    await self._wait_ready()
+
+    if orig_m != dest_m:
+      await self._send_command_plc(f"WR DM0 {dest_m}") # destination cassette # if different
+    await self._send_command_plc(f"WR DM5 {dest_n}") # destination plate position #
+    await self._send_command_plc("ST 1909") # place plate in destination position
+
+    await self._wait_ready()
+    await self._send_command_plc("ST 1903") # terminate access
+
+  async def read_barcode_inline(self, cassette: int, plt_position: int) -> str:
+    if self.barcode_installed:
       await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
       await self._wait_ready()
       barcode = await self._send_command_bcr("LON") # read barcode
       if barcode is None:
         raise RuntimeError("Failed to read barcode from plate")
       elif barcode == "ERROR":
-        logger.info(f"No barcode found when reading plate at cassette {m}, position {n}")
+        logger.info(f"No barcode found when reading plate at cassette {cassette}, position {plt_position}")
       else:
-        logger.info(f"Read barcode from plate at cassette {m}, position {n}: {barcode}")
+        logger.info(f"Read barcode from plate at cassette {cassette}, position {plt_position}: {barcode}")
         reset = await self._send_command_plc("RS 1910")  # move shovel back to normal position
-      if reset != "OK":
-        raise RuntimeError("Failed to reset shovel position after barcode reading")
+        if reset != "OK":
+          raise RuntimeError("Failed to reset shovel position after barcode reading")
       await self._wait_ready()
-    elif read_barcode and not self.barcode_installed:
-      logger.info(" Barcode reading requested during import but instance not configured with barcode reader.")
+      return barcode
+    else:
+      logger.info(" Barcode reading requested but instance not configured with barcode reader.")
+      return "No barcode"
 
-    await self._send_command_plc("ST 1903")  # terminate access
+
+  async def scan_cassette(self,):
+
 
   async def _send_command_plc(self, command: str) -> str:
     """
@@ -216,6 +253,19 @@ class LiconicBackend(IncubatorBackend):
       raise RuntimeError(f"Error response from Barcode Reader for command {command!r}: {resp!r}")
     return resp
 
+  async def _wait_plate_ready(self, timeout: int = 60):
+    """
+    Poll the plate-ready flag (RD 1914) until it is set, or timeout is reached.
+    """
+    start = time.time()
+    deadline = start + timeout
+    while time.time() < deadline:
+      resp = await self._send_command_plc("RD 1914")
+      if resp == "1":
+        return
+      await asyncio.sleep(0.1)
+    raise TimeoutError(f"Plate did not become ready within {timeout} seconds")
+
   async def _wait_ready(self, timeout: int = 60):
     """
     Poll the ready-flag (RD 1915) until it is set, or timeout is reached.
@@ -247,17 +297,39 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid temperature value received from incubator: {resp!r}")
 
-  async def start_shaking(self, frequency: float = 10.0):
-    """ Start shaking. Frequency by default is 10 Hz. Using command ST 1913. This functionality is
-    not currently able to be tested. """
+  # UNTESTED
+  # Unsure if 1 means ON and 0 means OFF, needs to be confirmed.
+  async def shaker_status(self) -> int:
+    """ Determines whether the shaker is ON (1) or OFF (0)"""
+    value = await self._send_command_plc()
+    await self._wait_ready()
+    return value
+
+  # UNTESTED
+  # Unsure if a liconic will return 00250 for 25 or 00025. Assuming former.
+  # Should be in Hz
+  async def get_shaker_speed(self) -> float:
+    """ Gets the current shaker speed default = 25"""
+    speed_val = await self._send_command_plc("RD DM39")
+    speed = speed_val / 10.0
+    await self._wait_ready()
+    return speed
+
+  # UNTESTED
+  # Unsure if setting WR DM39 00250 will set it at 25 Hz or if WR DM39 00025 will. Assuming former
+  async def start_shaking(self, frequency):
+    """ Start shaking. Must be between 1 and 50 Hz. Frequency by default is 10 Hz. Using command
+    ST 1913. This functionality is not currently able to be tested. """
     if frequency < 1.0 or frequency > 50.0:
       raise ValueError("Shaking frequency must be between 1.0 and 50.0 Hz")
     else:
       frequency_value = int(frequency)  # assuming incubator expects frequency in 0.1 Hz units
-      await self._send_command_plc(f"WR DM39 {frequency_value}")
+      frequency = frequency_value * 10
+      await self._send_command_plc(f"WR DM39 {str(frequency).zfill(5)}")
     await self._send_command_plc("ST 1913")
     await self._wait_ready()
 
+  # UNTESTED
   async def stop_shaking(self):
     """ Stop shaking. Using command RS 1913 """
     await self._send_command_plc("RS 1913")
@@ -299,12 +371,14 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid set humidity value received from incubator: {resp!r}")
 
+  # UNTESTED
   async def set_co2_level(self, co2_level: float):
     """ Set the CO2 level of the incubator in 1/100% vol. percentage (%) 500 = 5.0 % ."""
     co2_val = int(co2_level * 100)
     await self._send_command_plc(f"WR DM894 {str(co2_val).zfill(5)}")
     await self._wait_ready()
 
+  # UNTESTED
   async def get_co2_level(self) -> float:
     """ Get the CO2 level of the incubator in percentage (%)."""
     resp = await self._send_command_plc("RD DM984")
@@ -314,7 +388,7 @@ class LiconicBackend(IncubatorBackend):
       return co2
     except ValueError:
       raise RuntimeError(f"Invalid co2 value received from incubator: {resp!r}")
-
+  # UNTESTED
   async def get_set_co2_level(self) -> float:
     """ Get the set value CO2 level of the incubator in percentage (%)."""
     resp = await self._send_command_plc("RD DM894")
@@ -330,6 +404,7 @@ class LiconicBackend(IncubatorBackend):
     n2_val = int(n2_level * 100)
     await self._send_command_plc(f"WR DM895 {str(n2_val).zfill(5)}")
 
+  # UNTESTED
   async def get_n2_level(self) -> float:
     """ Get the N2 level of the incubator in percentage (%)."""
     resp = await self._send_command_plc("RD DM985")
@@ -340,6 +415,7 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid N2 value received from incubator: {resp!r}")
 
+  # UNTESTED
   async def get_set_n2_level(self) -> float:
     """ Get the set value N2 level of the incubator in percentage (%)."""
     resp = await self._send_command_plc("RD DM895")
@@ -352,6 +428,7 @@ class LiconicBackend(IncubatorBackend):
 
   # UNTESTED
   # Unsure what RD 1912 returns (is 1 home or swapped?)
+  # Another avenue is to read the first byte of T16 or T17 but don't have ability to test
   async def turn_swap_station(self, home: bool):
     """ Turn the swap station of the incubator. If home is True, turn to home position."""
     resp = await self._send_command_plc("RD 1912")
@@ -361,7 +438,7 @@ class LiconicBackend(IncubatorBackend):
       await self._send_command_plc("ST 1912")
 
   # UNTESTED
-  # Used in HT units only
+  # Activate plate sensor (ST 1911) used in HT units only because it is off by default
   async def check_shovel_sensor(self) -> bool:
     """ First need to activate shovel transfer sensor deactivated by default, wait 0.1 seconds
       and then Check if the shovel plate sensor is activated."""
