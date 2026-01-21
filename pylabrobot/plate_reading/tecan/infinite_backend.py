@@ -583,8 +583,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
 
-    step_loss = ["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"]
-    self._active_step_loss_commands = list(step_loss)
+    self._active_step_loss_commands = ["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"]
     self._active_mode = "ABS"
     await self._begin_run()
     try:
@@ -631,7 +630,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         }
       ]
     finally:
-      await self._end_run(step_loss)
+      await self._end_run()
 
   async def _configure_absorbance(self, wavelength_nm: int) -> None:
     wl_decitenth = int(round(wavelength_nm * 10))
@@ -690,8 +689,11 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
-    step_loss = ["CHECK MTP.STEPLOSS", "CHECK FI.TOP.STEPLOSS", "CHECK FI.STEPLOSS.Z"]
-    self._active_step_loss_commands = list(step_loss)
+    self._active_step_loss_commands = [
+      "CHECK MTP.STEPLOSS",
+      "CHECK FI.TOP.STEPLOSS",
+      "CHECK FI.STEPLOSS.Z",
+    ]
     self._active_mode = "FI.TOP"
     await self._begin_run()
     try:
@@ -738,7 +740,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         }
       ]
     finally:
-      await self._end_run(step_loss)
+      await self._end_run()
 
   async def _configure_fluorescence(self, excitation_nm: int, emission_nm: int) -> None:
     ex_decitenth = int(round(excitation_nm * 10))
@@ -798,8 +800,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
-    step_loss = ["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"]
-    self._active_step_loss_commands = list(step_loss)
+    self._active_step_loss_commands = ["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"]
     self._active_mode = "LUM"
     await self._begin_run()
     try:
@@ -844,7 +845,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         }
       ]
     finally:
-      await self._end_run(step_loss)
+      await self._end_run()
 
   async def _await_measurements(
     self, decoder: "_MeasurementDecoder", row_count: int, mode: str
@@ -1025,10 +1026,10 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       self._packet_log_handle.write(json.dumps(record) + "\n")
       self._packet_log_handle.flush()
 
-  async def _end_run(self, step_loss_commands: Sequence[str]) -> None:
+  async def _end_run(self) -> None:
     try:
       await self._send_ascii("TERMINATE", allow_timeout=True)
-      for cmd in step_loss_commands:
+      for cmd in self._active_step_loss_commands:
         await self._send_ascii(cmd, allow_timeout=True)
       await self._send_ascii("KEYLOCK OFF", allow_timeout=True)
       await self._send_ascii("ABSOLUTE MTP,IN", allow_timeout=True)
