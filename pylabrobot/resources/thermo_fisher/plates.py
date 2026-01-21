@@ -428,7 +428,8 @@ def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
 def Thermo_TS_Nunc_96_assay_300uL_Fb(name: str, with_lid: bool = False) -> Plate:
   """ Thermo Scientific™ Nunc™ 96-Well Optical-Bottom Microplate, black, TC surface
   - Product Number: 165305
-  - Max Volume: 300 uL
+  - Max Volume: 400 uL
+  - working volume: 50-300uL (in practice, although spec sheet says 50-200uL))
   - Manufacturer link: https://www.fishersci.com/shop/products/nunc-microwell-96-well-cell-culture-treated-flat-bottom-microplate/1256670#
   - Spec sheet info: https://documents.thermofisher.com/TFS-Assets/LCD/Schematics-%26-Diagrams/1653xx_0713.pdf
   """
