@@ -422,10 +422,10 @@ def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
     ),
   )
 
-# # # # # # # # # # Thermo_TS_Nunc_96_assay_300uL_Fb # # # # # # # # # #
+# # # # # # # # # # Thermo_TS_Nunc_96_wellplate_300uL_Fb # # # # # # # # # #
 
 
-def Thermo_TS_Nunc_96_assay_300uL_Fb(name: str, with_lid: bool = False) -> Plate:
+def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> Plate:
   """ Thermo Scientific™ Nunc™ 96-Well Optical-Bottom Microplate, black, TC surface
   - Product Number: 165305
   - Max Volume: 400 uL
@@ -438,8 +438,8 @@ def Thermo_TS_Nunc_96_assay_300uL_Fb(name: str, with_lid: bool = False) -> Plate
     size_x=127.76, #from spec
     size_y=85.47, #from spec
     size_z=14.86, #from spec
-    model="Thermo_TS_Nunc_96_assay_300uL_Fb",
-    lid=Thermo_TS_Nunc_96_assay_300uL_Fb_Lid(name + "_lid") if with_lid else None,
+    model="Thermo_TS_Nunc_96_wellplate_300uL_Fb",
+    lid=Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name + "_lid") if with_lid else None,
     ordered_items=create_ordered_items_2d(Well,
       num_items_x=12, #from spec
       num_items_y=8, #from spec
@@ -457,7 +457,7 @@ def Thermo_TS_Nunc_96_assay_300uL_Fb(name: str, with_lid: bool = False) -> Plate
       ))
 
 
-def Thermo_TS_Nunc_96_assay_300uL_Fb_Lid(name: str) -> Lid:
+def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
   return Lid(
     name=name,
     size_x=127.25, #from spec
