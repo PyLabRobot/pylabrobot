@@ -12,4 +12,4 @@ from .standard import (
   ImagingResult,
   Objective,
 )
-from .tecan_infinite_backend import TecanInfinite200ProBackend, TecanScanConfig
+from .tecan_infinite_backend import InfiniteScanConfig, TecanInfinite200ProBackend

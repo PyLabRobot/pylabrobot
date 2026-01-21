@@ -3,8 +3,8 @@ import unittest
 from pylabrobot.plate_reading.tecan_infinite_backend import (
   InfiniteScanConfig,
   TecanInfinite200ProBackend,
-  _AbsorbanceRunDecoder,
   _absorbance_od_calibrated,
+  _AbsorbanceRunDecoder,
   _consume_leading_ascii_frame,
   _FluorescenceRunDecoder,
   _LuminescenceRunDecoder,
@@ -25,10 +25,7 @@ def _bin_blob(payload):
 
 def _abs_prepare_blob(ex_decitenth, meas_dark, meas_bright, ref_dark, ref_bright):
   header = _pack_u16([0, ex_decitenth])
-  item = (
-    (0).to_bytes(4, "big")
-    + _pack_u16([0, 0, meas_dark, meas_bright, 0, ref_dark, ref_bright])
-  )
+  item = (0).to_bytes(4, "big") + _pack_u16([0, 0, meas_dark, meas_bright, 0, ref_dark, ref_bright])
   return _bin_blob(header + item)
 
 

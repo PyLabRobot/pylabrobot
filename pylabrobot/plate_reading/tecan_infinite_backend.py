@@ -111,9 +111,6 @@ class InfiniteScanConfig:
   counts_per_mm_y: float = 1_000
 
 
-TecanScanConfig = InfiniteScanConfig
-
-
 def _u16be(payload: bytes, offset: int) -> int:
   return int.from_bytes(payload[offset : offset + 2], "big")
 
@@ -1246,6 +1243,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     """Return True if the ASCII frame is a terminal marker."""
     return text in {"ST", "+", "-"} or text.startswith("BY#T")
 
+
 @dataclass
 class _AbsorbanceMeasurement:
   sample: int
@@ -1395,9 +1393,7 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
       )
     else:
       intensity = int(round(sum(counts) / len(counts))) if counts else 0
-    self.measurements.append(
-      _LuminescenceMeasurement(intensity=intensity)
-    )
+    self.measurements.append(_LuminescenceMeasurement(intensity=intensity))
 
 
 __all__ = [
