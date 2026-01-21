@@ -1,6 +1,6 @@
 import unittest
 
-from pylabrobot.plate_reading.tecan_infinite_backend import (
+from pylabrobot.plate_reading.tecan.infinite_backend import (
   InfiniteScanConfig,
   TecanInfinite200ProBackend,
   _absorbance_od_calibrated,
