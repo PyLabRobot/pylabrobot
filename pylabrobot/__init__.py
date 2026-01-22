@@ -21,8 +21,8 @@ def _is_running_in_jupyter() -> bool:
     True if running in Jupyter, False otherwise.
   """
   try:
-    shell = get_ipython().__class__.__name__  # type: ignore
-    return shell == "ZMQInteractiveShell"
+    shell = get_ipython().__class__.__name__  # type: ignore[name-defined]
+    return bool(shell == "ZMQInteractiveShell")
   except NameError:
     return False
 
