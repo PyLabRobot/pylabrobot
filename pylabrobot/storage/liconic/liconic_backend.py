@@ -3,6 +3,8 @@ import logging
 import time
 import warnings
 from typing import List, Tuple, Optional, Union, cast
+import re
+from typing import List, Tuple, Optional, Union
 
 import serial
 
@@ -14,6 +16,23 @@ from pylabrobot.barcode_scanners.keyence import KeyenceBarcodeScannerBackend
 from pylabrobot.storage.liconic.constants import LiconicType
 
 logger = logging.getLogger(__name__)
+
+# Mapping site_height to motor steps for Liconic cassettes
+LICONIC_SITE_HEIGHT_TO_STEPS = {
+    5: 377,      # pitch=11, site_height=5
+    11: 582,     # pitch=17, site_height=11
+    12: 617,     # pitch=18, site_height=12
+    17: 788,     # pitch=23, site_height=17
+    22: 959,     # pitch=28, site_height=22
+    23: 994,     # pitch=29, site_height=23
+    24: 1028,    # pitch=30, site_height=24
+    27: 1131,    # pitch=33, site_height=27
+    44: 1713,    # pitch=50, site_height=44
+    53: 2021,    # pitch=59, site_height=53
+    66: 2467,    # pitch=72, site_height=66
+    104: 3563    # pitch=110, site_height=104
+}
+
 
 class LiconicBackend(IncubatorBackend):
   """
@@ -123,6 +142,20 @@ class LiconicBackend(IncubatorBackend):
     site_idx = next(idx for idx, s in rack.sites.items() if s == site) + 1  # 1-indexed
     return rack_idx, site_idx
 
+  # Wrote this function to return motor step size and plate position number from PlateCarrier model name
+  def _carrier_to_steps_pos(self, site: PlateHolder) -> Tuple[int, int]:
+    rack = site.parent
+    assert isinstance(rack, PlateCarrier), "Site not in rack"
+    assert self._racks is not None, "Racks not set"
+    if not rack.model.startswith("liconic"):
+      raise ValueError(f"The plate carrier used: {rack.model} is not compatible with the Liconic")
+    match = re.search(r'_(\d+)mm', rack.model)
+    if match:
+      site_height = int(match.group(1))
+      site_num = int(rack.model.split('_')[-1])
+      return LICONIC_SITE_HEIGHT_TO_STEPS.get(site_height), site_num
+    raise ValueError(f"Could not parse site height and pos num from PlateCarrier model: {rack.model}")
+
   async def stop(self):
     await self.io_plc.stop()
     if self.io_bcr is not None:
@@ -149,8 +182,13 @@ class LiconicBackend(IncubatorBackend):
     """ Fetch a plate from the incubator to the loading tray."""
     site = plate.parent
     assert isinstance(site, PlateHolder), "Plate not in storage"
+
     m, n = self._site_to_m_n(site)
+    step_size, pos_num = self._carrier_to_steps_pos(site)
+
     await self._send_command_plc(f"WR DM0 {m}") # carousel number
+    await self._send_command_plc(f"WR DM23 {step_size}") # motor step size
+    await self._send_command_plc(f"WR DM25 {pos_num}") # number of positions in cassette
     await self._send_command_plc(f"WR DM5 {n}") # plate position in carousel
 
     if read_barcode:
@@ -166,6 +204,12 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc(f"WR DM0 {m}") # cassette number
     await self._send_command_plc(f"WR DM23 788")
     await self._send_command_plc(f"WR DM25 10") # plate position in cassette
+    step_size, pos_num = self._carrier_to_steps_pos(site)
+
+    await self._send_command_plc(f"WR DM0 {m}") # carousel number
+    await self._send_command_plc(f"WR DM23 {step_size}") # motor step size
+    await self._send_command_plc(f"WR DM25 {pos_num}") # number of positions in cassette
+    await self._send_command_plc(f"WR DM5 {n}") # plate position in cassette
     await self._send_command_plc("ST 1904")  # plate from transfer station
     await self._wait_ready()
 
@@ -184,6 +228,12 @@ class LiconicBackend(IncubatorBackend):
     dest_m, dest_n = self._site_to_m_n(dest_site) # destination cassette # and plate position #
 
     await self._send_command_plc(f"WR DM 0 {orig_m}") # origin cassette #
+    orig_step_size, orig_pos_num = self._carrier_to_steps_pos(orig_site)
+    dest_step_size, dest_pos_num = self._carrier_to_steps_pos(dest_site)
+
+    await self._send_command_plc(f"WR DM0 {orig_m}") # carousel number
+    await self._send_command_plc(f"WR DM23 {orig_step_size}") # motor step size
+    await self._send_command_plc(f"WR DM25 {orig_pos_num}") # number of positions in cassette
     await self._send_command_plc(f"WR DM 5 {orig_n}") # origin plate position #
 
     if read_barcode:
@@ -195,6 +245,8 @@ class LiconicBackend(IncubatorBackend):
 
     if orig_m != dest_m:
       await self._send_command_plc(f"WR DM0 {dest_m}") # destination cassette # if different
+    await self._send_command_plc(f"WR DM23 {dest_step_size}") # motor step size
+    await self._send_command_plc(f"WR DM25 {dest_pos_num}") # number of positions in cassette
     await self._send_command_plc(f"WR DM5 {dest_n}") # destination plate position #
     await self._send_command_plc("ST 1909") # place plate in destination position
 
