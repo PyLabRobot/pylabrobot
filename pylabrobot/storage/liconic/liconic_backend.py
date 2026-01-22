@@ -230,14 +230,14 @@ class LiconicBackend(IncubatorBackend):
     orig_m, orig_n = self._site_to_m_n(orig_site) # origin cassette # and plate position #
     dest_m, dest_n = self._site_to_m_n(dest_site) # destination cassette # and plate position #
 
-    await self._send_command_plc(f"WR DM 0 {orig_m}") # origin cassette #
+    await self._send_command_plc(f"WR DM0 {orig_m}") # origin cassette #
     orig_step_size, orig_pos_num = self._carrier_to_steps_pos(orig_site)
     dest_step_size, dest_pos_num = self._carrier_to_steps_pos(dest_site)
 
     await self._send_command_plc(f"WR DM0 {orig_m}") # carousel number
     await self._send_command_plc(f"WR DM23 {orig_step_size}") # motor step size
     await self._send_command_plc(f"WR DM25 {orig_pos_num}") # number of positions in cassette
-    await self._send_command_plc(f"WR DM 5 {orig_n}") # origin plate position #
+    await self._send_command_plc(f"WR DM5 {orig_n}") # origin plate position #
 
     if read_barcode:
       await self.read_barcode_inline(orig_m,orig_n)

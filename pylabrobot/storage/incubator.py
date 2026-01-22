@@ -270,6 +270,14 @@ class Incubator(Machine, Resource):
     """ Check if the second transfer plate sensor is activated."""
     return await self.backend.check_second_transfer_sensor()
 
-  async def move_position_to_position(self, plate: Plate, dest_site: PlateHolder, read_barcode: Optional[bool]=False):
+  async def move_position_to_position(self, plate_name: str, dest_site: PlateHolder, read_barcode: Optional[bool]=False) -> Plate:
     """ Move a plate to another internal position in the storage unit """
-    return await self.backend.move_position_to_position(plate=plate, dest_site=dest_site, read_barcode=read_barcode)
+    site = self.get_site_by_plate_name(plate_name)
+    plate = site.resource
+    assert plate is not None
+
+    await self.backend.move_position_to_position(plate=plate, dest_site=dest_site, read_barcode=read_barcode)
+    plate.unassign()
+    site.assign_child_resource(plate)
+
+    return plate
