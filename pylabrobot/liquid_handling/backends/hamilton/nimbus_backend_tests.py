@@ -805,6 +805,27 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(cmds[0].aspiration_speed[0], 500)
     self.assertEqual(cmds[0].blow_out_air_volume[0], 400)
 
+  async def test_aspirate_default_flow_rate(self):
+    """Test that flow_rate=None uses tip-based default (100 uL/s for 300ul tip)."""
+    await self.backend.aspirate(
+      [
+        SingleChannelAspiration(
+          resource=self.plate.get_item("A1"),
+          offset=Coordinate.zero(),
+          tip=self.tip,
+          volume=100.0,
+          flow_rate=None,
+          liquid_height=5.0,
+          blow_out_air_volume=None,
+          mix=None,
+        )
+      ],
+      use_channels=[0],
+    )
+
+    cmds = self._get_commands(Aspirate)
+    self.assertEqual(cmds[0].aspiration_speed[0], 1000)  # 100 uL/s * 10
+
   async def test_aspirate_multiple_channels(self):
     ops = [
       SingleChannelAspiration(
@@ -956,25 +977,6 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
 
     cmds = self._get_commands(EnableADC)
     self.assertEqual(len(cmds), 1)
-
-  async def test_dispense_flow_rate_required(self):
-    with self.assertRaises(ValueError) as ctx:
-      await self.backend.dispense(
-        [
-          SingleChannelDispense(
-            resource=self.plate.get_item("A1"),
-            offset=Coordinate.zero(),
-            tip=self.tip,
-            volume=100.0,
-            flow_rate=None,
-            liquid_height=None,
-            blow_out_air_volume=None,
-            mix=None,
-          )
-        ],
-        use_channels=[0],
-      )
-    self.assertIn("flow_rate", str(ctx.exception))
 
   # === Coordinate conversion tests ===
 
