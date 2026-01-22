@@ -1811,7 +1811,13 @@ class NimbusBackend(HamiltonTCPBackend):
     # Default mix_speed to aspirate speed (flow_rates) when no mix operation
     # This matches the working version behavior
     mix_speed: List[float] = [
-      op.mix.flow_rate if op.mix is not None else (op.flow_rate if op.flow_rate is not None else _get_default_flow_rate(op.tip, is_aspirate=True))
+      op.mix.flow_rate
+      if op.mix is not None
+      else (
+        op.flow_rate
+        if op.flow_rate is not None
+        else _get_default_flow_rate(op.tip, is_aspirate=True)
+      )
       for op in ops
     ]
 
@@ -2106,7 +2112,13 @@ class NimbusBackend(HamiltonTCPBackend):
     # Default mix_speed to dispense speed (flow_rates) when no mix operation
     # This matches the working version behavior
     mix_speed: List[float] = [
-      op.mix.flow_rate if op.mix is not None else (op.flow_rate if op.flow_rate is not None else _get_default_flow_rate(op.tip, is_aspirate=False))
+      op.mix.flow_rate
+      if op.mix is not None
+      else (
+        op.flow_rate
+        if op.flow_rate is not None
+        else _get_default_flow_rate(op.tip, is_aspirate=False)
+      )
       for op in ops
     ]
 
