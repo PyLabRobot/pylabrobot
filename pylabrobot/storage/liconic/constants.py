@@ -1,15 +1,15 @@
 from enum import Enum, IntEnum
 
 class LiconicType(Enum):
-  STX44_IC = "IC" # incubator
-  STX44_HC = "HC" # humid cooler
-  STX44_DC2 = "DC2" # dry storage
-  STX44_HR = "HR" # humid wide range
-  STX44_DR2 = "DR2" # dry wide range
-  STX44_AR = "AR" # humidity controlled
-  STX44_DF = "DF" # deep freezer
-  STX44_NC = "NC" # no climate
-  STX44_DH = "DH" # dry humid
+  STX44_IC = "STX44_IC" # incubator
+  STX44_HC = "STX44_HC" # humid cooler
+  STX44_DC2 = "STX44_DC2" # dry storage
+  STX44_HR = "STX44_HR" # humid wide range
+  STX44_DR2 = "STX44_DR2" # dry wide range
+  STX44_AR = "STX44_AR" # humidity controlled
+  STX44_DF = "STX44_DF" # deep freezer
+  STX44_NC = "STX44_NC" # no climate
+  STX44_DH = "STX44_DH" # dry humid
 
   STX110_IC = "STX110_IC" # incubator
   STX110_HC = "STX110_HC" # humid cooler
