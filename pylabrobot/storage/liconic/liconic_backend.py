@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Optional, Union, cast
 
 import serial
 
@@ -119,7 +119,7 @@ class LiconicBackend(IncubatorBackend):
     rack = site.parent
     assert isinstance(rack, PlateCarrier), "Site not in rack"
     assert self._racks is not None, "Racks not set"
-    rack_idx = self._racks.index(rack) + 1  # plr is 0-indexed, cytomat is 1-indexed
+    rack_idx = self._racks.index(rack) + 1  # plr is 0-indexed, liconic is 1-indexed
     site_idx = next(idx for idx, s in rack.sites.items() if s == site) + 1  # 1-indexed
     return rack_idx, site_idx
 
@@ -164,7 +164,8 @@ class LiconicBackend(IncubatorBackend):
     """ Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
     await self._send_command_plc(f"WR DM0 {m}") # cassette number
-    await self._send_command_plc(f"WR DM5 {n}") # plate position in cassette
+    await self._send_command_plc(f"WR DM23 788")
+    await self._send_command_plc(f"WR DM25 10") # plate position in cassette
     await self._send_command_plc("ST 1904")  # plate from transfer station
     await self._wait_ready()
 
