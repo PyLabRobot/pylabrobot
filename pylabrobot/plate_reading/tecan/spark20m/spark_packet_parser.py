@@ -67,8 +67,6 @@ PACKET_TYPE = {
 }
 
 
-
-
 class SparkPacket:
   def __init__(self, data_bytes: bytes):
     self.raw_data = data_bytes
@@ -116,8 +114,7 @@ class SparkPacket:
   def _parse_resp_ready(self) -> Dict[str, Any]:
     if not self.payload_bytes:
       return {"message": None}
-    reader = Reader(self.payload_bytes, little_endian=False)
-    return {"message": reader.string(len(self.payload_bytes))}
+    return {"message": self.payload_bytes.decode("utf-8", errors="ignore")}
 
   def _parse_resp_terminate(self) -> Dict[str, Any]:
     if len(self.payload_bytes) < 4:
@@ -135,13 +132,12 @@ class SparkPacket:
     return {"time": reader.u32()}
 
   def _parse_resp_log(self) -> Dict[str, Any]:
-    reader = Reader(self.payload_bytes, little_endian=False)
-    return {"message": reader.string(len(self.payload_bytes))}
+    return {"message": self.payload_bytes.decode("utf-8", errors="ignore")}
 
   def _parse_resp_message(self) -> Dict[str, Any]:
     reader = Reader(self.payload_bytes, little_endian=False)
     number = reader.u16()
-    message_str = reader.string(reader.remaining())
+    message_str = reader.remaining().decode("utf-8", errors="ignore")
     parts = message_str.split("|")
     return {"number": number, "format": parts[0], "args": parts[1:]}
 
@@ -149,7 +145,7 @@ class SparkPacket:
     reader = Reader(self.payload_bytes, little_endian=False)
     timestamp = reader.u32()
     number = reader.u16()
-    message_str = reader.string(reader.remaining())
+    message_str = reader.remaining().decode("utf-8", errors="ignore")
     parts = message_str.split("|")
     return {
       "async": is_async,
@@ -441,8 +437,8 @@ class SparkParser:
         try:
           count_packet = data_packets.popleft()
           count_payload = count_packet.parsed_payload["data"]
-          count_reader = Reader(count_payload, little_endian=False)
-          num_headers = count_reader.u16()
+          reader = Reader(count_payload, little_endian=False)
+          num_headers = reader.u16()
           logger.info(f"U16MULT_H indicates {num_headers} measurement blocks.")
         except Exception as e:
           logger.error(f"Error reading U16MULT_H count in seq {seq_num}: {e}")
