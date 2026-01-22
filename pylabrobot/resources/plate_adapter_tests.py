@@ -34,6 +34,7 @@ class TestPlateAdapter(unittest.TestCase):
         "category": "plate_adapter",
         "model": None,
         "barcode": None,
+        "preferred_pickup_distance_from_top": None,
         "children": [],
         "parent_name": None,
         "dx": 0.0,

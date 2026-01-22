@@ -42,6 +42,9 @@ class Resource:
     category: The category of the resource, e.g. `tips`, `plate_carrier`, etc.
     model: The model of the resource (optional).
     barcode: The barcode of the resource (optional).
+    preferred_pickup_distance_from_top: The preferred distance from the top of the resource to
+      pick it up from when using robotic arms (optional). This facilitates smart defaults on a
+      resource-by-resource basis for robotic arm movements.
   """
 
   def __init__(
@@ -54,6 +57,7 @@ class Resource:
     category: Optional[str] = None,
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
+    preferred_pickup_distance_from_top: Optional[float] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -64,6 +68,7 @@ class Resource:
     self.category = category
     self.model = model
     self.barcode = barcode
+    self.preferred_pickup_distance_from_top = preferred_pickup_distance_from_top
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
@@ -99,6 +104,7 @@ class Resource:
       "category": self.category,
       "model": self.model,
       "barcode": self.barcode.serialize() if self.barcode is not None else None,
+      "preferred_pickup_distance_from_top": self.preferred_pickup_distance_from_top,
       "children": [child.serialize() for child in self.children],
       "parent_name": self.parent.name if self.parent is not None else None,
     }
@@ -663,10 +669,12 @@ class Resource:
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
     barcode = data_copy.pop("barcode", None)
+    preferred_pickup_distance_from_top = data_copy.pop("preferred_pickup_distance_from_top", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
       resource.barcode = Barcode.deserialize(barcode)
+    resource.preferred_pickup_distance_from_top = preferred_pickup_distance_from_top
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)

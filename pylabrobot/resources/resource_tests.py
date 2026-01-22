@@ -240,6 +240,7 @@ class TestResource(unittest.TestCase):
           "symbology": "code128",
           "position_on_resource": "left",
         },
+        "preferred_pickup_distance_from_top": None,
       },
     )
 
@@ -287,12 +288,14 @@ class TestResource(unittest.TestCase):
             "parent_name": "test",
             "model": None,
             "barcode": None,
+            "preferred_pickup_distance_from_top": None,
           }
         ],
         "category": None,
         "parent_name": None,
         "model": None,
         "barcode": None,
+        "preferred_pickup_distance_from_top": None,
       },
     )
 
