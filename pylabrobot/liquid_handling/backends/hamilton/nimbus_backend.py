@@ -112,6 +112,30 @@ def _get_tip_type_from_tip(tip: Tip) -> int:
   )
 
 
+def _get_default_flow_rate(tip: Tip, is_aspirate: bool) -> float:
+  """Get default flow rate based on tip max volume.
+
+  Defaults from Hamilton Nimbus:
+    - 1000 ul tip: 250 asp / 400 disp
+    - 300 and 50 ul tip: 100 asp / 180 disp
+    - 10 ul tip: 100 asp / 75 disp
+
+  Args:
+    tip: Tip object to determine default flow rate for.
+    is_aspirate: True for aspirate, False for dispense.
+
+  Returns:
+    Default flow rate in uL/s.
+  """
+  max_vol = tip.maximal_volume
+  if max_vol >= 1000:
+    return 250.0 if is_aspirate else 400.0
+  if max_vol <= 10:
+    return 100.0 if is_aspirate else 75.0
+  # 50 and 300 ul tips
+  return 100.0 if is_aspirate else 180.0
+
+
 # ============================================================================
 # COMMAND CLASSES
 # ============================================================================
@@ -1401,12 +1425,8 @@ class NimbusBackend(HamiltonTCPBackend):
     begin_position = [round(begin_position_mm * 100)] * len(ops)
     end_position = [round(end_position_mm * 100)] * len(ops)
 
-    begin_position_full = self._fill_by_channels(
-      begin_position, use_channels, default=0
-    )
-    end_position_full = self._fill_by_channels(
-      end_position, use_channels, default=0
-    )
+    begin_position_full = self._fill_by_channels(begin_position, use_channels, default=0)
+    end_position_full = self._fill_by_channels(end_position, use_channels, default=0)
 
     return begin_position_full, end_position_full
 
@@ -1774,12 +1794,10 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Extract volumes and speeds from operations
     volumes = [op.volume for op in ops]  # in uL
-    # flow_rate should not be None - if it is, it's an error (no hardcoded fallback)
-    flow_rates: List[float] = []
-    for op in ops:
-      if op.flow_rate is None:
-        raise ValueError(f"flow_rate cannot be None for operation {op}")
-      flow_rates.append(op.flow_rate)
+    flow_rates: List[float] = [
+      op.flow_rate if op.flow_rate is not None else _get_default_flow_rate(op.tip, is_aspirate=True)
+      for op in ops
+    ]
     blow_out_air_volumes = [
       op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
     ]  # in uL, default 40
@@ -2064,12 +2082,12 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Extract volumes and speeds from operations
     volumes = [op.volume for op in ops]  # in uL
-    # flow_rate should not be None - if it is, it's an error (no hardcoded fallback)
-    flow_rates: List[float] = []
-    for op in ops:
-      if op.flow_rate is None:
-        raise ValueError(f"flow_rate cannot be None for operation {op}")
-      flow_rates.append(op.flow_rate)
+    flow_rates: List[float] = [
+      op.flow_rate
+      if op.flow_rate is not None
+      else _get_default_flow_rate(op.tip, is_aspirate=False)
+      for op in ops
+    ]
     blow_out_air_volumes = [
       op.blow_out_air_volume if op.blow_out_air_volume is not None else 40.0 for op in ops
     ]  # in uL, default 40
