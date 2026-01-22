@@ -77,9 +77,9 @@ def Cor_Axy_96_wellplate_500uL_Ub(name: str, with_lid: bool = False) -> Plate:
   """
   return Plate(
     name=name,
-    size_x=127.0,  # from spec
-    size_y=86.0,  # from spec
-    size_z=14.0,  # from spec
+    size_x=127.0,  # measured
+    size_y=85.51,  # measured
+    size_z=14.82,  # measured
     model="Cor_Axy_96_wellplate_500uL_Ub",
     ordered_items=create_ordered_items_2d(
       Well,
@@ -88,13 +88,13 @@ def Cor_Axy_96_wellplate_500uL_Ub(name: str, with_lid: bool = False) -> Plate:
       dx=9.6,  # measured
       dy=7.0,  # measured
       dz=1.2,  # measured
-      item_dx=9.0,  # from spec
-      item_dy=9.0,  # from spec
-      size_x=8.0,  # from spec
-      size_y=8.0,  # from spec
-      size_z=42.0,  # from spec
+      item_dx=9.0,  # measured
+      item_dy=9.0,  # measured
+      size_x=8.0,  # measured
+      size_y=8.0,  # measured
+      size_z=14.82-2.57,  # measured
       bottom_type=WellBottomType.U,
-      material_z_thickness=1.25,  # measured
+      material_z_thickness=1.18,  # measured
       cross_section_type=CrossSectionType.CIRCLE,
     ),
   )
