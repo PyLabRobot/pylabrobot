@@ -113,7 +113,7 @@ def _get_tip_type_from_tip(tip: Tip) -> int:
 
 
 def _get_default_flow_rate(tip: Tip, is_aspirate: bool) -> float:
-  """Get default flow rate based on tip max volume.
+  """Get default flow rate based on tip type.
 
   Defaults from Hamilton Nimbus:
     - 1000 ul tip: 250 asp / 400 disp
@@ -127,11 +127,14 @@ def _get_default_flow_rate(tip: Tip, is_aspirate: bool) -> float:
   Returns:
     Default flow rate in uL/s.
   """
-  max_vol = tip.maximal_volume
-  if max_vol >= 1000:
+  tip_type = _get_tip_type_from_tip(tip)
+
+  if tip_type in (NimbusTipType.HIGH_VOLUME_1000UL, NimbusTipType.HIGH_VOLUME_1000UL_FILTER):
     return 250.0 if is_aspirate else 400.0
-  if max_vol <= 10:
+
+  if tip_type in (NimbusTipType.LOW_VOLUME_10UL, NimbusTipType.LOW_VOLUME_10UL_FILTER):
     return 100.0 if is_aspirate else 75.0
+
   # 50 and 300 ul tips
   return 100.0 if is_aspirate else 180.0
 
