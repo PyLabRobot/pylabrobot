@@ -40,4 +40,5 @@ Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
+| 'thermo_nunc_1_troughplate_90000uL_Fb_omnitray'<br>Part no.: 165218, 140156, 242811, 264728 | ![](img/thermo_fisher/thermo_nunc_1_troughplate_90000uL_Fb_omnitray.jpg.avif) | `thermo_nunc_1_troughplate_90000uL_Fb_omnitray` |
 | 'ThermoFisherMatrixTrough8094'<br>Part no.: 8094<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/8094) | ![](img/thermo_fisher/ThermoFisherMatrixTrough8094.jpg.avif) | `ThermoFisherMatrixTrough8094` |

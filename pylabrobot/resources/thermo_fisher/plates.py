@@ -384,10 +384,10 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
   )
 
 
-# # # # # # # # # # thermo_nunc_1_wellplate_90000uL_Fb_omnitray # # # # # # # # # #
+# # # # # # # # # # thermo_nunc_1_troughplate_90000uL_Fb_omnitray # # # # # # # # # #
 
 
-def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
+def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name: str) -> Plate:
   """
   https://assets.fishersci.com/TFS-Assets/LSG/manuals/D03023.pdf
 
@@ -401,7 +401,7 @@ def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
     size_y=85.47,  # from spec
     size_z=14.5,  # from spec
     lid=None,  # TODO: define a matching Lid if you use one with this tray
-    model=thermo_nunc_1_wellplate_90000uL_Fb_omnitray.__name__,
+    model=thermo_nunc_1_troughplate_90000uL_Fb_omnitray.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,
@@ -457,3 +457,14 @@ def Thermo_TS_Nalgene_reservoir_300mL_Fb(name: str) -> Plate:
       material_z_thickness=1.15,  # measured.
     ),
   )
+def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
+  """Deprecated. Use :func:`thermo_nunc_1_troughplate_90000uL_Fb_omnitray` instead."""
+  import warnings
+
+  warnings.warn(
+    "thermo_nunc_1_wellplate_90000uL_Fb_omnitray is deprecated. "
+    "Use thermo_nunc_1_troughplate_90000uL_Fb_omnitray instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name=name)
