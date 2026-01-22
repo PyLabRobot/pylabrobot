@@ -13,6 +13,20 @@ CONFIG_FILE_NAME = "pylabrobot"
 CONFIG = load_config(CONFIG_FILE_NAME, create_default=False)
 
 
+def _is_running_in_jupyter() -> bool:
+  """
+  Check if the code is running in a Jupyter notebook environment.
+
+  Returns:
+    True if running in Jupyter, False otherwise.
+  """
+  try:
+    shell = get_ipython().__class__.__name__  # type: ignore[name-defined]
+    return bool(shell == "ZMQInteractiveShell")
+  except NameError:
+    return False
+
+
 def project_root() -> Path:
   """
   Get the root directory of the project.
@@ -62,6 +76,9 @@ def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
 def configure(cfg: Config):
   """Configure pylabrobot."""
   setup_logger(cfg.logging.log_dir, cfg.logging.level)
+  # Enable verbose mode by default when running in Jupyter notebook
+  if _is_running_in_jupyter():
+    verbose(True)
 
 
 configure(CONFIG)
