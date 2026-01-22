@@ -423,10 +423,10 @@ def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name: str) -> Plate:
   )
 
 
-# # # # # # # # # # Thermo_TS_Nalgene_reservoir_300mL_Fb # # # # # # # # # #
+# # # # # # # # # # Thermo_TS_Nalgene_1_troughplate_300000uL_Fb # # # # # # # # # #
 
 
-def Thermo_TS_Nalgene_reservoir_300mL_Fb(name: str) -> Plate:
+def Thermo_TS_Nalgene_1_troughplate_300000uL_Fb(name: str) -> Plate:
   """Thermo Fisher Scientific Nalgene 300mL Flat Bottom Reservoir
   - Product Number: 12001300 (non-sterile), 12001301 (sterile)
   - 1-well reservoir with SBS footprint
@@ -439,7 +439,7 @@ def Thermo_TS_Nalgene_reservoir_300mL_Fb(name: str) -> Plate:
     size_x=127.8,  # from spec
     size_y=85.5,  # from spec
     size_z=39.9,  # from spec
-    model="Thermo_TS_Nalgene_reservoir_300mL_Fb",
+    model=Thermo_TS_Nalgene_1_troughplate_300000uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,  # from spec
@@ -457,6 +457,8 @@ def Thermo_TS_Nalgene_reservoir_300mL_Fb(name: str) -> Plate:
       material_z_thickness=1.15,  # measured.
     ),
   )
+
+
 def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
   """Deprecated. Use :func:`thermo_nunc_1_troughplate_90000uL_Fb_omnitray` instead."""
   import warnings
