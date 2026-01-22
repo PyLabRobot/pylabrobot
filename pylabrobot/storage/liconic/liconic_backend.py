@@ -201,9 +201,6 @@ class LiconicBackend(IncubatorBackend):
   async def take_in_plate(self, site: PlateHolder, read_barcode: Optional[bool]=False):
     """ Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
-    await self._send_command_plc(f"WR DM0 {m}") # cassette number
-    await self._send_command_plc(f"WR DM23 788")
-    await self._send_command_plc(f"WR DM25 10") # plate position in cassette
     step_size, pos_num = self._carrier_to_steps_pos(site)
 
     await self._send_command_plc(f"WR DM0 {m}") # carousel number
