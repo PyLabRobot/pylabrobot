@@ -1808,7 +1808,12 @@ class NimbusBackend(HamiltonTCPBackend):
     # Extract mix parameters from op.mix if available. Otherwise use None.
     mix_volume: List[float] = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
     mix_cycles: List[int] = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
-    mix_speed: List[float] = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
+    # Default mix_speed to aspirate speed (flow_rates) when no mix operation
+    # This matches the working version behavior
+    mix_speed: List[float] = [
+      op.mix.flow_rate if op.mix is not None else (op.flow_rate if op.flow_rate is not None else _get_default_flow_rate(op.tip, is_aspirate=True))
+      for op in ops
+    ]
 
     # ========================================================================
     # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
@@ -2098,7 +2103,12 @@ class NimbusBackend(HamiltonTCPBackend):
     # Extract mix parameters from op.mix if available
     mix_volume: List[float] = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
     mix_cycles: List[int] = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
-    mix_speed: List[float] = [op.mix.flow_rate if op.mix is not None else 0.0 for op in ops]
+    # Default mix_speed to dispense speed (flow_rates) when no mix operation
+    # This matches the working version behavior
+    mix_speed: List[float] = [
+      op.mix.flow_rate if op.mix is not None else (op.flow_rate if op.flow_rate is not None else _get_default_flow_rate(op.tip, is_aspirate=False))
+      for op in ops
+    ]
 
     # ========================================================================
     # ADVANCED PARAMETERS: Fill in defaults using fill_in_defaults()
