@@ -80,6 +80,7 @@ class Plate(ItemizedResource["Well"]):
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
     plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
+    preferred_pickup_distance_from_top: Optional[float] = None,
   ):
     """Initialize a Plate resource.
 
@@ -100,6 +101,7 @@ class Plate(ItemizedResource["Well"]):
       ordering=ordering,
       category=category,
       model=model,
+      preferred_pickup_distance_from_top=preferred_pickup_distance_from_top,
     )
     self._lid: Optional[Lid] = None
     self.plate_type = plate_type

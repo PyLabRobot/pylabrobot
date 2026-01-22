@@ -51,6 +51,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     ordering: Optional[OrderedDict[str, str]] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    preferred_pickup_distance_from_top: Optional[float] = None,
   ):
     """Initialize an itemized resource
 
@@ -86,7 +87,15 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         ...   ordered_items={"A1": Well("well", size_x=1, size_y=1, size_z=1)})
     """
 
-    super().__init__(name, size_x, size_y, size_z, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      category=category,
+      model=model,
+      preferred_pickup_distance_from_top=preferred_pickup_distance_from_top,
+    )
 
     if ordered_items is not None:
       if ordering is not None:
