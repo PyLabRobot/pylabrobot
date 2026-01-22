@@ -151,6 +151,7 @@ class Incubator(Machine, Resource):
   async def stop_shaking(self):
     await self.backend.stop_shaking()
 
+  # REDO
   async def scan_barcode(self, m: int, n: int, pitch: int, plt_count: int):
     await self.backend.scan_barcode(cassette=m, position=n, pitch=pitch, plate_count=plt_count)
 
@@ -268,3 +269,7 @@ class Incubator(Machine, Resource):
   async def check_second_transfer_sensor(self) -> bool:
     """ Check if the second transfer plate sensor is activated."""
     return await self.backend.check_second_transfer_sensor()
+
+  async def move_position_to_position(self, plate: Plate, dest_site: PlateHolder, read_barcode: Optional[bool]=False):
+    """ Move a plate to another internal position in the storage unit """
+    return await self.backend.move_position_to_position(plate=plate, dest_site=dest_site, read_barcode=read_barcode)

@@ -198,7 +198,7 @@ class LiconicBackend(IncubatorBackend):
     await self._wait_ready()
     await self._send_command_plc("ST 1903")  # terminate access
 
-  async def take_in_plate(self, plate: Plate, site: PlateHolder, read_barcode: Optional[bool]=False):
+  async def take_in_plate(self, site: PlateHolder, read_barcode: Optional[bool]=False):
     """ Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
     await self._send_command_plc(f"WR DM0 {m}") # cassette number
@@ -218,12 +218,15 @@ class LiconicBackend(IncubatorBackend):
 
     await self._send_command_plc("ST 1903")  # terminate access
 
-  async def move_position_to_position(self,
-                                      plate: Plate,
-                                      orig_site: PlateHolder,
-                                      dest_site: PlateHolder,
-                                      read_barcode: Optional[bool]=False):
+  async def move_position_to_position(self, plate: Plate, dest_site: PlateHolder, read_barcode: Optional[bool]=False):
     """ Move plate from one internal position to another"""
+    orig_site = plate.parent
+    assert isinstance(orig_site, PlateHolder)
+    assert isinstance(dest_site, PlateHolder)
+
+    if dest_site.resource is not None:
+      raise RuntimeError(f"Position {dest_site} already has a plate assigned!")
+
     orig_m, orig_n = self._site_to_m_n(orig_site) # origin cassette # and plate position #
     dest_m, dest_n = self._site_to_m_n(dest_site) # destination cassette # and plate position #
 
