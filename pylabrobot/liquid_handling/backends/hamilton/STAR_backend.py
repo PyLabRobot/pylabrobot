@@ -8,6 +8,7 @@ import sys
 import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from typing import (
   Any,
   Callable,
@@ -1135,6 +1136,21 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
     return 3 if blow_out else 2
 
 
+@dataclass
+class Head96Information:
+  """Information about the installed 96-head."""
+
+  StopDiscType = Literal["core_i", "core_ii"]
+  InstrumentType = Literal["legacy", "FM-STAR"]
+
+  fw_version: str
+  fw_year: Optional[int]
+  supports_clot_monitoring_clld: bool
+  stop_disc_type: StopDiscType
+  instrument_type: InstrumentType
+  head_type: str
+
+
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   """Interface for the Hamilton STARBackend."""
 
@@ -1409,7 +1425,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
-    self.installations: dict[str, dict[str, Any]] = {}
+    self.head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -1461,28 +1477,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             z_position_at_the_command_end=self._channel_traversal_height,
           )
 
-        # Cache firmware version for version-specific behavior
+        # Cache firmware version and configuration for version-specific behavior
         raw_fw_version = await self.request_96head_firmware_version()
         fw_year = self._parse_firmware_version_year(raw_fw_version)
-
-        self.installations["96head"] = {
-          "fw_version": raw_fw_version,
-          "fw_year": fw_year,
-        }
-
         configuration_96head = await self.request_96head_configuration()
-        self.installations["96head"][
-          "clot_monitoring_clld"] = bool(int(configuration_96head[0]))
-        self.installations["96head"][
-          "stop_disc_type"] = STARBackend._96HEAD_STOP_DISC_TYPE[configuration_96head[1]]
-        self.installations["96head"][
-          "instrument_type"] = STARBackend._96HEAD_INSTRUMENT_TYPE[configuration_96head[2]]      
-        
         head96_type = await self.request_96head_type()
-        self.installations["96head"][
-          "type"] = head96_type
 
-        
+        self.head96_information = Head96Information(
+          fw_version=raw_fw_version,
+          fw_year=fw_year,
+          supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
+          stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
+          instrument_type="legacy" if configuration_96head[2] == "0" else "FM-STAR",
+          head_type=head96_type,
+        )
+
     async def set_up_arm_modules():
       await set_up_pip()
       await set_up_iswap()
@@ -6303,16 +6312,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     return await self.send_command(module="H0", command="RF")
 
-  _96HEAD_STOP_DISC_TYPE = {
-      "0": "core_i",
-      "1": "core_ii",
-  }
-
-  _96HEAD_INSTRUMENT_TYPE = {
-      "0": "legacy",
-      "1": "FM-STAR",
-  }
-
   async def request_96head_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
 
@@ -6329,24 +6328,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         List[str]: Raw positional tokens extracted from the QU response (the
             portion after the last ``"au"`` marker).
     """
-    resp = await self.send_command(module="H0", command="QU")
+    resp: str = await self.send_command(module="H0", command="QU")
     return resp.split("au")[-1].split()
 
   async def request_96head_type(self):
     """Send QG and return the 96-head type as a human-readable string."""
 
     type_96head_map = {
-        0: "Low volume head",
-        1: "High volume head",
-        2: "96 head II",
-        3: "96 head TADM",
+      0: "Low volume head",
+      1: "High volume head",
+      2: "96 head II",
+      3: "96 head TADM",
     }
 
-    resp = await self.send_command(
-      module="H0",
-      command="QG",
-        fmt="qg#"
-      )
+    resp = await self.send_command(module="H0", command="QG", fmt="qg#")
 
     return type_96head_map.get(resp["qg"], "unknown")
 
@@ -6446,7 +6441,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   def _96head_squeezer_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to squeezer drive hardware increments for 96-head."""
-    return round(value_mm / self._96head_squeezer_drive_mm_per_increment)
+    return round(value_mm / self._head96_squeezer_drive_mm_per_increment)
 
   def _96head_squeezer_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert squeezer drive hardware increments to mm for 96-head."""
@@ -6474,19 +6469,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def park_96head(
     self,
-    ):
+  ):
     """Park the 96-head.
     (ACTION command)
 
     Uses firmware default speeds and accelerations.
     """
-    
+
     assert self.core96_head_installed, "requires 96-head to be installed"
 
-    return await self.send_command(
-      module="H0",
-      command="MO"
-      )
+    return await self.send_command(module="H0", command="MO")
 
   async def move_96head_y(
     self,
@@ -6519,10 +6511,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      "96head" in self.installations and self.installations["96head"]["fw_year"] is not None
+      self.head96_information is not None and self.head96_information.fw_year is not None
     ), "requires 96-head firmware year information for safe operation"
 
-    fw_year = self.installations["96head"]["fw_year"]
+    fw_year = self.head96_information.fw_year
 
     # Determine speed limit based on firmware version
     # Pre-2021 firmware appears to have lower speed capability or safety limits
@@ -6533,7 +6525,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
     assert 0.78125 <= speed <= y_speed_upper_limit, (
       f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware year {fw_year}. "
-      f"Your firmware version: {self.installations['96head']['fw_version']}. "
+      f"Your firmware version: {self.head96_information.fw_version}. "
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
     )
@@ -6589,10 +6581,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      "96head" in self.installations and self.installations["96head"]["fw_year"] is not None
+      self.head96_information is not None and self.head96_information.fw_year is not None
     ), "requires 96-head firmware year information for safe operation"
 
-    fw_year = self.installations["96head"]["fw_year"]
+    fw_year = self.head96_information.fw_year
 
     # Validate parameters before hardware communication
     assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"

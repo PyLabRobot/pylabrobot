@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import STARBackend
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import Head96Information, STARBackend
 from pylabrobot.resources.well import Well
 
 
@@ -58,14 +58,18 @@ class STARChatterboxBackend(STARBackend):
     autoload_configuration_byte = configuration_data1[-4]
     self.autoload_installed = autoload_configuration_byte == "1"
 
-    self.installations = {}
-
     # Mock firmware information for 96-head if installed
     if self.core96_head_installed and not skip_core96_head:
-      self.installations["96head"] = {
-        "fw_version": "2023-01-01",
-        "fw_year": 2023,
-      }
+      self.head96_information = Head96Information(
+        fw_version="2023-01-01",
+        fw_year=2023,
+        supports_clot_monitoring_clld=False,
+        stop_disc_type="core_ii",
+        instrument_type="FM-STAR",
+        head_type="96head",
+      )
+    else:
+      self.head96_information = None
 
   async def request_tip_presence(self, mock_presence: Optional[List[int]] = None) -> List[int]:
     """Check mock tip presence with optional list for user-modifiable tip presence.
