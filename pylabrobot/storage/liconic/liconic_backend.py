@@ -352,7 +352,6 @@ class LiconicBackend(IncubatorBackend):
     cmd = command.strip() + "\r"
     logger.debug(f"Sending command to Barcode Reader: {cmd!r}")
     resp = await self.io_bcr.send_command(cmd)
-    #resp = (await self.io_bcr.read(128)).decode(self.serial_message_encoding)
     if not resp:
       raise RuntimeError(f"No response from Barcode Reader for command {command!r}")
     resp = resp.strip()

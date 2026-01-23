@@ -281,3 +281,7 @@ class Incubator(Machine, Resource):
     site.assign_child_resource(plate)
 
     return plate
+
+  async def scan_cassette(self, cassette: PlateCarrier):
+    """ Scan all positions in a single cassette aka carrier"""
+    return await self.backend.scan_cassette(cassette)
