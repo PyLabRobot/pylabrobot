@@ -384,10 +384,10 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
   )
 
 
-# # # # # # # # # # thermo_nunc_1_wellplate_90000uL_Fb_omnitray # # # # # # # # # #
+# # # # # # # # # # thermo_nunc_1_troughplate_90000uL_Fb_omnitray # # # # # # # # # #
 
 
-def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
+def thermo_nunc_1_troughplate_90000uL_Fb_omnitray(name: str) -> Plate:
   """
   https://assets.fishersci.com/TFS-Assets/LSG/manuals/D03023.pdf
 
@@ -401,7 +401,7 @@ def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
     size_y=85.47,  # from spec
     size_z=14.5,  # from spec
     lid=None,  # TODO: define a matching Lid if you use one with this tray
-    model=thermo_nunc_1_wellplate_90000uL_Fb_omnitray.__name__,
+    model=thermo_nunc_1_troughplate_90000uL_Fb_omnitray.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,
@@ -420,4 +420,51 @@ def thermo_nunc_1_wellplate_90000uL_Fb_omnitray(name: str) -> Plate:
       # compute_volume_from_height=None,
       # compute_height_from_volume=None,
     ),
+  )
+
+
+# # # # # # # # # # Thermo_TS_Nunc_96_wellplate_300uL_Fb # # # # # # # # # #
+
+
+def Thermo_TS_Nunc_96_wellplate_300uL_Fb(name: str, with_lid: bool = False) -> Plate:
+  """Thermo Scientific™ Nunc™ 96-Well Optical-Bottom Microplate, black, TC surface
+  - Product Number: 165305
+  - Max Volume: 400 uL
+  - working volume: 50-300uL (in practice, although spec sheet says 50-200uL))
+  - Manufacturer link: https://www.fishersci.com/shop/products/nunc-microwell-96-well-cell-culture-treated-flat-bottom-microplate/1256670#
+  - Spec sheet info: https://documents.thermofisher.com/TFS-Assets/LCD/Schematics-%26-Diagrams/1653xx_0713.pdf
+  """
+  return Plate(
+    name=name,
+    size_x=127.76,  # from spec
+    size_y=85.47,  # from spec
+    size_z=14.86,  # from spec
+    model="Thermo_TS_Nunc_96_wellplate_300uL_Fb",
+    lid=Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name + "_lid") if with_lid else None,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,  # from spec
+      num_items_y=8,  # from spec
+      dx=11.095,  # from spec
+      dy=8.025,  # from spec
+      dz=1.98,  # from spec
+      item_dx=9,  # from spec
+      item_dy=9,  # from spec
+      size_x=6.45,  # from spec
+      size_y=6.45,  # from spec
+      size_z=12.1,  # from spec
+      bottom_type=WellBottomType.FLAT,  # flat bottom wells
+      material_z_thickness=2.2,  # from spec
+    ),
+  )
+
+
+def Thermo_TS_Nunc_96_wellplate_300uL_Fb_Lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.25,  # from spec
+    size_y=85.3,  # from spec
+    size_z=9.1,  # from spec
+    nesting_z_height=16.7 - 14.86,  # from spec: lid+plate_z - plate_z
+    model="Thermo_TS_Nunc_96_assay_300uL_Fb_Lid",
   )
