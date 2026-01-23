@@ -6478,8 +6478,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
     return await self.send_command(module="C0", command="EV")
 
-  # TODO: async def move_96head_x()
-
   async def park_96head(
     self,
   ):
@@ -6491,6 +6489,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert self.core96_head_installed, "requires 96-head to be installed"
 
     return await self.send_command(module="H0", command="MO")
+
+  async def move_96head_x(self, x: float):
+    """Move the 96-head to a specified X-axis coordinate.
+
+    Note: Unlike move_96head_y and move_96head_z, the X-axis movement does not have
+    dedicated speed/acceleration parameters - it uses the EM command which moves
+    all axes together.
+
+    Args:
+      x: Target X coordinate in mm. Valid range: [-271.0, 974.0]
+
+    Returns:
+      Response from the hardware command.
+
+    Raises:
+      AssertionError: If 96-head not installed or parameter out of range.
+    """
+    assert self.core96_head_installed, "requires 96-head to be installed"
+    assert -271 <= x <= 974, "x must be between -271.0 and 974.0 mm"
+
+    current_pos = await self.request_96head_position()
+    return await self.move_96head_to_coordinate(
+      Coordinate(x, current_pos.y, current_pos.z),
+      minimum_height_at_beginning_of_a_command=current_pos.z - 10,
+    )
 
   async def move_96head_y(
     self,
@@ -7347,34 +7370,43 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def move_core_96_head_x(self, x_position: float):
-    """Move CoRe 96 Head X to absolute position"""
-    loc = await self.request_position_of_core_96_head()
-    await self.move_core_96_head_to_defined_position(
-      x=x_position,
-      y=loc["yh"],
-      z=loc["za"],
-      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+    """Move CoRe 96 Head X to absolute position
+
+    .. deprecated::
+      Use :meth:`move_96head_x` instead. Will be removed in 2025-06.
+    """
+    warnings.warn(
+      "`move_core_96_head_x` is deprecated. Use `move_96head_x` instead.",
+      DeprecationWarning,
+      stacklevel=2,
     )
+    return await self.move_96head_x(x_position)
 
   async def move_core_96_head_y(self, y_position: float):
-    """Move CoRe 96 Head Y to absolute position"""
-    loc = await self.request_position_of_core_96_head()
-    await self.move_core_96_head_to_defined_position(
-      x=loc["xs"],
-      y=y_position,
-      z=loc["za"],
-      minimum_height_at_beginning_of_a_command=loc["za"],
+    """Move CoRe 96 Head Y to absolute position
+
+    .. deprecated::
+      Use :meth:`move_96head_y` instead. Will be removed in 2025-06.
+    """
+    warnings.warn(
+      "`move_core_96_head_y` is deprecated. Use `move_96head_y` instead.",
+      DeprecationWarning,
+      stacklevel=2,
     )
+    return await self.move_96head_y(y_position)
 
   async def move_core_96_head_z(self, z_position: float):
-    """Move CoRe 96 Head Z to absolute position"""
-    loc = await self.request_position_of_core_96_head()
-    await self.move_core_96_head_to_defined_position(
-      x=loc["xs"],
-      y=loc["yh"],
-      z=z_position,
-      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+    """Move CoRe 96 Head Z to absolute position
+
+    .. deprecated::
+      Use :meth:`move_96head_z` instead. Will be removed in 2025-06.
+    """
+    warnings.warn(
+      "`move_core_96_head_z` is deprecated. Use `move_96head_z` instead.",
+      DeprecationWarning,
+      stacklevel=2,
     )
+    return await self.move_96head_z(z_position)
 
   # -------------- 3.10.5 Wash procedure commands using CoRe 96 Head --------------
 
