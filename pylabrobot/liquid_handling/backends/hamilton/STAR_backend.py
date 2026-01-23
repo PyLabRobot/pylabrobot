@@ -1142,12 +1142,13 @@ class Head96Information:
 
   StopDiscType = Literal["core_i", "core_ii"]
   InstrumentType = Literal["legacy", "FM-STAR"]
+  HeadType = Literal["Low volume head", "High volume head", "96 head II", "96 head TADM", "unknown"]
 
   fw_version: datetime.date
   supports_clot_monitoring_clld: bool
   stop_disc_type: StopDiscType
   instrument_type: InstrumentType
-  head_type: str
+  head_type: HeadType
 
 
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
@@ -6346,19 +6347,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp: str = await self.send_command(module="H0", command="QU")
     return resp.split("au")[-1].split()
 
-  async def head96_request_type(self):
+  async def head96_request_type(self) -> Head96Information.HeadType:
     """Send QG and return the 96-head type as a human-readable string."""
-
-    type_96head_map = {
+    type_map: Dict[int, Head96Information.HeadType] = {
       0: "Low volume head",
       1: "High volume head",
       2: "96 head II",
       3: "96 head TADM",
     }
-
     resp = await self.send_command(module="H0", command="QG", fmt="qg#")
-
-    return type_96head_map.get(resp["qg"], "unknown")
+    return type_map.get(resp["qg"], "unknown")
 
   # -------------- 3.10.1 Initialization --------------
 

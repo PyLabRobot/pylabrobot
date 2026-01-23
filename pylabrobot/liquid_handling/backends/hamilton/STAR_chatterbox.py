@@ -66,7 +66,7 @@ class STARChatterboxBackend(STARBackend):
         supports_clot_monitoring_clld=False,
         stop_disc_type="core_ii",
         instrument_type="FM-STAR",
-        head_type="96head",
+        head_type="96 head II",
       )
     else:
       self._head96_information = None
