@@ -6543,7 +6543,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      self._head96_information is not None and self._head96_information.fw_version is not None
+      self._head96_information is not None
     ), "requires 96-head firmware version information for safe operation"
 
     fw_version = self._head96_information.fw_version
@@ -6612,7 +6612,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      self._head96_information is not None and self._head96_information.fw_version is not None
+      self._head96_information is not None
     ), "requires 96-head firmware version information for safe operation"
 
     fw_version = self._head96_information.fw_version
