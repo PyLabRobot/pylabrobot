@@ -1143,8 +1143,7 @@ class Head96Information:
   StopDiscType = Literal["core_i", "core_ii"]
   InstrumentType = Literal["legacy", "FM-STAR"]
 
-  fw_version: str
-  fw_year: Optional[int]
+  fw_version: datetime.date
   supports_clot_monitoring_clld: bool
   stop_disc_type: StopDiscType
   instrument_type: InstrumentType
@@ -1378,17 +1377,37 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Parse a response from the machine."""
     return parse_star_fw_string(resp, fmt)
 
-  def _parse_firmware_version_year(self, fw_version: str) -> Optional[int]:
-    """Extract year from firmware version string.
+  def _parse_firmware_version_datetime(self, fw_version: str) -> datetime.date:
+    """Extract datetime from firmware version string.
 
     Args:
-        fw_version: Firmware version string (e.g., "v2021.03.15" or "2023_Q2_v1.4")
+      fw_version: Firmware version string (e.g., "v2021.03.15" or "2023_Q2_v1.4")
 
     Returns:
-        Extracted 4-digit year or None if not found.
+      A datetime object representing the extracted date
     """
+    # year_match = re.search(r"\b(20\d{2})\b", fw_version)
+    # return int(year_match.group(1)) if year_match else None
+
+    # Prefer full date patterns like YYYY.MM.DD / YYYY_MM_DD / YYYY-MM-DD
+    date_match = re.search(r"\b(20\d{2})[._-](\d{2})[._-](\d{2})\b", fw_version)
+    if date_match:
+      y, m, d = map(int, date_match.groups())
+      return datetime.date(y, m, d)
+
+    # Handle quarter formats like 2023_Q2 -> first day of the quarter
+    q_match = re.search(r"\b(20\d{2})_Q([1-4])\b", fw_version, flags=re.IGNORECASE)
+    if q_match:
+      y = int(q_match.group(1))
+      q = int(q_match.group(2))
+      month = (q - 1) * 3 + 1
+      return datetime.date(y, month, 1)
+
+    # Fall back to year only -> Jan 1st of that year, or None
     year_match = re.search(r"\b(20\d{2})\b", fw_version)
-    return int(year_match.group(1)) if year_match else None
+    if year_match is None:
+      raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
+    return datetime.date(int(year_match.group(1)), 1, 1)
 
   async def setup(
     self,
@@ -1478,14 +1497,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
 
         # Cache firmware version and configuration for version-specific behavior
-        raw_fw_version = await self.request_96head_firmware_version()
-        fw_year = self._parse_firmware_version_year(raw_fw_version)
+        fw_version = await self.request_96head_firmware_version()
         configuration_96head = await self.request_96head_configuration()
         head96_type = await self.request_96head_type()
 
         self._head96_information = Head96Information(
-          fw_version=raw_fw_version,
-          fw_year=fw_year,
+          fw_version=fw_version,
           supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
           stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
           instrument_type="legacy" if configuration_96head[2] == "0" else "FM-STAR",
@@ -6306,11 +6323,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10 96-Head commands --------------
 
-  async def request_96head_firmware_version(self):
-    """Request 96 Head firmware version
-    (MEM-READ command)
-    """
-    return await self.send_command(module="H0", command="RF")
+  async def request_96head_firmware_version(self) -> datetime.date:
+    """Request 96 Head firmware version (MEM-READ command)."""
+    resp: str = await self.send_command(module="H0", command="RF")
+    return self._parse_firmware_version_datetime(resp)
 
   async def request_96head_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
@@ -6511,20 +6527,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      self._head96_information is not None and self._head96_information.fw_year is not None
-    ), "requires 96-head firmware year information for safe operation"
+      self._head96_information is not None and self._head96_information.fw_version is not None
+    ), "requires 96-head firmware version information for safe operation"
 
-    fw_year = self._head96_information.fw_year
+    fw_version = self._head96_information.fw_version
 
     # Determine speed limit based on firmware version
     # Pre-2021 firmware appears to have lower speed capability or safety limits
     # TODO: Verify exact firmware version and investigate the reason for this change
-    y_speed_upper_limit = 390.625 if fw_year <= 2021 else 625.0  # mm/sec
+    y_speed_upper_limit = 390.625 if fw_version.year <= 2021 else 625.0  # mm/sec
 
     # Validate parameters before hardware communication
     assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
     assert 0.78125 <= speed <= y_speed_upper_limit, (
-      f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware year {fw_year}. "
+      f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware version {fw_version}. "
       f"Your firmware version: {self._head96_information.fw_version}. "
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
@@ -6581,10 +6597,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      self._head96_information is not None and self._head96_information.fw_year is not None
-    ), "requires 96-head firmware year information for safe operation"
+      self._head96_information is not None and self._head96_information.fw_version is not None
+    ), "requires 96-head firmware version information for safe operation"
 
-    fw_year = self._head96_information.fw_year
+    fw_version = self._head96_information.fw_version
 
     # Validate parameters before hardware communication
     assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"
@@ -6598,7 +6614,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Pre-2021 firmware: acceleration parameter is multiplied by 100
     # 2021+ firmware: acceleration parameter is 1:1 with increment/sec**2
     # TODO: identify exact firmware version that introduced this change
-    acceleration_multiplier = 1 if fw_year >= 2021 else 100
+    acceleration_multiplier = 1 if fw_version.year >= 2021 else 100
 
     # Convert mm-based parameters to hardware increments
     z_increment = self._96head_z_drive_mm_to_increment(z)

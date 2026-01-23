@@ -1,3 +1,4 @@
+import datetime
 from contextlib import asynccontextmanager
 from typing import List, Literal, Optional, Union
 
@@ -61,8 +62,7 @@ class STARChatterboxBackend(STARBackend):
     # Mock firmware information for 96-head if installed
     if self.core96_head_installed and not skip_core96_head:
       self._head96_information = Head96Information(
-        fw_version="2023-01-01",
-        fw_year=2023,
+        fw_version=datetime.date(2023, 1, 1),
         supports_clot_monitoring_clld=False,
         stop_disc_type="core_ii",
         instrument_type="FM-STAR",
@@ -160,9 +160,9 @@ class STARChatterboxBackend(STARBackend):
     """Return mock iSWAP initialization status."""
     return True
 
-  async def request_96head_firmware_version(self) -> str:
+  async def request_96head_firmware_version(self) -> datetime.date:
     """Return mock 96-head firmware version."""
-    return "v2023-01-01"
+    return datetime.date(2023, 1, 1)
 
   @property
   def iswap_parked(self) -> bool:
