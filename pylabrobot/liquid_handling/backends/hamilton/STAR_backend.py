@@ -1498,7 +1498,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
         # Cache firmware version and configuration for version-specific behavior
         fw_version = await self.request_96head_firmware_version()
-        configuration_96head = await self.request_96head_configuration()
+        configuration_96head = await self._request_96head_configuration()
         head96_type = await self.request_96head_type()
 
         self._head96_information = Head96Information(
@@ -6328,7 +6328,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp: str = await self.send_command(module="H0", command="RF")
     return self._parse_firmware_version_datetime(resp)
 
-  async def request_96head_configuration(self) -> List[str]:
+  async def _request_96head_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
 
     The instrument returns a sequence of positional tokens. This method returns
@@ -6341,8 +6341,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         - indices 3..9: reservable positions (positions 4..10)
 
     Returns:
-        List[str]: Raw positional tokens extracted from the QU response (the
-            portion after the last ``"au"`` marker).
+      Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
     """
     resp: str = await self.send_command(module="H0", command="QU")
     return resp.split("au")[-1].split()
@@ -6476,9 +6475,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.move_96head_to_z_safety()
 
   async def move_96head_to_z_safety(self):
-    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm.
-    (ACTION command)
-    """
+    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
     return await self.send_command(module="C0", command="EV")
 
   # TODO: async def move_96head_x()
@@ -6487,7 +6484,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self,
   ):
     """Park the 96-head.
-    (ACTION command)
 
     Uses firmware default speeds and accelerations.
     """
@@ -6504,7 +6500,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_protection_limiter: int = 15,
   ):
     """Move the 96-head to a specified Y-axis coordinate.
-    (ACTION command)
 
     Args:
       y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
@@ -6576,12 +6571,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     current_protection_limiter: int = 15,
   ):
     """Move the 96-head to a specified Z-axis coordinate.
-    (ACTION command)
 
     Args:
       z: Target Z coordinate in mm. Valid range: [180.5, 342.5]
       speed: Movement speed in mm/sec. Valid range: [0.25, 100.0]. Default: 80.0
-      acceleration: Movement acceleration in mm/sec². Valid range: [25.0, 500.0]. Default: 300.0
+      acceleration: Movement acceleration in mm/sec^2. Valid range: [25.0, 500.0]. Default: 300.0
       current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
 
     Returns:
@@ -7325,7 +7319,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_height_at_beginning_of_a_command: float = 342.5,
   ):
     """Move STAR(let) 96-Head to defined Coordinate
-    (ACTION command)
 
     Args:
       coordinate: Coordinate of A1 in mm
