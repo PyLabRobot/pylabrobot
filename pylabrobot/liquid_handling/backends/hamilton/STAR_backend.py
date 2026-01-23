@@ -6420,7 +6420,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Convert Y-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
 
-  # Dispensing drive conversions (mm and µL)
+  # Dispensing drive conversions (mm and uL)
 
   def _head96_dispensing_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to dispensing drive hardware increments for 96-head."""
@@ -6431,22 +6431,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return round(value_increments * self._head96_dispensing_drive_mm_per_increment, 2)
 
   def _head96_dispensing_drive_uL_to_increment(self, value_uL: float) -> int:
-    """Convert µL to dispensing drive hardware increments for 96-head."""
+    """Convert uL to dispensing drive hardware increments for 96-head."""
     return round(value_uL / self._head96_dispensing_drive_uL_per_increment)
 
   def _head96_dispensing_drive_increment_to_uL(self, value_increments: int) -> float:
-    """Convert dispensing drive hardware increments to µL for 96-head."""
+    """Convert dispensing drive hardware increments to uL for 96-head."""
     return round(value_increments * self._head96_dispensing_drive_uL_per_increment, 2)
 
   def _head96_dispensing_drive_mm_to_uL(self, value_mm: float) -> float:
-    """Convert dispensing drive mm to µL for 96-head."""
-    # Convert mm -> increment -> µL
+    """Convert dispensing drive mm to uL for 96-head."""
+    # Convert mm -> increment -> uL
     increment = self._head96_dispensing_drive_mm_to_increment(value_mm)
     return self._head96_dispensing_drive_increment_to_uL(increment)
 
   def _head96_dispensing_drive_uL_to_mm(self, value_uL: float) -> float:
-    """Convert dispensing drive µL to mm for 96-head."""
-    # Convert µL -> increment -> mm
+    """Convert dispensing drive uL to mm for 96-head."""
+    # Convert uL -> increment -> mm
     increment = self._head96_dispensing_drive_uL_to_increment(value_uL)
     return self._head96_dispensing_drive_increment_to_mm(increment)
 
