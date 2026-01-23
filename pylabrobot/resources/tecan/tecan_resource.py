@@ -26,6 +26,7 @@ class TecanResource(Resource):
     off_y: float = 0,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    preferred_pickup_distance_from_top: Optional[float] = None,
   ):
     super().__init__(
       name=name,
@@ -34,6 +35,7 @@ class TecanResource(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      preferred_pickup_distance_from_top=preferred_pickup_distance_from_top,
     )
 
     self.off_x = off_x
