@@ -1949,10 +1949,13 @@ class LiquidHandler(Resource, Machine):
     self,
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: float = 0,
+    pickup_distance_from_top: Optional[float] = None,
     direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs,
   ):
+    if pickup_distance_from_top is None:
+      pickup_distance_from_top = resource.preferred_pickup_distance_from_top or 0
+
     self._log_command(
       "pick_up_resource",
       resource=resource,
