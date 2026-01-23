@@ -1497,9 +1497,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
 
         # Cache firmware version and configuration for version-specific behavior
-        fw_version = await self.request_96head_firmware_version()
-        configuration_96head = await self._request_96head_configuration()
-        head96_type = await self.request_96head_type()
+        fw_version = await self.head96_request_firmware_version()
+        configuration_96head = await self._head96_request_configuration()
+        head96_type = await self.head96_request_type()
 
         self._head96_information = Head96Information(
           fw_version=fw_version,
@@ -6323,12 +6323,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10 96-Head commands --------------
 
-  async def request_96head_firmware_version(self) -> datetime.date:
+  async def head96_request_firmware_version(self) -> datetime.date:
     """Request 96 Head firmware version (MEM-READ command)."""
     resp: str = await self.send_command(module="H0", command="RF")
     return self._parse_firmware_version_datetime(resp)
 
-  async def _request_96head_configuration(self) -> List[str]:
+  async def _head96_request_configuration(self) -> List[str]:
     """Request the 96-head configuration (raw) using the QU command.
 
     The instrument returns a sequence of positional tokens. This method returns
@@ -6346,7 +6346,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp: str = await self.send_command(module="H0", command="QU")
     return resp.split("au")[-1].split()
 
-  async def request_96head_type(self):
+  async def head96_request_type(self):
     """Send QG and return the 96-head type as a human-readable string."""
 
     type_96head_map = {
@@ -6404,61 +6404,61 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # Z-axis conversions
 
-  def _96head_z_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to Z-axis hardware increments for 96-head."""
     return round(value_mm / self._head96_z_drive_mm_per_increment)
 
-  def _96head_z_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert Z-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
 
   # Y-axis conversions
 
-  def _96head_y_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _head96_y_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to Y-axis hardware increments for 96-head."""
     return round(value_mm / self._head96_y_drive_mm_per_increment)
 
-  def _96head_y_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _head96_y_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert Y-axis hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
 
   # Dispensing drive conversions (mm and µL)
 
-  def _96head_dispensing_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _head96_dispensing_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to dispensing drive hardware increments for 96-head."""
     return round(value_mm / self._head96_dispensing_drive_mm_per_increment)
 
-  def _96head_dispensing_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _head96_dispensing_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert dispensing drive hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_dispensing_drive_mm_per_increment, 2)
 
-  def _96head_dispensing_drive_uL_to_increment(self, value_uL: float) -> int:
+  def _head96_dispensing_drive_uL_to_increment(self, value_uL: float) -> int:
     """Convert µL to dispensing drive hardware increments for 96-head."""
     return round(value_uL / self._head96_dispensing_drive_uL_per_increment)
 
-  def _96head_dispensing_drive_increment_to_uL(self, value_increments: int) -> float:
+  def _head96_dispensing_drive_increment_to_uL(self, value_increments: int) -> float:
     """Convert dispensing drive hardware increments to µL for 96-head."""
     return round(value_increments * self._head96_dispensing_drive_uL_per_increment, 2)
 
-  def _96head_dispensing_drive_mm_to_uL(self, value_mm: float) -> float:
+  def _head96_dispensing_drive_mm_to_uL(self, value_mm: float) -> float:
     """Convert dispensing drive mm to µL for 96-head."""
     # Convert mm -> increment -> µL
-    increment = self._96head_dispensing_drive_mm_to_increment(value_mm)
-    return self._96head_dispensing_drive_increment_to_uL(increment)
+    increment = self._head96_dispensing_drive_mm_to_increment(value_mm)
+    return self._head96_dispensing_drive_increment_to_uL(increment)
 
-  def _96head_dispensing_drive_uL_to_mm(self, value_uL: float) -> float:
+  def _head96_dispensing_drive_uL_to_mm(self, value_uL: float) -> float:
     """Convert dispensing drive µL to mm for 96-head."""
     # Convert µL -> increment -> mm
-    increment = self._96head_dispensing_drive_uL_to_increment(value_uL)
-    return self._96head_dispensing_drive_increment_to_mm(increment)
+    increment = self._head96_dispensing_drive_uL_to_increment(value_uL)
+    return self._head96_dispensing_drive_increment_to_mm(increment)
 
   # Squeezer drive conversions
 
-  def _96head_squeezer_drive_mm_to_increment(self, value_mm: float) -> int:
+  def _head96_squeezer_drive_mm_to_increment(self, value_mm: float) -> int:
     """Convert mm to squeezer drive hardware increments for 96-head."""
     return round(value_mm / self._head96_squeezer_drive_mm_per_increment)
 
-  def _96head_squeezer_drive_increment_to_mm(self, value_increments: int) -> float:
+  def _head96_squeezer_drive_increment_to_mm(self, value_increments: int) -> float:
     """Convert squeezer drive hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_squeezer_drive_mm_per_increment, 2)
 
@@ -6467,18 +6467,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def move_core_96_to_safe_position(self):
     """Move CoRe 96 Head to Z safe position."""
     warnings.warn(
-      "move_core_96_to_safe_position is deprecated. Use move_96head_to_z_safety instead. "
+      "move_core_96_to_safe_position is deprecated. Use head96_move_to_z_safety instead. "
       "This method will be removed in 2026-04",  # TODO: remove 2026-04
       DeprecationWarning,
       stacklevel=2,
     )
-    return await self.move_96head_to_z_safety()
+    return await self.head96_move_to_z_safety()
 
-  async def move_96head_to_z_safety(self):
+  async def head96_move_to_z_safety(self):
     """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
     return await self.send_command(module="C0", command="EV")
 
-  async def park_96head(
+  async def head96_park(
     self,
   ):
     """Park the 96-head.
@@ -6490,10 +6490,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="H0", command="MO")
 
-  async def move_96head_x(self, x: float):
+  async def head96_move_x(self, x: float):
     """Move the 96-head to a specified X-axis coordinate.
 
-    Note: Unlike move_96head_y and move_96head_z, the X-axis movement does not have
+    Note: Unlike head96_move_y and head96_move_z, the X-axis movement does not have
     dedicated speed/acceleration parameters - it uses the EM command which moves
     all axes together.
 
@@ -6509,13 +6509,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert -271 <= x <= 974, "x must be between -271.0 and 974.0 mm"
 
-    current_pos = await self.request_96head_position()
-    return await self.move_96head_to_coordinate(
+    current_pos = await self.head96_request_position()
+    return await self.head96_move_to_coordinate(
       Coordinate(x, current_pos.y, current_pos.z),
       minimum_height_at_beginning_of_a_command=current_pos.z - 10,
     )
 
-  async def move_96head_y(
+  async def head96_move_y(
     self,
     y: float,
     speed: float = 300.0,
@@ -6571,9 +6571,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ), "current_protection_limiter must be an integer between 0 and 15"
 
     # Convert mm-based parameters to hardware increments using conversion methods
-    y_increment = self._96head_y_drive_mm_to_increment(y)
-    speed_increment = self._96head_y_drive_mm_to_increment(speed)
-    acceleration_increment = self._96head_y_drive_mm_to_increment(acceleration)
+    y_increment = self._head96_y_drive_mm_to_increment(y)
+    speed_increment = self._head96_y_drive_mm_to_increment(speed)
+    acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
 
     resp = await self.send_command(
       module="H0",
@@ -6586,7 +6586,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
-  async def move_96head_z(
+  async def head96_move_z(
     self,
     z: float,
     speed: float = 80.0,
@@ -6634,10 +6634,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_multiplier = 1 if fw_version.year >= 2021 else 100
 
     # Convert mm-based parameters to hardware increments
-    z_increment = self._96head_z_drive_mm_to_increment(z)
-    speed_increment = self._96head_z_drive_mm_to_increment(speed)
+    z_increment = self._head96_z_drive_mm_to_increment(z)
+    speed_increment = self._head96_z_drive_mm_to_increment(speed)
     acceleration_increment = round(
-      self._96head_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
+      self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
     )
 
     resp = await self.send_command(
@@ -7315,7 +7315,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     warnings.warn(  # TODO: remove 2025-02
       "`move_core_96_head_to_defined_position` is deprecated and will be "
-      "removed in 2025-02. Use `move_96head_to_coordinate` instead.",
+      "removed in 2025-02. Use `head96_move_to_coordinate` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
@@ -7336,7 +7336,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
-  async def move_96head_to_coordinate(
+  async def head96_move_to_coordinate(
     self,
     coordinate: Coordinate,
     minimum_height_at_beginning_of_a_command: float = 342.5,
@@ -7373,40 +7373,40 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move CoRe 96 Head X to absolute position
 
     .. deprecated::
-      Use :meth:`move_96head_x` instead. Will be removed in 2025-06.
+      Use :meth:`head96_move_x` instead. Will be removed in 2025-06.
     """
     warnings.warn(
-      "`move_core_96_head_x` is deprecated. Use `move_96head_x` instead.",
+      "`move_core_96_head_x` is deprecated. Use `head96_move_x` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
-    return await self.move_96head_x(x_position)
+    return await self.head96_move_x(x_position)
 
   async def move_core_96_head_y(self, y_position: float):
     """Move CoRe 96 Head Y to absolute position
 
     .. deprecated::
-      Use :meth:`move_96head_y` instead. Will be removed in 2025-06.
+      Use :meth:`head96_move_y` instead. Will be removed in 2025-06.
     """
     warnings.warn(
-      "`move_core_96_head_y` is deprecated. Use `move_96head_y` instead.",
+      "`move_core_96_head_y` is deprecated. Use `head96_move_y` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
-    return await self.move_96head_y(y_position)
+    return await self.head96_move_y(y_position)
 
   async def move_core_96_head_z(self, z_position: float):
     """Move CoRe 96 Head Z to absolute position
 
     .. deprecated::
-      Use :meth:`move_96head_z` instead. Will be removed in 2025-06.
+      Use :meth:`head96_move_z` instead. Will be removed in 2025-06.
     """
     warnings.warn(
-      "`move_core_96_head_z` is deprecated. Use `move_96head_z` instead.",
+      "`move_core_96_head_z` is deprecated. Use `head96_move_z` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
-    return await self.move_96head_z(z_position)
+    return await self.head96_move_z(z_position)
 
   # -------------- 3.10.5 Wash procedure commands using CoRe 96 Head --------------
 
@@ -7436,7 +7436,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     warnings.warn(  # TODO: remove 2025-02
       "`request_position_of_core_96_head` is deprecated and will be "
-      "removed in 2025-02 use `request_96head_position` instead.",
+      "removed in 2025-02 use `head96_request_position` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
@@ -7447,7 +7447,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp["za"] = resp["za"] / 10
     return resp
 
-  async def request_96head_position(self) -> Coordinate:
+  async def head96_request_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
     (MEM-READ command)
 
