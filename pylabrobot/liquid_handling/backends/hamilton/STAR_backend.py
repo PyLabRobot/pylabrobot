@@ -1425,7 +1425,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
-    self.head96_information: Optional[Head96Information] = None
+    self._head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -1483,7 +1483,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         configuration_96head = await self.request_96head_configuration()
         head96_type = await self.request_96head_type()
 
-        self.head96_information = Head96Information(
+        self._head96_information = Head96Information(
           fw_version=raw_fw_version,
           fw_year=fw_year,
           supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
@@ -6511,10 +6511,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      self.head96_information is not None and self.head96_information.fw_year is not None
+      self._head96_information is not None and self._head96_information.fw_year is not None
     ), "requires 96-head firmware year information for safe operation"
 
-    fw_year = self.head96_information.fw_year
+    fw_year = self._head96_information.fw_year
 
     # Determine speed limit based on firmware version
     # Pre-2021 firmware appears to have lower speed capability or safety limits
@@ -6525,7 +6525,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
     assert 0.78125 <= speed <= y_speed_upper_limit, (
       f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware year {fw_year}. "
-      f"Your firmware version: {self.head96_information.fw_version}. "
+      f"Your firmware version: {self._head96_information.fw_version}. "
       "If this limit seems incorrect, please test cautiously with an empty deck and report "
       "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
     )
@@ -6581,10 +6581,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate 96-head installation and firmware info availability
     assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
-      self.head96_information is not None and self.head96_information.fw_year is not None
+      self._head96_information is not None and self._head96_information.fw_year is not None
     ), "requires 96-head firmware year information for safe operation"
 
-    fw_year = self.head96_information.fw_year
+    fw_year = self._head96_information.fw_year
 
     # Validate parameters before hardware communication
     assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"

@@ -60,7 +60,7 @@ class STARChatterboxBackend(STARBackend):
 
     # Mock firmware information for 96-head if installed
     if self.core96_head_installed and not skip_core96_head:
-      self.head96_information = Head96Information(
+      self._head96_information = Head96Information(
         fw_version="2023-01-01",
         fw_year=2023,
         supports_clot_monitoring_clld=False,
@@ -69,7 +69,7 @@ class STARChatterboxBackend(STARBackend):
         head_type="96head",
       )
     else:
-      self.head96_information = None
+      self._head96_information = None
 
   async def request_tip_presence(self, mock_presence: Optional[List[int]] = None) -> List[int]:
     """Check mock tip presence with optional list for user-modifiable tip presence.
