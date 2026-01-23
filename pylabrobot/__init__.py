@@ -81,9 +81,6 @@ def configure(cfg: Config):
     verbose(True)
 
 
-configure(CONFIG)
-
-
 def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
   """Add a StreamHandler to the pylabrobot logger to make logging output visible to the console.
   If set to False, remove the console StreamHandler. This only removes StreamHandlers that output
@@ -100,3 +97,6 @@ def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
     handler.setLevel(level)
     handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
+
+
+configure(CONFIG)
