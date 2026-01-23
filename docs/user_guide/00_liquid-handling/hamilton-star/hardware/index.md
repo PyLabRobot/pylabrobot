@@ -1,4 +1,4 @@
-# Hamilton STAR Hardware Guide
+# STAR Hardware Guide
 
 ```{toctree}
 :maxdepth: 1

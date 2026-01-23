@@ -1,4 +1,4 @@
-# iSWAP Module
+# iSWAP
 
 The `R0` module allows fine grained control of the iSWAP gripper.
 
