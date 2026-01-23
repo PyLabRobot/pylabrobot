@@ -13,7 +13,9 @@ from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.backend import IncubatorBackend
 from pylabrobot.barcode_scanners.keyence import KeyenceBarcodeScannerBackend
-from pylabrobot.storage.liconic.constants import LiconicType
+from pylabrobot.storage.liconic.constants import LiconicType, ControllerError, HandlingError
+
+from pylabrobot.storage.liconic.errors import controller_error_map, handler_error_map
 
 logger = logging.getLogger(__name__)
 
@@ -274,8 +276,54 @@ class LiconicBackend(IncubatorBackend):
       return "No barcode"
 
 
-  async def scan_cassette(self,):
-    pass
+  async def scan_cassette(self, cassette:PlateCarrier):
+    """ Scan all barcodes in a cartridge using the internal barcode reader. Using command LON """
+    if not self.barcode_installed:
+      raise RuntimeError("Barcode reader not installed in this incubator instance")
+
+    await self._send_command_bcr("SSET") # enter settings mode
+    await self._send_command_bcr("WP121") # setting barcode scanner to multi-read mode
+    confirm = await self._send_command_bcr("RP12") # get read mode
+    if confirm != "121":
+      raise RuntimeError("Failed to set barcode reader to multiread mode")
+
+    await self._send_command_bcr("WPA06000") # set barcode scanner one shot time to 60,000 ms for multiread
+    time_confirm = await self._send_command_bcr("RPA0")
+    if time_confirm != "A06000":
+      raise RuntimeError("Failed to set barcode reader to 60000 ms one shot time")
+
+    await self._send_command_bcr("SEND") # exit settings mode
+
+    assert isinstance(cassette, PlateCarrier), "Site not in rack"
+    assert self._racks is not None, "Racks not set"
+    rack_idx = self._racks.index(cassette) + 1
+    num_pos = len(cassette.sites.items()) # get number of positions
+
+    await self._send_command_plc(f"WR DM0 {rack_idx}")
+    await self._send_command_plc("WR DM5 1") # set to first position
+
+    await self._send_command_plc("ST 1910") # set plate shuttle to plate read level
+    await self._wait_ready()
+
+    barcodes = await self._send_command_bcr("LON") # turn on barcode reader
+
+    await self._send_command_plc(f"WR DM5 {num_pos}")
+
+    print(f"BARCODES: {barcodes}")
+
+    await self._send_command_bcr("SSET") # enter settings mode
+    await self._send_command_bcr("WP120") # setting barcode scanner to single read mode
+
+    confirm = await self._send_command_bcr("RP12")
+    if confirm != "120":
+      raise RuntimeError("Failed to reset barcode reader to single mode")
+
+    await self._send_command_bcr("WPA00100") # set barcode scanner one shot time to 1000 ms for single read mode
+    time_confirm = await self._send_command_bcr("RPA0")
+    if time_confirm != "A00100":
+      raise RuntimeError("Failed to reset barcode reader to 1000 ms one shot time")
+
+    await self._send_command_bcr("SEND") # exit settings mode
 
   async def _send_command_plc(self, command: str) -> str:
     """
@@ -289,9 +337,13 @@ class LiconicBackend(IncubatorBackend):
       raise RuntimeError(f"No response from Liconic PLC for command {command!r}")
     resp = resp.strip()
     if resp.startswith("E"):
-      # add Liconic error handling message decoding here
-      raise RuntimeError(f"Error response from Liconic PLC for command {command!r}: {resp!r}")
+      logger.error(f"Command {command} failed with {resp}")
+      for member in ControllerError:
+        if resp == member.value:
+          raise controller_error_map[member]
+      raise RuntimeError(f"Unknown error {resp} when sending command {command}")
     return resp
+
 
   async def _send_command_bcr(self, command: str) -> str:
     """
@@ -325,7 +377,8 @@ class LiconicBackend(IncubatorBackend):
 
   async def _wait_ready(self, timeout: int = 60):
     """
-    Poll the ready-flag (RD 1915) until it is set, or timeout is reached.
+    Poll the ready-flag (RD 1915) until it is set. If timeout is reached
+    the error flag is read and if true aka "1" then the error register is read.
     """
     start = time.time()
     deadline = start + timeout
@@ -334,6 +387,13 @@ class LiconicBackend(IncubatorBackend):
       if resp == "1":
         return
       await asyncio.sleep(0.1)
+    err_flag = await self._send_command_plc("RD 1814")
+    if err_flag == "1":
+      error = await self._send_command_plc("RD DM200")
+      for member in HandlingError:
+        if error == member.value:
+          raise handler_error_map[member]
+      raise RuntimeError(f" Liconic Handler in unknown error state with memory showing {error}")
     raise TimeoutError(f"Incubator did not become ready within {timeout} seconds")
 
   async def set_temperature(self, temperature: float):
@@ -551,16 +611,30 @@ class LiconicBackend(IncubatorBackend):
     else:
       raise RuntimeError(f"Unexpected response from read 2nd transfer station sensor: {resp!r}")
 
-  async def scan_barcode(self, cassette: int, position: int, pitch: int, plate_count: int) -> str:
+  async def scan_barcode(self, site: PlateHolder) -> str:
     """ Scan a barcode using the internal barcode reader. Using command LON """
     if not self.barcode_installed:
       raise RuntimeError("Barcode reader not installed in this incubator instance")
 
-    await self._send_command_plc(f"WR DM0 {cassette}") # carousel number
-    await self._send_command_plc(f"WR DM23 {pitch}")   # pitch of plate in mm
-    await self._send_command_plc(f"WR DM25 {plate_count}") # plate
-    await self._send_command_plc(f"WR DM5 {position}") # plate position in carousel
+    m, n = self._site_to_m_n(site)
+    step_size, pos_num = self._carrier_to_steps_pos(site)
+
+    await self._send_command_plc(f"WR DM0 {m}") # carousel number
+    await self._send_command_plc(f"WR DM23 {step_size}")   # pitch of plate in mm
+    await self._send_command_plc(f"WR DM25 {pos_num}") # plate
+    await self._send_command_plc(f"WR DM5 {n}") # plate position in carousel
     await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
 
     barcode = await self._send_command_bcr("LON")
     print(f"Scanned barcode: {barcode}")
+    return barcode
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "port": self.io_plc.port,
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict):
+    return cls(port=data["port"])
