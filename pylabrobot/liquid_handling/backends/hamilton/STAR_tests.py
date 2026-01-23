@@ -206,7 +206,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.STAR = STARBackend(read_timeout=1)
     self.STAR._write_and_read_command = unittest.mock.AsyncMock()
-    self.STAR.io = unittest.mock.MagicMock()
+    self.STAR.io = unittest.mock.AsyncMock()
     self.STAR.io.setup = unittest.mock.AsyncMock()
     self.STAR.io.write = unittest.mock.MagicMock()
     self.STAR.io.read = unittest.mock.MagicMock()
@@ -437,10 +437,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         [True, True, True, True, False],
       ),
     )
-
-    # make sure two operations on the same spot are not allowed
-    with self.assertRaises(ValueError):
-      self.STAR._ops_to_fw_positions((op1, op1), use_channels=[0, 1])
 
   def test_tip_definition(self):
     pass

@@ -84,7 +84,10 @@ from pylabrobot.resources.hamilton import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonCoreGrippers
+from pylabrobot.resources.hamilton.hamilton_decks import (
+  HamiltonCoreGrippers,
+  rails_for_x_coordinate,
+)
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
@@ -1713,29 +1716,80 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   async def probe_liquid_heights(
     self,
     containers: List[Container],
-    use_channels: List[int],
-    tips: List[HamiltonTip],
+    use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
+    lld_mode: LLDMode = LLDMode.GAMMA,
+    search_speed: float = 10.0,
+    n_replicates: int = 1,
     move_to_z_safety_after: bool = True,
   ) -> List[float]:
-    """Probe liquid heights for the specified channels.
+    """Probe liquid surface heights in containers using liquid level detection.
 
-    Moves the channels to the x and y positions of the containers, then probes the liquid height
-    using the CLLD function.
+    Performs capacitive or pressure-based liquid level detection (LLD) by moving channels to
+    container positions and sensing the liquid surface. Heights are measured from the bottom
+    of each container's cavity.
 
-    Returns the liquid height in each well in mm with respect to the bottom of the container cavity.
-    Returns `None` for channels where the liquid height could not be determined.
+    Args:
+      containers: List of Container objects to probe, one per channel.
+      use_channels: Channel indices to use for probing (0-indexed).
+      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts to avoid center dividers. Defaults to container centers.
+      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based. Defaults to capacitive.
+      search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
+      n_replicates: Number of measurements per channel. Default 1.
+      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
+
+    Returns:
+      Mean of measured liquid heights for each container (mm from cavity bottom).
+
+    Raises:
+      RuntimeError: If channels lack tips.
+      NotImplementedError: If channels require different X positions.
+
+    Notes:
+      - All specified channels must have tips attached
+      - All channels must be at the same X position (single-row operation)
+      - For single containers with odd channel counts, Y-offsets are applied to avoid
+        center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
     """
 
-    if any(not resource.supports_compute_height_volume_functions() for resource in containers):
-      raise ValueError(
-        "automatic_surface_following can only be used with containers that support height<->volume functions."
-      )
+    if use_channels is None:
+      use_channels = list(range(len(containers)))
+
+    # Handle tip positioning ... if SINGLE container instance
+    if resource_offsets is None:
+      if len(set(containers)) == 1:
+        resource_offsets = get_wide_single_resource_liquid_op_offsets(
+          resource=containers[0], num_channels=len(containers)
+        )
+
+        if len(use_channels) % 2 != 0:
+          # Hamilton 1000 uL channels are 9 mm apart, so offset by half the distance
+          # + extra for the potential central 'splash guard'
+          y_offset = 5.5
+          resource_offsets = [
+            resource_offsets[i] + Coordinate(0, y_offset, 0) for i in range(len(use_channels))
+          ]
 
     resource_offsets = resource_offsets or [Coordinate.zero()] * len(containers)
 
-    assert len(containers) == len(use_channels) == len(resource_offsets) == len(tips)
+    # Validate parameters.
+    if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
+      raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
 
+    if not len(containers) == len(use_channels) == len(resource_offsets):
+      raise ValueError(
+        "Length of containers, use_channels, resource_offsets and tip_lengths must match."
+        f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)}."
+      )
+
+    # Make sure we have tips on all channels and know their lengths
+    tip_presence = await self.request_tip_presence()
+    if not all(tip_presence[idx] for idx in use_channels):
+      raise RuntimeError("All specified channels must have tips attached.")
+
+    tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
+
+    # Move channels to safe Z height before starting
     await self.move_all_channels_in_z_safety()
 
     # Check if all channels are on the same x position, then move there
@@ -1743,13 +1797,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       resource.get_location_wrt(self.deck, x="c", y="c", z="b").x + offset.x
       for resource, offset in zip(containers, resource_offsets)
     ]
-    if len(set(x_pos)) > 1:
+    if len(set(x_pos)) > 1:  # TODO: implement
       raise NotImplementedError(
-        "automatic_surface_following is not supported for multiple x positions."
+        "probe_liquid_heights is not yet supported for multiple x positions."
       )
     await self.move_channel_x(0, x_pos[0])
 
-    # move channels to above their y positions
+    # Move channels to their y positions
     y_pos = [
       resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + offset.y
       for resource, offset in zip(containers, resource_offsets)
@@ -1758,39 +1812,140 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       {channel: y for channel, y in zip(use_channels, y_pos)}
     )
 
-    # detect liquid heights
-    current_absolute_liquid_heights = await asyncio.gather(
-      *[
-        self._move_z_drive_to_liquid_surface_using_clld(
-          channel_idx=channel,
-          lowest_immers_pos=container.get_absolute_location("c", "c", "cavity_bottom").z
-          + tip.total_tip_length
-          - tip.fitting_depth,
-          start_pos_search=container.get_absolute_location("c", "c", "t").z
-          + tip.total_tip_length
-          - tip.fitting_depth
-          + 5,
-        )
-        for channel, container, tip in zip(use_channels, containers, tips)
-      ]
-    )
+    # Detect liquid heights
+    absolute_heights_measurements: Dict[int, List[float]] = {ch: [] for ch in use_channels}
 
-    current_absolute_liquid_heights = await self.request_pip_height_last_lld()  # type: ignore
+    lowest_immers_positions = [
+      container.get_absolute_location("c", "c", "cavity_bottom").z
+      + tip_len
+      - self.DEFAULT_TIP_FITTING_DEPTH
+      for container, tip_len in zip(containers, tip_lengths)
+    ]
+    start_pos_searches = [
+      container.get_absolute_location("c", "c", "t").z
+      + tip_len
+      - self.DEFAULT_TIP_FITTING_DEPTH
+      + 5
+      for container, tip_len in zip(containers, tip_lengths)
+    ]
 
-    filtered_absolute_liquid_heights = [
-      current_absolute_liquid_heights[idx] for idx in use_channels
+    try:
+      for _ in range(n_replicates):
+        if lld_mode == self.LLDMode.GAMMA:
+          await asyncio.gather(
+            *[
+              self._move_z_drive_to_liquid_surface_using_clld(
+                channel_idx=channel,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
+                channel_speed=search_speed,
+              )
+              for channel, lip, sps in zip(
+                use_channels, lowest_immers_positions, start_pos_searches
+              )
+            ]
+          )
+
+        else:
+          await asyncio.gather(
+            *[
+              self._search_for_surface_using_plld(
+                channel_idx=channel,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
+                channel_speed=search_speed,
+                dispense_drive_speed=5.0,
+                plld_mode=self.PressureLLDMode.LIQUID,
+                clld_verification=False,
+                post_detection_dist=0.0,
+              )
+              for channel, lip, sps in zip(
+                use_channels, lowest_immers_positions, start_pos_searches
+              )
+            ]
+          )
+
+        # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
+        current_absolute_liquid_heights = await self.request_pip_height_last_lld()
+        for ch_idx in use_channels:
+          height = current_absolute_liquid_heights[ch_idx]
+          absolute_heights_measurements[ch_idx].append(height)
+    except:
+      await self.move_all_channels_in_z_safety()
+      raise
+
+    # Compute average heights per channel and convert to relative to well bottom
+    absolute_liquid_heights = [
+      sum(absolute_heights_measurements[ch]) / len(absolute_heights_measurements[ch])
+      for ch in use_channels
     ]
 
     relative_to_well = [
-      filtered_absolute_liquid_heights[i]
-      - resource.get_absolute_location("c", "c", "cavity_bottom").z
-      for i, resource in enumerate(containers)
+      absolute_liquid_height - resource.get_absolute_location("c", "c", "cavity_bottom").z
+      for resource, absolute_liquid_height in zip(containers, absolute_liquid_heights)
     ]
 
     if move_to_z_safety_after:
       await self.move_all_channels_in_z_safety()
 
     return relative_to_well
+
+  async def probe_liquid_volumes(
+    self,
+    containers: List[Container],
+    use_channels: List[int],
+    resource_offsets: Optional[List[Coordinate]] = None,
+    lld_mode: LLDMode = LLDMode.GAMMA,
+    search_speed: float = 10.0,
+    n_replicates: int = 3,
+    move_to_z_safety_after: bool = True,
+  ) -> List[float]:
+    """Probe liquid volumes in containers by measuring heights and converting to volumes.
+
+    Performs liquid level detection to measure surface heights, then converts heights to
+    volumes using each container's geometric model. This is a convenience wrapper around
+    probe_liquid_heights that handles the height-to-volume conversion.
+
+    Args:
+      containers: List of Container objects to probe, one per channel. All must support height-to-volume conversion via compute_volume_from_height().
+      use_channels: Channel indices to use for probing (0-indexed).
+      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts. Defaults to container centers.
+      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.  Defaults to capacitive.
+      search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
+      n_replicates: Number of measurements per channel. Default 3.
+      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
+
+    Returns:
+      Volumes in each container (uL).
+
+    Raises:
+      ValueError: If any container doesn't support height-to-volume conversion (raised by probe_liquid_heights).
+      NotImplementedError: If channels require different X positions.
+
+    Notes:
+    - Delegates all motion, LLD, validation, and safety logic to probe_liquid_heights
+    - All containers must support height-volume functions. Volume calculation uses Container.compute_volume_from_height()
+    """
+
+    if any(not resource.supports_compute_height_volume_functions() for resource in containers):
+      raise ValueError(
+        "probe_liquid_volumes can only be used with containers that support height<->volume functions."
+      )
+
+    liquid_heights = await self.probe_liquid_heights(
+      containers=containers,
+      use_channels=use_channels,
+      resource_offsets=resource_offsets,
+      lld_mode=lld_mode,
+      search_speed=search_speed,
+      n_replicates=n_replicates,
+      move_to_z_safety_after=move_to_z_safety_after,
+    )
+
+    return [
+      container.compute_volume_from_height(height)
+      for container, height in zip(containers, liquid_heights)
+    ]
 
   async def aspirate(
     self,
@@ -2055,7 +2210,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
-        tips=[cast(HamiltonTip, op.tip) for op in ops],
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
       )
@@ -2422,7 +2576,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       liquid_heights = await self.probe_liquid_heights(
         containers=[op.resource for op in ops],
         use_channels=use_channels,
-        tips=[cast(HamiltonTip, op.tip) for op in ops],
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
       )
@@ -7986,6 +8139,112 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       cl=bit_pattern_hex,
       cb=blink_pattern_hex,
     )
+
+  async def verify_and_wait_for_carriers(
+    self,
+    check_interval: float = 1.0,
+  ):
+    """Verify that carriers have been loaded at expected rail positions.
+
+    This function checks if carriers are physically present on the deck at the specified
+    rail positions using the deck's presence sensors. If any carriers are missing, it will:
+    1. Prompt the user to load the missing carriers
+    2. Flash LEDs at the missing positions using set_loading_indicators
+    3. Continue checking until all carriers are detected
+
+    Args:
+      check_interval: Interval in seconds between presence checks (default: 1.0)
+
+    Raises:
+      ValueError: If no carriers are found on the deck.
+    """
+    # Extract carriers from deck children with start and end rail positions
+    carrier_rails: List[Tuple[int, int]] = []  # List of (start_rail, end_rail) tuples
+
+    for child in self.deck.children:
+      if isinstance(child, Carrier):
+        # Get x coordinate relative to deck
+        carrier_x = child.get_location_wrt(self.deck).x
+        carrier_start_rail = rails_for_x_coordinate(carrier_x)
+        carrier_end_rail = rails_for_x_coordinate(carrier_x - 100.0 + child.get_absolute_size_x())
+
+        # Verify rails are valid
+        carrier_start_rail = max(1, min(carrier_start_rail, 54))
+        if 1 <= carrier_end_rail <= 54:
+          carrier_rails.append((carrier_start_rail, carrier_end_rail))
+
+    if len(carrier_rails) == 0:
+      raise ValueError("No carriers found on deck. Assign carriers to the deck.")
+
+    # Extract end rails for comparison with detected rails
+    # The presence detection reports the end rail position
+    expected_end_rails = [end_rail for _, end_rail in carrier_rails]
+
+    # Check initial presence
+    detected_rails = set(await self.request_presence_of_carriers_on_deck())
+    missing_end_rails = sorted(set(expected_end_rails) - detected_rails)
+
+    if len(missing_end_rails) == 0:
+      logger.info(f"All carriers detected at end rail positions: {expected_end_rails}")
+      # Turn off all indicators
+      await self.set_loading_indicators(
+        bit_pattern=[False] * 54,
+        blink_pattern=[False] * 54,
+      )
+      print(f"\n✓ All carriers successfully detected at end rail positions: {expected_end_rails}\n")
+      return
+
+    # Prompt user about missing carriers
+    print(
+      f"\n{'='*60}\n"
+      f"CARRIER LOADING REQUIRED\n"
+      f"{'='*60}\n"
+      f"Expected carriers at end rail positions: {expected_end_rails}\n"
+      f"Detected carriers at rail positions: {sorted(detected_rails)}\n"
+      f"Missing carriers at end rail positions: {missing_end_rails}\n"
+      f"{'='*60}\n"
+      f"Please load the missing carriers. LEDs will flash at the carrier positions.\n"
+      f"The system will automatically detect when all carriers are loaded.\n"
+      f"{'='*60}\n"
+    )
+
+    # Flash LEDs until all carriers are detected
+    while missing_end_rails:
+      # Create bit pattern for missing carriers
+      # Flash all LEDs from start_rail to end_rail (inclusive) for each missing carrier
+      bit_pattern = [False] * 54
+      blink_pattern = [False] * 54
+
+      # For each missing carrier (identified by missing end rail), flash all its rails
+      for missing_end_rail in missing_end_rails:
+        # Find the carrier with this end rail
+        for start_rail, end_rail in carrier_rails:
+          if end_rail == missing_end_rail:
+            # Flash all LEDs from start_rail to end_rail (inclusive)
+            for rail in range(start_rail, end_rail + 1):
+              if 1 <= rail <= 54:
+                indicator_index = rail - 1  # Convert rail (1-54) to index (0-53)
+                bit_pattern[indicator_index] = True
+                blink_pattern[indicator_index] = True
+            break
+
+      # Set loading indicators
+      await self.set_loading_indicators(bit_pattern[::-1], blink_pattern[::-1])
+
+      # Wait before checking again
+      await asyncio.sleep(check_interval)
+
+      # Check for presence again
+      detected_rails = set(await self.request_presence_of_carriers_on_deck())
+      missing_end_rails = sorted(set(expected_end_rails) - detected_rails)
+
+    # All carriers detected, turn off all indicators
+    logger.info(f"All carriers successfully detected at end rail positions: {expected_end_rails}")
+    await self.set_loading_indicators(
+      bit_pattern=[False] * 54,
+      blink_pattern=[False] * 54,
+    )
+    print("\n✓ All carriers successfully loaded and detected!\n")
 
   async def unload_carrier(
     self,
