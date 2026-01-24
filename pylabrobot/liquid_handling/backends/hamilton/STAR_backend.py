@@ -6626,10 +6626,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ), "current_protection_limiter must be an integer between 0 and 15"
 
     # Determine acceleration scaling based on firmware version
-    # Pre-2021 firmware: acceleration parameter is multiplied by 100
-    # 2021+ firmware: acceleration parameter is 1:1 with increment/sec**2
+    # Pre-2010 firmware: acceleration parameter is multiplied by 1000
+    # 2010+ firmware: acceleration parameter is 1:1 with increment/sec**2
     # TODO: identify exact firmware version that introduced this change
-    acceleration_multiplier = 1 if fw_version.year >= 2021 else 100
+    acceleration_multiplier = 1 if fw_version.year >= 2010 else 0.001
 
     # Convert mm-based parameters to hardware increments
     z_increment = self._head96_z_drive_mm_to_increment(z)
