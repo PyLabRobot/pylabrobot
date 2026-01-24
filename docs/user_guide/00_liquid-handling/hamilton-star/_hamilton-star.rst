@@ -6,7 +6,7 @@ Hamilton STAR
    .. tab:: STAR (54 tracks)
 
       .. list-table::
-         :widths: 60 40
+         :widths: 50 50
          :header-rows: 1
 
          * - Summary
@@ -14,22 +14,18 @@ Hamilton STAR
          * - * **OEM Link:** `Hamilton Company <https://www.hamiltoncompany.com/automated-liquid-handling/platforms/microlab-star>`_
              * **Communication Protocol / Hardware:** USB / USB-A/B
              * **Communication Level:** Firmware
-             * **VID:PID:** 0x10C4:0xEA60
+             * **VID:PID:** 0x08AF:0x8000
              * **Deck Size:** 54 tracks
-             * **Generation:** Legacy (pre-2025) or "Fluid Motion" (2025+)
-             * **Independent Channels:** 1000µL (4-16 channels) or 5000µL
-             * **Multi-channel Heads:** 96-channel or 384-channel
-             * **Optional Modules:** Autoload & Loading Tray, Barcode Reader (1D/2D), iSWAP, CO-RE Grippers
            - .. figure:: img/star_old.png
                 :width: 320px
                 :align: center
                 
-                Hamilton STAR with 54-track deck
+                STAR with 54-track deck
 
    .. tab:: STARlet (30 tracks)
 
       .. list-table::
-         :widths: 60 40
+         :widths: 50 50
          :header-rows: 1
 
          * - Summary
@@ -37,24 +33,43 @@ Hamilton STAR
          * - * **OEM Link:** `Hamilton Company <https://www.hamiltoncompany.com/automated-liquid-handling/platforms/microlab-starlet>`_
              * **Communication Protocol / Hardware:** USB / USB-A/B
              * **Communication Level:** Firmware
-             * **VID:PID:** 0x10C4:0xEA60
+             * **VID:PID:** 0x08AF:0x8000
              * **Deck Size:** 30 tracks
-             * **Generation:** Legacy (pre-2025) or "Fluid Motion" (2025+)
-             * **Independent Channels:** 1000µL (4-16 channels) or 5000µL
-             * **Multi-channel Heads:** 96-channel or 384-channel
-             * **Optional Modules:** Autoload & Loading Tray, Barcode Reader (1D/2D), iSWAP, CO-RE Grippers
            - .. figure:: img/starlet_old.png
                 :width: 320px
                 :align: center
                 
-                Hamilton STARlet with 30-track deck
+                STARlet with 30-track deck
 
 About the Machine(s)
 --------------------
 
-The Hamilton STAR is a modular liquid handling platform designed for high-throughput automation. It's available in two deck sizes (STAR with 54 tracks and STARlet with 30 tracks) and can be configured with various pipetting channels, multi-channel heads, and optional automation modules.
+The Hamilton Microlab STAR is a modular liquid handling workstation designed for high-throughput laboratory automation.
+(The STARlet is a smaller version of the STAR that uses the exact same commands.)
 
-PyLabRobot provides comprehensive support for STAR systems through firmware-level communication over USB.
+It is particularly popular in the PyLabRobot community due to its flexibility, robustness, extensive sensor systems, and well-documented firmware.
+Both the STAR and the STARlet share the same modular architecture and can be configured with:
+
+* **Pipetting Tools:** 
+   * 1000µL channels (4-16)
+   * 5ml channels (1-4)
+* **Optional Modules:**
+   * "Multi-Probe Head": 96-Head / 384-Head
+   * Autoload with barcode reading (1D / 2D reader)
+   * iSWAP (for plate handling)
+   * Imaging Channel
+   * Tube Twister & Decapper
+* **Key Technologies:**
+   * CO-RE (Compression-induced O-Ring Expansion) tip attachment
+   * dual liquid level detection (capacitive and pressure-based)
+   * monitored air displacement (MAD)
+   * anti-droplet control (ADC, for volatile solvents)
+   * x/y/z motor resolution = 0.1 mm
+
+----------------------
+
+Table of Contents
+-----------------
 
 .. toctree::
    :maxdepth: 2

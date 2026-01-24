@@ -38,7 +38,7 @@ You can rotate the iSWAP to 12 predefined positions using {meth}`~pylabrobot.liq
 
 the positions and their corresponding integer specifications are shown visually here.
 
-![alt text](iswap_positions.png)
+![alt text](./img/iswap/iswap_positions.png)
 
 The `iswap_rotate` method can be used to move the wrist drive and the rotation drive simultaneously in one smooth motion. It takes a parameter for the rotation drive, and the final `grip_direction` of the iswap. The `grip_direction` is the same parameter used by {meth}`~pylabrobot.liquid_handling.liquid_handler.LiquidHandler.pick_up_resource` and {meth}`~pylabrobot.liquid_handling.liquid_handler.LiquidHandler.drop_resource`, and is with respect to the deck. This is easier than controlling the rotation drive, which is with respect to the wrist drive.
 
