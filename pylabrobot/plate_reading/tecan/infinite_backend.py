@@ -520,7 +520,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       read_timeout=30,
     )
     self.config = scan_config or InfiniteScanConfig()
-    self._setup_lock = asyncio.Lock()
+    self._setup_lock: Optional[asyncio.Lock] = None
     self._ready = False
     self._read_chunk_size = 512
     self._max_read_iterations = 200
@@ -532,6 +532,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._active_step_loss_commands: List[str] = []
 
   async def setup(self) -> None:
+    if self._setup_lock is None:
+      self._setup_lock = asyncio.Lock()
     async with self._setup_lock:
       if self._ready:
         return
@@ -543,6 +545,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       self._ready = True
 
   async def stop(self) -> None:
+    if self._setup_lock is None:
+      self._setup_lock = asyncio.Lock()
     async with self._setup_lock:
       if not self._ready:
         return
