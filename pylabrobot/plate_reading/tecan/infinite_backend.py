@@ -656,18 +656,25 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     finally:
       await self._end_run()
 
+  async def _clear_mode_settings(self, excitation: bool = False, emission: bool = False) -> None:
+    """Clear mode settings before configuring a new scan."""
+    if excitation:
+      await self._send_command("EXCITATION CLEAR", allow_timeout=True)
+    if emission:
+      await self._send_command("EMISSION CLEAR", allow_timeout=True)
+    await self._send_command("TIME CLEAR", allow_timeout=True)
+    await self._send_command("GAIN CLEAR", allow_timeout=True)
+    await self._send_command("READS CLEAR", allow_timeout=True)
+    await self._send_command("POSITION CLEAR", allow_timeout=True)
+    await self._send_command("MIRROR CLEAR", allow_timeout=True)
+
   async def _configure_absorbance(self, wavelength_nm: int) -> None:
     wl_decitenth = int(round(wavelength_nm * 10))
     bw_decitenth = int(round(self._auto_bandwidth(wavelength_nm) * 10))
     reads_number = max(1, int(self.config.flashes))
 
     await self._send_command("MODE ABS")
-    await self._send_command("EXCITATION CLEAR", allow_timeout=True)
-    await self._send_command("TIME CLEAR", allow_timeout=True)
-    await self._send_command("GAIN CLEAR", allow_timeout=True)
-    await self._send_command("READS CLEAR", allow_timeout=True)
-    await self._send_command("POSITION CLEAR", allow_timeout=True)
-    await self._send_command("MIRROR CLEAR", allow_timeout=True)
+    await self._clear_mode_settings(excitation=True)
     await self._send_command(
       f"EXCITATION 0,ABS,{wl_decitenth},{bw_decitenth},0", allow_timeout=True
     )
@@ -753,17 +760,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     # UI issues the entire FI configuration twice before PREPARE REF.
     for _ in range(2):
-      # clear commands
       await self._send_command("MODE FI.TOP", allow_timeout=True)
-      await self._send_command("READS CLEAR", allow_timeout=True)
-      await self._send_command("EXCITATION CLEAR", allow_timeout=True)
-      await self._send_command("EMISSION CLEAR", allow_timeout=True)
-      await self._send_command("TIME CLEAR", allow_timeout=True)
-      await self._send_command("GAIN CLEAR", allow_timeout=True)
-      await self._send_command("POSITION CLEAR", allow_timeout=True)
-      await self._send_command("MIRROR CLEAR", allow_timeout=True)
-
-      # configure commands
+      await self._clear_mode_settings(excitation=True, emission=True)
       await self._send_command(f"EXCITATION 0,FI,{ex_decitenth},50,0", allow_timeout=True)
       await self._send_command(f"EMISSION 0,FI,{em_decitenth},200,0", allow_timeout=True)
       await self._send_command("TIME 0,INTEGRATION=20", allow_timeout=True)
@@ -866,12 +864,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("CHECK LUM.STEPLOSS")
     await self._send_command("MODE LUM")
     reads_number = max(1, int(self.config.flashes))
-    await self._send_command("READS CLEAR", allow_timeout=True)
-    await self._send_command("EMISSION CLEAR", allow_timeout=True)
-    await self._send_command("TIME CLEAR", allow_timeout=True)
-    await self._send_command("GAIN CLEAR", allow_timeout=True)
-    await self._send_command("POSITION CLEAR", allow_timeout=True)
-    await self._send_command("MIRROR CLEAR", allow_timeout=True)
+    await self._clear_mode_settings(emission=True)
     await self._send_command("POSITION LUM,Z=14620", allow_timeout=True)
     await self._send_command(f"TIME 0,INTEGRATION={dark_integration}", allow_timeout=True)
     await self._send_command(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
