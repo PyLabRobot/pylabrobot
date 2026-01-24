@@ -1175,15 +1175,15 @@ class _AbsorbanceRunDecoder(_MeasurementDecoder):
     if _is_abs_calibration_marker(marker):
       if self._calibration is not None:
         return
-      decoded = _decode_abs_calibration(marker, blob)
-      if decoded is not None:
-        self._calibration = decoded
+      cal = _decode_abs_calibration(marker, blob)
+      if cal is not None:
+        self._calibration = cal
       return
     if _is_abs_data_marker(marker):
-      decoded = _decode_abs_data(marker, blob)
-      if decoded is None:
+      data = _decode_abs_data(marker, blob)
+      if data is None:
         return
-      _label, _ex, items = decoded
+      _label, _ex, items = data
       sample, reference = items[0] if items else (0, 0)
       self.measurements.append(
         _AbsorbanceMeasurement(sample=sample, reference=reference, items=items)
@@ -1218,14 +1218,14 @@ class _FluorescenceRunDecoder(_MeasurementDecoder):
 
   def _handle_bin(self, marker: int, blob: bytes) -> None:
     if marker == 18:
-      decoded = _decode_flr_calibration(marker, blob)
-      if decoded is not None:
-        self._calibration = decoded
+      cal = _decode_flr_calibration(marker, blob)
+      if cal is not None:
+        self._calibration = cal
       return
-    decoded = _decode_flr_data(marker, blob)
-    if decoded is None:
+    data = _decode_flr_data(marker, blob)
+    if data is None:
       return
-    _label, _ex, _em, items = decoded
+    _label, _ex, _em, items = data
     if self._calibration is not None:
       intensity = _fluorescence_corrected(self._calibration, items)
     else:
@@ -1270,14 +1270,14 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
 
   def _handle_bin(self, marker: int, blob: bytes) -> None:
     if marker == 10:
-      decoded = _decode_lum_calibration(marker, blob)
-      if decoded is not None:
-        self._calibration = decoded
+      cal = _decode_lum_calibration(marker, blob)
+      if cal is not None:
+        self._calibration = cal
       return
-    decoded = _decode_lum_data(marker, blob)
-    if decoded is None:
+    data = _decode_lum_data(marker, blob)
+    if data is None:
       return
-    _label, _em, counts = decoded
+    _label, _em, counts = data
     if self._calibration is not None and self._dark_integration_s and self._meas_integration_s:
       intensity = _luminescence_intensity(
         self._calibration, counts, self._dark_integration_s, self._meas_integration_s
