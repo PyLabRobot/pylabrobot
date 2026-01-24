@@ -541,7 +541,7 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     )
     decoder.feed_bin(cal_len, cal_blob)
     cal = decoder.calibration
-    self.assertIsNotNone(cal)
+    assert cal is not None
 
     def build_packet(intensity):
       target = 0.0
