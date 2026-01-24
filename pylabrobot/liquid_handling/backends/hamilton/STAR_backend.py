@@ -2754,10 +2754,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if tip_pickup_method == "from_rack":
       # the STAR will not automatically move the dispensing drive down if it is still up
       # so we need to move it down here
-      await self.head96_dispensing_drive_move_to_position(0)
+      # see https://github.com/PyLabRobot/pylabrobot/pull/835
+      lowest_dispensing_drive_height_no_tips = 218.19
+      await self.head96_dispensing_drive_move_to_position(lowest_dispensing_drive_height_no_tips)
 
     try:
-      return await self.pick_up_tips_core96(
+      await self.pick_up_tips_core96(
         x_position=abs(round(pickup_position.x * 10)),
         x_direction=0 if pickup_position.x >= 0 else 1,
         y_position=round(pickup_position.y * 10),
