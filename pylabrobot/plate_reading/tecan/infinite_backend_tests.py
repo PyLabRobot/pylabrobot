@@ -563,7 +563,7 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
   def test_decode_fluorescence_pattern(self):
     excitation = 485
     emission = 520
-    decoder = _FluorescenceRunDecoder(len(self.scan_wells), excitation * 10, emission * 10)
+    decoder = _FluorescenceRunDecoder(len(self.scan_wells))
     prep_marker, prep_blob = _flr_prepare_blob(
       excitation * 10, meas_dark=0, ref_dark=0, ref_bright=1000
     )

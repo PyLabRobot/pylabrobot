@@ -525,9 +525,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._max_read_iterations = 200
     self._device_initialized = False
     self._mode_capabilities: Dict[str, Dict[str, str]] = {}
-    self._current_fluorescence_excitation: Optional[int] = None
-    self._current_fluorescence_emission: Optional[int] = None
-    self._lum_integration_s: Dict[int, float] = {}
     self._pending_bin_events: List[Tuple[int, bytes]] = []
     self._parser = _StreamParser(allow_bare_ascii=True)
     self._run_active = False
@@ -717,14 +714,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._begin_run()
     try:
       await self._configure_fluorescence(excitation_wavelength, emission_wavelength)
-      if self._current_fluorescence_excitation is None:
-        raise RuntimeError("Fluorescence configuration missing excitation wavelength.")
-
-      decoder = _FluorescenceRunDecoder(
-        len(scan_wells),
-        self._current_fluorescence_excitation,
-        self._current_fluorescence_emission,
-      )
+      decoder = _FluorescenceRunDecoder(len(scan_wells))
 
       await self._run_scan(
         ordered_wells=ordered_wells,
@@ -758,8 +748,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
   async def _configure_fluorescence(self, excitation_nm: int, emission_nm: int) -> None:
     ex_decitenth = int(round(excitation_nm * 10))
     em_decitenth = int(round(emission_nm * 10))
-    self._current_fluorescence_excitation = ex_decitenth
-    self._current_fluorescence_emission = em_decitenth
     reads_number = max(1, int(self.config.flashes))
     beam_diameter = self._capability_numeric("FI.TOP", "#BEAM DIAMETER", 3000)
 
@@ -811,16 +799,17 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
 
+    dark_integration = 3_000_000
+    meas_integration = 1_000_000
+
     await self._begin_run()
     try:
-      await self._configure_luminescence()
-      dark_t = self._lum_integration_s.get(0, 0.0)
-      meas_t = self._lum_integration_s.get(1, 0.0)
+      await self._configure_luminescence(dark_integration, meas_integration)
 
       decoder = _LuminescenceRunDecoder(
         len(scan_wells),
-        dark_integration_s=dark_t,
-        meas_integration_s=meas_t,
+        dark_integration_s=_integration_value_to_seconds(dark_integration),
+        meas_integration_s=_integration_value_to_seconds(meas_integration),
       )
 
       await self._run_scan(
@@ -869,7 +858,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       return
     await self._read_command_response()
 
-  async def _configure_luminescence(self) -> None:
+  async def _configure_luminescence(self, dark_integration: int, meas_integration: int) -> None:
     await self._send_command("MODE LUM")
     # Pre-flight safety checks observed in captures (queries omitted).
     await self._send_command("CHECK LUM.FIBER")
@@ -877,10 +866,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("CHECK LUM.STEPLOSS")
     await self._send_command("MODE LUM")
     reads_number = max(1, int(self.config.flashes))
-    self._lum_integration_s = {
-      0: _integration_value_to_seconds(3_000_000),
-      1: _integration_value_to_seconds(1_000_000),
-    }
     await self._send_command("READS CLEAR", allow_timeout=True)
     await self._send_command("EMISSION CLEAR", allow_timeout=True)
     await self._send_command("TIME CLEAR", allow_timeout=True)
@@ -888,12 +873,12 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("POSITION CLEAR", allow_timeout=True)
     await self._send_command("MIRROR CLEAR", allow_timeout=True)
     await self._send_command("POSITION LUM,Z=14620", allow_timeout=True)
-    await self._send_command("TIME 0,INTEGRATION=3000000", allow_timeout=True)
+    await self._send_command(f"TIME 0,INTEGRATION={dark_integration}", allow_timeout=True)
     await self._send_command(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
     await self._send_command("SCAN DIRECTION=UP", allow_timeout=True)
     await self._send_command("RATIO LABELS=1", allow_timeout=True)
     await self._send_command("EMISSION 1,EMPTY,0,0,0", allow_timeout=True)
-    await self._send_command("TIME 1,INTEGRATION=1000000", allow_timeout=True)
+    await self._send_command(f"TIME 1,INTEGRATION={meas_integration}", allow_timeout=True)
     await self._send_command("TIME 1,READDELAY=0", allow_timeout=True)
     await self._send_command(f"READS 1,NUMBER={reads_number}", allow_timeout=True)
     await self._send_command("#EMISSION ATTENUATION", allow_timeout=True)
@@ -1217,15 +1202,8 @@ class _FluorescenceRunDecoder(_MeasurementDecoder):
 
   STATUS_FRAME_LEN = 31
 
-  def __init__(
-    self,
-    expected_wells: int,
-    excitation_decitenth: int,
-    emission_decitenth: Optional[int],
-  ) -> None:
+  def __init__(self, expected_wells: int) -> None:
     super().__init__(expected_wells)
-    self._excitation = excitation_decitenth
-    self._emission = emission_decitenth
     self._intensities: List[int] = []
     self._prepare: Optional[_FluorescencePrepare] = None
 
