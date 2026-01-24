@@ -1,5 +1,7 @@
 import unittest
+from unittest.mock import AsyncMock, call, patch
 
+from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.tecan.infinite_backend import (
   InfiniteScanConfig,
   TecanInfinite200ProBackend,
@@ -44,7 +46,7 @@ def _flr_data_blob(ex_decitenth, em_decitenth, meas, ref):
   return _bin_blob(_pack_u16(words))
 
 
-def _lum_data_blob(em_decitenth, intensity):
+def _lum_data_blob(em_decitenth: int, intensity: int):
   payload = bytearray(14)
   payload[0:2] = (0).to_bytes(2, "big")
   payload[2:4] = int(em_decitenth).to_bytes(2, "big")
@@ -640,3 +642,246 @@ class TestTecanInfiniteAscii(unittest.TestCase):
     self.assertTrue(TecanInfinite200ProBackend._is_terminal_frame("-"))
     self.assertTrue(TecanInfinite200ProBackend._is_terminal_frame("BY#T5000"))
     self.assertFalse(TecanInfinite200ProBackend._is_terminal_frame("OK"))
+
+
+class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
+  """Tests that verify correct commands are sent to the device."""
+
+  def setUp(self):
+    self.mock_usb = AsyncMock(spec=USB)
+    self.mock_usb.setup = AsyncMock()
+    self.mock_usb.stop = AsyncMock()
+    self.mock_usb.write = AsyncMock()
+    # Default to returning terminal response
+    self.mock_usb.read = AsyncMock(return_value=self._frame("ST"))
+
+    patcher = patch(
+      "pylabrobot.plate_reading.tecan.infinite_backend.USB",
+      return_value=self.mock_usb,
+    )
+    self.mock_usb_class = patcher.start()
+    self.addCleanup(patcher.stop)
+
+    self.backend = TecanInfinite200ProBackend(
+      scan_config=InfiniteScanConfig(counts_per_mm_x=1000, counts_per_mm_y=1000)
+    )
+    self.plate = _make_test_plate()
+    self.plate.location = Coordinate.zero()
+
+  def _frame(self, command: str) -> bytes:
+    """Helper to frame a command."""
+    return TecanInfinite200ProBackend._frame_command(command)
+
+  async def test_open(self):
+    self.backend._ready = True
+    self.backend._device_initialized = True
+
+    await self.backend.open()
+
+    self.mock_usb.write.assert_has_calls(
+      [
+        call(self._frame("ABSOLUTE MTP,OUT")),
+        call(self._frame("BY#T5000")),
+      ]
+    )
+
+  async def test_close(self):
+    self.backend._ready = True
+    self.backend._device_initialized = True
+
+    await self.backend.close(self.plate)
+
+    self.mock_usb.write.assert_has_calls(
+      [
+        call(self._frame("ABSOLUTE MTP,IN")),
+        call(self._frame("BY#T5000")),
+      ]
+    )
+
+  async def test_read_absorbance_commands(self):
+    """Test that read_absorbance sends the correct configuration commands."""
+    self.backend._ready = True
+    self.backend._device_initialized = True
+
+    async def mock_await(decoder, row_count, mode):
+      prep_marker, prep_blob = _abs_prepare_blob(6000, 0, 1000, 0, 1000)
+      decoder.feed_bin(prep_marker, prep_blob)
+      for _ in range(row_count):
+        data_marker, data_blob = _abs_data_blob(6000, 500, 1000)
+        decoder.feed_bin(data_marker, data_blob)
+
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+        await self.backend.read_absorbance(self.plate, [], wavelength=600)
+
+    self.mock_usb.write.assert_has_calls(
+      [
+        # _begin_run
+        call(self._frame("KEYLOCK ON")),
+        # _configure_absorbance
+        call(self._frame("MODE ABS")),
+        call(self._frame("EXCITATION CLEAR")),
+        call(self._frame("TIME CLEAR")),
+        call(self._frame("GAIN CLEAR")),
+        call(self._frame("READS CLEAR")),
+        call(self._frame("POSITION CLEAR")),
+        call(self._frame("MIRROR CLEAR")),
+        call(self._frame("EXCITATION 0,ABS,6000,90,0")),
+        call(self._frame("EXCITATION 1,ABS,6000,90,0")),
+        call(self._frame("READS 0,NUMBER=25")),
+        call(self._frame("READS 1,NUMBER=25")),
+        call(self._frame("TIME 0,READDELAY=0")),
+        call(self._frame("TIME 1,READDELAY=0")),
+        call(self._frame("SCAN DIRECTION=ALTUP")),
+        call(self._frame("#RATIO LABELS")),
+        call(self._frame("BEAM DIAMETER=700")),
+        call(self._frame("RATIO LABELS=1")),
+        call(self._frame("PREPARE REF")),
+        # row scans (2 rows in test plate)
+        call(self._frame("ABSOLUTE MTP,Y=8000")),
+        call(self._frame("SCAN DIRECTION=ALTUP")),
+        call(self._frame("SCANX 3000,23000,3")),
+        call(self._frame("ABSOLUTE MTP,Y=16000")),
+        call(self._frame("SCAN DIRECTION=ALTUP")),
+        call(self._frame("SCANX 23000,3000,3")),
+        # _end_run
+        call(self._frame("TERMINATE")),
+        call(self._frame("CHECK MTP.STEPLOSS")),
+        call(self._frame("CHECK ABS.STEPLOSS")),
+        call(self._frame("KEYLOCK OFF")),
+        call(self._frame("ABSOLUTE MTP,IN")),
+      ]
+    )
+
+  async def test_read_fluorescence_commands(self):
+    """Test that read_fluorescence sends the correct configuration commands."""
+    self.backend._ready = True
+    self.backend._device_initialized = True
+
+    async def mock_await(decoder, row_count, mode):
+      prep_marker, prep_blob = _flr_prepare_blob(4850, 0, 0, 1000)
+      decoder.feed_bin(prep_marker, prep_blob)
+      for _ in range(row_count):
+        data_marker, data_blob = _flr_data_blob(4850, 5200, 500, 1000)
+        decoder.feed_bin(data_marker, data_blob)
+
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+        await self.backend.read_fluorescence(
+          self.plate, [], excitation_wavelength=485, emission_wavelength=520, focal_height=20.0
+        )
+
+    # Fluorescence config is sent twice (UI behavior)
+    fl_config_commands = [
+      call(self._frame("MODE FI.TOP")),
+      call(self._frame("READS CLEAR")),
+      call(self._frame("EXCITATION CLEAR")),
+      call(self._frame("EMISSION CLEAR")),
+      call(self._frame("TIME CLEAR")),
+      call(self._frame("GAIN CLEAR")),
+      call(self._frame("POSITION CLEAR")),
+      call(self._frame("MIRROR CLEAR")),
+      call(self._frame("EXCITATION 0,FI,4850,50,0")),
+      call(self._frame("EMISSION 0,FI,5200,200,0")),
+      call(self._frame("TIME 0,INTEGRATION=20")),
+      call(self._frame("TIME 0,LAG=0")),
+      call(self._frame("TIME 0,READDELAY=0")),
+      call(self._frame("GAIN 0,VALUE=100")),
+      call(self._frame("POSITION 0,Z=20000")),
+      call(self._frame("BEAM DIAMETER=3000")),
+      call(self._frame("SCAN DIRECTION=UP")),
+      call(self._frame("RATIO LABELS=1")),
+      call(self._frame("READS 0,NUMBER=25")),
+      call(self._frame("EXCITATION 1,FI,4850,50,0")),
+      call(self._frame("EMISSION 1,FI,5200,200,0")),
+      call(self._frame("TIME 1,INTEGRATION=20")),
+      call(self._frame("TIME 1,LAG=0")),
+      call(self._frame("TIME 1,READDELAY=0")),
+      call(self._frame("GAIN 1,VALUE=100")),
+      call(self._frame("POSITION 1,Z=20000")),
+      call(self._frame("READS 1,NUMBER=25")),
+    ]
+
+    self.mock_usb.write.assert_has_calls(
+      [
+        # _begin_run
+        call(self._frame("KEYLOCK ON")),
+        # _configure_fluorescence (sent twice)
+        *fl_config_commands,
+        *fl_config_commands,
+        call(self._frame("PREPARE REF")),
+        # row scans (2 rows in test plate)
+        call(self._frame("ABSOLUTE MTP,Y=8000")),
+        call(self._frame("SCAN DIRECTION=UP")),
+        call(self._frame("SCANX 3000,23000,3")),
+        call(self._frame("ABSOLUTE MTP,Y=16000")),
+        call(self._frame("SCAN DIRECTION=UP")),
+        call(self._frame("SCANX 23000,3000,3")),
+        # _end_run
+        call(self._frame("TERMINATE")),
+        call(self._frame("CHECK MTP.STEPLOSS")),
+        call(self._frame("CHECK FI.TOP.STEPLOSS")),
+        call(self._frame("CHECK FI.STEPLOSS.Z")),
+        call(self._frame("KEYLOCK OFF")),
+        call(self._frame("ABSOLUTE MTP,IN")),
+      ]
+    )
+
+  async def test_read_luminescence_commands(self):
+    """Test that read_luminescence sends the correct configuration commands."""
+    self.backend._ready = True
+    self.backend._device_initialized = True
+
+    async def mock_await(decoder, row_count, mode):
+      prep_blob = bytes(14)
+      decoder.feed_bin(10, prep_blob)
+      for _ in range(row_count):
+        data_marker, data_blob = _lum_data_blob(0, 1000)
+        decoder.feed_bin(data_marker, data_blob)
+
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+        await self.backend.read_luminescence(self.plate, [], focal_height=20.0)
+
+    self.mock_usb.write.assert_has_calls(
+      [
+        # _begin_run
+        call(self._frame("KEYLOCK ON")),
+        # _configure_luminescence
+        call(self._frame("MODE LUM")),
+        call(self._frame("CHECK LUM.FIBER")),
+        call(self._frame("CHECK LUM.LID")),
+        call(self._frame("CHECK LUM.STEPLOSS")),
+        call(self._frame("MODE LUM")),
+        call(self._frame("READS CLEAR")),
+        call(self._frame("EMISSION CLEAR")),
+        call(self._frame("TIME CLEAR")),
+        call(self._frame("GAIN CLEAR")),
+        call(self._frame("POSITION CLEAR")),
+        call(self._frame("MIRROR CLEAR")),
+        call(self._frame("POSITION LUM,Z=14620")),
+        call(self._frame("TIME 0,INTEGRATION=3000000")),
+        call(self._frame("READS 0,NUMBER=25")),
+        call(self._frame("SCAN DIRECTION=UP")),
+        call(self._frame("RATIO LABELS=1")),
+        call(self._frame("EMISSION 1,EMPTY,0,0,0")),
+        call(self._frame("TIME 1,INTEGRATION=1000000")),
+        call(self._frame("TIME 1,READDELAY=0")),
+        call(self._frame("READS 1,NUMBER=25")),
+        call(self._frame("#EMISSION ATTENUATION")),
+        call(self._frame("PREPARE REF")),
+        # row scans (2 rows, non-serpentine so both scan left-to-right)
+        call(self._frame("ABSOLUTE MTP,Y=8000")),
+        call(self._frame("SCAN DIRECTION=UP")),
+        call(self._frame("SCANX 3000,23000,3")),
+        call(self._frame("ABSOLUTE MTP,Y=16000")),
+        call(self._frame("SCAN DIRECTION=UP")),
+        call(self._frame("SCANX 3000,23000,3")),
+        # _end_run
+        call(self._frame("TERMINATE")),
+        call(self._frame("CHECK MTP.STEPLOSS")),
+        call(self._frame("CHECK LUM.STEPLOSS")),
+        call(self._frame("KEYLOCK OFF")),
+        call(self._frame("ABSOLUTE MTP,IN")),
+      ]
+    )
