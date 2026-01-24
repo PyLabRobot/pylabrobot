@@ -20,9 +20,9 @@ def _pack_u16(words):
 
 
 def _bin_blob(payload):
-  marker = len(payload)
+  payload_len = len(payload)
   trailer = b"\x00\x00\x00\x00"
-  return marker, payload + trailer
+  return payload_len, payload + trailer
 
 
 def _abs_calibration_blob(ex_decitenth, meas_dark, meas_bright, ref_dark, ref_bright):
@@ -518,8 +518,8 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     expected_values = []
     for well in self.scan_wells:
       intensity = self.grid[well.get_row()][well.get_column()]
-      marker, blob, expected = build_packet(intensity)
-      decoder.feed_bin(marker, blob)
+      payload_len, blob, expected = build_packet(intensity)
+      decoder.feed_bin(payload_len, blob)
       expected_values.append(expected)
     self.assertTrue(decoder.done)
     actual_values = extract_actual(decoder)
@@ -532,14 +532,14 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     reference = 10000
     max_absorbance = 1.0
     decoder = _AbsorbanceRunDecoder(len(self.scan_wells))
-    cal_marker, cal_blob = _abs_calibration_blob(
+    cal_len, cal_blob = _abs_calibration_blob(
       wavelength * 10,
       meas_dark=0,
       meas_bright=1000,
       ref_dark=0,
       ref_bright=1000,
     )
-    decoder.feed_bin(cal_marker, cal_blob)
+    decoder.feed_bin(cal_len, cal_blob)
     cal = decoder.calibration
     self.assertIsNotNone(cal)
 
@@ -548,9 +548,9 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
       if self.max_intensity:
         target = (intensity / self.max_intensity) * max_absorbance
       sample = max(1, int(round(reference / (10**target))))
-      marker, blob = _abs_data_blob(wavelength * 10, sample, reference)
+      payload_len, blob = _abs_data_blob(wavelength * 10, sample, reference)
       expected = _absorbance_od_calibrated(cal, [(sample, reference)])
-      return marker, blob, expected
+      return payload_len, blob, expected
 
     def extract_actual(decoder):
       return [
@@ -564,14 +564,14 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     excitation = 485
     emission = 520
     decoder = _FluorescenceRunDecoder(len(self.scan_wells))
-    cal_marker, cal_blob = _flr_calibration_blob(
+    cal_len, cal_blob = _flr_calibration_blob(
       excitation * 10, meas_dark=0, ref_dark=0, ref_bright=1000
     )
-    decoder.feed_bin(cal_marker, cal_blob)
+    decoder.feed_bin(cal_len, cal_blob)
 
     def build_packet(intensity):
-      marker, blob = _flr_data_blob(excitation * 10, emission * 10, intensity, 1000)
-      return marker, blob, intensity
+      payload_len, blob = _flr_data_blob(excitation * 10, emission * 10, intensity, 1000)
+      return payload_len, blob, intensity
 
     def extract_actual(decoder):
       return decoder.intensities
@@ -582,8 +582,8 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     decoder = _LuminescenceRunDecoder(len(self.scan_wells))
 
     def build_packet(intensity):
-      marker, blob = _lum_data_blob(0, intensity)
-      return marker, blob, intensity
+      payload_len, blob = _lum_data_blob(0, intensity)
+      return payload_len, blob, intensity
 
     def extract_actual(decoder):
       return [measurement.intensity for measurement in decoder.measurements]
@@ -704,11 +704,11 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.backend._device_initialized = True
 
     async def mock_await(decoder, row_count, mode):
-      cal_marker, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
-      decoder.feed_bin(cal_marker, cal_blob)
+      cal_len, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
+      decoder.feed_bin(cal_len, cal_blob)
       for _ in range(row_count):
-        data_marker, data_blob = _abs_data_blob(6000, 500, 1000)
-        decoder.feed_bin(data_marker, data_blob)
+        data_len, data_blob = _abs_data_blob(6000, 500, 1000)
+        decoder.feed_bin(data_len, data_blob)
 
     with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
       with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
@@ -759,11 +759,11 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.backend._device_initialized = True
 
     async def mock_await(decoder, row_count, mode):
-      cal_marker, cal_blob = _flr_calibration_blob(4850, 0, 0, 1000)
-      decoder.feed_bin(cal_marker, cal_blob)
+      cal_len, cal_blob = _flr_calibration_blob(4850, 0, 0, 1000)
+      decoder.feed_bin(cal_len, cal_blob)
       for _ in range(row_count):
-        data_marker, data_blob = _flr_data_blob(4850, 5200, 500, 1000)
-        decoder.feed_bin(data_marker, data_blob)
+        data_len, data_blob = _flr_data_blob(4850, 5200, 500, 1000)
+        decoder.feed_bin(data_len, data_blob)
 
     with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
       with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
@@ -836,8 +836,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
       cal_blob = bytes(14)
       decoder.feed_bin(10, cal_blob)
       for _ in range(row_count):
-        data_marker, data_blob = _lum_data_blob(0, 1000)
-        decoder.feed_bin(data_marker, data_blob)
+        data_len, data_blob = _lum_data_blob(0, 1000)
+        decoder.feed_bin(data_len, data_blob)
 
     with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
       with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):

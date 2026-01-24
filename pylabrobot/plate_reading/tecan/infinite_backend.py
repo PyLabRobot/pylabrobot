@@ -40,19 +40,21 @@ def _integration_value_to_seconds(value: int) -> float:
   return value / 1_000_000.0 if value >= 1000 else value / 1000.0
 
 
-def _is_abs_calibration_marker(marker: int) -> bool:
-  return marker >= 22 and (marker - 4) % 18 == 0
+def _is_abs_calibration_len(payload_len: int) -> bool:
+  return payload_len >= 22 and (payload_len - 4) % 18 == 0
 
 
-def _is_abs_data_marker(marker: int) -> bool:
-  return marker >= 14 and (marker - 4) % 10 == 0
+def _is_abs_data_len(payload_len: int) -> bool:
+  return payload_len >= 14 and (payload_len - 4) % 10 == 0
 
 
-def _split_payload_and_trailer(marker: int, blob: bytes) -> Optional[Tuple[bytes, Tuple[int, int]]]:
-  if len(blob) != marker + 4:
+def _split_payload_and_trailer(
+  payload_len: int, blob: bytes
+) -> Optional[Tuple[bytes, Tuple[int, int]]]:
+  if len(blob) != payload_len + 4:
     return None
-  payload = blob[:marker]
-  trailer_reader = Reader(blob[marker:], little_endian=False)
+  payload = blob[:payload_len]
+  trailer_reader = Reader(blob[payload_len:], little_endian=False)
   return payload, (trailer_reader.u16(), trailer_reader.u16())
 
 
@@ -74,8 +76,8 @@ class _AbsorbanceCalibration:
   items: List[_AbsorbanceCalibrationItem]
 
 
-def _decode_abs_calibration(marker: int, blob: bytes) -> Optional[_AbsorbanceCalibration]:
-  split = _split_payload_and_trailer(marker, blob)
+def _decode_abs_calibration(payload_len: int, blob: bytes) -> Optional[_AbsorbanceCalibration]:
+  split = _split_payload_and_trailer(payload_len, blob)
   if split is None:
     return None
   payload, _ = split
@@ -103,8 +105,10 @@ def _decode_abs_calibration(marker: int, blob: bytes) -> Optional[_AbsorbanceCal
   return _AbsorbanceCalibration(ex=ex, items=items)
 
 
-def _decode_abs_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[Tuple[int, int]]]]:
-  split = _split_payload_and_trailer(marker, blob)
+def _decode_abs_data(
+  payload_len: int, blob: bytes
+) -> Optional[Tuple[int, int, List[Tuple[int, int]]]]:
+  split = _split_payload_and_trailer(payload_len, blob)
   if split is None:
     return None
   payload, _ = split
@@ -176,8 +180,8 @@ class _FluorescenceCalibration:
   ref_bright: int
 
 
-def _decode_flr_calibration(marker: int, blob: bytes) -> Optional[_FluorescenceCalibration]:
-  split = _split_payload_and_trailer(marker, blob)
+def _decode_flr_calibration(payload_len: int, blob: bytes) -> Optional[_FluorescenceCalibration]:
+  split = _split_payload_and_trailer(payload_len, blob)
   if split is None:
     return None
   payload, _ = split
@@ -199,9 +203,9 @@ def _decode_flr_calibration(marker: int, blob: bytes) -> Optional[_FluorescenceC
 
 
 def _decode_flr_data(
-  marker: int, blob: bytes
+  payload_len: int, blob: bytes
 ) -> Optional[Tuple[int, int, int, List[Tuple[int, int]]]]:
-  split = _split_payload_and_trailer(marker, blob)
+  split = _split_payload_and_trailer(payload_len, blob)
   if split is None:
     return None
   payload, _ = split
@@ -241,8 +245,8 @@ class _LuminescenceCalibration:
   ref_dark: int
 
 
-def _decode_lum_calibration(marker: int, blob: bytes) -> Optional[_LuminescenceCalibration]:
-  split = _split_payload_and_trailer(marker, blob)
+def _decode_lum_calibration(payload_len: int, blob: bytes) -> Optional[_LuminescenceCalibration]:
+  split = _split_payload_and_trailer(payload_len, blob)
   if split is None:
     return None
   payload, _ = split
@@ -253,8 +257,8 @@ def _decode_lum_calibration(marker: int, blob: bytes) -> Optional[_LuminescenceC
   return _LuminescenceCalibration(ref_dark=reader.i32())
 
 
-def _decode_lum_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[int]]]:
-  split = _split_payload_and_trailer(marker, blob)
+def _decode_lum_data(payload_len: int, blob: bytes) -> Optional[Tuple[int, int, List[int]]]:
+  split = _split_payload_and_trailer(payload_len, blob)
   if split is None:
     return None
   payload, _ = split
@@ -322,7 +326,7 @@ class _StreamEvent:
   """Parsed stream event (ASCII or binary)."""
 
   text: Optional[str] = None
-  marker: Optional[int] = None
+  payload_len: Optional[int] = None
   blob: Optional[bytes] = None
 
 
@@ -358,7 +362,7 @@ class _StreamParser:
           break
         blob = bytes(self._buffer[:need])
         del self._buffer[:need]
-        events.append(_StreamEvent(marker=self._pending_bin, blob=blob))
+        events.append(_StreamEvent(payload_len=self._pending_bin, blob=blob))
         self._pending_bin = None
         progressed = True
         continue
@@ -416,18 +420,18 @@ class _MeasurementDecoder(ABC):
       if event.text is not None:
         if event.text == "ST":
           self._terminal_seen = True
-      elif event.marker is not None and event.blob is not None:
-        self.feed_bin(event.marker, event.blob)
+      elif event.payload_len is not None and event.blob is not None:
+        self.feed_bin(event.payload_len, event.blob)
 
-  def feed_bin(self, marker: int, blob: bytes) -> None:
+  def feed_bin(self, payload_len: int, blob: bytes) -> None:
     """Handle a binary payload if the decoder expects one."""
-    if self._should_consume_bin(marker):
-      self._handle_bin(marker, blob)
+    if self._should_consume_bin(payload_len):
+      self._handle_bin(payload_len, blob)
 
-  def _should_consume_bin(self, _marker: int) -> bool:
+  def _should_consume_bin(self, _payload_len: int) -> bool:
     return False
 
-  def _handle_bin(self, _marker: int, _blob: bytes) -> None:
+  def _handle_bin(self, _payload_len: int, _blob: bytes) -> None:
     return None
 
 
@@ -838,8 +842,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
   ) -> None:
     target = decoder.count + row_count
     if self._pending_bin_events:
-      for marker, blob in self._pending_bin_events:
-        decoder.feed_bin(marker, blob)
+      for payload_len, blob in self._pending_bin_events:
+        decoder.feed_bin(payload_len, blob)
       self._pending_bin_events.clear()
     iterations = 0
     while decoder.count < target and iterations < self._max_read_iterations:
@@ -1125,8 +1129,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
           frames.append(event.text)
           if self._is_terminal_frame(event.text):
             saw_terminal = True
-        elif event.marker is not None and event.blob is not None:
-          self._pending_bin_events.append((event.marker, event.blob))
+        elif event.payload_len is not None and event.blob is not None:
+          self._pending_bin_events.append((event.payload_len, event.blob))
       if not require_terminal and frames and not self._parser.has_pending_bin():
         break
       if require_terminal and saw_terminal and not self._parser.has_pending_bin():
@@ -1168,19 +1172,19 @@ class _AbsorbanceRunDecoder(_MeasurementDecoder):
     """Return the absorbance calibration data, if available."""
     return self._calibration
 
-  def _should_consume_bin(self, marker: int) -> bool:
-    return _is_abs_calibration_marker(marker) or _is_abs_data_marker(marker)
+  def _should_consume_bin(self, payload_len: int) -> bool:
+    return _is_abs_calibration_len(payload_len) or _is_abs_data_len(payload_len)
 
-  def _handle_bin(self, marker: int, blob: bytes) -> None:
-    if _is_abs_calibration_marker(marker):
+  def _handle_bin(self, payload_len: int, blob: bytes) -> None:
+    if _is_abs_calibration_len(payload_len):
       if self._calibration is not None:
         return
-      cal = _decode_abs_calibration(marker, blob)
+      cal = _decode_abs_calibration(payload_len, blob)
       if cal is not None:
         self._calibration = cal
       return
-    if _is_abs_data_marker(marker):
-      data = _decode_abs_data(marker, blob)
+    if _is_abs_data_len(payload_len):
+      data = _decode_abs_data(payload_len, blob)
       if data is None:
         return
       _label, _ex, items = data
@@ -1209,20 +1213,20 @@ class _FluorescenceRunDecoder(_MeasurementDecoder):
     """Return decoded fluorescence intensities."""
     return self._intensities
 
-  def _should_consume_bin(self, marker: int) -> bool:
-    if marker == 18:
+  def _should_consume_bin(self, payload_len: int) -> bool:
+    if payload_len == 18:
       return True
-    if marker >= 16 and (marker - 6) % 10 == 0:
+    if payload_len >= 16 and (payload_len - 6) % 10 == 0:
       return True
     return False
 
-  def _handle_bin(self, marker: int, blob: bytes) -> None:
-    if marker == 18:
-      cal = _decode_flr_calibration(marker, blob)
+  def _handle_bin(self, payload_len: int, blob: bytes) -> None:
+    if payload_len == 18:
+      cal = _decode_flr_calibration(payload_len, blob)
       if cal is not None:
         self._calibration = cal
       return
-    data = _decode_flr_data(marker, blob)
+    data = _decode_flr_data(payload_len, blob)
     if data is None:
       return
     _label, _ex, _em, items = data
@@ -1261,20 +1265,20 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
   def count(self) -> int:
     return len(self.measurements)
 
-  def _should_consume_bin(self, marker: int) -> bool:
-    if marker == 10:
+  def _should_consume_bin(self, payload_len: int) -> bool:
+    if payload_len == 10:
       return True
-    if marker >= 14 and (marker - 4) % 10 == 0:
+    if payload_len >= 14 and (payload_len - 4) % 10 == 0:
       return True
     return False
 
-  def _handle_bin(self, marker: int, blob: bytes) -> None:
-    if marker == 10:
-      cal = _decode_lum_calibration(marker, blob)
+  def _handle_bin(self, payload_len: int, blob: bytes) -> None:
+    if payload_len == 10:
+      cal = _decode_lum_calibration(payload_len, blob)
       if cal is not None:
         self._calibration = cal
       return
-    data = _decode_lum_data(marker, blob)
+    data = _decode_lum_data(payload_len, blob)
     if data is None:
       return
     _label, _em, counts = data
