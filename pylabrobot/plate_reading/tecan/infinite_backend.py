@@ -532,7 +532,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._parser = _StreamParser(allow_bare_ascii=True)
     self._run_active = False
     self._active_step_loss_commands: List[str] = []
-    self._active_mode: Optional[str] = None
     self._packet_log_path = packet_log_path
     self._packet_log_handle: Optional[TextIO] = None
     self._packet_log_lock = asyncio.Lock()
@@ -574,6 +573,58 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("ABSOLUTE MTP,IN")
     await self._send_command("BY#T5000")
 
+  async def _run_scan(
+    self,
+    plate: Plate,
+    wells: List[Well],
+    decoder: _MeasurementDecoder,
+    mode: str,
+    step_loss_commands: List[str],
+    serpentine: bool,
+    scan_direction: str,
+  ) -> List[Well]:
+    """Run the common scan loop for all measurement types.
+
+    Args:
+      plate: The plate to scan.
+      wells: The wells to scan.
+      decoder: The decoder to use for parsing measurements.
+      mode: The mode name for logging (e.g., "Absorbance").
+      step_loss_commands: Commands to run after the scan to check for step loss.
+      serpentine: Whether to use serpentine scan order.
+      scan_direction: The scan direction command (e.g., "ALTUP", "UP").
+
+    Returns:
+      The list of wells in scan order.
+    """
+    ordered_wells = wells if wells else plate.get_all_items()
+    scan_wells = self._scan_visit_order(ordered_wells, serpentine=serpentine)
+
+    self._active_step_loss_commands = step_loss_commands
+
+    for row_index, row_wells in self._group_by_row(ordered_wells):
+      start_x, end_x, count = self._scan_range(row_index, row_wells, serpentine=serpentine)
+      _, y_stage = self._map_well_to_stage(row_wells[0])
+
+      await self._send_command(f"ABSOLUTE MTP,Y={y_stage}")
+      await self._send_command(f"SCAN DIRECTION={scan_direction}")
+      await self._send_command(
+        f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
+      )
+      logger.info(
+        "Queued %s scan row %s (%s wells): y=%s, x=%s..%s",
+        mode.lower(),
+        row_index,
+        count,
+        y_stage,
+        start_x,
+        end_x,
+      )
+      await self._await_measurements(decoder, count, mode)
+      await self._await_scan_terminal(decoder.pop_terminal())
+
+    return scan_wells
+
   async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     """Queue and execute an absorbance scan."""
 
@@ -582,33 +633,20 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
+    decoder = _AbsorbanceRunDecoder(len(scan_wells))
 
-    self._active_step_loss_commands = ["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"]
-    self._active_mode = "ABS"
     await self._begin_run()
     try:
-      decoder = _AbsorbanceRunDecoder(len(scan_wells))
       await self._configure_absorbance(wavelength)
-
-      for row_index, row_wells in self._group_by_row(ordered_wells):
-        start_x, end_x, count = self._scan_range(row_index, row_wells, serpentine=True)
-        _, y_stage = self._map_well_to_stage(row_wells[0])
-
-        await self._send_command(f"ABSOLUTE MTP,Y={y_stage}")
-        await self._send_command("SCAN DIRECTION=ALTUP")
-        await self._send_command(
-          f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
-        )
-        logger.info(
-          "Queued scan row %s (%s wells): y=%s, x=%s..%s",
-          row_index,
-          count,
-          y_stage,
-          start_x,
-          end_x,
-        )
-        await self._await_measurements(decoder, count, "Absorbance")
-        await self._await_scan_terminal(decoder.pop_terminal())
+      scan_wells = await self._run_scan(
+        plate=plate,
+        wells=wells,
+        decoder=decoder,
+        mode="Absorbance",
+        step_loss_commands=["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"],
+        serpentine=True,
+        scan_direction="ALTUP",
+      )
 
       if len(decoder.measurements) != len(scan_wells):
         raise RuntimeError("Absorbance decoder did not complete scan.")
@@ -684,44 +722,33 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for fluorescence scans.")
 
-    ordered_wells = wells if wells else plate.get_all_items()
-    scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
-    self._active_step_loss_commands = [
-      "CHECK MTP.STEPLOSS",
-      "CHECK FI.TOP.STEPLOSS",
-      "CHECK FI.STEPLOSS.Z",
-    ]
-    self._active_mode = "FI.TOP"
     await self._begin_run()
     try:
       await self._configure_fluorescence(excitation_wavelength, emission_wavelength)
       if self._current_fluorescence_excitation is None:
         raise RuntimeError("Fluorescence configuration missing excitation wavelength.")
+
+      ordered_wells = wells if wells else plate.get_all_items()
+      scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
       decoder = _FluorescenceRunDecoder(
         len(scan_wells),
         self._current_fluorescence_excitation,
         self._current_fluorescence_emission,
       )
 
-      for row_index, row_wells in self._group_by_row(ordered_wells):
-        start_x, end_x, count = self._scan_range(row_index, row_wells, serpentine=True)
-        _, y_stage = self._map_well_to_stage(row_wells[0])
-
-        await self._send_command(f"ABSOLUTE MTP,Y={y_stage}")
-        await self._send_command("SCAN DIRECTION=UP")
-        await self._send_command(
-          f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
-        )
-        logger.info(
-          "Queued fluorescence scan row %s (%s wells): y=%s, x=%s..%s",
-          row_index,
-          count,
-          y_stage,
-          start_x,
-          end_x,
-        )
-        await self._await_measurements(decoder, count, "Fluorescence")
-        await self._await_scan_terminal(decoder.pop_terminal())
+      scan_wells = await self._run_scan(
+        plate=plate,
+        wells=wells,
+        decoder=decoder,
+        mode="Fluorescence",
+        step_loss_commands=[
+          "CHECK MTP.STEPLOSS",
+          "CHECK FI.TOP.STEPLOSS",
+          "CHECK FI.STEPLOSS.Z",
+        ],
+        serpentine=True,
+        scan_direction="UP",
+      )
 
       if len(decoder.intensities) != len(scan_wells):
         raise RuntimeError("Fluorescence decoder did not complete scan.")
@@ -792,40 +819,29 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for luminescence scans.")
 
-    ordered_wells = wells if wells else plate.get_all_items()
-    scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
-    self._active_step_loss_commands = ["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"]
-    self._active_mode = "LUM"
     await self._begin_run()
     try:
       await self._configure_luminescence()
       dark_t = self._lum_integration_s.get(0, 0.0)
       meas_t = self._lum_integration_s.get(1, 0.0)
+
+      ordered_wells = wells if wells else plate.get_all_items()
+      scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
       decoder = _LuminescenceRunDecoder(
         len(scan_wells),
         dark_integration_s=dark_t,
         meas_integration_s=meas_t,
       )
 
-      for row_index, row_wells in self._group_by_row(ordered_wells):
-        start_x, end_x, count = self._scan_range(row_index, row_wells, serpentine=False)
-        _, y_stage = self._map_well_to_stage(row_wells[0])
-
-        await self._send_command(f"ABSOLUTE MTP,Y={y_stage}")
-        await self._send_command("SCAN DIRECTION=UP")
-        await self._send_command(
-          f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
-        )
-        logger.info(
-          "Queued luminescence scan row %s (%s wells): y=%s, x=%s..%s",
-          row_index,
-          count,
-          y_stage,
-          start_x,
-          end_x,
-        )
-        await self._await_measurements(decoder, count, "Luminescence")
-        await self._await_scan_terminal(decoder.pop_terminal())
+      scan_wells = await self._run_scan(
+        plate=plate,
+        wells=wells,
+        decoder=decoder,
+        mode="Luminescence",
+        step_loss_commands=["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"],
+        serpentine=False,
+        scan_direction="UP",
+      )
 
       if len(decoder.measurements) != len(scan_wells):
         raise RuntimeError("Luminescence decoder did not complete scan.")
@@ -1023,7 +1039,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     finally:
       self._run_active = False
       self._active_step_loss_commands = []
-      self._active_mode = None
 
   async def _cleanup_protocol(self) -> None:
     async def send_cleanup_cmd(cmd: str) -> None:
@@ -1040,7 +1055,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await send_cleanup_cmd("ABSOLUTE MTP,IN")
     self._run_active = False
     self._active_step_loss_commands = []
-    self._active_mode = None
 
   async def _query_mode_capabilities(self, mode: str) -> None:
     commands = self._MODE_CAPABILITY_COMMANDS.get(mode)
