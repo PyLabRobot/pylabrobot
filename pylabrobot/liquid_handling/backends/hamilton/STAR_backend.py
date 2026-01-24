@@ -7349,6 +7349,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
+  async def head96_dispensing_drive_move_to_position(
+    self,
+    position,
+    speed: float = 261.1,
+    stop_speed: float = 0,
+    acceleration: float = 17406.84,
+    current_protection_limiter: int = 15,
+  ):
+    """Move dispensing drive to absolute position in uL
+
+    Args:
+      position: Position in uL. Between 0, 1244.59.
+      speed: Speed in uL/s. Between 0.1, 1063.75.
+      stop_speed: Stop speed in uL/s. Between 0, 1063.75.
+      acceleration: Acceleration in uL/s^2. Between 96.7, 17406.84.
+      current_protection_limiter: Current protection limiter (0-15), default 15
+    """
+
+    if not (0 <= position <= 1244.59):
+      raise ValueError("position must be between 0 and 1244.59")
+    if not (0.1 <= speed <= 1063.75):
+      raise ValueError("speed must be between 0.1 and 1063.75")
+    if not (0 <= stop_speed <= 1063.75):
+      raise ValueError("stop_speed must be between 0 and 1063.75")
+    if not (96.7 <= acceleration <= 17406.84):
+      raise ValueError("acceleration must be between 96.7 and 17406.84")
+    if not (0 <= current_protection_limiter <= 15):
+      raise ValueError("current_protection_limiter must be between 0 and 15")
+
+    position_increments = self._head96_dispensing_drive_uL_to_increment(position)
+    speed_increments = self._head96_dispensing_drive_uL_to_increment(speed)
+    stop_speed_increments = self._head96_dispensing_drive_uL_to_increment(stop_speed)
+    acceleration_increments = self._head96_dispensing_drive_uL_to_increment(acceleration)
+
+    await self.send_command(
+      module="H0",
+      command="DQ",
+      dq=f"{position_increments:05}",
+      dv=f"{speed_increments:05}",
+      du=f"{stop_speed_increments:05}",
+      dr=f"{acceleration_increments:06}",
+      dw=f"{current_protection_limiter:02}",
+    )
+
   async def move_core_96_head_x(self, x_position: float):
     """Move CoRe 96 Head X to absolute position
 
