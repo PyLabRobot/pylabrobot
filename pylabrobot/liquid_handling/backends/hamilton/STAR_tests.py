@@ -681,7 +681,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call("C0TTid0001tt01tf1tl0519tv03600tg2tu0"),
-        _any_write_and_read_command_call("C0EPid0002xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
+        _any_write_and_read_command_call("H0DQid0002dq11281dv13500du00000dr900000dw15"),
+        _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
       ]
     )
 
@@ -696,7 +697,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips96(self.tip_rack)
     self.STAR._write_and_read_command.assert_has_calls(
       [
-        _any_write_and_read_command_call("C0ERid0003xs01179xd0yh2418za2164zh2450ze2450"),
+        _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2164zh2450ze2450"),
       ]
     )
 
@@ -706,7 +707,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.discard_tips96()
     self.STAR._write_and_read_command.assert_has_calls(
       [
-        _any_write_and_read_command_call("C0ERid0003xs00420xd1yh1203za2164zh2450ze2450"),
+        _any_write_and_read_command_call("C0ERid0004xs00420xd1yh1203za2164zh2450ze2450"),
       ]
     )
 
@@ -723,7 +724,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0EAid0003aa0xs02983xd0yh1457zh2450ze2450lz1999zt1866pp0100zm1866zv0032zq06180iw000ix0fh000af01083ag2500vt050bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
+          "C0EAid0004aa0xs02983xd0yh1457zh2450ze2450lz1999zt1866pp0100zm1866zv0032zq06180iw000ix0fh000af01083ag2500vt050bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
         ),
       ]
     )
@@ -742,7 +743,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0EDid0004da3xs02983xd0yh1457zm1866zv0032zq06180lz1999zt1866pp0100iw000ix0fh000zh2450ze2450df01083dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh00hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
+          "C0EDid0005da3xs02983xd0yh1457zm1866zv0032zq06180lz1999zt1866pp0100iw000ix0fh000zh2450ze2450df01083dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh00hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
         ),
       ]
     )
