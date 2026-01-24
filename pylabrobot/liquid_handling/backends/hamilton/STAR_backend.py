@@ -1374,8 +1374,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       A datetime object representing the extracted date
     """
-    # year_match = re.search(r"\b(20\d{2})\b", fw_version)
-    # return int(year_match.group(1)) if year_match else None
 
     # Prefer full date patterns like YYYY.MM.DD / YYYY_MM_DD / YYYY-MM-DD
     date_match = re.search(r"\b(20\d{2})[._-](\d{2})[._-](\d{2})\b", fw_version)
