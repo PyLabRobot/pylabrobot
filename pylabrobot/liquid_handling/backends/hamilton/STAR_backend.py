@@ -4015,6 +4015,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: If one or more components are out of range. The error message contains all offending components.
     """
 
+    # TODO: these are values for a STARBackend. Find them for a STARlet.
+
     errors = []
     if not (-271.0 <= c.x <= 974.0):
       errors.append(f"x={c.x}")
@@ -7333,7 +7335,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
-    # TODO: these are values for a STARBackend. Find them for a STARlet.
     self._check_96_position_legal(coordinate)
 
     assert (
@@ -7354,7 +7355,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move CoRe 96 Head X to absolute position
 
     .. deprecated::
-      Use :meth:`head96_move_x` instead. Will be removed in 2025-06.
+      Use :meth:`head96_move_x` instead. Will be removed in 2026-06.
     """
     warnings.warn(
       "`move_core_96_head_x` is deprecated. Use `head96_move_x` instead.",
@@ -7367,7 +7368,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move CoRe 96 Head Y to absolute position
 
     .. deprecated::
-      Use :meth:`head96_move_y` instead. Will be removed in 2025-06.
+      Use :meth:`head96_move_y` instead. Will be removed in 2026-06.
     """
     warnings.warn(
       "`move_core_96_head_y` is deprecated. Use `head96_move_y` instead.",
@@ -7380,7 +7381,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Move CoRe 96 Head Z to absolute position
 
     .. deprecated::
-      Use :meth:`head96_move_z` instead. Will be removed in 2025-06.
+      Use :meth:`head96_move_z` instead. Will be removed in 2026-06.
     """
     warnings.warn(
       "`move_core_96_head_z` is deprecated. Use `head96_move_z` instead.",
@@ -7388,6 +7389,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       stacklevel=2,
     )
     return await self.head96_move_z(z_position)
+
+  async def move_96head_to_coordinate(
+    self,
+    coordinate: Coordinate,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
+  ):
+    """Move STAR(let) 96-Head to defined Coordinate
+
+    .. deprecated::
+      Use :meth:`head96_move_to_coordinate` instead. Will be removed in 2026-06.
+    """
+    warnings.warn(
+      "`move_96head_to_coordinate` is deprecated. Use `head96_move_to_coordinate` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_to_coordinate(
+      coordinate=coordinate,
+      minimum_height_at_beginning_of_a_command=minimum_height_at_beginning_of_a_command,
+    )
 
   # -------------- 3.10.5 Wash procedure commands using CoRe 96 Head --------------
 
