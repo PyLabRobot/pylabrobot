@@ -8,6 +8,7 @@ import sys
 import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from typing import (
   Any,
   Callable,
@@ -34,6 +35,7 @@ from pylabrobot.heating_shaking.hamilton_backend import HamiltonHeaterShakerInte
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
+from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
@@ -119,20 +121,6 @@ def need_iswap_parked(
     return await method(self, *args, **kwargs)
 
   return wrapper
-
-
-def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
-  """Util for converting an argument to the appropriate format for low level star methods."""
-  # if the val is None, use the default.
-  if val is None:
-    return default
-  # if the val is a list, it must be of the correct length.
-  if len(val) != len(default):
-    raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
-  # replace None values in list with default values.
-  val = [v if v is not None else d for v, d in zip(val, default)]
-  # the value is ready to be used.
-  return val
 
 
 def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
@@ -1135,6 +1123,21 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
     return 3 if blow_out else 2
 
 
+@dataclass
+class Head96Information:
+  """Information about the installed 96-head."""
+
+  StopDiscType = Literal["core_i", "core_ii"]
+  InstrumentType = Literal["legacy", "FM-STAR"]
+  HeadType = Literal["Low volume head", "High volume head", "96 head II", "96 head TADM", "unknown"]
+
+  fw_version: datetime.date
+  supports_clot_monitoring_clld: bool
+  stop_disc_type: StopDiscType
+  instrument_type: InstrumentType
+  head_type: HeadType
+
+
 class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   """Interface for the Hamilton STARBackend."""
 
@@ -1362,6 +1365,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Parse a response from the machine."""
     return parse_star_fw_string(resp, fmt)
 
+  def _parse_firmware_version_datetime(self, fw_version: str) -> datetime.date:
+    """Extract datetime from firmware version string.
+
+    Args:
+      fw_version: Firmware version string (e.g., "v2021.03.15" or "2023_Q2_v1.4")
+
+    Returns:
+      A datetime object representing the extracted date
+    """
+
+    # Prefer full date patterns like YYYY.MM.DD / YYYY_MM_DD / YYYY-MM-DD
+    date_match = re.search(r"\b(20\d{2})[._-](\d{2})[._-](\d{2})\b", fw_version)
+    if date_match:
+      y, m, d = map(int, date_match.groups())
+      return datetime.date(y, m, d)
+
+    # Handle quarter formats like 2023_Q2 -> first day of the quarter
+    q_match = re.search(r"\b(20\d{2})_Q([1-4])\b", fw_version, flags=re.IGNORECASE)
+    if q_match:
+      y = int(q_match.group(1))
+      q = int(q_match.group(2))
+      month = (q - 1) * 3 + 1
+      return datetime.date(y, month, 1)
+
+    # Fall back to year only -> Jan 1st of that year, or None
+    year_match = re.search(r"\b(20\d{2})\b", fw_version)
+    if year_match is None:
+      raise ValueError(f"Could not parse year from firmware version string: '{fw_version}'")
+    return datetime.date(int(year_match.group(1)), 1, 1)
+
   async def setup(
     self,
     skip_instrument_initialization=False,
@@ -1397,6 +1430,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
+    self._head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -1440,12 +1474,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     async def set_up_core96_head():
       if self.core96_head_installed and not skip_core96_head:
+        # Initialize 96-head
         core96_head_initialized = await self.request_core_96_head_initialization_status()
         if not core96_head_initialized:
           await self.initialize_core_96_head(
             trash96=self.deck.get_trash_area96(),
             z_position_at_the_command_end=self._channel_traversal_height,
           )
+
+        # Cache firmware version and configuration for version-specific behavior
+        fw_version = await self.head96_request_firmware_version()
+        configuration_96head = await self._head96_request_configuration()
+        head96_type = await self.head96_request_type()
+
+        self._head96_information = Head96Information(
+          fw_version=fw_version,
+          supports_clot_monitoring_clld=bool(int(configuration_96head[0])),
+          stop_disc_type="core_i" if configuration_96head[1] == "0" else "core_ii",
+          instrument_type="legacy" if configuration_96head[2] == "0" else "FM-STAR",
+          head_type=head96_type,
+        )
 
     async def set_up_arm_modules():
       await set_up_pip()
@@ -2001,8 +2049,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dosing_drive_speed_during_2nd_section_search: Unknown.
       z_drive_speed_during_2nd_section_search: Unknown.
       cup_upper_edge: Unknown.
-      ratio_liquid_rise_to_tip_deep_in: Unknown.
-      immersion_depth_2nd_section: The depth to move into the liquid for the second section of aspiration.
 
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before starting an aspiration.
       min_z_endpos: The minimum height to move to, this is the end of aspiration.
@@ -2066,7 +2112,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
     # correct volumes using the liquid class
-    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
+    disable_volume_correction = fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
       hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
       for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
@@ -2085,17 +2131,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ]
     else:
       lld_search_height = [(wb + sh) for wb, sh in zip(well_bottoms, lld_search_height)]
-    clot_detection_height = _fill_in_defaults(
+    clot_detection_height = fill_in_defaults(
       clot_detection_height,
       default=[
         hlc.aspiration_clot_retract_height if hlc is not None else 0.0
         for hlc in hamilton_liquid_classes
       ],
     )
-    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10] * n)
-    second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
-    second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
-    minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
+    pull_out_distance_transport_air = fill_in_defaults(pull_out_distance_transport_air, [10] * n)
+    second_section_height = fill_in_defaults(second_section_height, [3.2] * n)
+    second_section_ratio = fill_in_defaults(second_section_ratio, [618.0] * n)
+    minimum_height = fill_in_defaults(minimum_height, well_bottoms)
     if immersion_depth is None:
       immersion_depth = [0.0] * n
     immersion_depth_direction = immersion_depth_direction or [
@@ -2108,7 +2154,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
-    transport_air_volume = _fill_in_defaults(
+    transport_air_volume = fill_in_defaults(
       transport_air_volume,
       default=[
         hlc.aspiration_air_transport_volume if hlc is not None else 0.0
@@ -2119,23 +2165,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0.0))
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
-    pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0.0] * n)
-    lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
-    gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
-    dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1] * n)
-    aspirate_position_above_z_touch_off = _fill_in_defaults(
+    pre_wetting_volume = fill_in_defaults(pre_wetting_volume, [0.0] * n)
+    lld_mode = fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
+    gamma_lld_sensitivity = fill_in_defaults(gamma_lld_sensitivity, [1] * n)
+    dp_lld_sensitivity = fill_in_defaults(dp_lld_sensitivity, [1] * n)
+    aspirate_position_above_z_touch_off = fill_in_defaults(
       aspirate_position_above_z_touch_off, [0.0] * n
     )
-    detection_height_difference_for_dual_lld = _fill_in_defaults(
+    detection_height_difference_for_dual_lld = fill_in_defaults(
       detection_height_difference_for_dual_lld, [0.0] * n
     )
-    swap_speed = _fill_in_defaults(
+    swap_speed = fill_in_defaults(
       swap_speed,
       default=[
         hlc.aspiration_swap_speed if hlc is not None else 100.0 for hlc in hamilton_liquid_classes
       ],
     )
-    settling_time = _fill_in_defaults(
+    settling_time = fill_in_defaults(
       settling_time,
       default=[
         hlc.aspiration_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
@@ -2143,29 +2189,27 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
     mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
-    mix_position_from_liquid_surface = _fill_in_defaults(
-      mix_position_from_liquid_surface, [0.0] * n
-    )
+    mix_position_from_liquid_surface = fill_in_defaults(mix_position_from_liquid_surface, [0.0] * n)
     mix_speed = [op.mix.flow_rate if op.mix is not None else 100.0 for op in ops]
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
-    limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
+    mix_surface_following_distance = fill_in_defaults(mix_surface_following_distance, [0.0] * n)
+    limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
 
-    use_2nd_section_aspiration = _fill_in_defaults(use_2nd_section_aspiration, [False] * n)
-    retract_height_over_2nd_section_to_empty_tip = _fill_in_defaults(
+    use_2nd_section_aspiration = fill_in_defaults(use_2nd_section_aspiration, [False] * n)
+    retract_height_over_2nd_section_to_empty_tip = fill_in_defaults(
       retract_height_over_2nd_section_to_empty_tip, [0.0] * n
     )
-    dispensation_speed_during_emptying_tip = _fill_in_defaults(
+    dispensation_speed_during_emptying_tip = fill_in_defaults(
       dispensation_speed_during_emptying_tip, [50.0] * n
     )
-    dosing_drive_speed_during_2nd_section_search = _fill_in_defaults(
+    dosing_drive_speed_during_2nd_section_search = fill_in_defaults(
       dosing_drive_speed_during_2nd_section_search, [50.0] * n
     )
-    z_drive_speed_during_2nd_section_search = _fill_in_defaults(
+    z_drive_speed_during_2nd_section_search = fill_in_defaults(
       z_drive_speed_during_2nd_section_search, [30.0] * n
     )
-    cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0.0] * n)
-    ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
-    immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
+    cup_upper_edge = fill_in_defaults(cup_upper_edge, [0.0] * n)
+    ratio_liquid_rise_to_tip_deep_in = fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
+    immersion_depth_2nd_section = fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
 
     if probe_liquid_height:
       if any(op.liquid_height is not None for op in ops):
@@ -2215,7 +2259,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         for i in range(len(liquid_height_after_aspiration))
       ]
     else:
-      surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
+      surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
 
     # check if the surface_following_distance would fall below the minimum height
     # if lld is enabled, we expect to find liquid above the well bottom so we don't need to raise an error
@@ -2452,7 +2496,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
     # correct volumes using the liquid class
-    disable_volume_correction = _fill_in_defaults(disable_volume_correction, [False] * n)
+    disable_volume_correction = fill_in_defaults(disable_volume_correction, [False] * n)
     volumes = [
       hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
       for op, hlc, disabled in zip(ops, hamilton_liquid_classes, disable_volume_correction)
@@ -2472,10 +2516,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       lld_search_height = [wb + sh for wb, sh in zip(well_bottoms, lld_search_height)]
 
-    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10.0] * n)
-    second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
-    second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
-    minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
+    pull_out_distance_transport_air = fill_in_defaults(pull_out_distance_transport_air, [10.0] * n)
+    second_section_height = fill_in_defaults(second_section_height, [3.2] * n)
+    second_section_ratio = fill_in_defaults(second_section_ratio, [618.0] * n)
+    minimum_height = fill_in_defaults(minimum_height, well_bottoms)
     if immersion_depth is None:
       immersion_depth = [0.0] * n
     immersion_depth_direction = immersion_depth_direction or [
@@ -2488,14 +2532,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120.0)
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
-    cut_off_speed = _fill_in_defaults(cut_off_speed, [5.0] * n)
-    stop_back_volume = _fill_in_defaults(
+    cut_off_speed = fill_in_defaults(cut_off_speed, [5.0] * n)
+    stop_back_volume = fill_in_defaults(
       stop_back_volume,
       default=[
         hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
       ],
     )
-    transport_air_volume = _fill_in_defaults(
+    transport_air_volume = fill_in_defaults(
       transport_air_volume,
       default=[
         hlc.dispense_air_transport_volume if hlc is not None else 0.0
@@ -2506,19 +2550,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0.0))
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
-    lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
-    dispense_position_above_z_touch_off = _fill_in_defaults(
+    lld_mode = fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
+    dispense_position_above_z_touch_off = fill_in_defaults(
       dispense_position_above_z_touch_off, default=[0] * n
     )
-    gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
-    dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1] * n)
-    swap_speed = _fill_in_defaults(
+    gamma_lld_sensitivity = fill_in_defaults(gamma_lld_sensitivity, [1] * n)
+    dp_lld_sensitivity = fill_in_defaults(dp_lld_sensitivity, [1] * n)
+    swap_speed = fill_in_defaults(
       swap_speed,
       default=[
         hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hamilton_liquid_classes
       ],
     )
-    settling_time = _fill_in_defaults(
+    settling_time = fill_in_defaults(
       settling_time,
       default=[
         hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hamilton_liquid_classes
@@ -2526,12 +2570,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     mix_volume = [op.mix.volume if op.mix is not None else 0.0 for op in ops]
     mix_cycles = [op.mix.repetitions if op.mix is not None else 0 for op in ops]
-    mix_position_from_liquid_surface = _fill_in_defaults(
-      mix_position_from_liquid_surface, [0.0] * n
-    )
+    mix_position_from_liquid_surface = fill_in_defaults(mix_position_from_liquid_surface, [0.0] * n)
     mix_speed = [op.mix.flow_rate if op.mix is not None else 1.0 for op in ops]
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0.0] * n)
-    limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
+    mix_surface_following_distance = fill_in_defaults(mix_surface_following_distance, [0.0] * n)
+    limit_curve_index = fill_in_defaults(limit_curve_index, [0] * n)
 
     if probe_liquid_height:
       if any(op.liquid_height is not None for op in ops):
@@ -2577,7 +2619,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         for i in range(len(liquid_height_after_aspiration))
       ]
     else:
-      surface_following_distance = _fill_in_defaults(surface_following_distance, [0.0] * n)
+      surface_following_distance = fill_in_defaults(surface_following_distance, [0.0] * n)
 
     liquid_surfaces_no_lld = liquid_surface_no_lld or [
       wb + lh for wb, lh in zip(well_bottoms, liquid_heights)
@@ -3969,6 +4011,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ValueError: If one or more components are out of range. The error message contains all offending components.
     """
 
+    # TODO: these are values for a STARBackend. Find them for a STARlet.
+
     errors = []
     if not (-271.0 <= c.x <= 974.0):
       errors.append(f"x={c.x}")
@@ -4998,8 +5042,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dosing_drive_speed_during_2nd_section_search: List[int] = [468],
     z_drive_speed_during_2nd_section_search: List[int] = [215],
     cup_upper_edge: List[int] = [3600],
-    ratio_liquid_rise_to_tip_deep_in: List[int] = [16246],
-    immersion_depth_2nd_section: List[int] = [30],
+    # deprecated, remove >2026-06
+    ratio_liquid_rise_to_tip_deep_in: Optional[List[int]] = None,
+    immersion_depth_2nd_section: Optional[List[int]] = None,
   ):
     """aspirate pip
 
@@ -5082,11 +5127,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_drive_speed_during_2nd_section_search: Z drive speed during 2nd section search [0.1mm/s].
           Must be between 3 and 1600. Default 215.
       cup_upper_edge: Cup upper edge [0.1mm]. Must be between 0 and 3600. Default 3600.
-      ratio_liquid_rise_to_tip_deep_in: Ratio liquid rise to tip deep in [1/100000]. Must be
-          between 0 and 50000. Default 16246.
-      immersion_depth_2nd_section: Immersion depth 2nd section [0.1mm]. Must be between 0 and
-          3600. Default 30.
     """
+
+    if ratio_liquid_rise_to_tip_deep_in is not None:
+      warnings.warn(
+        "ratio_liquid_rise_to_tip_deep_in is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+    if immersion_depth_2nd_section is not None:
+      warnings.warn(
+        "immersion_depth_2nd_section is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
 
     assert all(0 <= x <= 2 for x in aspiration_type), "aspiration_type must be between 0 and 2"
     assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
@@ -5179,12 +5233,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       3 <= x <= 1600 for x in z_drive_speed_during_2nd_section_search
     ), "z_drive_speed_during_2nd_section_search must be between 3 and 1600"
     assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
-    assert all(
-      0 <= x <= 5000 for x in ratio_liquid_rise_to_tip_deep_in
-    ), "ratio_liquid_rise_to_tip_deep_in must be between 0 and 50000"
-    assert all(
-      0 <= x <= 3600 for x in immersion_depth_2nd_section
-    ), "immersion_depth_2nd_section must be between 0 and 3600"
 
     return await self.send_command(
       module="C0",
@@ -5233,8 +5281,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
       sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
       io=[f"{io:04}" for io in cup_upper_edge],
-      il=[f"{il:05}" for il in ratio_liquid_rise_to_tip_deep_in],
-      in_=[f"{in_:04}" for in_ in immersion_depth_2nd_section],
     )
 
   @need_iswap_parked
@@ -6259,7 +6305,41 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:OD)
   # TODO:(command:OT)
 
-  # -------------- 3.10 CoRe 96 Head commands --------------
+  # -------------- 3.10 96-Head commands --------------
+
+  async def head96_request_firmware_version(self) -> datetime.date:
+    """Request 96 Head firmware version (MEM-READ command)."""
+    resp: str = await self.send_command(module="H0", command="RF")
+    return self._parse_firmware_version_datetime(resp)
+
+  async def _head96_request_configuration(self) -> List[str]:
+    """Request the 96-head configuration (raw) using the QU command.
+
+    The instrument returns a sequence of positional tokens. This method returns
+    those tokens without decoding them, but the following indices are currently
+    understood:
+
+        - index 0: clot_monitoring_with_clld
+        - index 1: stop_disc_type (codes: 0=core_i, 1=core_ii)
+        - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
+        - indices 3..9: reservable positions (positions 4..10)
+
+    Returns:
+      Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
+    """
+    resp: str = await self.send_command(module="H0", command="QU")
+    return resp.split("au")[-1].split()
+
+  async def head96_request_type(self) -> Head96Information.HeadType:
+    """Send QG and return the 96-head type as a human-readable string."""
+    type_map: Dict[int, Head96Information.HeadType] = {
+      0: "Low volume head",
+      1: "High volume head",
+      2: "96 head II",
+      3: "96 head TADM",
+    }
+    resp = await self.send_command(module="H0", command="QG", fmt="qg#")
+    return type_map.get(resp["qg"], "unknown")
 
   # -------------- 3.10.1 Initialization --------------
 
@@ -6289,15 +6369,268 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ze=f"{round(z_position_at_the_command_end*10):04}",
     )
 
-  async def move_core_96_to_safe_position(self):
-    """Move CoRe 96 Head to Z save position"""
-
-    return await self.send_command(module="C0", command="EV")
-
   async def request_core_96_head_initialization_status(self) -> bool:
     # not available in the C0 docs, so get from module H0 itself instead
     response = await self.send_command(module="H0", command="QW", fmt="qw#")
     return bool(response.get("qw", 0) == 1)  # type?
+
+  # -------------- 3.10.2 96-Head Movements --------------
+
+  # Conversion factors for 96-Head (mm per increment)
+  _head96_z_drive_mm_per_increment = 0.005
+  _head96_y_drive_mm_per_increment = 0.015625
+  _head96_dispensing_drive_mm_per_increment = 0.001025641026
+  _head96_dispensing_drive_uL_per_increment = 0.019340933
+  _head96_squeezer_drive_mm_per_increment = 0.0002086672009
+
+  # Z-axis conversions
+
+  def _head96_z_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to Z-axis hardware increments for 96-head."""
+    return round(value_mm / self._head96_z_drive_mm_per_increment)
+
+  def _head96_z_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert Z-axis hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_z_drive_mm_per_increment, 2)
+
+  # Y-axis conversions
+
+  def _head96_y_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to Y-axis hardware increments for 96-head."""
+    return round(value_mm / self._head96_y_drive_mm_per_increment)
+
+  def _head96_y_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert Y-axis hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_y_drive_mm_per_increment, 2)
+
+  # Dispensing drive conversions (mm and uL)
+
+  def _head96_dispensing_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to dispensing drive hardware increments for 96-head."""
+    return round(value_mm / self._head96_dispensing_drive_mm_per_increment)
+
+  def _head96_dispensing_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert dispensing drive hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_dispensing_drive_mm_per_increment, 2)
+
+  def _head96_dispensing_drive_uL_to_increment(self, value_uL: float) -> int:
+    """Convert uL to dispensing drive hardware increments for 96-head."""
+    return round(value_uL / self._head96_dispensing_drive_uL_per_increment)
+
+  def _head96_dispensing_drive_increment_to_uL(self, value_increments: int) -> float:
+    """Convert dispensing drive hardware increments to uL for 96-head."""
+    return round(value_increments * self._head96_dispensing_drive_uL_per_increment, 2)
+
+  def _head96_dispensing_drive_mm_to_uL(self, value_mm: float) -> float:
+    """Convert dispensing drive mm to uL for 96-head."""
+    # Convert mm -> increment -> uL
+    increment = self._head96_dispensing_drive_mm_to_increment(value_mm)
+    return self._head96_dispensing_drive_increment_to_uL(increment)
+
+  def _head96_dispensing_drive_uL_to_mm(self, value_uL: float) -> float:
+    """Convert dispensing drive uL to mm for 96-head."""
+    # Convert uL -> increment -> mm
+    increment = self._head96_dispensing_drive_uL_to_increment(value_uL)
+    return self._head96_dispensing_drive_increment_to_mm(increment)
+
+  # Squeezer drive conversions
+
+  def _head96_squeezer_drive_mm_to_increment(self, value_mm: float) -> int:
+    """Convert mm to squeezer drive hardware increments for 96-head."""
+    return round(value_mm / self._head96_squeezer_drive_mm_per_increment)
+
+  def _head96_squeezer_drive_increment_to_mm(self, value_increments: int) -> float:
+    """Convert squeezer drive hardware increments to mm for 96-head."""
+    return round(value_increments * self._head96_squeezer_drive_mm_per_increment, 2)
+
+  # Movement commands
+
+  async def move_core_96_to_safe_position(self):
+    """Move CoRe 96 Head to Z safe position."""
+    warnings.warn(
+      "move_core_96_to_safe_position is deprecated. Use head96_move_to_z_safety instead. "
+      "This method will be removed in 2026-04",  # TODO: remove 2026-04
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_to_z_safety()
+
+  async def head96_move_to_z_safety(self):
+    """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
+    return await self.send_command(module="C0", command="EV")
+
+  async def head96_park(
+    self,
+  ):
+    """Park the 96-head.
+
+    Uses firmware default speeds and accelerations.
+    """
+
+    assert self.core96_head_installed, "requires 96-head to be installed"
+
+    return await self.send_command(module="H0", command="MO")
+
+  async def head96_move_x(self, x: float):
+    """Move the 96-head to a specified X-axis coordinate.
+
+    Note: Unlike head96_move_y and head96_move_z, the X-axis movement does not have
+    dedicated speed/acceleration parameters - it uses the EM command which moves
+    all axes together.
+
+    Args:
+      x: Target X coordinate in mm. Valid range: [-271.0, 974.0]
+
+    Returns:
+      Response from the hardware command.
+
+    Raises:
+      AssertionError: If 96-head not installed or parameter out of range.
+    """
+    assert self.core96_head_installed, "requires 96-head to be installed"
+    assert -271 <= x <= 974, "x must be between -271.0 and 974.0 mm"
+
+    current_pos = await self.head96_request_position()
+    return await self.head96_move_to_coordinate(
+      Coordinate(x, current_pos.y, current_pos.z),
+      minimum_height_at_beginning_of_a_command=current_pos.z - 10,
+    )
+
+  async def head96_move_y(
+    self,
+    y: float,
+    speed: float = 300.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15,
+  ):
+    """Move the 96-head to a specified Y-axis coordinate.
+
+    Args:
+      y: Target Y coordinate in mm. Valid range: [93.75, 562.5]
+      speed: Movement speed in mm/sec. Valid range: [0.78125, 390.625 or 625.0]. Default: 300.0
+      acceleration: Movement acceleration in mm/sec**2. Valid range: [78.125, 781.25]. Default: 300.0
+      current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+
+    Returns:
+      Response from the hardware command.
+
+    Raises:
+      AssertionError: If 96-head not installed, firmware info missing, or parameters out of range.
+
+    Note:
+      Maximum speed varies by firmware version:
+      - Pre-2021: 390.625 mm/sec (25,000 increments)
+      - 2021+: 625.0 mm/sec (40,000 increments)
+      The exact firmware version introducing this change is undocumented.
+    """
+    # Validate 96-head installation and firmware info availability
+    assert self.core96_head_installed, "requires 96-head to be installed"
+    assert (
+      self._head96_information is not None
+    ), "requires 96-head firmware version information for safe operation"
+
+    fw_version = self._head96_information.fw_version
+
+    # Determine speed limit based on firmware version
+    # Pre-2021 firmware appears to have lower speed capability or safety limits
+    # TODO: Verify exact firmware version and investigate the reason for this change
+    y_speed_upper_limit = 390.625 if fw_version.year <= 2021 else 625.0  # mm/sec
+
+    # Validate parameters before hardware communication
+    assert 93.75 <= y <= 562.5, "y must be between 93.75 and 562.5 mm"
+    assert 0.78125 <= speed <= y_speed_upper_limit, (
+      f"speed must be between 0.78125 and {y_speed_upper_limit} mm/sec for firmware version {fw_version}. "
+      f"Your firmware version: {self._head96_information.fw_version}. "
+      "If this limit seems incorrect, please test cautiously with an empty deck and report "
+      "accurate limits + firmware to PyLabRobot: https://github.com/PyLabRobot/pylabrobot/issues"
+    )
+    assert (
+      78.125 <= acceleration <= 781.25
+    ), "acceleration must be between 78.125 and 781.25 mm/sec**2"
+    assert isinstance(current_protection_limiter, int) and (
+      0 <= current_protection_limiter <= 15
+    ), "current_protection_limiter must be an integer between 0 and 15"
+
+    # Convert mm-based parameters to hardware increments using conversion methods
+    y_increment = self._head96_y_drive_mm_to_increment(y)
+    speed_increment = self._head96_y_drive_mm_to_increment(speed)
+    acceleration_increment = self._head96_y_drive_mm_to_increment(acceleration)
+
+    resp = await self.send_command(
+      module="H0",
+      command="YA",
+      ya=f"{y_increment:05}",
+      yv=f"{speed_increment:05}",
+      yr=f"{acceleration_increment:05}",
+      yw=f"{current_protection_limiter:02}",
+    )
+
+    return resp
+
+  async def head96_move_z(
+    self,
+    z: float,
+    speed: float = 80.0,
+    acceleration: float = 300.0,
+    current_protection_limiter: int = 15,
+  ):
+    """Move the 96-head to a specified Z-axis coordinate.
+
+    Args:
+      z: Target Z coordinate in mm. Valid range: [180.5, 342.5]
+      speed: Movement speed in mm/sec. Valid range: [0.25, 100.0]. Default: 80.0
+      acceleration: Movement acceleration in mm/sec^2. Valid range: [25.0, 500.0]. Default: 300.0
+      current_protection_limiter: Motor current limit (0-15, hardware units). Default: 15
+
+    Returns:
+      Response from the hardware command.
+
+    Raises:
+      AssertionError: If 96-head not installed, firmware info missing, or parameters out of range.
+
+    Note:
+      Firmware versions from 2021+ use 1:1 acceleration scaling, while pre-2021 versions
+      use 100x scaling. Both maintain a 100,000 increment upper limit.
+    """
+    # Validate 96-head installation and firmware info availability
+    assert self.core96_head_installed, "requires 96-head to be installed"
+    assert (
+      self._head96_information is not None
+    ), "requires 96-head firmware version information for safe operation"
+
+    fw_version = self._head96_information.fw_version
+
+    # Validate parameters before hardware communication
+    assert 180.5 <= z <= 342.5, "z must be between 180.5 and 342.5 mm"
+    assert 0.25 <= speed <= 100.0, "speed must be between 0.25 and 100.0 mm/sec"
+    assert 25.0 <= acceleration <= 500.0, "acceleration must be between 25.0 and 500.0 mm/sec**2"
+    assert isinstance(current_protection_limiter, int) and (
+      0 <= current_protection_limiter <= 15
+    ), "current_protection_limiter must be an integer between 0 and 15"
+
+    # Determine acceleration scaling based on firmware version
+    # Pre-2010 firmware: acceleration parameter is multiplied by 1000
+    # 2010+ firmware: acceleration parameter is 1:1 with increment/sec**2
+    # TODO: identify exact firmware version that introduced this change
+    acceleration_multiplier = 1 if fw_version.year >= 2010 else 0.001
+
+    # Convert mm-based parameters to hardware increments
+    z_increment = self._head96_z_drive_mm_to_increment(z)
+    speed_increment = self._head96_z_drive_mm_to_increment(speed)
+    acceleration_increment = round(
+      self._head96_z_drive_mm_to_increment(acceleration) * acceleration_multiplier
+    )
+
+    resp = await self.send_command(
+      module="H0",
+      command="ZA",
+      za=f"{z_increment:05}",
+      zv=f"{speed_increment:05}",
+      zr=f"{acceleration_increment:06}",
+      zw=f"{current_protection_limiter:02}",
+    )
+
+    return resp
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
@@ -6963,7 +7296,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     warnings.warn(  # TODO: remove 2025-02
       "`move_core_96_head_to_defined_position` is deprecated and will be "
-      "removed in 2025-02. Use `move_96head_to_coordinate` instead.",
+      "removed in 2025-02. Use `head96_move_to_coordinate` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
@@ -6984,7 +7317,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
-  async def move_96head_to_coordinate(
+  async def head96_move_to_coordinate(
     self,
     coordinate: Coordinate,
     minimum_height_at_beginning_of_a_command: float = 342.5,
@@ -7000,7 +7333,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         342.5. Default 342.5.
     """
 
-    # TODO: these are values for a STARBackend. Find them for a STARlet.
     self._check_96_position_legal(coordinate)
 
     assert (
@@ -7018,33 +7350,62 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   async def move_core_96_head_x(self, x_position: float):
-    """Move CoRe 96 Head X to absolute position"""
-    loc = await self.request_position_of_core_96_head()
-    await self.move_core_96_head_to_defined_position(
-      x=x_position,
-      y=loc["yh"],
-      z=loc["za"],
-      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+    """Move CoRe 96 Head X to absolute position
+
+    .. deprecated::
+      Use :meth:`head96_move_x` instead. Will be removed in 2026-06.
+    """
+    warnings.warn(
+      "`move_core_96_head_x` is deprecated. Use `head96_move_x` instead.",
+      DeprecationWarning,
+      stacklevel=2,
     )
+    return await self.head96_move_x(x_position)
 
   async def move_core_96_head_y(self, y_position: float):
-    """Move CoRe 96 Head Y to absolute position"""
-    loc = await self.request_position_of_core_96_head()
-    await self.move_core_96_head_to_defined_position(
-      x=loc["xs"],
-      y=y_position,
-      z=loc["za"],
-      minimum_height_at_beginning_of_a_command=loc["za"],
+    """Move CoRe 96 Head Y to absolute position
+
+    .. deprecated::
+      Use :meth:`head96_move_y` instead. Will be removed in 2026-06.
+    """
+    warnings.warn(
+      "`move_core_96_head_y` is deprecated. Use `head96_move_y` instead.",
+      DeprecationWarning,
+      stacklevel=2,
     )
+    return await self.head96_move_y(y_position)
 
   async def move_core_96_head_z(self, z_position: float):
-    """Move CoRe 96 Head Z to absolute position"""
-    loc = await self.request_position_of_core_96_head()
-    await self.move_core_96_head_to_defined_position(
-      x=loc["xs"],
-      y=loc["yh"],
-      z=z_position,
-      minimum_height_at_beginning_of_a_command=loc["za"] - 10,
+    """Move CoRe 96 Head Z to absolute position
+
+    .. deprecated::
+      Use :meth:`head96_move_z` instead. Will be removed in 2026-06.
+    """
+    warnings.warn(
+      "`move_core_96_head_z` is deprecated. Use `head96_move_z` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_z(z_position)
+
+  async def move_96head_to_coordinate(
+    self,
+    coordinate: Coordinate,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
+  ):
+    """Move STAR(let) 96-Head to defined Coordinate
+
+    .. deprecated::
+      Use :meth:`head96_move_to_coordinate` instead. Will be removed in 2026-06.
+    """
+    warnings.warn(
+      "`move_96head_to_coordinate` is deprecated. Use `head96_move_to_coordinate` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_to_coordinate(
+      coordinate=coordinate,
+      minimum_height_at_beginning_of_a_command=minimum_height_at_beginning_of_a_command,
     )
 
   # -------------- 3.10.5 Wash procedure commands using CoRe 96 Head --------------
@@ -7064,29 +7425,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="QH", fmt="qh#")
 
   async def request_position_of_core_96_head(self):
-    """Request position of CoRe 96 Head (A1 considered to tip length)
+    """Deprecated - use `head96_request_position` instead."""
 
-    Returns:
-      xs: A1 X direction [1mm]
-      xd: X direction 0 = positive 1 = negative
-      yh: A1 Y direction [1mm]
-      za: Z height [1mm]
-    """
-
-    warnings.warn(  # TODO: remove 2025-02
+    warnings.warn(  # TODO: remove 2026-02
       "`request_position_of_core_96_head` is deprecated and will be "
-      "removed in 2025-02 use `request_96head_position` instead.",
+      "removed in 2026-02 use `head96_request_position` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
 
-    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
-    resp["xs"] = resp["xs"] / 10
-    resp["yh"] = resp["yh"] / 10
-    resp["za"] = resp["za"] / 10
-    return resp
+    return await self.head96_request_position()
 
-  async def request_96head_position(self) -> Coordinate:
+  async def head96_request_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
 
     Returns:
@@ -7120,6 +7470,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
+
+  async def head96_request_dispensing_drive_position_mm(self) -> float:
+    """Request CoRe 96 Head dispensing drive position in mm"""
+    resp = await self.send_command(module="H0", command="RD", fmt="rd######")
+    return self._head96_dispensing_drive_increment_to_mm(resp["rd"])
+
+  async def head96_request_dispensing_drive_position_uL(self) -> float:
+    """Request CoRe 96 Head dispensing drive position in uL"""
+    position_mm = await self.head96_request_dispensing_drive_position_mm()
+    return self._head96_dispensing_drive_mm_to_uL(position_mm)
 
   # -------------- 3.11 384 Head commands --------------
 
