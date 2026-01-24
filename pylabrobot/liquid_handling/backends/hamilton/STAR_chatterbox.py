@@ -160,7 +160,7 @@ class STARChatterboxBackend(STARBackend):
     """Return mock iSWAP initialization status."""
     return True
 
-  async def request_96head_firmware_version(self) -> datetime.date:
+  async def head96_request_firmware_version(self) -> datetime.date:
     """Return mock 96-head firmware version."""
     return datetime.date(2023, 1, 1)
 
