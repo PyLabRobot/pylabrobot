@@ -2751,6 +2751,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
+    if tip_pickup_method == "from_rack":
+      # the STAR will not automatically move the dispensing drive down if it is still up
+      # so we need to move it down here
+      await self.head96_dispensing_drive_move_to_position(0)
+
     try:
       return await self.pick_up_tips_core96(
         x_position=abs(round(pickup_position.x * 10)),
@@ -7515,14 +7520,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
 
-  async def head96_request_dispensing_drive_position_mm(self) -> float:
-    """Request CoRe 96 Head dispensing drive position in mm"""
+  async def head96_dispensing_drive_request_position_mm(self) -> float:
+    """Request 96 Head dispensing drive position in mm"""
     resp = await self.send_command(module="H0", command="RD", fmt="rd######")
     return self._head96_dispensing_drive_increment_to_mm(resp["rd"])
 
-  async def head96_request_dispensing_drive_position_uL(self) -> float:
-    """Request CoRe 96 Head dispensing drive position in uL"""
-    position_mm = await self.head96_request_dispensing_drive_position_mm()
+  async def head96_dispensing_drive_request_position_uL(self) -> float:
+    """Request 96 Head dispensing drive position in uL"""
+    position_mm = await self.head96_dispensing_drive_request_position_mm()
     return self._head96_dispensing_drive_mm_to_uL(position_mm)
 
   # -------------- 3.11 384 Head commands --------------
