@@ -575,31 +575,23 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
   async def _run_scan(
     self,
-    plate: Plate,
-    wells: List[Well],
+    ordered_wells: Sequence[Well],
     decoder: _MeasurementDecoder,
     mode: str,
     step_loss_commands: List[str],
     serpentine: bool,
     scan_direction: str,
-  ) -> List[Well]:
+  ) -> None:
     """Run the common scan loop for all measurement types.
 
     Args:
-      plate: The plate to scan.
-      wells: The wells to scan.
+      ordered_wells: The wells to scan in row-major order.
       decoder: The decoder to use for parsing measurements.
       mode: The mode name for logging (e.g., "Absorbance").
       step_loss_commands: Commands to run after the scan to check for step loss.
       serpentine: Whether to use serpentine scan order.
       scan_direction: The scan direction command (e.g., "ALTUP", "UP").
-
-    Returns:
-      The list of wells in scan order.
     """
-    ordered_wells = wells if wells else plate.get_all_items()
-    scan_wells = self._scan_visit_order(ordered_wells, serpentine=serpentine)
-
     self._active_step_loss_commands = step_loss_commands
 
     for row_index, row_wells in self._group_by_row(ordered_wells):
@@ -623,8 +615,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._await_measurements(decoder, count, mode)
       await self._await_scan_terminal(decoder.pop_terminal())
 
-    return scan_wells
-
   async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
     """Queue and execute an absorbance scan."""
 
@@ -638,9 +628,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._begin_run()
     try:
       await self._configure_absorbance(wavelength)
-      scan_wells = await self._run_scan(
-        plate=plate,
-        wells=wells,
+      await self._run_scan(
+        ordered_wells=ordered_wells,
         decoder=decoder,
         mode="Absorbance",
         step_loss_commands=["CHECK MTP.STEPLOSS", "CHECK ABS.STEPLOSS"],
@@ -722,23 +711,23 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for fluorescence scans.")
 
+    ordered_wells = wells if wells else plate.get_all_items()
+    scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
+
     await self._begin_run()
     try:
       await self._configure_fluorescence(excitation_wavelength, emission_wavelength)
       if self._current_fluorescence_excitation is None:
         raise RuntimeError("Fluorescence configuration missing excitation wavelength.")
 
-      ordered_wells = wells if wells else plate.get_all_items()
-      scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
       decoder = _FluorescenceRunDecoder(
         len(scan_wells),
         self._current_fluorescence_excitation,
         self._current_fluorescence_emission,
       )
 
-      scan_wells = await self._run_scan(
-        plate=plate,
-        wells=wells,
+      await self._run_scan(
+        ordered_wells=ordered_wells,
         decoder=decoder,
         mode="Fluorescence",
         step_loss_commands=[
@@ -819,23 +808,23 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for luminescence scans.")
 
+    ordered_wells = wells if wells else plate.get_all_items()
+    scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
+
     await self._begin_run()
     try:
       await self._configure_luminescence()
       dark_t = self._lum_integration_s.get(0, 0.0)
       meas_t = self._lum_integration_s.get(1, 0.0)
 
-      ordered_wells = wells if wells else plate.get_all_items()
-      scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
       decoder = _LuminescenceRunDecoder(
         len(scan_wells),
         dark_integration_s=dark_t,
         meas_integration_s=meas_t,
       )
 
-      scan_wells = await self._run_scan(
-        plate=plate,
-        wells=wells,
+      await self._run_scan(
+        ordered_wells=ordered_wells,
         decoder=decoder,
         mode="Luminescence",
         step_loss_commands=["CHECK MTP.STEPLOSS", "CHECK LUM.STEPLOSS"],
