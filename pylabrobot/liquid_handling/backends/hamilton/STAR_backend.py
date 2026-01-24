@@ -2049,8 +2049,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dosing_drive_speed_during_2nd_section_search: Unknown.
       z_drive_speed_during_2nd_section_search: Unknown.
       cup_upper_edge: Unknown.
-      ratio_liquid_rise_to_tip_deep_in: Unknown.
-      immersion_depth_2nd_section: The depth to move into the liquid for the second section of aspiration.
 
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before starting an aspiration.
       min_z_endpos: The minimum height to move to, this is the end of aspiration.
@@ -5044,8 +5042,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     dosing_drive_speed_during_2nd_section_search: List[int] = [468],
     z_drive_speed_during_2nd_section_search: List[int] = [215],
     cup_upper_edge: List[int] = [3600],
-    ratio_liquid_rise_to_tip_deep_in: List[int] = [16246],
-    immersion_depth_2nd_section: List[int] = [30],
+    # deprecated, remove >2026-06
+    ratio_liquid_rise_to_tip_deep_in: Optional[List[int]] = None,
+    immersion_depth_2nd_section: Optional[List[int]] = None,
   ):
     """aspirate pip
 
@@ -5128,11 +5127,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_drive_speed_during_2nd_section_search: Z drive speed during 2nd section search [0.1mm/s].
           Must be between 3 and 1600. Default 215.
       cup_upper_edge: Cup upper edge [0.1mm]. Must be between 0 and 3600. Default 3600.
-      ratio_liquid_rise_to_tip_deep_in: Ratio liquid rise to tip deep in [1/100000]. Must be
-          between 0 and 50000. Default 16246.
-      immersion_depth_2nd_section: Immersion depth 2nd section [0.1mm]. Must be between 0 and
-          3600. Default 30.
     """
+
+    if ratio_liquid_rise_to_tip_deep_in is not None:
+      warnings.warn(
+        "ratio_liquid_rise_to_tip_deep_in is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+    if immersion_depth_2nd_section is not None:
+      warnings.warn(
+        "immersion_depth_2nd_section is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
 
     assert all(0 <= x <= 2 for x in aspiration_type), "aspiration_type must be between 0 and 2"
     assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
@@ -5225,12 +5233,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       3 <= x <= 1600 for x in z_drive_speed_during_2nd_section_search
     ), "z_drive_speed_during_2nd_section_search must be between 3 and 1600"
     assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
-    assert all(
-      0 <= x <= 5000 for x in ratio_liquid_rise_to_tip_deep_in
-    ), "ratio_liquid_rise_to_tip_deep_in must be between 0 and 50000"
-    assert all(
-      0 <= x <= 3600 for x in immersion_depth_2nd_section
-    ), "immersion_depth_2nd_section must be between 0 and 3600"
 
     return await self.send_command(
       module="C0",
@@ -5279,8 +5281,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
       sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
       io=[f"{io:04}" for io in cup_upper_edge],
-      il=[f"{il:05}" for il in ratio_liquid_rise_to_tip_deep_in],
-      in_=[f"{in_:04}" for in_ in immersion_depth_2nd_section],
     )
 
   @need_iswap_parked
