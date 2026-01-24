@@ -7471,6 +7471,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
 
+  async def head96_request_dispensing_drive_position_mm(self) -> float:
+    """Request CoRe 96 Head dispensing drive position in mm"""
+    resp = await self.send_command(module="H0", command="RD", fmt="rd######")
+    return self._head96_dispensing_drive_increment_to_mm(resp["rd"])
+
+  async def head96_request_dispensing_drive_position_uL(self) -> float:
+    """Request CoRe 96 Head dispensing drive position in uL"""
+    position_mm = await self.head96_request_dispensing_drive_position_mm()
+    return self._head96_dispensing_drive_mm_to_uL(position_mm)
+
   # -------------- 3.11 384 Head commands --------------
 
   # -------------- 3.11.1 Initialization --------------
