@@ -7425,31 +7425,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="QH", fmt="qh#")
 
   async def request_position_of_core_96_head(self):
-    """Request position of CoRe 96 Head (A1 considered to tip length)
+    """Deprecated - use `head96_request_position` instead."""
 
-    Returns:
-      xs: A1 X direction [1mm]
-      xd: X direction 0 = positive 1 = negative
-      yh: A1 Y direction [1mm]
-      za: Z height [1mm]
-    """
-
-    warnings.warn(  # TODO: remove 2025-02
+    warnings.warn(  # TODO: remove 2026-02
       "`request_position_of_core_96_head` is deprecated and will be "
-      "removed in 2025-02 use `head96_request_position` instead.",
+      "removed in 2026-02 use `head96_request_position` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
 
-    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
-    resp["xs"] = resp["xs"] / 10
-    resp["yh"] = resp["yh"] / 10
-    resp["za"] = resp["za"] / 10
-    return resp
+    return await self.head96_request_position()
 
   async def head96_request_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
-    (MEM-READ command)
 
     Returns:
       Coordinate: x, y, z in mm
