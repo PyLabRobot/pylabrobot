@@ -40,7 +40,7 @@ def _integration_value_to_seconds(value: int) -> float:
   return value / 1_000_000.0 if value >= 1000 else value / 1000.0
 
 
-def _is_abs_prepare_marker(marker: int) -> bool:
+def _is_abs_calibration_marker(marker: int) -> bool:
   return marker >= 22 and (marker - 4) % 18 == 0
 
 
@@ -57,7 +57,7 @@ def _split_payload_and_trailer(marker: int, blob: bytes) -> Optional[Tuple[bytes
 
 
 @dataclass(frozen=True)
-class _AbsorbancePrepareItem:
+class _AbsorbanceCalibrationItem:
   ticker_overflows: int
   ticker_counter: int
   meas_gain: int
@@ -69,12 +69,12 @@ class _AbsorbancePrepareItem:
 
 
 @dataclass(frozen=True)
-class _AbsorbancePrepare:
+class _AbsorbanceCalibration:
   ex: int
-  items: List[_AbsorbancePrepareItem]
+  items: List[_AbsorbanceCalibrationItem]
 
 
-def _decode_abs_prepare(marker: int, blob: bytes) -> Optional[_AbsorbancePrepare]:
+def _decode_abs_calibration(marker: int, blob: bytes) -> Optional[_AbsorbanceCalibration]:
   split = _split_payload_and_trailer(marker, blob)
   if split is None:
     return None
@@ -86,10 +86,10 @@ def _decode_abs_prepare(marker: int, blob: bytes) -> Optional[_AbsorbancePrepare
   reader = Reader(payload, little_endian=False)
   reader.raw_bytes(2)  # skip first 2 bytes
   ex = reader.u16()
-  items: List[_AbsorbancePrepareItem] = []
+  items: List[_AbsorbanceCalibrationItem] = []
   while reader.has_remaining():
     items.append(
-      _AbsorbancePrepareItem(
+      _AbsorbanceCalibrationItem(
         ticker_overflows=reader.u32(),
         ticker_counter=reader.u16(),
         meas_gain=reader.u16(),
@@ -100,7 +100,7 @@ def _decode_abs_prepare(marker: int, blob: bytes) -> Optional[_AbsorbancePrepare
         ref_bright=reader.u16(),
       )
     )
-  return _AbsorbancePrepare(ex=ex, items=items)
+  return _AbsorbanceCalibration(ex=ex, items=items)
 
 
 def _decode_abs_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[Tuple[int, int]]]]:
@@ -125,30 +125,30 @@ def _decode_abs_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[
 
 
 def _absorbance_od_calibrated(
-  prep: _AbsorbancePrepare, meas_ref_items: List[Tuple[int, int]], od_max: float = 4.0
+  cal: _AbsorbanceCalibration, meas_ref_items: List[Tuple[int, int]], od_max: float = 4.0
 ) -> float:
-  if not prep.items:
-    raise ValueError("ABS prepare packet contained no calibration items.")
+  if not cal.items:
+    raise ValueError("ABS calibration packet contained no calibration items.")
 
   min_corr_trans = math.pow(10.0, -od_max)
 
-  if len(prep.items) == len(meas_ref_items) and len(prep.items) > 1:
+  if len(cal.items) == len(meas_ref_items) and len(cal.items) > 1:
     corr_trans_vals: List[float] = []
-    for (meas, ref), cal in zip(meas_ref_items, prep.items):
-      denom_corr = cal.meas_bright - cal.meas_dark
+    for (meas, ref), cal_item in zip(meas_ref_items, cal.items):
+      denom_corr = cal_item.meas_bright - cal_item.meas_dark
       if denom_corr == 0:
         continue
-      f_corr = (cal.ref_bright - cal.ref_dark) / denom_corr
-      denom = ref - cal.ref_dark
+      f_corr = (cal_item.ref_bright - cal_item.ref_dark) / denom_corr
+      denom = ref - cal_item.ref_dark
       if denom == 0:
         continue
-      corr_trans_vals.append(((meas - cal.meas_dark) / denom) * f_corr)
+      corr_trans_vals.append(((meas - cal_item.meas_dark) / denom) * f_corr)
     if not corr_trans_vals:
       raise ZeroDivisionError("ABS invalid: no usable reads after per-read calibration.")
     corr_trans = max(sum(corr_trans_vals) / len(corr_trans_vals), min_corr_trans)
     return float(-math.log10(corr_trans))
 
-  cal0 = prep.items[0]
+  cal0 = cal.items[0]
   denom_corr = cal0.meas_bright - cal0.meas_dark
   if denom_corr == 0:
     raise ZeroDivisionError("ABS calibration invalid: meas_bright == meas_dark")
@@ -169,14 +169,14 @@ def _absorbance_od_calibrated(
 
 
 @dataclass(frozen=True)
-class _FluorescencePrepare:
+class _FluorescenceCalibration:
   ex: int
   meas_dark: int
   ref_dark: int
   ref_bright: int
 
 
-def _decode_flr_prepare(marker: int, blob: bytes) -> Optional[_FluorescencePrepare]:
+def _decode_flr_calibration(marker: int, blob: bytes) -> Optional[_FluorescenceCalibration]:
   split = _split_payload_and_trailer(marker, blob)
   if split is None:
     return None
@@ -190,7 +190,7 @@ def _decode_flr_prepare(marker: int, blob: bytes) -> Optional[_FluorescencePrepa
   reader.raw_bytes(2)  # skip bytes 12-13
   ref_dark = reader.u16()
   ref_bright = reader.u16()
-  return _FluorescencePrepare(
+  return _FluorescenceCalibration(
     ex=ex,
     meas_dark=meas_dark,
     ref_dark=ref_dark,
@@ -223,25 +223,25 @@ def _decode_flr_data(
 
 
 def _fluorescence_corrected(
-  prep: _FluorescencePrepare, meas_ref_items: List[Tuple[int, int]]
+  cal: _FluorescenceCalibration, meas_ref_items: List[Tuple[int, int]]
 ) -> int:
   if not meas_ref_items:
     return 0
   meas_mean = sum(m for m, _ in meas_ref_items) / len(meas_ref_items)
   ref_mean = sum(r for _, r in meas_ref_items) / len(meas_ref_items)
-  denom = ref_mean - prep.ref_dark
+  denom = ref_mean - cal.ref_dark
   if denom == 0:
     return 0
-  corr = (meas_mean - prep.meas_dark) * (prep.ref_bright - prep.ref_dark) / denom
+  corr = (meas_mean - cal.meas_dark) * (cal.ref_bright - cal.ref_dark) / denom
   return int(round(corr))
 
 
 @dataclass(frozen=True)
-class _LuminescencePrepare:
+class _LuminescenceCalibration:
   ref_dark: int
 
 
-def _decode_lum_prepare(marker: int, blob: bytes) -> Optional[_LuminescencePrepare]:
+def _decode_lum_calibration(marker: int, blob: bytes) -> Optional[_LuminescenceCalibration]:
   split = _split_payload_and_trailer(marker, blob)
   if split is None:
     return None
@@ -250,7 +250,7 @@ def _decode_lum_prepare(marker: int, blob: bytes) -> Optional[_LuminescencePrepa
     return None
   reader = Reader(payload, little_endian=False)
   reader.raw_bytes(6)  # skip bytes 0-5
-  return _LuminescencePrepare(ref_dark=reader.i32())
+  return _LuminescenceCalibration(ref_dark=reader.i32())
 
 
 def _decode_lum_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[int]]]:
@@ -273,7 +273,7 @@ def _decode_lum_data(marker: int, blob: bytes) -> Optional[Tuple[int, int, List[
 
 
 def _luminescence_intensity(
-  prep: _LuminescencePrepare,
+  cal: _LuminescenceCalibration,
   counts: List[int],
   dark_integration_s: float,
   meas_integration_s: float,
@@ -283,7 +283,7 @@ def _luminescence_intensity(
   if dark_integration_s == 0 or meas_integration_s == 0:
     return 0
   count_mean = sum(counts) / len(counts)
-  corrected_rate = (count_mean / meas_integration_s) - (prep.ref_dark / dark_integration_s)
+  corrected_rate = (count_mean / meas_integration_s) - (cal.ref_dark / dark_integration_s)
   return int(corrected_rate)
 
 
@@ -637,12 +637,12 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       if len(decoder.measurements) != len(scan_wells):
         raise RuntimeError("Absorbance decoder did not complete scan.")
       intensities: List[float] = []
-      prep = decoder.prepare
-      if prep is None:
-        raise RuntimeError("ABS prepare packet not seen; cannot compute calibrated OD.")
+      cal = decoder.calibration
+      if cal is None:
+        raise RuntimeError("ABS calibration packet not seen; cannot compute calibrated OD.")
       for meas in decoder.measurements:
         items = meas.items or [(meas.sample, meas.reference)]
-        od = _absorbance_od_calibrated(prep, items)
+        od = _absorbance_od_calibrated(cal, items)
         intensities.append(od)
       matrix = self._format_plate_result(plate, scan_wells, intensities)
       return [
@@ -1157,27 +1157,27 @@ class _AbsorbanceRunDecoder(_MeasurementDecoder):
   def __init__(self, expected: int) -> None:
     super().__init__(expected)
     self.measurements: List[_AbsorbanceMeasurement] = []
-    self._prepare: Optional[_AbsorbancePrepare] = None
+    self._calibration: Optional[_AbsorbanceCalibration] = None
 
   @property
   def count(self) -> int:
     return len(self.measurements)
 
   @property
-  def prepare(self) -> Optional[_AbsorbancePrepare]:
-    """Return the absorbance prepare data, if available."""
-    return self._prepare
+  def calibration(self) -> Optional[_AbsorbanceCalibration]:
+    """Return the absorbance calibration data, if available."""
+    return self._calibration
 
   def _should_consume_bin(self, marker: int) -> bool:
-    return _is_abs_prepare_marker(marker) or _is_abs_data_marker(marker)
+    return _is_abs_calibration_marker(marker) or _is_abs_data_marker(marker)
 
   def _handle_bin(self, marker: int, blob: bytes) -> None:
-    if _is_abs_prepare_marker(marker):
-      if self._prepare is not None:
+    if _is_abs_calibration_marker(marker):
+      if self._calibration is not None:
         return
-      decoded = _decode_abs_prepare(marker, blob)
+      decoded = _decode_abs_calibration(marker, blob)
       if decoded is not None:
-        self._prepare = decoded
+        self._calibration = decoded
       return
     if _is_abs_data_marker(marker):
       decoded = _decode_abs_data(marker, blob)
@@ -1198,7 +1198,7 @@ class _FluorescenceRunDecoder(_MeasurementDecoder):
   def __init__(self, expected_wells: int) -> None:
     super().__init__(expected_wells)
     self._intensities: List[int] = []
-    self._prepare: Optional[_FluorescencePrepare] = None
+    self._calibration: Optional[_FluorescenceCalibration] = None
 
   @property
   def count(self) -> int:
@@ -1218,16 +1218,16 @@ class _FluorescenceRunDecoder(_MeasurementDecoder):
 
   def _handle_bin(self, marker: int, blob: bytes) -> None:
     if marker == 18:
-      decoded = _decode_flr_prepare(marker, blob)
+      decoded = _decode_flr_calibration(marker, blob)
       if decoded is not None:
-        self._prepare = decoded
+        self._calibration = decoded
       return
     decoded = _decode_flr_data(marker, blob)
     if decoded is None:
       return
     _label, _ex, _em, items = decoded
-    if self._prepare is not None:
-      intensity = _fluorescence_corrected(self._prepare, items)
+    if self._calibration is not None:
+      intensity = _fluorescence_corrected(self._calibration, items)
     else:
       if not items:
         intensity = 0
@@ -1253,7 +1253,7 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
   ) -> None:
     super().__init__(expected)
     self.measurements: List[_LuminescenceMeasurement] = []
-    self._prepare: Optional[_LuminescencePrepare] = None
+    self._calibration: Optional[_LuminescenceCalibration] = None
     self._dark_integration_s = float(dark_integration_s)
     self._meas_integration_s = float(meas_integration_s)
 
@@ -1270,17 +1270,17 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
 
   def _handle_bin(self, marker: int, blob: bytes) -> None:
     if marker == 10:
-      decoded = _decode_lum_prepare(marker, blob)
+      decoded = _decode_lum_calibration(marker, blob)
       if decoded is not None:
-        self._prepare = decoded
+        self._calibration = decoded
       return
     decoded = _decode_lum_data(marker, blob)
     if decoded is None:
       return
     _label, _em, counts = decoded
-    if self._prepare is not None and self._dark_integration_s and self._meas_integration_s:
+    if self._calibration is not None and self._dark_integration_s and self._meas_integration_s:
       intensity = _luminescence_intensity(
-        self._prepare, counts, self._dark_integration_s, self._meas_integration_s
+        self._calibration, counts, self._dark_integration_s, self._meas_integration_s
       )
     else:
       intensity = int(round(sum(counts) / len(counts))) if counts else 0

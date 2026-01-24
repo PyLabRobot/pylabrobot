@@ -25,7 +25,7 @@ def _bin_blob(payload):
   return marker, payload + trailer
 
 
-def _abs_prepare_blob(ex_decitenth, meas_dark, meas_bright, ref_dark, ref_bright):
+def _abs_calibration_blob(ex_decitenth, meas_dark, meas_bright, ref_dark, ref_bright):
   header = _pack_u16([0, ex_decitenth])
   item = (0).to_bytes(4, "big") + _pack_u16([0, 0, meas_dark, meas_bright, 0, ref_dark, ref_bright])
   return _bin_blob(header + item)
@@ -36,7 +36,7 @@ def _abs_data_blob(ex_decitenth, meas, ref):
   return _bin_blob(payload)
 
 
-def _flr_prepare_blob(ex_decitenth, meas_dark, ref_dark, ref_bright):
+def _flr_calibration_blob(ex_decitenth, meas_dark, ref_dark, ref_bright):
   words = [ex_decitenth, 0, 0, 0, 0, meas_dark, 0, ref_dark, ref_bright]
   return _bin_blob(_pack_u16(words))
 
@@ -532,16 +532,16 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     reference = 10000
     max_absorbance = 1.0
     decoder = _AbsorbanceRunDecoder(len(self.scan_wells))
-    prep_marker, prep_blob = _abs_prepare_blob(
+    cal_marker, cal_blob = _abs_calibration_blob(
       wavelength * 10,
       meas_dark=0,
       meas_bright=1000,
       ref_dark=0,
       ref_bright=1000,
     )
-    decoder.feed_bin(prep_marker, prep_blob)
-    prep = decoder.prepare
-    self.assertIsNotNone(prep)
+    decoder.feed_bin(cal_marker, cal_blob)
+    cal = decoder.calibration
+    self.assertIsNotNone(cal)
 
     def build_packet(intensity):
       target = 0.0
@@ -549,12 +549,12 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
         target = (intensity / self.max_intensity) * max_absorbance
       sample = max(1, int(round(reference / (10**target))))
       marker, blob = _abs_data_blob(wavelength * 10, sample, reference)
-      expected = _absorbance_od_calibrated(prep, [(sample, reference)])
+      expected = _absorbance_od_calibrated(cal, [(sample, reference)])
       return marker, blob, expected
 
     def extract_actual(decoder):
       return [
-        _absorbance_od_calibrated(prep, [(meas.sample, meas.reference)])
+        _absorbance_od_calibrated(cal, [(meas.sample, meas.reference)])
         for meas in decoder.measurements
       ]
 
@@ -564,10 +564,10 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
     excitation = 485
     emission = 520
     decoder = _FluorescenceRunDecoder(len(self.scan_wells))
-    prep_marker, prep_blob = _flr_prepare_blob(
+    cal_marker, cal_blob = _flr_calibration_blob(
       excitation * 10, meas_dark=0, ref_dark=0, ref_bright=1000
     )
-    decoder.feed_bin(prep_marker, prep_blob)
+    decoder.feed_bin(cal_marker, cal_blob)
 
     def build_packet(intensity):
       marker, blob = _flr_data_blob(excitation * 10, emission * 10, intensity, 1000)
@@ -704,8 +704,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.backend._device_initialized = True
 
     async def mock_await(decoder, row_count, mode):
-      prep_marker, prep_blob = _abs_prepare_blob(6000, 0, 1000, 0, 1000)
-      decoder.feed_bin(prep_marker, prep_blob)
+      cal_marker, cal_blob = _abs_calibration_blob(6000, 0, 1000, 0, 1000)
+      decoder.feed_bin(cal_marker, cal_blob)
       for _ in range(row_count):
         data_marker, data_blob = _abs_data_blob(6000, 500, 1000)
         decoder.feed_bin(data_marker, data_blob)
@@ -759,8 +759,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.backend._device_initialized = True
 
     async def mock_await(decoder, row_count, mode):
-      prep_marker, prep_blob = _flr_prepare_blob(4850, 0, 0, 1000)
-      decoder.feed_bin(prep_marker, prep_blob)
+      cal_marker, cal_blob = _flr_calibration_blob(4850, 0, 0, 1000)
+      decoder.feed_bin(cal_marker, cal_blob)
       for _ in range(row_count):
         data_marker, data_blob = _flr_data_blob(4850, 5200, 500, 1000)
         decoder.feed_bin(data_marker, data_blob)
@@ -833,8 +833,8 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.backend._device_initialized = True
 
     async def mock_await(decoder, row_count, mode):
-      prep_blob = bytes(14)
-      decoder.feed_bin(10, prep_blob)
+      cal_blob = bytes(14)
+      decoder.feed_bin(10, cal_blob)
       for _ in range(row_count):
         data_marker, data_blob = _lum_data_blob(0, 1000)
         decoder.feed_bin(data_marker, data_blob)
