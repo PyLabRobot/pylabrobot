@@ -2688,7 +2688,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Pick up tips using the 96 head.
 
     `tip_pickup_method` can be one of the following:
-        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mouting tips.
+        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mounting tips.
         - "from_waste":
             1. it actually moves the plunger all the way up
             2. mounts tips
