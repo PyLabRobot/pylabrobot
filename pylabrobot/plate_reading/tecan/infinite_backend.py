@@ -7,15 +7,13 @@ This backend targets the Infinite "M" series (e.g., Infinite 200 PRO).  The
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import math
-import os
 import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, TextIO, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.usb import USB
@@ -513,7 +511,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
   def __init__(
     self,
     scan_config: Optional[InfiniteScanConfig] = None,
-    packet_log_path: Optional[str] = None,
   ) -> None:
     super().__init__()
     self.io = USB(
@@ -533,9 +530,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._parser = _StreamParser(allow_bare_ascii=True)
     self._run_active = False
     self._active_step_loss_commands: List[str] = []
-    self._packet_log_path = packet_log_path
-    self._packet_log_handle: Optional[TextIO] = None
-    self._packet_log_lock = asyncio.Lock()
 
   async def setup(self) -> None:
     async with self._setup_lock:
@@ -554,9 +548,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         return
       await self._cleanup_protocol()
       await self.io.stop()
-      if self._packet_log_handle is not None:
-        self._packet_log_handle.close()
-        self._packet_log_handle = None
       self._device_initialized = False
       self._mode_capabilities.clear()
       self._reset_stream_state()
@@ -963,8 +954,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     except TimeoutError:
       await self._recover_transport()
       raise
-    if data:
-      await self._log_packet("in", data)
     return data
 
   async def _recover_transport(self) -> None:
@@ -977,28 +966,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._device_initialized = False
     self._mode_capabilities.clear()
     self._reset_stream_state()
-
-  async def _log_packet(
-    self, direction: str, data: bytes, ascii_payload: Optional[str] = None
-  ) -> None:
-    if not self._packet_log_path:
-      return
-    async with self._packet_log_lock:
-      if self._packet_log_handle is None:
-        parent = os.path.dirname(self._packet_log_path)
-        if parent:
-          os.makedirs(parent, exist_ok=True)
-        self._packet_log_handle = open(self._packet_log_path, "a", encoding="utf-8")
-      record = {
-        "ts": time.time(),
-        "dir": direction,
-        "size": len(data),
-        "data_hex": data.hex(),
-      }
-      if ascii_payload is not None:
-        record["ascii"] = ascii_payload
-      self._packet_log_handle.write(json.dumps(record) + "\n")
-      self._packet_log_handle.flush()
 
   async def _end_run(self) -> None:
     try:
@@ -1085,7 +1052,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     logger.debug("[tecan] >> %s", command)
     framed = self._frame_command(command)
     await self.io.write(framed)
-    await self._log_packet("out", framed, ascii_payload=command)
     if not read_response:
       return []
     if command.startswith(("#", "?")):
