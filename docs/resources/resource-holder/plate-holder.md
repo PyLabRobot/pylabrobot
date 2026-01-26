@@ -24,7 +24,7 @@ To explain what is happening in the image above: you measure the difference betw
 
 #### Measurement with z probing
 
-To measure the height of a surface, you might find [z probing](/user_guide/00_liquid-handling/hamilton-star/z-probing) useful. Z-probing is an automated way, using a pipetting channel, to find the z height of an object. You can see a video of automated measurement on our YouTube channel:
+To measure the height of a surface, you might find [z probing](/user_guide/00_liquid-handling/hamilton-star/probing/z-probing) useful. Z-probing is an automated way, using a pipetting channel, to find the z height of an object. You can see a video of automated measurement on our YouTube channel:
 
 <iframe width="720" height="405" src="https://www.youtube.com/embed/_uPf9hyTBog" title="YouTube video player" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
