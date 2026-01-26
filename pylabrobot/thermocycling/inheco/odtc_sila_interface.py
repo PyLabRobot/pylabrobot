@@ -16,7 +16,7 @@ import time
 import urllib.request
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import xml.etree.ElementTree as ET
 
@@ -269,6 +269,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     # Lock for parallelism checking (separate from base class's _making_request)
     self._parallelism_lock = asyncio.Lock()
+
+    # DataEvent storage by request_id
+    self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
 
   def _check_state_allowability(self, command: str) -> bool:
     """Check if command is allowed in current state.
@@ -531,11 +534,20 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     # Handle DataEvent (intermediate data, e.g., during ExecuteMethod)
     if "DataEvent" in decoded:
-      # For now, just log DataEvents - design allows future exposure
       data_event = decoded["DataEvent"]
       request_id = data_event.get("requestId")
-      self._logger.debug(f"DataEvent received for requestId {request_id}")
-      # TODO: Could expose via callback/stream in future
+
+      if request_id is not None:
+        # Store the full DataEvent payload
+        if request_id not in self._data_events_by_request_id:
+          self._data_events_by_request_id[request_id] = []
+        self._data_events_by_request_id[request_id].append(data_event)
+
+        self._logger.debug(
+          f"DataEvent received for requestId {request_id} "
+          f"(total: {len(self._data_events_by_request_id[request_id])})"
+        )
+
       return SOAP_RESPONSE_DataEventResponse.encode("utf-8")
 
     # Handle ErrorEvent (recoverable errors with continuation tasks)
@@ -568,8 +580,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     self,
     command: str,
     lock_id: Optional[str] = None,
+    return_request_id: bool = False,
     **kwargs,
-  ) -> Any:
+  ) -> Any | tuple[asyncio.Future[Any], int]:
     """Send a SiLA command with parallelism, state, and lockId validation.
 
     Overrides base class to add:
@@ -582,10 +595,15 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     Args:
       command: Command name.
       lock_id: LockId (defaults to None, validated if device is locked).
+      return_request_id: If True and command is async (return_code==2),
+          return (Future, request_id) tuple instead of awaiting Future.
+          Caller must await the Future themselves.
       **kwargs: Additional command parameters.
 
     Returns:
-      Command response (parsed XML ElementTree for async, decoded dict for sync).
+      - For sync commands (return_code==1): decoded response dict
+      - For async commands with return_request_id=False: result after awaiting Future
+      - For async commands with return_request_id=True: (Future, request_id) tuple
 
     Raises:
       RuntimeError: For validation failures, return code errors, or state violations.
@@ -731,16 +749,21 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       if self._current_state == SiLAState.IDLE:
         self._current_state = SiLAState.BUSY
 
-      # Wait for async response
-      try:
-        result = await fut
-        return result
-      except asyncio.TimeoutError:
-        # Clean up on timeout
-        self._pending_by_id.pop(request_id, None)
-        self._active_request_ids.discard(request_id)
-        self._executing_commands.discard(normalized_cmd)
-        raise RuntimeError(f"Command {command} timed out waiting for ResponseEvent")
+      # Handle return_request_id parameter
+      if return_request_id:
+        # Return Future and request_id immediately (caller awaits)
+        return (fut, request_id)
+      else:
+        # Existing behavior: await Future
+        try:
+          result = await fut
+          return result
+        except asyncio.TimeoutError:
+          # Clean up on timeout
+          self._pending_by_id.pop(request_id, None)
+          self._active_request_ids.discard(request_id)
+          self._executing_commands.discard(normalized_cmd)
+          raise RuntimeError(f"Command {command} timed out waiting for ResponseEvent")
 
     else:
       # Error return code

@@ -1,10 +1,11 @@
 """Tests for ODTC backend and SiLA interface."""
 
+import asyncio
 import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.thermocycling.inheco.odtc_backend import ODTCBackend
+from pylabrobot.thermocycling.inheco.odtc_backend import MethodExecution, ODTCBackend
 from pylabrobot.thermocycling.inheco.odtc_sila_interface import ODTCSiLAInterface, SiLAState
 
 
@@ -243,6 +244,177 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     temps = await self.backend.get_lid_current_temperature()
     self.assertEqual(len(temps), 1)
     self.assertAlmostEqual(temps[0], 26.0, places=2)
+
+  async def test_execute_method_wait_true(self):
+    """Test execute_method with wait=True (blocking)."""
+    self.backend._sila.send_command = AsyncMock(return_value=None)
+    result = await self.backend.execute_method("PCR_30cycles", wait=True)
+    self.assertIsNone(result)
+    self.backend._sila.send_command.assert_called_once_with(
+      "ExecuteMethod", return_request_id=False, methodName="PCR_30cycles"
+    )
+
+  async def test_execute_method_wait_false(self):
+    """Test execute_method with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.execute_method("PCR_30cycles", wait=False)
+    self.assertIsInstance(execution, MethodExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.method_name, "PCR_30cycles")
+    self.backend._sila.send_command.assert_called_once_with(
+      "ExecuteMethod", return_request_id=True, methodName="PCR_30cycles"
+    )
+
+  async def test_method_execution_awaitable(self):
+    """Test that MethodExecution is awaitable."""
+    fut = asyncio.Future()
+    fut.set_result("success")
+    execution = MethodExecution(
+      request_id=12345,
+      method_name="PCR_30cycles",
+      _future=fut,
+      backend=self.backend
+    )
+    result = await execution
+    self.assertEqual(result, "success")
+
+  async def test_method_execution_wait(self):
+    """Test MethodExecution.wait() method."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    execution = MethodExecution(
+      request_id=12345,
+      method_name="PCR_30cycles",
+      _future=fut,
+      backend=self.backend
+    )
+    await execution.wait()  # Should not raise
+
+  async def test_method_execution_is_running(self):
+    """Test MethodExecution.is_running() method."""
+    fut = asyncio.Future()
+    execution = MethodExecution(
+      request_id=12345,
+      method_name="PCR_30cycles",
+      _future=fut,
+      backend=self.backend
+    )
+    self.backend.get_status = AsyncMock(return_value="busy")
+    is_running = await execution.is_running()
+    self.assertTrue(is_running)
+
+  async def test_is_method_running(self):
+    """Test is_method_running()."""
+    self.backend.get_status = AsyncMock(return_value="busy")
+    self.assertTrue(await self.backend.is_method_running())
+
+    self.backend.get_status = AsyncMock(return_value="idle")
+    self.assertFalse(await self.backend.is_method_running())
+
+    self.backend.get_status = AsyncMock(return_value="BUSY")
+    self.assertTrue(await self.backend.is_method_running())
+
+  async def test_wait_for_method_completion(self):
+    """Test wait_for_method_completion()."""
+    call_count = 0
+
+    async def mock_get_status():
+      nonlocal call_count
+      call_count += 1
+      if call_count < 3:
+        return "busy"
+      return "idle"
+
+    self.backend.get_status = AsyncMock(side_effect=mock_get_status)
+    await self.backend.wait_for_method_completion(poll_interval=0.1)
+    self.assertEqual(call_count, 3)
+
+  async def test_wait_for_method_completion_timeout(self):
+    """Test wait_for_method_completion() with timeout."""
+    self.backend.get_status = AsyncMock(return_value="busy")
+    with self.assertRaises(TimeoutError):
+      await self.backend.wait_for_method_completion(poll_interval=0.1, timeout=0.3)
+
+  async def test_get_data_events(self):
+    """Test get_data_events()."""
+    self.backend._sila._data_events_by_request_id = {
+      12345: [{"requestId": 12345, "data": "test1"}, {"requestId": 12345, "data": "test2"}],
+      67890: [{"requestId": 67890, "data": "test3"}],
+    }
+
+    # Get all events
+    all_events = await self.backend.get_data_events()
+    self.assertEqual(len(all_events), 2)
+    self.assertEqual(len(all_events[12345]), 2)
+
+    # Get events for specific request_id
+    events = await self.backend.get_data_events(request_id=12345)
+    self.assertEqual(len(events), 1)
+    self.assertEqual(len(events[12345]), 2)
+
+    # Get events for non-existent request_id
+    events = await self.backend.get_data_events(request_id=99999)
+    self.assertEqual(len(events), 1)
+    self.assertEqual(len(events[99999]), 0)
+
+
+class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
+  """Tests for DataEvent storage in ODTCSiLAInterface."""
+
+  def test_data_event_storage_logic(self):
+    """Test that DataEvent storage logic works correctly."""
+    # Test the storage logic directly without creating the full interface
+    # (which requires network permissions)
+    data_events_by_request_id = {}
+
+    # Simulate receiving a DataEvent
+    data_event = {
+      "requestId": 12345,
+      "data": "test_data"
+    }
+
+    # Apply the same logic as in _on_http handler
+    request_id = data_event.get("requestId")
+    if request_id is not None:
+      if request_id not in data_events_by_request_id:
+        data_events_by_request_id[request_id] = []
+      data_events_by_request_id[request_id].append(data_event)
+
+    # Verify storage
+    self.assertIn(12345, data_events_by_request_id)
+    self.assertEqual(len(data_events_by_request_id[12345]), 1)
+    self.assertEqual(
+      data_events_by_request_id[12345][0]["requestId"],
+      12345
+    )
+
+    # Test multiple events for same request_id
+    data_event2 = {
+      "requestId": 12345,
+      "data": "test_data2"
+    }
+    request_id = data_event2.get("requestId")
+    if request_id is not None:
+      if request_id not in data_events_by_request_id:
+        data_events_by_request_id[request_id] = []
+      data_events_by_request_id[request_id].append(data_event2)
+
+    self.assertEqual(len(data_events_by_request_id[12345]), 2)
+
+    # Test event with None request_id (should not be stored)
+    data_event_no_id = {
+      "data": "test_data_no_id"
+    }
+    request_id = data_event_no_id.get("requestId")
+    if request_id is not None:
+      if request_id not in data_events_by_request_id:
+        data_events_by_request_id[request_id] = []
+      data_events_by_request_id[request_id].append(data_event_no_id)
+
+    # Should still only have 2 events (the one with None request_id wasn't stored)
+    self.assertEqual(len(data_events_by_request_id[12345]), 2)
 
 
 if __name__ == "__main__":

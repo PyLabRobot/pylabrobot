@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
@@ -11,13 +13,43 @@ from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 from .odtc_sila_interface import ODTCSiLAInterface
 from .odtc_xml import (
+  ODTCMethod,
   ODTCMethodSet,
   ODTCSensorValues,
+  get_method_by_name,
   method_set_to_xml,
   parse_method_set,
   parse_method_set_file,
   parse_sensor_values,
 )
+
+
+@dataclass
+class MethodExecution:
+  """Handle for an executing method that can be awaited or checked.
+
+  This handle is returned from execute_method(wait=False) and provides:
+  - Awaitable interface (can be awaited like a Task)
+  - Request ID access for DataEvent tracking
+  - Status checking methods
+  """
+
+  request_id: int
+  method_name: str
+  _future: asyncio.Future[Any]
+  backend: "ODTCBackend"
+
+  def __await__(self):
+    """Make this awaitable like a Task."""
+    return self._future.__await__()
+
+  async def wait(self) -> None:
+    """Wait for method completion."""
+    await self._future
+
+  async def is_running(self) -> bool:
+    """Check if method is still running."""
+    return await self.backend.is_method_running()
 
 
 class ODTCBackend(ThermocyclerBackend):
@@ -248,57 +280,153 @@ class ODTCBackend(ThermocyclerBackend):
     return str(resp)  # type: ignore
 
   # Method control commands
-  async def execute_method(self, method_name: str, priority: Optional[int] = None) -> None:
+  async def execute_method(
+    self,
+    method_name: str,
+    priority: Optional[int] = None,
+    wait: bool = True,
+  ) -> Optional[MethodExecution]:
     """Execute a method or premethod by name.
 
     Args:
       method_name: Name of the method or premethod to execute.
       priority: Priority (not used by ODTC, but part of SiLA spec).
+      wait: If True, block until completion and return None.
+          If False, return MethodExecution handle immediately.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: MethodExecution handle (awaitable, has request_id)
     """
     params: dict = {"methodName": method_name}
     if priority is not None:
       params["priority"] = priority
-    await self._sila.send_command("ExecuteMethod", **params)
+
+    if wait:
+      # Blocking: await send_command normally
+      await self._sila.send_command("ExecuteMethod", return_request_id=False, **params)
+      return None
+    else:
+      # Use send_command with return_request_id=True to get Future and request_id
+      fut, request_id = await self._sila.send_command(
+        "ExecuteMethod",
+        return_request_id=True,
+        **params
+      )
+
+      return MethodExecution(
+        request_id=request_id,
+        method_name=method_name,
+        _future=fut,
+        backend=self
+      )
 
   async def stop_method(self) -> None:
     """Stop currently running method."""
     await self._sila.send_command("StopMethod")
 
-  async def list_methods(self) -> Tuple[List[str], List[str]]:
-    """List available methods and premethods.
+  async def is_method_running(self) -> bool:
+    """Check if a method is currently running.
+
+    Uses GetStatus to check device state. Returns True if state is 'busy',
+    indicating a method execution is in progress.
 
     Returns:
-      Tuple of (premethod_names, method_names).
+      True if method is running (state is 'busy'), False otherwise.
+    """
+    status = await self.get_status()
+    return status.lower() == "busy"
+
+  async def wait_for_method_completion(
+    self,
+    poll_interval: float = 5.0,
+    timeout: Optional[float] = None,
+  ) -> None:
+    """Wait until method execution completes.
+
+    Polls GetStatus at poll_interval until state returns to 'idle'.
+    Useful when method was started with wait=False and you need to wait.
+
+    Args:
+      poll_interval: Seconds between status checks. Default 5.0.
+      timeout: Maximum seconds to wait. None for no timeout.
+
+    Raises:
+      TimeoutError: If timeout is exceeded.
+    """
+    import time
+
+    start_time = time.time()
+    while await self.is_method_running():
+      if timeout is not None:
+        elapsed = time.time() - start_time
+        if elapsed > timeout:
+          raise TimeoutError(
+            f"Method execution did not complete within {timeout}s"
+          )
+      await asyncio.sleep(poll_interval)
+
+  async def get_data_events(self, request_id: Optional[int] = None) -> Dict[int, List[Dict[str, Any]]]:
+    """Get collected DataEvents.
+
+    Args:
+      request_id: If provided, return events for this request_id only.
+          If None, return all collected events.
+
+    Returns:
+      Dict mapping request_id to list of DataEvent payloads.
+    """
+    all_events = self._sila._data_events_by_request_id.copy()
+
+    if request_id is not None:
+      return {request_id: all_events.get(request_id, [])}
+
+    return all_events
+
+  async def get_method_set(self) -> ODTCMethodSet:
+    """Get the full MethodSet from the device.
+
+    Returns:
+      ODTCMethodSet containing all methods and premethods.
+
+    Raises:
+      ValueError: If response is empty or MethodsXML parameter not found.
     """
     resp = await self._sila.send_command("GetParameters")
     if resp is None:
-      return ([], [])
+      raise ValueError("Empty response from GetParameters")
 
     # Extract MethodsXML parameter
     param = resp.find(".//Parameter[@name='MethodsXML']")
     if param is None:
-      return ([], [])
+      raise ValueError("MethodsXML parameter not found in response")
 
     string_elem = param.find("String")
     if string_elem is None or string_elem.text is None:
-      return ([], [])
+      raise ValueError("MethodsXML String element not found")
 
     # Parse MethodSet XML (it's escaped in the response)
     method_set_xml = string_elem.text
-    method_set = parse_method_set(method_set_xml)
+    return parse_method_set(method_set_xml)
 
-    premethod_names = [pm.name for pm in method_set.premethods]
-    method_names = [m.name for m in method_set.methods]
-
-    return (premethod_names, method_names)
-
-  async def upload_method_set_from_file(self, filepath: str) -> None:
-    """Load and upload a MethodSet XML file to the device.
+  async def get_method_by_name(self, method_name: str) -> Optional[ODTCMethod]:
+    """Get a specific method by name from the device.
 
     Args:
-      filepath: Path to MethodSet XML file.
+      method_name: Name of the method to retrieve.
+
+    Returns:
+      ODTCMethod if found, None otherwise.
     """
-    method_set = parse_method_set_file(filepath)
+    method_set = await self.get_method_set()
+    return get_method_by_name(method_set, method_name)
+
+  async def upload_method_set(self, method_set: ODTCMethodSet) -> None:
+    """Upload a MethodSet to the device.
+
+    Args:
+      method_set: ODTCMethodSet to upload.
+    """
     method_set_xml = method_set_to_xml(method_set)
 
     # SetParameters expects paramsXML in ResponseType_1.2.xsd format
@@ -312,6 +440,15 @@ class ODTCBackend(ThermocyclerBackend):
 
     params_xml = ET.tostring(param_set, encoding="unicode", xml_declaration=False)
     await self._sila.send_command("SetParameters", paramsXML=params_xml)
+
+  async def upload_method_set_from_file(self, filepath: str) -> None:
+    """Load and upload a MethodSet XML file to the device.
+
+    Args:
+      filepath: Path to MethodSet XML file.
+    """
+    method_set = parse_method_set_file(filepath)
+    await self.upload_method_set(method_set)
 
   async def save_method_set_to_file(self, filepath: str) -> None:
     """Download methods from device and save to file.
