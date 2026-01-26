@@ -265,7 +265,7 @@ def fifty_ul_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_10uL(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 10 µL tip without filter (`tt02` in venus)
+  """Hamilton 10 uL tip without filter (`tt02` in venus)
 
   Hamilton cat. no.: 235900 (non-sterile), 235935 (sterile)
   """
@@ -280,7 +280,7 @@ def hamilton_tip_10uL(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_10uL_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 10 µL tip with filter (`tt03` in venus)
+  """Hamilton 10 uL tip with filter (`tt03` in venus)
 
   Hamilton cat. no.: 235936 (sterile), 235901 (non-sterile)
   """
@@ -295,7 +295,7 @@ def hamilton_tip_10uL_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_50uL(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 50 µL tip without filter
+  """Hamilton 50 uL tip without filter
 
   Hamilton cat. no.: 235966
   """
@@ -310,7 +310,7 @@ def hamilton_tip_50uL(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_50uL_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 50 µL tip with filter
+  """Hamilton 50 uL tip with filter
 
   Hamilton cat. no.: 235948
   """
@@ -325,7 +325,7 @@ def hamilton_tip_50uL_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 300 µL tip without filter (`tt00` in venus)"""
+  """Hamilton 300 uL tip without filter (`tt00` in venus)"""
   return HamiltonTip(
     name=name,
     has_filter=False,
@@ -337,7 +337,7 @@ def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_300uL_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 300 µL tip with filter (`tt01` in venus)"""
+  """Hamilton 300 uL tip with filter (`tt01` in venus)"""
   return HamiltonTip(
     name=name,
     has_filter=True,
@@ -349,7 +349,7 @@ def hamilton_tip_300uL_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_300uL_filter_slim(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 300 µL slim tip with filter"""
+  """Hamilton 300 uL slim tip with filter"""
   return HamiltonTip(
     name=name,
     has_filter=True,
@@ -361,7 +361,7 @@ def hamilton_tip_300uL_filter_slim(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_300uL_filter_ultrawide(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 300 µL ultra wide bore (1.55 mm) tip with filter"""
+  """Hamilton 300 uL ultra wide bore (1.55 mm) tip with filter"""
   return HamiltonTip(
     name=name,
     has_filter=True,
@@ -373,7 +373,7 @@ def hamilton_tip_300uL_filter_ultrawide(name: Optional[str] = None) -> HamiltonT
 
 
 def hamilton_tip_1000uL(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 1000 µL tip without filter (`tt04` in venus)"""
+  """Hamilton 1000 uL tip without filter (`tt04` in venus)"""
   return HamiltonTip(
     name=name,
     has_filter=False,
@@ -385,7 +385,7 @@ def hamilton_tip_1000uL(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_1000uL_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 1000 µL tip with filter (`tt05` in venus)"""
+  """Hamilton 1000 uL tip with filter (`tt05` in venus)"""
   return HamiltonTip(
     name=name,
     has_filter=True,
@@ -397,7 +397,7 @@ def hamilton_tip_1000uL_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_1000uL_filter_wide(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 1000 µL wide bore (1.20 mm) tip with filter
+  """Hamilton 1000 uL wide bore (1.20 mm) tip with filter
 
   Hamilton P/N 235677
   """
@@ -412,7 +412,7 @@ def hamilton_tip_1000uL_filter_wide(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_1000uL_filter_ultrawide(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 1000 µL ultra wide bore (3.20 mm) tip with filter
+  """Hamilton 1000 uL ultra wide bore (3.20 mm) tip with filter
 
   Hamilton P/N 235541
   """
@@ -427,7 +427,7 @@ def hamilton_tip_1000uL_filter_ultrawide(name: Optional[str] = None) -> Hamilton
 
 
 def hamilton_tip_4000uL_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 4000 µL tip with filter (`tt29` in venus)"""
+  """Hamilton 4000 uL tip with filter (`tt29` in venus)"""
   return HamiltonTip(
     name=name,
     has_filter=True,
@@ -439,7 +439,7 @@ def hamilton_tip_4000uL_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_5000uL(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 5000 µL tip without filter (`tt25` in venus)"""
+  """Hamilton 5000 uL tip without filter (`tt25` in venus)"""
   return HamiltonTip(
     name=name,
     has_filter=False,
@@ -451,7 +451,7 @@ def hamilton_tip_5000uL(name: Optional[str] = None) -> HamiltonTip:
 
 
 def hamilton_tip_5000uL_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Hamilton 5000 µL tip with filter (`tt25` in venus)"""
+  """Hamilton 5000 uL tip with filter (`tt25` in venus)"""
   return HamiltonTip(
     name=name,
     has_filter=True,
