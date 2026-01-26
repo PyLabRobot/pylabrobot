@@ -65,40 +65,32 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
   async def send_command_and_stream(
     self,
     command: str,
+    on_response: callable,
     timeout: float = 5.0,
     stop_condition: Optional[callable] = None
 ):
-    """Send a command and yield responses as an async generator.
-
-    Args:
-        command: The command to send to the barcode scanner
-        timeout: Maximum time in seconds to wait for responses
-        stop_condition: Optional callable that returns True when to stop reading.
-                       Takes a response string and returns bool.
-
-    Yields:
-        Response strings from the scanner as they arrive
-    """
+    """Send a command and call on_response for each barcode response."""
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
-
     deadline = time.time() + timeout
 
     while time.time() < deadline:
         try:
-            response = await asyncio.wait_for(
-                self.io.readline(),
-                timeout=0.1
-            )
-            decoded = response.decode(self.serial_messaging_encoding).strip()
-
-            if decoded:  # Only yield non-empty responses
-                yield decoded
-
-            # Check stop condition if provided
-            if stop_condition and stop_condition(decoded):
-                break
-
+            response = await asyncio.wait_for(self.io.readline(), timeout=1.0)
+            if response:
+                decoded = response.decode(self.serial_messaging_encoding).strip()
+                print(f"Received from barcode scanner: {decoded}")
+                if decoded:
+                    try:
+                        await on_response(decoded)  # Call the callback
+                    except Exception as e:
+                        print(f"Error in callback: {e}")
+                    if stop_condition and stop_condition(decoded):
+                        break
         except asyncio.TimeoutError:
+            print("Barcode scanner timeout, continuing...")
+            continue
+        except Exception as e:
+            print(f"Error reading from barcode scanner: {e}")
             continue
 
   async def stop(self):

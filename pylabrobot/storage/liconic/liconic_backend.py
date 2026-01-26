@@ -275,6 +275,8 @@ class LiconicBackend(IncubatorBackend):
       logger.info(" Barcode reading requested but instance not configured with barcode reader.")
       return "No barcode"
 
+  async def handle_barcode(self, code: str):
+    print(f"Got barcode: {code}")
 
   async def scan_cassette(self, cassette:PlateCarrier):
     """ Scan all barcodes in a cartridge using the internal barcode reader. Using command LON """
@@ -305,11 +307,9 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc("ST 1910") # set plate shuttle to plate read level
     await self._wait_ready()
 
-    barcodes = await self.io_bcr._send_command_and_stream("LON", 30.0) # turn on barcode reader and stream response for 30s
+    asyncio.create_task(self.io_bcr.send_command_and_stream("LON", on_response=self.handle_barcode, timeout=30.0)) # turn on barcode reader and stream response for 30s
 
     await self._send_command_plc(f"WR DM5 {num_pos}")
-
-    print(f"BARCODES: {barcodes}")
 
     await self._send_command_bcr("SSET") # enter settings mode
     await self._send_command_bcr("WP120") # setting barcode scanner to single read mode
