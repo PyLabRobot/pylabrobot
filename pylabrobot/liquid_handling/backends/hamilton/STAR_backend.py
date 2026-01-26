@@ -2000,7 +2000,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     assert self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.DISPENSING_DRIVE_VOL_LIMIT_TOP, (
-      f"Target dispensing Drive vol must be betweeen {self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
+      f"Target dispensing Drive vol must be between {self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
       f" and {self.DISPENSING_DRIVE_VOL_LIMIT_TOP}, is {vol}"
     )
     assert (
