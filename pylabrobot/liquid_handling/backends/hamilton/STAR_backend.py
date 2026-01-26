@@ -1964,95 +1964,85 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = -45  # vol TODO: confirm with others
   DISPENSING_DRIVE_VOL_LIMIT_TOP = 1_250  # vol
 
-  async def channel_dispensing_drive_request_position(
-    self,
-    channel_idx: int,
-  ):
-    """Request the current position of the channel's dispensing drive
-    (MEM-READ command)
-    """
+  async def channel_dispensing_drive_request_position(self, channel_idx: int) -> float:
+    """Request the current position of the channel's dispensing drive"""
 
-    assert (
-      0 <= channel_idx < self.num_channels
-    ), f"channel_idx must be between 0 and {self.num_channels-1}"
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}")
 
     resp = await self.send_command(module=f"P{channel_idx+1}", command="RD", fmt="rd##### #####")
-
     return STARBackend.dispensing_drive_increment_to_volume(resp["rd"])
 
   async def channel_dispensing_drive_move_to_volume_position(
     self,
     channel_idx: int,
     vol: float,
-    speed: float = 200.0,  # uL/sec
+    flow_rate: float = 200.0,  # uL/sec
     acceleration: float = 3000.0,  # uL/sec**2,
     current_limit: int = 5,
   ):
     """Move channel's dispensing drive to specified volume position
-    (ACTION command)
 
     Args:
       channel_idx: Index of the channel to move (0-indexed).
       vol: Target volume position to move the dispensing drive piston to (uL).
-      speed: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
+      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
       acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
       current_limit: Current limit for the drive (1-7). Default is 5.
     """
 
-    assert self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.DISPENSING_DRIVE_VOL_LIMIT_TOP, (
-      f"Target dispensing Drive vol must be between {self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
-      f" and {self.DISPENSING_DRIVE_VOL_LIMIT_TOP}, is {vol}"
-    )
-    assert (
-      0.9 <= speed <= 632.8
-    ), f"Dispensing drive speed must be between 0.9 and 632.8 uL/sec, is {speed}"
-    assert (
-      234.4 <= acceleration <= 28125.6
-    ), f"Dispensing drive acceleration must be between 234.4 and 28125.6 uL/sec**2, is {acceleration}"
-    assert (
-      1 <= current_limit <= 7
-    ), f"Dispensing drive current limit must be between 1 and 7, is {current_limit}"
+    if not (self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.DISPENSING_DRIVE_VOL_LIMIT_TOP):
+      raise ValueError(
+        f"Target dispensing Drive vol must be between {self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
+        f" and {self.DISPENSING_DRIVE_VOL_LIMIT_TOP}, is {vol}"
+      )
+    if not (0.9 <= flow_rate <= 632.8):
+      raise ValueError(
+        f"Dispensing drive speed must be between 0.9 and 632.8 uL/sec, is {flow_rate}"
+      )
+    if not (234.4 <= acceleration <= 28125.6):
+      raise ValueError(
+        f"Dispensing drive acceleration must be between 234.4 and 28125.6 uL/sec**2, is {acceleration}"
+      )
+    if not (1 <= current_limit <= 7):
+      raise ValueError(
+        f"Dispensing drive current limit must be between 1 and 7, is {current_limit}"
+      )
 
     current_position = await self.channel_dispensing_drive_request_position(channel_idx=channel_idx)
-
-    relative_vol_movement_required = round(vol - current_position, 1)
-
-    direction = "0" if relative_vol_movement_required >= 0 else "1"
-
-    relative_vol_movement_required_increment = STARBackend.dispensing_drive_vol_to_increment(
-      abs(relative_vol_movement_required)
+    relative_vol_movement = round(vol - current_position, 1)
+    relative_vol_movement_increment = STARBackend.dispensing_drive_vol_to_increment(
+      abs(relative_vol_movement)
     )
-    speed_increment = STARBackend.dispensing_drive_vol_to_increment(speed)
+    speed_increment = STARBackend.dispensing_drive_vol_to_increment(flow_rate)
     acceleration_increment = STARBackend.dispensing_drive_vol_to_increment(acceleration)
     acceleration_increment_thousands = round(acceleration_increment * 0.001)
 
-    resp = await self.send_command(
+    await self.send_command(
       module=f"P{channel_idx+1}",
       command="DS",
-      ds=f"{relative_vol_movement_required_increment:05}",
-      dt=direction,
+      ds=f"{relative_vol_movement_increment:05}",
+      dt="0" if relative_vol_movement >= 0 else "1",
       dv=f"{speed_increment:05}",
       dr=f"{acceleration_increment_thousands:03}",
       dw=f"{current_limit}",
     )
 
-  async def empty_channel(
+  async def empty_tip(
     self,
     channel_idx: int,
     vol: Optional[float] = None,
-    speed: float = 200.0,  # vol/sec
+    flow_rate: float = 200.0,  # vol/sec
     acceleration: float = 3000.0,  # vol/sec**2,
     current_limit: int = 5,
     reset_dispensing_drive_after: bool = True,
   ):
-    """Empty channel by moving to `vol` (default bottom limit),
-    optionally returning to 0.
-    (ACTION command)
+    """Empty tip by moving to `vol` (default bottom limit), optionally returning plunger position to 0.
 
     Args:
       channel_idx: Index of the channel to empty (0-indexed).
       vol: Target volume position to move the dispensing drive piston to (uL). If None, defaults to bottom limit.
-      speed: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
+      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
       acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
       current_limit: Current limit for the drive (1-7). Default is 5.
       reset_dispensing_drive_after: Whether to return the dispensing drive to 0 after emptying. Default is True
@@ -2065,7 +2055,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     await self.channel_dispensing_drive_move_to_volume_position(
       channel_idx=channel_idx,
       vol=vol,
-      speed=speed,
+      flow_rate=flow_rate,
       acceleration=acceleration,
       current_limit=current_limit,
     )
@@ -2075,28 +2065,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.channel_dispensing_drive_move_to_volume_position(
         channel_idx=channel_idx,
         vol=0,
-        speed=speed,
+        flow_rate=flow_rate,
         acceleration=acceleration,
         current_limit=current_limit,
       )
 
-  async def empty_channels(
+  async def empty_tips(
     self,
     channels: Optional[List[int]] = None,
     vol: Optional[float] = None,
-    speed: float = 200.0,  # vol/sec
+    flow_rate: float = 200.0,  # vol/sec
     acceleration: float = 3000.0,  # vol/sec**2,
     current_limit: int = 5,
     reset_dispensing_drive_after: bool = True,
   ):
-    """Empty multiple channels by moving to `vol` (default bottom limit),
-    optionally returning to 0.
-    (ACTION command)
+    """Empty multiple tips by moving to `vol` (default bottom limit), optionally returning plunger position to 0.
 
     Args:
-      channels: List of channel indices to empty (0-indexed). If None, all channels are emptied.
+      channels: List of channel indices to empty (0-indexed). If None, all channels with tips mounted are emptied.
       vol: Target volume position to move the dispensing drive piston to (uL). If None, defaults to bottom limit.
-      speed: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
+      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
       acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
       current_limit: Current limit for the drive (1-7). Default is 5.
       reset_dispensing_drive_after: Whether to return the dispensing drive to 0 after emptying. Default is True
@@ -2107,17 +2095,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channels = [ch for ch, occupied in enumerate(channel_occupancy) if occupied]
     else:
       # Validate that all provided channels are within valid range
-      for ch in channels:
-        assert (
-          0 <= ch < self.num_channels
-        ), f"channel_idx must be between 0 and {self.num_channels-1}, got {ch}"
+      if not all(0 <= ch < self.num_channels for ch in channels):
+        raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}, got {channels}")
 
     await asyncio.gather(
       *[
-        self.empty_channel(
+        self.empty_tip(
           channel_idx=ch,
           vol=vol,
-          speed=speed,
+          flow_rate=flow_rate,
           acceleration=acceleration,
           current_limit=current_limit,
           reset_dispensing_drive_after=reset_dispensing_drive_after,
