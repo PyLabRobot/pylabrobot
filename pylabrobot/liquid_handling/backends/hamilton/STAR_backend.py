@@ -2058,7 +2058,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       reset_dispensing_drive_after: Whether to return the dispensing drive to 0 after emptying. Default is True
     """
 
-    if vol == None:
+    if vol is None:
       vol = self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
 
     # Empty tip
