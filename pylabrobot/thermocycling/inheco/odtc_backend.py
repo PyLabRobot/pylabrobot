@@ -228,6 +228,13 @@ class ODTCBackend(ThermocyclerBackend):
     if not method_name:
       method_name = f"PLR_Protocol_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
+    if block_max_volume < 30.0:
+      fluid_quantity = "0"
+    elif block_max_volume < 75.0:
+      fluid_quantity = "1"
+    else:
+      fluid_quantity = "2"
+
     # Use ISO format with timezone for strict SiLA compliance (e.g. 2026-01-06T18:39:30.503368-08:00)
     now = datetime.datetime.now().astimezone()
     now_str = now.isoformat()
@@ -240,7 +247,7 @@ class ODTCBackend(ThermocyclerBackend):
     )
     ET.SubElement(method_elem, "Variant").text = "960000"
     ET.SubElement(method_elem, "PlateType").text = "0"
-    ET.SubElement(method_elem, "FluidQuantity").text = _format_number(block_max_volume)
+    ET.SubElement(method_elem, "FluidQuantity").text = fluid_quantity
 
     ET.SubElement(method_elem, "PostHeating").text = "true" if post_heating else "false"
 
@@ -329,10 +336,10 @@ class ODTCBackend(ThermocyclerBackend):
 
     Args:
         protocol: The protocol to run.
-        block_max_volume: Fluid quantity in microliters.
-        start_block_temperature: The starting block temperature in Celsius.
-        start_lid_temperature: The starting lid temperature in Celsius.
-        post_heating: Whether to keep heating after method end.
+        block_max_volume: Maximum block volume in microliters.
+        start_block_temperature: The starting block temperature in C.
+        start_lid_temperature: The starting lid temperature in C.
+        post_heating: Whether to keep last temperature after method end.
         method_name: Optional name for the method on the device.
         **kwargs: Additional XML parameters for the ODTC method, including:
             slope, overshoot_slope1, overshoot_temperature, overshoot_time, overshoot_slope2,
