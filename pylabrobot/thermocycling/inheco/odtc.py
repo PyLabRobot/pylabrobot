@@ -1,7 +1,8 @@
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from pylabrobot.resources import Coordinate, Rotation
 from pylabrobot.thermocycling.thermocycler import Thermocycler
+
 from .odtc_backend import ODTCBackend
 
 
@@ -14,7 +15,7 @@ class ODTC(Thermocycler):
     ip: str,
     client_ip: Optional[str] = None,
     child_location: Coordinate = Coordinate(0, 0, 0),
-    rotation: Optional[Rotation] = None
+    rotation: Optional[Rotation] = None,
   ):
     """
     Initialize the Inheco ODTC.
