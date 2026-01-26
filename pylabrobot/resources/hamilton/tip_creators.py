@@ -110,11 +110,7 @@ class HamiltonTip(Tip):
 
 
 def standard_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Standard volume tip without a filter (`tt00` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_300uL` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_300uL` instead."""
   warnings.warn(
     "standard_volume_tip_no_filter is deprecated, use hamilton_tip_300uL instead",
     DeprecationWarning,
@@ -124,11 +120,7 @@ def standard_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Standard volume tip with a filter (`tt01` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_300uL_filter` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_300uL_filter` instead."""
   warnings.warn(
     "standard_volume_tip_with_filter is deprecated, use hamilton_tip_300uL_filter instead",
     DeprecationWarning,
@@ -138,11 +130,7 @@ def standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def slim_standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Slim standard volume tip with a filter
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_300uL_filter_slim` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_300uL_filter_slim` instead."""
   warnings.warn(
     "slim_standard_volume_tip_with_filter is deprecated, use hamilton_tip_300uL_filter_slim instead",
     DeprecationWarning,
@@ -152,11 +140,7 @@ def slim_standard_volume_tip_with_filter(name: Optional[str] = None) -> Hamilton
 
 
 def ultrawide_standard_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Ultra wide bore (1.55 mm) standard volume tip with a filter
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_300uL_filter_ultrawide` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_300uL_filter_ultrawide` instead."""
   warnings.warn(
     "ultrawide_standard_volume_tip_with_filter is deprecated, "
     "use hamilton_tip_300uL_filter_ultrawide instead",
@@ -167,11 +151,7 @@ def ultrawide_standard_volume_tip_with_filter(name: Optional[str] = None) -> Ham
 
 
 def low_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Low volume tip without a filter (`tt02` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_10uL` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_10uL` instead."""
   warnings.warn(
     "low_volume_tip_no_filter is deprecated, use hamilton_tip_10uL instead",
     DeprecationWarning,
@@ -181,11 +161,7 @@ def low_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def low_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Low volume tip with a filter (`tt03` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_10uL_filter` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_10uL_filter` instead."""
   warnings.warn(
     "low_volume_tip_with_filter is deprecated, use hamilton_tip_10uL_filter instead",
     DeprecationWarning,
@@ -195,11 +171,7 @@ def low_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def high_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
-  """High volume tip without a filter (`tt04` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_1000uL` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_1000uL` instead."""
   warnings.warn(
     "high_volume_tip_no_filter is deprecated, use hamilton_tip_1000uL instead",
     DeprecationWarning,
@@ -209,11 +181,7 @@ def high_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """High volume tip with a filter (`tt05` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_1000uL_filter` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_1000uL_filter` instead."""
   warnings.warn(
     "high_volume_tip_with_filter is deprecated, use hamilton_tip_1000uL_filter instead",
     DeprecationWarning,
@@ -223,11 +191,7 @@ def high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def wide_high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Wide bore (1.20 mm) high volume tip with a filter, Hamilton P/N 235677
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_1000uL_filter_wide` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_1000uL_filter_wide` instead."""
   warnings.warn(
     "wide_high_volume_tip_with_filter is deprecated, use hamilton_tip_1000uL_filter_wide instead",
     DeprecationWarning,
@@ -237,11 +201,7 @@ def wide_high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def ultrawide_high_volume_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """Ultra wide bore (3.20 mm) high volume tip with a filter, Hamilton P/N 235541
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_1000uL_filter_ultrawide` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_1000uL_filter_ultrawide` instead."""
   warnings.warn(
     "ultrawide_high_volume_tip_with_filter is deprecated, "
     "use hamilton_tip_1000uL_filter_ultrawide instead",
@@ -252,11 +212,7 @@ def ultrawide_high_volume_tip_with_filter(name: Optional[str] = None) -> Hamilto
 
 
 def four_ml_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """4mL tip with a filter (`tt29` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_4000uL_filter` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_4000uL_filter` instead."""
   warnings.warn(
     "four_ml_tip_with_filter is deprecated, use hamilton_tip_4000uL_filter instead",
     DeprecationWarning,
@@ -266,11 +222,7 @@ def four_ml_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def five_ml_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """5mL tip with a filter (`tt25` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_5000uL_filter` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_5000uL_filter` instead."""
   warnings.warn(
     "five_ml_tip_with_filter is deprecated, use hamilton_tip_5000uL_filter instead",
     DeprecationWarning,
@@ -280,11 +232,7 @@ def five_ml_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def five_ml_tip(name: Optional[str] = None) -> HamiltonTip:
-  """5mL tip without a filter (`tt25` in venus)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_5000uL` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_5000uL` instead."""
   warnings.warn(
     "five_ml_tip is deprecated, use hamilton_tip_5000uL instead",
     DeprecationWarning,
@@ -294,11 +242,7 @@ def five_ml_tip(name: Optional[str] = None) -> HamiltonTip:
 
 
 def fifty_ul_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
-  """50 ul tip with a filter (Hamilton cat. no.: 235948)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_50uL_filter` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_50uL_filter` instead."""
   warnings.warn(
     "fifty_ul_tip_with_filter is deprecated, use hamilton_tip_50uL_filter instead",
     DeprecationWarning,
@@ -308,11 +252,7 @@ def fifty_ul_tip_with_filter(name: Optional[str] = None) -> HamiltonTip:
 
 
 def fifty_ul_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
-  """50 ul tip without a filter (Hamilton cat. no.: 235966)
-
-  .. deprecated:: 0.1.0
-      Use :func:`hamilton_tip_50uL` instead.
-  """
+  """Deprecated. Use :func:`hamilton_tip_50uL` instead."""
   warnings.warn(
     "fifty_ul_tip_no_filter is deprecated, use hamilton_tip_50uL instead",
     DeprecationWarning,
