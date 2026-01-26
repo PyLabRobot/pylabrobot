@@ -198,6 +198,24 @@ await tc.wait_for_method_completion(
 )
 ```
 
+### Temperature Control
+
+The ODTC supports direct temperature control via `set_block_temperature()` and `set_lid_temperature()`:
+
+```python
+# Set block temperature (uses PreMethod internally)
+await tc.set_block_temperature([95.0])  # Sets block to 95°C
+
+# Set lid temperature (uses PreMethod internally)
+await tc.set_lid_temperature([105.0])  # Sets lid to 105°C
+
+# Both methods coordinate temperatures:
+# - set_block_temperature() uses existing lid temp or defaults to 105°C
+# - set_lid_temperature() uses existing block temp or defaults to 25°C
+```
+
+**Note**: These methods use PreMethods internally to achieve constant temperature holds. They automatically stop any running method, wait for idle state, upload a PreMethod, and execute it.
+
 ### Parallel Operations
 
 Per ODTC SiLA spec, certain commands can run in parallel with `ExecuteMethod`:
