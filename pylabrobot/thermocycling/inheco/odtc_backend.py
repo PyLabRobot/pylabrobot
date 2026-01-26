@@ -11,7 +11,7 @@ from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
-from .odtc_sila_interface import ODTCSiLAInterface
+from .odtc_sila_interface import ODTCSiLAInterface, SiLAState
 from .odtc_xml import (
   ODTCMethod,
   ODTCMethodSet,
@@ -117,14 +117,15 @@ class ODTCBackend(ThermocyclerBackend):
     
     Performs the full SiLA connection lifecycle:
     1. Sets up the HTTP event receiver server
-    2. Calls Reset to move from Startup -> Standby and register event receiver
+    2. Calls Reset to move from startup -> standby and register event receiver
     3. Waits for Reset to complete and checks state
-    4. Calls Initialize to move from Standby -> Idle
+    4. Calls Initialize to move from standby -> idle
+    5. Verifies device is in idle state after Initialize
     """
     # Step 1: Set up the HTTP event receiver server
     await self._sila.setup()
     
-    # Step 2: Reset (Startup -> Standby) - registers event receiver URI
+    # Step 2: Reset (startup -> standby) - registers event receiver URI
     # Reset is async, so we wait for it to complete
     event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
     await self.reset(
@@ -136,19 +137,33 @@ class ODTCBackend(ThermocyclerBackend):
     # Step 3: Check state after Reset completes
     # GetStatus is synchronous and will update our internal state tracking
     status = await self.get_status()
+    self.logger.info(f"GetStatus returned raw state: {status!r} (type: {type(status).__name__})")
     
-    # Normalize state string for comparison (device returns lowercase)
-    status_normalized = status.lower() if status else status
+    # Compare against enum values directly (no normalization - we want to see what device actually returns)
+    self.logger.debug(f"Comparing state '{status}' == SiLAState.STANDBY.value '{SiLAState.STANDBY.value}': {status == SiLAState.STANDBY.value}")
+    self.logger.debug(f"Comparing state '{status}' == SiLAState.IDLE.value '{SiLAState.IDLE.value}': {status == SiLAState.IDLE.value}")
     
-    # Step 4: Initialize (Standby -> Idle) if we're in Standby
-    if status_normalized == "standby":
+    if status == SiLAState.STANDBY.value:
+      self.logger.info("Device is in standby state, calling Initialize...")
       await self.initialize()
-    elif status_normalized == "idle":
-      # Already in Idle, nothing to do
-      self.logger.info("Device already in Idle state after Reset")
+      
+      # Step 4: Verify device is in idle state after Initialize
+      status_after_init = await self.get_status()
+      self.logger.info(f"GetStatus after Initialize returned state: {status_after_init!r}")
+      
+      if status_after_init == SiLAState.IDLE.value:
+        self.logger.info("Device successfully initialized and is in idle state")
+      else:
+        raise RuntimeError(
+          f"Device is not in idle state after Initialize. Expected {SiLAState.IDLE.value!r}, "
+          f"but got {status_after_init!r}."
+        )
+    elif status == SiLAState.IDLE.value:
+      # Already in idle, nothing to do
+      self.logger.info("Device already in idle state after Reset")
     else:
       raise RuntimeError(
-        f"Unexpected device state after Reset: {status}. Expected standby or idle."
+        f"Unexpected device state after Reset: {status!r}. Expected {SiLAState.STANDBY.value!r} or {SiLAState.IDLE.value!r}."
       )
 
   async def stop(self) -> None:
@@ -171,36 +186,45 @@ class ODTCBackend(ThermocyclerBackend):
     """Get device status state.
 
     Returns:
-      Device state string (e.g., "Idle", "Busy", "Standby").
+      Device state string (e.g., "idle", "busy", "standby").
+      
+    Raises:
+      ValueError: If response format is unexpected and state cannot be extracted.
     """
     resp = await self._sila.send_command("GetStatus")
     # GetStatus is synchronous - resp is a dict from soap_decode
-    if isinstance(resp, dict):
-      # Try different possible response structures
-      # Structure 1: GetStatusResponse -> state (like SCILABackend)
-      state = resp.get("GetStatusResponse", {}).get("state")
-      if state:
-        return state  # type: ignore
-      # Structure 2: GetStatusResponse -> GetStatusResult -> state
-      state = resp.get("GetStatusResponse", {}).get("GetStatusResult", {}).get("state")
-      if state:
-        return state  # type: ignore
-      # Structure 3: Direct state key
-      state = resp.get("state")
-      if state:
-        return state  # type: ignore
-      # Debug: log the actual response structure to help diagnose
-      self.logger.debug(f"GetStatus response keys: {list(resp.keys())}")
-      if "GetStatusResponse" in resp:
-        self.logger.debug(f"GetStatusResponse keys: {list(resp['GetStatusResponse'].keys())}")
-      return "Unknown"
-    else:
-      # Fallback if response format is different
-      self.logger.warning(f"GetStatus returned non-dict response: {type(resp)}")
-      return "Unknown"
+    
+    if not isinstance(resp, dict):
+      self.logger.warning(f"GetStatus returned non-dict response: {type(resp)}, value: {resp!r}")
+      raise ValueError(f"GetStatus returned unexpected type: {type(resp).__name__}")
+    
+    # ODTC devices use: GetStatusResponse -> state
+    # Format: {"GetStatusResponse": {"state": "idle", "GetStatusResult": {...}, ...}}
+    # GetStatusResult contains return code info, but state is a direct child of GetStatusResponse
+    get_status_response = resp.get("GetStatusResponse")
+    if not isinstance(get_status_response, dict):
+      raise ValueError(
+        f"GetStatus: GetStatusResponse is not a dict. Response: {resp}"
+      )
+    
+    # Check for state in GetStatusResponse (ODTC standard structure)
+    if "state" in get_status_response:
+      state = get_status_response["state"]
+      self.logger.debug(f"GetStatus returned state: {state!r}")
+      return str(state)
+    
+    # Unexpected structure - log and raise with full context
+    self.logger.error(
+      f"GetStatus: Could not find state in GetStatusResponse.state. "
+      f"Response: {resp}"
+    )
+    raise ValueError(
+      f"GetStatus: Could not find state in GetStatusResponse.state. "
+      f"Response structure: {resp}"
+    )
 
   async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
-    """Initialize the device (must be in Standby state).
+    """Initialize the device (must be in standby state).
 
     Args:
       wait: If True, block until completion. If False, return CommandExecution handle.
@@ -507,7 +531,7 @@ class ODTCBackend(ThermocyclerBackend):
       True if method is running (state is 'busy'), False otherwise.
     """
     status = await self.get_status()
-    return status.lower() == "busy"
+    return status == SiLAState.BUSY.value
 
   async def wait_for_method_completion(
     self,

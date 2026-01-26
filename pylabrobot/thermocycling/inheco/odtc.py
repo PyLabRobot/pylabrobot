@@ -180,7 +180,7 @@ class InhecoODTC(Thermocycler):
     """Get device status state.
 
     Returns:
-      Device state string (e.g., "Idle", "Busy", "Standby").
+      Device state string (e.g., "idle", "busy", "standby").
     """
     return await self.backend.get_status()
 
@@ -195,7 +195,7 @@ class InhecoODTC(Thermocycler):
   # Device control methods
 
   async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
-    """Initialize the device (must be in Standby state).
+    """Initialize the device (must be in standby state).
 
     Args:
       wait: If True, block until completion. If False, return CommandExecution handle.

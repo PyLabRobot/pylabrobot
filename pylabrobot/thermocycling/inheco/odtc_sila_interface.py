@@ -85,7 +85,7 @@ class SiLAState(str, Enum):
   """SiLA device states per specification.
   
   Note: State values match what the ODTC device actually returns.
-  Based on SCILABackend comment, devices return: "standBy", "inError", "startup" (mixed/lowercase).
+  Based on SCILABackend comment, devices return: "standby", "inError", "startup" (mixed/lowercase).
   However, the actual ODTC device returns "standby" (all lowercase) as seen in practice.
   """
 
@@ -364,11 +364,15 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     """Update internal state from GetStatus or StatusEvent response.
 
     Args:
-      state_str: State string from device response (must match enum values exactly).
+      state_str: State string from device response. Must match enum values exactly.
     """
     if not state_str:
+      self._logger.debug("_update_state_from_status: Empty state string, skipping update")
       return
     
+    self._logger.debug(f"_update_state_from_status: Received state: {state_str!r} (type: {type(state_str).__name__})")
+    
+    # Match exactly against enum values (no normalization - we want to see what device actually returns)
     try:
       self._current_state = SiLAState(state_str)
       self._logger.debug(f"State updated to: {self._current_state.value}")
@@ -517,7 +521,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       normalized_cmd = self._normalize_command_name(pending.name)
       self._executing_commands.discard(normalized_cmd)
 
-      # Update state: if no more commands executing, transition Busy -> Idle
+      # Update state: if no more commands executing, transition busy -> idle
       if not self._executing_commands and self._current_state == SiLAState.BUSY:
         self._current_state = SiLAState.IDLE
 
@@ -695,10 +699,10 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       # Synchronous success (GetStatus, GetDeviceIdentification)
       # Update state from GetStatus response if applicable
       if command == "GetStatus":
-        # Try different possible response structures
-        state = decoded.get("GetStatusResponse", {}).get("state")
-        if not state:
-          state = decoded.get("GetStatusResponse", {}).get("GetStatusResult", {}).get("state")
+        # ODTC standard: GetStatusResponse -> state
+        # GetStatusResult contains return code info, but state is a direct child of GetStatusResponse
+        get_status_response = decoded.get("GetStatusResponse", {})
+        state = get_status_response.get("state")
         if state:
           self._update_state_from_status(state)
       return decoded
@@ -745,7 +749,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       self._active_request_ids.add(request_id)
       self._executing_commands.add(normalized_cmd)
 
-      # Update state: Idle -> Busy
+      # Update state: idle -> busy
       if self._current_state == SiLAState.IDLE:
         self._current_state = SiLAState.BUSY
 
