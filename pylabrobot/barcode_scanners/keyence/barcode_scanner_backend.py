@@ -62,13 +62,13 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     response = await self.io.readline()
     return response.decode(self.serial_messaging_encoding).strip()
 
-  async def _send_command_and_stream(
+  async def send_command_and_stream(
     self,
     command: str,
     timeout: float = 5.0,
     stop_condition: Optional[callable] = None
-) -> list[str]:
-    """Send a command and receive a stream of responses until timeout or stop condition.
+):
+    """Send a command and yield responses as an async generator.
 
     Args:
         command: The command to send to the barcode scanner
@@ -76,35 +76,30 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
         stop_condition: Optional callable that returns True when to stop reading.
                        Takes a response string and returns bool.
 
-    Returns:
-        A list of response strings received from the scanner
+    Yields:
+        Response strings from the scanner as they arrive
     """
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
 
-    responses = []
     deadline = time.time() + timeout
 
     while time.time() < deadline:
         try:
-            # Set a short timeout for individual reads to allow checking deadline
             response = await asyncio.wait_for(
                 self.io.readline(),
                 timeout=0.1
             )
             decoded = response.decode(self.serial_messaging_encoding).strip()
 
-            if decoded:  # Only add non-empty responses
-                responses.append(decoded)
+            if decoded:  # Only yield non-empty responses
+                yield decoded
 
             # Check stop condition if provided
             if stop_condition and stop_condition(decoded):
                 break
 
         except asyncio.TimeoutError:
-            # No data available, continue waiting until deadline
             continue
-
-    return responses
 
   async def stop(self):
     await self.io.stop()
