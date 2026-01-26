@@ -7,6 +7,7 @@ from pylabrobot.barcode_scanners.backend import (
 import serial
 import time
 
+from typing import Optional
 from pylabrobot.io.serial import Serial
 
 class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
@@ -60,6 +61,50 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
     response = await self.io.readline()
     return response.decode(self.serial_messaging_encoding).strip()
+
+  async def _send_command_and_stream(
+    self,
+    command: str,
+    timeout: float = 5.0,
+    stop_condition: Optional[callable] = None
+) -> list[str]:
+    """Send a command and receive a stream of responses until timeout or stop condition.
+
+    Args:
+        command: The command to send to the barcode scanner
+        timeout: Maximum time in seconds to wait for responses
+        stop_condition: Optional callable that returns True when to stop reading.
+                       Takes a response string and returns bool.
+
+    Returns:
+        A list of response strings received from the scanner
+    """
+    await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
+
+    responses = []
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        try:
+            # Set a short timeout for individual reads to allow checking deadline
+            response = await asyncio.wait_for(
+                self.io.readline(),
+                timeout=0.1
+            )
+            decoded = response.decode(self.serial_messaging_encoding).strip()
+
+            if decoded:  # Only add non-empty responses
+                responses.append(decoded)
+
+            # Check stop condition if provided
+            if stop_condition and stop_condition(decoded):
+                break
+
+        except asyncio.TimeoutError:
+            # No data available, continue waiting until deadline
+            continue
+
+    return responses
 
   async def stop(self):
     await self.io.stop()

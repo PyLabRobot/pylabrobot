@@ -305,7 +305,7 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc("ST 1910") # set plate shuttle to plate read level
     await self._wait_ready()
 
-    barcodes = await self._send_command_bcr("LON") # turn on barcode reader
+    barcodes = await self.io_bcr._send_command_and_stream("LON", 30.0) # turn on barcode reader and stream response for 30s
 
     await self._send_command_plc(f"WR DM5 {num_pos}")
 
