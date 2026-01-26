@@ -1959,6 +1959,163 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for container, height in zip(containers, liquid_heights)
     ]
 
+  # # # Granular channel control methods # # #
+
+  DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = -45  # vol TODO: confirm with others
+  DISPENSING_DRIVE_VOL_LIMIT_TOP = 1_250  # vol
+
+  async def channel_dispensing_drive_request_position(self, channel_idx: int) -> float:
+    """Request the current position of the channel's dispensing drive"""
+
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}")
+
+    resp = await self.send_command(
+      module=STARBackend.channel_id(channel_idx), command="RD", fmt="rd##### #####"
+    )
+    return STARBackend.dispensing_drive_increment_to_volume(resp["rd"])
+
+  async def channel_dispensing_drive_move_to_volume_position(
+    self,
+    channel_idx: int,
+    vol: float,
+    flow_rate: float = 200.0,  # uL/sec
+    acceleration: float = 3000.0,  # uL/sec**2,
+    current_limit: int = 5,
+  ):
+    """Move channel's dispensing drive to specified volume position
+
+    Args:
+      channel_idx: Index of the channel to move (0-indexed).
+      vol: Target volume position to move the dispensing drive piston to (uL).
+      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
+      acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
+      current_limit: Current limit for the drive (1-7). Default is 5.
+    """
+
+    if not (self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.DISPENSING_DRIVE_VOL_LIMIT_TOP):
+      raise ValueError(
+        f"Target dispensing Drive vol must be between {self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
+        f" and {self.DISPENSING_DRIVE_VOL_LIMIT_TOP}, is {vol}"
+      )
+    if not (0.9 <= flow_rate <= 632.8):
+      raise ValueError(
+        f"Dispensing drive speed must be between 0.9 and 632.8 uL/sec, is {flow_rate}"
+      )
+    if not (234.4 <= acceleration <= 28125.6):
+      raise ValueError(
+        f"Dispensing drive acceleration must be between 234.4 and 28125.6 uL/sec**2, is {acceleration}"
+      )
+    if not (1 <= current_limit <= 7):
+      raise ValueError(
+        f"Dispensing drive current limit must be between 1 and 7, is {current_limit}"
+      )
+
+    current_position = await self.channel_dispensing_drive_request_position(channel_idx=channel_idx)
+    relative_vol_movement = round(vol - current_position, 1)
+    relative_vol_movement_increment = STARBackend.dispensing_drive_vol_to_increment(
+      abs(relative_vol_movement)
+    )
+    speed_increment = STARBackend.dispensing_drive_vol_to_increment(flow_rate)
+    acceleration_increment = STARBackend.dispensing_drive_vol_to_increment(acceleration)
+    acceleration_increment_thousands = round(acceleration_increment * 0.001)
+
+    await self.send_command(
+      module=STARBackend.channel_id(channel_idx),
+      command="DS",
+      ds=f"{relative_vol_movement_increment:05}",
+      dt="0" if relative_vol_movement >= 0 else "1",
+      dv=f"{speed_increment:05}",
+      dr=f"{acceleration_increment_thousands:03}",
+      dw=f"{current_limit}",
+    )
+
+  async def empty_tip(
+    self,
+    channel_idx: int,
+    vol: Optional[float] = None,
+    flow_rate: float = 200.0,  # vol/sec
+    acceleration: float = 3000.0,  # vol/sec**2,
+    current_limit: int = 5,
+    reset_dispensing_drive_after: bool = True,
+  ):
+    """Empty tip by moving to `vol` (default bottom limit), optionally returning plunger position to 0.
+
+    Args:
+      channel_idx: Index of the channel to empty (0-indexed).
+      vol: Target volume position to move the dispensing drive piston to (uL). If None, defaults to bottom limit.
+      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
+      acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
+      current_limit: Current limit for the drive (1-7). Default is 5.
+      reset_dispensing_drive_after: Whether to return the dispensing drive to 0 after emptying. Default is True
+    """
+
+    if vol is None:
+      vol = self.DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
+
+    # Empty tip
+    await self.channel_dispensing_drive_move_to_volume_position(
+      channel_idx=channel_idx,
+      vol=vol,
+      flow_rate=flow_rate,
+      acceleration=acceleration,
+      current_limit=current_limit,
+    )
+
+    if reset_dispensing_drive_after:
+      # Reset only channel used back to vol=0.0 position
+      await self.channel_dispensing_drive_move_to_volume_position(
+        channel_idx=channel_idx,
+        vol=0,
+        flow_rate=flow_rate,
+        acceleration=acceleration,
+        current_limit=current_limit,
+      )
+
+  async def empty_tips(
+    self,
+    channels: Optional[List[int]] = None,
+    vol: Optional[float] = None,
+    flow_rate: float = 200.0,  # vol/sec
+    acceleration: float = 3000.0,  # vol/sec**2,
+    current_limit: int = 5,
+    reset_dispensing_drive_after: bool = True,
+  ):
+    """Empty multiple tips by moving to `vol` (default bottom limit), optionally returning plunger position to 0.
+
+    Args:
+      channels: List of channel indices to empty (0-indexed). If None, all channels with tips mounted are emptied.
+      vol: Target volume position to move the dispensing drive piston to (uL). If None, defaults to bottom limit.
+      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
+      acceleration: Acceleration of the movement (uL/sec**2). Default is 3000.0 uL/sec**2.
+      current_limit: Current limit for the drive (1-7). Default is 5.
+      reset_dispensing_drive_after: Whether to return the dispensing drive to 0 after emptying. Default is True
+    """
+
+    if channels is None:
+      channel_occupancy = await self.request_tip_presence()
+      channels = [ch for ch, occupied in enumerate(channel_occupancy) if occupied]
+    else:
+      # Validate that all provided channels are within valid range
+      if not all(0 <= ch < self.num_channels for ch in channels):
+        raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}, got {channels}")
+
+    await asyncio.gather(
+      *[
+        self.empty_tip(
+          channel_idx=ch,
+          vol=vol,
+          flow_rate=flow_rate,
+          acceleration=acceleration,
+          current_limit=current_limit,
+          reset_dispensing_drive_after=reset_dispensing_drive_after,
+        )
+        for ch in channels
+      ]
+    )
+
+  # # # Channel Liquid Handling Commands # # #
+
   async def aspirate(
     self,
     ops: List[SingleChannelAspiration],
@@ -2688,7 +2845,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Pick up tips using the 96 head.
 
     `tip_pickup_method` can be one of the following:
-        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mouting tips.
+        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mounting tips.
         - "from_waste":
             1. it actually moves the plunger all the way up
             2. mounts tips
@@ -2751,8 +2908,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
+    if tip_pickup_method == "from_rack":
+      # the STAR will not automatically move the dispensing drive down if it is still up
+      # so we need to move it down here
+      # see https://github.com/PyLabRobot/pylabrobot/pull/835
+      lowest_dispensing_drive_height_no_tips = 218.19
+      await self.head96_dispensing_drive_move_to_position(lowest_dispensing_drive_height_no_tips)
+
     try:
-      return await self.pick_up_tips_core96(
+      await self.pick_up_tips_core96(
         x_position=abs(round(pickup_position.x * 10)),
         x_direction=0 if pickup_position.x >= 0 else 1,
         y_position=round(pickup_position.y * 10),
@@ -7349,6 +7513,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
+  async def head96_dispensing_drive_move_to_position(
+    self,
+    position,
+    speed: float = 261.1,
+    stop_speed: float = 0,
+    acceleration: float = 17406.84,
+    current_protection_limiter: int = 15,
+  ):
+    """Move dispensing drive to absolute position in uL
+
+    Args:
+      position: Position in uL. Between 0, 1244.59.
+      speed: Speed in uL/s. Between 0.1, 1063.75.
+      stop_speed: Stop speed in uL/s. Between 0, 1063.75.
+      acceleration: Acceleration in uL/s^2. Between 96.7, 17406.84.
+      current_protection_limiter: Current protection limiter (0-15), default 15
+    """
+
+    if not (0 <= position <= 1244.59):
+      raise ValueError("position must be between 0 and 1244.59")
+    if not (0.1 <= speed <= 1063.75):
+      raise ValueError("speed must be between 0.1 and 1063.75")
+    if not (0 <= stop_speed <= 1063.75):
+      raise ValueError("stop_speed must be between 0 and 1063.75")
+    if not (96.7 <= acceleration <= 17406.84):
+      raise ValueError("acceleration must be between 96.7 and 17406.84")
+    if not (0 <= current_protection_limiter <= 15):
+      raise ValueError("current_protection_limiter must be between 0 and 15")
+
+    position_increments = self._head96_dispensing_drive_uL_to_increment(position)
+    speed_increments = self._head96_dispensing_drive_uL_to_increment(speed)
+    stop_speed_increments = self._head96_dispensing_drive_uL_to_increment(stop_speed)
+    acceleration_increments = self._head96_dispensing_drive_uL_to_increment(acceleration)
+
+    await self.send_command(
+      module="H0",
+      command="DQ",
+      dq=f"{position_increments:05}",
+      dv=f"{speed_increments:05}",
+      du=f"{stop_speed_increments:05}",
+      dr=f"{acceleration_increments:06}",
+      dw=f"{current_protection_limiter:02}",
+    )
+
   async def move_core_96_head_x(self, x_position: float):
     """Move CoRe 96 Head X to absolute position
 
@@ -7425,31 +7633,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return await self.send_command(module="C0", command="QH", fmt="qh#")
 
   async def request_position_of_core_96_head(self):
-    """Request position of CoRe 96 Head (A1 considered to tip length)
+    """Deprecated - use `head96_request_position` instead."""
 
-    Returns:
-      xs: A1 X direction [1mm]
-      xd: X direction 0 = positive 1 = negative
-      yh: A1 Y direction [1mm]
-      za: Z height [1mm]
-    """
-
-    warnings.warn(  # TODO: remove 2025-02
+    warnings.warn(  # TODO: remove 2026-02
       "`request_position_of_core_96_head` is deprecated and will be "
-      "removed in 2025-02 use `head96_request_position` instead.",
+      "removed in 2026-02 use `head96_request_position` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
 
-    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
-    resp["xs"] = resp["xs"] / 10
-    resp["yh"] = resp["yh"] / 10
-    resp["za"] = resp["za"] / 10
-    return resp
+    return await self.head96_request_position()
 
   async def head96_request_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
-    (MEM-READ command)
 
     Returns:
       Coordinate: x, y, z in mm
@@ -7482,6 +7678,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
+
+  async def head96_dispensing_drive_request_position_mm(self) -> float:
+    """Request 96 Head dispensing drive position in mm"""
+    resp = await self.send_command(module="H0", command="RD", fmt="rd######")
+    return self._head96_dispensing_drive_increment_to_mm(resp["rd"])
+
+  async def head96_dispensing_drive_request_position_uL(self) -> float:
+    """Request 96 Head dispensing drive position in uL"""
+    position_mm = await self.head96_dispensing_drive_request_position_mm()
+    return self._head96_dispensing_drive_mm_to_uL(position_mm)
 
   # -------------- 3.11 384 Head commands --------------
 
