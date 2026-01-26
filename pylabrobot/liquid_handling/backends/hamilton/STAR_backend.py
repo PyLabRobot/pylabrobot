@@ -1970,7 +1970,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if not (0 <= channel_idx < self.num_channels):
       raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}")
 
-    resp = await self.send_command(module=f"P{channel_idx+1}", command="RD", fmt="rd##### #####")
+    resp = await self.send_command(
+      module=STARBackend.channel_id(channel_idx), command="RD", fmt="rd##### #####"
+    )
     return STARBackend.dispensing_drive_increment_to_volume(resp["rd"])
 
   async def channel_dispensing_drive_move_to_volume_position(
@@ -2019,7 +2021,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     acceleration_increment_thousands = round(acceleration_increment * 0.001)
 
     await self.send_command(
-      module=f"P{channel_idx+1}",
+      module=STARBackend.channel_id(channel_idx),
       command="DS",
       ds=f"{relative_vol_movement_increment:05}",
       dt="0" if relative_vol_movement >= 0 else "1",
