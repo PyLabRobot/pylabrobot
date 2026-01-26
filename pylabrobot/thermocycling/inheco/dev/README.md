@@ -57,8 +57,8 @@ await tc.setup()
 
 The `setup()` method:
 1. Starts HTTP server for receiving SiLA events (ResponseEvent, StatusEvent, DataEvent)
-2. Calls `Reset()` to register event receiver URI and move to Standby
-3. Calls `Initialize()` to move to Idle (ready for commands)
+2. Calls `Reset()` to register event receiver URI and move to `standby`
+3. Calls `Initialize()` to move to `idle` (ready for commands)
 
 ### Cleanup
 
@@ -551,10 +551,10 @@ The implementation handles SiLA return codes and state transitions:
 - **Return code 9**: Command not allowed in current state
 
 State transitions are tracked automatically:
-- `Startup` → `Standby` (via Reset)
-- `Standby` → `Idle` (via Initialize)
-- `Idle` → `Busy` (when async command starts)
-- `Busy` → `Idle` (when all commands complete)
+- `startup` → `standby` (via Reset)
+- `standby` → `idle` (via Initialize)
+- `idle` → `busy` (when async command starts)
+- `busy` → `idle` (when all commands complete)
 
 ## Best Practices
 

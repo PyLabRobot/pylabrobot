@@ -74,15 +74,35 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     self.assertIn("5", error_msg)  # Return code 5
 
   def test_update_state_from_status(self):
-    """Test state updates from status strings."""
-    self.interface._update_state_from_status("Idle")
+    """Test state updates from status strings - exact matching only."""
+    # Test lowercase enum values (exact match required)
+    self.interface._update_state_from_status("idle")
     self.assertEqual(self.interface._current_state, SiLAState.IDLE)
 
-    self.interface._update_state_from_status("Busy")
+    self.interface._update_state_from_status("busy")
     self.assertEqual(self.interface._current_state, SiLAState.BUSY)
 
-    self.interface._update_state_from_status("Standby")
+    self.interface._update_state_from_status("standby")
     self.assertEqual(self.interface._current_state, SiLAState.STANDBY)
+    
+    # Test camelCase enum values (exact match required)
+    self.interface._update_state_from_status("inError")
+    self.assertEqual(self.interface._current_state, SiLAState.INERROR)
+    
+    self.interface._update_state_from_status("errorHandling")
+    self.assertEqual(self.interface._current_state, SiLAState.ERRORHANDLING)
+    
+    # Test that case mismatches are NOT accepted (exact matching only)
+    # These should keep the current state and log a warning
+    initial_state = self.interface._current_state
+    self.interface._update_state_from_status("Idle")  # Wrong case
+    self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
+    
+    self.interface._update_state_from_status("BUSY")  # Wrong case
+    self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
+    
+    self.interface._update_state_from_status("INERROR")  # Wrong case
+    self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
 
   def test_handle_return_code(self):
     """Test return code handling."""
@@ -93,7 +113,7 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
 
     # Code 4 should raise
     with self.assertRaises(RuntimeError) as cm:
-      self.interface._handle_return_code(4, "Busy", "ExecuteMethod", 123)
+      self.interface._handle_return_code(4, "busy", "ExecuteMethod", 123)
     self.assertIn("return code 4", str(cm.exception))
 
     # Code 5 should raise
@@ -139,10 +159,15 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_get_status(self):
     """Test get_status."""
     self.backend._sila.send_command = AsyncMock(
-      return_value={"GetStatusResponse": {"GetStatusResult": {"state": "Idle"}}}
+      return_value={
+        "GetStatusResponse": {
+          "state": "idle",
+          "GetStatusResult": {"returnCode": 1, "message": "Success."}
+        }
+      }
     )
     status = await self.backend.get_status()
-    self.assertEqual(status, "Idle")
+    self.assertEqual(status, "idle")
     self.backend._sila.send_command.assert_called_once_with("GetStatus")
 
   async def test_open_door(self):

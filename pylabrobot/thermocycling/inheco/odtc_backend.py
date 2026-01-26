@@ -139,17 +139,12 @@ class ODTCBackend(ThermocyclerBackend):
     status = await self.get_status()
     self.logger.info(f"GetStatus returned raw state: {status!r} (type: {type(status).__name__})")
     
-    # Compare against enum values directly (no normalization - we want to see what device actually returns)
-    self.logger.debug(f"Comparing state '{status}' == SiLAState.STANDBY.value '{SiLAState.STANDBY.value}': {status == SiLAState.STANDBY.value}")
-    self.logger.debug(f"Comparing state '{status}' == SiLAState.IDLE.value '{SiLAState.IDLE.value}': {status == SiLAState.IDLE.value}")
-    
     if status == SiLAState.STANDBY.value:
       self.logger.info("Device is in standby state, calling Initialize...")
       await self.initialize()
       
       # Step 4: Verify device is in idle state after Initialize
       status_after_init = await self.get_status()
-      self.logger.info(f"GetStatus after Initialize returned state: {status_after_init!r}")
       
       if status_after_init == SiLAState.IDLE.value:
         self.logger.info("Device successfully initialized and is in idle state")
@@ -179,7 +174,74 @@ class ODTCBackend(ThermocyclerBackend):
     }
 
   # ============================================================================
-  # Basic ODTC Commands (from plan)
+  # Response Parsing Utilities
+  # ============================================================================
+
+  def _extract_dict_path(
+    self, resp: dict, path: List[str], command_name: str, required: bool = True
+  ) -> Any:
+    """Extract nested value from dict response using path.
+
+    Args:
+      resp: Response dict from send_command (SOAP-decoded).
+      path: List of keys to traverse (e.g., ["GetStatusResponse", "state"]).
+      command_name: Command name for error messages.
+      required: If True, raise ValueError if path not found.
+
+    Returns:
+      Extracted value, or None if not required and not found.
+
+    Raises:
+      ValueError: If required=True and path not found or invalid structure.
+    """
+    value = resp
+    for key in path:
+      if not isinstance(value, dict):
+        if required:
+          raise ValueError(
+            f"{command_name}: Expected dict at path {path}, got {type(value).__name__}"
+          )
+        return None
+      value = value.get(key, {})
+
+    if value is None or (isinstance(value, dict) and not value and required):
+      if required:
+        raise ValueError(
+          f"{command_name}: Could not find value at path {path}. Response: {resp}"
+        )
+      return None
+    self.logger.debug(f"{command_name} extracted value at path {path}: {value!r}")
+    return value
+
+  def _extract_xml_parameter(self, resp, param_name: str, command_name: str) -> str:
+    """Extract parameter value from ElementTree XML response.
+
+    Args:
+      resp: ElementTree root from send_command.
+      param_name: Name of parameter to extract.
+      command_name: Command name for error messages.
+
+    Returns:
+      Parameter text value.
+
+    Raises:
+      ValueError: If response is None or parameter not found.
+    """
+    if resp is None:
+      raise ValueError(f"Empty response from {command_name}")
+
+    param = resp.find(f".//Parameter[@name='{param_name}']")
+    if param is None:
+      raise ValueError(f"{param_name} parameter not found in {command_name} response")
+
+    string_elem = param.find("String")
+    if string_elem is None or string_elem.text is None:
+      raise ValueError(f"{param_name} String element not found in {command_name} response")
+
+    return string_elem.text
+
+  # ============================================================================
+  # Basic ODTC Commands
   # ============================================================================
 
   async def get_status(self) -> str:
@@ -193,35 +255,9 @@ class ODTCBackend(ThermocyclerBackend):
     """
     resp = await self._sila.send_command("GetStatus")
     # GetStatus is synchronous - resp is a dict from soap_decode
-    
-    if not isinstance(resp, dict):
-      self.logger.warning(f"GetStatus returned non-dict response: {type(resp)}, value: {resp!r}")
-      raise ValueError(f"GetStatus returned unexpected type: {type(resp).__name__}")
-    
-    # ODTC devices use: GetStatusResponse -> state
-    # Format: {"GetStatusResponse": {"state": "idle", "GetStatusResult": {...}, ...}}
-    # GetStatusResult contains return code info, but state is a direct child of GetStatusResponse
-    get_status_response = resp.get("GetStatusResponse")
-    if not isinstance(get_status_response, dict):
-      raise ValueError(
-        f"GetStatus: GetStatusResponse is not a dict. Response: {resp}"
-      )
-    
-    # Check for state in GetStatusResponse (ODTC standard structure)
-    if "state" in get_status_response:
-      state = get_status_response["state"]
-      self.logger.debug(f"GetStatus returned state: {state!r}")
-      return str(state)
-    
-    # Unexpected structure - log and raise with full context
-    self.logger.error(
-      f"GetStatus: Could not find state in GetStatusResponse.state. "
-      f"Response: {resp}"
-    )
-    raise ValueError(
-      f"GetStatus: Could not find state in GetStatusResponse.state. "
-      f"Response structure: {resp}"
-    )
+    # ODTC standard structure: {"GetStatusResponse": {"state": "idle", ...}}
+    state = self._extract_dict_path(resp, ["GetStatusResponse", "state"], "GetStatus")
+    return str(state)
 
   async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
     """Initialize the device (must be in standby state).
@@ -301,10 +337,13 @@ class ODTCBackend(ThermocyclerBackend):
     """
     resp = await self._sila.send_command("GetDeviceIdentification")
     # GetDeviceIdentification is synchronous - resp is a dict from soap_decode
-    if isinstance(resp, dict):
-      return resp.get("GetDeviceIdentificationResponse", {}).get("GetDeviceIdentificationResult", {})  # type: ignore
-    else:
-      return {}
+    result = self._extract_dict_path(
+      resp,
+      ["GetDeviceIdentificationResponse", "GetDeviceIdentificationResult"],
+      "GetDeviceIdentification",
+      required=False,
+    )
+    return result if isinstance(result, dict) else {}
 
   async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True) -> Optional[CommandExecution]:
     """Lock the device for exclusive access.
@@ -427,19 +466,10 @@ class ODTCBackend(ThermocyclerBackend):
       ODTCSensorValues with temperatures in °C.
     """
     resp = await self._sila.send_command("ReadActualTemperature")
-    # Response is ElementTree root - find SensorValues parameter
-    if resp is None:
-      raise ValueError("Empty response from ReadActualTemperature")
-
+    # Response is ElementTree root - extract SensorValues parameter
     # Response structure: ResponseData/Parameter[@name='SensorValues']/String
-    param = resp.find(".//Parameter[@name='SensorValues']")
-    if param is None:
-      raise ValueError("SensorValues parameter not found in response")
-    sensor_str_elem = param.find("String")
-    if sensor_str_elem is None or sensor_str_elem.text is None:
-      raise ValueError("SensorValues String element not found")
+    sensor_xml = self._extract_xml_parameter(resp, "SensorValues", "ReadActualTemperature")
     # Parse the XML string (it's escaped in the response)
-    sensor_xml = sensor_str_elem.text
     return parse_sensor_values(sensor_xml)
 
   async def get_last_data(self) -> str:
@@ -589,20 +619,9 @@ class ODTCBackend(ThermocyclerBackend):
       ValueError: If response is empty or MethodsXML parameter not found.
     """
     resp = await self._sila.send_command("GetParameters")
-    if resp is None:
-      raise ValueError("Empty response from GetParameters")
-
     # Extract MethodsXML parameter
-    param = resp.find(".//Parameter[@name='MethodsXML']")
-    if param is None:
-      raise ValueError("MethodsXML parameter not found in response")
-
-    string_elem = param.find("String")
-    if string_elem is None or string_elem.text is None:
-      raise ValueError("MethodsXML String element not found")
-
+    method_set_xml = self._extract_xml_parameter(resp, "MethodsXML", "GetParameters")
     # Parse MethodSet XML (it's escaped in the response)
-    method_set_xml = string_elem.text
     return parse_method_set(method_set_xml)
 
   async def get_method_by_name(self, method_name: str) -> Optional[ODTCMethod]:
@@ -653,20 +672,9 @@ class ODTCBackend(ThermocyclerBackend):
       filepath: Path to save MethodSet XML file.
     """
     resp = await self._sila.send_command("GetParameters")
-    if resp is None:
-      raise ValueError("Empty response from GetParameters")
-
     # Extract MethodsXML parameter
-    param = resp.find(".//Parameter[@name='MethodsXML']")
-    if param is None:
-      raise ValueError("MethodsXML parameter not found in response")
-
-    string_elem = param.find("String")
-    if string_elem is None or string_elem.text is None:
-      raise ValueError("MethodsXML String element not found")
-
+    method_set_xml = self._extract_xml_parameter(resp, "MethodsXML", "GetParameters")
     # XML is escaped in the response, so we get it as-is
-    method_set_xml = string_elem.text
     # Write to file
     with open(filepath, "w", encoding="utf-8") as f:
       f.write(method_set_xml)
