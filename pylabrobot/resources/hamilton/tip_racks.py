@@ -20,7 +20,6 @@ from .tip_creators import (
   hamilton_tip_1000uL_filter_wide,
   hamilton_tip_4000uL_filter,
   hamilton_tip_5000uL,
-  hamilton_tip_5000uL_filter,
 )
 
 # # # # # # # # # # 10 ul Tips # # # # # # # # # #
