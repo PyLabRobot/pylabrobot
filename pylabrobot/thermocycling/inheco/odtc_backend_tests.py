@@ -5,7 +5,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.thermocycling.inheco.odtc_backend import MethodExecution, ODTCBackend
+from pylabrobot.thermocycling.inheco.odtc_backend import CommandExecution, MethodExecution, ODTCBackend
 from pylabrobot.thermocycling.inheco.odtc_sila_interface import ODTCSiLAInterface, SiLAState
 
 
@@ -273,6 +273,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut.set_result("success")
     execution = MethodExecution(
       request_id=12345,
+      command_name="ExecuteMethod",
       method_name="PCR_30cycles",
       _future=fut,
       backend=self.backend
@@ -286,6 +287,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut.set_result(None)
     execution = MethodExecution(
       request_id=12345,
+      command_name="ExecuteMethod",
       method_name="PCR_30cycles",
       _future=fut,
       backend=self.backend
@@ -297,6 +299,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     fut = asyncio.Future()
     execution = MethodExecution(
       request_id=12345,
+      command_name="ExecuteMethod",
       method_name="PCR_30cycles",
       _future=fut,
       backend=self.backend
@@ -304,6 +307,161 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend.get_status = AsyncMock(return_value="busy")
     is_running = await execution.is_running()
     self.assertTrue(is_running)
+
+  async def test_method_execution_stop(self):
+    """Test MethodExecution.stop() method."""
+    fut = asyncio.Future()
+    execution = MethodExecution(
+      request_id=12345,
+      command_name="ExecuteMethod",
+      method_name="PCR_30cycles",
+      _future=fut,
+      backend=self.backend
+    )
+    self.backend._sila.send_command = AsyncMock()
+    await execution.stop()
+    self.backend._sila.send_command.assert_called_once_with("StopMethod", return_request_id=False)
+
+  async def test_method_execution_inheritance(self):
+    """Test that MethodExecution is a subclass of CommandExecution."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    execution = MethodExecution(
+      request_id=12345,
+      command_name="ExecuteMethod",
+      method_name="PCR_30cycles",
+      _future=fut,
+      backend=self.backend
+    )
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.command_name, "ExecuteMethod")
+    self.assertEqual(execution.method_name, "PCR_30cycles")
+
+  async def test_command_execution_awaitable(self):
+    """Test that CommandExecution is awaitable."""
+    fut = asyncio.Future()
+    fut.set_result("success")
+    execution = CommandExecution(
+      request_id=12345,
+      command_name="OpenDoor",
+      _future=fut,
+      backend=self.backend
+    )
+    result = await execution
+    self.assertEqual(result, "success")
+
+  async def test_command_execution_wait(self):
+    """Test CommandExecution.wait() method."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    execution = CommandExecution(
+      request_id=12345,
+      command_name="OpenDoor",
+      _future=fut,
+      backend=self.backend
+    )
+    await execution.wait()  # Should not raise
+
+  async def test_command_execution_get_data_events(self):
+    """Test CommandExecution.get_data_events() method."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    execution = CommandExecution(
+      request_id=12345,
+      command_name="OpenDoor",
+      _future=fut,
+      backend=self.backend
+    )
+    self.backend._sila._data_events_by_request_id = {
+      12345: [{"requestId": 12345, "data": "test1"}, {"requestId": 12345, "data": "test2"}],
+      67890: [{"requestId": 67890, "data": "test3"}],
+    }
+    events = await execution.get_data_events()
+    self.assertEqual(len(events), 2)
+    self.assertEqual(events[0]["requestId"], 12345)
+
+  async def test_open_door_wait_false(self):
+    """Test open_door with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.open_door(wait=False)
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.command_name, "OpenDoor")
+    self.backend._sila.send_command.assert_called_once_with(
+      "OpenDoor", return_request_id=True
+    )
+
+  async def test_open_door_wait_true(self):
+    """Test open_door with wait=True (blocking)."""
+    self.backend._sila.send_command = AsyncMock(return_value=None)
+    result = await self.backend.open_door(wait=True)
+    self.assertIsNone(result)
+    self.backend._sila.send_command.assert_called_once_with(
+      "OpenDoor", return_request_id=False
+    )
+
+  async def test_close_door_wait_false(self):
+    """Test close_door with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.close_door(wait=False)
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.command_name, "CloseDoor")
+
+  async def test_initialize_wait_false(self):
+    """Test initialize with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.initialize(wait=False)
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.command_name, "Initialize")
+
+  async def test_reset_wait_false(self):
+    """Test reset with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.reset(wait=False)
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.command_name, "Reset")
+
+  async def test_lock_device_wait_false(self):
+    """Test lock_device with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.lock_device("my_lock", wait=False)
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.command_name, "LockDevice")
+
+  async def test_unlock_device_wait_false(self):
+    """Test unlock_device with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila._lock_id = "my_lock"
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.unlock_device(wait=False)
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.command_name, "UnlockDevice")
+
+  async def test_stop_method_wait_false(self):
+    """Test stop_method with wait=False (returns handle)."""
+    fut = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    execution = await self.backend.stop_method(wait=False)
+    self.assertIsInstance(execution, CommandExecution)
+    self.assertEqual(execution.request_id, 12345)
+    self.assertEqual(execution.command_name, "StopMethod")
 
   async def test_is_method_running(self):
     """Test is_method_running()."""

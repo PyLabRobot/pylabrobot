@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.thermocycling.thermocycler import Thermocycler
 
-from .odtc_backend import ODTCBackend
+from .odtc_backend import CommandExecution, MethodExecution, ODTCBackend
 from .odtc_xml import ODTCMethodSet, ODTCConfig
 
 
@@ -122,7 +122,7 @@ class InhecoODTC(Thermocycler):
     method_name: str,
     priority: Optional[int] = None,
     wait: bool = True,
-  ):
+  ) -> Optional[MethodExecution]:
     """Execute a method or premethod by name.
 
     Args:
@@ -136,9 +136,17 @@ class InhecoODTC(Thermocycler):
     """
     return await self.backend.execute_method(method_name, priority, wait)
 
-  async def stop_method(self) -> None:
-    """Stop any currently running method."""
-    await self.backend.stop_method()
+  async def stop_method(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Stop any currently running method.
+
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    return await self.backend.stop_method(wait=wait)
 
   async def get_method_set(self):
     """Get the full MethodSet from the device."""
@@ -186,24 +194,38 @@ class InhecoODTC(Thermocycler):
 
   # Device control methods
 
-  async def initialize(self) -> None:
-    """Initialize the device (must be in Standby state)."""
-    await self.backend.initialize()
+  async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Initialize the device (must be in Standby state).
+
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    return await self.backend.initialize(wait=wait)
 
   async def reset(
     self,
     device_id: str = "ODTC",
     event_receiver_uri: Optional[str] = None,
     simulation_mode: bool = False,
-  ) -> None:
+    wait: bool = True,
+  ) -> Optional[CommandExecution]:
     """Reset the device.
 
     Args:
       device_id: Device identifier.
       event_receiver_uri: Event receiver URI (auto-detected if None).
       simulation_mode: Enable simulation mode.
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
     """
-    await self.backend.reset(device_id, event_receiver_uri, simulation_mode)
+    return await self.backend.reset(device_id, event_receiver_uri, simulation_mode, wait=wait)
 
   async def get_device_identification(self) -> dict:
     """Get device identification information.
@@ -213,44 +235,57 @@ class InhecoODTC(Thermocycler):
     """
     return await self.backend.get_device_identification()
 
-  async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None) -> None:
+  async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True) -> Optional[CommandExecution]:
     """Lock the device for exclusive access.
 
     Args:
       lock_id: Unique lock identifier.
       lock_timeout: Lock timeout in seconds (optional).
-    """
-    await self.backend.lock_device(lock_id, lock_timeout)
+      wait: If True, block until completion. If False, return CommandExecution handle.
 
-  async def unlock_device(self) -> None:
-    """Unlock the device."""
-    await self.backend.unlock_device()
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    return await self.backend.lock_device(lock_id, lock_timeout, wait=wait)
+
+  async def unlock_device(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Unlock the device.
+
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    return await self.backend.unlock_device(wait=wait)
 
   # Door control methods
 
-  async def open_door(self) -> None:
-    """Open the drawer door (equivalent to PrepareForOutput)."""
-    await self.backend.open_door()
-
-  async def close_door(self) -> None:
-    """Close the drawer door (equivalent to PrepareForInput)."""
-    await self.backend.close_door()
-
-  async def prepare_for_output(self, position: Optional[int] = None) -> None:
-    """Prepare for output (equivalent to OpenDoor).
+  async def open_door(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Open the drawer door.
 
     Args:
-      position: Position parameter (ignored by ODTC, but part of SiLA spec).
-    """
-    await self.backend.prepare_for_output(position)
+      wait: If True, block until completion. If False, return CommandExecution handle.
 
-  async def prepare_for_input(self, position: Optional[int] = None) -> None:
-    """Prepare for input (equivalent to CloseDoor).
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    return await self.backend.open_door(wait=wait)
+
+  async def close_door(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Close the drawer door.
 
     Args:
-      position: Position parameter (ignored by ODTC, but part of SiLA spec).
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
     """
-    await self.backend.prepare_for_input(position)
+    return await self.backend.close_door(wait=wait)
 
   # Data retrieval methods
 

@@ -70,18 +70,65 @@ await tc.stop()  # Closes HTTP server and connections
 
 ### Synchronous Commands
 
-Most commands are synchronous and return immediately:
+Some commands are synchronous and return immediately:
 
 ```python
 # Get device status
 status = await tc.get_status()  # Returns "idle", "busy", "standby", etc.
 
-# Read temperatures
-temps = await tc.read_temperatures()  # Returns ODTCSensorValues
+# Get device identification
+device_info = await tc.get_device_identification()
+```
 
-# Open/close door
-await tc.open_door()
+### Asynchronous Commands
+
+Most ODTC commands are asynchronous and support both blocking and non-blocking execution:
+
+#### Blocking Execution (Default)
+
+```python
+# Block until command completes
+await tc.open_door()  # Returns None when complete
 await tc.close_door()
+await tc.initialize()
+await tc.reset()
+```
+
+#### Non-Blocking Execution with Handle
+
+```python
+# Start command and get execution handle
+door_opening = await tc.open_door(wait=False)
+# Returns CommandExecution handle immediately
+
+# Do other work while command runs
+temps = await tc.read_temperatures()  # Can run in parallel if allowed
+
+# Wait for completion
+await door_opening  # Await the handle directly
+# OR
+await door_opening.wait()  # Explicit wait method
+```
+
+#### CommandExecution Handle
+
+The `CommandExecution` handle provides:
+
+- **`request_id`**: SiLA request ID for tracking DataEvents
+- **`command_name`**: Name of the executing command
+- **Awaitable interface**: Can be awaited like `asyncio.Task`
+- **`wait()`**: Explicit wait for completion
+- **`get_data_events()`**: Get DataEvents for this command execution
+
+```python
+# Non-blocking door operation
+door_opening = await tc.open_door(wait=False)
+
+# Get DataEvents for this execution
+events = await door_opening.get_data_events()
+
+# Wait for completion
+await door_opening
 ```
 
 ### Asynchronous Method Execution
@@ -117,13 +164,12 @@ await tc.wait_for_method_completion()  # Poll-based wait
 
 #### MethodExecution Handle
 
-The `MethodExecution` handle provides:
+The `MethodExecution` handle extends `CommandExecution` with method-specific features:
 
-- **`request_id`**: SiLA request ID for tracking DataEvents
-- **`method_name`**: Name of executing method
-- **Awaitable interface**: Can be awaited like `asyncio.Task`
-- **`is_running()`**: Check if method is still running
-- **`wait()`**: Explicit wait for completion
+- **All `CommandExecution` features**: `request_id`, `command_name`, awaitable interface, `wait()`, `get_data_events()`
+- **`method_name`**: Name of executing method (more semantic than `command_name`)
+- **`is_running()`**: Check if method is still running (checks device busy state)
+- **`stop()`**: Stop the currently running method
 
 ```python
 execution = await tc.execute_method("PCR_30cycles", wait=False)
@@ -169,10 +215,33 @@ execution = await tc.execute_method("PCR_30cycles", wait=False)
 
 # These can run in parallel:
 temps = await tc.read_temperatures()
-await tc.open_door()
+door_opening = await tc.open_door(wait=False)
+
+# Wait for door to complete
+await door_opening
 
 # These will queue/wait:
 method2 = await tc.execute_method("PCR_40cycles", wait=False)  # Waits for method1
+```
+
+### CommandExecution vs MethodExecution
+
+- **`CommandExecution`**: Base class for all async commands (door operations, initialize, reset, etc.)
+- **`MethodExecution`**: Subclass of `CommandExecution` for method execution with additional features:
+  - `is_running()`: Checks if device is in "busy" state
+  - `stop()`: Stops the currently running method
+  - `method_name`: More semantic than `command_name` for methods
+
+```python
+# CommandExecution example
+door_opening = await tc.open_door(wait=False)
+await door_opening  # Wait for door to open
+
+# MethodExecution example (has additional features)
+method_exec = await tc.execute_method("PCR_30cycles", wait=False)
+if await method_exec.is_running():
+    print(f"Method {method_exec.method_name} is running")
+    await method_exec.stop()  # Stop the method
 ```
 
 ## Getting Protocols from Device

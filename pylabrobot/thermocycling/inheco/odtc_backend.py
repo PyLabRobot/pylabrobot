@@ -25,17 +25,17 @@ from .odtc_xml import (
 
 
 @dataclass
-class MethodExecution:
-  """Handle for an executing method that can be awaited or checked.
+class CommandExecution:
+  """Base handle for an executing async command that can be awaited or checked.
 
-  This handle is returned from execute_method(wait=False) and provides:
+  This handle is returned from async commands when wait=False and provides:
   - Awaitable interface (can be awaited like a Task)
   - Request ID access for DataEvent tracking
-  - Status checking methods
+  - Command completion waiting
   """
 
   request_id: int
-  method_name: str
+  command_name: str
   _future: asyncio.Future[Any]
   backend: "ODTCBackend"
 
@@ -44,12 +44,47 @@ class MethodExecution:
     return self._future.__await__()
 
   async def wait(self) -> None:
-    """Wait for method completion."""
+    """Wait for command completion."""
     await self._future
 
+  async def get_data_events(self) -> List[Dict[str, Any]]:
+    """Get DataEvents for this command execution.
+
+    Returns:
+      List of DataEvent payloads for this request_id.
+    """
+    events_dict = await self.backend.get_data_events(self.request_id)
+    return events_dict.get(self.request_id, [])
+
+
+@dataclass
+class MethodExecution(CommandExecution):
+  """Handle for an executing method (protocol) with method-specific features.
+
+  This handle is returned from execute_method(wait=False) and provides:
+  - All features from CommandExecution (awaitable, request_id, DataEvents)
+  - Method-specific status checking
+  - Method stopping capability
+  """
+
+  method_name: str
+
+  def __post_init__(self):
+    """Set command_name to ExecuteMethod for parent class."""
+    # Override command_name from parent to be ExecuteMethod
+    object.__setattr__(self, 'command_name', "ExecuteMethod")
+
   async def is_running(self) -> bool:
-    """Check if method is still running."""
+    """Check if method is still running (checks device busy state).
+
+    Returns:
+      True if device state is 'busy', False otherwise.
+    """
     return await self.backend.is_method_running()
+
+  async def stop(self) -> None:
+    """Stop the currently running method."""
+    await self.backend.stop_method()
 
 
 class ODTCBackend(ThermocyclerBackend):
@@ -164,31 +199,75 @@ class ODTCBackend(ThermocyclerBackend):
       self.logger.warning(f"GetStatus returned non-dict response: {type(resp)}")
       return "Unknown"
 
-  async def initialize(self) -> None:
-    """Initialize the device (must be in Standby state)."""
-    await self._sila.send_command("Initialize")
+  async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Initialize the device (must be in Standby state).
+
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    if wait:
+      await self._sila.send_command("Initialize", return_request_id=False)
+      return None
+    else:
+      fut, request_id = await self._sila.send_command(
+        "Initialize",
+        return_request_id=True
+      )
+      return CommandExecution(
+        request_id=request_id,
+        command_name="Initialize",
+        _future=fut,
+        backend=self
+      )
 
   async def reset(
     self,
     device_id: str = "ODTC",
     event_receiver_uri: Optional[str] = None,
     simulation_mode: bool = False,
-  ) -> None:
+    wait: bool = True,
+  ) -> Optional[CommandExecution]:
     """Reset the device.
 
     Args:
       device_id: Device identifier.
       event_receiver_uri: Event receiver URI (auto-detected if None).
       simulation_mode: Enable simulation mode.
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
     """
     if event_receiver_uri is None:
       event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
-    await self._sila.send_command(
-      "Reset",
-      deviceId=device_id,
-      eventReceiverURI=event_receiver_uri,
-      simulationMode=simulation_mode,
-    )
+    if wait:
+      await self._sila.send_command(
+        "Reset",
+        return_request_id=False,
+        deviceId=device_id,
+        eventReceiverURI=event_receiver_uri,
+        simulationMode=simulation_mode,
+      )
+      return None
+    else:
+      fut, request_id = await self._sila.send_command(
+        "Reset",
+        return_request_id=True,
+        deviceId=device_id,
+        eventReceiverURI=event_receiver_uri,
+        simulationMode=simulation_mode,
+      )
+      return CommandExecution(
+        request_id=request_id,
+        command_name="Reset",
+        _future=fut,
+        backend=self
+      )
 
   async def get_device_identification(self) -> dict:
     """Get device identification information.
@@ -203,47 +282,118 @@ class ODTCBackend(ThermocyclerBackend):
     else:
       return {}
 
-  async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None) -> None:
+  async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True) -> Optional[CommandExecution]:
     """Lock the device for exclusive access.
 
     Args:
       lock_id: Unique lock identifier.
       lock_timeout: Lock timeout in seconds (optional).
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
     """
     params: dict = {"lockId": lock_id, "PMSId": "PyLabRobot"}
     if lock_timeout is not None:
       params["lockTimeout"] = lock_timeout
-    await self._sila.send_command("LockDevice", lock_id=lock_id, **params)
+    if wait:
+      await self._sila.send_command("LockDevice", return_request_id=False, lock_id=lock_id, **params)
+      return None
+    else:
+      fut, request_id = await self._sila.send_command(
+        "LockDevice",
+        return_request_id=True,
+        lock_id=lock_id,
+        **params
+      )
+      return CommandExecution(
+        request_id=request_id,
+        command_name="LockDevice",
+        _future=fut,
+        backend=self
+      )
 
-  async def unlock_device(self) -> None:
-    """Unlock the device."""
+  async def unlock_device(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Unlock the device.
+
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
     # Must provide the lockId that was used to lock it
     if self._sila._lock_id is None:
       raise RuntimeError("Device is not locked")
-    await self._sila.send_command("UnlockDevice", lock_id=self._sila._lock_id)
+    if wait:
+      await self._sila.send_command("UnlockDevice", return_request_id=False, lock_id=self._sila._lock_id)
+      return None
+    else:
+      fut, request_id = await self._sila.send_command(
+        "UnlockDevice",
+        return_request_id=True,
+        lock_id=self._sila._lock_id
+      )
+      return CommandExecution(
+        request_id=request_id,
+        command_name="UnlockDevice",
+        _future=fut,
+        backend=self
+      )
 
   # Door control commands
-  async def open_door(self) -> None:
-    """Open the drawer door (equivalent to PrepareForOutput)."""
-    await self._sila.send_command("OpenDoor")
+  async def open_door(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Open the drawer door.
 
-  async def close_door(self) -> None:
-    """Close the drawer door (equivalent to PrepareForInput)."""
-    await self._sila.send_command("CloseDoor")
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
 
-  async def prepare_for_output(self, position: Optional[int] = None) -> None:
-    """Prepare for output (equivalent to OpenDoor)."""
-    params = {}
-    if position is not None:
-      params["position"] = position
-    await self._sila.send_command("PrepareForOutput", **params)
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    if wait:
+      await self._sila.send_command("OpenDoor", return_request_id=False)
+      return None
+    else:
+      fut, request_id = await self._sila.send_command(
+        "OpenDoor",
+        return_request_id=True
+      )
+      return CommandExecution(
+        request_id=request_id,
+        command_name="OpenDoor",
+        _future=fut,
+        backend=self
+      )
 
-  async def prepare_for_input(self, position: Optional[int] = None) -> None:
-    """Prepare for input (equivalent to CloseDoor)."""
-    params = {}
-    if position is not None:
-      params["position"] = position
-    await self._sila.send_command("PrepareForInput", **params)
+  async def close_door(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Close the drawer door.
+
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    if wait:
+      await self._sila.send_command("CloseDoor", return_request_id=False)
+      return None
+    else:
+      fut, request_id = await self._sila.send_command(
+        "CloseDoor",
+        return_request_id=True
+      )
+      return CommandExecution(
+        request_id=request_id,
+        command_name="CloseDoor",
+        _future=fut,
+        backend=self
+      )
+
 
   # Sensor commands
   async def read_temperatures(self) -> ODTCSensorValues:
@@ -316,14 +466,36 @@ class ODTCBackend(ThermocyclerBackend):
 
       return MethodExecution(
         request_id=request_id,
+        command_name="ExecuteMethod",  # Will be set correctly by __post_init__
         method_name=method_name,
         _future=fut,
         backend=self
       )
 
-  async def stop_method(self) -> None:
-    """Stop currently running method."""
-    await self._sila.send_command("StopMethod")
+  async def stop_method(self, wait: bool = True) -> Optional[CommandExecution]:
+    """Stop currently running method.
+
+    Args:
+      wait: If True, block until completion. If False, return CommandExecution handle.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: CommandExecution handle (awaitable, has request_id)
+    """
+    if wait:
+      await self._sila.send_command("StopMethod", return_request_id=False)
+      return None
+    else:
+      fut, request_id = await self._sila.send_command(
+        "StopMethod",
+        return_request_id=True
+      )
+      return CommandExecution(
+        request_id=request_id,
+        command_name="StopMethod",
+        _future=fut,
+        backend=self
+      )
 
   async def is_method_running(self) -> bool:
     """Check if a method is currently running.
