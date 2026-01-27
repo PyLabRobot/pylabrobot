@@ -194,7 +194,7 @@ class STARChatterboxBackend(STARBackend):
     This method is called when the system needs to know the current position
     of a channel's dispensing drive (e.g., before emptying tips).
 
-    Returns a mock position of default 0.0 µL for all channels.
+    Returns a mock position with a default value of 0.0 for all channels.
     """
     if not (0 <= channel_idx < self.num_channels):
       raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}")
