@@ -2,9 +2,8 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import List, Tuple, Optional, Union, cast
-import re
 from typing import List, Tuple, Optional, Union
+import re
 
 import serial
 
