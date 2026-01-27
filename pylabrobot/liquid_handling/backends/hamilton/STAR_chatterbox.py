@@ -71,25 +71,30 @@ class STARChatterboxBackend(STARBackend):
     else:
       self._head96_information = None
 
-  async def request_tip_presence(self, mock_presence: Optional[List[int]] = None) -> List[int]:
-    """Check mock tip presence with optional list for user-modifiable tip presence.
-    (Mock MEM-READ command)
-    Args:
-      mock_presence: Optional list indicating tip presence for each channel.
-        1 indicates tip present, 0 indicates no tip.
+  # # # # # # # # Low-level command sending/receiving # # # # # # # #
 
-    Default: all tips present.
+  async def _write_and_read_command(
+    self,
+    id_: Optional[int],
+    cmd: str,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True,
+  ) -> Optional[str]:
+    print(cmd)
+    return None
 
-    Returns:
-      List of integers indicating tip presence for each channel.
-    """
-    if mock_presence is None:
-      return [1 for channel_idx in range(self.num_channels)]
+  async def send_raw_command(
+    self,
+    command: str,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True,
+  ) -> Optional[str]:
+    print(command)
+    return None
 
-    assert (
-      len(mock_presence) == self.num_channels
-    ), "Length of mock_presence must match number of channels."
-    return mock_presence
+  # # # # # # # # STAR configuration # # # # # # # #
 
   async def request_machine_configuration(self):
     """Return mock machine configuration data.
@@ -156,41 +161,50 @@ class STARChatterboxBackend(STARBackend):
     }
     return self._extended_conf
 
-  async def request_iswap_initialization_status(self) -> bool:
-    """Return mock iSWAP initialization status."""
-    return True
+  # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
 
-  async def head96_request_firmware_version(self) -> datetime.date:
-    """Return mock 96-head firmware version."""
-    return datetime.date(2023, 1, 1)
+  async def request_tip_presence(self, mock_presence: Optional[List[int]] = None) -> List[int]:
+    """Check mock tip presence with optional list for user-modifiable tip presence.
+    (Mock MEM-READ command)
+    Args:
+      mock_presence: Optional list indicating tip presence for each channel.
+        1 indicates tip present, 0 indicates no tip.
 
-  @property
-  def iswap_parked(self) -> bool:
-    return self._iswap_parked is True
+    Default: all tips present.
 
-  async def _write_and_read_command(
-    self,
-    id_: Optional[int],
-    cmd: str,
-    write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
-    wait: bool = True,
-  ) -> Optional[str]:
-    print(cmd)
-    return None
+    Returns:
+      List of integers indicating tip presence for each channel.
+    """
+    if mock_presence is None:
+      return [1 for channel_idx in range(self.num_channels)]
 
-  async def send_raw_command(
-    self,
-    command: str,
-    write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
-    wait: bool = True,
-  ) -> Optional[str]:
-    print(command)
-    return None
+    assert (
+      len(mock_presence) == self.num_channels
+    ), "Length of mock_presence must match number of channels."
+    return mock_presence
 
   async def request_z_pos_channel_n(self, channel: int) -> float:
     return 285.0
+
+  async def channel_dispensing_drive_request_position(
+    self, channel_idx: int, simulated_value: float = 0.0
+  ) -> float:
+    """Override to return mock dispensing drive position.
+
+    This method is called when the system needs to know the current position
+    of a channel's dispensing drive (e.g., before emptying tips).
+
+    Returns a mock position of default 0.0 µL for all channels.
+    """
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}")
+
+    return simulated_value
+
+  async def move_channel_y(self, channel: int, y: float):
+    print(f"moving channel {channel} to y: {y}")
+
+  # # # # # # # # 1_000 uL Channel: Complex Commands # # # # # # # #
 
   async def step_off_foil(
     self,
@@ -204,22 +218,6 @@ class STARChatterboxBackend(STARBackend):
       f"stepping off foil | wells: {wells} | front channel: {front_channel} | "
       f"back channel: {back_channel} | move inwards: {move_inwards} | move height: {move_height}"
     )
-
-  async def move_channel_y(self, channel: int, y: float):
-    print(f"moving channel {channel} to y: {y}")
-
-  @asynccontextmanager
-  async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
-    """A context manager that sets the iSWAP to slow speed during the context."""
-    assert 20 <= gripper_velocity <= 75_000, "Gripper velocity out of range."
-    assert 20 <= wrist_velocity <= 65_000, "Wrist velocity out of range."
-
-    messages = ["start slow iswap"]
-    try:
-      yield
-    finally:
-      messages.append("end slow iswap")
-      print(" | ".join(messages))
 
   async def pierce_foil(
     self,
@@ -237,6 +235,22 @@ class STARChatterboxBackend(STARBackend):
       f"spread: {spread} | one by one: {one_by_one} | distance from bottom: {distance_from_bottom}"
     )
 
+  # # # # # # # # Extension: 96-Head # # # # # # # #
+
+  async def head96_request_firmware_version(self) -> datetime.date:
+    """Return mock 96-head firmware version."""
+    return datetime.date(2023, 1, 1)
+
+  # # # # # # # # Extension: iSWAP # # # # # # # #
+
+  async def request_iswap_initialization_status(self) -> bool:
+    """Return mock iSWAP initialization status."""
+    return True
+
+  @property
+  def iswap_parked(self) -> bool:
+    return self._iswap_parked is True
+
   async def move_iswap_x(self, x_position: float):
     print("moving iswap x to", x_position)
 
@@ -245,3 +259,16 @@ class STARChatterboxBackend(STARBackend):
 
   async def move_iswap_z(self, z_position: float):
     print("moving iswap z to", z_position)
+
+  @asynccontextmanager
+  async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
+    """A context manager that sets the iSWAP to slow speed during the context."""
+    assert 20 <= gripper_velocity <= 75_000, "Gripper velocity out of range."
+    assert 20 <= wrist_velocity <= 65_000, "Wrist velocity out of range."
+
+    messages = ["start slow iswap"]
+    try:
+      yield
+    finally:
+      messages.append("end slow iswap")
+      print(" | ".join(messages))
