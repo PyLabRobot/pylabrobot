@@ -6538,6 +6538,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="H0", command="QW", fmt="qw#")
     return bool(response.get("qw", 0) == 1)  # type?
 
+  async def head96_dispensing_drive_and_squeezer_driver_initialise(
+    self,
+    squeezer_speed: float = 15.0,  # mm/sec
+    squeezer_acceleration: float = 62.0,  # mm/sec**2,
+    squeezer_current_limit: int = 15,
+    dispensing_drive_current_limit: int = 7,
+  ):
+    """Initialise 96-head's dispensing drive AND squeezer drive
+
+    This command...
+      - drops any tips that might be on the channel (in place, without moving to trash!)
+      - moves the dispense drive to volume position 215.92 uL
+        (after tip pickup it will be at 218.19 uL)
+
+    Args:
+      squeezer_speed: Speed of the movement (mm/sec). Default is 15.0 mm/sec.
+      squeezer_acceleration: Acceleration of the movement (mm/sec**2). Default is 62.0 mm/sec**2.
+      squeezer_current_limit: Current limit for the squeezer drive (1-15). Default is 15.
+      dispensing_drive_current_limit: Current limit for the dispensing drive (1-15). Default is 7.
+    """
+
+    if not (0.01 <= squeezer_speed <= 16.69):
+      raise ValueError(
+        f"96-head squeezer drive speed must be between 0.01 and 16.69 mm/sec, is {squeezer_speed}"
+      )
+    if not (1.04 <= squeezer_acceleration <= 62.6):
+      raise ValueError(
+        "96-head squeezer drive acceleration must be between 1.04 and "
+        f"62.6 mm/sec**2, is {squeezer_acceleration}"
+      )
+    if not (1 <= squeezer_current_limit <= 15):
+      raise ValueError(
+        "96-head squeezer drive current limit must be between 1 and 15, "
+        f"is {squeezer_current_limit}"
+      )
+    if not (1 <= dispensing_drive_current_limit <= 15):
+      raise ValueError(
+        "96-head dispensing drive current limit must be between 1 and 15, "
+        f"is {dispensing_drive_current_limit}"
+      )
+
+    squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
+    squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
+        squeezer_acceleration
+    )
+
+    resp = await self.send_command(
+      module="H0",
+      command="PI",
+      sv=f"{squeezer_speed_increment:05}",
+      sr=f"{squeezer_acceleration_increment:06}",
+      sw=f"{squeezer_current_limit:02}",
+      dw=f"{dispensing_drive_current_limit:02}",
+    )
+
+    return resp
+
   # -------------- 3.10.2 96-Head Movements --------------
 
   # Conversion factors for 96-Head (mm per increment)
@@ -6899,6 +6956,32 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
+
+
+
+  # # # Granular commands # # #
+
+  async def head96_dispensing_drive_move_to_home_volume(
+    self,
+  ):
+    """Broken firmware command: meant to move the 96-head dispensing drive into
+    its home position -> probably means at vol=0.0 uL,
+    but 96-head dispensing drive cannot reach vol=0.0 uL!
+    """
+
+    raise ValueError(
+        "Broken firmware command: raises STARFirmwareError: "
+        "{'CoRe 96 Head': UnknownHamiltonError('Position out of permitted area')}, H0DLid0080er54"
+    )
+    # resp = await self.send_command(
+    #   module="H0",
+    #   command="DL",
+    # )
+
+ 
+
+
+  # # # "Atomic" liquid handling commands # # #
 
   @need_iswap_parked
   async def aspirate_core_96(
@@ -7513,6 +7596,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = -25
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP = 1244.59
+
   async def head96_dispensing_drive_move_to_position(
     self,
     position,
@@ -7531,7 +7617,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       current_protection_limiter: Current protection limiter (0-15), default 15
     """
 
-    if not (0 <= position <= 1244.59):
+    if not (0 <= position <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP):
       raise ValueError("position must be between 0 and 1244.59")
     if not (0.1 <= speed <= 1063.75):
       raise ValueError("speed must be between 0.1 and 1063.75")
@@ -7555,6 +7641,58 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       du=f"{stop_speed_increments:05}",
       dr=f"{acceleration_increments:06}",
       dw=f"{current_protection_limiter:02}",
+    )
+
+  async def head96_dispensing_drive_move_to_volume_position(
+    self,
+    vol: float,
+    flow_rate: float = 200.0,  # uL/sec
+    acceleration: float = 15_000.0,  # uL/sec**2,
+    current_limit: int = 7,
+  ):
+    """Move 96-head's dispensing drive to specified volume position
+
+    Args:
+      vol: Target volume position to move the dispensing drive piston to (uL).
+      flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
+      acceleration: Acceleration of the movement (uL/sec**2). Default is 15_000.0 uL/sec**2.
+      current_limit: Current limit for the drive (1-15). Default is 5.
+    """
+
+    if not (self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP):
+      raise ValueError(
+        f"Target dispensing drive vol must be between {self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
+        f" and {self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP}, is {vol}"
+      )
+    if not (0.1 <= flow_rate <= 1063.75):
+      raise ValueError(
+        f"96-head dispensing drive speed must be between 0.1 and 1063.75 uL/sec, is {flow_rate}"
+      )
+    if not (96.7 <= acceleration <= 17406.84):
+      raise ValueError(
+        f"96-head dispensing drive acceleration must be between 96.7 and 17406.84 uL/sec**2, is {acceleration}"
+      )
+    if not (1 <= current_limit <= 15):
+      raise ValueError(
+        f"96-head dispensing drive current limit must be between 1 and 15, is {current_limit}"
+      )
+
+    current_position = await self.head96_dispensing_drive_request_position_uL()
+    relative_vol_movement = round(vol - current_position, 1)
+    relative_vol_movement_increment = self._head96_dispensing_drive_uL_to_increment(
+      abs(relative_vol_movement)
+    )
+    flow_rate_increment = self._head96_dispensing_drive_uL_to_increment(flow_rate)
+    acceleration_increment = self._head96_dispensing_drive_uL_to_increment(acceleration)
+
+    await self.send_command(
+      module="H0",
+      command="DS",
+      ds=f"{relative_vol_movement_increment:05}",
+      dt="0" if relative_vol_movement >= 0 else "1",
+      dv=f"{flow_rate_increment:05}",
+      dr=f"{acceleration_increment:06}",
+      dw=f"{current_limit:02}",
     )
 
   async def move_core_96_head_x(self, x_position: float):
