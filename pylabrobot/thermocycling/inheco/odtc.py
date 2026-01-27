@@ -1,12 +1,15 @@
 """Inheco ODTC (On-Deck Thermocycler) resource class."""
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
 
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.thermocycling.thermocycler import Thermocycler
 
 from .odtc_backend import CommandExecution, MethodExecution, ODTCBackend
-from .odtc_xml import ODTCMethodSet, ODTCConfig
+from .odtc_xml import ODTCMethod, ODTCPreMethod, ODTCConfig
+
+if TYPE_CHECKING:
+  from pylabrobot.thermocycling.standard import Protocol
 
 
 # Mapping from model string to variant integer (960000 for 96-well, 384000 for 384-well)
@@ -40,7 +43,7 @@ class InhecoODTC(Thermocycler):
   Example usage:
     ```python
     from pylabrobot.thermocycling.inheco import InhecoODTC, ODTCBackend
-    from pylabrobot.thermocycling.inheco.odtc_xml import protocol_to_odtc_method
+    from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
     # Create backend and thermocycler (384-well)
     backend = ODTCBackend(odtc_ip="192.168.1.100")
@@ -49,20 +52,19 @@ class InhecoODTC(Thermocycler):
     # Initialize
     await tc.setup()
 
-    # Create a protocol with model-aware defaults
-    from pylabrobot.thermocycling.standard import Protocol, Stage, Step
+    # Create a protocol
     protocol = Protocol(stages=[
       Stage(steps=[Step(temperature=[95.0], hold_seconds=30.0)], repeats=1)
     ])
 
-    # Convert to ODTC method using model's variant (384000)
-    config = tc.get_default_config(name="my_protocol")
-    method = protocol_to_odtc_method(protocol, config=config)
-    # method.variant will be 384000 (not 960000)
+    # Upload protocol (uses model's variant 384000 automatically)
+    await tc.upload_protocol(protocol, name="my_method")
 
-    # Upload and execute
-    await tc.upload_method_set(ODTCMethodSet(methods=[method], premethods=[]))
-    await tc.execute_method("my_protocol")
+    # Run method by name
+    await tc.run_protocol(method_name="my_method")
+
+    # Or upload and run in one call
+    await tc.run_protocol(protocol=protocol, method_name="my_pcr")
 
     # Clean up
     await tc.stop()
@@ -115,26 +117,145 @@ class InhecoODTC(Thermocycler):
       "port": self.backend._sila.bound_port,
     }
 
-  # Convenience methods that expose ODTC-specific functionality
+  # Protocol management methods
 
-  async def execute_method(
+  async def upload_protocol(
     self,
-    method_name: str,
-    priority: Optional[int] = None,
-    wait: bool = True,
-  ) -> Optional[MethodExecution]:
-    """Execute a method or premethod by name.
+    protocol: "Protocol",
+    config: Optional["ODTCConfig"] = None,
+    name: Optional[str] = None,
+    allow_overwrite: bool = False,
+    debug_xml: bool = False,
+    xml_output_path: Optional[str] = None,
+  ) -> str:
+    """Upload a Protocol to the device.
 
     Args:
-      method_name: Name of the method or premethod to execute.
-      priority: Priority (not used by ODTC, but part of SiLA spec).
+      protocol: PyLabRobot Protocol to upload.
+      config: Optional ODTCConfig for device-specific parameters. If None, uses
+        model-aware defaults (variant matches thermocycler model).
+      name: Method name. If None, uses "plr_currentProtocol".
+      allow_overwrite: If False, raise ValueError if method name already exists.
+      debug_xml: If True, log the generated XML to the logger at DEBUG level.
+        Useful for troubleshooting validation errors.
+      xml_output_path: Optional file path to save the generated MethodSet XML.
+        If provided, the XML will be written to this file before upload.
+
+    Returns:
+      Method name (resolved name, may be scratch name if not provided).
+
+    Raises:
+      ValueError: If allow_overwrite=False and method name already exists.
+    """
+    from .odtc_xml import ODTCConfig, protocol_to_odtc_method
+
+    # Use model-aware defaults if config not provided
+    if config is None:
+      config = self.get_default_config()
+
+    # Set name in config if provided
+    if name is not None:
+      config.name = name
+
+    # Convert Protocol to ODTCMethod in resource layer
+    method = protocol_to_odtc_method(protocol, config=config)
+
+    # Upload method to backend
+    await self.backend.upload_method(
+      method,
+      allow_overwrite=allow_overwrite,
+      execute=False,
+      debug_xml=debug_xml,
+      xml_output_path=xml_output_path,
+    )
+
+    return method.name
+
+  async def run_protocol(
+    self,
+    protocol: Optional["Protocol"] = None,
+    config: Optional["ODTCConfig"] = None,
+    method_name: Optional[str] = None,
+    wait: bool = True,
+    debug_xml: bool = False,
+    xml_output_path: Optional[str] = None,
+  ) -> Optional[MethodExecution]:
+    """Run a protocol or method on the device.
+
+    If protocol is provided:
+        - Converts Protocol to ODTCMethod
+        - Uploads it with name method_name (or uses scratch name "plr_currentProtocol" if method_name=None)
+        - Executes the method by the resolved name
+
+    If only method_name is provided:
+        - Executes existing Method on device by that name
+
+    Args:
+      protocol: Optional Protocol to convert and execute. If None, method_name must be provided.
+      config: Optional ODTCConfig for device-specific parameters. If None and protocol provided,
+        uses model-aware defaults.
+      method_name: Name of Method to execute. If protocol provided, this is the name for the
+        uploaded method. If only method_name provided, this is the existing method to run.
+        If None and protocol provided, uses "plr_currentProtocol".
       wait: If True, block until completion. If False, return MethodExecution handle.
+      debug_xml: If True, log the generated XML to the logger at DEBUG level.
+        Useful for troubleshooting validation errors.
+      xml_output_path: Optional file path to save the generated MethodSet XML.
+        If provided, the XML will be written to this file before upload.
 
     Returns:
       If wait=True: None (blocks until complete)
       If wait=False: MethodExecution handle (awaitable, has request_id)
+
+    Raises:
+      ValueError: If neither protocol nor method_name is provided.
     """
-    return await self.backend.execute_method(method_name, priority, wait)
+    if protocol is not None:
+      # Convert, upload, and execute protocol
+      if config is None:
+        config = self.get_default_config()
+      # Upload with allow_overwrite=True since we're about to execute it
+      method_name = await self.upload_protocol(
+        protocol,
+        config=config,
+        name=method_name,
+        allow_overwrite=True,
+        debug_xml=debug_xml,
+        xml_output_path=xml_output_path,
+      )
+      return await self.backend.execute_method(method_name, wait=wait)
+    elif method_name is not None:
+      # Execute existing method by name
+      return await self.backend.execute_method(method_name, wait=wait)
+    else:
+      raise ValueError("Either protocol or method_name must be provided")
+
+  async def get_method_set(self):
+    """Get the full MethodSet from the device.
+
+    Returns:
+      ODTCMethodSet containing all methods and premethods.
+    """
+    return await self.backend.get_method_set()
+
+  async def get_method(self, name: str) -> Optional[Union[ODTCMethod, ODTCPreMethod]]:
+    """Get a method by name from the device (searches both methods and premethods).
+
+    Args:
+      name: Method name to retrieve.
+
+    Returns:
+      ODTCMethod or ODTCPreMethod if found, None otherwise.
+    """
+    return await self.backend.get_method_by_name(name)
+
+  async def list_methods(self) -> List[str]:
+    """List all method names (both methods and premethods) on the device.
+
+    Returns:
+      List of method names.
+    """
+    return await self.backend.list_method_names()
 
   async def stop_method(self, wait: bool = True) -> Optional[CommandExecution]:
     """Stop any currently running method.
@@ -148,14 +269,6 @@ class InhecoODTC(Thermocycler):
     """
     return await self.backend.stop_method(wait=wait)
 
-  async def get_method_set(self):
-    """Get the full MethodSet from the device."""
-    return await self.backend.get_method_set()
-
-  async def get_method_by_name(self, method_name: str):
-    """Get a specific method by name from the device."""
-    return await self.backend.get_method_by_name(method_name)
-
   async def is_method_running(self) -> bool:
     """Check if a method is currently running."""
     return await self.backend.is_method_running()
@@ -168,13 +281,74 @@ class InhecoODTC(Thermocycler):
     """Wait until method execution completes."""
     await self.backend.wait_for_method_completion(poll_interval, timeout)
 
-  async def upload_method_set_from_file(self, filepath: str) -> None:
-    """Load a MethodSet XML file and upload to device."""
-    await self.backend.upload_method_set_from_file(filepath)
+  async def set_mount_temperature(
+    self,
+    temperature: float,
+    lid_temperature: Optional[float] = None,
+    wait: bool = True,
+    debug_xml: bool = False,
+    xml_output_path: Optional[str] = None,
+  ) -> Optional[MethodExecution]:
+    """Set mount (block) temperature and hold it.
 
-  async def save_method_set_to_file(self, filepath: str) -> None:
-    """Download methods from device and save to file."""
-    await self.backend.save_method_set_to_file(filepath)
+    Creates and executes a PreMethod to set the mount and lid temperatures.
+    PreMethods are simpler than full Methods and are designed for temperature conditioning.
+
+    Args:
+      temperature: Target mount (block) temperature in °C.
+      lid_temperature: Optional lid temperature in °C. If None, uses hardware-defined
+        default (max_lid_temp: 110°C for 96-well, 115°C for 384-well).
+      wait: If True, block until temperatures are set. If False, return MethodExecution handle.
+      debug_xml: If True, log the generated XML to the logger at DEBUG level.
+      xml_output_path: Optional file path to save the generated MethodSet XML.
+
+    Returns:
+      If wait=True: None (blocks until complete)
+      If wait=False: MethodExecution handle (awaitable, has request_id)
+
+    Example:
+      ```python
+      # Set mount to 95°C with default lid temperature (110°C) - blocking
+      await tc.set_mount_temperature(95.0)
+
+      # Set mount to 95°C with custom lid temperature - blocking
+      await tc.set_mount_temperature(95.0, lid_temperature=115.0)
+
+      # Non-blocking - returns MethodExecution handle
+      execution = await tc.set_mount_temperature(95.0, wait=False)
+      # Do other work...
+      await execution  # Wait when ready
+      ```
+    """
+    from .odtc_xml import ODTCPreMethod, generate_odtc_timestamp, resolve_protocol_name
+
+    # Use default lid temperature if not specified
+    if lid_temperature is not None:
+      target_lid_temp = lid_temperature
+    else:
+      # Use hardware-defined max as default (110°C for 96-well, 115°C for 384-well)
+      constraints = self.get_constraints()
+      target_lid_temp = constraints.max_lid_temp
+
+    # Create PreMethod - much simpler than a full Method
+    # PreMethods just set target temperatures and hold them
+    premethod = ODTCPreMethod(
+      name=resolve_protocol_name(None),  # Uses "plr_currentProtocol"
+      target_block_temperature=temperature,
+      target_lid_temperature=target_lid_temp,
+      datetime=generate_odtc_timestamp(),
+    )
+
+    # Upload PreMethod to backend
+    await self.backend.upload_premethod(
+      premethod,
+      allow_overwrite=True,  # Always overwrite scratch name
+      debug_xml=debug_xml,
+      xml_output_path=xml_output_path,
+    )
+
+    # Execute the PreMethod (same command as Methods)
+    return await self.backend.execute_method(premethod.name, wait=wait)
 
   async def get_status(self) -> str:
     """Get device status state.
@@ -191,6 +365,26 @@ class InhecoODTC(Thermocycler):
       ODTCSensorValues with temperatures in °C.
     """
     return await self.backend.read_temperatures()
+
+  async def monitor_temperatures(
+    self,
+    callback=None,
+    poll_interval: float = 2.0,
+    timeout=None,
+    stop_on_method_completion: bool = True,
+    show_updates: bool = True,
+  ):
+    """Monitor temperatures during method execution with controlled polling rate.
+
+    See ODTCBackend.monitor_temperatures() for full documentation.
+    """
+    return await self.backend.monitor_temperatures(
+      callback=callback,
+      poll_interval=poll_interval,
+      timeout=timeout,
+      stop_on_method_completion=stop_on_method_completion,
+      show_updates=show_updates,
+    )
 
   # Device control methods
 
@@ -311,15 +505,6 @@ class InhecoODTC(Thermocycler):
     """
     return await self.backend.get_last_data()
 
-  # Method upload methods
-
-  async def upload_method_set(self, method_set: ODTCMethodSet) -> None:
-    """Upload a MethodSet to the device.
-
-    Args:
-      method_set: ODTCMethodSet to upload.
-    """
-    await self.backend.upload_method_set(method_set)
 
   # Protocol conversion helpers with model-aware defaults
 

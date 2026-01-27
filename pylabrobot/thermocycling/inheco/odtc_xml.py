@@ -8,6 +8,7 @@ bidirectional conversion between Python objects and XML.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, fields
 from enum import Enum
@@ -19,6 +20,46 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+
+# =============================================================================
+# Scratch Method Names
+# =============================================================================
+
+SCRATCH_PROTOCOL_NAME = "plr_currentProtocol"
+
+
+# =============================================================================
+# Timestamp Generation
+# =============================================================================
+
+
+def generate_odtc_timestamp() -> str:
+  """Generate ISO 8601 timestamp in ODTC format.
+
+  Returns:
+    Timestamp string in ISO 8601 format: YYYY-MM-DDTHH:MM:SS.ffffff (6 decimal places).
+    Example: "2026-01-26T14:30:45.123456"
+
+  Note:
+    Uses Python's standard ISO 8601 formatting with microseconds (6 decimal places).
+    ODTC accepts timestamps with 0-7 decimal places, so this standard format is compatible.
+  """
+  return datetime.now().isoformat(timespec="microseconds")
+
+
+def resolve_protocol_name(name: Optional[str]) -> str:
+  """Resolve protocol name, using scratch name if not provided.
+
+  Args:
+    name: Protocol name (may be None or empty string).
+
+  Returns:
+    Resolved name. If name is None or empty, returns scratch name.
+  """
+  if not name:  # None or empty string
+    return SCRATCH_PROTOCOL_NAME
+  return name
 
 
 # =============================================================================
@@ -278,7 +319,7 @@ class ODTCConfig:
   """
 
   # Method identification/metadata
-  name: str = "converted_protocol"
+  name: Optional[str] = None
   creator: Optional[str] = None
   description: Optional[str] = None
   datetime: Optional[str] = None
@@ -585,8 +626,9 @@ def _method_to_xml(method: ODTCMethod, parent: ET.Element) -> ET.Element:
   ET.SubElement(elem, "PlateType").text = str(method.plate_type)
   ET.SubElement(elem, "FluidQuantity").text = str(method.fluid_quantity)
   ET.SubElement(elem, "PostHeating").text = "true" if method.post_heating else "false"
-  ET.SubElement(elem, "StartBlockTemperature").text = str(method.start_block_temperature)
-  ET.SubElement(elem, "StartLidTemperature").text = str(method.start_lid_temperature)
+  # Use _format_value to ensure integers are formatted without .0
+  ET.SubElement(elem, "StartBlockTemperature").text = _format_value(method.start_block_temperature)
+  ET.SubElement(elem, "StartLidTemperature").text = _format_value(method.start_lid_temperature)
 
   # Add steps
   for step in method.steps:
@@ -682,9 +724,6 @@ def parse_sensor_values(xml_str: str) -> ODTCSensorValues:
 # =============================================================================
 
 
-def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCMethod]:
-  """Find a method by name."""
-  return next((m for m in method_set.methods if m.name == name), None)
 
 
 def get_premethod_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCPreMethod]:
@@ -692,14 +731,47 @@ def get_premethod_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTC
   return next((pm for pm in method_set.premethods if pm.name == name), None)
 
 
-def list_method_names(method_set: ODTCMethodSet) -> List[str]:
-  """Get all method names."""
+# Keep the method-only version as internal helper
+def _get_method_only_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCMethod]:
+  """Find a method by name (methods only, not premethods)."""
+  return next((m for m in method_set.methods if m.name == name), None)
+
+
+def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[Union[ODTCMethod, ODTCPreMethod]]:
+  """Find a method by name, searching both methods and premethods.
+  
+  Args:
+    method_set: ODTCMethodSet to search.
+    name: Method name to find.
+    
+  Returns:
+    ODTCMethod or ODTCPreMethod if found, None otherwise.
+  """
+  # Search methods first, then premethods
+  method = _get_method_only_by_name(method_set, name)
+  if method is not None:
+    return method
+  premethod = get_premethod_by_name(method_set, name)
+  if premethod is not None:
+    return premethod
+  return None
+
+
+def _list_method_names_only(method_set: ODTCMethodSet) -> List[str]:
+  """Get all method names (methods only, not premethods)."""
   return [m.name for m in method_set.methods]
 
 
 def list_premethod_names(method_set: ODTCMethodSet) -> List[str]:
   """Get all premethod names."""
   return [pm.name for pm in method_set.premethods]
+
+
+def list_method_names(method_set: ODTCMethodSet) -> List[str]:
+  """Get all method names (both methods and premethods)."""
+  method_names = [m.name for m in method_set.methods]
+  premethod_names = [pm.name for pm in method_set.premethods]
+  return method_names + premethod_names
 
 
 # =============================================================================
@@ -851,8 +923,14 @@ def protocol_to_odtc_method(
     else config.lid_temperature
   )
 
+  # Resolve method name (use scratch name if not provided)
+  resolved_name = resolve_protocol_name(config.name)
+
+  # Generate timestamp if not already set
+  resolved_datetime = config.datetime if config.datetime else generate_odtc_timestamp()
+
   return ODTCMethod(
-    name=config.name,
+    name=resolved_name,
     variant=config.variant,
     plate_type=config.plate_type,
     fluid_quantity=config.fluid_quantity,
@@ -863,7 +941,7 @@ def protocol_to_odtc_method(
     pid_set=list(config.pid_set),  # Copy the list
     creator=config.creator,
     description=config.description,
-    datetime=config.datetime,
+    datetime=resolved_datetime,
   )
 
 

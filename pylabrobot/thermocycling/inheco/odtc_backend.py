@@ -5,21 +5,27 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 from .odtc_sila_interface import ODTCSiLAInterface, SiLAState
 from .odtc_xml import (
+  ODTCConfig,
   ODTCMethod,
   ODTCMethodSet,
+  ODTCPreMethod,
   ODTCSensorValues,
+  generate_odtc_timestamp,
   get_method_by_name,
+  get_premethod_by_name,
+  list_method_names,
   method_set_to_xml,
   parse_method_set,
   parse_method_set_file,
   parse_sensor_values,
+  resolve_protocol_name,
 )
 
 
@@ -212,13 +218,17 @@ class ODTCBackend(ThermocyclerBackend):
     self.logger.debug(f"{command_name} extracted value at path {path}: {value!r}")
     return value
 
-  def _extract_xml_parameter(self, resp: Any, param_name: str, command_name: str) -> str:
+  def _extract_xml_parameter(
+    self, resp: Any, param_name: str, command_name: str, allow_root_fallback: bool = False
+  ) -> str:
     """Extract parameter value from ElementTree XML response.
 
     Args:
       resp: ElementTree root from send_command.
-      param_name: Name of parameter to extract.
+      param_name: Name of parameter to extract (matches 'name' attribute on Parameter element).
       command_name: Command name for error messages.
+      allow_root_fallback: If True, fall back to root-based behavior when parameter
+        with matching name is not found. If False, raise error if parameter not found.
 
     Returns:
       Parameter text value.
@@ -229,13 +239,36 @@ class ODTCBackend(ThermocyclerBackend):
     if resp is None:
       raise ValueError(f"Empty response from {command_name}")
 
-    param = resp.find(f".//Parameter[@name='{param_name}']")
-    if param is None:
-      raise ValueError(f"{param_name} parameter not found in {command_name} response")
+    import xml.etree.ElementTree as ET
 
+    # First, try strict matching by name attribute
+    # Look for Parameter[@name='param_name'] in ResponseData or anywhere in tree
+    param = None
+    if resp.tag == "Parameter" and resp.get("name") == param_name:
+      param = resp
+    else:
+      # Search for Parameter with matching name attribute
+      param = resp.find(f".//Parameter[@name='{param_name}']")
+
+    # Fallback: if not found and fallback allowed, use root-based behavior
+    # (for cases where temperature data is in root without name attribute)
+    if param is None and allow_root_fallback:
+      # Either root is Parameter, or find first Parameter in ResponseData
+      param = resp if resp.tag == "Parameter" else resp.find(".//Parameter")
+
+    if param is None:
+      # Include full XML structure in error for debugging
+      xml_str = ET.tostring(resp, encoding='unicode')
+      raise ValueError(
+        f"Parameter '{param_name}' not found in {command_name} response. "
+        f"Root element tag: {resp.tag}\n"
+        f"Full XML response:\n{xml_str}"
+      )
+
+    # Extract String element from Parameter (contains escaped XML)
     string_elem = param.find("String")
     if string_elem is None or string_elem.text is None:
-      raise ValueError(f"{param_name} String element not found in {command_name} response")
+      raise ValueError(f"String element not found in {command_name} Parameter response")
 
     return str(string_elem.text)
 
@@ -467,9 +500,54 @@ class ODTCBackend(ThermocyclerBackend):
       ODTCSensorValues with temperatures in °C.
     """
     resp = await self._sila.send_command("ReadActualTemperature")
-    # Response is ElementTree root - extract SensorValues parameter
-    # Response structure: ResponseData/Parameter[@name='SensorValues']/String
-    sensor_xml = self._extract_xml_parameter(resp, "SensorValues", "ReadActualTemperature")
+
+    # Debug logging to see what we actually received
+    self.logger.debug(
+      f"ReadActualTemperature response type: {type(resp).__name__}, "
+      f"isinstance dict: {isinstance(resp, dict)}, "
+      f"isinstance ElementTree: {hasattr(resp, 'find') if resp else False}"
+    )
+
+    # Handle both synchronous (dict) and asynchronous (ElementTree) responses
+    if isinstance(resp, dict):
+      # Synchronous response (return_code == 1) - extract from dict structure
+      # Structure: ReadActualTemperatureResponse -> ResponseData -> Parameter -> String
+      # Parameter might be a dict or list, so we need to find the one with name="SensorValues"
+      self.logger.debug(f"ReadActualTemperature dict response keys: {list(resp.keys())}")
+      response_data = self._extract_dict_path(
+        resp, ["ReadActualTemperatureResponse", "ResponseData"], "ReadActualTemperature"
+      )
+      self.logger.debug(f"ResponseData structure: {response_data}")
+
+      # Parameter might be a dict or list
+      param = response_data.get("Parameter")
+      if isinstance(param, list):
+        # Find parameter with name="SensorValues"
+        sensor_param = next((p for p in param if p.get("name") == "SensorValues"), None)
+      elif isinstance(param, dict):
+        # Single parameter dict
+        sensor_param = param if param.get("name") == "SensorValues" else None
+      else:
+        sensor_param = None
+
+      if sensor_param is None:
+        raise ValueError(
+          "SensorValues parameter not found in ReadActualTemperature response"
+        )
+
+      sensor_xml = sensor_param.get("String")
+      if sensor_xml is None:
+        raise ValueError(
+          "String element not found in SensorValues parameter"
+        )
+    else:
+      # Asynchronous response (return_code == 2) - resp is ElementTree root
+      # Response structure: ResponseData/Parameter[@name='SensorValues']/String
+      # Use fallback for temperature data which may be in root without name attribute
+      sensor_xml = self._extract_xml_parameter(
+        resp, "SensorValues", "ReadActualTemperature", allow_root_fallback=True
+      )
+
     # Parse the XML string (it's escaped in the response)
     return parse_sensor_values(sensor_xml)
 
@@ -625,25 +703,99 @@ class ODTCBackend(ThermocyclerBackend):
     # Parse MethodSet XML (it's escaped in the response)
     return parse_method_set(method_set_xml)
 
-  async def get_method_by_name(self, method_name: str) -> Optional[ODTCMethod]:
-    """Get a specific method by name from the device.
+  async def get_method_by_name(self, method_name: str) -> Optional[Union[ODTCMethod, ODTCPreMethod]]:
+    """Get a method by name from the device (searches both methods and premethods).
 
     Args:
       method_name: Name of the method to retrieve.
 
     Returns:
-      ODTCMethod if found, None otherwise.
+      ODTCMethod or ODTCPreMethod if found, None otherwise.
     """
     method_set = await self.get_method_set()
     return get_method_by_name(method_set, method_name)
 
-  async def upload_method_set(self, method_set: ODTCMethodSet) -> None:
+  async def list_method_names(self) -> List[str]:
+    """List all method names (both methods and premethods) on the device.
+
+    Returns:
+      List of method names.
+    """
+    method_set = await self.get_method_set()
+    return list_method_names(method_set)
+
+  async def upload_method_set(
+    self,
+    method_set: ODTCMethodSet,
+    allow_overwrite: bool = False,
+    debug_xml: bool = False,
+    xml_output_path: Optional[str] = None,
+  ) -> None:
     """Upload a MethodSet to the device.
 
     Args:
       method_set: ODTCMethodSet to upload.
+      allow_overwrite: If False, raise ValueError if any method/premethod name
+        already exists on the device. If True, allow overwriting existing methods/premethods.
+      debug_xml: If True, log the generated XML to the logger at DEBUG level.
+        Useful for troubleshooting validation errors.
+      xml_output_path: Optional file path to save the generated MethodSet XML.
+        If provided, the XML will be written to this file before upload.
+        Useful for comparing with example XML files or debugging.
+
+    Raises:
+      ValueError: If allow_overwrite=False and any method/premethod name already exists
+        on the device (checking both methods and premethods for conflicts).
     """
+    # Check for name conflicts if overwrite not allowed
+    if not allow_overwrite:
+      existing_method_set = await self.get_method_set()
+      conflicts = []
+
+      # Check all method names (unified search)
+      for method in method_set.methods:
+        existing_method = get_method_by_name(existing_method_set, method.name)
+        if existing_method is not None:
+          method_type = "PreMethod" if isinstance(existing_method, ODTCPreMethod) else "Method"
+          conflicts.append(f"Method '{method.name}' already exists as {method_type}")
+
+      # Check all premethod names (unified search)
+      for premethod in method_set.premethods:
+        existing_method = get_method_by_name(existing_method_set, premethod.name)
+        if existing_method is not None:
+          method_type = "PreMethod" if isinstance(existing_method, ODTCPreMethod) else "Method"
+          conflicts.append(f"Method '{premethod.name}' already exists as {method_type}")
+
+      if conflicts:
+        conflict_msg = "\n".join(f"  - {c}" for c in conflicts)
+        raise ValueError(
+          f"Cannot upload MethodSet: name conflicts detected.\n{conflict_msg}\n"
+          f"Set allow_overwrite=True to overwrite existing methods."
+        )
+
     method_set_xml = method_set_to_xml(method_set)
+
+    # Debug XML output if requested
+    if debug_xml or xml_output_path:
+      import xml.dom.minidom
+      # Pretty-print for readability
+      try:
+        dom = xml.dom.minidom.parseString(method_set_xml)
+        pretty_xml = dom.toprettyxml(indent="  ")
+      except Exception:
+        # Fallback to original if pretty-printing fails
+        pretty_xml = method_set_xml
+
+      if debug_xml:
+        self.logger.debug("Generated MethodSet XML:\n%s", pretty_xml)
+
+      if xml_output_path:
+        try:
+          with open(xml_output_path, "w", encoding="utf-8") as f:
+            f.write(pretty_xml)
+          self.logger.info("MethodSet XML saved to: %s", xml_output_path)
+        except Exception as e:
+          self.logger.warning("Failed to save XML to %s: %s", xml_output_path, e)
 
     # SetParameters expects paramsXML in ResponseType_1.2.xsd format
     # Format: <ParameterSet><Parameter parameterType="String" name="MethodsXML"><String>...</String></Parameter></ParameterSet>
@@ -655,16 +807,174 @@ class ODTCBackend(ThermocyclerBackend):
     string_elem.text = method_set_xml
 
     params_xml = ET.tostring(param_set, encoding="unicode", xml_declaration=False)
+
+    if debug_xml:
+      self.logger.debug("Wrapped ParameterSet XML (sent to device):\n%s", params_xml)
+
     await self._sila.send_command("SetParameters", paramsXML=params_xml)
 
-  async def upload_method_set_from_file(self, filepath: str) -> None:
+  async def upload_method(
+    self,
+    method: ODTCMethod,
+    allow_overwrite: bool = False,
+    execute: bool = False,
+    wait: bool = True,
+    debug_xml: bool = False,
+    xml_output_path: Optional[str] = None,
+  ) -> Optional[MethodExecution]:
+    """Upload a single method to the device.
+
+    Convenience wrapper that wraps method in MethodSet and uploads.
+
+    Args:
+      method: ODTCMethod to upload.
+      allow_overwrite: If False, raise ValueError if method name already exists
+        on the device. If True, allow overwriting existing method/premethod.
+        If method name resolves to scratch name and this is not explicitly False,
+        it will be set to True automatically.
+      execute: If True, execute the method after uploading. If False, only upload.
+      wait: If execute=True and wait=True, block until method completes.
+        If execute=True and wait=False, return MethodExecution handle.
+      debug_xml: If True, log the generated XML to the logger at DEBUG level.
+        Passed through to upload_method_set.
+      xml_output_path: Optional file path to save the generated MethodSet XML.
+        Passed through to upload_method_set.
+
+    Returns:
+      If execute=False: None
+      If execute=True and wait=True: None (blocks until complete)
+      If execute=True and wait=False: MethodExecution handle (awaitable, has request_id)
+
+    Raises:
+      ValueError: If allow_overwrite=False and method name already exists
+        on the device (checking both methods and premethods for conflicts).
+    """
+    # Resolve name (use scratch name if None/empty)
+    resolved_name = resolve_protocol_name(method.name)
+    # Check if we're using a scratch name (original name was None/empty)
+    is_scratch_name = not method.name or method.name == ""
+
+    # Generate timestamp if not already set
+    resolved_datetime = method.datetime if method.datetime else generate_odtc_timestamp()
+
+    # Auto-overwrite for scratch names unless explicitly disabled
+    if is_scratch_name and allow_overwrite is False:
+      # Check if user explicitly passed False (vs default)
+      # Since we can't distinguish, we'll auto-overwrite for scratch names
+      # but log a warning if they explicitly set False
+      allow_overwrite = True
+      if not method.name:  # Only warn if name was actually None/empty (not just resolved)
+        self.logger.warning(
+          f"Method name resolved to scratch name '{resolved_name}'. "
+          "Auto-enabling allow_overwrite=True for scratch methods."
+        )
+
+    # Create method copy with resolved name and timestamp
+    method_copy = ODTCMethod(
+      name=resolved_name,
+      variant=method.variant,
+      plate_type=method.plate_type,
+      fluid_quantity=method.fluid_quantity,
+      post_heating=method.post_heating,
+      start_block_temperature=method.start_block_temperature,
+      start_lid_temperature=method.start_lid_temperature,
+      steps=method.steps,
+      pid_set=method.pid_set,
+      creator=method.creator,
+      description=method.description,
+      datetime=resolved_datetime,
+    )
+
+    method_set = ODTCMethodSet(methods=[method_copy], premethods=[])
+    await self.upload_method_set(
+      method_set,
+      allow_overwrite=allow_overwrite,
+      debug_xml=debug_xml,
+      xml_output_path=xml_output_path,
+    )
+
+    if execute:
+      return await self.execute_method(resolved_name, wait=wait)
+    return None
+
+  async def upload_premethod(
+    self,
+    premethod: ODTCPreMethod,
+    allow_overwrite: bool = False,
+    debug_xml: bool = False,
+    xml_output_path: Optional[str] = None,
+  ) -> None:
+    """Upload a single premethod to the device.
+
+    Convenience wrapper that wraps premethod in MethodSet and uploads.
+
+    Args:
+      premethod: ODTCPreMethod to upload.
+      allow_overwrite: If False, raise ValueError if premethod name already exists
+        on the device. If True, allow overwriting existing method/premethod.
+        If premethod name resolves to scratch name and this is not explicitly False,
+        it will be set to True automatically.
+
+    Raises:
+      ValueError: If allow_overwrite=False and premethod name already exists
+        on the device (checking both methods and premethods for conflicts).
+    """
+    # Resolve name (use scratch name if None/empty)
+    resolved_name = resolve_protocol_name(premethod.name)
+    # Check if we're using a scratch name (original name was None/empty)
+    is_scratch_name = not premethod.name or premethod.name == ""
+
+    # Generate timestamp if not already set
+    resolved_datetime = premethod.datetime if premethod.datetime else generate_odtc_timestamp()
+
+    # Auto-overwrite for scratch names unless explicitly disabled
+    if is_scratch_name and allow_overwrite is False:
+      # Check if user explicitly passed False (vs default)
+      # Since we can't distinguish, we'll auto-overwrite for scratch names
+      # but log a warning if they explicitly set False
+      allow_overwrite = True
+      if not premethod.name:  # Only warn if name was actually None/empty (not just resolved)
+        self.logger.warning(
+          f"PreMethod name resolved to scratch name '{resolved_name}'. "
+          "Auto-enabling allow_overwrite=True for scratch premethods."
+        )
+
+    # Create premethod copy with resolved name and timestamp
+    premethod_copy = ODTCPreMethod(
+      name=resolved_name,
+      target_block_temperature=premethod.target_block_temperature,
+      target_lid_temperature=premethod.target_lid_temperature,
+      creator=premethod.creator,
+      description=premethod.description,
+      datetime=resolved_datetime,
+    )
+
+    method_set = ODTCMethodSet(methods=[], premethods=[premethod_copy])
+    await self.upload_method_set(
+      method_set,
+      allow_overwrite=allow_overwrite,
+      debug_xml=debug_xml,
+      xml_output_path=xml_output_path,
+    )
+
+  async def upload_method_set_from_file(
+    self,
+    filepath: str,
+    allow_overwrite: bool = False,
+  ) -> None:
     """Load and upload a MethodSet XML file to the device.
 
     Args:
       filepath: Path to MethodSet XML file.
+      allow_overwrite: If False, raise ValueError if any method/premethod name
+        already exists on the device. If True, allow overwriting existing methods/premethods.
+
+    Raises:
+      ValueError: If allow_overwrite=False and any method/premethod name already exists
+        on the device (checking both methods and premethods for conflicts).
     """
     method_set = parse_method_set_file(filepath)
-    await self.upload_method_set(method_set)
+    await self.upload_method_set(method_set, allow_overwrite=allow_overwrite)
 
   async def save_method_set_to_file(self, filepath: str) -> None:
     """Download methods from device and save to file.

@@ -83,7 +83,7 @@ SOAP_RESPONSE_ErrorEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoa
 
 class SiLAState(str, Enum):
   """SiLA device states per specification.
-  
+
   Note: State values match what the ODTC device actually returns.
   Based on SCILABackend comment, devices return: "standby", "inError", "startup" (mixed/lowercase).
   However, the actual ODTC device returns "standby" (all lowercase) as seen in practice.
@@ -302,25 +302,30 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     if not self._executing_commands:
       return True
 
-    # Check against each executing command
-    for executing_cmd in self._executing_commands:
-      # Normalize command names (handle aliases)
-      cmd1 = self._normalize_command_name(command)
-      cmd2 = self._normalize_command_name(executing_cmd)
+    # Normalize the new command name
+    new_cmd = self._normalize_command_name(command)
 
-      # Check parallelism table
-      if cmd1 in self.PARALLELISM_TABLE:
-        if cmd2 in self.PARALLELISM_TABLE[cmd1]:
-          if self.PARALLELISM_TABLE[cmd1][cmd2] == "S":
+    # Check against each executing command
+    # The parallelism table is keyed by the EXECUTING command, then lists what can run in parallel
+    for executing_cmd in self._executing_commands:
+      # Normalize executing command name
+      exec_cmd = self._normalize_command_name(executing_cmd)
+
+      # Check parallelism table from the perspective of the EXECUTING command
+      if exec_cmd in self.PARALLELISM_TABLE:
+        if new_cmd in self.PARALLELISM_TABLE[exec_cmd]:
+          if self.PARALLELISM_TABLE[exec_cmd][new_cmd] == "S":
             return False  # Sequential required
+          # If "P" (parallel), continue checking other executing commands
         else:
-          # Command not in table - default to sequential for safety
+          # New command not in executing command's table - default to sequential for safety
           return False
       else:
-        # Command not in parallelism table - default to sequential
+        # Executing command not in parallelism table - default to sequential
         return False
 
-    return True  # Can run in parallel
+    # All checks passed - can run in parallel with all executing commands
+    return True
 
   def _normalize_command_name(self, command: str) -> str:
     """Normalize command name for parallelism table lookup.
@@ -369,9 +374,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     if not state_str:
       self._logger.debug("_update_state_from_status: Empty state string, skipping update")
       return
-    
+
     self._logger.debug(f"_update_state_from_status: Received state: {state_str!r} (type: {type(state_str).__name__})")
-    
+
     # Match exactly against enum values (no normalization - we want to see what device actually returns)
     try:
       self._current_state = SiLAState(state_str)
@@ -625,22 +630,25 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
         f"Command {command} not allowed in state {self._current_state.value} (return code 9)"
       )
 
-    # Check parallelism (for commands in the table)
-    normalized_cmd = self._normalize_command_name(command)
-    if normalized_cmd in self.PARALLELISM_TABLE:
-      async with self._parallelism_lock:
-        if not self._check_parallelism(normalized_cmd):
-          raise RuntimeError(
-            f"Command {command} cannot run in parallel with currently executing commands (return code 4)"
-          )
-    else:
-      # Command not in parallelism table - default to sequential (safe)
-      async with self._parallelism_lock:
-        if self._executing_commands:
-          # If any command is executing and this command isn't in table, reject
-          raise RuntimeError(
-            f"Command {command} not in parallelism table and device is busy (return code 4)"
-          )
+    # Synchronous read-only commands (GetStatus, GetDeviceIdentification) should always be allowed
+    # They are non-interfering queries that can run at any time, even during method execution
+    if command not in self.SYNCHRONOUS_COMMANDS:
+      # Check parallelism (for commands in the table)
+      normalized_cmd = self._normalize_command_name(command)
+      if normalized_cmd in self.PARALLELISM_TABLE:
+        async with self._parallelism_lock:
+          if not self._check_parallelism(normalized_cmd):
+            raise RuntimeError(
+              f"Command {command} cannot run in parallel with currently executing commands (return code 4)"
+            )
+      else:
+        # Command not in parallelism table - default to sequential (safe)
+        async with self._parallelism_lock:
+          if self._executing_commands:
+            # If any command is executing and this command isn't in table, reject
+            raise RuntimeError(
+              f"Command {command} not in parallelism table and device is busy (return code 4)"
+            )
 
     # Generate request_id (reuse base class method)
     request_id = self._make_request_id()
@@ -693,6 +701,11 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     # Extract return code and message
     return_code, message = self._get_return_code_and_message(command, decoded)
+
+    # Debug logging for return code
+    self._logger.debug(
+      f"Command {command} returned code {return_code}: {message}"
+    )
 
     # Handle return codes
     if return_code == 1:
