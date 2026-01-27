@@ -124,7 +124,7 @@ class Serial(IOBase):
       matching_ports = [
         p.device
         for p in serial.tools.list_ports.comports()
-        if f"{self._vid}:{self._pid}" in (p.hwid or "")
+        if f"{self._vid:04X}:{self._pid:04X}" in (p.hwid or "")
       ]
 
       # 1.a. No matching devices found AND no port specified
