@@ -7656,7 +7656,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       vol: Target volume position to move the dispensing drive piston to (uL).
       flow_rate: Speed of the movement (uL/sec). Default is 200.0 uL/sec.
       acceleration: Acceleration of the movement (uL/sec**2). Default is 15_000.0 uL/sec**2.
-      current_limit: Current limit for the drive (1-15). Default is 5.
+      current_limit: Current limit for the drive (1-15). Default is 7.
     """
 
     if not (self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP):
