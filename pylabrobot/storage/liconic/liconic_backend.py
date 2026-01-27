@@ -275,56 +275,6 @@ class LiconicBackend(IncubatorBackend):
       logger.info(" Barcode reading requested but instance not configured with barcode reader.")
       return "No barcode"
 
-
-  async def scan_cassette(self, cassette:PlateCarrier):
-    """ Scan all barcodes in a cartridge using the internal barcode reader. Using command LON """
-    if not self.barcode_installed:
-      raise RuntimeError("Barcode reader not installed in this incubator instance")
-
-    await self._send_command_bcr("SSET") # enter settings mode
-    await self._send_command_bcr("WP121") # setting barcode scanner to multi-read mode
-    confirm = await self._send_command_bcr("RP12") # get read mode
-    if confirm != "121":
-      raise RuntimeError("Failed to set barcode reader to multiread mode")
-
-    await self._send_command_bcr("WPA06000") # set barcode scanner one shot time to 60,000 ms for multiread
-    time_confirm = await self._send_command_bcr("RPA0")
-    if time_confirm != "A06000":
-      raise RuntimeError("Failed to set barcode reader to 60000 ms one shot time")
-
-    await self._send_command_bcr("SEND") # exit settings mode
-
-    assert isinstance(cassette, PlateCarrier), "Site not in rack"
-    assert self._racks is not None, "Racks not set"
-    rack_idx = self._racks.index(cassette) + 1
-    num_pos = len(cassette.sites.items()) # get number of positions
-
-    await self._send_command_plc(f"WR DM0 {rack_idx}")
-    await self._send_command_plc("WR DM5 1") # set to first position
-
-    await self._send_command_plc("ST 1910") # set plate shuttle to plate read level
-    await self._wait_ready()
-
-    barcodes = await self._send_command_bcr("LON") # turn on barcode reader
-
-    await self._send_command_plc(f"WR DM5 {num_pos}")
-
-    print(f"BARCODES: {barcodes}")
-
-    await self._send_command_bcr("SSET") # enter settings mode
-    await self._send_command_bcr("WP120") # setting barcode scanner to single read mode
-
-    confirm = await self._send_command_bcr("RP12")
-    if confirm != "120":
-      raise RuntimeError("Failed to reset barcode reader to single mode")
-
-    await self._send_command_bcr("WPA00100") # set barcode scanner one shot time to 1000 ms for single read mode
-    time_confirm = await self._send_command_bcr("RPA0")
-    if time_confirm != "A00100":
-      raise RuntimeError("Failed to reset barcode reader to 1000 ms one shot time")
-
-    await self._send_command_bcr("SEND") # exit settings mode
-
   async def _send_command_plc(self, command: str) -> str:
     """
     Send an ASCII command to the Liconic PLC over serial and return the response.
