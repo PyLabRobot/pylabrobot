@@ -179,19 +179,10 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc("ST 1902")
     await self._wait_ready()
 
-  async def fetch_plate_to_loading_tray(self, plate: Optional[Plate]=None, site: Optional[PlateHolder]=None, read_barcode: Optional[bool]=False) -> str:
+  async def fetch_plate_to_loading_tray(self, plate: str, read_barcode: Optional[bool]=False) -> str:
     """ Fetch a plate from the incubator to the loading tray."""
-    if plate and not site:
-      site = plate.parent
-      assert isinstance(site, PlateHolder), "Plate not in storage"
-    elif site and not plate:
-      site = site
-      assert isinstance(site, PlateHolder), "Plate holder not found"
-    elif site and plate:
-      if plate.parent != site:
-        raise RuntimeError(f"The requested plate {plate} is not the plate in {site}")
-    else:
-      raise RuntimeError("Please provide a plate or plate holder location")
+    site = plate.parent
+    assert isinstance(site, PlateHolder), "Plate not in storage"
 
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
@@ -203,15 +194,13 @@ class LiconicBackend(IncubatorBackend):
 
     if read_barcode:
       barcode = await self.read_barcode_inline(m,n)
+      print(barcode)
 
     await self._send_command_plc("ST 1905")  # plate to transfer station
     await self._wait_ready()
     await self._send_command_plc("ST 1903")  # terminate access
 
-    if read_barcode:
-      return barcode
-
-  async def take_in_plate(self, site: PlateHolder, read_barcode: Optional[bool]=False) -> str:
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, read_barcode: Optional[bool]=False) -> str:
     """ Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
@@ -225,11 +214,9 @@ class LiconicBackend(IncubatorBackend):
 
     if read_barcode:
       barcode = await self.read_barcode_inline(m,n)
+      print(barcode)
 
     await self._send_command_plc("ST 1903")  # terminate access
-
-    if read_barcode:
-      return barcode
 
   async def move_position_to_position(self, plate: Plate, dest_site: PlateHolder, read_barcode: Optional[bool]=False):
     """ Move plate from one internal position to another"""
@@ -313,9 +300,7 @@ class LiconicBackend(IncubatorBackend):
     """
     Send an ASCII command to the barcode reader over serial and return the response.
     """
-    cmd = command.strip() + "\r"
-    logger.debug(f"Sending command to Barcode Reader: {cmd!r}")
-    resp = await self.io_bcr.send_command(cmd)
+    resp = await self.io_bcr.send_command(command)
     if not resp:
       raise RuntimeError(f"No response from Barcode Reader for command {command!r}")
     resp = resp.strip()

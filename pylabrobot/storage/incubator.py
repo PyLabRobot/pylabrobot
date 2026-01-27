@@ -73,13 +73,13 @@ class Incubator(Machine, Resource):
           return site
     raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
 
-  async def fetch_plate_to_loading_tray(self, plate_name: str) -> Plate:
+  async def fetch_plate_to_loading_tray(self, plate_name: str, read_barcode: Optional[bool]=False) -> Plate:
     """Fetch a plate from the incubator and put it on the loading tray."""
 
     site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
     assert plate is not None
-    await self.backend.fetch_plate_to_loading_tray(plate)
+    await self.backend.fetch_plate_to_loading_tray(plate, read_barcode)
     plate.unassign()
     self.loading_tray.assign_child_resource(plate)
     return plate

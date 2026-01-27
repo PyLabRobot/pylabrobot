@@ -59,7 +59,13 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     Keyence uses carriage return \r as the line ending by default."""
 
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
-    response = await self.io.readline()
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+      response = await self.io.readline()
+      if response:
+         break
+      await asyncio.sleep(self.poll_interval)
+
     return response.decode(self.serial_messaging_encoding).strip()
 
   async def send_command_and_stream(
