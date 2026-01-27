@@ -5,21 +5,19 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
 from .odtc_sila_interface import ODTCSiLAInterface, SiLAState
 from .odtc_xml import (
-  ODTCConfig,
   ODTCMethod,
   ODTCMethodSet,
   ODTCPreMethod,
   ODTCSensorValues,
   generate_odtc_timestamp,
   get_method_by_name,
-  get_premethod_by_name,
   list_method_names,
   method_set_to_xml,
   parse_method_set,
@@ -492,7 +490,7 @@ class ODTCBackend(ThermocyclerBackend):
       )
 
 
-  # Sensor commands
+  # Sensor commands TODO: We cleaned this up at the xml extraction level, clean the method up for temperature reporting
   async def read_temperatures(self) -> ODTCSensorValues:
     """Read all temperature sensors.
 
@@ -1103,10 +1101,15 @@ class ODTCBackend(ThermocyclerBackend):
 
     Returns:
       True if lid/door is open.
+
+    Raises:
+      NotImplementedError: Door status query not available. Call open_door() or
+        close_door() explicitly to control and confirm door state.
     """
-    # Would need GetDoorStatus command - for now, return False
-    # TODO: Implement GetDoorStatus if available
-    return False
+    raise NotImplementedError(
+      "Door status query not available. Call open_door() or close_door() "
+      "explicitly to control and confirm door state."
+    )
 
   async def get_lid_status(self) -> LidStatus:
     """Get lid temperature status.

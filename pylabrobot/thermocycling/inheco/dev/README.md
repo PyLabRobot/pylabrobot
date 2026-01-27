@@ -36,6 +36,83 @@ The ODTC implementation provides a complete interface for controlling Inheco ODT
    - Conversion between `ODTCMethod` and generic `Protocol`
    - `ODTCConfig` class for preserving ODTC-specific parameters
 
+## Protocol vs Method: Naming Conventions
+
+Understanding the distinction between **Protocol** and **Method** is crucial for using the ODTC API correctly:
+
+### Protocol (PyLabRobot)
+- **`Protocol`**: PyLabRobot's generic protocol object (from `pylabrobot.thermocycling.standard`)
+  - Contains `Stage` objects with `Step` objects
+  - Defines temperatures, hold times, and cycle repeats
+  - Hardware-agnostic (works with any thermocycler)
+  - Example: `Protocol(stages=[Stage(steps=[Step(temperature=95.0, hold_seconds=30.0)])])`
+
+### Method (ODTC Device)
+- **`ODTCMethod`** or **`ODTCPreMethod`**: ODTC-specific XML-defined method stored on the device
+  - Contains ODTC-specific parameters (overshoot, slopes, PID settings)
+  - Stored on the device with a unique **method name** (string identifier)
+  - Example: `"PCR_30cycles"` is a method name stored on the device
+
+### Method Name (String)
+- **Method name**: A string identifier for a method stored on the device
+  - Examples: `"PCR_30cycles"`, `"my_pcr"`, `"plr_currentProtocol"`
+  - Used to reference methods when executing: `await tc.run_protocol(method_name="PCR_30cycles")`
+  - Can be a Method or PreMethod name (both are stored on the device)
+
+### Key API Methods
+
+**High-level methods (recommended):**
+- `upload_protocol(protocol, name="method_name")` - Upload a `Protocol` to device as a method
+- `run_protocol(protocol=..., method_name=...)` - Upload and run a `Protocol`, or run existing method by name
+- `list_methods()` - List all method names (both Methods and PreMethods) on device
+- `get_method(name)` - Get `ODTCMethod` or `ODTCPreMethod` by name from device
+- `set_mount_temperature(temperature)` - Set mount temperature (creates PreMethod internally)
+
+**Lower-level methods (for advanced use):**
+- `get_method_set()` - Get full `ODTCMethodSet` (all methods and premethods)
+- `backend.execute_method(method_name)` - Execute method by name (backend-level)
+
+### Workflow Examples
+
+**Creating and running a new protocol:**
+```python
+# 1. Create Protocol (PyLabRobot object)
+protocol = Protocol(stages=[Stage(steps=[Step(temperature=95.0, hold_seconds=30.0)])])
+
+# 2. Upload Protocol to device as a method (with method name "my_pcr")
+await tc.upload_protocol(protocol, name="my_pcr")
+
+# 3. Run the method by name
+await tc.run_protocol(method_name="my_pcr")
+
+# OR: Upload and run in one call
+await tc.run_protocol(protocol=protocol, method_name="my_pcr")
+```
+
+**Using existing methods on device:**
+```python
+# 1. List all method names on device
+method_names = await tc.list_methods()  # Returns: ["PCR_30cycles", "my_pcr", ...]
+
+# 2. Get method object by name
+method = await tc.get_method("PCR_30cycles")  # Returns ODTCMethod or ODTCPreMethod
+
+# 3. Run existing method by name
+await tc.run_protocol(method_name="PCR_30cycles")
+```
+
+**Converting between Protocol and Method:**
+```python
+# Get method from device → Convert to Protocol
+method = await tc.get_method("PCR_30cycles")
+protocol, config = odtc_method_to_protocol(method)
+
+# Modify Protocol → Convert back to Method → Upload
+protocol.stages[0].repeats = 35
+method_modified = protocol_to_odtc_method(protocol, config=config)
+await tc.upload_protocol(protocol, name="PCR_35cycles")
+```
+
 ## Connection and Setup
 
 ### Basic Connection
@@ -133,26 +210,30 @@ await door_opening
 
 ### Asynchronous Method Execution
 
-The ODTC supports both blocking and non-blocking method execution:
+The ODTC supports both blocking and non-blocking method execution using `run_protocol()`:
 
 #### Blocking Execution (Default)
 
 ```python
-# Block until method completes
-await tc.execute_method("PCR_30cycles", wait=True)
+# Run existing method - blocks until complete
+await tc.run_protocol(method_name="PCR_30cycles")
 # Returns None when complete
+
+# Upload and run Protocol - blocks until complete
+protocol = Protocol(stages=[...])
+await tc.run_protocol(protocol=protocol, method_name="my_pcr")
 ```
 
 #### Non-Blocking Execution with Handle
 
 ```python
 # Start method and get execution handle
-execution = await tc.execute_method("PCR_30cycles", wait=False)
+execution = await tc.run_protocol(method_name="PCR_30cycles", wait=False)
 # Returns MethodExecution handle immediately
 
 # Do parallel operations while method runs
 temps = await tc.read_temperatures()  # Allowed in parallel!
-await tc.open_door()  # Allowed in parallel!
+door_opening = await tc.open_door(wait=False)  # Allowed in parallel!
 
 # Wait for completion (multiple options)
 await execution  # Await the handle directly
@@ -172,14 +253,14 @@ The `MethodExecution` handle extends `CommandExecution` with method-specific fea
 - **`stop()`**: Stop the currently running method
 
 ```python
-execution = await tc.execute_method("PCR_30cycles", wait=False)
+execution = await tc.run_protocol(method_name="PCR_30cycles", wait=False)
 
 # Check status
 if await execution.is_running():
     print(f"Method {execution.method_name} still running (ID: {execution.request_id})")
 
 # Get DataEvents for this execution
-events = await tc.get_data_events(execution.request_id)
+events = await execution.get_data_events()
 
 # Wait for completion
 await execution
@@ -200,21 +281,22 @@ await tc.wait_for_method_completion(
 
 ### Temperature Control
 
-The ODTC supports direct temperature control via `set_block_temperature()` and `set_lid_temperature()`:
+The ODTC supports direct temperature control via `set_mount_temperature()`:
 
 ```python
-# Set block temperature (uses PreMethod internally)
-await tc.set_block_temperature([95.0])  # Sets block to 95°C
+# Set mount (block) temperature - blocking
+await tc.set_mount_temperature(95.0)  # Sets mount to 95°C with default lid temp
 
-# Set lid temperature (uses PreMethod internally)
-await tc.set_lid_temperature([105.0])  # Sets lid to 105°C
+# Set mount temperature with custom lid temperature
+await tc.set_mount_temperature(95.0, lid_temperature=110.0)
 
-# Both methods coordinate temperatures:
-# - set_block_temperature() uses existing lid temp or defaults to 105°C
-# - set_lid_temperature() uses existing block temp or defaults to 25°C
+# Non-blocking temperature control
+execution = await tc.set_mount_temperature(37.0, wait=False)
+# Do other work...
+await execution  # Wait when ready
 ```
 
-**Note**: These methods use PreMethods internally to achieve constant temperature holds. They automatically stop any running method, wait for idle state, upload a PreMethod, and execute it.
+**Note**: `set_mount_temperature()` uses PreMethods internally to achieve constant temperature holds. It automatically stops any running method, waits for idle state, uploads a PreMethod, and executes it. The default lid temperature is hardware-defined (110°C for 96-well, 115°C for 384-well).
 
 ### Parallel Operations
 
@@ -229,7 +311,7 @@ Per ODTC SiLA spec, certain commands can run in parallel with `ExecuteMethod`:
 
 ```python
 # Start method
-execution = await tc.execute_method("PCR_30cycles", wait=False)
+execution = await tc.run_protocol(method_name="PCR_30cycles", wait=False)
 
 # These can run in parallel:
 temps = await tc.read_temperatures()
@@ -239,7 +321,7 @@ door_opening = await tc.open_door(wait=False)
 await door_opening
 
 # These will queue/wait:
-method2 = await tc.execute_method("PCR_40cycles", wait=False)  # Waits for method1
+method2 = await tc.run_protocol(method_name="PCR_40cycles", wait=False)  # Waits for method1
 ```
 
 ### CommandExecution vs MethodExecution
@@ -256,15 +338,36 @@ door_opening = await tc.open_door(wait=False)
 await door_opening  # Wait for door to open
 
 # MethodExecution example (has additional features)
-method_exec = await tc.execute_method("PCR_30cycles", wait=False)
+method_exec = await tc.run_protocol(method_name="PCR_30cycles", wait=False)
 if await method_exec.is_running():
     print(f"Method {method_exec.method_name} is running")
     await method_exec.stop()  # Stop the method
 ```
 
-## Getting Protocols from Device
+## Getting Methods from Device
 
-### Get Full MethodSet
+### List All Method Names (Recommended)
+
+```python
+# List all method names (both Methods and PreMethods)
+method_names = await tc.list_methods()
+# Returns: ["PCR_30cycles", "my_pcr", "PRE25", "plr_currentProtocol", ...]
+
+for name in method_names:
+    print(f"Method: {name}")
+```
+
+### Get Specific Method by Name
+
+```python
+# Get a specific method (searches both Methods and PreMethods)
+method = await tc.get_method("PCR_30cycles")
+if method:
+    print(f"Found method: {method.name}")
+    # method is either ODTCMethod or ODTCPreMethod
+```
+
+### Get Full MethodSet (Advanced)
 
 ```python
 # Download all methods and premethods from device
@@ -278,22 +381,15 @@ for premethod in method_set.premethods:
     print(f"PreMethod: {premethod.name}")
 ```
 
-### Get Specific Method by Name
-
-```python
-# Get a specific method
-method = await tc.get_method_by_name("PCR_30cycles")
-if method:
-    print(f"Found method: {method.name}")
-```
-
-### Convert to Protocol + Config
+### Convert Method to Protocol + Config
 
 ```python
 from pylabrobot.thermocycling.inheco.odtc_xml import odtc_method_to_protocol
 
 # Get method from device
-method = await tc.get_method_by_name("PCR_30cycles")
+method = await tc.get_method("PCR_30cycles")
+if not method:
+    raise ValueError("Method not found")
 
 # Convert to Protocol + ODTCConfig (lossless)
 protocol, config = odtc_method_to_protocol(method)
@@ -304,35 +400,13 @@ protocol, config = odtc_method_to_protocol(method)
 
 ## Running Protocols
 
-### Upload and Execute from XML File
+### Recommended: High-Level API
+
+The recommended approach uses `upload_protocol()` and `run_protocol()` for a simpler workflow:
+
+#### Upload and Run a Protocol
 
 ```python
-# Upload MethodSet XML file to device
-await tc.upload_method_set_from_file("my_methods.xml")
-
-# Execute a method
-await tc.execute_method("PCR_30cycles")
-```
-
-### Upload and Execute from ODTCMethodSet Object
-
-```python
-from pylabrobot.thermocycling.inheco.odtc_xml import parse_method_set_file
-
-# Parse XML file
-method_set = parse_method_set_file("my_methods.xml")
-
-# Upload to device
-await tc.upload_method_set(method_set)
-
-# Execute
-await tc.execute_method("PCR_30cycles")
-```
-
-### Convert Protocol to ODTC and Execute
-
-```python
-from pylabrobot.thermocycling.inheco.odtc_xml import protocol_to_odtc_method
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 # Create a Protocol
@@ -349,21 +423,72 @@ protocol = Protocol(
     ]
 )
 
-# Convert to ODTCMethod (with default config)
-# Note: Overshoot parameters will use defaults (minimal overshoot)
-# Future work will automatically derive optimal overshoot parameters
-odtc_method = protocol_to_odtc_method(protocol)
+# Upload Protocol to device with method name "my_pcr"
+await tc.upload_protocol(protocol, name="my_pcr")
 
-# Upload method to device (need to wrap in MethodSet)
-from pylabrobot.thermocycling.inheco.odtc_xml import ODTCMethodSet
-method_set = ODTCMethodSet(methods=[odtc_method], premethods=[])
-await tc.upload_method_set(method_set)
+# Run the method by name
+await tc.run_protocol(method_name="my_pcr")
 
-# Execute
-await tc.execute_method(odtc_method.name)
+# OR: Upload and run in one call
+await tc.run_protocol(protocol=protocol, method_name="my_pcr")
+```
+
+#### Run Existing Method by Name
+
+```python
+# List all methods on device
+method_names = await tc.list_methods()  # Returns: ["PCR_30cycles", "my_pcr", ...]
+
+# Run existing method by name
+await tc.run_protocol(method_name="PCR_30cycles")
+```
+
+#### Set Mount Temperature (Simple Temperature Control)
+
+```python
+# Set mount temperature to 37°C (creates PreMethod internally)
+await tc.set_mount_temperature(37.0)
+
+# Non-blocking with custom lid temperature
+execution = await tc.set_mount_temperature(
+    37.0,
+    lid_temperature=110.0,
+    wait=False
+)
+# Do other work...
+await execution  # Wait when ready
 ```
 
 **Note on performance:** Protocols created directly in PyLabRobot (without an `ODTCConfig` from an existing XML protocol) will use default overshoot parameters, which may result in slower heating compared to manually-tuned ODTC protocols. Future enhancements will automatically derive optimal overshoot parameters for improved thermal performance.
+
+### Advanced: Lower-Level API
+
+For advanced use cases, you can work directly with XML files and `ODTCMethodSet` objects:
+
+#### Upload and Execute from XML File
+
+```python
+# Upload MethodSet XML file to device (backend-level)
+await tc.backend.upload_method_set_from_file("my_methods.xml")
+
+# Execute a method by name
+await tc.run_protocol(method_name="PCR_30cycles")
+```
+
+#### Upload and Execute from ODTCMethodSet Object
+
+```python
+from pylabrobot.thermocycling.inheco.odtc_xml import parse_method_set_file
+
+# Parse XML file
+method_set = parse_method_set_file("my_methods.xml")
+
+# Upload to device (backend-level)
+await tc.backend.upload_method_set(method_set)
+
+# Execute
+await tc.run_protocol(method_name="PCR_30cycles")
+```
 
 ## XML to Protocol + Config Conversion
 
@@ -479,9 +604,10 @@ from pylabrobot.thermocycling.inheco.odtc_xml import (
     parse_method_set
 )
 
-# 1. Get method from device (or parse from XML)
-method_set = await tc.get_method_set()
-method = method_set.methods[0]
+# 1. Get method from device
+method = await tc.get_method("PCR_30cycles")
+if not method:
+    raise ValueError("Method not found")
 
 # 2. Convert to Protocol + Config
 protocol, config = odtc_method_to_protocol(method)
@@ -489,34 +615,32 @@ protocol, config = odtc_method_to_protocol(method)
 # 3. Modify protocol (generic changes)
 protocol.stages[0].repeats = 35  # Change cycle count
 
-# 4. Convert back to ODTC (preserves all ODTC-specific params)
-method_modified = protocol_to_odtc_method(protocol, config=config)
+# 4. Upload modified protocol (preserves all ODTC-specific params via config)
+await tc.upload_protocol(protocol, name="PCR_35cycles", config=config)
 
-# 5. Upload and execute
-method_set_modified = ODTCMethodSet(methods=[method_modified], premethods=[])
-await tc.upload_method_set(method_set_modified)
-await tc.execute_method(method_modified.name)
+# 5. Execute
+await tc.run_protocol(method_name="PCR_35cycles")
 ```
 
 ### Round-Trip from Device XML
 
 ```python
-# Full round-trip: Device XML → Protocol+Config → Device XML
+# Full round-trip: Device Method → Protocol+Config → Device Method
 
 # 1. Get from device
-method_set = await tc.get_method_set()
-method = method_set.methods[0]
+method = await tc.get_method("PCR_30cycles")
+if not method:
+    raise ValueError("Method not found")
 
 # 2. Convert to Protocol + Config
 protocol, config = odtc_method_to_protocol(method)
 
-# 3. Convert back to XML
-method_restored = protocol_to_odtc_method(protocol, config=config)
-method_set_restored = ODTCMethodSet(methods=[method_restored], premethods=[])
-xml_restored = method_set_to_xml(method_set_restored)
+# 3. Upload back to device (preserves all ODTC-specific params via config)
+await tc.upload_protocol(protocol, name="PCR_30cycles_restored", config=config)
 
-# 4. Verify round-trip (should be equivalent)
-# (Note: XML formatting may differ, but content should match)
+# 4. Verify round-trip by comparing methods
+method_restored = await tc.get_method("PCR_30cycles_restored")
+# Methods should be equivalent (XML formatting may differ, but content should match)
 ```
 
 ## DataEvent Collection
@@ -525,14 +649,14 @@ During method execution, the ODTC sends `DataEvent` messages containing experime
 
 ```python
 # Start method
-execution = await tc.execute_method("PCR_30cycles", wait=False)
+execution = await tc.run_protocol(method_name="PCR_30cycles", wait=False)
 
 # Get DataEvents for this execution
-events = await tc.get_data_events(execution.request_id)
-# Returns: {request_id: [event1, event2, ...]}
+events = await execution.get_data_events()
+# Returns: List of DataEvent objects
 
-# Get all collected events
-all_events = await tc.get_data_events()
+# Get all collected events (backend-level)
+all_events = await tc.backend.get_data_events()
 # Returns: {request_id1: [...], request_id2: [...]}
 ```
 
@@ -576,6 +700,7 @@ State transitions are tracked automatically:
 ```python
 from pylabrobot.thermocycling.inheco import InhecoODTC, ODTCBackend
 from pylabrobot.thermocycling.inheco.odtc_xml import odtc_method_to_protocol
+from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 # Setup
 tc = InhecoODTC(
@@ -585,29 +710,42 @@ tc = InhecoODTC(
 )
 await tc.setup()
 
-# Get method from device
-method = await tc.get_method_by_name("PCR_30cycles")
-if not method:
-    raise ValueError("Method not found")
+# Example 1: Get existing method from device, modify, and run
+method = await tc.get_method("PCR_30cycles")
+if method:
+    # Convert to Protocol + Config
+    protocol, config = odtc_method_to_protocol(method)
+    
+    # Modify protocol
+    protocol.stages[0].repeats = 35
+    
+    # Upload modified protocol with new name
+    await tc.upload_protocol(protocol, name="PCR_35cycles", config=config)
+    
+    # Run with parallel operations
+    execution = await tc.run_protocol(method_name="PCR_35cycles", wait=False)
+    temps = await tc.read_temperatures()  # Parallel operation
+    await execution  # Wait for completion
 
-# Convert to Protocol + Config
-protocol, config = odtc_method_to_protocol(method)
+# Example 2: Create new protocol and run
+protocol = Protocol(
+    stages=[
+        Stage(
+            steps=[
+                Step(temperature=95.0, hold_seconds=30.0),
+                Step(temperature=60.0, hold_seconds=30.0),
+                Step(temperature=72.0, hold_seconds=60.0),
+            ],
+            repeats=30
+        )
+    ]
+)
 
-# Modify protocol
-protocol.stages[0].repeats = 35
+# Upload and run in one call
+await tc.run_protocol(protocol=protocol, method_name="my_pcr")
 
-# Convert back (preserves all ODTC params including overtemp)
-from pylabrobot.thermocycling.inheco.odtc_xml import protocol_to_odtc_method, ODTCMethodSet
-method_modified = protocol_to_odtc_method(protocol, config=config)
-
-# Upload and execute
-method_set = ODTCMethodSet(methods=[method_modified], premethods=[])
-await tc.upload_method_set(method_set)
-
-# Execute with parallel operations
-execution = await tc.execute_method(method_modified.name, wait=False)
-temps = await tc.read_temperatures()  # Parallel operation
-await execution  # Wait for completion
+# Example 3: Set mount temperature
+await tc.set_mount_temperature(37.0)
 
 # Cleanup
 await tc.stop()

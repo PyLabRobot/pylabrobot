@@ -1,5 +1,6 @@
 """Inheco ODTC (On-Deck Thermocycler) resource class."""
 
+import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
 
 from pylabrobot.resources import Coordinate, ItemizedResource
@@ -11,12 +12,80 @@ from .odtc_xml import ODTCMethod, ODTCPreMethod, ODTCConfig
 if TYPE_CHECKING:
   from pylabrobot.thermocycling.standard import Protocol
 
+logger = logging.getLogger(__name__)
+
 
 # Mapping from model string to variant integer (960000 for 96-well, 384000 for 384-well)
 _MODEL_TO_VARIANT: Dict[str, int] = {
   "96": 960000,
   "384": 384000,
 }
+
+
+def _volume_to_fluid_quantity(volume_ul: float) -> int:
+  """Map volume in µL to ODTC fluid_quantity code.
+
+  Args:
+    volume_ul: Volume in microliters.
+
+  Returns:
+    fluid_quantity code: 0 (10-29ul), 1 (30-74ul), or 2 (75-100ul).
+
+  Raises:
+    ValueError: If volume > 100 µL.
+  """
+  if volume_ul > 100:
+    raise ValueError(
+      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. "
+      "Please use a volume between 0-100 µL."
+    )
+  elif volume_ul <= 29:
+    return 0  # 10-29ul
+  elif volume_ul <= 74:
+    return 1  # 30-74ul
+  else:  # 75 <= volume_ul <= 100
+    return 2  # 75-100ul
+
+
+def _validate_volume_fluid_quantity(
+  volume_ul: float,
+  fluid_quantity: int,
+  is_premethod: bool = False,
+) -> None:
+  """Validate that volume matches fluid_quantity and warn if mismatch.
+
+  Args:
+    volume_ul: Volume in microliters.
+    fluid_quantity: ODTC fluid_quantity code (0, 1, or 2).
+    is_premethod: If True, suppress warnings for volume=0 (premethods don't need volume).
+  """
+  if volume_ul <= 0:
+    if not is_premethod:
+      logger.warning(
+        f"block_max_volume={volume_ul} µL is invalid. Using default fluid_quantity=1 (30-74ul). "
+        "Please provide a valid volume for accurate thermal calibration."
+      )
+    return
+
+  if volume_ul > 100:
+    raise ValueError(
+      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. "
+      "Please use a volume between 0-100 µL."
+    )
+
+  # Check if volume matches fluid_quantity
+  expected_fluid_quantity = _volume_to_fluid_quantity(volume_ul)
+  if fluid_quantity != expected_fluid_quantity:
+    volume_ranges = {
+      0: "10-29 µL",
+      1: "30-74 µL",
+      2: "75-100 µL",
+    }
+    logger.warning(
+      f"Volume mismatch: block_max_volume={volume_ul} µL suggests fluid_quantity={expected_fluid_quantity} "
+      f"({volume_ranges[expected_fluid_quantity]}), but config has fluid_quantity={fluid_quantity} "
+      f"({volume_ranges.get(fluid_quantity, 'unknown')}). This may affect thermal calibration accuracy."
+    )
 
 
 class InhecoODTC(Thermocycler):
@@ -127,6 +196,7 @@ class InhecoODTC(Thermocycler):
     allow_overwrite: bool = False,
     debug_xml: bool = False,
     xml_output_path: Optional[str] = None,
+    block_max_volume: Optional[float] = None,
   ) -> str:
     """Upload a Protocol to the device.
 
@@ -140,18 +210,28 @@ class InhecoODTC(Thermocycler):
         Useful for troubleshooting validation errors.
       xml_output_path: Optional file path to save the generated MethodSet XML.
         If provided, the XML will be written to this file before upload.
+      block_max_volume: Optional volume in µL. If provided and config is None, used to set
+        fluid_quantity. If config is provided, validates volume matches fluid_quantity.
 
     Returns:
       Method name (resolved name, may be scratch name if not provided).
 
     Raises:
       ValueError: If allow_overwrite=False and method name already exists.
+      ValueError: If block_max_volume > 100 µL.
     """
-    from .odtc_xml import ODTCConfig, protocol_to_odtc_method
+    from .odtc_xml import protocol_to_odtc_method
 
     # Use model-aware defaults if config not provided
     if config is None:
-      config = self.get_default_config()
+      if block_max_volume is not None and block_max_volume > 0 and block_max_volume <= 100:
+        fluid_quantity = _volume_to_fluid_quantity(block_max_volume)
+        config = self.get_default_config(fluid_quantity=fluid_quantity)
+      else:
+        config = self.get_default_config()
+    elif block_max_volume is not None:
+      # Config provided - validate volume matches fluid_quantity
+      _validate_volume_fluid_quantity(block_max_volume, config.fluid_quantity, is_premethod=False)
 
     # Set name in config if provided
     if name is not None:
@@ -174,11 +254,13 @@ class InhecoODTC(Thermocycler):
   async def run_protocol(
     self,
     protocol: Optional["Protocol"] = None,
+    block_max_volume: float = 0.0,
     config: Optional["ODTCConfig"] = None,
     method_name: Optional[str] = None,
     wait: bool = True,
     debug_xml: bool = False,
     xml_output_path: Optional[str] = None,
+    **backend_kwargs: Any,
   ) -> Optional[MethodExecution]:
     """Run a protocol or method on the device.
 
@@ -192,6 +274,9 @@ class InhecoODTC(Thermocycler):
 
     Args:
       protocol: Optional Protocol to convert and execute. If None, method_name must be provided.
+      block_max_volume: Maximum block volume (µL) for safety. Used to set fluid_quantity in
+        ODTCConfig when config is None. Must be between 0-100 µL. If 0, uses default
+        fluid_quantity=1 (30-74ul) with a warning. If >100, raises ValueError.
       config: Optional ODTCConfig for device-specific parameters. If None and protocol provided,
         uses model-aware defaults.
       method_name: Name of Method to execute. If protocol provided, this is the name for the
@@ -202,6 +287,7 @@ class InhecoODTC(Thermocycler):
         Useful for troubleshooting validation errors.
       xml_output_path: Optional file path to save the generated MethodSet XML.
         If provided, the XML will be written to this file before upload.
+      **backend_kwargs: Additional backend-specific parameters (unused for ODTC).
 
     Returns:
       If wait=True: None (blocks until complete)
@@ -213,17 +299,39 @@ class InhecoODTC(Thermocycler):
     if protocol is not None:
       # Convert, upload, and execute protocol
       if config is None:
-        config = self.get_default_config()
+        # Use block_max_volume to set fluid_quantity if volume is valid
+        if block_max_volume > 0 and block_max_volume <= 100:
+          fluid_quantity = _volume_to_fluid_quantity(block_max_volume)
+          config = self.get_default_config(fluid_quantity=fluid_quantity)
+        elif block_max_volume == 0:
+          # Use default but warn
+          logger.warning(
+            f"block_max_volume={block_max_volume} µL is invalid. Using default fluid_quantity=1 (30-74ul). "
+            "Please provide a valid volume for accurate thermal calibration."
+          )
+          config = self.get_default_config()
+        else:  # block_max_volume > 100
+          raise ValueError(
+            f"Volume {block_max_volume} µL exceeds ODTC maximum of 100 µL. "
+            "Please use a volume between 0-100 µL."
+          )
+      else:
+        # Config provided - validate volume matches fluid_quantity (only if volume > 0)
+        if block_max_volume > 0:
+          _validate_volume_fluid_quantity(block_max_volume, config.fluid_quantity, is_premethod=False)
+
       # Upload with allow_overwrite=True since we're about to execute it
-      method_name = await self.upload_protocol(
+      # Pass block_max_volume only if > 0 to avoid triggering validation warnings in upload_protocol
+      resolved_method_name = await self.upload_protocol(
         protocol,
         config=config,
         name=method_name,
         allow_overwrite=True,
         debug_xml=debug_xml,
         xml_output_path=xml_output_path,
+        block_max_volume=block_max_volume if block_max_volume > 0 else None,
       )
-      return await self.backend.execute_method(method_name, wait=wait)
+      return await self.backend.execute_method(resolved_method_name, wait=wait)
     elif method_name is not None:
       # Execute existing method by name
       return await self.backend.execute_method(method_name, wait=wait)
@@ -332,6 +440,7 @@ class InhecoODTC(Thermocycler):
 
     # Create PreMethod - much simpler than a full Method
     # PreMethods just set target temperatures and hold them
+    # Note: PreMethods don't need volume/fluid_quantity (they're for temperature conditioning)
     premethod = ODTCPreMethod(
       name=resolve_protocol_name(None),  # Uses "plr_currentProtocol"
       target_block_temperature=temperature,
@@ -366,25 +475,6 @@ class InhecoODTC(Thermocycler):
     """
     return await self.backend.read_temperatures()
 
-  async def monitor_temperatures(
-    self,
-    callback=None,
-    poll_interval: float = 2.0,
-    timeout=None,
-    stop_on_method_completion: bool = True,
-    show_updates: bool = True,
-  ):
-    """Monitor temperatures during method execution with controlled polling rate.
-
-    See ODTCBackend.monitor_temperatures() for full documentation.
-    """
-    return await self.backend.monitor_temperatures(
-      callback=callback,
-      poll_interval=poll_interval,
-      timeout=timeout,
-      stop_on_method_completion=stop_on_method_completion,
-      show_updates=show_updates,
-    )
 
   # Device control methods
 
