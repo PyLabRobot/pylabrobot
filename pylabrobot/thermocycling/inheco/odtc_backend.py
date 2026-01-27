@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
-from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
@@ -114,7 +113,7 @@ class ODTCBackend(ThermocyclerBackend):
 
   async def setup(self) -> None:
     """Initialize the ODTC device connection.
-    
+
     Performs the full SiLA connection lifecycle:
     1. Sets up the HTTP event receiver server
     2. Calls Reset to move from startup -> standby and register event receiver
@@ -124,7 +123,7 @@ class ODTCBackend(ThermocyclerBackend):
     """
     # Step 1: Set up the HTTP event receiver server
     await self._sila.setup()
-    
+
     # Step 2: Reset (startup -> standby) - registers event receiver URI
     # Reset is async, so we wait for it to complete
     event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
@@ -133,19 +132,19 @@ class ODTCBackend(ThermocyclerBackend):
       event_receiver_uri=event_receiver_uri,
       simulation_mode=False,
     )
-    
+
     # Step 3: Check state after Reset completes
     # GetStatus is synchronous and will update our internal state tracking
     status = await self.get_status()
     self.logger.info(f"GetStatus returned raw state: {status!r} (type: {type(status).__name__})")
-    
+
     if status == SiLAState.STANDBY.value:
       self.logger.info("Device is in standby state, calling Initialize...")
       await self.initialize()
-      
+
       # Step 4: Verify device is in idle state after Initialize
       status_after_init = await self.get_status()
-      
+
       if status_after_init == SiLAState.IDLE.value:
         self.logger.info("Device successfully initialized and is in idle state")
       else:
@@ -213,7 +212,7 @@ class ODTCBackend(ThermocyclerBackend):
     self.logger.debug(f"{command_name} extracted value at path {path}: {value!r}")
     return value
 
-  def _extract_xml_parameter(self, resp, param_name: str, command_name: str) -> str:
+  def _extract_xml_parameter(self, resp: Any, param_name: str, command_name: str) -> str:
     """Extract parameter value from ElementTree XML response.
 
     Args:
@@ -238,7 +237,7 @@ class ODTCBackend(ThermocyclerBackend):
     if string_elem is None or string_elem.text is None:
       raise ValueError(f"{param_name} String element not found in {command_name} response")
 
-    return string_elem.text
+    return str(string_elem.text)
 
   # ============================================================================
   # Basic ODTC Commands
@@ -249,14 +248,15 @@ class ODTCBackend(ThermocyclerBackend):
 
     Returns:
       Device state string (e.g., "idle", "busy", "standby").
-      
+
     Raises:
       ValueError: If response format is unexpected and state cannot be extracted.
     """
     resp = await self._sila.send_command("GetStatus")
     # GetStatus is synchronous - resp is a dict from soap_decode
     # ODTC standard structure: {"GetStatusResponse": {"state": "idle", ...}}
-    state = self._extract_dict_path(resp, ["GetStatusResponse", "state"], "GetStatus")
+    resp_dict = cast(Dict[str, Any], resp)
+    state = self._extract_dict_path(resp_dict, ["GetStatusResponse", "state"], "GetStatus")
     return str(state)
 
   async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
@@ -337,8 +337,9 @@ class ODTCBackend(ThermocyclerBackend):
     """
     resp = await self._sila.send_command("GetDeviceIdentification")
     # GetDeviceIdentification is synchronous - resp is a dict from soap_decode
+    resp_dict = cast(Dict[str, Any], resp)
     result = self._extract_dict_path(
-      resp,
+      resp_dict,
       ["GetDeviceIdentificationResponse", "GetDeviceIdentificationResult"],
       "GetDeviceIdentification",
       required=False,

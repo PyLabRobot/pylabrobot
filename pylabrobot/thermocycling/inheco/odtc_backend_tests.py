@@ -3,6 +3,7 @@
 import asyncio
 import unittest
 import xml.etree.ElementTree as ET
+from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.thermocycling.inheco.odtc_backend import CommandExecution, MethodExecution, ODTCBackend
@@ -146,19 +147,24 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup(self):
     """Test backend setup."""
-    self.backend._sila.setup = AsyncMock()
+    self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
+    self.backend._sila._client_ip = "192.168.1.1"  # type: ignore[attr-defined]
+    # Mock the read-only property by setting it on the mock object
+    setattr(self.backend._sila, 'bound_port', 8080)  # type: ignore[misc]
+    self.backend.reset = AsyncMock()  # type: ignore[method-assign]
+    self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
     await self.backend.setup()
     self.backend._sila.setup.assert_called_once()
 
   async def test_stop(self):
     """Test backend stop."""
-    self.backend._sila.close = AsyncMock()
+    self.backend._sila.close = AsyncMock()  # type: ignore[method-assign]
     await self.backend.stop()
     self.backend._sila.close.assert_called_once()
 
   async def test_get_status(self):
     """Test get_status."""
-    self.backend._sila.send_command = AsyncMock(
+    self.backend._sila.send_command = AsyncMock(  # type: ignore[method-assign]
       return_value={
         "GetStatusResponse": {
           "state": "idle",
@@ -172,13 +178,13 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_open_door(self):
     """Test open_door."""
-    self.backend._sila.send_command = AsyncMock()
+    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.open_door()
     self.backend._sila.send_command.assert_called_once_with("OpenDoor")
 
   async def test_close_door(self):
     """Test close_door."""
-    self.backend._sila.send_command = AsyncMock()
+    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.close_door()
     self.backend._sila.send_command.assert_called_once_with("CloseDoor")
 
@@ -204,26 +210,26 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     string_elem = ET.SubElement(param, "String")
     string_elem.text = sensor_xml
 
-    self.backend._sila.send_command = AsyncMock(return_value=root)
+    self.backend._sila.send_command = AsyncMock(return_value=root)  # type: ignore[method-assign]
     sensor_values = await self.backend.read_temperatures()
     self.assertAlmostEqual(sensor_values.mount, 24.63, places=2)  # 2463 * 0.01
     self.assertAlmostEqual(sensor_values.lid, 25.75, places=2)  # 2575 * 0.01
 
   async def test_execute_method(self):
     """Test execute_method."""
-    self.backend._sila.send_command = AsyncMock()
+    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.execute_method("MyMethod")
     self.backend._sila.send_command.assert_called_once_with("ExecuteMethod", methodName="MyMethod")
 
   async def test_stop_method(self):
     """Test stop_method."""
-    self.backend._sila.send_command = AsyncMock()
+    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.stop_method()
     self.backend._sila.send_command.assert_called_once_with("StopMethod")
 
   async def test_lock_device(self):
     """Test lock_device."""
-    self.backend._sila.send_command = AsyncMock()
+    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.lock_device("my_lock_id")
     self.backend._sila.send_command.assert_called_once()
     call_kwargs = self.backend._sila.send_command.call_args[1]
@@ -233,7 +239,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_unlock_device(self):
     """Test unlock_device."""
     self.backend._sila._lock_id = "my_lock_id"
-    self.backend._sila.send_command = AsyncMock()
+    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.unlock_device()
     self.backend._sila.send_command.assert_called_once_with("UnlockDevice", lock_id="my_lock_id")
 
@@ -252,7 +258,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     string_elem = ET.SubElement(param, "String")
     string_elem.text = sensor_xml
 
-    self.backend._sila.send_command = AsyncMock(return_value=root)
+    self.backend._sila.send_command = AsyncMock(return_value=root)  # type: ignore[method-assign]
     temps = await self.backend.get_block_current_temperature()
     self.assertEqual(len(temps), 1)
     self.assertAlmostEqual(temps[0], 25.0, places=2)
@@ -265,14 +271,14 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     string_elem = ET.SubElement(param, "String")
     string_elem.text = sensor_xml
 
-    self.backend._sila.send_command = AsyncMock(return_value=root)
+    self.backend._sila.send_command = AsyncMock(return_value=root)  # type: ignore[method-assign]
     temps = await self.backend.get_lid_current_temperature()
     self.assertEqual(len(temps), 1)
     self.assertAlmostEqual(temps[0], 26.0, places=2)
 
   async def test_execute_method_wait_true(self):
     """Test execute_method with wait=True (blocking)."""
-    self.backend._sila.send_command = AsyncMock(return_value=None)
+    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
     result = await self.backend.execute_method("PCR_30cycles", wait=True)
     self.assertIsNone(result)
     self.backend._sila.send_command.assert_called_once_with(
@@ -281,10 +287,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_execute_method_wait_false(self):
     """Test execute_method with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.execute_method("PCR_30cycles", wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, MethodExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.method_name, "PCR_30cycles")
@@ -294,7 +301,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_method_execution_awaitable(self):
     """Test that MethodExecution is awaitable."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result("success")
     execution = MethodExecution(
       request_id=12345,
@@ -308,7 +315,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_method_execution_wait(self):
     """Test MethodExecution.wait() method."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     execution = MethodExecution(
       request_id=12345,
@@ -321,7 +328,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_method_execution_is_running(self):
     """Test MethodExecution.is_running() method."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     execution = MethodExecution(
       request_id=12345,
       command_name="ExecuteMethod",
@@ -329,13 +336,13 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       _future=fut,
       backend=self.backend
     )
-    self.backend.get_status = AsyncMock(return_value="busy")
+    self.backend.get_status = AsyncMock(return_value="busy")  # type: ignore[method-assign]
     is_running = await execution.is_running()
     self.assertTrue(is_running)
 
   async def test_method_execution_stop(self):
     """Test MethodExecution.stop() method."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     execution = MethodExecution(
       request_id=12345,
       command_name="ExecuteMethod",
@@ -343,13 +350,13 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       _future=fut,
       backend=self.backend
     )
-    self.backend._sila.send_command = AsyncMock()
+    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await execution.stop()
     self.backend._sila.send_command.assert_called_once_with("StopMethod", return_request_id=False)
 
   async def test_method_execution_inheritance(self):
     """Test that MethodExecution is a subclass of CommandExecution."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     execution = MethodExecution(
       request_id=12345,
@@ -364,7 +371,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_command_execution_awaitable(self):
     """Test that CommandExecution is awaitable."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result("success")
     execution = CommandExecution(
       request_id=12345,
@@ -377,7 +384,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_command_execution_wait(self):
     """Test CommandExecution.wait() method."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     execution = CommandExecution(
       request_id=12345,
@@ -389,7 +396,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_command_execution_get_data_events(self):
     """Test CommandExecution.get_data_events() method."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     execution = CommandExecution(
       request_id=12345,
@@ -407,10 +414,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_open_door_wait_false(self):
     """Test open_door with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.open_door(wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "OpenDoor")
@@ -420,7 +428,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_open_door_wait_true(self):
     """Test open_door with wait=True (blocking)."""
-    self.backend._sila.send_command = AsyncMock(return_value=None)
+    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
     result = await self.backend.open_door(wait=True)
     self.assertIsNone(result)
     self.backend._sila.send_command.assert_called_once_with(
@@ -429,74 +437,80 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_close_door_wait_false(self):
     """Test close_door with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.close_door(wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "CloseDoor")
 
   async def test_initialize_wait_false(self):
     """Test initialize with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.initialize(wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "Initialize")
 
   async def test_reset_wait_false(self):
     """Test reset with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.reset(wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "Reset")
 
   async def test_lock_device_wait_false(self):
     """Test lock_device with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.lock_device("my_lock", wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "LockDevice")
 
   async def test_unlock_device_wait_false(self):
     """Test unlock_device with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila._lock_id = "my_lock"
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.unlock_device(wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "UnlockDevice")
 
   async def test_stop_method_wait_false(self):
     """Test stop_method with wait=False (returns handle)."""
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
-    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))
+    self.backend._sila.send_command = AsyncMock(return_value=(fut, 12345))  # type: ignore[method-assign]
     execution = await self.backend.stop_method(wait=False)
+    assert execution is not None  # Type narrowing
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "StopMethod")
 
   async def test_is_method_running(self):
     """Test is_method_running()."""
-    self.backend.get_status = AsyncMock(return_value="busy")
+    self.backend.get_status = AsyncMock(return_value="busy")  # type: ignore[method-assign]
     self.assertTrue(await self.backend.is_method_running())
 
-    self.backend.get_status = AsyncMock(return_value="idle")
+    self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
     self.assertFalse(await self.backend.is_method_running())
 
-    self.backend.get_status = AsyncMock(return_value="BUSY")
+    self.backend.get_status = AsyncMock(return_value="BUSY")  # type: ignore[method-assign]
     self.assertTrue(await self.backend.is_method_running())
 
   async def test_wait_for_method_completion(self):
@@ -510,13 +524,13 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
         return "busy"
       return "idle"
 
-    self.backend.get_status = AsyncMock(side_effect=mock_get_status)
+    self.backend.get_status = AsyncMock(side_effect=mock_get_status)  # type: ignore[method-assign]
     await self.backend.wait_for_method_completion(poll_interval=0.1)
     self.assertEqual(call_count, 3)
 
   async def test_wait_for_method_completion_timeout(self):
     """Test wait_for_method_completion() with timeout."""
-    self.backend.get_status = AsyncMock(return_value="busy")
+    self.backend.get_status = AsyncMock(return_value="busy")  # type: ignore[method-assign]
     with self.assertRaises(TimeoutError):
       await self.backend.wait_for_method_completion(poll_interval=0.1, timeout=0.3)
 
@@ -550,7 +564,7 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
     """Test that DataEvent storage logic works correctly."""
     # Test the storage logic directly without creating the full interface
     # (which requires network permissions)
-    data_events_by_request_id = {}
+    data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
 
     # Simulate receiving a DataEvent
     data_event = {
@@ -560,7 +574,7 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
 
     # Apply the same logic as in _on_http handler
     request_id = data_event.get("requestId")
-    if request_id is not None:
+    if request_id is not None and isinstance(request_id, int):
       if request_id not in data_events_by_request_id:
         data_events_by_request_id[request_id] = []
       data_events_by_request_id[request_id].append(data_event)
@@ -579,7 +593,7 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
       "data": "test_data2"
     }
     request_id = data_event2.get("requestId")
-    if request_id is not None:
+    if request_id is not None and isinstance(request_id, int):
       if request_id not in data_events_by_request_id:
         data_events_by_request_id[request_id] = []
       data_events_by_request_id[request_id].append(data_event2)
@@ -591,7 +605,7 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
       "data": "test_data_no_id"
     }
     request_id = data_event_no_id.get("requestId")
-    if request_id is not None:
+    if request_id is not None and isinstance(request_id, int):
       if request_id not in data_events_by_request_id:
         data_events_by_request_id[request_id] = []
       data_events_by_request_id[request_id].append(data_event_no_id)

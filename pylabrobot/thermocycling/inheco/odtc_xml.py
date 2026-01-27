@@ -11,7 +11,10 @@ import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, fields
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+
+if TYPE_CHECKING:
+  from pylabrobot.thermocycling.standard import Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -376,7 +379,7 @@ class ODTCConfig:
           )
 
     if errors:
-      raise ValueError(f"ODTCConfig validation failed:\n  - " + "\n  - ".join(errors))
+      raise ValueError("ODTCConfig validation failed:\n  - " + "\n  - ".join(errors))
 
     return errors
 
@@ -389,7 +392,7 @@ class ODTCConfig:
 def _get_xml_meta(f) -> XMLField:
   """Get XMLField metadata from a dataclass field, or create default."""
   if "xml" in f.metadata:
-    return f.metadata["xml"]
+    return cast(XMLField, f.metadata["xml"])
   # Default: element with field name as tag
   return XMLField(tag=None, field_type=XMLFieldType.ELEMENT)
 
@@ -399,15 +402,16 @@ def _get_tag(f, meta: XMLField) -> str:
   return meta.tag if meta.tag else f.name
 
 
-def _get_inner_type(type_hint) -> Optional[Type]:
+def _get_inner_type(type_hint) -> Optional[Type[Any]]:
   """Extract the inner type from List[T] or Optional[T]."""
   origin = get_origin(type_hint)
   args = get_args(type_hint)
   if origin is list and args:
-    return args[0]
+    return cast(Type[Any], args[0])
   if origin is Union and type(None) in args:
     # Optional[T] is Union[T, None]
-    return next((a for a in args if a is not type(None)), None)
+    result = next((a for a in args if a is not type(None)), None)
+    return cast(Type[Any], result) if result is not None else None
   return None
 
 
@@ -461,7 +465,8 @@ def from_xml(elem: ET.Element, cls: Type[T]) -> T:
   # Use get_type_hints to resolve string annotations to actual types
   type_hints = get_type_hints(cls)
 
-  for f in fields(cls):
+  # Type narrowing: we've verified cls is a dataclass, so fields() is safe
+  for f in fields(cls):  # type: ignore[arg-type]
     meta = _get_xml_meta(f)
     tag = _get_tag(f, meta)
     field_type = type_hints.get(f.name, f.type)
@@ -777,9 +782,6 @@ def protocol_to_odtc_method(
     This function handles sequential stages with repeats. Each stage with
     repeats > 1 is converted to an ODTC loop using GotoNumber/LoopNumber.
   """
-  # Import here to avoid circular imports
-  from pylabrobot.thermocycling.standard import Protocol
-
   if config is None:
     config = ODTCConfig()
 
