@@ -2,9 +2,8 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import List, Tuple, Optional, Union, cast
-import re
 from typing import List, Tuple, Optional, Union
+import re
 
 import serial
 
@@ -180,10 +179,19 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc("ST 1902")
     await self._wait_ready()
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate, site=PlateHolder, read_barcode: Optional[bool]=False):
+  async def fetch_plate_to_loading_tray(self, plate: Optional[Plate]=None, site: Optional[PlateHolder]=None, read_barcode: Optional[bool]=False) -> str:
     """ Fetch a plate from the incubator to the loading tray."""
-    site = plate.parent
-    assert isinstance(site, PlateHolder), "Plate not in storage"
+    if plate and not site:
+      site = plate.parent
+      assert isinstance(site, PlateHolder), "Plate not in storage"
+    elif site and not plate:
+      site = site
+      assert isinstance(site, PlateHolder), "Plate holder not found"
+    elif site and plate:
+      if plate.parent != site:
+        raise RuntimeError(f"The requested plate {plate} is not the plate in {site}")
+    else:
+      raise RuntimeError("Please provide a plate or plate holder location")
 
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
@@ -194,13 +202,16 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc(f"WR DM5 {n}") # plate position in carousel
 
     if read_barcode:
-      await self.read_barcode_inline(m,n)
+      barcode = await self.read_barcode_inline(m,n)
 
     await self._send_command_plc("ST 1905")  # plate to transfer station
     await self._wait_ready()
     await self._send_command_plc("ST 1903")  # terminate access
 
-  async def take_in_plate(self, site: PlateHolder, read_barcode: Optional[bool]=False):
+    if read_barcode:
+      return barcode
+
+  async def take_in_plate(self, site: PlateHolder, read_barcode: Optional[bool]=False) -> str:
     """ Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
@@ -213,9 +224,12 @@ class LiconicBackend(IncubatorBackend):
     await self._wait_ready()
 
     if read_barcode:
-      await self.read_barcode_inline(m,n)
+      barcode = await self.read_barcode_inline(m,n)
 
     await self._send_command_plc("ST 1903")  # terminate access
+
+    if read_barcode:
+      return barcode
 
   async def move_position_to_position(self, plate: Plate, dest_site: PlateHolder, read_barcode: Optional[bool]=False):
     """ Move plate from one internal position to another"""
@@ -274,56 +288,6 @@ class LiconicBackend(IncubatorBackend):
     else:
       logger.info(" Barcode reading requested but instance not configured with barcode reader.")
       return "No barcode"
-
-  async def handle_barcode(self, code: str):
-    print(f"Got barcode: {code}")
-
-  async def scan_cassette(self, cassette:PlateCarrier):
-    """ Scan all barcodes in a cartridge using the internal barcode reader. Using command LON """
-    if not self.barcode_installed:
-      raise RuntimeError("Barcode reader not installed in this incubator instance")
-
-    await self._send_command_bcr("SSET") # enter settings mode
-    await self._send_command_bcr("WP121") # setting barcode scanner to multi-read mode
-    confirm = await self._send_command_bcr("RP12") # get read mode
-    if confirm != "121":
-      raise RuntimeError("Failed to set barcode reader to multiread mode")
-
-    await self._send_command_bcr("WPA06000") # set barcode scanner one shot time to 60,000 ms for multiread
-    time_confirm = await self._send_command_bcr("RPA0")
-    if time_confirm != "A06000":
-      raise RuntimeError("Failed to set barcode reader to 60000 ms one shot time")
-
-    await self._send_command_bcr("SEND") # exit settings mode
-
-    assert isinstance(cassette, PlateCarrier), "Site not in rack"
-    assert self._racks is not None, "Racks not set"
-    rack_idx = self._racks.index(cassette) + 1
-    num_pos = len(cassette.sites.items()) # get number of positions
-
-    await self._send_command_plc(f"WR DM0 {rack_idx}")
-    await self._send_command_plc("WR DM5 1") # set to first position
-
-    await self._send_command_plc("ST 1910") # set plate shuttle to plate read level
-    await self._wait_ready()
-
-    asyncio.create_task(self.io_bcr.send_command_and_stream("LON", on_response=self.handle_barcode, timeout=30.0)) # turn on barcode reader and stream response for 30s
-
-    await self._send_command_plc(f"WR DM5 {num_pos}")
-
-    await self._send_command_bcr("SSET") # enter settings mode
-    await self._send_command_bcr("WP120") # setting barcode scanner to single read mode
-
-    confirm = await self._send_command_bcr("RP12")
-    if confirm != "120":
-      raise RuntimeError("Failed to reset barcode reader to single mode")
-
-    await self._send_command_bcr("WPA00100") # set barcode scanner one shot time to 1000 ms for single read mode
-    time_confirm = await self._send_command_bcr("RPA0")
-    if time_confirm != "A00100":
-      raise RuntimeError("Failed to reset barcode reader to 1000 ms one shot time")
-
-    await self._send_command_bcr("SEND") # exit settings mode
 
   async def _send_command_plc(self, command: str) -> str:
     """
