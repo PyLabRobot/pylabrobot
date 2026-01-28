@@ -1887,7 +1887,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             # Check if it's specifically the "no liquid found" error
             error_msg = str(result).lower()
             if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
-              height = None  # No liquid detected - this is expected
+              height = 0.0  # No liquid detected - this is expected
             else:
               # Some other firmware error - re-raise it
               raise result
