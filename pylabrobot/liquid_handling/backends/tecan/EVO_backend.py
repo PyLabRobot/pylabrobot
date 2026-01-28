@@ -988,11 +988,7 @@ class LiHa(EVOArm):
       TecanError: if moving to the target position causes a collision
     """
 
-    raw_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
-    try:
-      cur_x = int(raw_x)
-    except ValueError as e:
-      raise TecanError("Invalid position cache", self.module, 3) from e
+    cur_x = EVOArm._pos_cache.setdefault(self.module, int(await self.report_x_param(0)))
 
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
