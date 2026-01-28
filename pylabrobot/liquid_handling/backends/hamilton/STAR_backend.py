@@ -1573,26 +1573,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ttti = await self.get_or_assign_tip_type_index(tips.pop())
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
-
-    # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
-      max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      max_tip_length -= 2
+    tips = [op.tip for op in ops]
+    assert all(isinstance(tip, HamiltonTip) for tip in tips), "All tips must be HamiltonTip."
+    collar_heights = set((tip.collar_height) for tip in tips)
+    if len(collar_heights) > 1:
+      raise ValueError("Cannot mix tips with different collar heights.")
+    collar_height = collar_heights.pop()
 
     tip = ops[0].tip
     if not isinstance(tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
 
     begin_tip_pick_up_process = (
-      round((max_z + max_total_tip_length) * 10)
+      round((max_z + collar_height) * 10)
       if begin_tip_pick_up_process is None
       else int(begin_tip_pick_up_process * 10)
     )
     end_tip_pick_up_process = (
-      round((max_z + max_tip_length) * 10)
+      round((max_z) * 10)
       if end_tip_pick_up_process is None
       else round(end_tip_pick_up_process * 10)
     )
@@ -1662,15 +1660,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         else round(end_tip_deposit_process * 10)
       )
     else:
-      max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-      max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
+      tips = [op.tip for op in ops]
+      assert all(isinstance(tip, HamiltonTip) for tip in tips), "All tips must be HamiltonTip."
+      collar_heights = set(tip.collar_height for tip in tips)
+      if len(collar_heights) > 1:
+        raise ValueError("Cannot mix tips with different collar heights.")
+      collar_height = collar_heights.pop()
+
       begin_tip_deposit_process = (
-        round((max_z + max_total_tip_length) * 10)
+        round((max_z + collar_height) * 10)
         if begin_tip_deposit_process is None
         else round(begin_tip_deposit_process * 10)
       )
       end_tip_deposit_process = (
-        round((max_z + max_tip_length) * 10)
+        round((max_z) * 10)
         if end_tip_deposit_process is None
         else round(end_tip_deposit_process * 10)
       )

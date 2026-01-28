@@ -47,6 +47,7 @@ class HamiltonTip(Tip):
     maximal_volume: float,
     tip_size: Union[TipSize, str],  # union for deserialization, will probably refactor
     pickup_method: Union[TipPickupMethod, str],  # union for deserialization, will probably refactor
+    collar_height: Optional[float] = None,
     name: Optional[str] = None,
   ):
     if isinstance(tip_size, str):
@@ -75,6 +76,14 @@ class HamiltonTip(Tip):
 
     self.pickup_method = pickup_method
     self.tip_size = tip_size
+    self.collar_height = collar_height
+
+  @property
+  def collar_height_strict(self) -> float:
+    """Return collar_height, raising if it is None."""
+    if self.collar_height is None:
+      raise ValueError(f"collar_height is not defined for this tip: {self!r}")
+    return self.collar_height
 
   def __repr__(self) -> str:
     name_field = f"'{self.name}'" if self.name is not None else "None"
@@ -85,6 +94,7 @@ class HamiltonTip(Tip):
       f"maximal_volume={self.maximal_volume}, "
       f"fitting_depth={self.fitting_depth}, "
       f"total_tip_length={self.total_tip_length}, "
+      f"collar_height={self.collar_height}, "
       f"pickup_method={self.pickup_method.name})"
     )
 
@@ -95,6 +105,7 @@ class HamiltonTip(Tip):
       **super_serialized,
       "pickup_method": self.pickup_method.name,
       "tip_size": self.tip_size.name,
+      "collar_height": self.collar_height,
     }
 
   @classmethod
@@ -106,6 +117,7 @@ class HamiltonTip(Tip):
       maximal_volume=data["maximal_volume"],
       tip_size=TipSize[data["tip_size"]],
       pickup_method=TipPickupMethod[data["pickup_method"]],
+      collar_height=data.get("collar_height"),
     )
 
 
@@ -276,6 +288,7 @@ def hamilton_tip_10uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=15,
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=6.0,
   )
 
 
@@ -291,6 +304,7 @@ def hamilton_tip_10uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=10,
     tip_size=TipSize.LOW_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=6.0,
   )
 
 
@@ -306,6 +320,7 @@ def hamilton_tip_50uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=65,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=8.0,
   )
 
 
@@ -321,6 +336,7 @@ def hamilton_tip_50uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=60,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=8.0,
   )
 
 
@@ -333,6 +349,7 @@ def hamilton_tip_300uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=400,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=8.0,
   )
 
 
@@ -345,6 +362,7 @@ def hamilton_tip_300uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=8.0,
   )
 
 
@@ -357,6 +375,7 @@ def hamilton_tip_300uL_filter_slim(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=360,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=8.0,
   )
 
 
@@ -369,6 +388,7 @@ def hamilton_tip_300uL_filter_ultrawide(name: Optional[str] = None) -> HamiltonT
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=8.0,
   )
 
 
@@ -381,6 +401,7 @@ def hamilton_tip_1000uL(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=1250,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=10.0,
   )
 
 
@@ -393,6 +414,7 @@ def hamilton_tip_1000uL_filter(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=10.0,
   )
 
 
@@ -408,6 +430,7 @@ def hamilton_tip_1000uL_filter_wide(name: Optional[str] = None) -> HamiltonTip:
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=10.0,
   )
 
 
@@ -423,6 +446,7 @@ def hamilton_tip_1000uL_filter_ultrawide(name: Optional[str] = None) -> Hamilton
     maximal_volume=1065,
     tip_size=TipSize.HIGH_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK,
+    collar_height=10.0,
   )
 
 
