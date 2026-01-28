@@ -1891,7 +1891,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               logger.warning(
                 f"Channel {ch_idx}: No liquid detected. Could be because there is "
                 f"no liquid in container {containers[idx].name} or liquid "
-                "is non-detectable (e.g. if capacitative LLD chosen: low-volume or "
+                "is non-detectable (e.g. if capacitive LLD chosen: low-volume or "
                 "ultra-pure, non-conductive liquid). "
                 "Consider using pressure-based LLD if liquid is believed to exist."
               )
