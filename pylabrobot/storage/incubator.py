@@ -73,13 +73,20 @@ class Incubator(Machine, Resource):
           return site
     raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
 
-  async def fetch_plate_to_loading_tray(self, plate_name: str) -> Plate:
+  async def fetch_plate_to_loading_tray(self, plate_name: str, read_barcode: Optional[bool]=False) -> Plate:
     """Fetch a plate from the incubator and put it on the loading tray."""
 
     site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
     assert plate is not None
-    await self.backend.fetch_plate_to_loading_tray(plate)
+
+    if read_barcode:
+      barcode = await self.backend.fetch_plate_to_loading_tray(plate, read_barcode)
+      print(barcode)
+      # undecided with what we want to do with barcode string (no Plate variable for it)
+    else:
+      await self.backend.fetch_plate_to_loading_tray(plate)
+
     plate.unassign()
     self.loading_tray.assign_child_resource(plate)
     return plate
@@ -112,7 +119,7 @@ class Incubator(Machine, Resource):
   def find_random_site(self, plate: Plate) -> PlateHolder:
     return random.choice(self._find_available_sites_sorted(plate))
 
-  async def take_in_plate(self, site: Union[PlateHolder, Literal["random", "smallest"]]):
+  async def take_in_plate(self, site: Union[PlateHolder, Literal["random", "smallest"]], read_barcode: Optional[bool] = False):
     """Take a plate from the loading tray and put it in the incubator."""
 
     plate = cast(Plate, self.loading_tray.resource)
@@ -128,7 +135,14 @@ class Incubator(Machine, Resource):
         raise ValueError(f"Site {site.name} is not available for plate {plate.name}")
     else:
       raise ValueError(f"Invalid site: {site}")
-    await self.backend.take_in_plate(plate, site)
+
+    if read_barcode:
+      barcode = await self.backend.take_in_plate(plate, site, read_barcode)
+      print(barcode)
+       # undecided with what we want to do with barcode string (no Plate variable for it)
+    else:
+      await self.backend.take_in_plate(plate, site)
+
     plate.unassign()
     site.assign_child_resource(plate)
 
@@ -150,6 +164,9 @@ class Incubator(Machine, Resource):
 
   async def stop_shaking(self):
     await self.backend.stop_shaking()
+
+  async def scan_barcode(self, site: PlateHolder):
+    await self.backend.scan_barcode(self, site)
 
   def summary(self) -> str:
     def create_pretty_table(header, *columns) -> str:
@@ -207,3 +224,79 @@ class Incubator(Machine, Resource):
       category=data["category"],
       model=data["model"],
     )
+
+  """ Methods added for Liconic incubator options."""
+
+  async def get_set_temperature(self) -> float:
+    """ Get the set value temperature of the incubator in degrees Celsius."""
+    return await self.backend.get_set_temperature()
+
+  async def set_humidity(self, humidity: float):
+    """ Set the humidity of the incubator in percentage (%)."""
+    return await self.backend.set_humidity(humidity)
+
+  async def get_humidity(self) -> float:
+    """ Get the humidity of the incubator in percentage (%)."""
+    return await self.backend.get_humidity()
+
+  async def get_set_humidity(self) -> float:
+    """ Get the set value humidity of the incubator in percentage (%)."""
+    return await self.backend.get_set_humidity()
+
+  async def set_co2_level(self, co2_level: float):
+    """ Set the CO2 level of the incubator in percentage (%)."""
+    return await self.backend.set_co2_level(co2_level)
+
+  async def get_co2_level(self) -> float:
+    """ Get the CO2 level of the incubator in percentage (%)."""
+    return await self.backend.get_co2_level()
+
+  async def get_set_co2_level(self) -> float:
+    """ Get the set value CO2 level of the incubator in percentage (%)."""
+    return await self.backend.get_set_co2_level()
+
+  async def set_n2_level(self, n2_level: float):
+    """ Set the N2 level of the incubator in percentage (%)."""
+    return await self.backend.set_n2_level(n2_level)
+
+  async def get_n2_level(self) -> float:
+    """ Get the N2 level of the incubator in percentage (%)."""
+    return await self.backend.get_n2_level()
+
+  async def get_set_n2_level(self) -> float:
+    """ Get the set value N2 level of the incubator in percentage (%)."""
+    return await self.backend.get_set_n2_level()
+
+  async def turn_swap_station(self, home: bool):
+    """ Turn the swap station of the incubator. If home is True, turn to home position."""
+    return await self.backend.turn_swap_station(home)
+
+  async def check_shovel_sensor(self) -> bool:
+    """ Check if the shovel plate sensor is activated."""
+    return await self.backend.check_shovel_sensor()
+
+  async def check_transfer_sensor(self) -> bool:
+    """ Check if the transfer plate sensor is activated."""
+    return await self.backend.check_transfer_sensor()
+
+  async def check_second_transfer_sensor(self) -> bool:
+    """ Check if the second transfer plate sensor is activated."""
+    return await self.backend.check_second_transfer_sensor()
+
+  async def move_position_to_position(self, plate_name: str, dest_site: PlateHolder, read_barcode: Optional[bool]=False) -> Plate:
+    """ Move a plate to another internal position in the storage unit """
+    site = self.get_site_by_plate_name(plate_name)
+    plate = site.resource
+    assert plate is not None
+
+    if read_barcode:
+      barcode = await self.backend.move_position_to_position(plate, dest_site, read_barcode)
+      print(barcode)
+      # undecided with what we want to do with barcode string (no Plate variable for it)
+    else:
+      await self.backend.move_position_to_position(plate,dest_site)
+
+    plate.unassign()
+    site.assign_child_resource(plate)
+
+    return plate
