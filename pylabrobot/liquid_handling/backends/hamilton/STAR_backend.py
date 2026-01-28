@@ -1879,12 +1879,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             return_exceptions=True
           )
 
-        # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
+        # Get heights for ALL channels, handling failures for channels with no liquid
+        # (indexed 0 to self.num_channels-1) but only store for used channels
         current_absolute_liquid_heights = await self.request_pip_height_last_lld()
         for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
-          if isinstance(result, Exception):
-            # No liquid detected - record as None or 0.0
-            height = 0.0  # or 0.0 depending on your preference
+          if isinstance(result, STARFirmwareError):
+            # Check if it's specifically the "no liquid found" error
+            error_msg = str(result).lower()
+            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+              height = None  # No liquid detected - this is expected
+            else:
+              # Some other firmware error - re-raise it
+              raise result
+          elif isinstance(result, Exception):
+            # Some other unexpected error - re-raise it
+            raise result
           else:
             height = current_absolute_liquid_heights[ch_idx]
           absolute_heights_measurements[ch_idx].append(height)
