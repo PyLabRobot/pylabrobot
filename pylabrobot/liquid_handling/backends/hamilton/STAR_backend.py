@@ -1887,7 +1887,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             # Check if it's specifically the "no liquid found" error
             error_msg = str(result).lower()
             if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
-              height = 0.0  # No liquid detected - this is expected
+              height = None  # No liquid detected - this is expected
+              logger.warning(
+                f"Channel {ch_idx}: No liquid detected. Could be because there is "
+                f"no liquid in container {containers[idx].name} or liquid "
+                "is non-detectable (e.g. if capacitative LLD chosen: low-volume or "
+                "ultra-pure, non-conductive liquid). "
+                "Consider using pressure-based LLD if liquid is believed to exist."
+                )
             else:
               # Some other firmware error - re-raise it
               raise result
@@ -1902,10 +1909,40 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       raise
 
     # Compute average heights per channel and convert to relative to well bottom
-    absolute_liquid_heights = [
-      sum(absolute_heights_measurements[ch]) / len(absolute_heights_measurements[ch])
-      for ch in use_channels
-    ]
+    absolute_liquid_heights = []
+    inconsistent_channels = []
+    
+    for ch in use_channels:
+      measurements = absolute_heights_measurements[ch]
+      non_none = [m for m in measurements if m is not None]
+      none_count = len(measurements) - len(non_none)
+      
+      if none_count > 0 and len(non_none) > 0:
+        # Inconsistent results - track this channel
+        inconsistent_channels.append(
+          f"Channel {ch}: {len(non_none)} replicates detected liquid, {none_count} did not"
+        )
+        # Use the non-None values for now, but we'll raise an error after checking all channels
+        absolute_liquid_heights.append(sum(non_none) / len(non_none))
+      elif len(non_none) > 0:
+        # All replicates found liquid - compute average
+        absolute_liquid_heights.append(sum(non_none) / len(non_none))
+      else:
+        # All replicates found no liquid - use cavity bottom as the absolute height
+        # This will result in 0.0 relative height
+        # Find the index of ch in use_channels to get corresponding container
+        container_idx = use_channels.index(ch)
+        absolute_liquid_heights.append(
+          containers[container_idx].get_absolute_location("c", "c", "cavity_bottom").z
+        )
+    
+    # If any channels had inconsistent results, raise an error with all of them
+    if inconsistent_channels:
+      raise RuntimeError(
+        f"Inconsistent liquid detection across replicates for {len(inconsistent_channels)} channel(s). "
+        f"This may indicate liquid levels at or very near the detection limit:\n" +
+        "\n".join(inconsistent_channels)
+      )
 
     relative_to_well = [
       absolute_liquid_height - resource.get_absolute_location("c", "c", "cavity_bottom").z
