@@ -1825,7 +1825,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Detect liquid heights
-    absolute_heights_measurements: Dict[int, List[float]] = {ch: [] for ch in use_channels}
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
+      ch: [] for ch in use_channels
+    }
 
     lowest_immers_positions = [
       container.get_absolute_location("c", "c", "cavity_bottom").z
