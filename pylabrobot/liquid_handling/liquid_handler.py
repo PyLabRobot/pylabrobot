@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import inspect
 import json
 import logging
-import threading
 import unittest.mock
 import warnings
 from typing import (
@@ -203,17 +201,6 @@ class LiquidHandler(Resource, Machine):
     """Clear the state of the liquid handler head."""
 
     self.update_head_state({c: None for c in self.head.keys()})
-
-  def _run_async_in_thread(self, func, *args, **kwargs):
-    def callback(*args, **kwargs):
-      loop = asyncio.new_event_loop()
-      asyncio.set_event_loop(loop)
-      loop.run_until_complete(func(*args, **kwargs))
-      loop.close()
-
-    t = threading.Thread(target=callback, args=args, kwargs=kwargs)
-    t.start()
-    t.join()
 
   def summary(self):
     """Prints a string summary of the deck layout."""

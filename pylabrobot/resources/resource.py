@@ -4,7 +4,7 @@ import itertools
 import json
 import logging
 import sys
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
@@ -21,6 +21,39 @@ else:
   from typing_extensions import Self
 
 logger = logging.getLogger("pylabrobot")
+
+
+def _compute_location_from_anchors(
+  parent: "Resource",
+  child: "Resource",
+  parent_anchor: Union[tuple[str, str, str], str],
+  child_anchor: Union[tuple[str, str, str], str],
+) -> Coordinate:
+  """Compute the location for a child resource to align anchor points.
+
+  Args:
+    parent: The parent resource.
+    child: The child resource to be assigned.
+    parent_anchor: Tuple of (x, y, z) anchor specifiers or a 3-character string for the parent.
+    child_anchor: Tuple of (x, y, z) anchor specifiers or a 3-character string for the child.
+
+  Returns:
+    The location to pass to assign_child_resource to align the anchors.
+  """
+  # Convert string anchors to tuples
+  if isinstance(parent_anchor, str):
+    if len(parent_anchor) != 3:
+      raise ValueError(f"Anchor string must be exactly 3 characters, got: {parent_anchor}")
+    parent_anchor = (parent_anchor[0], parent_anchor[1], parent_anchor[2])
+
+  if isinstance(child_anchor, str):
+    if len(child_anchor) != 3:
+      raise ValueError(f"Anchor string must be exactly 3 characters, got: {child_anchor}")
+    child_anchor = (child_anchor[0], child_anchor[1], child_anchor[2])
+
+  parent_anchor_pos = parent.get_anchor(x=parent_anchor[0], y=parent_anchor[1], z=parent_anchor[2])
+  child_anchor_pos = child.get_anchor(x=child_anchor[0], y=child_anchor[1], z=child_anchor[2])
+  return parent_anchor_pos - child_anchor_pos
 
 
 WillAssignResourceCallback = Callable[["Resource"], None]
@@ -341,6 +374,59 @@ class Resource:
     # Call "did assign" callbacks
     for callback in self._did_assign_resource_callbacks:
       callback(resource)
+
+  def assign_child_by_anchor(
+    self,
+    resource: Resource,
+    parent_anchor: Union[tuple[str, str, str], str] = ("l", "f", "b"),
+    child_anchor: Union[tuple[str, str, str], str] = ("l", "f", "b"),
+    reassign: bool = True,
+  ):
+    """Assign a child resource by aligning anchor points.
+
+    This method computes the location needed to align the specified anchor points of the parent
+    and child resources, then calls :meth:`assign_child_resource` with the computed location.
+
+    Args:
+      resource: The resource to assign.
+      parent_anchor: Anchor specifiers for the parent. Can be either:
+        - A tuple of (x, y, z) strings, or
+        - A 3-character string (e.g., "lfb" for left-front-bottom)
+        Each element can be:
+        x: `"l"`/`"left"`, `"c"`/`"center"`, or `"r"`/`"right"`
+        y: `"b"`/`"back"`, `"c"`/`"center"`, or `"f"`/`"front"`
+        z: `"t"`/`"top"`, `"c"`/`"center"`, or `"b"`/`"bottom"`
+        Defaults to left-front-bottom.
+      child_anchor: Anchor specifiers for the child (same format as parent_anchor).
+        Defaults to left-front-bottom.
+      reassign: If `False`, an error will be raised if the resource to be assigned is already
+        assigned to this resource. Defaults to `True`.
+
+    Examples:
+      Align left-front-bottom (default behavior):
+
+      >>> parent = Resource("parent", size_x=100, size_y=100, size_z=10)
+      >>> child = Resource("child", size_x=80, size_y=80, size_z=5)
+      >>> parent.assign_child_by_anchor(child)  # Both default to LFB
+
+      Align the center-center-bottom using tuple syntax:
+
+      >>> parent.assign_child_by_anchor(child, parent_anchor=("c", "c", "b"),
+      ...                               child_anchor=("c", "c", "b"))
+
+      Align the center-center-bottom using string syntax:
+
+      >>> parent.assign_child_by_anchor(child, parent_anchor="ccb", child_anchor="ccb")
+
+      Stack on top by aligning parent's top with child's bottom:
+
+      >>> parent.assign_child_by_anchor(child, parent_anchor="lft", child_anchor="lfb")
+    """
+
+    location = _compute_location_from_anchors(
+      parent=self, child=resource, parent_anchor=parent_anchor, child_anchor=child_anchor
+    )
+    self.assign_child_resource(resource=resource, location=location, reassign=reassign)
 
   # Helper methods to call all callbacks. These are used to propagate callbacks up the tree.
   def _call_will_assign_resource_callbacks(self, resource: Resource):

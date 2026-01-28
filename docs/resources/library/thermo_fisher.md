@@ -29,14 +29,14 @@ Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
 | 'Thermo_TS_96_wellplate_1200ul_Rb'<br>Part no.: AB-1127 or 10243223<br>[manufacturer website](https://www.fishersci.co.uk/shop/products/product/10243223) <br><br>- Material: Polypropylene (AB-1068, polystyrene) <br> | ![](img/thermo_fisher/Thermo_TS_96_wellplate_1200ul_Rb.webp) | `Thermo_TS_96_wellplate_1200ul_Rb` |
+| 'Thermo_TS_Nunc_96_wellplate_300uL_Fb'<br>Part no.: 165305<br>[manufacturer website](https://www.fishersci.com/shop/products/nunc-microwell-96-well-cell-culture-treated-flat-bottom-microplate/1256670#)  <br> | ![](img/thermo_fisher/Thermo_TS_Nunc_96_wellplate_300uL_Fb.webp) | `Thermo_TS_Nunc_96_wellplate_300uL_Fb` |
 | 'Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate'<br>Part no.: 4483354 (TFS) or 15273005 (FS) (= with barcode)<br>Part no.: 16698853 (FS) (= **without** barcode)<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/4483354) <br><br>- Material: Polycarbonate, Polypropylene<br>- plate_type: semi-skirted<br>- product line: "MicroAmp"<br>- (sub)product line: "EnduraPlate" | ![](img/thermo_fisher/Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate.png) | `Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate` |
 | 'Thermo_Nunc_96_well_plate_1300uL_Rb'<br>Part no.: 26025X | ![](img/thermo_fisher/Thermo_Nunc_96_well_plate_1300uL_Rb.jpg) | `Thermo_Nunc_96_well_plate_1300uL_Rb` |
 | 'thermo_AB_96_wellplate_300ul_Vb_MicroAmp'<br>Part no.: N8010560/4316813 (w/o barcode)<br>Part no.: 4306737/4326659 (with barcode) | ![](img/thermo_fisher/thermo_AB_96_wellplate_300ul_Vb_MicroAmp.webp) | `thermo_AB_96_wellplate_300ul_Vb_MicroAmp` |
 | 'thermo_AB_384_wellplate_40uL_Vb_MicroAmp'<br>Part no.: 4309849, 4326270, 4343814 (with barcode), 4343370 (w/o barcode). | ![](img/thermo_fisher/thermo_AB_384_wellplate_40uL_Vb_MicroAmp.jpg) | `thermo_AB_384_wellplate_40uL_Vb_MicroAmp` |
-| 'thermo_nunc_1_wellplate_90000uL_Fb_omnitray'<br>Part no.: 165218, 140156, 242811, 264728 | ![](img/thermo_fisher/thermo_nunc_1_wellplate_90000uL_Fb_omnitray.jpg.avif) | `thermo_nunc_1_wellplate_90000uL_Fb_omnitray` |
-
 ## Troughs
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
+| 'thermo_nunc_1_troughplate_90000uL_Fb_omnitray'<br>Part no.: 165218, 140156, 242811, 264728 | ![](img/thermo_fisher/thermo_nunc_1_troughplate_90000uL_Fb_omnitray.jpg.avif) | `thermo_nunc_1_troughplate_90000uL_Fb_omnitray` |
 | 'ThermoFisherMatrixTrough8094'<br>Part no.: 8094<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/8094) | ![](img/thermo_fisher/ThermoFisherMatrixTrough8094.jpg.avif) | `ThermoFisherMatrixTrough8094` |
