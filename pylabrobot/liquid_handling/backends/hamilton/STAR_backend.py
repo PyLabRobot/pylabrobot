@@ -1844,7 +1844,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     try:
       for _ in range(n_replicates):
         if lld_mode == self.LLDMode.GAMMA:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._move_z_drive_to_liquid_surface_using_clld(
                 channel_idx=channel,
@@ -1855,11 +1855,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True 
           )
 
         else:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._search_for_surface_using_plld(
                 channel_idx=channel,
@@ -1874,13 +1875,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True
           )
 
         # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
         current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for ch_idx in use_channels:
-          height = current_absolute_liquid_heights[ch_idx]
+        for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
+          if isinstance(result, Exception):
+            # No liquid detected - record as None or 0.0
+            height = 0.0  # or 0.0 depending on your preference
+          else:
+            height = current_absolute_liquid_heights[ch_idx]
           absolute_heights_measurements[ch_idx].append(height)
     except:
       await self.move_all_channels_in_z_safety()
