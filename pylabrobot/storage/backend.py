@@ -127,3 +127,8 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
   async def scan_barcode(self, m: int, n: int, pitch: int, plt_count: int):
     """Scan barcode at given position with specified pitch and timeout."""
     pass
+
+  @abstractmethod
+  async def move_position_to_position(self, plate_name: str, dest_site: PlateHolder):
+    """ Move plate by name to another position in the storage unit"""
+    pass

@@ -79,7 +79,14 @@ class Incubator(Machine, Resource):
     site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
     assert plate is not None
-    await self.backend.fetch_plate_to_loading_tray(plate, read_barcode)
+
+    if read_barcode:
+      barcode = await self.backend.fetch_plate_to_loading_tray(plate, read_barcode)
+      print(barcode)
+      # undecided with what we want to do with barcode string (no Plate variable for it)
+    else:
+      await self.backend.fetch_plate_to_loading_tray(plate)
+
     plate.unassign()
     self.loading_tray.assign_child_resource(plate)
     return plate
@@ -128,7 +135,14 @@ class Incubator(Machine, Resource):
         raise ValueError(f"Site {site.name} is not available for plate {plate.name}")
     else:
       raise ValueError(f"Invalid site: {site}")
-    await self.backend.take_in_plate(plate, site, read_barcode)
+
+    if read_barcode:
+      barcode = await self.backend.take_in_plate(plate, site, read_barcode)
+      print(barcode)
+       # undecided with what we want to do with barcode string (no Plate variable for it)
+    else:
+      await self.backend.take_in_plate(plate, site)
+
     plate.unassign()
     site.assign_child_resource(plate)
 
@@ -151,9 +165,8 @@ class Incubator(Machine, Resource):
   async def stop_shaking(self):
     await self.backend.stop_shaking()
 
-  # REDO
-  async def scan_barcode(self, m: int, n: int, pitch: int, plt_count: int):
-    await self.backend.scan_barcode(cassette=m, position=n, pitch=pitch, plate_count=plt_count)
+  async def scan_barcode(self, site: PlateHolder):
+    await self.backend.scan_barcode(self, site)
 
   def summary(self) -> str:
     def create_pretty_table(header, *columns) -> str:
@@ -276,7 +289,13 @@ class Incubator(Machine, Resource):
     plate = site.resource
     assert plate is not None
 
-    await self.backend.move_position_to_position(plate=plate, dest_site=dest_site, read_barcode=read_barcode)
+    if read_barcode:
+      barcode = await self.backend.move_position_to_position(plate, dest_site, read_barcode)
+      print(barcode)
+      # undecided with what we want to do with barcode string (no Plate variable for it)
+    else:
+      await self.backend.move_position_to_position(plate,dest_site)
+
     plate.unassign()
     site.assign_child_resource(plate)
 
