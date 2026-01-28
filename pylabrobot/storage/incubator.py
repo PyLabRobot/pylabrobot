@@ -112,7 +112,7 @@ class Incubator(Machine, Resource):
   def find_random_site(self, plate: Plate) -> PlateHolder:
     return random.choice(self._find_available_sites_sorted(plate))
 
-  async def take_in_plate(self, site: Union[PlateHolder, Literal["random", "smallest"]]):
+  async def take_in_plate(self, site: Union[PlateHolder, Literal["random", "smallest"]], read_barcode: Optional[bool] = False):
     """Take a plate from the loading tray and put it in the incubator."""
 
     plate = cast(Plate, self.loading_tray.resource)
@@ -128,7 +128,7 @@ class Incubator(Machine, Resource):
         raise ValueError(f"Site {site.name} is not available for plate {plate.name}")
     else:
       raise ValueError(f"Invalid site: {site}")
-    await self.backend.take_in_plate(plate, site)
+    await self.backend.take_in_plate(plate, site, read_barcode)
     plate.unassign()
     site.assign_child_resource(plate)
 

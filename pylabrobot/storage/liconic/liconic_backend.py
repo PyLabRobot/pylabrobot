@@ -240,7 +240,8 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc(f"WR DM5 {orig_n}") # origin plate position #
 
     if read_barcode:
-      await self.read_barcode_inline(orig_m,orig_n)
+      barcode = await self.read_barcode_inline(orig_m,orig_n)
+      print(barcode)
 
     await self._send_command_plc("ST 1908") # pick plate from origin position
 
