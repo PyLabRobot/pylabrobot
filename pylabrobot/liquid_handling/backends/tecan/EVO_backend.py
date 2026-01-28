@@ -121,7 +121,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         continue
       # RoMa(C1) and LiHa(C5) should only have integer values
       # MCA can return both integers and strings
-      data.append(int(x) if x.isdigit() else x)
+      data.append(int(x) if x.lstrip("-").isdigit() else x)
 
     return {"module": module, "data": data}
 
