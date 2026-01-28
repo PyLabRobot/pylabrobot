@@ -914,7 +914,7 @@ class EVOArm:
     resp: List[int] = (
       await self.backend.send_command(module=self.module, command="RPX", params=[param])
     )["data"]
-    return resp[0]
+    return int(resp[0])
 
   async def report_y_param(self, param: int) -> List[int]:
     """Report current parameters for y-axis.
@@ -989,6 +989,7 @@ class LiHa(EVOArm):
     """
 
     cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
+
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
