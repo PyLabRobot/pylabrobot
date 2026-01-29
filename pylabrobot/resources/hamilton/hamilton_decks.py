@@ -8,7 +8,7 @@ from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError
-from pylabrobot.resources.hamilton.tip_creators import standard_volume_tip_with_filter
+from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_300uL_filter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
@@ -484,7 +484,7 @@ class HamiltonSTARDeck(HamiltonDeck):
           size_x=9.0,
           size_y=9.0,
           size_z=0,
-          make_tip=standard_volume_tip_with_filter,
+          make_tip=hamilton_tip_300uL_filter,
         )
         for i in range(8)
       ]
