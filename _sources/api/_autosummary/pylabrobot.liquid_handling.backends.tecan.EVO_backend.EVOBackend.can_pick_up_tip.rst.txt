@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.tecan.EVO\_backend.EVOBackend.can\_pick\_up\_tip
+=====================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.tecan.EVO_backend
+
+.. automethod:: EVOBackend.can_pick_up_tip
