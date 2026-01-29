@@ -339,6 +339,12 @@ class EmbeddedTipRack(TipRack):
     )
     self.sinking_depth = sinking_depth
 
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "sinking_depth": self.sinking_depth,
+    }
+
 
 class StandingTipRack(TipRack):
   """It's defining geometric characteristic is that it is completely self-sufficient and does not require a separate TipHolder to embed into."""
