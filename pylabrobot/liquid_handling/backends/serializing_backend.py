@@ -1,4 +1,3 @@
-import sys
 from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
@@ -22,11 +21,6 @@ from pylabrobot.liquid_handling.standard import (
 )
 from pylabrobot.resources import Tip
 from pylabrobot.serializer import serialize
-
-if sys.version_info >= (3, 8):
-  from typing import TypedDict
-else:
-  from typing_extensions import TypedDict
 
 
 class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
@@ -232,27 +226,3 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return True
-
-
-class SerializingSavingBackend(SerializingBackend):
-  """A backend that saves all serialized commands in `self.sent_commands`, wrote for testing."""
-
-  class Command(TypedDict):
-    command: str
-    data: Optional[Dict[str, Any]]
-
-  async def setup(self):
-    self.sent_commands: List[SerializingSavingBackend.Command] = []
-    await super().setup()
-
-  async def send_command(self, command: str, data: Optional[Dict[str, Any]] = None):
-    self.sent_commands.append({"command": command, "data": data})
-
-  def clear(self):
-    self.sent_commands = []
-
-  def get_first_data_for_command(self, command: str) -> Optional[Dict[str, Any]]:
-    for sent_command in self.sent_commands:
-      if sent_command["command"] == command:
-        return sent_command["data"]
-    return None
