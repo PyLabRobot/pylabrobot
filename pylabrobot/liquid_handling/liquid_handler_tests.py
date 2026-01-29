@@ -989,7 +989,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.lh.aspirate([well], vols=[10])
 
-  @pytest.mark.filterwarnings("ignore:Extra arguments to backend.pick_up_tips")
+  @pytest.mark.filterwarnings("ignore:Extra arguments to backend")
   async def test_strictness(self):
     class TestBackend(backends.SaverBackend):
       """Override pick_up_tips for testing."""
