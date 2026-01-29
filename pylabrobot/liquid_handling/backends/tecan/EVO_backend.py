@@ -915,7 +915,7 @@ class EVOArm:
       await self.backend.send_command(module=self.module, command="RPX", params=[param])
     )["data"]
     #Debug
-    print (f"RPX response: {resp}")
+    print (f"RPX response: {resp}, param: {param}")
     return int(resp[0])
 
   async def report_y_param(self, param: int) -> List[int]:
@@ -929,7 +929,7 @@ class EVOArm:
       await self.backend.send_command(module=self.module, command="RPY", params=[param])
     )["data"]
     # Debug
-    print (f"RPY response: {resp}")
+    print (f"RPY response: {resp}, param: {param}")
     return resp
 
 
