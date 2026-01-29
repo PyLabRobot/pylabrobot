@@ -2888,26 +2888,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
 
-    tip_length = prototypical_tip.total_tip_length
-    fitting_depth = prototypical_tip.fitting_depth
-    tip_engage_height_from_tipspot = tip_length - fitting_depth
-
-    # Adjust tip engage height based on tip size
-    if prototypical_tip.tip_size == TipSize.LOW_VOLUME:
-      tip_engage_height_from_tipspot += 2
-    elif prototypical_tip.tip_size != TipSize.STANDARD_VOLUME:
-      tip_engage_height_from_tipspot -= 2
-
-    # Compute pickup Z
+    # Compute pickup position
     alignment_tipspot = pickup.resource.get_item(experimental_alignment_tipspot_identifier)
-    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
-    z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
-
-    # Compute full position (used for x/y)
     pickup_position = (
       alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
     )
-    pickup_position.z = round(z_pickup_position, 2)
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
@@ -2955,12 +2940,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
       position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
-      tip_rack = tip_spot_a1.parent
-      assert tip_rack is not None
-      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
-      # This should be the case for all normal hamilton tip carriers + racks
-      # In the future, we might want to make this more flexible
-      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
