@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
 from typing import Callable, Optional
 
 from pylabrobot.resources.volume_tracker import VolumeTracker
 
 
-@dataclass
 class Tip:
   """A single tip.
 
@@ -20,14 +18,22 @@ class Tip:
     name: optional identifier for this tip
   """
 
-  has_filter: bool
-  total_tip_length: float
-  maximal_volume: float
-  fitting_depth: float
-  _collar_height: Optional[float] = None
-  name: Optional[str] = None
+  def __init__(
+    self,
+    has_filter: bool,
+    total_tip_length: float,
+    maximal_volume: float,
+    fitting_depth: float,
+    collar_height: Optional[float] = None,
+    name: Optional[str] = None,
+  ):
+    self.has_filter = has_filter
+    self.total_tip_length = total_tip_length
+    self.maximal_volume = maximal_volume
+    self.fitting_depth = fitting_depth
+    self._collar_height = collar_height
+    self.name = name
 
-  def __post_init__(self):
     if self.name is None:
       warnings.warn(
         "Creating a Tip without a name is deprecated. "
@@ -49,6 +55,17 @@ class Tip:
       "fitting_depth": self.fitting_depth,
       "collar_height": self._collar_height,
     }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> "Tip":
+    return cls(
+      has_filter=data["has_filter"],
+      total_tip_length=data["total_tip_length"],
+      maximal_volume=data["maximal_volume"],
+      fitting_depth=data["fitting_depth"],
+      collar_height=data.get("collar_height"),
+      name=data.get("name"),
+    )
 
   def __hash__(self):
     return hash(

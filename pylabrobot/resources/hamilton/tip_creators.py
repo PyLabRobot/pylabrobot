@@ -71,7 +71,7 @@ class HamiltonTip(Tip):
       has_filter=has_filter,
       maximal_volume=maximal_volume,
       fitting_depth=fitting_depth,
-      _collar_height=collar_height,
+      collar_height=collar_height,
       name=name,
     )
 
