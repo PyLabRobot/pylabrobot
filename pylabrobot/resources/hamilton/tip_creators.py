@@ -71,19 +71,12 @@ class HamiltonTip(Tip):
       has_filter=has_filter,
       maximal_volume=maximal_volume,
       fitting_depth=fitting_depth,
+      _collar_height=collar_height,
       name=name,
     )
 
     self.pickup_method = pickup_method
     self.tip_size = tip_size
-    self.collar_height = collar_height
-
-  @property
-  def collar_height_strict(self) -> float:
-    """Return collar_height, raising if it is None."""
-    if self.collar_height is None:
-      raise ValueError(f"collar_height is not defined for this tip: {self!r}")
-    return self.collar_height
 
   def __repr__(self) -> str:
     name_field = f"'{self.name}'" if self.name is not None else "None"
@@ -94,7 +87,7 @@ class HamiltonTip(Tip):
       f"maximal_volume={self.maximal_volume}, "
       f"fitting_depth={self.fitting_depth}, "
       f"total_tip_length={self.total_tip_length}, "
-      f"collar_height={self.collar_height}, "
+      f"collar_height={self._collar_height}, "
       f"pickup_method={self.pickup_method.name})"
     )
 
@@ -105,7 +98,6 @@ class HamiltonTip(Tip):
       **super_serialized,
       "pickup_method": self.pickup_method.name,
       "tip_size": self.tip_size.name,
-      "collar_height": self.collar_height,
     }
 
   @classmethod
