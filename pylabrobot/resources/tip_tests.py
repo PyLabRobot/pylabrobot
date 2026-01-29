@@ -37,12 +37,13 @@ class TipTests(unittest.TestCase):
       10.0,
       TipSize.HIGH_VOLUME,
       TipPickupMethod.OUT_OF_RACK,
+      name="test_tip",
     )
     self.assertEqual(
       tip.serialize(),
       {
         "type": "HamiltonTip",
-        "name": None,
+        "name": "test_tip",
         "has_filter": False,
         "total_tip_length": 10.0,
         "maximal_volume": 10.0,
@@ -58,5 +59,6 @@ class TipTests(unittest.TestCase):
       10.0,
       TipSize.HIGH_VOLUME,
       TipPickupMethod.OUT_OF_RACK,
+      name="test_tip",
     )
     self.assertEqual(HamiltonTip.deserialize(tip.serialize()), tip)
