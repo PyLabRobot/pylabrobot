@@ -3,7 +3,7 @@ import tempfile
 import unittest
 import unittest.mock
 from typing import Any, List, Union, cast
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import PropertyMock
 
 import pytest
 
@@ -61,7 +61,7 @@ from .standard import (
 )
 
 
-def _create_mock_backend(num_channels: int = 8) -> MagicMock:
+def _create_mock_backend(num_channels: int = 8):
   """Create a mock LiquidHandlerBackend with the specified number of channels."""
   mock = unittest.mock.create_autospec(LiquidHandlerBackend, instance=True)
   type(mock).num_channels = PropertyMock(return_value=num_channels)
