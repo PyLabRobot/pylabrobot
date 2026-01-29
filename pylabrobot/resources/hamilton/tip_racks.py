@@ -48,6 +48,7 @@ def hamilton_universal_rack(name: str, make_tip, with_tips: bool = True) -> Embe
       make_tip=make_tip,
     ),
     with_tips=with_tips,
+    frame_height=10.0,
   )
 
 

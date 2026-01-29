@@ -157,6 +157,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,
+    frame_height: Optional[float] = None,
   ):
     super().__init__(
       name,
@@ -168,12 +169,20 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       category=category,
       model=model,
     )
+    self._frame_height = frame_height
 
     if ordered_items is not None and len(ordered_items) > 0:
       if with_tips:
         self.fill()
       else:
         self.empty()
+
+  @property
+  def frame_height(self) -> float:
+    """Return frame_height, raising if it is None."""
+    if self._frame_height is None:
+      raise ValueError(f"frame_height is not defined for this tip rack: {self!r}")
+    return self._frame_height
 
   def __repr__(self) -> str:
     return (
@@ -324,6 +333,7 @@ class EmbeddedTipRack(TipRack):
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,
+    frame_height: Optional[float] = None,
   ):
     """sinking_depth: the depth the tip rack sinks into the tip holder when placed inside it."""
     super().__init__(
@@ -336,6 +346,7 @@ class EmbeddedTipRack(TipRack):
       category=category,
       model=model,
       with_tips=with_tips,
+      frame_height=frame_height,
     )
     self.sinking_depth = sinking_depth
 
