@@ -16,7 +16,6 @@ class Tip:
     total_tip_length: total length of the tip, in in mm
     maximal_volume: maximal volume of the tip, in ul
     fitting_depth: the overlap between the tip and the pipette, in mm
-    collar_height: the height of the collar, in mm
     name: optional identifier for this tip
   """
 
@@ -24,7 +23,6 @@ class Tip:
   total_tip_length: float
   maximal_volume: float
   fitting_depth: float
-  _collar_height: Optional[float] = None
   name: Optional[str] = None
 
   def __post_init__(self):
@@ -47,7 +45,6 @@ class Tip:
       "has_filter": self.has_filter,
       "maximal_volume": self.maximal_volume,
       "fitting_depth": self.fitting_depth,
-      "collar_height": self._collar_height,
     }
 
   def __hash__(self):
@@ -57,7 +54,6 @@ class Tip:
         self.total_tip_length,
         self.maximal_volume,
         self.fitting_depth,
-        self._collar_height,
       )
     )
 
@@ -70,15 +66,7 @@ class Tip:
       and self.total_tip_length == other.total_tip_length
       and self.maximal_volume == other.maximal_volume
       and self.fitting_depth == other.fitting_depth
-      and self._collar_height == other._collar_height
     )
-
-  @property
-  def collar_height(self) -> float:
-    """Return collar_height, raising if it is None."""
-    if self._collar_height is None:
-      raise ValueError(f"collar_height is not defined for this tip: {self!r}")
-    return self._collar_height
 
 
 TipCreator = Callable[[str], Tip]
