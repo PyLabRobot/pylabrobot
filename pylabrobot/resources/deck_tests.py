@@ -17,7 +17,7 @@ from pylabrobot.resources import (
   Well,
   create_homogeneous_resources,
   create_ordered_items_2d,
-  standard_volume_tip_with_filter,
+  hamilton_tip_300uL_filter,
 )
 
 
@@ -85,7 +85,7 @@ class DeckTests(unittest.TestCase):
         item_dy=1,
         size_x=1,
         size_y=1,
-        make_tip=standard_volume_tip_with_filter,
+        make_tip=hamilton_tip_300uL_filter,
       ),
     )
     pc = PlateCarrier(

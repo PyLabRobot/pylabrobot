@@ -2,10 +2,13 @@ import itertools
 import tempfile
 import unittest
 import unittest.mock
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, List, Union, cast
+from unittest.mock import PropertyMock
 
 import pytest
 
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
@@ -45,7 +48,6 @@ from pylabrobot.resources.volume_tracker import (
 from pylabrobot.resources.well import Well
 from pylabrobot.serializer import serialize
 
-from . import backends
 from .liquid_handler import LiquidHandler
 from .standard import (
   Drop,
@@ -57,6 +59,14 @@ from .standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
+
+
+def _create_mock_backend(num_channels: int = 8):
+  """Create a mock LiquidHandlerBackend with the specified number of channels."""
+  mock = unittest.mock.create_autospec(LiquidHandlerBackend, instance=True)
+  type(mock).num_channels = PropertyMock(return_value=num_channels)
+  mock.can_pick_up_tip.return_value = True
+  return mock
 
 
 def _make_asp(
@@ -97,7 +107,7 @@ def _make_disp(
 
 class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = backends.SaverBackend(num_channels=8)
+    self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
@@ -434,13 +444,17 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         lid.rotation.z = 0
 
   def test_serialize(self):
-    serialized = self.lh.serialize()
+    # Use a real backend for serialization test since mocks can't be deserialized
+    backend = LiquidHandlerChatterboxBackend(num_channels=8)
+    lh = LiquidHandler(backend, deck=STARLetDeck())
+
+    serialized = lh.serialize()
     deserialized = LiquidHandler.deserialize(serialized)
 
-    self.assertEqual(deserialized.deck, self.lh.deck)
+    self.assertEqual(deserialized.deck, lh.deck)
     self.assertEqual(
       deserialized.backend.__class__.__name__,
-      self.lh.backend.__class__.__name__,
+      lh.backend.__class__.__name__,
     )
 
 
@@ -448,7 +462,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.maxDiff = None
 
-    self.backend = backends.SaverBackend(num_channels=8)
+    self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
@@ -458,71 +472,51 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
 
-  def get_first_command(self, command) -> Optional[Dict[str, Any]]:
-    for sent_command in self.backend.commands_received:
-      if sent_command["command"] == command:
-        return sent_command
-    return None
-
   async def test_offsets_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
     await self.lh.pick_up_tips([tip_spot], offsets=[Coordinate(x=1, y=1, z=1)])
     await self.lh.drop_tips([tip_spot], offsets=[Coordinate(x=1, y=1, z=1)])
 
-    self.assertEqual(
-      self.get_first_command("pick_up_tips"),
-      {
-        "command": "pick_up_tips",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [Pickup(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))],
-        },
-      },
+    self.backend.pick_up_tips.assert_called_once_with(
+      use_channels=[0],
+      ops=[Pickup(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))],
     )
-    self.assertEqual(
-      self.get_first_command("drop_tips"),
-      {
-        "command": "drop_tips",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [Drop(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))],
-        },
-      },
+    self.backend.drop_tips.assert_called_once_with(
+      use_channels=[0],
+      ops=[Drop(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))],
     )
 
   async def test_default_offset_head96(self):
     self.lh.default_offset_head96 = Coordinate(1, 2, 3)
 
     await self.lh.pick_up_tips96(self.tip_rack)
-    cmd = self.get_first_command("pick_up_tips96")
-    self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["pickup"].offset, Coordinate(1, 2, 3))  # type: ignore
-    self.backend.clear()
+    self.backend.pick_up_tips96.assert_called_once()
+    call_kwargs = self.backend.pick_up_tips96.call_args.kwargs
+    self.assertEqual(call_kwargs["pickup"].offset, Coordinate(1, 2, 3))
+    self.backend.pick_up_tips96.reset_mock()
 
     # aspirate with extra offset; effective offset should be default + provided
     await self.lh.aspirate96(self.plate, volume=10, offset=Coordinate(1, 0, 0))
-    cmd = self.get_first_command("aspirate96")
-    self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["aspiration"].offset, Coordinate(2, 2, 3))  # type: ignore
-    self.backend.clear()
+    self.backend.aspirate96.assert_called_once()
+    call_kwargs = self.backend.aspirate96.call_args.kwargs
+    self.assertEqual(call_kwargs["aspiration"].offset, Coordinate(2, 2, 3))
+    self.backend.aspirate96.reset_mock()
 
     # dispense without providing offset uses default
     await self.lh.dispense96(self.plate, volume=10)
-    cmd = self.get_first_command("dispense96")
-    self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["dispense"].offset, Coordinate(1, 2, 3))  # type: ignore
-    self.backend.clear()
+    self.backend.dispense96.assert_called_once()
+    call_kwargs = self.backend.dispense96.call_args.kwargs
+    self.assertEqual(call_kwargs["dispense"].offset, Coordinate(1, 2, 3))
+    self.backend.dispense96.reset_mock()
 
     await self.lh.drop_tips96(self.tip_rack, offset=Coordinate(0, 1, 0))
-    cmd = self.get_first_command("drop_tips96")
-    self.assertIsNotNone(cmd)
-    self.assertEqual(cmd["kwargs"]["drop"].offset, Coordinate(1, 3, 3))  # type: ignore
+    self.backend.drop_tips96.assert_called_once()
+    call_kwargs = self.backend.drop_tips96.call_args.kwargs
+    self.assertEqual(call_kwargs["drop"].offset, Coordinate(1, 3, 3))
 
   async def test_default_offset_head96_initializer(self):
-    backend = backends.SaverBackend(num_channels=8)
+    backend = _create_mock_backend(num_channels=8)
     deck = STARLetDeck()
     lh = LiquidHandler(
       backend=backend,
@@ -532,8 +526,11 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(lh.default_offset_head96, Coordinate(1, 2, 3))
 
   async def test_default_offset_head96_serialization(self):
-    self.lh.default_offset_head96 = Coordinate(1, 2, 3)
-    data = self.lh.serialize()
+    # Use a real backend for serialization test since mocks can't be deserialized
+    backend = LiquidHandlerChatterboxBackend(num_channels=8)
+    lh = LiquidHandler(backend=backend, deck=STARLetDeck())
+    lh.default_offset_head96 = Coordinate(1, 2, 3)
+    data = lh.serialize()
     self.assertEqual(data["default_offset_head96"], serialize(Coordinate(1, 2, 3)))
     new_lh = LiquidHandler.deserialize(data)
     self.assertEqual(new_lh.default_offset_head96, Coordinate(1, 2, 3))
@@ -545,27 +542,13 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.pick_up_tips([tip_spot])
       await self.lh.drop_tips([tip_spot])
 
-    self.assertEqual(
-      self.get_first_command("pick_up_tips"),
-      {
-        "command": "pick_up_tips",
-        "args": (),
-        "kwargs": {
-          "use_channels": [2],
-          "ops": [Pickup(tip_spot, tip=tip, offset=Coordinate.zero())],
-        },
-      },
+    self.backend.pick_up_tips.assert_called_once_with(
+      use_channels=[2],
+      ops=[Pickup(tip_spot, tip=tip, offset=Coordinate.zero())],
     )
-    self.assertEqual(
-      self.get_first_command("drop_tips"),
-      {
-        "command": "drop_tips",
-        "args": (),
-        "kwargs": {
-          "use_channels": [2],
-          "ops": [Drop(tip_spot, tip=tip, offset=Coordinate.zero())],
-        },
-      },
+    self.backend.drop_tips.assert_called_once_with(
+      use_channels=[2],
+      ops=[Drop(tip_spot, tip=tip, offset=Coordinate.zero())],
     )
 
   async def test_offsets_asp_disp(self):
@@ -576,27 +559,13 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate([well], vols=[10], offsets=[Coordinate(x=1, y=1, z=1)])
     await self.lh.dispense([well], vols=[10], offsets=[Coordinate(x=1, y=1, z=1)])
 
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(well, vol=10, offset=Coordinate(x=1, y=1, z=1), tip=t)],
-        },
-      },
+    self.backend.aspirate.assert_called_once_with(
+      use_channels=[0],
+      ops=[_make_asp(well, vol=10, offset=Coordinate(x=1, y=1, z=1), tip=t)],
     )
-    self.assertEqual(
-      self.get_first_command("dispense"),
-      {
-        "command": "dispense",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_disp(well, vol=10, offset=Coordinate(x=1, y=1, z=1), tip=t)],
-        },
-      },
+    self.backend.dispense.assert_called_once_with(
+      use_channels=[0],
+      ops=[_make_disp(well, vol=10, offset=Coordinate(x=1, y=1, z=1), tip=t)],
     )
 
   async def test_return_tips(self):
@@ -605,16 +574,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips([tip_spot])
     await self.lh.return_tips()
 
-    self.assertEqual(
-      self.get_first_command("drop_tips"),
-      {
-        "command": "drop_tips",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [Drop(tip_spot, tip=tip, offset=Coordinate.zero())],
-        },
-      },
+    self.backend.drop_tips.assert_called_once_with(
+      use_channels=[0],
+      ops=[Drop(tip_spot, tip=tip, offset=Coordinate.zero())],
     )
 
     with self.assertRaises(RuntimeError):
@@ -630,13 +592,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     for i in range(96):
       assert not self.lh.head96[i].has_tip, f"Channel head {i} is not empty."
 
-    self.assertEqual(
-      self.get_first_command("drop_tips96"),
-      {
-        "command": "drop_tips96",
-        "args": (),
-        "kwargs": {"drop": DropTipRack(resource=self.tip_rack, offset=Coordinate.zero())},
-      },
+    self.backend.drop_tips96.assert_called_once_with(
+      drop=DropTipRack(resource=self.tip_rack, offset=Coordinate.zero())
     )
 
     with self.assertRaises(RuntimeError):
@@ -645,9 +602,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_aspirate_dispense96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(self.plate, volume=10)
-    self.lh.backend.dispense96 = unittest.mock.create_autospec(self.lh.backend.dispense96)  # type: ignore
     await self.lh.dispense96(self.plate, 10)
-    self.lh.backend.dispense96.assert_called_with(  # type: ignore
+    self.backend.dispense96.assert_called_with(
       dispense=MultiHeadDispensePlate(
         wells=self.plate.get_all_items(),
         offset=Coordinate.zero(),
@@ -668,66 +624,33 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.get_item("A1").tracker.set_volume(10)
     await self.lh.transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10)
 
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_item("A1"), vol=10.0, tip=t)],
-        },
-      },
+    self.backend.aspirate.assert_called_once_with(
+      use_channels=[0],
+      ops=[_make_asp(self.plate.get_item("A1"), vol=10.0, tip=t)],
     )
-    self.assertEqual(
-      self.get_first_command("dispense"),
-      {
-        "command": "dispense",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_disp(self.plate.get_item("A2"), vol=10.0, tip=t)],
-        },
-      },
+    self.backend.dispense.assert_called_once_with(
+      use_channels=[0],
+      ops=[_make_disp(self.plate.get_item("A2"), vol=10.0, tip=t)],
     )
-    self.backend.clear()
+    self.backend.aspirate.reset_mock()
+    self.backend.dispense.reset_mock()
 
     # Transfer to multiple wells
     self.plate.get_item("A1").tracker.set_volume(80)
     await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80)
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_item("A1"), vol=80.0, tip=t)],
-        },
-      },
+    self.backend.aspirate.assert_called_once_with(
+      use_channels=[0],
+      ops=[_make_asp(self.plate.get_item("A1"), vol=80.0, tip=t)],
     )
 
-    dispenses = list(
-      filter(
-        lambda x: x["command"] == "dispense",
-        self.backend.commands_received,
-      )
-    )
-    self.assertEqual(
-      dispenses,
-      [
-        {
-          "command": "dispense",
-          "args": (),
-          "kwargs": {
-            "use_channels": [0],
-            "ops": [_make_disp(well, vol=10.0, tip=t)],
-          },
-        }
-        for well in self.plate["A1:H1"]
-      ],
-    )
-    self.backend.clear()
+    dispense_calls = self.backend.dispense.call_args_list
+    expected_dispenses = [
+      unittest.mock.call(use_channels=[0], ops=[_make_disp(well, vol=10.0, tip=t)])
+      for well in self.plate["A1:H1"]
+    ]
+    self.assertEqual(dispense_calls, expected_dispenses)
+    self.backend.aspirate.reset_mock()
+    self.backend.dispense.reset_mock()
 
     # Transfer with ratios
     self.plate.get_item("A1").tracker.set_volume(60)
@@ -737,75 +660,35 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       source_vol=60,
       ratios=[2, 1],
     )
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_item("A1"), vol=60.0, tip=t)],
-        },
-      },
+    self.backend.aspirate.assert_called_once_with(
+      use_channels=[0],
+      ops=[_make_asp(self.plate.get_item("A1"), vol=60.0, tip=t)],
     )
-    dispenses = list(
-      filter(
-        lambda x: x["command"] == "dispense",
-        self.backend.commands_received,
-      )
-    )
-    self.assertEqual(
-      dispenses,
-      [
-        {
-          "command": "dispense",
-          "args": (),
-          "kwargs": {
-            "use_channels": [0],
-            "ops": [_make_disp(well, vol=vol, tip=t)],
-          },
-        }
-        for well, vol in zip(self.plate["B1:C1"], [40, 20])
-      ],
-    )
-    self.backend.clear()
+    dispense_calls = self.backend.dispense.call_args_list
+    expected_dispenses = [
+      unittest.mock.call(use_channels=[0], ops=[_make_disp(well, vol=vol, tip=t)])
+      for well, vol in zip(self.plate["B1:C1"], [40, 20])
+    ]
+    self.assertEqual(dispense_calls, expected_dispenses)
+    self.backend.aspirate.reset_mock()
+    self.backend.dispense.reset_mock()
 
     # Transfer with target_vols
     vols: List[float] = [3, 1, 4, 1, 5, 9, 6, 2]
     self.plate.get_item("A1").tracker.set_volume(sum(vols))
     await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols)
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_well("A1"), vol=sum(vols), tip=t)],
-        },
-      },
+    self.backend.aspirate.assert_called_once_with(
+      use_channels=[0],
+      ops=[_make_asp(self.plate.get_well("A1"), vol=sum(vols), tip=t)],
     )
-    dispenses = list(
-      filter(
-        lambda x: x["command"] == "dispense",
-        self.backend.commands_received,
-      )
-    )
-    self.assertEqual(
-      dispenses,
-      [
-        {
-          "command": "dispense",
-          "args": (),
-          "kwargs": {
-            "use_channels": [0],
-            "ops": [_make_disp(well, vol=vol, tip=t)],
-          },
-        }
-        for well, vol in zip(self.plate["A1:H1"], vols)
-      ],
-    )
-    self.backend.clear()
+    dispense_calls = self.backend.dispense.call_args_list
+    expected_dispenses = [
+      unittest.mock.call(use_channels=[0], ops=[_make_disp(well, vol=vol, tip=t)])
+      for well, vol in zip(self.plate["A1:H1"], vols)
+    ]
+    self.assertEqual(dispense_calls, expected_dispenses)
+    self.backend.aspirate.reset_mock()
+    self.backend.dispense.reset_mock()
 
     # target_vols and source_vol specified
     with self.assertRaises(TypeError):
@@ -831,45 +714,30 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.stamp(self.plate, self.plate, volume=10)
     ts = self.tip_rack.get_all_tips()
 
-    self.assertEqual(
-      self.get_first_command("aspirate96"),
-      {
-        "command": "aspirate96",
-        "args": (),
-        "kwargs": {
-          "aspiration": MultiHeadAspirationPlate(
-            wells=self.plate.get_all_items(),
-            volume=10.0,
-            tips=ts,
-            offset=Coordinate.zero(),
-            flow_rate=None,
-            liquid_height=None,
-            blow_out_air_volume=None,
-            mix=None,
-          )
-        },
-      },
+    self.backend.aspirate96.assert_called_once_with(
+      aspiration=MultiHeadAspirationPlate(
+        wells=self.plate.get_all_items(),
+        volume=10.0,
+        tips=ts,
+        offset=Coordinate.zero(),
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
     )
-    self.assertEqual(
-      self.get_first_command("dispense96"),
-      {
-        "command": "dispense96",
-        "args": (),
-        "kwargs": {
-          "dispense": MultiHeadDispensePlate(
-            wells=self.plate.get_all_items(),
-            volume=10.0,
-            tips=ts,
-            offset=Coordinate.zero(),
-            flow_rate=None,
-            liquid_height=None,
-            blow_out_air_volume=None,
-            mix=None,
-          )
-        },
-      },
+    self.backend.dispense96.assert_called_once_with(
+      dispense=MultiHeadDispensePlate(
+        wells=self.plate.get_all_items(),
+        volume=10.0,
+        tips=ts,
+        offset=Coordinate.zero(),
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
     )
-    self.backend.clear()
 
   async def test_tip_tracking_double_pickup(self):
     set_tip_tracking(enabled=True)
@@ -937,37 +805,36 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     trash = self.deck.get_trash_area()
     offsets = get_tight_single_resource_liquid_op_offsets(trash, num_channels=4)
 
+    # drop_tips is called twice: once for pick_up, so check the second call
+    drop_tips_calls = self.backend.drop_tips.call_args_list
+    self.assertEqual(len(drop_tips_calls), 1)
     self.assertEqual(
-      self.get_first_command("drop_tips"),
-      {
-        "command": "drop_tips",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0, 1, 3, 4],
-          "ops": [
-            Drop(
-              self.deck.get_trash_area(),
-              tip=tips[3],
-              offset=offsets[0],
-            ),
-            Drop(
-              self.deck.get_trash_area(),
-              tip=tips[2],
-              offset=offsets[1],
-            ),
-            Drop(
-              self.deck.get_trash_area(),
-              tip=tips[1],
-              offset=offsets[2],
-            ),
-            Drop(
-              self.deck.get_trash_area(),
-              tip=tips[0],
-              offset=offsets[3],
-            ),
-          ],
-        },
-      },
+      drop_tips_calls[0],
+      unittest.mock.call(
+        use_channels=[0, 1, 3, 4],
+        ops=[
+          Drop(
+            self.deck.get_trash_area(),
+            tip=tips[3],
+            offset=offsets[0],
+          ),
+          Drop(
+            self.deck.get_trash_area(),
+            tip=tips[2],
+            offset=offsets[1],
+          ),
+          Drop(
+            self.deck.get_trash_area(),
+            tip=tips[1],
+            offset=offsets[2],
+          ),
+          Drop(
+            self.deck.get_trash_area(),
+            tip=tips[0],
+            offset=offsets[3],
+          ),
+        ],
+      ),
     )
 
     # test tip tracking
@@ -989,15 +856,14 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.lh.aspirate([well], vols=[10])
 
-  @pytest.mark.filterwarnings("ignore:Extra arguments to backend.pick_up_tips")
+  @pytest.mark.filterwarnings("ignore:Extra arguments to backend")
   async def test_strictness(self):
-    class TestBackend(backends.SaverBackend):
-      """Override pick_up_tips for testing."""
+    # Create a mock backend with a custom pick_up_tips that checks arguments
+    async def custom_pick_up_tips(ops, use_channels, non_default, default=True):
+      assert non_default == default
 
-      async def pick_up_tips(self, ops, use_channels, non_default, default=True):  # type: ignore
-        assert non_default == default
-
-    self.backend = TestBackend(num_channels=16)
+    self.backend = _create_mock_backend(num_channels=16)
+    self.backend.pick_up_tips = custom_pick_up_tips
     self.lh = LiquidHandler(self.backend, deck=self.deck)
     await self.lh.setup()
 
@@ -1064,7 +930,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh.deck.save(fn=deck_filename)
 
     # create a new liquid handler, load the state and the deck
-    lh2 = LiquidHandler(self.backend, deck=STARLetDeck())
+    backend2 = _create_mock_backend(num_channels=8)
+    lh2 = LiquidHandler(backend2, deck=STARLetDeck())
     lh2.deck = Deck.load_from_json_file(json_file=deck_filename)
     lh2.deck.load_state_from_file(fn=state_filename)
 
@@ -1095,7 +962,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
-    self.backend = backends.SaverBackend(num_channels=8)
+    self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
