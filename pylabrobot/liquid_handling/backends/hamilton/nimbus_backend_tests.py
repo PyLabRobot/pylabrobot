@@ -63,6 +63,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_low_volume(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=50.0,
       maximal_volume=10.0,
@@ -73,6 +74,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_low_volume_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=50.0,
       maximal_volume=10.0,
@@ -83,6 +85,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_50ul(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=50.0,
       maximal_volume=50.0,
@@ -93,6 +96,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_50ul_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=50.0,
       maximal_volume=50.0,
@@ -103,6 +107,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_300ul(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=59.9,
       maximal_volume=300.0,
@@ -113,6 +118,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_300ul_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=59.9,
       maximal_volume=300.0,
@@ -123,6 +129,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_high_volume(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=95.1,
       maximal_volume=1000.0,
@@ -133,6 +140,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_high_volume_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=95.1,
       maximal_volume=1000.0,
@@ -145,7 +153,9 @@ class TestNimbusTipType(unittest.TestCase):
     from pylabrobot.resources import Tip
 
     # Regular Tip (non-Hamilton) should raise
-    tip = Tip(has_filter=False, total_tip_length=50.0, maximal_volume=300.0, fitting_depth=8.0)
+    tip = Tip(
+      name="test_tip", has_filter=False, total_tip_length=50.0, maximal_volume=300.0, fitting_depth=8.0
+    )
     with self.assertRaises(ValueError) as ctx:
       _get_tip_type_from_tip(tip)
     self.assertIn("HamiltonTip", str(ctx.exception))
@@ -688,6 +698,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, rails=10)
 
     self.tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=59.9,
       maximal_volume=300.0,
