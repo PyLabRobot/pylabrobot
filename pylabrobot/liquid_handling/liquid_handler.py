@@ -1677,6 +1677,8 @@ class LiquidHandler(Resource, Machine):
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    else:  # List[Well]
+      containers = resource
 
     if len(containers) == 1:  # single container
       container = containers[0]
@@ -1818,6 +1820,8 @@ class LiquidHandler(Resource, Machine):
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    else:  # List[Well]
+      containers = resource
 
     # if we have enough liquid in the tip, remove it from the tip tracker for accounting.
     # if we do not (for example because the plunger was up on tip pickup), and we
