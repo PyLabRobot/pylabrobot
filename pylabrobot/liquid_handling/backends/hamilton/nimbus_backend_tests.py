@@ -154,7 +154,11 @@ class TestNimbusTipType(unittest.TestCase):
 
     # Regular Tip (non-Hamilton) should raise
     tip = Tip(
-      name="test_tip", has_filter=False, total_tip_length=50.0, maximal_volume=300.0, fitting_depth=8.0
+      name="test_tip",
+      has_filter=False,
+      total_tip_length=50.0,
+      maximal_volume=300.0,
+      fitting_depth=8.0,
     )
     with self.assertRaises(ValueError) as ctx:
       _get_tip_type_from_tip(tip)
