@@ -145,7 +145,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   """Test that USB data is parsed correctly."""
 
   async def asyncSetUp(self):
-    self.star = STARBackend(read_timeout=2, packet_read_timeout=1)
+    self.star = STARBackend(read_timeout=1, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
     self.star.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
