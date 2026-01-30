@@ -6320,7 +6320,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Measure tip presence on all single channels using their sleeve sensors.
 
     Returns:
-      List of integers where 0 = no tip, 1 = Tip present (for each channel)
+      List of integers where 0 = no tip, 1 = tip present (for each channel)
     """
 
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
