@@ -1,3 +1,59 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyLabRobot"
+description = "A hardware agnostic platform for lab automation"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dynamic = ["version"]
+dependencies = ["typing_extensions==4.15.0"]
+
+[project.optional-dependencies]
+fw = ["pyserial==3.5", "pyusb==1.3.1", "libusb-package==1.0.26.1"]
+http = ["requests==2.32.5", "types-requests==2.32.4.20250913"]
+plate_reading = ["pylibftdi==0.23.0"]
+websockets = ["websockets==15.0.1"]
+visualizer = ["websockets==15.0.1"]
+opentrons = ["opentrons-http-api-client"]
+server = ["flask[async]==3.1.2"]
+inheco = ["hid==1.0.8"]
+agrow = ["pymodbus==3.6.8"]
+dev = [
+  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,server,inheco,agrow]",
+  "pytest==8.4.2",
+  "pytest-timeout==2.4.0",
+  "mypy==1.18.2",
+  "responses==0.25.8",
+  "sphinx-reredirects==0.1.6",
+  "ruff==0.2.1",
+  "nbconvert==7.16.6",
+  "sphinx-sitemap==2.8.0",
+  "pydata-sphinx-theme==0.16.1",
+  "myst_nb==1.3.0",
+  "sphinx_copybutton==0.5.2",
+]
+all = ["PyLabRobot[dev]"]
+
+[project.scripts]
+lh-server = "pylabrobot.server.liquid_handling_server:main"
+plr-gui = "pylabrobot.gui.gui:main"
+
+[project.urls]
+Homepage = "https://github.com/pylabrobot/pylabrobot"
+
+[tool.setuptools.dynamic]
+version = {file = "pylabrobot/version.txt"}
+
+[tool.setuptools.packages.find]
+namespaces = false
+exclude = ["tools*", "docs*"]
+
+[tool.setuptools.package-data]
+pylabrobot = ["visualizer/*", "version.txt"]
+
 [tool.ruff]
 line-length = 100
 indent-width = 2
@@ -5,3 +61,52 @@ indent-width = 2
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.9"
+
+[tool.pixi.pypi-dependencies]
+pylabrobot = { path = ".", editable = true }
+
+[tool.pixi.feature.fw.dependencies]
+libusb = "*"
+
+[tool.pixi.feature.fw.pypi-dependencies]
+pylabrobot = { path = ".", editable = true, extras = ["fw"] }
+
+[tool.pixi.feature.plate-reading.dependencies]
+libftdi = "*"
+
+[tool.pixi.feature.plate-reading.pypi-dependencies]
+pylabrobot = { path = ".", editable = true, extras = ["plate_reading"] }
+
+[tool.pixi.feature.inheco.dependencies]
+libhidapi = "*"
+
+[tool.pixi.feature.inheco.pypi-dependencies]
+pylabrobot = { path = ".", editable = true, extras = ["inheco"] }
+
+[tool.pixi.feature.dev.dependencies]
+libusb = "*"
+libftdi = "*"
+libhidapi = "*"
+
+[tool.pixi.feature.dev.pypi-dependencies]
+pylabrobot = { path = ".", editable = true, extras = ["dev"] }
+
+[tool.pixi.tasks]
+test = "python -m pytest -s -v"
+lint = "python -m ruff check pylabrobot"
+format = { cmd = "python -m ruff format pylabrobot && python -m ruff check --fix pylabrobot --select I" }
+format-check = { cmd = "python -m ruff format --check pylabrobot && python -m ruff check pylabrobot --select I" }
+typecheck = "python -m mypy pylabrobot --check-untyped-defs"
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+fw = { features = ["fw"], solve-group = "fw" }
+plate-reading = { features = ["plate-reading"], solve-group = "plate-reading" }
+inheco = { features = ["inheco"], solve-group = "inheco" }
+dev = { features = ["dev"], solve-group = "dev" }
