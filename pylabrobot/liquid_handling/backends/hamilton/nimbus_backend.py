@@ -1458,17 +1458,7 @@ class NimbusBackend(HamiltonTCPBackend):
     if any(op.tip.fitting_depth != fitting_depth for op in ops):
       raise ValueError("All tips must have the same fitting_depth")
 
-    # These offsets are to match values that were modelled initially.
-    # They are based on the old tip rack model. They might not be correct. The new model predicts different values.
-    tip_type = _get_tip_type_from_tip(ops[0].tip)
-    if tip_type in (NimbusTipType.TIP_50UL, NimbusTipType.TIP_50UL_FILTER):
-      tip_offset = 0.3
-    elif tip_type in (NimbusTipType.HIGH_VOLUME_1000UL, NimbusTipType.HIGH_VOLUME_1000UL_FILTER):
-      tip_offset = 0.0
-    else:  # 10uL and 300uL
-      tip_offset = -0.2
-
-    begin_position_mm = max_z_hamilton + collar_height + tip_offset
+    begin_position_mm = max_z_hamilton + collar_height
     end_position_mm = begin_position_mm - fitting_depth
 
     begin_tip_pick_up_process = self._fill_by_channels(
@@ -1630,17 +1620,7 @@ class NimbusBackend(HamiltonTCPBackend):
       if any(op.tip.collar_height != collar_height for op in ops):
         raise ValueError("All tips must have the same collar_height")
 
-      # These offsets are to match values that were modelled initially.
-      # They are based on the old tip rack model. They might not be correct. The new model predicts different values.
-      tip_type = _get_tip_type_from_tip(ops[0].tip)
-      if tip_type in (NimbusTipType.TIP_50UL, NimbusTipType.TIP_50UL_FILTER):
-        tip_offset = 0.3
-      elif tip_type in (NimbusTipType.HIGH_VOLUME_1000UL, NimbusTipType.HIGH_VOLUME_1000UL_FILTER):
-        tip_offset = 0.0
-      else:  # 10uL and 300uL
-        tip_offset = -0.2
-
-      end_position_mm = max_z_hamilton - total_tip_length + collar_height + tip_offset
+      end_position_mm = max_z_hamilton - total_tip_length + collar_height
       begin_position_mm = end_position_mm + 10.0  # I think 10mm might be the collar height
 
       begin_tip_deposit_process = self._fill_by_channels(
