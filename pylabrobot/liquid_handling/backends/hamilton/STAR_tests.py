@@ -987,7 +987,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_288_C00(name="tip carrier")
     tip_car[0] = tr = hamilton_96_tiprack_1000uL(name="tips_01").rotated(z=90)
     assert tr.rotation.z == 90
-    assert tr.location == Coordinate(82.6, 0, 0)
+    assert tr.location == Coordinate(82.6, 0, -6.1)
     deck.assign_child_resource(tip_car, rails=2)
     await lh.setup()
 
