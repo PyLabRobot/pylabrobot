@@ -34,8 +34,9 @@ class InfiniteScanConfig:
   counts_per_mm_y: float = 1_000
 
 
-def _integration_value_to_seconds(value: int) -> float:
-  return value / 1_000_000.0 if value >= 1000 else value / 1000.0
+def _integration_microseconds_to_seconds(value: int) -> float:
+  # DLL/UI indicates integration time is stored in microseconds; UI displays ms by dividing by 1000.
+  return value / 1_000_000.0
 
 
 def _is_abs_calibration_len(payload_len: int) -> bool:
@@ -805,8 +806,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
       decoder = _LuminescenceRunDecoder(
         len(scan_wells),
-        dark_integration_s=_integration_value_to_seconds(dark_integration),
-        meas_integration_s=_integration_value_to_seconds(meas_integration),
+        dark_integration_s=_integration_microseconds_to_seconds(dark_integration),
+        meas_integration_s=_integration_microseconds_to_seconds(meas_integration),
       )
 
       await self._run_scan(
