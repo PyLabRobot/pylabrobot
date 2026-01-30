@@ -1830,7 +1830,7 @@ class LiquidHandler(Resource, Machine):
     else:
       raise TypeError(
         f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
-        f" for {resource}"
+        f"for {resource}"
       )
 
     # if we have enough liquid in the tip, remove it from the tip tracker for accounting.
