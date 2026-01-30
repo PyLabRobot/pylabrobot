@@ -6310,13 +6310,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     warnings.warn(  # TODO: remove 2026-06
       "`request_tip_presence` is deprecated and will be "
-      "removed in 2026-06 use `channel_measure_tip_presence` instead.",
+      "removed in 2026-06 use `channels_sense_tip_presence` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
-    return await self.channels_measure_tip_presence()
+    return await self.channels_sense_tip_presence()
 
-  async def channels_measure_tip_presence(self) -> List[int]:
+  async def channels_sense_tip_presence(self) -> List[int]:
     """Measure tip presence on all single channels using their sleeve sensors.
 
     Returns:
