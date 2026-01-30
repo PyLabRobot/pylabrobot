@@ -31,7 +31,6 @@ from pylabrobot.resources import (
   no_tip_tracking,
   set_tip_tracking,
 )
-from pylabrobot.resources.revvity.plates import Revvity_384_wellplate_28ul_Ub
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.errors import (
   HasTipError,
@@ -42,6 +41,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
+from pylabrobot.resources.revvity.plates import Revvity_384_wellplate_28ul_Ub
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
   set_volume_tracking,
