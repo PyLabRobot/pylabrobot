@@ -1677,8 +1677,13 @@ class LiquidHandler(Resource, Machine):
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
-    else:  # List[Well]
+    elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
       containers = resource
+    else:
+      raise TypeError(
+        f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
+        f" for {resource}"
+      )
 
     if len(containers) == 1:  # single container
       container = containers[0]
