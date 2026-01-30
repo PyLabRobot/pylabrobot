@@ -33,14 +33,14 @@ def hamilton_universal_rack(name: str, make_tip, with_tips: bool = True) -> Embe
     size_y=82.6,
     size_z=20.0,
     model=hamilton_universal_rack.__name__,
-    sinking_depth=5.90 + 0.2,
+    sinking_depth=6.0,  # sinking depth
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.2,
       dy=5.3,
-      dz=7.7,  # depth of hole
+      dz=7.7 - 0.2,  # depth of hole
       item_dx=9.0,
       item_dy=9.0,
       size_x=9.0,
