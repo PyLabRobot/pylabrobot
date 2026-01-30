@@ -1924,8 +1924,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         inconsistent_channels.append(
           f"Channel {ch}: {len(non_none)} replicates detected liquid, {none_count} did not"
         )
-        # Use the non-None values for now, but we'll raise an error after checking all channels
-        absolute_liquid_heights.append(sum(non_none) / len(non_none))
       elif len(non_none) > 0:
         # All replicates found liquid - compute average
         absolute_liquid_heights.append(sum(non_none) / len(non_none))
