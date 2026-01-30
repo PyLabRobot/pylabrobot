@@ -27,7 +27,14 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.barcode import Barcode
-from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.hamilton import (
+  STARLetDeck,
+  hamilton_96_tiprack_10uL,
+  hamilton_96_tiprack_50uL,
+  hamilton_96_tiprack_300uL,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_1000uL,
+)
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -1373,3 +1380,59 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call("C0ZAid0015"),
       ]
     )
+
+
+class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+  """Test tip pickup and drop z positions for all tip sizes."""
+
+  async def asyncSetUp(self):
+    self.star = STARCommandCatcher()
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.star, deck=self.deck)
+    self.tip_car = TIP_CAR_480_A00(name="tip_car")
+    self.deck.assign_child_resource(self.tip_car, rails=15)
+    await self.lh.setup()
+    set_tip_tracking(enabled=False)
+
+  async def asyncTearDown(self):
+    await self.lh.stop()
+
+  async def test_10uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_10uL(name="tips")
+    self.star.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2224tz2164", self.star.commands[-1])
+    self.star.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp2224tz2144", self.star.commands[-1])
+    tip_rack.unassign()
+
+  async def test_50uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_50uL(name="tips")
+    self.star.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    self.star.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    tip_rack.unassign()
+
+  async def test_300uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_300uL(name="tips")
+    self.star.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    self.star.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    tip_rack.unassign()
+
+  async def test_1000uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_1000uL(name="tips")
+    self.star.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2264tz2164", self.star.commands[-1])
+    self.star.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp2264tz2184", self.star.commands[-1])
+    tip_rack.unassign()
