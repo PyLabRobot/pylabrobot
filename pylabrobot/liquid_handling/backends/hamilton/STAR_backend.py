@@ -7652,7 +7652,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Returns:
       dictionary with key qh:
-        qh: 0 = no tips, 1 = TipRack are picked up
+        qh: 0 = no tips, 1 = tips are picked up
     """
     warnings.warn(  # TODO: remove 2026-06
       "`request_tip_presence_in_core_96_head` is deprecated and will be "
@@ -7672,7 +7672,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Returns:
       0 = no tips
-      1 = TipRack are picked up
+      1 = firmware believes tips are on the 96-head
     """
     resp = await self.send_command(module="C0", command="QH", fmt="qh#")
 
