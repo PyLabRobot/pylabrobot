@@ -352,7 +352,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_pickup_01(self):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2266 2266&tz2166 2166&th2450 2450&"
+      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2264 2264&tz2164 2164&th2450 2450&"
       "te2450 2450&ba0 0&td1 1&",
       PICKUP_TIP_FORMAT,
     )
@@ -361,7 +361,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.test_tip_pickup_01()  # pick up tips first
     await self.lh.drop_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1414 1414&tz1314 1314&th2450 2450&"
+      "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1413 1413&tz1313 1313&th2450 2450&"
       "te2450 2450&ts0td0 0&",
       DROP_TIP_FORMAT,
     )
@@ -377,7 +377,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.test_small_tip_pickup()  # pick up tips first
     await self.lh.drop_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
-      "A1PMTRid0012xp4329 0&yp2418 0&tp2024&tz1924&th2450&te2450&tm1 0&ts0td0&",
+      "A1PMTRid0012xp4329 0&yp2418 0&tp2025&tz1925&th2450&te2450&tm1 0&ts0td0&",
       DROP_TIP_FORMAT,
     )
 
