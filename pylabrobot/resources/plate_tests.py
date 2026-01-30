@@ -29,7 +29,8 @@ class TestLid(unittest.TestCase):
     self.assertEqual(plate.lid.get_absolute_size_x(), 1)
     self.assertEqual(plate.lid.get_absolute_location(), Coordinate(0, 0, 5))
 
-  def test_add_lid(self):
+  def _create_plate_with_lid(self):
+    """Helper to create a plate with a lid."""
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     lid = Lid(
       name="another_lid",
@@ -41,8 +42,12 @@ class TestLid(unittest.TestCase):
     plate.assign_child_resource(lid, location=Coordinate(0, 0, 0))
     return plate
 
+  def test_add_lid(self):
+    plate = self._create_plate_with_lid()
+    self.assertIsNotNone(plate.lid)
+
   def test_add_lid_with_existing_lid(self):
-    plate = self.test_add_lid()
+    plate = self._create_plate_with_lid()
     another_lid = Lid(
       name="another_lid",
       size_x=plate.get_size_x(),
@@ -53,7 +58,7 @@ class TestLid(unittest.TestCase):
     with self.assertRaises(ValueError):
       plate.assign_child_resource(another_lid, location=Coordinate(0, 0, 0))
 
-    plate = self.test_add_lid()
+    plate = self._create_plate_with_lid()
     plate.unassign_child_resource(plate.lid)
     self.assertIsNone(plate.lid)
 

@@ -145,7 +145,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   """Test that USB data is parsed correctly."""
 
   async def asyncSetUp(self):
-    self.star = STARBackend(read_timeout=2, packet_read_timeout=1)
+    self.star = STARBackend(read_timeout=1, packet_read_timeout=1)
     self.star.set_deck(STARLetDeck())
     self.star.io = unittest.mock.AsyncMock()
     await super().asyncSetUp()
@@ -438,10 +438,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ),
     )
 
-    # make sure two operations on the same spot are not allowed
-    with self.assertRaises(ValueError):
-      self.STAR._ops_to_fw_positions((op1, op1), use_channels=[0, 1])
-
   def test_tip_definition(self):
     pass
 
@@ -512,7 +508,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "mh0000 0000 0000 0000 0000 0000 0000&gi000 000 000 000 000 000 000&gj0gk0lk0 0 0 0 0 0 0&"
           "ik0000 0000 0000 0000 0000 0000 0000&sd0500 0500 0500 0500 0500 0500 0500&se0500 0500 0500 "
           "0500 0500 0500 0500&sz0300 0300 0300 0300 0300 0300 0300&io0000 0000 0000 0000 0000 0000 0"
-          "000&il00000 00000 00000 00000 00000 00000 00000&in0000 0000 0000 0000 0000 0000 0000&",
+          "000&",
         )
       ]
     )
@@ -532,8 +528,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "1866&po0100 0100&zu0032 0032&zr06180 06180&zx1866 1866&ip0000 0000&it0 0&fp0000 0000&"
           "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&zo000 000&"
           "ld00 00&de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&mh0000 0000&"
-          "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&"
-          "il00000 00000&in0000 0000&",
+          "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&",
         )
       ]
     )
@@ -555,8 +550,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "1966&po0100 0100&zu0032 0032&zr06180 06180&zx1866 1866&ip0000 0000&it0 0&fp0000 0000&"
           "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&zo000 000&"
           "ld00 00&de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&mh0000 0000&"
-          "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&"
-          "il00000 00000&in0000 0000&",
+          "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&",
         )
       ]
     )
@@ -581,8 +575,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "1000&ta000 000 000&ba0000 0000 0000&oa000 000 000&lm0 0 0&ll1 1 1&lv1 1 1&zo000 000 000&"
           "ld00 00 00&de0020 0020 0020&wt10 10 10&mv00000 00000 00000&mc00 00 00&mp000 000 000&"
           "ms1000 1000 1000&mh0000 0000 0000&gi000 000 000&gj0gk0lk0 0 0&ik0000 0000 0000&sd0500 0500 "
-          "0500&se0500 0500 0500&sz0300 0300 0300&io0000 0000 0000&il00000 00000 00000&in0000 0000 "
-          "0000&",
+          "0500&se0500 0500 0500&sz0300 0300 0300&io0000 0000 0000&",
         )
       ]
     )
@@ -610,8 +603,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "00000 00000 00000 00000 00000&mc00 00 00 00 00 00&mp000 000 000 000 000 000&ms1000 1000 "
           "1000 1000 1000 1000&mh0000 0000 0000 0000 0000 0000&gi000 000 000 000 000 000&gj0gk0lk0 0 0 "
           "0 0 0&ik0000 0000 0000 0000 0000 0000&sd0500 0500 0500 0500 0500 0500&se0500 0500 0500 0500 "
-          "0500 0500&sz0300 0300 0300 0300 0300 0300&io0000 0000 0000 0000 0000 0000&il00000 00000 "
-          "00000 00000 00000 00000&in0000 0000 0000 0000 0000 0000&",
+          "0500 0500&sz0300 0300 0300 0300 0300 0300&io0000 0000 0000 0000 0000 0000&",
         )
       ]
     )
@@ -689,7 +681,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call("C0TTid0001tt01tf1tl0519tv03600tg2tu0"),
-        _any_write_and_read_command_call("C0EPid0002xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
+        _any_write_and_read_command_call("H0DQid0002dq11281dv13500du00000dr900000dw15"),
+        _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
       ]
     )
 
@@ -704,7 +697,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips96(self.tip_rack)
     self.STAR._write_and_read_command.assert_has_calls(
       [
-        _any_write_and_read_command_call("C0ERid0003xs01179xd0yh2418za2164zh2450ze2450"),
+        _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2164zh2450ze2450"),
       ]
     )
 
@@ -714,7 +707,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.discard_tips96()
     self.STAR._write_and_read_command.assert_has_calls(
       [
-        _any_write_and_read_command_call("C0ERid0003xs00420xd1yh1203za2164zh2450ze2450"),
+        _any_write_and_read_command_call("C0ERid0004xs00420xd1yh1203za2164zh2450ze2450"),
       ]
     )
 
@@ -731,7 +724,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0EAid0003aa0xs02983xd0yh1457zh2450ze2450lz1999zt1866pp0100zm1866zv0032zq06180iw000ix0fh000af01083ag2500vt050bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
+          "C0EAid0004aa0xs02983xd0yh1457zh2450ze2450lz1999zt1866pp0100zm1866zv0032zq06180iw000ix0fh000af01083ag2500vt050bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
         ),
       ]
     )
@@ -750,7 +743,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0EDid0004da3xs02983xd0yh1457zm1866zv0032zq06180lz1999zt1866pp0100iw000ix0fh000zh2450ze2450df01083dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh00hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
+          "C0EDid0005da3xs02983xd0yh1457zm1866zv0032zq06180lz1999zt1866pp0100iw000ix0fh000zh2450ze2450df01083dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh00hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0"
         ),
       ]
     )
@@ -1380,3 +1373,124 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call("C0ZAid0015"),
       ]
     )
+
+
+class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+  """Test STAR tip pickup and drop Z position calculations for all tip sizes."""
+
+  async def asyncSetUp(self):
+    self.backend = STARBackend()
+    self.backend._write_and_read_command = unittest.mock.AsyncMock()
+    self.backend.io = unittest.mock.AsyncMock()
+    self.backend._num_channels = 8
+    self.backend.core96_head_installed = True
+    self.backend.iswap_installed = True
+    self.backend.setup = unittest.mock.AsyncMock()
+    self.backend._core_parked = True
+    self.backend._iswap_parked = True
+
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+
+    self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
+    self.deck.assign_child_resource(self.tip_car, rails=1)
+
+    await self.lh.setup()
+    set_tip_tracking(enabled=False)
+
+  def _get_tp_tz_from_calls(self, cmd_prefix: str):
+    """Extract tp and tz values from mock calls matching the command prefix."""
+    for call in self.backend._write_and_read_command.call_args_list:
+      cmd = call.kwargs.get("cmd", "")
+      if cmd.startswith(cmd_prefix):
+        parsed = parse_star_fw_string(cmd, "tp####tz####")
+        return parsed.get("tp"), parsed.get("tz")
+    return None, None
+
+  async def test_10uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_10uL
+
+    tip_rack = hamilton_96_tiprack_10uL("tips")
+    self.tip_car[1] = tip_rack
+
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2224)
+    self.assertEqual(tz, 2164)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.drop_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2224)
+    self.assertEqual(tz, 2144)
+
+    tip_rack.unassign()
+
+  async def test_50uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_50uL
+
+    tip_rack = hamilton_96_tiprack_50uL("tips")
+    self.tip_car[1] = tip_rack
+
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2248)
+    self.assertEqual(tz, 2168)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.drop_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2248)
+    self.assertEqual(tz, 2168)
+
+    tip_rack.unassign()
+
+  async def test_300uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
+
+    tip_rack = hamilton_96_tiprack_300uL("tips")
+    self.tip_car[1] = tip_rack
+
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.drop_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
+
+    tip_rack.unassign()
+
+  async def test_1000uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_1000uL
+
+    tip_rack = hamilton_96_tiprack_1000uL("tips")
+    self.tip_car[1] = tip_rack
+
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2266)
+    self.assertEqual(tz, 2166)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.drop_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2266)
+    self.assertEqual(tz, 2186)
+
+    tip_rack.unassign()

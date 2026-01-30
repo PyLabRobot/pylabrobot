@@ -8,7 +8,7 @@ from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError
-from pylabrobot.resources.hamilton.tip_creators import standard_volume_tip_with_filter
+from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_300uL_filter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
@@ -29,7 +29,7 @@ STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
 
 
-def _rails_for_x_coordinate(x: float) -> int:
+def rails_for_x_coordinate(x: float) -> int:
   """Convert an x coordinate to a rail identifier."""
   return int((x - 100.0) / _RAILS_WIDTH) + 1
 
@@ -302,7 +302,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print rail
       if depth == 0:
-        rails = _rails_for_x_coordinate(resource.get_location_wrt(self).x)
+        rails = rails_for_x_coordinate(resource.get_location_wrt(self).x)
         r_summary += f"({rails})".ljust(rail_column_length)
       else:
         r_summary += " " * rail_column_length
@@ -484,7 +484,7 @@ class HamiltonSTARDeck(HamiltonDeck):
           size_x=9.0,
           size_y=9.0,
           size_z=0,
-          make_tip=standard_volume_tip_with_filter,
+          make_tip=hamilton_tip_300uL_filter,
         )
         for i in range(8)
       ]

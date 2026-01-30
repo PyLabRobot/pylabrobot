@@ -210,6 +210,50 @@ class Socket(IOBase):
       )
       return data
 
+  async def read_exact(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
+    """Read exactly num_bytes, blocking until all bytes are received.
+
+    Args:
+      num_bytes: The exact number of bytes to read.
+      timeout: Maximum time to wait for data before raising a timeout.
+        Note: The timeout is applied per-chunk read operation, not cumulatively
+        for the entire read. For small reads (typical use case), this is acceptable.
+        For large reads, consider that the total time may exceed the timeout value.
+
+    Returns:
+      Exactly num_bytes of data.
+
+    Raises:
+      ConnectionError: If the connection is closed before num_bytes are read.
+      TimeoutError: If timeout is reached before num_bytes are read.
+    """
+    if self._reader is None:
+      raise RuntimeError("Socket not set up; call setup() first")
+    timeout = self._read_timeout if timeout is None else timeout
+    data = bytearray()
+    async with self._read_lock:
+      while len(data) < num_bytes:
+        remaining = num_bytes - len(data)
+        try:
+          chunk = await asyncio.wait_for(self._reader.read(remaining), timeout=timeout)
+        except asyncio.TimeoutError as exc:
+          logger.error("read_exact timeout: %r", exc)
+          raise TimeoutError(f"Timeout while reading from socket after {timeout} seconds") from exc
+        if len(chunk) == 0:
+          raise ConnectionError("Connection closed before num_bytes are read")
+        data.extend(chunk)
+
+      result = bytes(data)
+      logger.log(LOG_LEVEL_IO, "[%s:%d] read_exact %s", self._host, self._port, result.hex())
+      capturer.record(
+        SocketCommand(
+          device_id=self._unique_id,
+          action="read_exact",
+          data=result.hex(),
+        )
+      )
+      return result
+
   async def read_until_eof(self, chunk_size: int = 1024, timeout: Optional[float] = None) -> bytes:
     """Read until EOF is reached.
     Do not retry on timeouts.
@@ -341,6 +385,20 @@ class SocketValidator(Socket):
         f"Expected socket readuntil command from {self._unique_id}, "
         f"got {next_command.module} {next_command.action} from {next_command.device_id}"
         f" (expected separator {expected_sep!r}, got {separator!r})"
+      )
+    return bytes.fromhex(next_command.data)
+
+  async def read_exact(self, *args, **kwargs) -> bytes:
+    """Return captured read_exact data for validation."""
+    next_command = SocketCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "socket"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "read_exact"
+    ):
+      raise ValidationError(
+        f"Expected socket read_exact command from {self._unique_id}, "
+        f"got {next_command.module} {next_command.action} from {next_command.device_id}"
       )
     return bytes.fromhex(next_command.data)
 

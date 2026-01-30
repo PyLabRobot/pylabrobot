@@ -6,20 +6,20 @@ from pylabrobot.resources.tip_rack import (
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 from .tip_creators import (
-  fifty_ul_tip_no_filter,
-  fifty_ul_tip_with_filter,
-  five_ml_tip,
-  four_ml_tip_with_filter,
-  high_volume_tip_no_filter,
-  high_volume_tip_with_filter,
-  low_volume_tip_no_filter,
-  low_volume_tip_with_filter,
-  slim_standard_volume_tip_with_filter,
-  standard_volume_tip_no_filter,
-  standard_volume_tip_with_filter,
-  ultrawide_high_volume_tip_with_filter,
-  ultrawide_standard_volume_tip_with_filter,
-  wide_high_volume_tip_with_filter,
+  hamilton_tip_10uL,
+  hamilton_tip_10uL_filter,
+  hamilton_tip_50uL,
+  hamilton_tip_50uL_filter,
+  hamilton_tip_300uL,
+  hamilton_tip_300uL_filter,
+  hamilton_tip_300uL_filter_slim,
+  hamilton_tip_300uL_filter_ultrawide,
+  hamilton_tip_1000uL,
+  hamilton_tip_1000uL_filter,
+  hamilton_tip_1000uL_filter_ultrawide,
+  hamilton_tip_1000uL_filter_wide,
+  hamilton_tip_4000uL_filter,
+  hamilton_tip_5000uL,
 )
 
 # # # # # # # # # # 10 ul Tips # # # # # # # # # #
@@ -47,7 +47,7 @@ def hamilton_96_tiprack_10uL_filter(name: str, with_tips: bool = True) -> TipRac
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=low_volume_tip_with_filter,
+      make_tip=hamilton_tip_10uL_filter,
     ),
     with_tips=with_tips,
   )
@@ -75,7 +75,7 @@ def hamilton_96_tiprack_10uL(name: str, with_tips: bool = True) -> TipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=low_volume_tip_no_filter,
+      make_tip=hamilton_tip_10uL,
     ),
     with_tips=with_tips,
   )
@@ -105,7 +105,7 @@ def hamilton_96_tiprack_50uL_filter(name: str, with_tips: bool = True) -> TipRac
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=fifty_ul_tip_with_filter,
+      make_tip=hamilton_tip_50uL_filter,
     ),
     with_tips=with_tips,
   )
@@ -132,7 +132,7 @@ def hamilton_96_tiprack_50uL(name: str, with_tips: bool = True) -> TipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=fifty_ul_tip_no_filter,
+      make_tip=hamilton_tip_50uL,
     ),
     with_tips=with_tips,
   )
@@ -162,7 +162,7 @@ def hamilton_96_tiprack_50uL_NTR(name: str, with_tips: bool = True) -> NestedTip
       item_dy=9.0,
       size_x=8.15,
       size_y=8.15,
-      make_tip=fifty_ul_tip_no_filter,
+      make_tip=hamilton_tip_50uL,
     ),
     with_tips=with_tips,
   )
@@ -192,7 +192,7 @@ def hamilton_96_tiprack_300uL_filter(name: str, with_tips: bool = True) -> TipRa
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=standard_volume_tip_with_filter,
+      make_tip=hamilton_tip_300uL_filter,
     ),
     with_tips=with_tips,
   )
@@ -219,7 +219,7 @@ def hamilton_96_tiprack_300uL(name: str, with_tips: bool = True) -> TipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=standard_volume_tip_no_filter,
+      make_tip=hamilton_tip_300uL,
     ),
     with_tips=with_tips,
   )
@@ -246,7 +246,7 @@ def hamilton_96_tiprack_300uL_filter_slim(name: str, with_tips: bool = True) -> 
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=slim_standard_volume_tip_with_filter,
+      make_tip=hamilton_tip_300uL_filter_slim,
     ),
     with_tips=with_tips,
   )
@@ -273,7 +273,7 @@ def hamilton_96_tiprack_300uL_filter_ultrawide(name: str, with_tips: bool = True
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=ultrawide_standard_volume_tip_with_filter,
+      make_tip=hamilton_tip_300uL_filter_ultrawide,
     ),
     with_tips=with_tips,
   )
@@ -304,7 +304,7 @@ def hamilton_96_tiprack_1000uL_filter(name: str, with_tips: bool = True) -> TipR
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=high_volume_tip_with_filter,
+      make_tip=hamilton_tip_1000uL_filter,
     ),
     with_tips=with_tips,
   )
@@ -331,7 +331,7 @@ def hamilton_96_tiprack_1000uL(name: str, with_tips: bool = True) -> TipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=high_volume_tip_no_filter,
+      make_tip=hamilton_tip_1000uL,
     ),
     with_tips=with_tips,
   )
@@ -369,7 +369,7 @@ def hamilton_96_tiprack_1000uL_filter_wide(name: str, with_tips: bool = True) ->
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=wide_high_volume_tip_with_filter,
+      make_tip=hamilton_tip_1000uL_filter_wide,
     ),
     with_tips=with_tips,
   )
@@ -407,7 +407,7 @@ def hamilton_96_tiprack_1000uL_filter_ultrawide(name: str, with_tips: bool = Tru
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=ultrawide_high_volume_tip_with_filter,
+      make_tip=hamilton_tip_1000uL_filter_ultrawide,
     ),
     with_tips=with_tips,
   )
@@ -437,7 +437,7 @@ def hamilton_24_tiprack_4000uL_filter(name: str, with_tips: bool = True) -> TipR
       item_dy=18.0,
       size_x=18.0,
       size_y=18.0,
-      make_tip=four_ml_tip_with_filter,
+      make_tip=hamilton_tip_4000uL_filter,
     ),
     with_tips=with_tips,
   )
@@ -467,7 +467,7 @@ def hamilton_24_tiprack_5000uL(name: str, with_tips: bool = True) -> TipRack:
       item_dy=18.0,
       size_x=18.0,
       size_y=18.0,
-      make_tip=five_ml_tip,
+      make_tip=hamilton_tip_5000uL,
     ),
     with_tips=with_tips,
   )
