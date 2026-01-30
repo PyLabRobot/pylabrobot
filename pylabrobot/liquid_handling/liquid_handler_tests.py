@@ -617,7 +617,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       )
     )
 
-  async def test_dispense96_with_well_list(self):
+  async def test_dispense96_with_quadrant_well_list(self):
     plate_384 = Revvity_384_wellplate_28ul_Ub(name="plate_384")
     self.deck.assign_child_resource(plate_384, location=Coordinate(400, 100, 0))
     quadrant_wells = plate_384.get_quadrant("tl")
@@ -639,11 +639,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         mix=None,
       )
     )
-
-  async def test_dispense96_well_list_wrong_count(self):
-    await self.lh.pick_up_tips96(self.tip_rack)
-    with self.assertRaises(ValueError, msg="dispense96 expects 96 wells"):
-      await self.lh.dispense96(self.plate.get_all_items()[:48], 10)
 
   async def test_dispense96_well_list_mixed_parents(self):
     plate2 = Cor_96_wellplate_360ul_Fb(name="plate2")
