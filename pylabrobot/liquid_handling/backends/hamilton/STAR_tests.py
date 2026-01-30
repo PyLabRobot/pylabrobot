@@ -750,50 +750,36 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_core_96_dispense_quadrant(self):
-    """Test that different quadrants of a 384-well plate produce different firmware positions.
+    """Test that each quadrant of a 384-well plate produces the correct firmware command.
 
-    Before the fix, all quadrants produced identical xs/yh values in the firmware command
-    because the reference well was hardcoded to A1 instead of using the actual first well
-    from the quadrant's well list.
+    Before the fix, all quadrants produced identical xs/yh values because the reference well
+    was hardcoded to A1 instead of using the actual first well from the quadrant's well list.
     """
-    import re
-
     plate_384 = Greiner_384_wellplate_28ul_Fb(name="plate_384")
     self.plt_car[2] = plate_384
 
     await self.lh.pick_up_tips96(self.tip_rack2)
-    # aspirate from the 96-well plate so we have volume to dispense
     if self.plate.lid is not None:
       self.plate.lid.unassign()
     await self.lh.aspirate96(self.plate, volume=100, blow_out=True)
 
-    positions = {}
-    for quadrant in ["tl", "tr", "bl", "br"]:
+    expected = {
+      "tl": "C0EDid0005da2xs02959xd0yh3400zm1912zv0032zq06180lz1999zt1912pp0100iw000ix0fh000zh2450ze2450df00060dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh50hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0",
+      "tr": "C0EDid0006da2xs03004xd0yh3400zm1912zv0032zq06180lz1999zt1912pp0100iw000ix0fh000zh2450ze2450df00060dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh50hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0",
+      "bl": "C0EDid0007da2xs02959xd0yh3355zm1912zv0032zq06180lz1999zt1912pp0100iw000ix0fh000zh2450ze2450df00060dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh50hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0",
+      "br": "C0EDid0008da2xs03004xd0yh3355zm1912zv0032zq06180lz1999zt1912pp0100iw000ix0fh000zh2450ze2450df00060dg1200es0050ev000vt050bv00000cm0cs1ej00bs0020wh50hv00000hc00hp000mj000hs1200cwFFFFFFFFFFFFFFFFFFFFFFFFcr000cj0cx0",
+    }
+
+    for quadrant, expected_cmd in expected.items():
       wells = plate_384.get_quadrant(quadrant)
       self.STAR._write_and_read_command.reset_mock()
-
       with no_volume_tracking():
         await self.lh.dispense96(wells, volume=6)
-
-      dispense_call = [
-        c
-        for c in self.STAR._write_and_read_command.call_args_list
-        if c.kwargs.get("cmd", "").startswith("C0ED")
-      ][0]
-      cmd = dispense_call.kwargs["cmd"]
-      xs = int(re.search(r"xs(\d+)", cmd).group(1))
-      yh = int(re.search(r"yh(\d+)", cmd).group(1))
-      positions[quadrant] = (xs, yh)
-
-    # Same row quadrants share yh, same column quadrants share xs
-    self.assertEqual(positions["tl"][1], positions["tr"][1], "top row yh must match")
-    self.assertEqual(positions["bl"][1], positions["br"][1], "bottom row yh must match")
-    self.assertEqual(positions["tl"][0], positions["bl"][0], "left column xs must match")
-    self.assertEqual(positions["tr"][0], positions["br"][0], "right column xs must match")
-
-    # Different rows/columns must differ
-    self.assertGreater(positions["tr"][0], positions["tl"][0], "right xs > left xs")
-    self.assertLess(positions["bl"][1], positions["tl"][1], "bottom yh < top yh")
+      self.STAR._write_and_read_command.assert_has_calls(
+        [
+          _any_write_and_read_command_call(expected_cmd),
+        ]
+      )
 
   async def test_zero_volume_liquid_handling96(self):
     # just test that this does not throw an error
