@@ -6314,8 +6314,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       DeprecationWarning,
       stacklevel=2,
     )
-    return  await self.channels_measure_tip_presence()
-  
+    return await self.channels_measure_tip_presence()
+
   async def channels_measure_tip_presence(self) -> List[int]:
     """Measure tip presence on all single channels using their sleeve sensors.
 
@@ -7660,7 +7660,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       DeprecationWarning,
       stacklevel=2,
     )
-    
+
     return await self.send_command(module="C0", command="QH", fmt="qh#")
 
   async def head96_request_tip_presence(self) -> int:
@@ -7675,9 +7675,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       1 = TipRack are picked up
     """
     resp = await self.send_command(module="C0", command="QH", fmt="qh#")
-    
+
     return int(resp["qh"])
-  
+
   async def request_position_of_core_96_head(self):
     """Deprecated - use `head96_request_position` instead."""
 
