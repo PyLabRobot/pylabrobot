@@ -27,6 +27,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.barcode import Barcode
+from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
 
 from .STAR_backend import (
@@ -747,6 +748,52 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         ),
       ]
     )
+
+  async def test_core_96_dispense_quadrant(self):
+    """Test that different quadrants of a 384-well plate produce different firmware positions.
+
+    Before the fix, all quadrants produced identical xs/yh values in the firmware command
+    because the reference well was hardcoded to A1 instead of using the actual first well
+    from the quadrant's well list.
+    """
+    import re
+
+    htrf_plate = Greiner_384_wellplate_28ul_Fb(name="htrf_plate")
+    self.plt_car[2] = htrf_plate
+
+    await self.lh.pick_up_tips96(self.tip_rack2)
+    # aspirate from the 96-well plate so we have volume to dispense
+    if self.plate.lid is not None:
+      self.plate.lid.unassign()
+    await self.lh.aspirate96(self.plate, volume=100, blow_out=True)
+
+    positions = {}
+    for quadrant in ["tl", "tr", "bl", "br"]:
+      wells = htrf_plate.get_quadrant(quadrant)
+      self.STAR._write_and_read_command.reset_mock()
+
+      with no_volume_tracking():
+        await self.lh.dispense96(wells, volume=6)
+
+      dispense_call = [
+        c
+        for c in self.STAR._write_and_read_command.call_args_list
+        if c.kwargs.get("cmd", "").startswith("C0ED")
+      ][0]
+      cmd = dispense_call.kwargs["cmd"]
+      xs = int(re.search(r"xs(\d+)", cmd).group(1))
+      yh = int(re.search(r"yh(\d+)", cmd).group(1))
+      positions[quadrant] = (xs, yh)
+
+    # Same row quadrants share yh, same column quadrants share xs
+    self.assertEqual(positions["tl"][1], positions["tr"][1], "top row yh must match")
+    self.assertEqual(positions["bl"][1], positions["br"][1], "bottom row yh must match")
+    self.assertEqual(positions["tl"][0], positions["bl"][0], "left column xs must match")
+    self.assertEqual(positions["tr"][0], positions["br"][0], "right column xs must match")
+
+    # Different rows/columns must differ
+    self.assertGreater(positions["tr"][0], positions["tl"][0], "right xs > left xs")
+    self.assertLess(positions["bl"][1], positions["tl"][1], "bottom yh < top yh")
 
   async def test_zero_volume_liquid_handling96(self):
     # just test that this does not throw an error
