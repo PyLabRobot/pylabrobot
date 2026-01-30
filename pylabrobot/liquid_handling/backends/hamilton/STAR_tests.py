@@ -758,8 +758,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     """
     import re
 
-    htrf_plate = Greiner_384_wellplate_28ul_Fb(name="htrf_plate")
-    self.plt_car[2] = htrf_plate
+    plate_384 = Greiner_384_wellplate_28ul_Fb(name="plate_384")
+    self.plt_car[2] = plate_384
 
     await self.lh.pick_up_tips96(self.tip_rack2)
     # aspirate from the 96-well plate so we have volume to dispense
@@ -769,7 +769,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     positions = {}
     for quadrant in ["tl", "tr", "bl", "br"]:
-      wells = htrf_plate.get_quadrant(quadrant)
+      wells = plate_384.get_quadrant(quadrant)
       self.STAR._write_and_read_command.reset_mock()
 
       with no_volume_tracking():
