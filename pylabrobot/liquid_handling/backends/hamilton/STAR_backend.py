@@ -6308,6 +6308,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       0 = no tip, 1 = Tip in gripper (for each channel)
     """
+    warnings.warn(  # TODO: remove 2026-06
+      "`request_tip_presence` is deprecated and will be "
+      "removed in 2026-06 use `channels_sense_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.channels_sense_tip_presence()
+
+  async def channels_sense_tip_presence(self) -> List[int]:
+    """Measure tip presence on all single channels using their sleeve sensors.
+
+    Returns:
+      List of integers where 0 = no tip, 1 = tip present (for each channel)
+    """
 
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
     return cast(List[int], resp.get("rt"))
@@ -7634,13 +7648,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.10.6 Query CoRe 96 Head --------------
 
   async def request_tip_presence_in_core_96_head(self):
-    """Request Tip presence in CoRe 96 Head
+    """Deprecated - use `head96_request_tip_presence` instead.
 
     Returns:
-      qh: 0 = no tips, 1 = TipRack are picked up
+      dictionary with key qh:
+        qh: 0 = no tips, 1 = tips are picked up
     """
+    warnings.warn(  # TODO: remove 2026-06
+      "`request_tip_presence_in_core_96_head` is deprecated and will be "
+      "removed in 2026-06 use `head96_request_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
 
     return await self.send_command(module="C0", command="QH", fmt="qh#")
+
+  async def head96_request_tip_presence(self) -> int:
+    """Request Tip presence on the 96-Head
+
+    Note: this command requests this information from the STAR(let)'s
+      internal memory.
+      It does not directly sense whether tips are present.
+
+    Returns:
+      0 = no tips
+      1 = firmware believes tips are on the 96-head
+    """
+    resp = await self.send_command(module="C0", command="QH", fmt="qh#")
+
+    return int(resp["qh"])
 
   async def request_position_of_core_96_head(self):
     """Deprecated - use `head96_request_position` instead."""
