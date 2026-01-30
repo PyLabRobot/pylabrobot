@@ -9,6 +9,8 @@ from pylabrobot.resources import (
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
   hamilton_96_tiprack_10uL,
+  hamilton_96_tiprack_50uL,
+  hamilton_96_tiprack_300uL,
   hamilton_96_tiprack_1000uL,
   set_tip_tracking,
 )
@@ -570,3 +572,59 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "te": "int",
       },
     )
+
+
+class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+  """Test tip pickup and drop z positions for all tip sizes."""
+
+  async def asyncSetUp(self):
+    self.vantage = VantageCommandCatcher()
+    self.deck = VantageDeck(size=1.3)
+    self.lh = LiquidHandler(self.vantage, deck=self.deck)
+    self.tip_car = TIP_CAR_480_A00(name="tip_car")
+    self.deck.assign_child_resource(self.tip_car, rails=15)
+    await self.lh.setup()
+    set_tip_tracking(enabled=False)
+
+  async def asyncTearDown(self):
+    await self.lh.stop()
+
+  async def test_10uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_10uL(name="tips")
+    self.vantage.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2224&tz2164", self.vantage.commands[-1])
+    self.vantage.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp2025&tz1925", self.vantage.commands[-1])
+    tip_rack.unassign()
+
+  async def test_50uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_50uL(name="tips")
+    self.vantage.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2244&tz2164", self.vantage.commands[-1])
+    self.vantage.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp1840&tz1740", self.vantage.commands[-1])
+    tip_rack.unassign()
+
+  async def test_300uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_300uL(name="tips")
+    self.vantage.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2244&tz2164", self.vantage.commands[-1])
+    self.vantage.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp1745&tz1645", self.vantage.commands[-1])
+    tip_rack.unassign()
+
+  async def test_1000uL_tips(self):
+    self.tip_car[0] = tip_rack = hamilton_96_tiprack_1000uL(name="tips")
+    self.vantage.commands.clear()
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn("tp2264&tz2164", self.vantage.commands[-1])
+    self.vantage.commands.clear()
+    await self.lh.drop_tips(tip_rack["A1"])
+    self.assertIn("tp1413&tz1313", self.vantage.commands[-1])
+    tip_rack.unassign()
