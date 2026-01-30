@@ -645,7 +645,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(plate2, location=Coordinate(400, 100, 0))
     mixed = self.plate.get_all_items()[:48] + plate2.get_all_items()[:48]
     await self.lh.pick_up_tips96(self.tip_rack)
-    with self.assertRaises(ValueError, msg="All wells must be in the same plate"):
+    with self.assertRaises(ValueError):
       await self.lh.dispense96(mixed, 10)
 
   async def test_transfer(self):
