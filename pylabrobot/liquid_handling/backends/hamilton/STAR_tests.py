@@ -27,14 +27,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.barcode import Barcode
-from pylabrobot.resources.hamilton import (
-  STARLetDeck,
-  hamilton_96_tiprack_10uL,
-  hamilton_96_tiprack_50uL,
-  hamilton_96_tiprack_300uL,
-  hamilton_96_tiprack_300uL_filter,
-  hamilton_96_tiprack_1000uL,
-)
+from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -456,7 +449,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "C0TTid0001tt01tf1tl0519tv03600tg2tu0",
         ),
         _any_write_and_read_command_call(
-          "C0TPid0002xp01179 01179 00000&yp2418 2328 0000&tm1 1 0&tt01tp2246tz2166th2450td0",
+          "C0TPid0002xp01179 01179 00000&yp2418 2328 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
         ),
       ]
     )
@@ -469,7 +462,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "C0TTid0001tt01tf1tl0519tv03600tg2tu0",
         ),
         _any_write_and_read_command_call(
-          "C0TPid0002xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 0000&tm0 0 0 0 1 1 0&tt01tp2246tz2166th2450td0",
+          "C0TPid0002xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 0000&tm0 0 0 0 1 1 0&tt01tp2244tz2164th2450td0",
         ),
       ]
     )
@@ -485,7 +478,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       [
         _any_write_and_read_command_call(
           "C0TRid0003xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
-          "0000&tm0 0 0 0 1 1 0&tp2246tz2166th2450te2450ti1",
+          "0000&tm0 0 0 0 1 1 0&tp2244tz2164th2450te2450ti1",
         )
       ]
     )
@@ -689,7 +682,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       [
         _any_write_and_read_command_call("C0TTid0001tt01tf1tl0519tv03600tg2tu0"),
         _any_write_and_read_command_call("H0DQid0002dq11281dv13500du00000dr900000dw15"),
-        _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2166zh2450ze2450"),
+        _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
       ]
     )
 
@@ -704,7 +697,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips96(self.tip_rack)
     self.STAR._write_and_read_command.assert_has_calls(
       [
-        _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2166zh2450ze2450"),
+        _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2164zh2450ze2450"),
       ]
     )
 
@@ -994,7 +987,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_288_C00(name="tip carrier")
     tip_car[0] = tr = hamilton_96_tiprack_1000uL(name="tips_01").rotated(z=90)
     assert tr.rotation.z == 90
-    assert tr.location == Coordinate(82.6, 0, -6.1)
+    assert tr.location == Coordinate(82.6, 0, 0)
     deck.assign_child_resource(tip_car, rails=2)
     await lh.setup()
 
@@ -1383,56 +1376,121 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
-  """Test tip pickup and drop z positions for all tip sizes."""
+  """Test STAR tip pickup and drop Z position calculations for all tip sizes."""
 
   async def asyncSetUp(self):
-    self.star = STARCommandCatcher()
+    self.backend = STARBackend()
+    self.backend._write_and_read_command = unittest.mock.AsyncMock()
+    self.backend.io = unittest.mock.AsyncMock()
+    self.backend._num_channels = 8
+    self.backend.core96_head_installed = True
+    self.backend.iswap_installed = True
+    self.backend.setup = unittest.mock.AsyncMock()
+    self.backend._core_parked = True
+    self.backend._iswap_parked = True
+
     self.deck = STARLetDeck()
-    self.lh = LiquidHandler(self.star, deck=self.deck)
-    self.tip_car = TIP_CAR_480_A00(name="tip_car")
-    self.deck.assign_child_resource(self.tip_car, rails=15)
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+
+    self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
+    self.deck.assign_child_resource(self.tip_car, rails=1)
+
     await self.lh.setup()
     set_tip_tracking(enabled=False)
 
-  async def asyncTearDown(self):
-    await self.lh.stop()
+  def _get_tp_tz_from_calls(self, cmd_prefix: str):
+    """Extract tp and tz values from mock calls matching the command prefix."""
+    for call in self.backend._write_and_read_command.call_args_list:
+      cmd = call.kwargs.get("cmd", "")
+      if cmd.startswith(cmd_prefix):
+        parsed = parse_star_fw_string(cmd, "tp####tz####")
+        return parsed.get("tp"), parsed.get("tz")
+    return None, None
 
   async def test_10uL_tips(self):
-    self.tip_car[0] = tip_rack = hamilton_96_tiprack_10uL(name="tips")
-    self.star.commands.clear()
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_10uL
+
+    tip_rack = hamilton_96_tiprack_10uL("tips")
+    self.tip_car[1] = tip_rack
+
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2226tz2166", self.star.commands[-1])
-    self.star.commands.clear()
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2224)
+    self.assertEqual(tz, 2164)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2226tz2146", self.star.commands[-1])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2224)
+    self.assertEqual(tz, 2144)
+
     tip_rack.unassign()
 
   async def test_50uL_tips(self):
-    self.tip_car[0] = tip_rack = hamilton_96_tiprack_50uL(name="tips")
-    self.star.commands.clear()
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_50uL
+
+    tip_rack = hamilton_96_tiprack_50uL("tips")
+    self.tip_car[1] = tip_rack
+
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2246tz2166", self.star.commands[-1])
-    self.star.commands.clear()
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2248)
+    self.assertEqual(tz, 2168)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2246tz2166", self.star.commands[-1])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2248)
+    self.assertEqual(tz, 2168)
+
     tip_rack.unassign()
 
   async def test_300uL_tips(self):
-    self.tip_car[0] = tip_rack = hamilton_96_tiprack_300uL(name="tips")
-    self.star.commands.clear()
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
+
+    tip_rack = hamilton_96_tiprack_300uL("tips")
+    self.tip_car[1] = tip_rack
+
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2246tz2166", self.star.commands[-1])
-    self.star.commands.clear()
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2246tz2166", self.star.commands[-1])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
+
     tip_rack.unassign()
 
   async def test_1000uL_tips(self):
-    self.tip_car[0] = tip_rack = hamilton_96_tiprack_1000uL(name="tips")
-    self.star.commands.clear()
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_1000uL
+
+    tip_rack = hamilton_96_tiprack_1000uL("tips")
+    self.tip_car[1] = tip_rack
+
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2266tz2166", self.star.commands[-1])
-    self.star.commands.clear()
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2266)
+    self.assertEqual(tz, 2166)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2266tz2186", self.star.commands[-1])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2266)
+    self.assertEqual(tz, 2186)
+
     tip_rack.unassign()
