@@ -456,7 +456,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "C0TTid0001tt01tf1tl0519tv03600tg2tu0",
         ),
         _any_write_and_read_command_call(
-          "C0TPid0002xp01179 01179 00000&yp2418 2328 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
+          "C0TPid0002xp01179 01179 00000&yp2418 2328 0000&tm1 1 0&tt01tp2246tz2166th2450td0",
         ),
       ]
     )
@@ -469,7 +469,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           "C0TTid0001tt01tf1tl0519tv03600tg2tu0",
         ),
         _any_write_and_read_command_call(
-          "C0TPid0002xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 0000&tm0 0 0 0 1 1 0&tt01tp2244tz2164th2450td0",
+          "C0TPid0002xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 0000&tm0 0 0 0 1 1 0&tt01tp2246tz2166th2450td0",
         ),
       ]
     )
@@ -485,7 +485,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       [
         _any_write_and_read_command_call(
           "C0TRid0003xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
-          "0000&tm0 0 0 0 1 1 0&tp2244tz2164th2450te2450ti1",
+          "0000&tm0 0 0 0 1 1 0&tp2246tz2166th2450te2450ti1",
         )
       ]
     )
@@ -689,7 +689,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       [
         _any_write_and_read_command_call("C0TTid0001tt01tf1tl0519tv03600tg2tu0"),
         _any_write_and_read_command_call("H0DQid0002dq11281dv13500du00000dr900000dw15"),
-        _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
+        _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2166zh2450ze2450"),
       ]
     )
 
@@ -704,7 +704,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips96(self.tip_rack)
     self.STAR._write_and_read_command.assert_has_calls(
       [
-        _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2164zh2450ze2450"),
+        _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2166zh2450ze2450"),
       ]
     )
 
@@ -1007,10 +1007,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2261tz2161th2450td0"
+          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz2163th2450td0"
         ),
         _any_write_and_read_command_call(
-          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2261tz2181th2450te2450ti1"
+          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz2183th2450te2450ti1"
         ),
       ]
     )
@@ -1401,38 +1401,38 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_10uL(name="tips")
     self.star.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2224tz2164", self.star.commands[-1])
+    self.assertIn("tp2226tz2166", self.star.commands[-1])
     self.star.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2224tz2144", self.star.commands[-1])
+    self.assertIn("tp2226tz2146", self.star.commands[-1])
     tip_rack.unassign()
 
   async def test_50uL_tips(self):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_50uL(name="tips")
     self.star.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    self.assertIn("tp2246tz2166", self.star.commands[-1])
     self.star.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    self.assertIn("tp2246tz2166", self.star.commands[-1])
     tip_rack.unassign()
 
   async def test_300uL_tips(self):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_300uL(name="tips")
     self.star.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    self.assertIn("tp2246tz2166", self.star.commands[-1])
     self.star.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2244tz2164", self.star.commands[-1])
+    self.assertIn("tp2246tz2166", self.star.commands[-1])
     tip_rack.unassign()
 
   async def test_1000uL_tips(self):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_1000uL(name="tips")
     self.star.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2264tz2164", self.star.commands[-1])
+    self.assertIn("tp2266tz2166", self.star.commands[-1])
     self.star.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2264tz2184", self.star.commands[-1])
+    self.assertIn("tp2266tz2186", self.star.commands[-1])
     tip_rack.unassign()

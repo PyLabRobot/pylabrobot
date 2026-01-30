@@ -354,7 +354,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_pickup_01(self):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2264 2264&tz2164 2164&th2450 2450&"
+      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2266 2266&tz2166 2166&th2450 2450&"
       "te2450 2450&ba0 0&td1 1&",
       PICKUP_TIP_FORMAT,
     )
@@ -363,7 +363,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.test_tip_pickup_01()  # pick up tips first
     await self.lh.drop_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1413 1413&tz1313 1313&th2450 2450&"
+      "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1415 1415&tz1315 1315&th2450 2450&"
       "te2450 2450&ts0td0 0&",
       DROP_TIP_FORMAT,
     )
@@ -371,7 +371,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_small_tip_pickup(self):
     await self.lh.pick_up_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
-      "A1PMTPid0010xp4329 0&yp2418 0&tm1 0&tt1&tp2224&tz2164&th2450&te2450&ba0&td1&",
+      "A1PMTPid0010xp4329 0&yp2418 0&tm1 0&tt1&tp2226&tz2166&th2450&te2450&ba0&td1&",
       PICKUP_TIP_FORMAT,
     )
 
@@ -379,7 +379,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.test_small_tip_pickup()  # pick up tips first
     await self.lh.drop_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
-      "A1PMTRid0012xp4329 0&yp2418 0&tp2025&tz1925&th2450&te2450&tm1 0&ts0td0&",
+      "A1PMTRid0012xp4329 0&yp2418 0&tp2026&tz1926&th2450&te2450&tm1 0&ts0td0&",
       DROP_TIP_FORMAT,
     )
 
@@ -593,38 +593,38 @@ class TestVantageTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_10uL(name="tips")
     self.vantage.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2224&tz2164", self.vantage.commands[-1])
+    self.assertIn("tp2226&tz2166", self.vantage.commands[-1])
     self.vantage.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp2025&tz1925", self.vantage.commands[-1])
+    self.assertIn("tp2026&tz1926", self.vantage.commands[-1])
     tip_rack.unassign()
 
   async def test_50uL_tips(self):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_50uL(name="tips")
     self.vantage.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2244&tz2164", self.vantage.commands[-1])
+    self.assertIn("tp2246&tz2166", self.vantage.commands[-1])
     self.vantage.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp1840&tz1740", self.vantage.commands[-1])
+    self.assertIn("tp1842&tz1742", self.vantage.commands[-1])
     tip_rack.unassign()
 
   async def test_300uL_tips(self):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_300uL(name="tips")
     self.vantage.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2244&tz2164", self.vantage.commands[-1])
+    self.assertIn("tp2246&tz2166", self.vantage.commands[-1])
     self.vantage.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp1745&tz1645", self.vantage.commands[-1])
+    self.assertIn("tp1746&tz1646", self.vantage.commands[-1])
     tip_rack.unassign()
 
   async def test_1000uL_tips(self):
     self.tip_car[0] = tip_rack = hamilton_96_tiprack_1000uL(name="tips")
     self.vantage.commands.clear()
     await self.lh.pick_up_tips(tip_rack["A1"])
-    self.assertIn("tp2264&tz2164", self.vantage.commands[-1])
+    self.assertIn("tp2266&tz2166", self.vantage.commands[-1])
     self.vantage.commands.clear()
     await self.lh.drop_tips(tip_rack["A1"])
-    self.assertIn("tp1413&tz1313", self.vantage.commands[-1])
+    self.assertIn("tp1415&tz1315", self.vantage.commands[-1])
     tip_rack.unassign()
