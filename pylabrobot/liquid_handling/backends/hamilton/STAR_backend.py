@@ -2369,8 +2369,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_drive_speed_during_2nd_section_search, [30.0] * n
     )
     cup_upper_edge = fill_in_defaults(cup_upper_edge, [0.0] * n)
-    ratio_liquid_rise_to_tip_deep_in = fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
-    immersion_depth_2nd_section = fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
+
+    # Deprecated params - warn if passed, but don't use them
+    if ratio_liquid_rise_to_tip_deep_in is not None:
+      warnings.warn(
+        "ratio_liquid_rise_to_tip_deep_in is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+    if immersion_depth_2nd_section is not None:
+      warnings.warn(
+        "immersion_depth_2nd_section is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
 
     if probe_liquid_height:
       if any(op.liquid_height is not None for op in ops):
@@ -2491,8 +2503,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           round(zs * 10) for zs in z_drive_speed_during_2nd_section_search
         ],
         cup_upper_edge=[round(cue * 10) for cue in cup_upper_edge],
-        ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
-        immersion_depth_2nd_section=[round(id_ * 10) for id_ in immersion_depth_2nd_section],
         minimum_traverse_height_at_beginning_of_a_command=round(
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
@@ -3190,11 +3200,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimal_end_height=round((min_z_endpos or self._channel_traversal_height) * 10),
+      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      maximum_immersion_depth=round((minimum_height or position.z) * 10),
+      minimum_height=round((minimum_height or position.z) * 10),
       second_section_height=round(second_section_height * 10),
       second_section_ratio=round(second_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
