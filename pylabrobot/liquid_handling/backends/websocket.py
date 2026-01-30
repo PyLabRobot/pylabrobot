@@ -7,9 +7,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 try:
   import websockets
+  import websockets.asyncio.server
   import websockets.exceptions
-  import websockets.legacy
-  import websockets.legacy.server
 
   HAS_WEBSOCKETS = True
 except ImportError as e:
@@ -22,7 +21,7 @@ from pylabrobot.liquid_handling.backends.serializing_backend import (
 )
 
 if TYPE_CHECKING:
-  import websockets.legacy
+  import websockets.asyncio.server
 
 
 logger = logging.getLogger("pylabrobot")
@@ -51,7 +50,7 @@ class WebSocketBackend(SerializingBackend):
       )
 
     super().__init__(num_channels=num_channels)
-    self._websocket: Optional["websockets.legacy.server.WebSocketServerProtocol"] = None
+    self._websocket: Optional["websockets.asyncio.server.ServerConnection"] = None
     self._loop: Optional[asyncio.AbstractEventLoop] = None
     self._t: Optional[threading.Thread] = None
     self._stop_: Optional[asyncio.Future] = None
@@ -67,7 +66,7 @@ class WebSocketBackend(SerializingBackend):
   @property
   def websocket(
     self,
-  ) -> "websockets.legacy.server.WebSocketServerProtocol":
+  ) -> "websockets.asyncio.server.ServerConnection":
     """The websocket connection."""
     if self._websocket is None:
       raise RuntimeError("No websocket connection has been established.")
@@ -115,7 +114,7 @@ class WebSocketBackend(SerializingBackend):
 
   async def _socket_handler(
     self,
-    websocket: "websockets.legacy.server.WebSocketServerProtocol",
+    websocket: "websockets.asyncio.server.ServerConnection",
   ):
     """Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`."""
@@ -244,7 +243,7 @@ class WebSocketBackend(SerializingBackend):
       self._stop_ = self.loop.create_future()
       while True:
         try:
-          async with websockets.legacy.server.serve(
+          async with websockets.asyncio.server.serve(
             self._socket_handler, self.ws_host, self.ws_port
           ):
             print(f"Websocket server started at http://{self.ws_host}:{self.ws_port}")

@@ -454,16 +454,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     self.send_command_mock.assert_called_once_with("!TAG OFF")
 
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._wait_for_idle",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._wait_for_idle",
     new_callable=AsyncMock,
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._transfer_data",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._transfer_data",
     new_callable=AsyncMock,
     return_value="",
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._read_now",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._read_now",
     new_callable=AsyncMock,
   )
   async def test_read_absorbance(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
@@ -491,16 +491,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     mock_transfer_data.assert_called_once()
 
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._wait_for_idle",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._wait_for_idle",
     new_callable=AsyncMock,
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._transfer_data",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._transfer_data",
     new_callable=AsyncMock,
     return_value="",
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._read_now",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._read_now",
     new_callable=AsyncMock,
   )
   async def test_read_fluorescence(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
@@ -535,16 +535,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     mock_transfer_data.assert_called_once()
 
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._wait_for_idle",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._wait_for_idle",
     new_callable=AsyncMock,
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._transfer_data",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._transfer_data",
     new_callable=AsyncMock,
     return_value="",
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._read_now",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._read_now",
     new_callable=AsyncMock,
   )
   async def test_read_luminescence(self, mock_read_now, mock_transfer_data, mock_wait_for_idle):
@@ -574,16 +574,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     mock_transfer_data.assert_called_once()
 
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._wait_for_idle",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._wait_for_idle",
     new_callable=AsyncMock,
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._transfer_data",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._transfer_data",
     new_callable=AsyncMock,
     return_value="",
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._read_now",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._read_now",
     new_callable=AsyncMock,
   )
   async def test_read_fluorescence_polarization(
@@ -623,16 +623,16 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
     mock_transfer_data.assert_called_once()
 
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._wait_for_idle",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._wait_for_idle",
     new_callable=AsyncMock,
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._transfer_data",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._transfer_data",
     new_callable=AsyncMock,
     return_value="",
   )
   @patch(
-    "pylabrobot.plate_reading.molecular_devices_backend.MolecularDevicesBackend._read_now",
+    "pylabrobot.plate_reading.molecular_devices.backend.MolecularDevicesBackend._read_now",
     new_callable=AsyncMock,
   )
   async def test_read_time_resolved_fluorescence(

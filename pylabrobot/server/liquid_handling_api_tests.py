@@ -3,12 +3,11 @@ import time
 import unittest
 from pathlib import Path
 from typing import cast
+from unittest.mock import PropertyMock
 
 from pylabrobot import Config
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import (
-  SerializingSavingBackend,
-)
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -21,6 +20,14 @@ from pylabrobot.resources import (
 from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
 from pylabrobot.serializer import serialize
 from pylabrobot.server.liquid_handling_server import create_app
+
+
+def _create_mock_backend(num_channels: int = 8):
+  """Create a mock LiquidHandlerBackend with the specified number of channels."""
+  mock = unittest.mock.create_autospec(LiquidHandlerBackend, instance=True)
+  type(mock).num_channels = PropertyMock(return_value=num_channels)
+  mock.can_pick_up_tip.return_value = True
+  return mock
 
 
 def build_layout() -> HamiltonDeck:
@@ -51,7 +58,7 @@ def _wait_for_task_done(base_url, client, task_id):
 
 class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = SerializingSavingBackend(num_channels=8)
+    self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.app = create_app(lh=self.lh)
@@ -126,7 +133,7 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
 
 class LiquidHandlingApiOpsTests(unittest.TestCase):
   def setUp(self) -> None:
-    self.backend = SerializingSavingBackend(num_channels=8)
+    self.backend = _create_mock_backend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.app = create_app(lh=self.lh)

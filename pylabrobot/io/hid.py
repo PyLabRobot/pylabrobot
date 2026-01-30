@@ -113,7 +113,7 @@ class HID(IOBase):
       self._executor = None
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
-    """Writes data to the HID device.
+    r"""Writes data to the HID device.
 
     There is a non-obvious part in the HID API:
 

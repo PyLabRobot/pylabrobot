@@ -63,6 +63,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_low_volume(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=50.0,
       maximal_volume=10.0,
@@ -73,6 +74,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_low_volume_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=50.0,
       maximal_volume=10.0,
@@ -83,6 +85,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_50ul(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=50.0,
       maximal_volume=50.0,
@@ -93,6 +96,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_50ul_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=50.0,
       maximal_volume=50.0,
@@ -103,6 +107,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_300ul(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=59.9,
       maximal_volume=300.0,
@@ -113,6 +118,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_standard_300ul_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=59.9,
       maximal_volume=300.0,
@@ -123,6 +129,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_high_volume(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=95.1,
       maximal_volume=1000.0,
@@ -133,6 +140,7 @@ class TestNimbusTipType(unittest.TestCase):
 
   def test_get_tip_type_high_volume_filter(self):
     tip = HamiltonTip(
+      name="test_tip",
       has_filter=True,
       total_tip_length=95.1,
       maximal_volume=1000.0,
@@ -145,7 +153,13 @@ class TestNimbusTipType(unittest.TestCase):
     from pylabrobot.resources import Tip
 
     # Regular Tip (non-Hamilton) should raise
-    tip = Tip(has_filter=False, total_tip_length=50.0, maximal_volume=300.0, fitting_depth=8.0)
+    tip = Tip(
+      name="test_tip",
+      has_filter=False,
+      total_tip_length=50.0,
+      maximal_volume=300.0,
+      fitting_depth=8.0,
+    )
     with self.assertRaises(ValueError) as ctx:
       _get_tip_type_from_tip(tip)
     self.assertIn("HamiltonTip", str(ctx.exception))
@@ -688,6 +702,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, rails=10)
 
     self.tip = HamiltonTip(
+      name="test_tip",
       has_filter=False,
       total_tip_length=59.9,
       maximal_volume=300.0,
@@ -1041,6 +1056,133 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     x_with_offset = self._get_commands(Aspirate)[0].x_positions[0]
 
     self.assertEqual(x_with_offset - x_no_offset, 1000)
+
+
+class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+  """Tests for Nimbus tip pickup/drop Z positions across all tip sizes.
+
+  These tests verify that the begin/end tip pickup and drop process values
+  match the machine-validated values.
+  """
+
+  async def asyncSetUp(self):
+    self.deck = NimbusDeck()
+    self.backend = _setup_backend_with_deck(self.deck)
+    self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
+    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
+
+  def _get_commands(self, cmd_type):
+    return [
+      call.args[0] for call in self.mock_send.call_args_list if isinstance(call.args[0], cmd_type)
+    ]
+
+  async def test_10uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_10uL
+
+    tip_rack = hamilton_96_tiprack_10uL("tips")
+    self.deck.assign_child_resource(tip_rack, rails=1)
+    tip_spot = tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+
+    await self.backend.pick_up_tips(
+      [Pickup(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    pickup_cmd = self._get_commands(PickupTips)[0]
+    self.assertEqual(pickup_cmd.begin_tip_pick_up_process[0], 740)
+    self.assertEqual(pickup_cmd.end_tip_pick_up_process[0], -60)
+
+    self.mock_send.reset_mock()
+    await self.backend.drop_tips(
+      [Drop(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    drop_cmd = self._get_commands(DropTips)[0]
+    self.assertEqual(drop_cmd.begin_tip_deposit_process[0], -1250)
+    self.assertEqual(drop_cmd.end_tip_deposit_process[0], -2250)
+
+    tip_rack.unassign()
+
+  async def test_50uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_50uL
+
+    tip_rack = hamilton_96_tiprack_50uL("tips")
+    self.deck.assign_child_resource(tip_rack, rails=1)
+    tip_spot = tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+
+    await self.backend.pick_up_tips(
+      [Pickup(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    pickup_cmd = self._get_commands(PickupTips)[0]
+    self.assertEqual(pickup_cmd.begin_tip_pick_up_process[0], 990)
+    self.assertEqual(pickup_cmd.end_tip_pick_up_process[0], 190)
+
+    self.mock_send.reset_mock()
+    await self.backend.drop_tips(
+      [Drop(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    drop_cmd = self._get_commands(DropTips)[0]
+    self.assertEqual(drop_cmd.begin_tip_deposit_process[0], -3050)
+    self.assertEqual(drop_cmd.end_tip_deposit_process[0], -4050)
+
+    tip_rack.unassign()
+
+  async def test_300uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
+
+    tip_rack = hamilton_96_tiprack_300uL("tips")
+    self.deck.assign_child_resource(tip_rack, rails=1)
+    tip_spot = tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+
+    await self.backend.pick_up_tips(
+      [Pickup(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    pickup_cmd = self._get_commands(PickupTips)[0]
+    self.assertEqual(pickup_cmd.begin_tip_pick_up_process[0], 940)
+    self.assertEqual(pickup_cmd.end_tip_pick_up_process[0], 140)
+
+    self.mock_send.reset_mock()
+    await self.backend.drop_tips(
+      [Drop(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    drop_cmd = self._get_commands(DropTips)[0]
+    self.assertEqual(drop_cmd.begin_tip_deposit_process[0], -4050)
+    self.assertEqual(drop_cmd.end_tip_deposit_process[0], -5050)
+
+    tip_rack.unassign()
+
+  async def test_1000uL_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_1000uL
+
+    tip_rack = hamilton_96_tiprack_1000uL("tips")
+    self.deck.assign_child_resource(tip_rack, rails=1)
+    tip_spot = tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+
+    await self.backend.pick_up_tips(
+      [Pickup(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    pickup_cmd = self._get_commands(PickupTips)[0]
+    self.assertEqual(pickup_cmd.begin_tip_pick_up_process[0], 1160)
+    self.assertEqual(pickup_cmd.end_tip_pick_up_process[0], 360)
+
+    self.mock_send.reset_mock()
+    await self.backend.drop_tips(
+      [Drop(resource=tip_spot, offset=Coordinate.zero(), tip=tip)],
+      use_channels=[0],
+    )
+    drop_cmd = self._get_commands(DropTips)[0]
+    self.assertEqual(drop_cmd.begin_tip_deposit_process[0], -7350)
+    self.assertEqual(drop_cmd.end_tip_deposit_process[0], -8350)
+
+    tip_rack.unassign()
 
 
 if __name__ == "__main__":

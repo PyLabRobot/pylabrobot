@@ -7,12 +7,12 @@ with open("README.md", "r", encoding="utf-8") as f:
   long_description = f.read()
 
 
-extras_fw = ["pyserial", "pyusb", "libusb_package<=1.0.26.2"]
+extras_fw = ["pyserial==3.5", "pyusb==1.3.1", "libusb-package==1.0.26.1"]
 
-extras_http = ["requests", "types-requests"]
+extras_http = ["requests==2.32.5", "types-requests==2.32.4.20250913"]
 
 extras_plate_reading = [
-  "pylibftdi",
+  "pylibftdi==0.23.0",
 ]
 
 extras_websockets = ["websockets==15.0.1"]
@@ -22,11 +22,11 @@ extras_visualizer = extras_websockets
 extras_opentrons = ["opentrons-http-api-client"]
 
 extras_server = [
-  "flask[async]",
+  "flask[async]==3.1.2",
 ]
 
 
-extras_inheco = ["hid"]
+extras_inheco = ["hid==1.0.8"]
 
 extras_agrow = ["pymodbus==3.6.8"]
 
@@ -41,17 +41,17 @@ extras_dev = (
   + extras_inheco
   + extras_agrow
   + [
-    "pydata-sphinx-theme",
-    "myst_nb",
-    "sphinx_copybutton",
-    "pytest",
-    "pytest-timeout",
-    "mypy",
-    "responses",
-    "sphinx-reredirects",
+    "pydata-sphinx-theme==0.16.1",
+    "myst_nb==1.3.0",
+    "sphinx_copybutton==0.5.2",
+    "pytest==8.4.2",
+    "pytest-timeout==2.4.0",
+    "mypy==1.18.2",
+    "responses==0.25.8",
+    "sphinx-reredirects==0.1.6",
     "ruff==0.2.1",
-    "nbconvert",
-    "sphinx-sitemap",
+    "nbconvert==7.16.6",
+    "sphinx-sitemap==2.8.0",
   ]
 )
 
@@ -65,7 +65,7 @@ setup(
   description="A hardware agnostic platform for lab automation",
   long_description=long_description,
   long_description_content_type="text/markdown",
-  install_requires=["typing_extensions"],
+  install_requires=["typing_extensions==4.15.0"],
   url="https://github.com/pylabrobot/pylabrobot.git",
   package_data={"pylabrobot": ["visualizer/*", "version.txt"]},
   extras_require={
