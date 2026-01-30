@@ -1666,6 +1666,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if len(collar_heights) > 1:
         raise ValueError("Cannot mix tips with different collar heights.")
       collar_height = collar_heights.pop()
+      fitting_depth = tips[0].fitting_depth
 
       begin_tip_deposit_process = (
         round((max_z + collar_height) * 10)
@@ -1673,7 +1674,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         else round(begin_tip_deposit_process * 10)
       )
       end_tip_deposit_process = (
-        round((max_z) * 10)
+        round((max_z + collar_height - fitting_depth) * 10)
         if end_tip_deposit_process is None
         else round(end_tip_deposit_process * 10)
       )

@@ -987,7 +987,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_288_C00(name="tip carrier")
     tip_car[0] = tr = hamilton_96_tiprack_1000uL(name="tips_01").rotated(z=90)
     assert tr.rotation.z == 90
-    assert tr.location == Coordinate(82.6, 0, 0)
+    assert tr.location == Coordinate(82.6, 0, -6.1)
     deck.assign_child_resource(tip_car, rails=2)
     await lh.setup()
 
@@ -1000,10 +1000,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz2163th2450td0"
+          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2261tz2161th2450td0"
         ),
         _any_write_and_read_command_call(
-          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz2183th2450te2450ti1"
+          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2261tz2181th2450te2450ti1"
         ),
       ]
     )
