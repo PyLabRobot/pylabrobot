@@ -1590,9 +1590,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       else int(begin_tip_pick_up_process * 10)
     )
     end_tip_pick_up_process = (
-      round((max_z) * 10)
-      if end_tip_pick_up_process is None
-      else round(end_tip_pick_up_process * 10)
+      round(max_z * 10) if end_tip_pick_up_process is None else round(end_tip_pick_up_process * 10)
     )
     minimum_traverse_height_at_beginning_of_a_command = (
       round(self._channel_traversal_height * 10)
