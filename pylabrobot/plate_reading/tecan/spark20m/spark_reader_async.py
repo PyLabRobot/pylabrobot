@@ -72,7 +72,9 @@ class SparkReaderAsync:
       checksum ^= byte
     return checksum
 
-  async def send_command(self, command_str, device_type=SparkDevice.PLATE_TRANSPORT):
+  async def send_command(
+    self, command_str, device_type=SparkDevice.PLATE_TRANSPORT, attempts=10000
+  ):
     if device_type not in self.devices:
       logging.error(f"Device type {device_type} not connected.")
       return False
@@ -84,7 +86,7 @@ class SparkReaderAsync:
       # Set up read task before sending command
       read_task = self._init_read(device_type, SparkEndpoint.INTERRUPT_IN)
       await asyncio.sleep(0.01)
-      response_task = asyncio.create_task(self._get_response(read_task))
+      response_task = asyncio.create_task(self._get_response(read_task, attempts=attempts))
 
       logging.debug(f"Sending to {device_type.name}: {command_str}")
       payload = command_str.encode("ascii")
@@ -108,7 +110,11 @@ class SparkReaderAsync:
       try:
         response = response_task.result()
         logging.debug(f"Response: {response}")
-        return True
+        return (
+          response["payload"]["message"]
+          if response and "payload" in response and "message" in response["payload"]
+          else None
+        )
       except Exception as e:
         logging.debug(f"Response task exception: {e}")
         return False
@@ -163,7 +169,8 @@ class SparkReaderAsync:
               raise Exception(parsed)
         except Exception as e:
           logging.error(f"Error in get_response retry: {e}")
-
+      if parsed.get("type") != "RespReady":
+        logging.warning('Timeout waiting for "RespReady" response')
       return parsed
 
     except asyncio.CancelledError:
