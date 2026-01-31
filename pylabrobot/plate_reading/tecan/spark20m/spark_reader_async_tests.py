@@ -78,8 +78,10 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
 
     # Mock calculate_checksum to return a predictable value
-    with patch.object(self.reader, "_calculate_checksum", return_value=0x99):
-      success = await self.reader.send_command("CMD")
+    with patch.object(self.reader, "_get_response") as mock_get_response:
+      mock_get_response.return_value = {"payload": {"message": "OK"}}
+      with patch.object(self.reader, "_calculate_checksum", return_value=0x99):
+        success = await self.reader.send_command("CMD", attempts=10)
 
     self.assertTrue(success)
     # Expected message: header + payload + checksum
@@ -92,7 +94,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.reader.seq_num, 1)
 
   async def test_send_command_device_not_connected(self):
-    success = await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION)
+    success = await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION, attempts=10)
     self.assertFalse(success)
 
   async def test_get_response_success(self):
