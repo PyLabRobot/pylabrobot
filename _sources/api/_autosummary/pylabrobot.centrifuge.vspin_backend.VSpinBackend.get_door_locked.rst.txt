@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin\_backend.VSpinBackend.get\_door\_locked
+===================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. automethod:: VSpinBackend.get_door_locked

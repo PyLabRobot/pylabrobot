@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateCarrier.assign\_child\_by\_anchor
+===========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateCarrier.assign_child_by_anchor

@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin\_backend.VSpinBackend.g\_to\_rpm
+============================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. automethod:: VSpinBackend.g_to_rpm

@@ -1,0 +1,6 @@
+pylabrobot.resources.tecan.tip\_carriers.DiTi\_Nest\_4\_Pos\_LiHa\_350
+======================================================================
+
+.. currentmodule:: pylabrobot.resources.tecan.tip_carriers
+
+.. autofunction:: DiTi_Nest_4_Pos_LiHa_350

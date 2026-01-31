@@ -1,0 +1,40 @@
+﻿pylabrobot.temperature\_controlling.inheco.cpac\_backend.InhecoCPACBackend
+==========================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.cpac_backend
+
+.. autoclass:: InhecoCPACBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoCPACBackend.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~InhecoCPACBackend.__init__
+      ~InhecoCPACBackend.deactivate
+      ~InhecoCPACBackend.deserialize
+      ~InhecoCPACBackend.get_all_instances
+      ~InhecoCPACBackend.get_current_temperature
+      ~InhecoCPACBackend.get_device_info
+      ~InhecoCPACBackend.serialize
+      ~InhecoCPACBackend.set_target_temperature
+      ~InhecoCPACBackend.set_temperature
+      ~InhecoCPACBackend.setup
+      ~InhecoCPACBackend.start_temperature_control
+      ~InhecoCPACBackend.stop
+      ~InhecoCPACBackend.stop_temperature_control
+   
+   
