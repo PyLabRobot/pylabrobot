@@ -1910,44 +1910,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       await self.move_all_channels_in_z_safety()
       raise
 
-    # Compute average heights per channel and convert to relative to well bottom
-    absolute_liquid_heights = []
-    inconsistent_channels = []
+    # Compute liquid heights relative to well bottom
+    relative_to_well: List[float] = []
+    inconsistent_channels: List[str] = []
 
-    for ch in use_channels:
+    for ch, container in zip(use_channels, containers):
       measurements = absolute_heights_measurements[ch]
-      non_none = [m for m in measurements if m is not None]
-      none_count = len(measurements) - len(non_none)
+      valid = [m for m in measurements if m is not None]
+      cavity_bottom = container.get_absolute_location("c", "c", "cavity_bottom").z
 
-      if none_count > 0 and len(non_none) > 0:
-        # Inconsistent results - track this channel
-        inconsistent_channels.append(
-          f"Channel {ch}: {len(non_none)} replicates detected liquid, {none_count} did not"
-        )
-      elif len(non_none) > 0:
-        # All replicates found liquid - compute average
-        absolute_liquid_heights.append(sum(non_none) / len(non_none))
+      if len(valid) == 0:
+        relative_to_well.append(0.0)
+      elif len(valid) == len(measurements):
+        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
       else:
-        # All replicates found no liquid - use cavity bottom as the absolute height
-        # This will result in 0.0 relative height
-        # Find the index of ch in use_channels to get corresponding container
-        container_idx = use_channels.index(ch)
-        absolute_liquid_heights.append(
-          containers[container_idx].get_absolute_location("c", "c", "cavity_bottom").z
+        inconsistent_channels.append(
+          f"Channel {ch}: {len(valid)}/{len(measurements)} replicates detected liquid"
         )
 
-    # If any channels had inconsistent results, raise an error with all of them
     if inconsistent_channels:
       raise RuntimeError(
-        f"Inconsistent liquid detection across replicates for {len(inconsistent_channels)} channel(s). "
-        f"This may indicate liquid levels at or very near the detection limit:\n"
+        "Inconsistent liquid detection across replicates. "
+        "This may indicate liquid levels near the detection limit:\n"
         + "\n".join(inconsistent_channels)
       )
-
-    relative_to_well = [
-      absolute_liquid_height - resource.get_absolute_location("c", "c", "cavity_bottom").z
-      for resource, absolute_liquid_height in zip(containers, absolute_liquid_heights)
-    ]
 
     if move_to_z_safety_after:
       await self.move_all_channels_in_z_safety()
