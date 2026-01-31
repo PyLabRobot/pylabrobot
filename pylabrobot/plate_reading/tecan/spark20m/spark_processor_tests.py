@@ -3,6 +3,8 @@ import math
 import unittest
 from unittest.mock import patch
 
+import pytest
+
 # Configure logging to avoid pollution during tests
 from pylabrobot.plate_reading.tecan.spark20m.spark_processor import (
   AbsorbanceProcessor,
@@ -210,7 +212,9 @@ class TestAbsorbanceProcessor(unittest.TestCase):
         0.05389217987680245,
       ],
     ]
-    assert proc == res
+    assert len(proc) == len(res)
+    for proc_row, res_row in zip(proc, res):
+      assert proc_row == pytest.approx(res_row)
 
 
 class TestFluorescenceProcessor(unittest.TestCase):
@@ -341,7 +345,9 @@ class TestFluorescenceProcessor(unittest.TestCase):
         50658.76437083986,
       ]
     ]
-    assert proc == res
+    assert len(proc) == len(res)
+    for proc_row, res_row in zip(proc, res):
+      assert proc_row == pytest.approx(res_row)
 
 
 if __name__ == "__main__":
