@@ -1890,13 +1890,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             error_msg = str(result).lower()
             if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
               height = None  # No liquid detected - this is expected
-              logger.warning(
+              msg = (
                 f"Channel {ch_idx}: No liquid detected. Could be because there is "
-                f"no liquid in container {containers[idx].name} or liquid "
-                "is non-detectable (e.g. if capacitive LLD chosen: low-volume or "
-                "ultra-pure, non-conductive liquid). "
-                "Consider using pressure-based LLD if liquid is believed to exist."
+                f"no liquid in container {containers[idx].name} or liquid level is too low."
               )
+              if lld_mode == self.LLDMode.GAMMA:
+                msg += " Consider using pressure-based LLD if liquid is believed to exist."
+              logger.warning(msg)
             else:
               # Some other firmware error - re-raise it
               raise result
