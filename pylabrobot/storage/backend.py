@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
+from pylabrobot.resources.barcode import Barcode
 
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
@@ -27,11 +28,11 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **kwargs):
     pass
 
   @abstractmethod
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **kwargs):
     pass
 
   @abstractmethod
@@ -124,11 +125,13 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def scan_barcode(self, m: int, n: int, pitch: int, plt_count: int):
-    """Scan barcode at given position with specified pitch and timeout."""
+  async def scan_barcode(self, site: PlateHolder) -> Barcode:
+    """Scan barcode at given position."""
     pass
 
   @abstractmethod
-  async def move_position_to_position(self, plate_name: str, dest_site: PlateHolder):
-    """Move plate by name to another position in the storage unit"""
+  async def move_position_to_position(
+    self, plate: Plate, dest_site: PlateHolder, read_barcode: bool = False
+  ):
+    """Move plate to another position in the storage unit"""
     pass

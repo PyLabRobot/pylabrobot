@@ -104,4 +104,8 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
 
   async def scan_barcode(self) -> Barcode:
     data = await self.send_command("LON")
+    if data.startswith("NG"):
+      raise BarcodeScannerError("Barcode reader is off: cannot read barcode")
+    if data.startswith("ERR99"):
+      raise BarcodeScannerError(f"Error response from barcode reader: {data}")
     return Barcode(data=data, symbology="unknown", position_on_resource="front")

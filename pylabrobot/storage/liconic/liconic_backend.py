@@ -7,9 +7,10 @@ from typing import List, Optional, Tuple, Union
 
 import serial
 
-from pylabrobot.barcode_scanners.keyence import KeyenceBarcodeScannerBackend
+from pylabrobot.barcode_scanners import BarcodeScanner
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateHolder
+from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.backend import IncubatorBackend
 from pylabrobot.storage.liconic.constants import ControllerError, HandlingError, LiconicType
@@ -35,10 +36,9 @@ LICONIC_SITE_HEIGHT_TO_STEPS = {
 
 
 class LiconicBackend(IncubatorBackend):
-  """
-  Backend for Liconic incubators.
-  Written to connect with internal barcode reader and gas control.
-  Barcode reader tested is the Keyence BL-1300
+  """Backend for Liconic incubators.
+
+  Optionally accepts a BarcodeScanner instance for internal barcode reading.
   """
 
   default_baud = 9600
@@ -51,13 +51,11 @@ class LiconicBackend(IncubatorBackend):
     self,
     model: Union[LiconicType, str],
     port: str,
-    barcode_installed: Optional[bool] = None,
-    barcode_port: Optional[str] = None,
+    barcode_scanner: Optional[BarcodeScanner] = None,
   ):
     super().__init__()
 
-    self.barcode_installed: Optional[bool] = barcode_installed
-    self.barcode_port: Optional[str] = barcode_port
+    self.barcode_scanner = barcode_scanner
 
     if isinstance(model, str):
       try:
@@ -78,11 +76,6 @@ class LiconicBackend(IncubatorBackend):
       timeout=1,
       rtscts=True,
     )
-
-    if barcode_installed:
-      if not barcode_port:
-        raise ValueError("barcode_port must also be provided if barcode is installed")
-      self.io_bcr = KeyenceBarcodeScannerBackend(serial_port=barcode_port)
 
     self.co2_installed: Optional[bool] = None
     self.n2_installed: Optional[bool] = None
@@ -133,13 +126,6 @@ class LiconicBackend(IncubatorBackend):
       await self.io_plc.stop()
       raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds")
 
-    if self.io_bcr is not None:
-      try:
-        await self.io_bcr.setup()
-      except Exception as e:
-        await self.io_bcr.stop()
-        raise RuntimeError(f"Could not setup barcode reader on {self.barcode_port}: {e}")
-
   def _site_to_m_n(self, site: PlateHolder) -> Tuple[int, int]:
     rack = site.parent
     assert isinstance(rack, PlateCarrier), "Site not in rack"
@@ -166,8 +152,6 @@ class LiconicBackend(IncubatorBackend):
 
   async def stop(self):
     await self.io_plc.stop()
-    if self.io_bcr is not None:
-      await self.io_bcr.stop()
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
@@ -186,9 +170,7 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc("ST 1902")
     await self._wait_ready()
 
-  async def fetch_plate_to_loading_tray(
-    self, plate: Plate, read_barcode: Optional[bool] = False
-  ) -> Optional[str]:
+  async def fetch_plate_to_loading_tray(self, plate: Plate, read_barcode: bool = False):
     """Fetch a plate from the incubator to the loading tray."""
     site = plate.parent
     assert isinstance(site, PlateHolder), "Plate not in storage"
@@ -202,18 +184,13 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc(f"WR DM5 {n}")  # plate position in carousel
 
     if read_barcode:
-      barcode = await self.read_barcode_inline(m, n)
+      plate.barcode = await self.read_barcode_inline(m, n)
 
     await self._send_command_plc("ST 1905")  # plate to transfer station
     await self._wait_ready()
     await self._send_command_plc("ST 1903")  # terminate access
 
-    if read_barcode:
-      return barcode
-
-  async def take_in_plate(
-    self, plate: Plate, site: PlateHolder, read_barcode: Optional[bool] = False
-  ) -> Optional[str]:
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, read_barcode: bool = False):
     """Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
@@ -226,17 +203,13 @@ class LiconicBackend(IncubatorBackend):
     await self._wait_ready()
 
     if read_barcode:
-      barcode = await self.read_barcode_inline(m, n)
-      print(barcode)
+      plate.barcode = await self.read_barcode_inline(m, n)
 
     await self._send_command_plc("ST 1903")  # terminate access
 
-    if read_barcode:
-      return barcode
-
   async def move_position_to_position(
-    self, plate: Plate, dest_site: PlateHolder, read_barcode: Optional[bool] = False
-  ) -> Optional[str]:
+    self, plate: Plate, dest_site: PlateHolder, read_barcode: bool = False
+  ):
     """Move plate from one internal position to another"""
     orig_site = plate.parent
     assert isinstance(orig_site, PlateHolder)
@@ -258,7 +231,7 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc(f"WR DM5 {orig_n}")  # origin plate position #
 
     if read_barcode:
-      barcode = await self.read_barcode_inline(orig_m, orig_n)
+      plate.barcode = await self.read_barcode_inline(orig_m, orig_n)
 
     await self._send_command_plc("ST 1908")  # pick plate from origin position
 
@@ -274,32 +247,21 @@ class LiconicBackend(IncubatorBackend):
     await self._wait_ready()
     await self._send_command_plc("ST 1903")  # terminate access
 
-    if read_barcode:
-      return barcode
+  async def read_barcode_inline(self, cassette: int, plt_position: int) -> Barcode:
+    if self.barcode_scanner is None:
+      raise RuntimeError("Barcode scanner not configured for this incubator instance")
 
-  async def read_barcode_inline(self, cassette: int, plt_position: int) -> str:
-    if self.barcode_installed:
-      await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
-      await self._wait_ready()
-      barcode = await self._send_command_bcr("LON")  # read barcode
-      if barcode is None:
-        raise RuntimeError("Failed to read barcode from plate")
-      elif barcode == "ERROR":
-        logger.info(
-          f"No barcode found when reading plate at cassette {cassette}, position {plt_position}"
-        )
-      else:
-        logger.info(
-          f"Read barcode from plate at cassette {cassette}, position {plt_position}: {barcode}"
-        )
-        reset = await self._send_command_plc("RS 1910")  # move shovel back to normal position
-        if reset != "OK":
-          raise RuntimeError("Failed to reset shovel position after barcode reading")
-      await self._wait_ready()
-      return barcode
-    else:
-      logger.info(" Barcode reading requested but instance not configured with barcode reader.")
-      return "No barcode"
+    await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
+    await self._wait_ready()
+    barcode = await self.barcode_scanner.scan()
+    logger.info(
+      f"Read barcode from plate at cassette {cassette}, position {plt_position}: {barcode.data}"
+    )
+    reset = await self._send_command_plc("RS 1910")  # move shovel back to normal position
+    if reset != "OK":
+      raise RuntimeError("Failed to reset shovel position after barcode reading")
+    await self._wait_ready()
+    return barcode
 
   async def _send_command_plc(self, command: str) -> str:
     """
@@ -318,20 +280,6 @@ class LiconicBackend(IncubatorBackend):
         if resp == member.value:
           raise controller_error_map[member]
       raise RuntimeError(f"Unknown error {resp} when sending command {command}")
-    return resp
-
-  async def _send_command_bcr(self, command: str) -> str:
-    """
-    Send an ASCII command to the barcode reader over serial and return the response.
-    """
-    resp = await self.io_bcr.send_command(command)
-    if not resp:
-      raise RuntimeError(f"No response from Barcode Reader for command {command!r}")
-    resp = resp.strip()
-    if resp.startswith("NG"):
-      raise RuntimeError("Barcode reader is off: cannot read barcode")
-    elif resp.startswith("ERR99"):
-      raise RuntimeError(f"Error response from Barcode Reader for command {command!r}: {resp!r}")
     return resp
 
   async def _wait_plate_ready(self, timeout: int = 60):
@@ -583,10 +531,10 @@ class LiconicBackend(IncubatorBackend):
     else:
       raise RuntimeError(f"Unexpected response from read 2nd transfer station sensor: {resp!r}")
 
-  async def scan_barcode(self, site: PlateHolder) -> str:
-    """Scan a barcode using the internal barcode reader. Using command LON"""
-    if not self.barcode_installed:
-      raise RuntimeError("Barcode reader not installed in this incubator instance")
+  async def scan_barcode(self, site: PlateHolder) -> Barcode:
+    """Scan a barcode using the internal barcode reader."""
+    if self.barcode_scanner is None:
+      raise RuntimeError("Barcode scanner not configured for this incubator instance")
 
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
@@ -597,8 +545,8 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc(f"WR DM5 {n}")  # plate position in carousel
     await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
 
-    barcode = await self._send_command_bcr("LON")
-    print(f"Scanned barcode: {barcode}")
+    barcode = await self.barcode_scanner.scan()
+    logger.info(f"Scanned barcode: {barcode.data}")
     return barcode
 
   def serialize(self) -> dict:

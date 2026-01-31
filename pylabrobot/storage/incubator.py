@@ -73,22 +73,13 @@ class Incubator(Machine, Resource):
           return site
     raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
 
-  async def fetch_plate_to_loading_tray(
-    self, plate_name: str, read_barcode: Optional[bool] = False
-  ) -> Plate:
+  async def fetch_plate_to_loading_tray(self, plate_name: str, **backend_kwargs) -> Plate:
     """Fetch a plate from the incubator and put it on the loading tray."""
 
     site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
     assert plate is not None
-
-    if read_barcode:
-      barcode = await self.backend.fetch_plate_to_loading_tray(plate, read_barcode)
-      print(barcode)
-      # undecided with what we want to do with barcode string (no Plate variable for it)
-    else:
-      await self.backend.fetch_plate_to_loading_tray(plate)
-
+    await self.backend.fetch_plate_to_loading_tray(plate, **backend_kwargs)
     plate.unassign()
     self.loading_tray.assign_child_resource(plate)
     return plate
@@ -122,9 +113,7 @@ class Incubator(Machine, Resource):
     return random.choice(self._find_available_sites_sorted(plate))
 
   async def take_in_plate(
-    self,
-    site: Union[PlateHolder, Literal["random", "smallest"]],
-    read_barcode: Optional[bool] = False,
+    self, site: Union[PlateHolder, Literal["random", "smallest"]], **backend_kwargs
   ):
     """Take a plate from the loading tray and put it in the incubator."""
 
@@ -141,14 +130,7 @@ class Incubator(Machine, Resource):
         raise ValueError(f"Site {site.name} is not available for plate {plate.name}")
     else:
       raise ValueError(f"Invalid site: {site}")
-
-    if read_barcode:
-      barcode = await self.backend.take_in_plate(plate, site, read_barcode)
-      print(barcode)
-    # undecided with what we want to do with barcode string (no Plate variable for it)
-    else:
-      await self.backend.take_in_plate(plate, site)
-
+    await self.backend.take_in_plate(plate, site, **backend_kwargs)
     plate.unassign()
     site.assign_child_resource(plate)
 
@@ -170,9 +152,6 @@ class Incubator(Machine, Resource):
 
   async def stop_shaking(self):
     await self.backend.stop_shaking()
-
-  async def scan_barcode(self, site: PlateHolder):
-    await self.backend.scan_barcode(self, site)
 
   def summary(self) -> str:
     def create_pretty_table(header, *columns) -> str:
@@ -231,7 +210,8 @@ class Incubator(Machine, Resource):
       model=data["model"],
     )
 
-  """ Methods added for Liconic incubator options."""
+  async def scan_barcode(self, site: PlateHolder):
+    return await self.backend.scan_barcode(site)
 
   async def get_set_temperature(self) -> float:
     """Get the set value temperature of the incubator in degrees Celsius."""
@@ -290,21 +270,13 @@ class Incubator(Machine, Resource):
     return await self.backend.check_second_transfer_sensor()
 
   async def move_position_to_position(
-    self, plate_name: str, dest_site: PlateHolder, read_barcode: Optional[bool] = False
+    self, plate_name: str, dest_site: PlateHolder, **backend_kwargs
   ) -> Plate:
-    """Move a plate to another internal position in the storage unit"""
+    """Move a plate to another internal position in the storage unit."""
     site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
     assert plate is not None
-
-    if read_barcode:
-      barcode = await self.backend.move_position_to_position(plate, dest_site, read_barcode)
-      print(barcode)
-      # undecided with what we want to do with barcode string (no Plate variable for it)
-    else:
-      await self.backend.move_position_to_position(plate, dest_site)
-
+    await self.backend.move_position_to_position(plate, dest_site, **backend_kwargs)
     plate.unassign()
-    site.assign_child_resource(plate)
-
+    dest_site.assign_child_resource(plate)
     return plate
