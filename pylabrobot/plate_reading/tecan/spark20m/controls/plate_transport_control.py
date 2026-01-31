@@ -1,6 +1,6 @@
 from enum import Enum
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import MovementSpeed, PlatePosition
 
 
@@ -11,7 +11,7 @@ class PlateColor(Enum):
   NO = "NO"
 
 
-class plateControl(baseControl):
+class PlateControl(BaseControl):
   """
   This class provides methods for controlling the plate transport system.
   It includes functionalities to move the plate to absolute positions or named positions,

@@ -1,10 +1,10 @@
 from typing import Optional
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import ModuleType, SimulationState
 
 
-class SystemControl(baseControl):
+class SystemControl(BaseControl):
   async def get_status(self):
     return await self.send_command("?INSTRUMENT STATE")
 

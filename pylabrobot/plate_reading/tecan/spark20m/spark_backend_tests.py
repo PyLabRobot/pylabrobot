@@ -3,7 +3,7 @@ import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pylabrobot.plate_reading.tecan.spark20m.spark_backend import SparkBackend, SparkDevice
+from pylabrobot.plate_reading.tecan.spark20m.spark_backend import SparkBackend
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well
 
@@ -23,12 +23,6 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.mock_reader.connect = AsyncMock()
     self.mock_reader.close = AsyncMock()
     self.mock_reader.send_command = AsyncMock(return_value=True)
-
-    # Mock reading context manager
-    self.mock_reading_cm = MagicMock()
-    self.mock_reading_cm.__aenter__ = AsyncMock()
-    self.mock_reading_cm.__aexit__ = AsyncMock()
-    self.mock_reader.reading.return_value = self.mock_reading_cm
 
     # Patch Processors
     self.abs_proc_patcher = patch(
@@ -53,12 +47,12 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
   async def test_setup(self):
     await self.backend.setup()
     self.mock_reader.connect.assert_called_once()
-    # Verify that init_module was called and it used the reading context
-    self.mock_reader.reading.assert_called_with(SparkDevice.PLATE_TRANSPORT)
+    # Verify that send_command was called for init_module
+    self.mock_reader.send_command.assert_called()
 
   async def test_open(self):
     await self.backend.open()
-    self.mock_reader.reading.assert_called_with(SparkDevice.PLATE_TRANSPORT)
+    self.mock_reader.send_command.assert_called()
 
   async def test_read_absorbance(self):
     # Mock background read

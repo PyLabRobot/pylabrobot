@@ -2,7 +2,7 @@ import logging
 from enum import Enum
 from typing import Optional
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import MeasurementMode, ModuleType
 
 
@@ -18,7 +18,7 @@ class ScanDarkState(Enum):
   FALSE = "FALSE"
 
 
-class measurement_control(baseControl):
+class MeasurementControl(BaseControl):
   """
   This class provides methods for controlling measurement operations on the device.
   It includes functionalities to start/end measurements, set/get measurement modes,

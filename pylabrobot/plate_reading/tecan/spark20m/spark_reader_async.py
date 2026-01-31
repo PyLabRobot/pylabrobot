@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import logging
 from enum import Enum
 from typing import Optional
@@ -98,6 +97,11 @@ class SparkReaderAsync:
     endpoint_addr = SparkEndpoint.BULK_OUT.value
 
     async with self.lock:
+      # Set up read task before sending command
+      read_task = self._init_read(device_type, SparkEndpoint.INTERRUPT_IN)
+      await asyncio.sleep(0.01)
+      response_task = asyncio.create_task(self._get_response(read_task))
+
       logging.debug(f"Sending to {device_type.name}: {command_str}")
       payload = command_str.encode("ascii")
       payload_len = len(payload)
@@ -109,12 +113,23 @@ class SparkReaderAsync:
       try:
         await reader.write_to_endpoint(endpoint_addr, message)
         logging.debug(f"Sent message to {device_type.name}: {message.hex()}")
-        return True
       except Exception as e:
         logging.error(f"Error sending command to {device_type.name}: {e}", exc_info=True)
         return False
 
-  def init_read(self, device_type, endpoint, count=512, read_timeout=2000):
+      # Wait for response
+      if not response_task.done():
+        await response_task
+
+      try:
+        response = response_task.result()
+        logging.debug(f"Response: {response}")
+        return True
+      except Exception as e:
+        logging.debug(f"Response task exception: {e}")
+        return False
+
+  def _init_read(self, device_type, endpoint, count=512, read_timeout=2000):
     logging.debug(f"Initiating read task on {device_type.name} ep {hex(endpoint.value)}...")
     self.cur_reader = self.devices[device_type]
     self.cur_endpoint_addr = endpoint.value
@@ -125,7 +140,7 @@ class SparkReaderAsync:
       )
     )
 
-  async def get_response(self, read_task, timeout=2000, attempts=10000):
+  async def _get_response(self, read_task, timeout=2000, attempts=10000):
     try:
       data = await read_task
 
@@ -177,37 +192,6 @@ class SparkReaderAsync:
   def clear_messages(self):
     """Clear the list of recorded RespMessage payloads."""
     self.msgs = []
-
-  @contextlib.asynccontextmanager
-  async def reading(
-    self,
-    device_type=SparkDevice.PLATE_TRANSPORT,
-    endpoint=SparkEndpoint.INTERRUPT_IN,
-    count=512,
-    read_timeout=2000,
-  ):
-    if device_type not in self.devices:
-      raise ValueError(f"Device type {device_type} not connected.")
-
-    read_task = self.init_read(device_type, endpoint, count, read_timeout)
-    await asyncio.sleep(0.01)  # Short delay to ensure the read task starts
-
-    response_task = asyncio.create_task(self.get_response(read_task))
-
-    try:
-      yield response_task
-    finally:
-      logging.debug(
-        f"Context manager exiting, awaiting read task for {device_type.name} {endpoint.name}"
-      )
-      if not response_task.done():
-        await response_task
-
-      try:
-        response = response_task.result()
-        logging.debug(f"Response from context manager read: {response}")
-      except Exception as e:
-        logging.debug(f"Response task exception: {e}")
 
   async def start_background_read(
     self, device_type, endpoint=SparkEndpoint.INTERRUPT_IN, read_timeout=100

@@ -1,11 +1,11 @@
 import logging
 from typing import Optional
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import InstrumentMessageType, ModuleType
 
 
-class DataControl(baseControl):
+class DataControl(BaseControl):
   async def get_programmable_memory_scope(
     self, hw_module: Optional[ModuleType] = None, number=None, subcomponent=None
   ):

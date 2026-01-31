@@ -1,3 +1,3 @@
-class baseControl:
-  def __init__(self, reader):
-    self.send_command = reader.send_command
+class BaseControl:
+  def __init__(self, send_command):
+    self.send_command = send_command

@@ -1,8 +1,8 @@
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import GasOption, GasPowerState
 
 
-class GasControl(baseControl):
+class GasControl(BaseControl):
   async def get_gas_options(self):
     """Gets the available gas options."""
     response = await self.send_command("#GASCONTROL GAS")

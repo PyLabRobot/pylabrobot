@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import ModuleType, ShakingMode, ShakingName
 
 
@@ -15,7 +15,7 @@ class RetractionState(Enum):
   DISABLED = "DISABLED"
 
 
-class movement_control(baseControl):
+class MovementControl(BaseControl):
   """
   This class provides methods for controlling various movement operations on the device.
   It includes functionalities to move motors to absolute or relative positions,

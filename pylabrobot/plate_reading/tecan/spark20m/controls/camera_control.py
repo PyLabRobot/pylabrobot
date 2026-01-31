@@ -1,10 +1,10 @@
 import logging
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import BrightnessState, CameraMode, FlippingMode, TriggerMode
 
 
-class cameraControl(baseControl):
+class CameraControl(BaseControl):
   async def initialize_camera(self, ini_file_path=None):
     """Initializes the camera."""
     command = "CAMERA INIT"

@@ -1,10 +1,10 @@
 from typing import Optional
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import ConfigAxis, ModuleType
 
 
-class ConfigControl(baseControl):
+class ConfigControl(BaseControl):
   async def get_config_expected_modules(self):
     """Gets the expected modules from configuration."""
     return await self.send_command("?CONFIG MODULE EXPECTED")

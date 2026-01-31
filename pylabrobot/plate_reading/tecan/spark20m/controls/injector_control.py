@@ -1,10 +1,10 @@
 from typing import List
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import InjectionMode, InjectorName, InjectorState
 
 
-class InjectorControl(baseControl):
+class InjectorControl(BaseControl):
   async def get_all_injectors(self):
     """Gets all available injectors."""
     response = await self.send_command("#INJECTOR PUMP")

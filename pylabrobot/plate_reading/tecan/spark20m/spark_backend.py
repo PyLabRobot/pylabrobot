@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from typing import Dict, List, Optional
@@ -10,34 +9,15 @@ from pylabrobot.resources.well import Well
 
 from .controls.config_control import ConfigControl
 from .controls.data_control import DataControl
-from .controls.measurement_control import MeasurementMode, ScanDirection, measurement_control
+from .controls.measurement_control import MeasurementControl, MeasurementMode, ScanDirection
 from .controls.optics_control import FilterType, FluorescenceCarrier, MirrorType, OpticsControl
-from .controls.plate_transport_control import MovementSpeed, PlatePosition, plateControl
+from .controls.plate_transport_control import MovementSpeed, PlateControl, PlatePosition
 from .controls.sensor_control import InstrumentMessageType, SensorControl
 from .controls.system_control import SystemControl
 from .spark_processor import AbsorbanceProcessor, FluorescenceProcessor
 from .spark_reader_async import SparkDevice, SparkEndpoint, SparkReaderAsync
 
 logger = logging.getLogger(__name__)
-
-
-class AutoReaderProxy:
-  def __init__(self, target, reader, device):
-    self._target = target
-    self._reader = reader
-    self._device = device
-
-  def __getattr__(self, name):
-    attr = getattr(self._target, name)
-
-    if asyncio.iscoroutinefunction(attr):
-
-      async def wrapper(*args, **kwargs):
-        async with self._reader.reading(self._device):
-          return await attr(*args, **kwargs)
-
-      return wrapper
-    return attr
 
 
 class SparkBackend(PlateReaderBackend):
@@ -50,26 +30,14 @@ class SparkBackend(PlateReaderBackend):
     self.absorbance_processor = AbsorbanceProcessor()
     self.fluorescence_processor = FluorescenceProcessor()
 
-    # Initialize .controls
-    self.config = AutoReaderProxy(
-      ConfigControl(self.reader), self.reader, SparkDevice.PLATE_TRANSPORT
-    )
-    self.plate = AutoReaderProxy(
-      plateControl(self.reader), self.reader, SparkDevice.PLATE_TRANSPORT
-    )
-    self.measure = AutoReaderProxy(
-      measurement_control(self.reader), self.reader, SparkDevice.PLATE_TRANSPORT
-    )
-    self.optics = AutoReaderProxy(
-      OpticsControl(self.reader), self.reader, SparkDevice.PLATE_TRANSPORT
-    )
-    self.system = AutoReaderProxy(
-      SystemControl(self.reader), self.reader, SparkDevice.PLATE_TRANSPORT
-    )
-    self.sensors = AutoReaderProxy(
-      SensorControl(self.reader), self.reader, SparkDevice.PLATE_TRANSPORT
-    )
-    self.data = AutoReaderProxy(DataControl(self.reader), self.reader, SparkDevice.PLATE_TRANSPORT)
+    # Initialize controls
+    self.config = ConfigControl(self.reader.send_command)
+    self.plate = PlateControl(self.reader.send_command)
+    self.measure = MeasurementControl(self.reader.send_command)
+    self.optics = OpticsControl(self.reader.send_command)
+    self.system = SystemControl(self.reader.send_command)
+    self.sensors = SensorControl(self.reader.send_command)
+    self.data = DataControl(self.reader.send_command)
 
   async def setup(self) -> None:
     """Set up the plate reader."""

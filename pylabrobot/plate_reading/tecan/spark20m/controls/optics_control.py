@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import (
   FilterType,
   FluorescenceCarrier,
@@ -24,7 +24,7 @@ class LightingState(Enum):
   OFF = "OFF"
 
 
-class OpticsControl(baseControl):
+class OpticsControl(BaseControl):
   async def get_beam_diameter_list(self):
     """Gets the list of possible beam diameters."""
     return await self.send_command("#BEAM DIAMETER")

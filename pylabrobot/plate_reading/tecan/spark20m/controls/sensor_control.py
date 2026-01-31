@@ -2,7 +2,7 @@ import logging
 from enum import Enum
 from typing import Optional
 
-from .base_control import baseControl
+from .base_control import BaseControl
 from .spark_enums import InstrumentMessageType, ModuleType
 
 
@@ -20,7 +20,7 @@ class chillerState(Enum):
   OFF = "OFF"
 
 
-class SensorControl(baseControl):
+class SensorControl(BaseControl):
   async def read_barcode(self, force_reading=False):
     """Reads the barcode."""
     command = "BARCODE READ"

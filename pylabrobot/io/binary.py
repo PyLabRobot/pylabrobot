@@ -1,7 +1,6 @@
 """Binary data reading utilities."""
 
 import struct
-from typing import Optional
 
 
 class Reader:
@@ -39,7 +38,7 @@ class Reader:
     """Read a value using struct format."""
     prefix = "<" if self._little_endian else ">"
     data = self.raw_bytes(size)
-    return struct.unpack(prefix + fmt, data)[0]
+    return int(struct.unpack(prefix + fmt, data)[0])
 
   def u8(self) -> int:
     """Read an unsigned 8-bit integer."""

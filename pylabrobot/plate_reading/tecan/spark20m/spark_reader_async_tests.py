@@ -105,7 +105,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       read_task: asyncio.Future = asyncio.Future()
       read_task.set_result(b"response_bytes")
 
-      parsed = await self.reader.get_response(read_task)
+      parsed = await self.reader._get_response(read_task)
 
       self.assertEqual(parsed, {"type": "RespReady", "payload": {"status": "OK"}})
 
@@ -131,33 +131,13 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       read_task: asyncio.Future = asyncio.Future()
       read_task.set_result(b"initial_data")
 
-      parsed = await self.reader.get_response(read_task, attempts=5)
+      parsed = await self.reader._get_response(read_task, attempts=5)
 
       self.assertEqual(parsed, {"type": "RespReady", "payload": "done"})
       self.assertIn("msg1", self.reader.msgs)
 
       # Should have called read_from_endpoint once for the retry
       mock_reader.read_from_endpoint.assert_awaited()
-
-  async def test_reading_context_manager(self):
-    mock_dev = AsyncMock()
-    self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
-
-    with patch.object(self.reader, "init_read") as mock_init_read, patch.object(
-      self.reader, "get_response", new_callable=AsyncMock
-    ) as mock_get_resp:
-      read_task_mock: asyncio.Future = asyncio.Future()
-      mock_init_read.return_value = read_task_mock
-
-      mock_get_resp.return_value = {"status": "ok"}
-
-      async with self.reader.reading(SparkDevice.PLATE_TRANSPORT):
-        pass
-
-      mock_init_read.assert_called_with(
-        SparkDevice.PLATE_TRANSPORT, SparkEndpoint.INTERRUPT_IN, 512, 2000
-      )
-      mock_get_resp.assert_awaited()
 
   async def test_start_background_read(self):
     mock_dev = AsyncMock()
@@ -218,7 +198,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       read_task.set_result(b"error_bytes")
 
       # get_response catches exceptions and logs them, returning None
-      result = await self.reader.get_response(read_task)
+      result = await self.reader._get_response(read_task)
       self.assertIsNone(result)
 
 
