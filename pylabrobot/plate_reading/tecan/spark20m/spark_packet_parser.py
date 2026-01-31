@@ -4,6 +4,8 @@ import struct
 from collections import deque
 from typing import Any, Dict, List, TypedDict
 
+from pylabrobot.io.binary import Reader
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,29 +67,6 @@ PACKET_TYPE = {
 }
 
 
-# --- Payload Reader Helpers ---
-def _read_bytes(payload: bytes, offset: int, length: int) -> bytes:
-  if offset + length > len(payload):
-    raise ValueError(
-      f"Payload too short: need {length} bytes at offset {offset}, got {len(payload) - offset}"
-    )
-  return payload[offset : offset + length]
-
-
-def _read_u8(payload: bytes, offset: int) -> int:
-  return int(struct.unpack(">B", _read_bytes(payload, offset, 1))[0])
-
-
-def _read_u16(payload: bytes, offset: int) -> int:
-  return int(struct.unpack(">H", _read_bytes(payload, offset, 2))[0])
-
-
-def _read_u32(payload: bytes, offset: int) -> int:
-  return int(struct.unpack(">I", _read_bytes(payload, offset, 4))[0])
-
-
-def _read_string(payload: bytes, offset: int, length: int) -> str:
-  return _read_bytes(payload, offset, length).decode("utf-8", errors="ignore")
 
 
 class SparkPacket:
@@ -96,10 +75,11 @@ class SparkPacket:
     if len(self.raw_data) < 5:
       raise ValueError("Packet too short")
 
-    self.indicator = self.raw_data[0]
+    reader = Reader(self.raw_data, little_endian=False)
+    self.indicator = reader.u8()
     self.type = PACKET_TYPE.get(self.indicator, f"Unknown_{self.indicator}")
-    self.seq_num = self.raw_data[1]
-    self.payload_len = _read_u16(self.raw_data, 2)
+    self.seq_num = reader.u8()
+    self.payload_len = reader.u16()
     payload_end = 4 + self.payload_len
     if len(self.raw_data) < payload_end + 1:
       raise ValueError("Packet data shorter than indicated payload length")
@@ -134,39 +114,42 @@ class SparkPacket:
       return {"parsing_error": str(e), "raw_payload": self.payload_bytes}
 
   def _parse_resp_ready(self) -> Dict[str, Any]:
-    return {
-      "message": _read_string(self.payload_bytes, 0, len(self.payload_bytes))
-      if self.payload_bytes
-      else None
-    }
+    if not self.payload_bytes:
+      return {"message": None}
+    reader = Reader(self.payload_bytes, little_endian=False)
+    return {"message": reader.string(len(self.payload_bytes))}
 
   def _parse_resp_terminate(self) -> Dict[str, Any]:
-    return {"time": _read_u32(self.payload_bytes, 0) if len(self.payload_bytes) >= 4 else None}
+    if len(self.payload_bytes) < 4:
+      return {"time": None}
+    reader = Reader(self.payload_bytes, little_endian=False)
+    return {"time": reader.u32()}
 
   def _parse_resp_binary(self, is_header=False) -> Dict[str, Any]:
     return {"is_header": is_header, "data": self.payload_bytes}
 
   def _parse_resp_busy(self) -> Dict[str, Any]:
-    return {"time": _read_u32(self.payload_bytes, 0) if len(self.payload_bytes) >= 4 else None}
+    if len(self.payload_bytes) < 4:
+      return {"time": None}
+    reader = Reader(self.payload_bytes, little_endian=False)
+    return {"time": reader.u32()}
 
   def _parse_resp_log(self) -> Dict[str, Any]:
-    return {"message": _read_string(self.payload_bytes, 0, len(self.payload_bytes))}
+    reader = Reader(self.payload_bytes, little_endian=False)
+    return {"message": reader.string(len(self.payload_bytes))}
 
   def _parse_resp_message(self) -> Dict[str, Any]:
-    offset = 0
-    number = _read_u16(self.payload_bytes, offset)
-    offset += 2
-    message_str = _read_string(self.payload_bytes, offset, len(self.payload_bytes) - offset)
+    reader = Reader(self.payload_bytes, little_endian=False)
+    number = reader.u16()
+    message_str = reader.string(reader.remaining())
     parts = message_str.split("|")
     return {"number": number, "format": parts[0], "args": parts[1:]}
 
   def _parse_resp_error(self, is_async=False) -> Dict[str, Any]:
-    offset = 0
-    timestamp = _read_u32(self.payload_bytes, offset)
-    offset += 4
-    number = _read_u16(self.payload_bytes, offset)
-    offset += 2
-    message_str = _read_string(self.payload_bytes, offset, len(self.payload_bytes) - offset)
+    reader = Reader(self.payload_bytes, little_endian=False)
+    timestamp = reader.u32()
+    number = reader.u16()
+    message_str = reader.string(reader.remaining())
     parts = message_str.split("|")
     return {
       "async": is_async,
@@ -229,7 +212,8 @@ class MeasurementBlock:
     return data
 
   def _read_u16_from_buffer(self) -> int:
-    return _read_u16(self._consume_buffer(2), 0)
+    reader = Reader(self._consume_buffer(2), little_endian=False)
+    return reader.u16()
 
   def _parse_generic_payload(self, types: List[TDCLType]) -> Dict[str, Any]:
     parsed = {}
@@ -457,7 +441,8 @@ class SparkParser:
         try:
           count_packet = data_packets.popleft()
           count_payload = count_packet.parsed_payload["data"]
-          num_headers = _read_u16(count_payload, 0)
+          count_reader = Reader(count_payload, little_endian=False)
+          num_headers = count_reader.u16()
           logger.info(f"U16MULT_H indicates {num_headers} measurement blocks.")
         except Exception as e:
           logger.error(f"Error reading U16MULT_H count in seq {seq_num}: {e}")
