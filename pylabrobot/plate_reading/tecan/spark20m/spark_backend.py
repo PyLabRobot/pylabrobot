@@ -80,19 +80,12 @@ class SparkBackend(PlateReaderBackend):
   async def scan_plate_range(self, plate: Plate, wells: Optional[List[Well]], z: float = 9150):
     """Scan the plate range."""
     num_cols, num_rows, size_y = plate.num_items_x, plate.num_items_y, plate.get_size_y()
-    if num_cols < 2 or num_rows < 2:
-      raise ValueError("Plate must have at least 2 rows and 2 columns to calculate well spacing.")
     top_left_well = plate.get_item(0)
     if top_left_well.location is None:
       raise ValueError("Top left well location is not set.")
     top_left_well_center = top_left_well.location + top_left_well.get_anchor(x="c", y="c")
-    loc_A1 = plate.get_item("A1").location
-    loc_A2 = plate.get_item("A2").location
-    loc_B1 = plate.get_item("B1").location
-    if loc_A1 is None or loc_A2 is None or loc_B1 is None:
-      raise ValueError("Well locations for A1, A2, or B1 are not set.")
-    dx = loc_A2.x - loc_A1.x
-    dy = loc_A1.y - loc_B1.y
+    dx = plate.item_dx
+    dy = plate.item_dy
 
     # Determine rectangles to scan
     if wells is None:
@@ -108,7 +101,9 @@ class SparkBackend(PlateReaderBackend):
         start_x = round((top_left_well_center.x + dx * min_col) * 1000)
         end_x = round((top_left_well_center.x + dx * max_col) * 1000)
         num_points_x = max_col - min_col + 1
-        await self.measurement_control.measure_range_in_x_pointwise(start_x, end_x, y_pos, z, num_points_x)
+        await self.measurement_control.measure_range_in_x_pointwise(
+          start_x, end_x, y_pos, z, num_points_x
+        )
 
   async def read_absorbance(
     self,
