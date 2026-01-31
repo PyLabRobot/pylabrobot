@@ -124,7 +124,7 @@ class Serial(IOBase):
       matching_ports = [
         p.device
         for p in serial.tools.list_ports.comports()
-        if f"{self._vid}:{self._pid}" in (p.hwid or "")
+        if f"{self._vid:04X}:{self._pid:04X}" in (p.hwid or "")
       ]
 
       # 1.a. No matching devices found AND no port specified
@@ -136,20 +136,12 @@ class Serial(IOBase):
     else:
       matching_ports = []
 
-    # 2. VID:PID maybe - port specified
+    # 2. Port specified - skip VID:PID validation, trust the user
     if self._port:  # Port explicitly specified
       candidate_port = self._port
-
-      # 2.a. Port specified but does not match VID:PID - sanity check (e.g. typo in port)
-      if (self._vid is not None and self._pid is not None) and candidate_port not in matching_ports:
-        raise RuntimeError(
-          f"Specified port {candidate_port} not found among machines: {matching_ports} "
-          f"with VID={self._vid}:PID={self._pid}."
-        )
-      else:  # -> WINNER by port specification
-        logger.info(
-          f"Using explicitly provided port: {candidate_port} (for VID={self._vid}, PID={self._pid})",
-        )
+      logger.info(
+        f"Using explicitly provided port: {candidate_port} (for VID={self._vid}, PID={self._pid})",
+      )
 
     # 3. VID:PID specified -  port not specified -> Single device found -> WINNER by VID:PID search
     elif len(matching_ports) == 1:

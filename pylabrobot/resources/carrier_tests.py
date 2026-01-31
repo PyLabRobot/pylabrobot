@@ -1,6 +1,6 @@
 import unittest
 
-from pylabrobot.resources.hamilton.mfx_carriers import MFX_CAR_L5_base
+from pylabrobot.resources.hamilton.mfx_carriers import hamilton_mfx_carrier_L5_base
 from pylabrobot.resources.hamilton.mfx_modules import MFX_TIP_module
 
 from .carrier import (
@@ -420,7 +420,7 @@ class MFXCarrierTests(unittest.TestCase):
     MFX_TIP_module_4 = MFX_TIP_module(name="MFX_TIP_module_4")
     MFX_TIP_module_5 = MFX_TIP_module(name="MFX_TIP_module_5")
 
-    mfx_carrier = MFX_CAR_L5_base(
+    mfx_carrier = hamilton_mfx_carrier_L5_base(
       name="mfx_tip_carrier_1",
       modules={
         4: MFX_TIP_module_5,
