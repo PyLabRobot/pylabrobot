@@ -187,7 +187,7 @@ class LiconicBackend(IncubatorBackend):
     await self._wait_ready()
 
   async def fetch_plate_to_loading_tray(
-    self, plate: str, read_barcode: Optional[bool] = False
+    self, plate: Plate, read_barcode: Optional[bool] = False
   ) -> Optional[str]:
     """Fetch a plate from the incubator to the loading tray."""
     site = plate.parent
