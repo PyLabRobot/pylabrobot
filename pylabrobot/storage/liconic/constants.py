@@ -1,65 +1,67 @@
 from enum import Enum, IntEnum
 
+
 class LiconicType(Enum):
-  STX44_IC = "STX44_IC" # incubator
-  STX44_HC = "STX44_HC" # humid cooler
-  STX44_DC2 = "STX44_DC2" # dry storage
-  STX44_HR = "STX44_HR" # humid wide range
-  STX44_DR2 = "STX44_DR2" # dry wide range
-  STX44_AR = "STX44_AR" # humidity controlled
-  STX44_DF = "STX44_DF" # deep freezer
-  STX44_NC = "STX44_NC" # no climate
-  STX44_DH = "STX44_DH" # dry humid
+  STX44_IC = "STX44_IC"  # incubator
+  STX44_HC = "STX44_HC"  # humid cooler
+  STX44_DC2 = "STX44_DC2"  # dry storage
+  STX44_HR = "STX44_HR"  # humid wide range
+  STX44_DR2 = "STX44_DR2"  # dry wide range
+  STX44_AR = "STX44_AR"  # humidity controlled
+  STX44_DF = "STX44_DF"  # deep freezer
+  STX44_NC = "STX44_NC"  # no climate
+  STX44_DH = "STX44_DH"  # dry humid
 
-  STX110_IC = "STX110_IC" # incubator
-  STX110_HC = "STX110_HC" # humid cooler
-  STX110_DC2 = "STX110_DC2" # dry storage
-  STX110_HR = "STX110_HR" # humid wide range
-  STX110_DR2 = "STX110_DR2" # dry wide range
-  STX110_AR = "STX110_AR" # humidity controlled
-  STX110_DF = "STX110_DF" # deep freezer
-  STX110_NC = "STX110_NC" # no climate
-  STX110_DH = "STX110_DH" # dry humid
+  STX110_IC = "STX110_IC"  # incubator
+  STX110_HC = "STX110_HC"  # humid cooler
+  STX110_DC2 = "STX110_DC2"  # dry storage
+  STX110_HR = "STX110_HR"  # humid wide range
+  STX110_DR2 = "STX110_DR2"  # dry wide range
+  STX110_AR = "STX110_AR"  # humidity controlled
+  STX110_DF = "STX110_DF"  # deep freezer
+  STX110_NC = "STX110_NC"  # no climate
+  STX110_DH = "STX110_DH"  # dry humid
 
-  STX220_IC = "STX220_IC" # incubator
-  STX220_HC = "STX220_HC" # humid cooler
-  STX220_DC2 = "STX220_DC2" # dry storage
-  STX220_HR = "STX220_HR" # humid wide range
-  STX220_DR2 = "STX220_DR2" # dry wide range
-  STX220_AR = "STX220_AR" # humidity controlled
-  STX220_DF = "STX220_DF" # deep freezer
-  STX220_NC = "STX220_NC" # no climate
-  STX220_DH = "STX220_DH" # dry humid
+  STX220_IC = "STX220_IC"  # incubator
+  STX220_HC = "STX220_HC"  # humid cooler
+  STX220_DC2 = "STX220_DC2"  # dry storage
+  STX220_HR = "STX220_HR"  # humid wide range
+  STX220_DR2 = "STX220_DR2"  # dry wide range
+  STX220_AR = "STX220_AR"  # humidity controlled
+  STX220_DF = "STX220_DF"  # deep freezer
+  STX220_NC = "STX220_NC"  # no climate
+  STX220_DH = "STX220_DH"  # dry humid
 
-  STX280_IC = "STX280_IC" # incubator
-  STX280_HC = "STX280_HC" # humid cooler
-  STX280_DC2 = "STX280_DC2" # dry storage
-  STX280_HR = "STX280_HR" # humid wide range
-  STX280_DR2 = "STX280_DR2" # dry wide range
-  STX280_AR = "STX280_AR" # humidity controlled
-  STX280_DF = "STX280_DF" # deep freezer
-  STX280_NC = "STX280_NC" # no climate
-  STX280_DH = "STX44_DH" # dry humid
+  STX280_IC = "STX280_IC"  # incubator
+  STX280_HC = "STX280_HC"  # humid cooler
+  STX280_DC2 = "STX280_DC2"  # dry storage
+  STX280_HR = "STX280_HR"  # humid wide range
+  STX280_DR2 = "STX280_DR2"  # dry wide range
+  STX280_AR = "STX280_AR"  # humidity controlled
+  STX280_DF = "STX280_DF"  # deep freezer
+  STX280_NC = "STX280_NC"  # no climate
+  STX280_DH = "STX44_DH"  # dry humid
 
-  STX500_IC = "STX500_IC" # incubator
-  STX500_HC = "STX500_HC" # humid cooler
-  STX500_DC2 = "STX500_DC2" # dry storage
-  STX500_HR = "STX500_HR" # humid wide range
-  STX500_DR2 = "STX500_DR2" # dry wide range
-  STX500_AR = "STX500_AR" # humidity controlled
-  STX500_DF = "STX500_DF" # deep freezer
-  STX500_NC = "STX500_NC" # no climate
-  STX500_DH = "STX500_DH" # dry humid
+  STX500_IC = "STX500_IC"  # incubator
+  STX500_HC = "STX500_HC"  # humid cooler
+  STX500_DC2 = "STX500_DC2"  # dry storage
+  STX500_HR = "STX500_HR"  # humid wide range
+  STX500_DR2 = "STX500_DR2"  # dry wide range
+  STX500_AR = "STX500_AR"  # humidity controlled
+  STX500_DF = "STX500_DF"  # deep freezer
+  STX500_NC = "STX500_NC"  # no climate
+  STX500_DH = "STX500_DH"  # dry humid
 
-  STX1000_IC = "STX1000_IC" # incubator
-  STX1000_HC = "STX1000_HC" # humid cooler
-  STX1000_DC2 = "STX1000_DC2" # dry storage
-  STX1000_HR = "STX1000_HR" # humid wide range
-  STX1000_DR2 = "STX1000_DR2" # dry wide range
-  STX1000_AR = "STX1000_AR" # humidity controlled
-  STX1000_DF = "STX1000_DF" # deep freezer
-  STX1000_NC = "STX1000_NC" # no climate
-  STX1000_DH = "STX1000_DH" # dry humid
+  STX1000_IC = "STX1000_IC"  # incubator
+  STX1000_HC = "STX1000_HC"  # humid cooler
+  STX1000_DC2 = "STX1000_DC2"  # dry storage
+  STX1000_HR = "STX1000_HR"  # humid wide range
+  STX1000_DR2 = "STX1000_DR2"  # dry wide range
+  STX1000_AR = "STX1000_AR"  # humidity controlled
+  STX1000_DF = "STX1000_DF"  # deep freezer
+  STX1000_NC = "STX1000_NC"  # no climate
+  STX1000_DH = "STX1000_DH"  # dry humid
+
 
 class ControllerError(Enum):
   RELAY_ERROR = "E0"
@@ -68,6 +70,7 @@ class ControllerError(Enum):
   HARDWARE_ERROR = "E3"
   WRITE_PROTECTED_ERROR = "E4"
   BASE_UNIT_ERROR = "E5"
+
 
 class HandlingError(Enum):
   GENERAL_HANDLING_ERROR = "00001"
@@ -83,7 +86,7 @@ class HandlingError(Enum):
   NO_PLATE_ON_SHOVEL_DETECTION = "00016"
   NO_RECOVERY = "00017"
 
-  IMPORT_PLATE_STACKER_POSITIONING_ERROR  = "00100"
+  IMPORT_PLATE_STACKER_POSITIONING_ERROR = "00100"
   IMPORT_PLATE_HANDLER_TRANSFER_TURN_OUT_ERROR = "00101"
   IMPORT_PLATE_SHOVEL_TRANSFER_OUTER_ERROR = "00102"
   IMPORT_PLATE_LIFT_TRANSFER_ERROR = "00103"
@@ -104,7 +107,7 @@ class HandlingError(Enum):
   EXPORT_PLATE_HANDLER_TRANSFER_TURN_OUT_ERROR = "00205"
   EXPORT_PLATE_SHOVEL_TRANSFER_OUTER_ERROR = "00206"
   EXPORT_PLATE_LIFT_TRANSFER_PLACE_ERROR = "00207"
-  EXPORT_PLATE_SHOVEL_TRANSFER_INNER_ERROR= "00208"
+  EXPORT_PLATE_SHOVEL_TRANSFER_INNER_ERROR = "00208"
   EXPORT_PLATE_HANDLER_TRANSFER_TURN_IN_ERROR = "00209"
   EXPORT_PLATE_LIFT_TRAVEL_BACK_ERROR = "00210"
   EXPORT_PLATE_LIFT_INITIALIZING_ERROR = "00211"
