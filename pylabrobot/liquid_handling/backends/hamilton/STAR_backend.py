@@ -1827,7 +1827,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Detect liquid heights
-    absolute_heights_measurements: Dict[int, List[float]] = {ch: [] for ch in use_channels}
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
+      ch: [] for ch in use_channels
+    }
 
     lowest_immers_positions = [
       container.get_absolute_location("c", "c", "cavity_bottom").z
@@ -1846,7 +1848,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     try:
       for _ in range(n_replicates):
         if lld_mode == self.LLDMode.GAMMA:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._move_z_drive_to_liquid_surface_using_clld(
                 channel_idx=channel,
@@ -1857,11 +1859,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True,
           )
 
         else:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._search_for_surface_using_plld(
                 channel_idx=channel,
@@ -1876,28 +1879,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True,
           )
 
-        # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
+        # Get heights for ALL channels, handling failures for channels with no liquid
+        # (indexed 0 to self.num_channels-1) but only store for used channels
         current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for ch_idx in use_channels:
-          height = current_absolute_liquid_heights[ch_idx]
+        for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
+          if isinstance(result, STARFirmwareError):
+            # Check if it's specifically the "no liquid found" error
+            error_msg = str(result).lower()
+            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+              height = None  # No liquid detected - this is expected
+              msg = (
+                f"Channel {ch_idx}: No liquid detected. Could be because there is "
+                f"no liquid in container {containers[idx].name} or liquid level is too low."
+              )
+              if lld_mode == self.LLDMode.GAMMA:
+                msg += " Consider using pressure-based LLD if liquid is believed to exist."
+              logger.warning(msg)
+            else:
+              # Some other firmware error - re-raise it
+              raise result
+          elif isinstance(result, Exception):
+            # Some other unexpected error - re-raise it
+            raise result
+          else:
+            height = current_absolute_liquid_heights[ch_idx]
           absolute_heights_measurements[ch_idx].append(height)
     except:
       await self.move_all_channels_in_z_safety()
       raise
 
-    # Compute average heights per channel and convert to relative to well bottom
-    absolute_liquid_heights = [
-      sum(absolute_heights_measurements[ch]) / len(absolute_heights_measurements[ch])
-      for ch in use_channels
-    ]
+    # Compute liquid heights relative to well bottom
+    relative_to_well: List[float] = []
+    inconsistent_channels: List[str] = []
 
-    relative_to_well = [
-      absolute_liquid_height - resource.get_absolute_location("c", "c", "cavity_bottom").z
-      for resource, absolute_liquid_height in zip(containers, absolute_liquid_heights)
-    ]
+    for ch, container in zip(use_channels, containers):
+      measurements = absolute_heights_measurements[ch]
+      valid = [m for m in measurements if m is not None]
+      cavity_bottom = container.get_absolute_location("c", "c", "cavity_bottom").z
+
+      if len(valid) == 0:
+        relative_to_well.append(0.0)
+      elif len(valid) == len(measurements):
+        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
+      else:
+        inconsistent_channels.append(
+          f"Channel {ch}: {len(valid)}/{len(measurements)} replicates detected liquid"
+        )
+
+    if inconsistent_channels:
+      raise RuntimeError(
+        "Inconsistent liquid detection across replicates. "
+        "This may indicate liquid levels near the detection limit:\n"
+        + "\n".join(inconsistent_channels)
+      )
 
     if move_to_z_safety_after:
       await self.move_all_channels_in_z_safety()
@@ -3134,9 +3172,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
       if rot.z % 360 == 180:
-        ref_well = plate.get_well("H12")
+        ref_well = aspiration.wells[-1]
       elif rot.z % 360 == 0:
-        ref_well = plate.get_well("A1")
+        ref_well = aspiration.wells[0]
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
@@ -3410,9 +3448,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
       if rot.z % 360 == 180:
-        ref_well = plate.get_well("H12")
+        ref_well = dispense.wells[-1]
       elif rot.z % 360 == 0:
-        ref_well = plate.get_well("A1")
+        ref_well = dispense.wells[0]
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
@@ -6289,6 +6327,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       0 = no tip, 1 = Tip in gripper (for each channel)
     """
+    warnings.warn(  # TODO: remove 2026-06
+      "`request_tip_presence` is deprecated and will be "
+      "removed in 2026-06 use `channels_sense_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.channels_sense_tip_presence()
+
+  async def channels_sense_tip_presence(self) -> List[int]:
+    """Measure tip presence on all single channels using their sleeve sensors.
+
+    Returns:
+      List of integers where 0 = no tip, 1 = tip present (for each channel)
+    """
 
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
     return cast(List[int], resp.get("rt"))
@@ -7615,13 +7667,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.10.6 Query CoRe 96 Head --------------
 
   async def request_tip_presence_in_core_96_head(self):
-    """Request Tip presence in CoRe 96 Head
+    """Deprecated - use `head96_request_tip_presence` instead.
 
     Returns:
-      qh: 0 = no tips, 1 = TipRack are picked up
+      dictionary with key qh:
+        qh: 0 = no tips, 1 = tips are picked up
     """
+    warnings.warn(  # TODO: remove 2026-06
+      "`request_tip_presence_in_core_96_head` is deprecated and will be "
+      "removed in 2026-06 use `head96_request_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
 
     return await self.send_command(module="C0", command="QH", fmt="qh#")
+
+  async def head96_request_tip_presence(self) -> int:
+    """Request Tip presence on the 96-Head
+
+    Note: this command requests this information from the STAR(let)'s
+      internal memory.
+      It does not directly sense whether tips are present.
+
+    Returns:
+      0 = no tips
+      1 = firmware believes tips are on the 96-head
+    """
+    resp = await self.send_command(module="C0", command="QH", fmt="qh#")
+
+    return int(resp["qh"])
 
   async def request_position_of_core_96_head(self):
     """Deprecated - use `head96_request_position` instead."""
