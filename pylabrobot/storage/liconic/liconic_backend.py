@@ -344,9 +344,8 @@ class LiconicBackend(IncubatorBackend):
   # Unsure if 1 means ON and 0 means OFF, needs to be confirmed.
   async def shaker_status(self) -> int:
     """Determines whether the shaker is ON (1) or OFF (0)"""
-    value = await self._send_command_plc()
-    await self._wait_ready()
-    return value
+    # TODO: Missing PLC command - need to determine correct command from Liconic documentation
+    raise NotImplementedError("shaker_status command not yet implemented")
 
   # UNTESTED
   # Unsure if a liconic will return 00250 for 25 or 00025. Assuming former.
@@ -354,7 +353,7 @@ class LiconicBackend(IncubatorBackend):
   async def get_shaker_speed(self) -> float:
     """Gets the current shaker speed default = 25"""
     speed_val = await self._send_command_plc("RD DM39")
-    speed = speed_val / 10.0
+    speed = int(speed_val) / 10.0
     await self._wait_ready()
     return speed
 
@@ -500,7 +499,7 @@ class LiconicBackend(IncubatorBackend):
     """First need to activate shovel transfer sensor deactivated by default, wait 0.1 seconds
     and then Check if the shovel plate sensor is activated."""
     await self._send_command_plc("ST 1911")
-    asyncio.sleep(0.1)
+    await asyncio.sleep(0.1)
     resp = await self._send_command_plc("RD 1812")
     if resp == "1":
       return True
