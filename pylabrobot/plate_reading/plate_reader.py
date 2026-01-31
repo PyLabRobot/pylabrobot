@@ -32,8 +32,9 @@ class PlateReader(ResourceHolder, Machine):
     size_y: float,
     size_z: float,
     backend: PlateReaderBackend,
-    category: Optional[str] = None,
+    category: Optional[str] = "plate_reader",
     model: Optional[str] = None,
+    child_location: Coordinate = Coordinate.zero(),
   ) -> None:
     ResourceHolder.__init__(
       self,
@@ -43,6 +44,7 @@ class PlateReader(ResourceHolder, Machine):
       size_z=size_z,
       category=category,
       model=model,
+      child_location=child_location,
     )
     Machine.__init__(self, backend=backend)
     self.backend: PlateReaderBackend = backend  # fix type
@@ -187,7 +189,6 @@ class PlateReader(ResourceHolder, Machine):
       focal_height=focal_height,
       **backend_kwargs,
     )
-
     if not use_new_return_type:
       logger.warning(
         "The return type of read_fluorescence will change in a future version. Please set "
@@ -195,3 +196,6 @@ class PlateReader(ResourceHolder, Machine):
       )
       return result[0]["data"]  # type: ignore[no-any-return]
     return result
+
+  def serialize(self) -> dict:
+    return {**Resource.serialize(self), **Machine.serialize(self)}

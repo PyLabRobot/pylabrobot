@@ -11,6 +11,12 @@ from .agilent import (
   SynergyH1Backend,
 )
 from .bmg_labtech import CLARIOstarBackend
+from .byonoy import (
+  ByonoyAbsorbance96AutomateBackend,
+  ByonoyLuminescence96AutomateBackend,
+  byonoy_absorbance96_base_and_reader,
+  byonoy_absorbance_adapter,
+)
 from .chatterbox import PlateReaderChatterboxBackend
 from .image_reader import ImageReader
 from .imager import Imager
