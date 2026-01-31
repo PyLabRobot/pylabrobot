@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 import serial
 
@@ -70,9 +70,9 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
   async def send_command_and_stream(
     self,
     command: str,
-    on_response: callable,
+    on_response: Callable[[str], Awaitable[None]],
     timeout: float = 5.0,
-    stop_condition: Optional[callable] = None,
+    stop_condition: Optional[Callable[[str], bool]] = None,
   ):
     """Send a command and call on_response for each barcode response."""
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
