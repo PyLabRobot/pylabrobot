@@ -159,6 +159,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | WIP | [OEM](https://byonoy.com/luminescence-96-automate/) |
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
+| Tecan | Infinite 200 PRO | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Mostly | [OEM](https://lifesciences.tecan.com/infinite-200-pro) |
 
 
 ### Flow Cytometers
