@@ -31,19 +31,19 @@ class SparkBackend(PlateReaderBackend):
     self.fluorescence_processor = FluorescenceProcessor()
 
     # Initialize controls
-    self.config = ConfigControl(self.reader.send_command)
-    self.plate = PlateControl(self.reader.send_command)
-    self.measure = MeasurementControl(self.reader.send_command)
-    self.optics = OpticsControl(self.reader.send_command)
-    self.system = SystemControl(self.reader.send_command)
-    self.sensors = SensorControl(self.reader.send_command)
-    self.data = DataControl(self.reader.send_command)
+    self.config_control = ConfigControl(self.reader.send_command)
+    self.plate_control = PlateControl(self.reader.send_command)
+    self.measurement_control = MeasurementControl(self.reader.send_command)
+    self.optics_control = OpticsControl(self.reader.send_command)
+    self.system_control = SystemControl(self.reader.send_command)
+    self.sensor_control = SensorControl(self.reader.send_command)
+    self.data_control = DataControl(self.reader.send_command)
 
   async def setup(self) -> None:
     """Set up the plate reader."""
     await self.reader.connect()
-    await self.config.init_module()
-    await self.data.turn_all_interval_messages_off()
+    await self.config_control.init_module()
+    await self.data_control.turn_all_interval_messages_off()
 
   async def get_average_temperature(self) -> Optional[float]:
     """Calculate average chamber temperature from recorded messages (ID 100)."""
@@ -71,11 +71,11 @@ class SparkBackend(PlateReaderBackend):
 
   async def open(self) -> None:
     """Move the plate carrier out."""
-    await self.plate.move_to_position(PlatePosition.OUT_RIGHT)
+    await self.plate_control.move_to_position(PlatePosition.OUT_RIGHT)
 
   async def close(self, plate: Optional[Plate] = None) -> None:
     """Move the plate carrier in."""
-    await self.plate.move_to_position(PlatePosition.PLATE_IN)
+    await self.plate_control.move_to_position(PlatePosition.PLATE_IN)
 
   async def scan_plate_range(self, plate: Plate, wells: Optional[List[Well]], z: float = 9150):
     """Scan the plate range."""
@@ -108,7 +108,7 @@ class SparkBackend(PlateReaderBackend):
         start_x = round((top_left_well_center.x + dx * min_col) * 1000)
         end_x = round((top_left_well_center.x + dx * max_col) * 1000)
         num_points_x = max_col - min_col + 1
-        await self.measure.measure_range_in_x_pointwise(start_x, end_x, y_pos, z, num_points_x)
+        await self.measurement_control.measure_range_in_x_pointwise(start_x, end_x, y_pos, z, num_points_x)
 
   async def read_absorbance(
     self,
@@ -122,15 +122,15 @@ class SparkBackend(PlateReaderBackend):
 
     # Initialize
     self.reader.clear_messages()
-    await self.data.set_interval(InstrumentMessageType.TEMPERATURE, 200)
+    await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
     # Setup Measurement
-    await self.measure.set_measurement_mode(MeasurementMode.ABSORBANCE)
-    await self.measure.start_measurement()
-    await self.plate.set_motor_speed(MovementSpeed.NORMAL)
-    await self.measure.set_scan_direction(ScanDirection.UP)
-    await self.system.set_settle_time(50000)
-    await self.measure.set_number_of_reads(num_reads, label=1)
-    await self.optics.set_excitation_filter(
+    await self.measurement_control.set_measurement_mode(MeasurementMode.ABSORBANCE)
+    await self.measurement_control.start_measurement()
+    await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
+    await self.measurement_control.set_scan_direction(ScanDirection.UP)
+    await self.system_control.set_settle_time(50000)
+    await self.measurement_control.set_number_of_reads(num_reads, label=1)
+    await self.optics_control.set_excitation_filter(
       FilterType.BANDPASS, wavelength=wavelength * 10, bandwidth=bandwidth, label=1
     )
 
@@ -141,7 +141,7 @@ class SparkBackend(PlateReaderBackend):
 
     try:
       # Execute Measurement Sequence
-      await self.measure.prepare_instrument(measure_reference=True)
+      await self.measurement_control.prepare_instrument(measure_reference=True)
 
       await self.scan_plate_range(plate, wells)
       measurement_time = time.time()
@@ -150,8 +150,8 @@ class SparkBackend(PlateReaderBackend):
       stop_event.set()
       await bg_task
 
-      await self.measure.end_measurement()
-      await self.data.turn_all_interval_messages_off()
+      await self.measurement_control.end_measurement()
+      await self.data_control.turn_all_interval_messages_off()
 
     # Process results
     data_matrix = self.absorbance_processor.process(results)
@@ -185,37 +185,37 @@ class SparkBackend(PlateReaderBackend):
 
     # Initialize
     self.reader.clear_messages()
-    await self.data.set_interval(InstrumentMessageType.TEMPERATURE, 200)
+    await self.data_control.set_interval(InstrumentMessageType.TEMPERATURE, 200)
 
     # Setup Measurement
-    await self.measure.set_measurement_mode(MeasurementMode.FLUORESCENCE_TOP)
-    await self.measure.start_measurement()
-    await self.plate.set_motor_speed(MovementSpeed.NORMAL)
+    await self.measurement_control.set_measurement_mode(MeasurementMode.FLUORESCENCE_TOP)
+    await self.measurement_control.start_measurement()
+    await self.plate_control.set_motor_speed(MovementSpeed.NORMAL)
 
     # System Settings
-    await self.system.set_integration_time(40)
-    await self.system.set_lag_time(0)
-    await self.system.set_settle_time(0)
+    await self.system_control.set_integration_time(40)
+    await self.system_control.set_lag_time(0)
+    await self.system_control.set_settle_time(0)
 
     # Optics Settings
-    await self.optics.set_beam_diameter(5400)
-    await self.optics.set_emission_filter(
+    await self.optics_control.set_beam_diameter(5400)
+    await self.optics_control.set_emission_filter(
       FilterType.BANDPASS,
       wavelength=em_wavelength,
       bandwidth=bandwidth,
       carrier=FluorescenceCarrier.MONOCHROMATOR_EMISSION,
     )
-    await self.optics.set_excitation_filter(
+    await self.optics_control.set_excitation_filter(
       FilterType.BANDPASS,
       wavelength=ex_wavelength,
       bandwidth=bandwidth,
       carrier=FluorescenceCarrier.MONOCHROMATOR_EXCITATION,
     )
 
-    await self.measure.set_scan_direction(ScanDirection.ALTERNATE_UP)
-    await self.optics.set_mirror(mirror_type=MirrorType.AUTOMATIC)
-    await self.optics.set_signal_gain(gain)
-    await self.measure.set_number_of_reads(num_reads)
+    await self.measurement_control.set_scan_direction(ScanDirection.ALTERNATE_UP)
+    await self.optics_control.set_mirror(mirror_type=MirrorType.AUTOMATIC)
+    await self.optics_control.set_signal_gain(gain)
+    await self.measurement_control.set_number_of_reads(num_reads)
 
     # Start Background Read
     bg_task, stop_event, results = await self.reader.start_background_read(
@@ -224,7 +224,7 @@ class SparkBackend(PlateReaderBackend):
 
     try:
       # Execute Measurement Sequence
-      await self.measure.prepare_instrument(measure_reference=True)
+      await self.measurement_control.prepare_instrument(measure_reference=True)
       await self.scan_plate_range(plate, wells, focal_height)
       measurement_time = time.time()
 
@@ -232,8 +232,8 @@ class SparkBackend(PlateReaderBackend):
       stop_event.set()
       await bg_task
 
-      await self.measure.end_measurement()
-      await self.data.turn_all_interval_messages_off()
+      await self.measurement_control.end_measurement()
+      await self.data_control.turn_all_interval_messages_off()
 
     # Process results
     data_matrix = self.fluorescence_processor.process(results)
