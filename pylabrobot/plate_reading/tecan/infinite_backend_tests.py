@@ -841,7 +841,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
 
     with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
       with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
-        await self.backend.read_luminescence(self.plate, [], focal_height=20.0)
+        await self.backend.read_luminescence(self.plate, [], focal_height=14.62)
 
     self.mock_usb.write.assert_has_calls(
       [

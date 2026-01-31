@@ -32,6 +32,7 @@ class InfiniteScanConfig:
   flashes: int = 25
   counts_per_mm_x: float = 1_000
   counts_per_mm_y: float = 1_000
+  counts_per_mm_z: float = 1_000
 
 
 def _integration_microseconds_to_seconds(value: int) -> float:
@@ -720,7 +721,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     await self._begin_run()
     try:
-      await self._configure_fluorescence(excitation_wavelength, emission_wavelength)
+      await self._configure_fluorescence(excitation_wavelength, emission_wavelength, focal_height)
       decoder = _FluorescenceRunDecoder(len(scan_wells))
 
       await self._run_scan(
@@ -752,11 +753,14 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     finally:
       await self._end_run()
 
-  async def _configure_fluorescence(self, excitation_nm: int, emission_nm: int) -> None:
+  async def _configure_fluorescence(
+    self, excitation_nm: int, emission_nm: int, focal_height: float
+  ) -> None:
     ex_decitenth = int(round(excitation_nm * 10))
     em_decitenth = int(round(emission_nm * 10))
     reads_number = max(1, int(self.config.flashes))
     beam_diameter = self._capability_numeric("FI.TOP", "#BEAM DIAMETER", 3000)
+    z_position = int(round(focal_height * self.config.counts_per_mm_z))
 
     # UI issues the entire FI configuration twice before PREPARE REF.
     for _ in range(2):
@@ -768,7 +772,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._send_command("TIME 0,LAG=0", allow_timeout=True)
       await self._send_command("TIME 0,READDELAY=0", allow_timeout=True)
       await self._send_command("GAIN 0,VALUE=100", allow_timeout=True)
-      await self._send_command("POSITION 0,Z=20000", allow_timeout=True)
+      await self._send_command(f"POSITION 0,Z={z_position}", allow_timeout=True)
       await self._send_command(f"BEAM DIAMETER={beam_diameter}", allow_timeout=True)
       await self._send_command("SCAN DIRECTION=UP", allow_timeout=True)
       await self._send_command("RATIO LABELS=1", allow_timeout=True)
@@ -779,7 +783,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._send_command("TIME 1,LAG=0", allow_timeout=True)
       await self._send_command("TIME 1,READDELAY=0", allow_timeout=True)
       await self._send_command("GAIN 1,VALUE=100", allow_timeout=True)
-      await self._send_command("POSITION 1,Z=20000", allow_timeout=True)
+      await self._send_command(f"POSITION 1,Z={z_position}", allow_timeout=True)
       await self._send_command(f"READS 1,NUMBER={reads_number}", allow_timeout=True)
     await self._send_command("PREPARE REF", allow_timeout=True, read_response=False)
 
@@ -802,7 +806,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     await self._begin_run()
     try:
-      await self._configure_luminescence(dark_integration, meas_integration)
+      await self._configure_luminescence(dark_integration, meas_integration, focal_height)
 
       decoder = _LuminescenceRunDecoder(
         len(scan_wells),
@@ -856,7 +860,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       return
     await self._read_command_response()
 
-  async def _configure_luminescence(self, dark_integration: int, meas_integration: int) -> None:
+  async def _configure_luminescence(
+    self, dark_integration: int, meas_integration: int, focal_height: float
+  ) -> None:
     await self._send_command("MODE LUM")
     # Pre-flight safety checks observed in captures (queries omitted).
     await self._send_command("CHECK LUM.FIBER")
@@ -864,8 +870,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("CHECK LUM.STEPLOSS")
     await self._send_command("MODE LUM")
     reads_number = max(1, int(self.config.flashes))
+    z_position = int(round(focal_height * self.config.counts_per_mm_z))
     await self._clear_mode_settings(emission=True)
-    await self._send_command("POSITION LUM,Z=14620", allow_timeout=True)
+    await self._send_command(f"POSITION LUM,Z={z_position}", allow_timeout=True)
     await self._send_command(f"TIME 0,INTEGRATION={dark_integration}", allow_timeout=True)
     await self._send_command(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
     await self._send_command("SCAN DIRECTION=UP", allow_timeout=True)
