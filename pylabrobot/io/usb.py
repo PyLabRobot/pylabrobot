@@ -129,7 +129,7 @@ class USB(IOBase):
       # send a zero-length packet to indicate the end of the transfer
       await loop.run_in_executor(
         self._executor,
-        lambda: dev.write(write_endpoint, b"", timeout=timeout),
+        lambda: dev.write(write_endpoint, b"", timeout=int(timeout * 1000)),
       )
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
     capturer.record(
@@ -504,6 +504,7 @@ class USBValidator(USB):
     read_timeout: int = 30,
     write_timeout: int = 30,
     configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
+    max_workers: int = 1,
   ):
     super().__init__(
       id_vendor=id_vendor,
@@ -514,6 +515,7 @@ class USBValidator(USB):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       configuration_callback=configuration_callback,
+      max_workers=max_workers,
     )
     self.cr = cr
 
