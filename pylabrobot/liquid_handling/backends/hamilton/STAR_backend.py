@@ -6643,7 +6643,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
     squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
-        squeezer_acceleration
+      squeezer_acceleration
     )
 
     resp = await self.send_command(
@@ -7019,29 +7019,31 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
 
-
-
   # # # Granular commands # # #
 
   async def head96_dispensing_drive_move_to_home_volume(
     self,
   ):
-    """Broken firmware command: meant to move the 96-head dispensing drive into
-    its home position -> probably means at vol=0.0 uL,
-    but 96-head dispensing drive cannot reach vol=0.0 uL!
+    """Move the 96-head dispensing drive into its home position (vol=0.0 uL).
+
+    .. warning::
+      This firmware command is known to be broken: the 96-head dispensing drive cannot reach
+      vol=0.0 uL, which typically raises
+      ``STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted
+      area')}``.
     """
 
-    raise ValueError(
-        "Broken firmware command: raises STARFirmwareError: "
-        "{'CoRe 96 Head': UnknownHamiltonError('Position out of permitted area')}, H0DLid0080er54"
+    logger.warning(
+      "head96_dispensing_drive_move_to_home_volume is a known broken firmware command: "
+      "the 96-head dispensing drive cannot reach vol=0.0 uL and will likely raise "
+      "STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted "
+      "area')}. Attempting to send the command anyway."
     )
-    # resp = await self.send_command(
-    #   module="H0",
-    #   command="DL",
-    # )
 
- 
-
+    return await self.send_command(
+      module="H0",
+      command="DL",
+    )
 
   # # # "Atomic" liquid handling commands # # #
 
@@ -7721,7 +7723,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       current_limit: Current limit for the drive (1-15). Default is 7.
     """
 
-    if not (self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM <= vol <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP):
+    if not (
+      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
+      <= vol
+      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
+    ):
       raise ValueError(
         f"Target dispensing drive vol must be between {self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM}"
         f" and {self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP}, is {vol}"
