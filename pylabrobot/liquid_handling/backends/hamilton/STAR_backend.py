@@ -10871,9 +10871,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           )
 
       # Similarly for the channels to the front of `front_channel`, make sure they are all
-      # spaced >=9mm apart. This time, we iterate from back (closest to `front_channel`)
-      # to the front (lh.backend.num_channels - 1), and put each channel >=9mm before the
-      # one behind it.
+      # spaced >= channel_minimum_y_spacing (usually 9mm) apart. This time, we iterate from
+      # back (closest to `front_channel`) to the front (lh.backend.num_channels - 1), and
+      # put each channel >= channel_minimum_y_spacing before the one behind it.
       front_channel = max(use_channels)
       for channel_idx in range(front_channel, self.num_channels - 1):
         if (
