@@ -3,11 +3,8 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 # Import the module under test
-from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import (
-  SparkDevice,
-  SparkEndpoint,
-  SparkReaderAsync,
-)
+from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice, SparkEndpoint
+from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import SparkReaderAsync
 
 
 class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
