@@ -1825,7 +1825,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Detect liquid heights
-    absolute_heights_measurements: Dict[int, List[float]] = {ch: [] for ch in use_channels}
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
+      ch: [] for ch in use_channels
+    }
 
     lowest_immers_positions = [
       container.get_absolute_location("c", "c", "cavity_bottom").z
@@ -1844,7 +1846,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     try:
       for _ in range(n_replicates):
         if lld_mode == self.LLDMode.GAMMA:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._move_z_drive_to_liquid_surface_using_clld(
                 channel_idx=channel,
@@ -1855,11 +1857,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True,
           )
 
         else:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._search_for_surface_using_plld(
                 channel_idx=channel,
@@ -1874,28 +1877,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True,
           )
 
-        # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
+        # Get heights for ALL channels, handling failures for channels with no liquid
+        # (indexed 0 to self.num_channels-1) but only store for used channels
         current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for ch_idx in use_channels:
-          height = current_absolute_liquid_heights[ch_idx]
+        for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
+          if isinstance(result, STARFirmwareError):
+            # Check if it's specifically the "no liquid found" error
+            error_msg = str(result).lower()
+            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+              height = None  # No liquid detected - this is expected
+              msg = (
+                f"Channel {ch_idx}: No liquid detected. Could be because there is "
+                f"no liquid in container {containers[idx].name} or liquid level is too low."
+              )
+              if lld_mode == self.LLDMode.GAMMA:
+                msg += " Consider using pressure-based LLD if liquid is believed to exist."
+              logger.warning(msg)
+            else:
+              # Some other firmware error - re-raise it
+              raise result
+          elif isinstance(result, Exception):
+            # Some other unexpected error - re-raise it
+            raise result
+          else:
+            height = current_absolute_liquid_heights[ch_idx]
           absolute_heights_measurements[ch_idx].append(height)
     except:
       await self.move_all_channels_in_z_safety()
       raise
 
-    # Compute average heights per channel and convert to relative to well bottom
-    absolute_liquid_heights = [
-      sum(absolute_heights_measurements[ch]) / len(absolute_heights_measurements[ch])
-      for ch in use_channels
-    ]
+    # Compute liquid heights relative to well bottom
+    relative_to_well: List[float] = []
+    inconsistent_channels: List[str] = []
 
-    relative_to_well = [
-      absolute_liquid_height - resource.get_absolute_location("c", "c", "cavity_bottom").z
-      for resource, absolute_liquid_height in zip(containers, absolute_liquid_heights)
-    ]
+    for ch, container in zip(use_channels, containers):
+      measurements = absolute_heights_measurements[ch]
+      valid = [m for m in measurements if m is not None]
+      cavity_bottom = container.get_absolute_location("c", "c", "cavity_bottom").z
+
+      if len(valid) == 0:
+        relative_to_well.append(0.0)
+      elif len(valid) == len(measurements):
+        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
+      else:
+        inconsistent_channels.append(
+          f"Channel {ch}: {len(valid)}/{len(measurements)} replicates detected liquid"
+        )
+
+    if inconsistent_channels:
+      raise RuntimeError(
+        "Inconsistent liquid detection across replicates. "
+        "This may indicate liquid levels near the detection limit:\n"
+        + "\n".join(inconsistent_channels)
+      )
 
     if move_to_z_safety_after:
       await self.move_all_channels_in_z_safety()
