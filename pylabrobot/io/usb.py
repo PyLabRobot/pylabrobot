@@ -52,6 +52,7 @@ class USB(IOBase):
     read_timeout: int = 30,
     write_timeout: int = 30,
     configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
+    max_workers: int = 1,
   ):
     """Initialize an io.USB object.
 
@@ -66,6 +67,7 @@ class USB(IOBase):
       write_timeout: The timeout for writing to the machine in seconds.
       configuration_callback: A callback that takes the device object as an argument and performs
         any necessary configuration. If `None`, `dev.set_configuration()` is called.
+      max_workers: The maximum number of worker threads for USB I/O operations.
     """
 
     super().__init__()
@@ -86,6 +88,7 @@ class USB(IOBase):
     self.read_timeout = read_timeout
     self.write_timeout = write_timeout
     self.configuration_callback = configuration_callback
+    self.max_workers = max_workers
 
     self.dev: Optional[usb.core.Device] = None  # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -459,7 +462,7 @@ class USB(IOBase):
     while self._read_packet() is not None:
       pass
 
-    self._executor = ThreadPoolExecutor(max_workers=16)
+    self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
   async def stop(self):
     """Close the USB connection to the machine."""

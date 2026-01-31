@@ -56,7 +56,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
     mock_usb_success = AsyncMock()
 
-    def side_effect(id_vendor, id_product, configuration_callback=None):
+    def side_effect(id_vendor, id_product, configuration_callback=None, max_workers=1):
       if id_product == SparkDevice.PLATE_TRANSPORT.value:
         raise Exception("Some USB Error")
       if id_product == SparkDevice.ABSORPTION.value:

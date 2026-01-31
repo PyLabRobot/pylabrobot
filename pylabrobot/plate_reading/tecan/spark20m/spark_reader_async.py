@@ -65,6 +65,7 @@ class SparkReaderAsync:
           id_vendor=self.vid,
           id_product=device_type.value,
           configuration_callback=configure,
+          max_workers=16,
         )
 
         await reader.setup()
