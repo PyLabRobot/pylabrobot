@@ -1185,6 +1185,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_version: Optional[str] = None  # loaded lazily
 
+    self.channel_minimum_y_spacing: float = 9.0
+
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
     self._setup_done = False
@@ -1453,7 +1455,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     async def set_up_pip():
       if (not initialized or any(tip_presences)) and not skip_pip:
         await self.initialize_pip()
-      self.channel_minimum_y_spacing = 9.0
+      self.channel_minimum_y_spacing = 9.0 # TODO: identify from machine directly to override default
 
     async def set_up_autoload():
       if self.autoload_installed and not skip_autoload:
