@@ -526,7 +526,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._ready = False
     self._read_chunk_size = 512
     self._max_read_iterations = 200
-    self._device_initialized = False
     self._mode_capabilities: Dict[str, Dict[str, str]] = {}
     self._pending_bin_events: List[Tuple[int, bytes]] = []
     self._parser = _StreamParser(allow_bare_ascii=True)
@@ -554,7 +553,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
         return
       await self._cleanup_protocol()
       await self.io.stop()
-      self._device_initialized = False
       self._mode_capabilities.clear()
       self._reset_stream_state()
       self._ready = False
@@ -941,17 +939,13 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     return matrix
 
   async def _initialize_device(self) -> None:
-    if self._device_initialized:
-      return
     try:
       await self._send_command("QQ")
     except TimeoutError:
       logger.warning("QQ produced no response; continuing with initialization.")
     await self._send_command("INIT FORCE")
-    self._device_initialized = True
 
   async def _begin_run(self) -> None:
-    await self._initialize_device()
     self._reset_stream_state()
     await self._send_command("KEYLOCK ON")
     self._run_active = True
@@ -975,9 +969,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self.io.setup()
     except Exception:
       return
-    self._device_initialized = False
     self._mode_capabilities.clear()
     self._reset_stream_state()
+    await self._initialize_device()
 
   async def _end_run(self) -> None:
     try:
