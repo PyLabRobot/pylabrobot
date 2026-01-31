@@ -2,7 +2,7 @@
 
 import unittest
 import unittest.mock
-from typing import cast
+from typing import Literal, cast
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
@@ -771,7 +771,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     }
 
     for quadrant, expected_cmd in expected.items():
-      wells = plate_384.get_quadrant(quadrant)
+      wells = plate_384.get_quadrant(cast(Literal["tl", "tr", "bl", "br"], quadrant))
       self.STAR._write_and_read_command.reset_mock()
       with no_volume_tracking():
         await self.lh.dispense96(wells, volume=6)
