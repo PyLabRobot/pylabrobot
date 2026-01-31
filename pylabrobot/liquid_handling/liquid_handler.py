@@ -1677,6 +1677,13 @@ class LiquidHandler(Resource, Machine):
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
+      containers = resource
+    else:
+      raise TypeError(
+        f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
+        f" for {resource}"
+      )
 
     if len(containers) == 1:  # single container
       container = containers[0]
@@ -1814,10 +1821,17 @@ class LiquidHandler(Resource, Machine):
     containers: Sequence[Container]
     if isinstance(resource, Plate):
       if resource.has_lid():
-        raise ValueError("Dispensing to plate with lid")
+        raise ValueError("Dispensing to plate with lid is not possible. Remove the lid first.")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
+      containers = resource
+    else:
+      raise TypeError(
+        f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
+        f"for {resource}"
+      )
 
     # if we have enough liquid in the tip, remove it from the tip tracker for accounting.
     # if we do not (for example because the plunger was up on tip pickup), and we
