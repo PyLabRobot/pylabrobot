@@ -1843,59 +1843,66 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for container, tip_len in zip(containers, tip_lengths)
     ]
 
-    async def detect_liquid_for_channel(
-      channel: int, lip: float, sps: float, container: Container
-    ) -> Optional[float]:
-      """Run LLD for a single channel, returning None if no liquid found."""
-      try:
-        if lld_mode == self.LLDMode.GAMMA:
-          await self._move_z_drive_to_liquid_surface_using_clld(
-            channel_idx=channel,
-            lowest_immers_pos=lip,
-            start_pos_search=sps,
-            channel_speed=search_speed,
-          )
-        else:
-          await self._search_for_surface_using_plld(
-            channel_idx=channel,
-            lowest_immers_pos=lip,
-            start_pos_search=sps,
-            channel_speed=search_speed,
-            dispense_drive_speed=5.0,
-            plld_mode=self.PressureLLDMode.LIQUID,
-            clld_verification=False,
-            post_detection_dist=0.0,
-          )
-        return channel  # Return channel index to indicate success
-      except STARFirmwareError as e:
-        error_msg = str(e).lower()
-        if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
-          logger.warning(
-            f"Channel {channel}: No liquid detected. Could be because there is "
-            f"no liquid in container {container.name} or liquid "
-            "is non-detectable (e.g. if capacitive LLD chosen: low-volume or "
-            "ultra-pure, non-conductive liquid). "
-            "Consider using pressure-based LLD if liquid is believed to exist."
-          )
-          return None  # No liquid detected - this is expected
-        raise  # Some other firmware error - re-raise it
-
     try:
       for _ in range(n_replicates):
-        results = await asyncio.gather(
-          *[
-            detect_liquid_for_channel(channel, lip, sps, container)
-            for channel, lip, sps, container in zip(
-              use_channels, lowest_immers_positions, start_pos_searches, containers
-            )
-          ]
-        )
+        if lld_mode == self.LLDMode.GAMMA:
+          results = await asyncio.gather(
+            *[
+              self._move_z_drive_to_liquid_surface_using_clld(
+                channel_idx=channel,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
+                channel_speed=search_speed,
+              )
+              for channel, lip, sps in zip(
+                use_channels, lowest_immers_positions, start_pos_searches
+              )
+            ],
+            return_exceptions=True,
+          )
 
-        # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used
+        else:
+          results = await asyncio.gather(
+            *[
+              self._search_for_surface_using_plld(
+                channel_idx=channel,
+                lowest_immers_pos=lip,
+                start_pos_search=sps,
+                channel_speed=search_speed,
+                dispense_drive_speed=5.0,
+                plld_mode=self.PressureLLDMode.LIQUID,
+                clld_verification=False,
+                post_detection_dist=0.0,
+              )
+              for channel, lip, sps in zip(
+                use_channels, lowest_immers_positions, start_pos_searches
+              )
+            ],
+            return_exceptions=True,
+          )
+
+        # Get heights for ALL channels, handling failures for channels with no liquid
+        # (indexed 0 to self.num_channels-1) but only store for used channels
         current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for ch_idx, result in zip(use_channels, results):
-          if result is None:
-            height = None
+        for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
+          if isinstance(result, STARFirmwareError):
+            # Check if it's specifically the "no liquid found" error
+            error_msg = str(result).lower()
+            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+              height = None  # No liquid detected - this is expected
+              logger.warning(
+                f"Channel {ch_idx}: No liquid detected. Could be because there is "
+                f"no liquid in container {containers[idx].name} or liquid "
+                "is non-detectable (e.g. if capacitive LLD chosen: low-volume or "
+                "ultra-pure, non-conductive liquid). "
+                "Consider using pressure-based LLD if liquid is believed to exist."
+              )
+            else:
+              # Some other firmware error - re-raise it
+              raise result
+          elif isinstance(result, Exception):
+            # Some other unexpected error - re-raise it
+            raise result
           else:
             height = current_absolute_liquid_heights[ch_idx]
           absolute_heights_measurements[ch_idx].append(height)
