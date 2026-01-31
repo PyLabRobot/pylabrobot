@@ -1455,7 +1455,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     async def set_up_pip():
       if (not initialized or any(tip_presences)) and not skip_pip:
         await self.initialize_pip()
-      self.channel_minimum_y_spacing = 9.0 # TODO: identify from machine directly to override default
+      self.channel_minimum_y_spacing = (
+        9.0  # TODO: identify from machine directly to override default
+      )
 
     async def set_up_autoload():
       if self.autoload_installed and not skip_autoload:
