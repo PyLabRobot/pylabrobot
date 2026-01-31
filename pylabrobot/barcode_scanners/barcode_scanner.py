@@ -1,5 +1,6 @@
 from pylabrobot.barcode_scanners.backend import BarcodeScannerBackend
 from pylabrobot.machines.machine import Machine
+from pylabrobot.resources.barcode import Barcode
 
 
 class BarcodeScanner(Machine):
@@ -9,6 +10,6 @@ class BarcodeScanner(Machine):
     super().__init__(backend=backend)
     self.backend: BarcodeScannerBackend = backend
 
-  async def scan(self) -> str:
+  async def scan(self) -> Barcode:
     """Scan a barcode and return its value."""
     return await self.backend.scan_barcode()

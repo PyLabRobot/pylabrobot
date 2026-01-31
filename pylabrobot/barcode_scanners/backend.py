@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 
 from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.resources.barcode import Barcode
 
 
 class BarcodeScannerError(Exception):
@@ -12,6 +13,6 @@ class BarcodeScannerBackend(MachineBackend, metaclass=ABCMeta):
     super().__init__()
 
   @abstractmethod
-  async def scan_barcode(self) -> str:
-    """Scan a barcode and return its value as a string."""
+  async def scan_barcode(self) -> Barcode:
+    """Scan a barcode and return its value."""
     pass

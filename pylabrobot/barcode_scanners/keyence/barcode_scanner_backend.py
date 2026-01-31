@@ -9,6 +9,7 @@ from pylabrobot.barcode_scanners.backend import (
   BarcodeScannerError,
 )
 from pylabrobot.io.serial import Serial
+from pylabrobot.resources.barcode import Barcode
 
 
 class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
@@ -101,5 +102,6 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
   async def stop(self):
     await self.io.stop()
 
-  async def scan_barcode(self) -> str:
-    return await self.send_command("LON")
+  async def scan_barcode(self) -> Barcode:
+    data = await self.send_command("LON")
+    return Barcode(data=data, symbology="unknown", position_on_resource="front")
