@@ -14,8 +14,9 @@ from .controls.optics_control import FilterType, FluorescenceCarrier, MirrorType
 from .controls.plate_transport_control import MovementSpeed, PlateControl, PlatePosition
 from .controls.sensor_control import InstrumentMessageType, SensorControl
 from .controls.system_control import SystemControl
+from .enums import SparkDevice, SparkEndpoint
 from .spark_processor import AbsorbanceProcessor, FluorescenceProcessor
-from .spark_reader_async import SparkDevice, SparkEndpoint, SparkReaderAsync
+from .spark_reader_async import SparkReaderAsync
 
 logger = logging.getLogger(__name__)
 
