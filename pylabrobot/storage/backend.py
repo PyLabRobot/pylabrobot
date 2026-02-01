@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
+from pylabrobot.resources.barcode import Barcode
 
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
@@ -27,11 +28,11 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **kwargs):
     pass
 
   @abstractmethod
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **kwargs):
     pass
 
   @abstractmethod
@@ -49,4 +50,88 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def stop_shaking(self):
+    pass
+
+  """ Methods added for Liconic incubator options."""
+
+  @abstractmethod
+  async def get_set_temperature(self) -> float:
+    """Get the set value temperature of the incubator in degrees Celsius."""
+    pass
+
+  @abstractmethod
+  async def set_humidity(self, humidity: float):
+    """Set operation humidity of the incubator in % RH; e.g. 90.0% RH."""
+    pass
+
+  @abstractmethod
+  async def get_humidity(self) -> float:
+    """Get the current humidity of the incubator in % RH; e.g. 90.0% RH."""
+    pass
+
+  @abstractmethod
+  async def get_set_humidity(self) -> float:
+    """Get the set value humidity of the incubator in % RH; e.g. 90.0% RH."""
+    pass
+
+  @abstractmethod
+  async def set_co2_level(self, co2_level: float):
+    """Set operation CO2 level of the incubator in %; e.g. 5.0%."""
+    pass
+
+  @abstractmethod
+  async def get_co2_level(self) -> float:
+    """Get the current CO2 level of the incubator in %; e.g. 5.0%."""
+    pass
+
+  @abstractmethod
+  async def get_set_co2_level(self) -> float:
+    """Get the set value CO2 level of the incubator in %; e.g. 5.0%."""
+    pass
+
+  @abstractmethod
+  async def set_n2_level(self, n2_level: float):
+    """Set operation N2 level of the incubator in %; e.g. 90.0%."""
+    pass
+
+  @abstractmethod
+  async def get_n2_level(self) -> float:
+    """Get the current N2 level of the incubator in %; e.g. 90.0%."""
+    pass
+
+  @abstractmethod
+  async def get_set_n2_level(self) -> float:
+    """Get the set value N2 level of the incubator in %; e.g. 90.0%."""
+    pass
+
+  @abstractmethod
+  async def turn_swap_station(self, home: bool):
+    """Swap the incubator station to home or 180 degree position."""
+    pass
+
+  @abstractmethod
+  async def check_shovel_sensor(self) -> bool:
+    """Check if there is a plate on the shovel plate sensor."""
+    pass
+
+  @abstractmethod
+  async def check_transfer_sensor(self) -> bool:
+    """Check if there is a plate on the transfer sensor."""
+    pass
+
+  @abstractmethod
+  async def check_second_transfer_sensor(self) -> bool:
+    """Check 2nd transfer station plate sensor."""
+    pass
+
+  @abstractmethod
+  async def scan_barcode(self, site: PlateHolder) -> Barcode:
+    """Scan barcode at given position."""
+    pass
+
+  @abstractmethod
+  async def move_position_to_position(
+    self, plate: Plate, dest_site: PlateHolder, read_barcode: bool = False
+  ):
+    """Move plate to another position in the storage unit"""
     pass
