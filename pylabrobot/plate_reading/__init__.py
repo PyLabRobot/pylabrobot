@@ -44,3 +44,4 @@ from .standard import (
   ImagingResult,
   Objective,
 )
+from .tecan.spark20m.spark_backend import SparkBackend
