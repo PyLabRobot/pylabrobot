@@ -36,6 +36,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   :class:`pylabrobot.resources.plate.Plate` can only have child resources of type
   :class:`pylabrobot.resources.well.Well`.
 
+  Items are always arranged in a uniform grid with equal spacing between items. The spacing between
+  items in the x direction is given by :attr:`item_dx` and the spacing in the y direction is given
+  by :attr:`item_dy`.
+
   .. note::
     This class is not meant to be used directly, but rather to be subclassed, most commonly by
     :class:`pylabrobot.resources.Plate` and :class:`pylabrobot.resources.TipRack`.
@@ -474,6 +478,28 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     not a full grid, an error will be raised."""
     num_items_y, _ = self._get_grid_size(self._ordering)
     return num_items_y
+
+  @property
+  def item_dx(self) -> float:
+    """The spacing between items in the x direction."""
+    if self.num_items_x < 2:
+      raise ValueError("Cannot compute item_dx with fewer than 2 items in the x direction.")
+    item_a1 = self.get_item("A1")
+    item_a2 = self.get_item("A2")
+    if item_a1.location is None or item_a2.location is None:
+      raise ValueError("Item locations are not set.")
+    return item_a2.location.x - item_a1.location.x
+
+  @property
+  def item_dy(self) -> float:
+    """The spacing between items in the y direction."""
+    if self.num_items_y < 2:
+      raise ValueError("Cannot compute item_dy with fewer than 2 items in the y direction.")
+    item_a1 = self.get_item("A1")
+    item_b1 = self.get_item("B1")
+    if item_a1.location is None or item_b1.location is None:
+      raise ValueError("Item locations are not set.")
+    return item_a1.location.y - item_b1.location.y
 
   @property
   def items(self) -> List[str]:
