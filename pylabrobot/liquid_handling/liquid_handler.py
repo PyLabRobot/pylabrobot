@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import inspect
 import json
 import logging
-import threading
 import unittest.mock
 import warnings
 from typing import (
@@ -203,17 +201,6 @@ class LiquidHandler(Resource, Machine):
     """Clear the state of the liquid handler head."""
 
     self.update_head_state({c: None for c in self.head.keys()})
-
-  def _run_async_in_thread(self, func, *args, **kwargs):
-    def callback(*args, **kwargs):
-      loop = asyncio.new_event_loop()
-      asyncio.set_event_loop(loop)
-      loop.run_until_complete(func(*args, **kwargs))
-      loop.close()
-
-    t = threading.Thread(target=callback, args=args, kwargs=kwargs)
-    t.start()
-    t.join()
 
   def summary(self):
     """Prints a string summary of the deck layout."""
@@ -1690,6 +1677,13 @@ class LiquidHandler(Resource, Machine):
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
+      containers = resource
+    else:
+      raise TypeError(
+        f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
+        f" for {resource}"
+      )
 
     if len(containers) == 1:  # single container
       container = containers[0]
@@ -1827,10 +1821,17 @@ class LiquidHandler(Resource, Machine):
     containers: Sequence[Container]
     if isinstance(resource, Plate):
       if resource.has_lid():
-        raise ValueError("Dispensing to plate with lid")
+        raise ValueError("Dispensing to plate with lid is not possible. Remove the lid first.")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
+      containers = resource
+    else:
+      raise TypeError(
+        f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
+        f"for {resource}"
+      )
 
     # if we have enough liquid in the tip, remove it from the tip tracker for accounting.
     # if we do not (for example because the plunger was up on tip pickup), and we
