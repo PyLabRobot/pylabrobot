@@ -93,8 +93,7 @@ class SparkReaderAsync:
     self, command_str, device_type=SparkDevice.PLATE_TRANSPORT, attempts=10000
   ):
     if device_type not in self.devices:
-      logging.error(f"Device type {device_type} not connected.")
-      return False
+      raise RuntimeError(f"Device type {device_type} not connected.")
 
     reader = self.devices[device_type]
     endpoint_addr = SparkEndpoint.BULK_OUT.value
@@ -118,7 +117,7 @@ class SparkReaderAsync:
         logging.debug(f"Sent message to {device_type.name}: {message.hex()}")
       except Exception as e:
         logging.error(f"Error sending command to {device_type.name}: {e}", exc_info=True)
-        return False
+        raise e
 
       # Wait for response
       if not response_task.done():
@@ -133,8 +132,8 @@ class SparkReaderAsync:
           else None
         )
       except Exception as e:
-        logging.debug(f"Response task exception: {e}")
-        return False
+        logging.error(f"Response task exception: {e}")
+        raise e
 
   def _init_read(self, device_type, endpoint, count=512, read_timeout=2000):
     logging.debug(f"Initiating read task on {device_type.name} ep {hex(endpoint.value)}...")

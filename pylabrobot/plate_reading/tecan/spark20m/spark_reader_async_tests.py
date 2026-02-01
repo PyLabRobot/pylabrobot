@@ -94,8 +94,8 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.reader.seq_num, 1)
 
   async def test_send_command_device_not_connected(self):
-    success = await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION, attempts=10)
-    self.assertFalse(success)
+    with self.assertRaisesRegex(RuntimeError, "Device type .* not connected"):
+      await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION, attempts=10)
 
   async def test_get_response_success(self):
     # Mock parse_single_spark_packet
