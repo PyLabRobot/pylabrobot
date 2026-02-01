@@ -30,11 +30,12 @@ function setRootResource(data) {
   resource.location = { x: 0, y: 0, z: 0 };
   resource.draw(resourceLayer);
 
-  // center the root resource on the stage.
-  let centerXOffset = (stage.width() - resource.size_x) / 2;
-  let centerYOffset = (stage.height() - resource.size_y) / 2;
-  stage.x(centerXOffset);
-  stage.y(-centerYOffset);
+  // Store globally so fitToViewport() can use it.
+  rootResource = resource;
+
+  fitToViewport();
+
+  buildResourceTree(resource);
 }
 
 function removeResource(resourceName) {
@@ -46,7 +47,15 @@ function setState(allStates) {
   for (let resourceName in allStates) {
     let state = allStates[resourceName];
     let resource = resources[resourceName];
-    resource.setState(state);
+    if (!resource) {
+      console.warn(`[setState] resource not found: ${resourceName}`);
+      continue;
+    }
+    try {
+      resource.setState(state);
+    } catch (e) {
+      console.error(`[setState] error for ${resourceName}:`, e);
+    }
   }
 }
 
@@ -60,16 +69,22 @@ async function processCentralEvent(event, data) {
       resource = loadResource(data.resource);
       resource.draw(resourceLayer);
       setState(data.state);
+      addResourceToTree(resource);
       break;
 
     case "resource_unassigned":
+      removeResourceFromTree(data.resource_name);
       removeResource(data.resource_name);
       break;
 
     case "set_state":
       let allStates = data;
       setState(allStates);
-
+      // Rebuild the sidepanel tree so summaries reflect the updated state
+      const rootName = Object.keys(resources).find(
+        (n) => resources[n] && !resources[n].parent
+      );
+      if (rootName) buildResourceTree(resources[rootName]);
       break;
 
     default:

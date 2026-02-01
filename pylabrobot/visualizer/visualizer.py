@@ -1,5 +1,6 @@
 import asyncio
 import http.server
+import inspect
 import json
 import logging
 import os
@@ -20,6 +21,8 @@ except ImportError as e:
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import Resource
+from pylabrobot.resources.tip_tracker import set_tip_tracking
+from pylabrobot.resources.volume_tracker import set_volume_tracking
 
 logger = logging.getLogger("pylabrobot")
 
@@ -45,6 +48,8 @@ class Visualizer:
     ws_port: int = 2121,
     fs_port: int = 1337,
     open_browser: bool = True,
+    name: Optional[str] = None,
+    favicon: Optional[str] = None,
   ):
     """Create a new Visualizer. Use :meth:`.setup` to start the visualization.
 
@@ -55,9 +60,27 @@ class Visualizer:
       fs_port: The port of the file server. If this port is in use, the port will be incremented
         until a free port is found.
       open_browser: If `True`, the visualizer will open a browser window when it is started.
+      name: A custom name to display in the browser header. If ``None``, the filename of the
+        calling script or notebook is detected automatically.
+      favicon: Path to a ``.png`` file to use as the browser tab icon. If ``None``, the
+        PyLabRobot logo is used.
     """
 
     self.setup_finished = False
+
+    if name is not None:
+      self._source_filename = name
+    else:
+      self._source_filename = self._detect_source_filename()
+
+    if favicon is not None:
+      if not favicon.endswith(".png"):
+        raise ValueError("favicon must be a .png file")
+      if not os.path.isfile(favicon):
+        raise FileNotFoundError(f"favicon file not found: {favicon}")
+      self._favicon_path = os.path.abspath(favicon)
+    else:
+      self._favicon_path = os.path.join(os.path.dirname(__file__), "img", "logo.png")
 
     # Hook into the resource (un)assigned callbacks so we can send the appropriate events to the
     # browser.
@@ -182,7 +205,13 @@ class Visualizer:
       "data": data,
       "event": event,
     }
-    return json.dumps(command_data), id_
+    # Python's json.dumps outputs bare Infinity/-Infinity for float('inf'), which is
+    # not valid JSON and causes JSON.parse() in the browser to throw SyntaxError.
+    # Replace bare tokens with quoted strings so the browser's JSON reviver can handle them.
+    serialized = json.dumps(command_data)
+    serialized = serialized.replace(": Infinity", ': "Infinity"')
+    serialized = serialized.replace(": -Infinity", ': "-Infinity"')
+    return serialized, id_
 
   def has_connection(self) -> bool:
     """Return `True` if a websocket connection has been established."""
@@ -255,6 +284,91 @@ class Visualizer:
       raise RuntimeError("The file server thread has not been started yet.")
     return self._fst
 
+  @staticmethod
+  def _detect_source_filename() -> str:
+    """Detect the filename of the calling script or notebook."""
+
+    # 1. VS Code sets __vsc_ipynb_file__ in the IPython user namespace.
+    try:
+      ipython = get_ipython()  # type: ignore[name-defined]  # noqa: F821
+      vsc_file = getattr(ipython, "user_ns", {}).get("__vsc_ipynb_file__")
+      if vsc_file:
+        return os.path.basename(vsc_file)
+    except NameError:
+      pass
+
+    # 2. Try ipynbname package (works for classic Jupyter Notebook and JupyterLab).
+    try:
+      import ipynbname  # type: ignore[import-untyped]
+
+      nb_path = ipynbname.path()
+      if nb_path:
+        return os.path.basename(str(nb_path))
+    except Exception:
+      pass
+
+    # 3. Query the Jupyter REST API using the kernel connection file.
+    try:
+      import ipykernel  # type: ignore[import-untyped]
+      import json as _json
+      import re
+      import urllib.request
+
+      # Get the kernel id from the connection file path.
+      connection_file = ipykernel.get_connection_file()
+      kernel_id = os.path.basename(connection_file).replace("kernel-", "").replace(".json", "")
+
+      # Try common Jupyter server ports and tokens.
+      # First, try to get server info from jupyter_core / notebook.
+      servers = []
+      try:
+        from jupyter_server.serverapp import list_running_servers  # type: ignore[import-untyped]
+
+        servers = list(list_running_servers())
+      except Exception:
+        pass
+      if not servers:
+        try:
+          from notebook.notebookapp import list_running_servers  # type: ignore[import-untyped]
+
+          servers = list(list_running_servers())
+        except Exception:
+          pass
+
+      for srv in servers:
+        base_url = srv.get("url", "").rstrip("/")
+        token = srv.get("token", "")
+        try:
+          api_url = f"{base_url}/api/sessions"
+          if token:
+            api_url += f"?token={token}"
+          req = urllib.request.Request(api_url)
+          with urllib.request.urlopen(req, timeout=2) as resp:
+            sessions = _json.loads(resp.read().decode())
+          for sess in sessions:
+            kid = sess.get("kernel", {}).get("id", "")
+            if kid == kernel_id:
+              nb_path = sess.get("notebook", {}).get("path", "") or sess.get("path", "")
+              if nb_path:
+                return os.path.basename(nb_path)
+        except Exception:
+          continue
+    except Exception:
+      pass
+
+    # 4. Fall back to stack inspection for .py scripts.
+    for frame_info in inspect.stack():
+      fname = frame_info.filename
+      if fname == __file__:
+        continue
+      basename = os.path.basename(fname)
+      if "ipykernel" in fname or fname.startswith("<"):
+        return ""
+      if basename.endswith(".py"):
+        return basename
+
+    return ""
+
   async def setup(self):
     """Start the visualizer.
 
@@ -263,6 +377,10 @@ class Visualizer:
 
     if self.setup_finished:
       raise RuntimeError("The visualizer has already been started.")
+
+    # Enable tip and volume tracking so the visualizer receives real-time state updates.
+    set_tip_tracking(True)
+    set_volume_tracking(True)
 
     await self._run_ws_server()
     self._run_file_server()
@@ -318,7 +436,8 @@ class Visualizer:
       )
 
     def start_server(lock):
-      ws_port, fs_port = self.ws_port, self.fs_port
+      ws_port, fs_port, source_filename = self.ws_port, self.fs_port, self._source_filename
+      favicon_path = self._favicon_path
 
       # try to start the server. If the port is in use, try with another port until it succeeds.
       class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -330,6 +449,12 @@ class Visualizer:
         def log_message(self, format, *args):
           pass
 
+        def end_headers(self):
+          self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+          self.send_header("Pragma", "no-cache")
+          self.send_header("Expires", "0")
+          super().end_headers()
+
         def do_GET(self) -> None:
           # rewrite some info in the index.html file on the fly,
           # like a simple template engine
@@ -339,11 +464,19 @@ class Visualizer:
 
             content = content.replace("{{ ws_port }}", str(ws_port))
             content = content.replace("{{ fs_port }}", str(fs_port))
+            content = content.replace("{{ source_filename }}", source_filename)
 
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
             self.wfile.write(content.encode("utf-8"))
+          elif self.path == "/favicon.png":
+            with open(favicon_path, "rb") as f:
+              data = f.read()
+            self.send_response(200)
+            self.send_header("Content-type", "image/png")
+            self.end_headers()
+            self.wfile.write(data)
           else:
             return super().do_GET()
 
