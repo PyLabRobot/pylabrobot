@@ -454,8 +454,7 @@ class Resource {
           const cy = base.y + yOff;
           const cz = (base.z || 0) + zOff;
           const czStr = zNA ? "na" : cz.toFixed(1);
-          const isAbsolute = sidebarRootResource && wrtName === sidebarRootResource.name;
-          const wrtLabel = isAbsolute ? "abs" : "wrt " + wrtName;
+          const wrtLabel = "wrt " + wrtName;
           labelText = `${this.name}\n${wrtLabel}: (${cx.toFixed(1)}, ${cy.toFixed(1)}, ${czStr}) mm`;
         } else {
           labelText = this.tooltipLabel();
