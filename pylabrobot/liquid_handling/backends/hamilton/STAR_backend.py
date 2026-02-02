@@ -7660,7 +7660,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
-  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = -25
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = 0
   HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP = 1244.59
 
   async def head96_dispensing_drive_move_to_position(
@@ -7681,7 +7681,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       current_protection_limiter: Current protection limiter (0-15), default 15
     """
 
-    if not (0 <= position <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP):
+    if not (
+      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
+      <= position
+      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
+    ):
       raise ValueError("position must be between 0 and 1244.59")
     if not (0.1 <= speed <= 1063.75):
       raise ValueError("speed must be between 0.1 and 1063.75")
