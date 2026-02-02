@@ -120,6 +120,9 @@ class Visualizer:
     self._t: Optional[threading.Thread] = None
     self._stop_: Optional[asyncio.Future] = None
 
+    self._pending_state_updates: Dict[str, dict] = {}
+    self._flush_scheduled = False
+
     self.received: List[dict] = []
 
   @property
@@ -615,10 +618,19 @@ class Visualizer:
     asyncio.run_coroutine_threadsafe(fut, self.loop)
 
   def _handle_state_update_callback(self, resource: Resource) -> None:
-    """Called when the state of a resource is updated. This method will send an event to the
-    browser about the updated state."""
+    """Called when the state of a resource is updated. Updates are batched so that
+    rapid successive changes (e.g. 96-channel pickup) are sent as a single message."""
 
-    # Send a `set_state` event to the browser.
-    data = {resource.name: resource.serialize_state()}
-    fut = self.send_command(event="set_state", data=data, wait_for_response=False)
-    asyncio.run_coroutine_threadsafe(fut, self.loop)
+    self._pending_state_updates[resource.name] = resource.serialize_state()
+    if not self._flush_scheduled:
+      self._flush_scheduled = True
+      self.loop.call_soon_threadsafe(self._flush_state_updates)
+
+  def _flush_state_updates(self) -> None:
+    """Send all pending state updates as a single ``set_state`` event."""
+    data = self._pending_state_updates
+    self._pending_state_updates = {}
+    self._flush_scheduled = False
+    if data:
+      fut = self.send_command(event="set_state", data=data, wait_for_response=False)
+      asyncio.ensure_future(fut)

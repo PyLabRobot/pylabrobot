@@ -1291,11 +1291,13 @@ function fillHead96Grid(panel, head96State) {
   for (var p = 0; p < numPipettes; p++) {
     var startCh = p * 96;
     var box = document.createElement("div");
-    box.style.border = "1.5px solid #aaa";
+    box.style.border = "1.5px solid #555";
     box.style.borderRadius = "6px";
     box.style.padding = "6px";
-    box.style.background = "rgba(245, 245, 245, 0.6)";
-    box.style.display = "inline-block";
+    box.style.background = "#444";
+    box.style.display = "inline-flex";
+    box.style.flexDirection = "column";
+    box.style.alignItems = "center";
     var grid = document.createElement("div");
     grid.style.display = "grid";
     grid.style.gridTemplateColumns = "repeat(12, " + dotSize + "px)";
@@ -1311,12 +1313,51 @@ function fillHead96Grid(panel, head96State) {
         dot.style.width = dotSize + "px";
         dot.style.height = dotSize + "px";
         dot.style.borderRadius = "50%";
-        dot.style.border = "1.5px solid " + (hasTip ? "#555" : "#bbb");
-        dot.style.background = hasTip ? "#666" : "#e8e8e8";
+        dot.style.border = "1.5px solid " + (hasTip ? "#40CDA1" : "#555");
+        dot.style.background = hasTip ? "#40CDA1" : "white";
         dot.title = "Channel " + ch + (hasTip ? " (tip)" : "");
         grid.appendChild(dot);
       }
     }
+    // Bars outside the grid box, 60% of the corresponding dimension, centered
+    var gridW = 12 * dotSize + 11 * gapSize;
+    var gridH = 8 * dotSize + 7 * gapSize;
+    var hBarW = Math.round(gridW * 0.6);
+    var vBarH = Math.round(gridH * 0.6);
+    function makeHBar() {
+      var bar = document.createElement("div");
+      bar.style.width = hBarW + "px";
+      bar.style.height = "4px";
+      bar.style.background = "#444";
+      return bar;
+    }
+    function makeVBar() {
+      var bar = document.createElement("div");
+      bar.style.width = "4px";
+      bar.style.height = vBarH + "px";
+      bar.style.background = "#444";
+      return bar;
+    }
+
+    // Row: left bar + box + right bar
+    box.appendChild(grid);
+    var midRow = document.createElement("div");
+    midRow.style.display = "flex";
+    midRow.style.flexDirection = "row";
+    midRow.style.alignItems = "center";
+    midRow.appendChild(makeVBar());
+    midRow.appendChild(box);
+    midRow.appendChild(makeVBar());
+
+    // Column: top bar + midRow + bottom bar
+    var boxWrap = document.createElement("div");
+    boxWrap.style.display = "flex";
+    boxWrap.style.flexDirection = "column";
+    boxWrap.style.alignItems = "center";
+    boxWrap.appendChild(makeHBar());
+    boxWrap.appendChild(midRow);
+    boxWrap.appendChild(makeHBar());
+
     // Pipette index label (only when multiple 96-head pipettes)
     if (numPipettes > 1) {
       var wrapper = document.createElement("div");
@@ -1330,12 +1371,10 @@ function fillHead96Grid(panel, head96State) {
       idLabel.style.color = "#888";
       idLabel.style.marginBottom = "2px";
       wrapper.appendChild(idLabel);
-      box.appendChild(grid);
-      wrapper.appendChild(box);
+      wrapper.appendChild(boxWrap);
       panel.appendChild(wrapper);
     } else {
-      box.appendChild(grid);
-      panel.appendChild(box);
+      panel.appendChild(boxWrap);
     }
   }
 }
