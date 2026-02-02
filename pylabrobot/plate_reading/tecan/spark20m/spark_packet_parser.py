@@ -68,23 +68,23 @@ PACKET_TYPE = {
 
 
 class SparkPacket:
-  def __init__(self, data_bytes: bytes):
-    self.raw_data = data_bytes
+  def __init__(self, data_bytes: bytes) -> None:
+    self.raw_data: bytes = data_bytes
     if len(self.raw_data) < 5:
       raise ValueError("Packet too short")
 
     reader = Reader(self.raw_data, little_endian=False)
-    self.indicator = reader.u8()
-    self.type = PACKET_TYPE.get(self.indicator, f"Unknown_{self.indicator}")
-    self.seq_num = reader.u8()
-    self.payload_len = reader.u16()
+    self.indicator: int = reader.u8()
+    self.type: str = PACKET_TYPE.get(self.indicator, f"Unknown_{self.indicator}")
+    self.seq_num: int = reader.u8()
+    self.payload_len: int = reader.u16()
     payload_end = 4 + self.payload_len
     if len(self.raw_data) < payload_end + 1:
       raise ValueError("Packet data shorter than indicated payload length")
 
-    self.payload_bytes = self.raw_data[4:payload_end]
-    self.checksum = self.raw_data[payload_end]
-    self.parsed_payload = self._parse_payload()
+    self.payload_bytes: bytes = self.raw_data[4:payload_end]
+    self.checksum: int = self.raw_data[payload_end]
+    self.parsed_payload: Dict[str, Any] = self._parse_payload()
 
   def _parse_payload(self) -> Dict[str, Any]:
     try:
@@ -122,7 +122,7 @@ class SparkPacket:
     reader = Reader(self.payload_bytes, little_endian=False)
     return {"time": reader.u32()}
 
-  def _parse_resp_binary(self, is_header=False) -> Dict[str, Any]:
+  def _parse_resp_binary(self, is_header: bool = False) -> Dict[str, Any]:
     return {"is_header": is_header, "data": self.payload_bytes}
 
   def _parse_resp_busy(self) -> Dict[str, Any]:
@@ -141,7 +141,7 @@ class SparkPacket:
     parts = message_str.split("|")
     return {"number": number, "format": parts[0], "args": parts[1:]}
 
-  def _parse_resp_error(self, is_async=False) -> Dict[str, Any]:
+  def _parse_resp_error(self, is_async: bool = False) -> Dict[str, Any]:
     reader = Reader(self.payload_bytes, little_endian=False)
     timestamp = reader.u32()
     number = reader.u16()
@@ -174,26 +174,26 @@ class SparkPacket:
 
 
 class MeasurementBlock:
-  def __init__(self, header_packet: SparkPacket, data_packets: deque[SparkPacket]):
+  def __init__(self, header_packet: SparkPacket, data_packets: "deque[SparkPacket]") -> None:
     if not header_packet or header_packet.indicator != 136:
       raise ValueError("Invalid header packet provided")
 
-    self.header_packet = header_packet
-    self.data_packets = data_packets
-    self.seq_num = header_packet.seq_num
-    self.byte_buffer = b""
+    self.header_packet: SparkPacket = header_packet
+    self.data_packets: "deque[SparkPacket]" = data_packets
+    self.seq_num: int = header_packet.seq_num
+    self.byte_buffer: bytes = b""
 
     header_type_codes = list(self.header_packet.parsed_payload["data"])
-    self.header_types = []
+    self.header_types: List[TDCLType] = []
     for code in header_type_codes:
       type_info = TDCL_DATA_TYPE_MAP.get(code)
       if type_info:
         self.header_types.append(type_info)
       else:
         logger.warning(f"Unknown TDCL data type code: {code} in seq {self.seq_num}")
-    self.header_type_names = [t["name"] for t in self.header_types]
+    self.header_type_names: List[str] = [t["name"] for t in self.header_types]
 
-  def _ensure_buffer(self, num_bytes: int):
+  def _ensure_buffer(self, num_bytes: int) -> None:
     while len(self.byte_buffer) < num_bytes:
       if not self.data_packets:
         raise ValueError(
@@ -285,7 +285,7 @@ class MeasurementBlock:
 
   def _parse_nested_mult(
     self, result: Dict[str, Any], outer_mult_index: int, inner_mult_index: int
-  ):
+  ) -> None:
     outer_mult_types = self.header_types[:outer_mult_index]
     if outer_mult_types:
       result.update(self._parse_generic_payload(outer_mult_types))
@@ -314,7 +314,7 @@ class MeasurementBlock:
       measurements.append(measurement)
     result["measurements"] = measurements
 
-  def _parse_single_mult(self, result: Dict[str, Any], inner_mult_index: int):
+  def _parse_single_mult(self, result: Dict[str, Any], inner_mult_index: int) -> None:
     initial_types = self.header_types[:inner_mult_index]
     if initial_types:
       result.update(self._parse_generic_payload(initial_types))
@@ -330,7 +330,7 @@ class MeasurementBlock:
       rd_md_pairs.append(pair_data)
     result["rd_md_pairs"] = rd_md_pairs
 
-  def _parse_linear(self, result: Dict[str, Any]):
+  def _parse_linear(self, result: Dict[str, Any]) -> None:
     while self.data_packets:
       self.byte_buffer += self.data_packets.popleft().parsed_payload["data"]
 
@@ -373,7 +373,7 @@ class MeasurementBlock:
 
 
 class SparkParser:
-  def __init__(self, data_bytes_list: List[bytes]):
+  def __init__(self, data_bytes_list: List[bytes]) -> None:
     self.all_packets: List[SparkPacket] = []
     for data_bytes in data_bytes_list:
       try:
@@ -388,12 +388,12 @@ class SparkParser:
     for seq_num in self.sequences:
       self.sequences[seq_num].sort(key=lambda p: p.indicator)  # Headers before data
 
-  def save_all_packets(self, filename="spark_all_packets.json"):
+  def save_all_packets(self, filename: str = "spark_all_packets.json") -> None:
     with open(filename, "w") as f:
       json.dump([p.to_dict() for p in self.all_packets], f, indent=4)
     logger.info(f"All {len(self.all_packets)} packets parsed and saved to {filename}")
 
-  def process_all_sequences(self):
+  def process_all_sequences(self) -> Dict[int, Any]:
     results: Dict[int, Any] = {}
     for seq_num, packets_in_seq in self.sequences.items():
       logger.info(f"\nProcessing Sequence: {seq_num}")

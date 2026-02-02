@@ -12,7 +12,7 @@ sys.modules["usb.util"] = MagicMock()
 
 
 class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+  async def asyncSetUp(self) -> None:
     # Patch SparkReaderAsync
     self.reader_patcher = patch(
       "pylabrobot.plate_reading.tecan.spark20m.spark_backend.SparkReaderAsync"
@@ -39,25 +39,25 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
 
     self.backend = SparkBackend()
 
-  async def asyncTearDown(self):
+  async def asyncTearDown(self) -> None:
     self.reader_patcher.stop()
     self.abs_proc_patcher.stop()
     self.fluo_proc_patcher.stop()
 
-  async def test_setup(self):
+  async def test_setup(self) -> None:
     await self.backend.setup()
     self.mock_reader.connect.assert_called_once()
     # Verify that send_command was called for init_module
     self.mock_reader.send_command.assert_called()
 
-  async def test_open(self):
+  async def test_open(self) -> None:
     await self.backend.open()
     self.mock_reader.send_command.assert_called()
 
-  async def test_read_absorbance(self):
+  async def test_read_absorbance(self) -> None:
     # Mock background read
     stop_event = MagicMock()
-    bg_task: asyncio.Future = asyncio.Future()
+    bg_task: "asyncio.Future[None]" = asyncio.Future()
     bg_task.set_result(None)
     self.mock_reader.start_background_read = AsyncMock(return_value=(bg_task, stop_event, []))
 
@@ -86,10 +86,10 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[0]["wavelength"], 600)
     self.assertEqual(results[0]["data"], [[0.5]])
 
-  async def test_read_fluorescence(self):
+  async def test_read_fluorescence(self) -> None:
     # Mock background read
     stop_event = MagicMock()
-    bg_task: asyncio.Future = asyncio.Future()
+    bg_task: "asyncio.Future[None]" = asyncio.Future()
     bg_task.set_result(None)
     self.mock_reader.start_background_read = AsyncMock(return_value=(bg_task, stop_event, []))
 
@@ -121,7 +121,7 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(results[0]["em_wavelength"], 520)
     self.assertEqual(results[0]["data"], [[100.0]])
 
-  async def test_get_average_temperature(self):
+  async def test_get_average_temperature(self) -> None:
     # Mock reader messages
     self.mock_reader.msgs = [
       {"number": 100, "args": ["2500"]},  # 25.00
@@ -132,7 +132,7 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     temp = await self.backend.get_average_temperature()
     self.assertEqual(temp, 25.5)
 
-  async def test_get_average_temperature_empty(self):
+  async def test_get_average_temperature_empty(self) -> None:
     self.mock_reader.msgs = []
     temp = await self.backend.get_average_temperature()
     self.assertIsNone(temp)

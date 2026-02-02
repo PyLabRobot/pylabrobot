@@ -1,6 +1,7 @@
 import logging
 import math
 import statistics
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .spark_packet_parser import SparkParser
 
@@ -8,13 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 class SparkProcessorBase:
-  def _parse_raw_data(self, raw_results):
+  def _parse_raw_data(self, raw_results: List[bytes]) -> Dict[int, Any]:
     parser = SparkParser(raw_results)
     return parser.process_all_sequences()
 
-  def _identify_sequences(self, parsed_data):
-    ref_seq_key = None
-    meas_seq_keys = []
+  def _identify_sequences(self, parsed_data: Dict[Any, Any]) -> Tuple[Optional[Any], List[Any]]:
+    ref_seq_key: Optional[Any] = None
+    meas_seq_keys: List[Any] = []
 
     for key, val in parsed_data.items():
       if isinstance(val, list) and len(val) > 0:
@@ -27,7 +28,7 @@ class SparkProcessorBase:
     meas_seq_keys.sort()
     return ref_seq_key, meas_seq_keys
 
-  def _safe_log10(self, x):
+  def _safe_log10(self, x: float) -> Union[float, str]:
     try:
       return -math.log10(x)
     except ValueError:
@@ -35,28 +36,30 @@ class SparkProcessorBase:
     except TypeError:
       return "Error"
 
-  def _safe_div(self, n, d):
+  def _safe_div(self, n: float, d: float) -> float:
     if d == 0:
       return float("nan")
     return n / d
 
 
 class AbsorbanceProcessor(SparkProcessorBase):
-  def __init__(self):
+  def __init__(self) -> None:
     pass
 
-  def process(self, raw_results):
+  def process(self, raw_results: List[bytes]) -> List[List[Union[float, str]]]:
+    empty_result: List[List[Union[float, str]]] = []
+
     parsed_data = self._parse_raw_data(raw_results)
     if not parsed_data:
       logger.warning("No valid packets found in results.")
-      return []
+      return empty_result
 
     ref_seq_key, meas_seq_keys = self._identify_sequences(parsed_data)
 
     if ref_seq_key is None or not meas_seq_keys:
       logger.error("Could not identify Reference (grouped) and Measurement (standalone) sequences.")
       logger.debug(f"Found sequences: {parsed_data.keys()}")
-      return []
+      return empty_result
 
     try:
       # Calculate average dark values from reference sequence (Block 0)
@@ -111,25 +114,27 @@ class AbsorbanceProcessor(SparkProcessorBase):
 
     except Exception as e:
       logger.error(f"Error during calculation: {e}", exc_info=True)
-      return []
+      return empty_result
 
 
 class FluorescenceProcessor(SparkProcessorBase):
-  def process(self, raw_results):
+  def process(self, raw_results: List[bytes]) -> List[List[Union[float, str]]]:
+    empty_result: List[List[Union[float, str]]] = []
+
     parsed_data = self._parse_raw_data(raw_results)
     if not parsed_data:
       logger.warning("No valid packets found in results.")
-      return []
+      return empty_result
 
     ref_seq_key, meas_seq_keys = self._identify_sequences(parsed_data)
 
     if ref_seq_key is None:
       logger.error("Calibration sequence not found.")
-      return []
+      return empty_result
 
     if not meas_seq_keys:
       logger.error("Measurement sequence not found.")
-      return []
+      return empty_result
 
     logger.info(
       f"Using Sequence {ref_seq_key} for Calibration and Sequences {meas_seq_keys} for Measurements."
@@ -156,18 +161,18 @@ class FluorescenceProcessor(SparkProcessorBase):
 
         if not signal_dark_values or not ref_dark_values:
           logger.error("Could not extract Dark values.")
-          return []
+          return empty_result
 
         signalDark = sum(signal_dark_values) / len(signal_dark_values)
         refDark = sum(ref_dark_values) / len(ref_dark_values)
       else:
         logger.error("Block 0 does not look like Dark calibration.")
-        return []
+        return empty_result
 
       # Extract bright values
       block1 = cal_seq_data["blocks"][1]
       bright_pairs = block1["rd_md_pairs"]
-      ref_bright_values = []
+      ref_bright_values: List[float] = []
       for pair in bright_pairs:
         rd_key = next((k for k in pair.keys() if "U16RD" in k), None)
         if rd_key:
@@ -175,7 +180,7 @@ class FluorescenceProcessor(SparkProcessorBase):
 
       if not ref_bright_values:
         logger.error("Could not extract Bright Reference values.")
-        return []
+        return empty_result
 
       refBright = sum(ref_bright_values) / len(ref_bright_values)
 
@@ -187,11 +192,11 @@ class FluorescenceProcessor(SparkProcessorBase):
       )
 
       # Calculate RFU
-      final_results_list = []
+      final_results_list: List[List[Union[float, str]]] = []
       for seq_id in meas_seq_keys:
         meas_seq_data = parsed_data[seq_id][0]
         measurements = meas_seq_data["block"]["measurements"]
-        rfu_row = []
+        rfu_row: List[Union[float, str]] = []
 
         for measurement in measurements:
           inner_loops = measurement["inner_loops"]
@@ -223,4 +228,4 @@ class FluorescenceProcessor(SparkProcessorBase):
 
     except Exception as e:
       logger.error(f"Error during calculation: {e}", exc_info=True)
-      return []
+      return empty_result

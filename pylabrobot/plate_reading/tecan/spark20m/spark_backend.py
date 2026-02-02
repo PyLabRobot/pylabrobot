@@ -9,10 +9,19 @@ from pylabrobot.resources.well import Well
 
 from .controls.config_control import ConfigControl
 from .controls.data_control import DataControl
-from .controls.measurement_control import MeasurementControl, MeasurementMode, ScanDirection
-from .controls.optics_control import FilterType, FluorescenceCarrier, MirrorType, OpticsControl
-from .controls.plate_transport_control import MovementSpeed, PlateControl, PlatePosition
-from .controls.sensor_control import InstrumentMessageType, SensorControl
+from .controls.measurement_control import MeasurementControl, ScanDirection
+from .controls.optics_control import OpticsControl
+from .controls.plate_transport_control import PlateControl
+from .controls.sensor_control import SensorControl
+from .controls.spark_enums import (
+  FilterType,
+  FluorescenceCarrier,
+  InstrumentMessageType,
+  MeasurementMode,
+  MirrorType,
+  MovementSpeed,
+  PlatePosition,
+)
 from .controls.system_control import SystemControl
 from .enums import SparkDevice, SparkEndpoint
 from .spark_processor import AbsorbanceProcessor, FluorescenceProcessor
@@ -78,7 +87,9 @@ class SparkBackend(PlateReaderBackend):
     """Move the plate carrier in."""
     await self.plate_control.move_to_position(PlatePosition.PLATE_IN)
 
-  async def scan_plate_range(self, plate: Plate, wells: Optional[List[Well]], z: float = 9150):
+  async def scan_plate_range(
+    self, plate: Plate, wells: Optional[List[Well]], z: float = 9150
+  ) -> None:
     """Scan the plate range."""
     num_cols, num_rows, size_y = plate.num_items_x, plate.num_items_y, plate.get_size_y()
     top_left_well = plate.get_item(0)
@@ -113,7 +124,7 @@ class SparkBackend(PlateReaderBackend):
     wavelength: int,
     bandwidth: int = 200,
     num_reads: int = 10,
-  ) -> List[Dict]:
+  ) -> List[Dict[str, object]]:
     """Read absorbance."""
 
     # Initialize
@@ -134,6 +145,9 @@ class SparkBackend(PlateReaderBackend):
     bg_task, stop_event, results = await self.reader.start_background_read(
       SparkDevice.ABSORPTION, SparkEndpoint.BULK_IN
     )
+
+    if bg_task is None or stop_event is None or results is None:
+      raise RuntimeError("Failed to start background read")
 
     try:
       # Execute Measurement Sequence
@@ -173,7 +187,7 @@ class SparkBackend(PlateReaderBackend):
     bandwidth: int = 200,
     num_reads: int = 30,
     gain: int = 117,
-  ) -> List[Dict]:
+  ) -> List[Dict[str, object]]:
     """Read fluorescence."""
 
     ex_wavelength = excitation_wavelength * 10
@@ -218,6 +232,9 @@ class SparkBackend(PlateReaderBackend):
       SparkDevice.FLUORESCENCE, SparkEndpoint.BULK_IN1
     )
 
+    if bg_task is None or stop_event is None or results is None:
+      raise RuntimeError("Failed to start background read")
+
     try:
       # Execute Measurement Sequence
       await self.measurement_control.prepare_instrument(measure_reference=True)
@@ -247,5 +264,5 @@ class SparkBackend(PlateReaderBackend):
 
   async def read_luminescence(
     self, plate: Plate, wells: List[Well], focal_height: float
-  ) -> List[Dict]:
+  ) -> List[Dict[str, object]]:
     raise NotImplementedError("Luminescence will be implemented in the future.")

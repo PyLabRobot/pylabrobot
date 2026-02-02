@@ -8,17 +8,17 @@ from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import SparkRead
 
 
 class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+  async def asyncSetUp(self) -> None:
     # Patch USB class
     self.usb_patcher = patch("pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.USB")
     self.mock_usb_class = self.usb_patcher.start()
 
     self.reader = SparkReaderAsync()
 
-  async def asyncTearDown(self):
+  async def asyncTearDown(self) -> None:
     self.usb_patcher.stop()
 
-  async def test_connect_success(self):
+  async def test_connect_success(self) -> None:
     # Create a mock USB instance
     mock_usb_instance = AsyncMock()
     self.mock_usb_class.return_value = mock_usb_instance
@@ -37,14 +37,14 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
     mock_usb_instance.setup.assert_awaited()
 
-  async def test_connect_no_devices(self):
+  async def test_connect_no_devices(self) -> None:
     # USB raising RuntimeError means device not found
     self.mock_usb_class.side_effect = RuntimeError("Device not found")
 
     with self.assertRaisesRegex(ValueError, "Failed to connect to any known Spark devices"):
       await self.reader.connect()
 
-  async def test_connect_usb_error(self):
+  async def test_connect_usb_error(self) -> None:
     # Device 1: Fails with Exception (not RuntimeError)
     # Device 2: Succeeds
 
@@ -53,7 +53,9 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
     mock_usb_success = AsyncMock()
 
-    def side_effect(id_vendor, id_product, configuration_callback=None, max_workers=1):
+    def side_effect(
+      id_vendor: int, id_product: int, configuration_callback: object = None, max_workers: int = 1
+    ) -> AsyncMock:
       if id_product == SparkDevice.PLATE_TRANSPORT.value:
         raise Exception("Some USB Error")
       if id_product == SparkDevice.ABSORPTION.value:
@@ -69,7 +71,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     # Device 2 should be in devices
     self.assertIn(SparkDevice.ABSORPTION, self.reader.devices)
 
-  async def test_send_command(self):
+  async def test_send_command(self) -> None:
     # Setup connected device
     mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
@@ -90,25 +92,27 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     mock_dev.write_to_endpoint.assert_awaited_with(SparkEndpoint.BULK_OUT.value, expected_msg)
     self.assertEqual(self.reader.seq_num, 1)
 
-  async def test_send_command_device_not_connected(self):
+  async def test_send_command_device_not_connected(self) -> None:
     with self.assertRaisesRegex(RuntimeError, "Device type .* not connected"):
       await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION, attempts=10)
 
-  async def test_get_response_success(self):
+  async def test_get_response_success(self) -> None:
     # Mock parse_single_spark_packet
     with patch(
       "pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.parse_single_spark_packet"
     ) as mock_parse:
       mock_parse.return_value = {"type": "RespReady", "payload": {"status": "OK"}}
 
-      read_task: asyncio.Future = asyncio.Future()
-      read_task.set_result(b"response_bytes")
+      async def return_bytes() -> bytes:
+        return b"response_bytes"
+
+      read_task = asyncio.create_task(return_bytes())
 
       parsed = await self.reader._get_response(read_task)
 
       self.assertEqual(parsed, {"type": "RespReady", "payload": {"status": "OK"}})
 
-  async def test_get_response_busy_then_ready(self):
+  async def test_get_response_busy_then_ready(self) -> None:
     # This tests the retry loop
     mock_reader = AsyncMock()
     self.reader.cur_reader = mock_reader
@@ -127,8 +131,10 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
       mock_reader.read_from_endpoint.return_value = b"retry_data"
 
-      read_task: asyncio.Future = asyncio.Future()
-      read_task.set_result(b"initial_data")
+      async def return_initial_data() -> bytes:
+        return b"initial_data"
+
+      read_task = asyncio.create_task(return_initial_data())
 
       parsed = await self.reader._get_response(read_task, attempts=5)
 
@@ -138,7 +144,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       # Should have called read_from_endpoint once for the retry
       mock_reader.read_from_endpoint.assert_awaited()
 
-  async def test_start_background_read(self):
+  async def test_start_background_read(self) -> None:
     mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
 
@@ -148,7 +154,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     # 2. Read successful data
     # 3. Raise CancelledError (simulating task cancellation)
 
-    async def side_effect(*args, **kwargs):
+    async def side_effect(*args: object, **kwargs: object) -> bytes:
       if mock_dev.read_from_endpoint.call_count == 1:
         return b"data1"
       elif mock_dev.read_from_endpoint.call_count == 2:
@@ -156,13 +162,15 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       else:
         # Stall until cancelled
         await asyncio.sleep(10)
-        return None
+        return b""
 
     mock_dev.read_from_endpoint.side_effect = side_effect
 
     task, stop_event, results = await self.reader.start_background_read(SparkDevice.PLATE_TRANSPORT)
 
-    self.assertIsNotNone(task)
+    assert task is not None
+    assert stop_event is not None
+    assert results is not None
 
     # Let it run to collect data
     await asyncio.sleep(0.5)  # Wait for 2 reads (0.2 sleep in loop)
@@ -177,7 +185,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     self.assertIn(b"data1", results)
     self.assertIn(b"data2", results)
 
-  async def test_close(self):
+  async def test_close(self) -> None:
     mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
 
@@ -187,14 +195,16 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     # Ensure stop called on the mocked USB device
     mock_dev.stop.assert_awaited()
 
-  async def test_get_response_error(self):
+  async def test_get_response_error(self) -> None:
     with patch(
       "pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.parse_single_spark_packet"
     ) as mock_parse:
       mock_parse.return_value = {"type": "RespError", "payload": {"error": "BadCommand"}}
 
-      read_task: asyncio.Future = asyncio.Future()
-      read_task.set_result(b"error_bytes")
+      async def return_error_bytes() -> bytes:
+        return b"error_bytes"
+
+      read_task = asyncio.create_task(return_error_bytes())
 
       # get_response catches exceptions and logs them, returning None
       result = await self.reader._get_response(read_task)
