@@ -3,6 +3,8 @@ from typing import Dict, Optional, Tuple
 from pylabrobot.plate_reading.byonoy.byonoy_backend import ByonoyAbsorbance96AutomateBackend
 from pylabrobot.plate_reading.plate_reader import PlateReader
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, ResourceHolder
+from pylabrobot.resources.barcode import Barcode
+from pylabrobot.resources.rotation import Rotation
 
 # NEW RESOURCE MODELLING SYSTEM FOR BYONOY A96A
 
@@ -103,31 +105,31 @@ def byonoy_a96a_parking_unit(name: str) -> Resource:
 class ByonoyBaseUnit(Resource):
   def __init__(
     self,
-    name,
+    name: str,
     size_x: float,
     size_y: float,
     size_z: float,
     child_location_map_per_model: Dict[str, Coordinate],
     plate_location: Coordinate,
     plate_accessible: bool = True,
-    rotation=None,
-    category=None,
-    model=None,
-    barcode=None,
+    rotation: Optional[Rotation] = None,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+    barcode: Optional[Barcode] = None,
   ):
     super().__init__(
       name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
+      rotation=rotation,
+      category=category,
+      model=model,
+      barcode=barcode,
     )
     self.child_location_map_per_model = child_location_map_per_model
     self.plate_location = plate_location
     self.plate_accessible = plate_accessible
-    # self.rotation = rotation
-    # self.category = category
-    # self.model = model
-    # self.barcode = barcode
 
   # child_location_map_per_model = {  # Can be extended for future top units
   #   "Byonoy A96A Illumination Unit": Coordinate(x=0.0, y=0.0, z=14.1),
@@ -142,7 +144,7 @@ class ByonoyBaseUnit(Resource):
 
   def assign_child_resource(
     self, resource: Resource, location: Optional[Coordinate] = None, reassign: bool = True
-  ):
+  ) -> None:
     # Check there is no resource on the Byonoy base unit
     if len(self.children) != 0:
       # Check whether illumination_unit already on BaseUnit
@@ -172,7 +174,7 @@ class ByonoyBaseUnit(Resource):
     elif isinstance(resource, Plate):
       location = self.plate_location
 
-    return super().assign_child_resource(resource, location, reassign)
+    super().assign_child_resource(resource, location, reassign)
 
   # def check_can_drop_resource_here(self, resource: Resource) -> None:
   #   raise RuntimeError(
@@ -208,9 +210,9 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
     size_x: float,
     size_y: float,
     size_z: float,
-    pedestal_size_z: float = None,  # type: ignore
-    child_location=Coordinate.zero(),
-    category="plate_holder",
+    pedestal_size_z: float = 0,
+    child_location: Coordinate = Coordinate.zero(),
+    category: str = "plate_holder",
     model: Optional[str] = None,
   ):
     super().__init__(
@@ -242,12 +244,23 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
 
 
 class ByonoyBase(Resource):
-  def __init__(self, name, rotation=None, category=None, model=None, barcode=None):
+  def __init__(
+    self,
+    name: str,
+    rotation: Optional[Rotation] = None,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+    barcode: Optional[Barcode] = None,
+  ):
     super().__init__(
       name=name,
       size_x=138,
       size_y=95.7,
       size_z=27.7,
+      rotation=rotation,
+      category=category,
+      model=model,
+      barcode=barcode,
     )
 
     self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
@@ -270,22 +283,24 @@ class ByonoyBase(Resource):
     self.assign_child_resource(self.reader_holder, location=Coordinate.zero())
 
   def assign_child_resource(
-    self, resource: Resource, location: Optional[Coordinate], reassign=True
-  ):
+    self, resource: Resource, location: Optional[Coordinate], reassign: bool = True
+  ) -> None:
     if isinstance(resource, _ByonoyAbsorbanceReaderPlateHolder):
       if self.plate_holder._byonoy_base is not None:
         raise ValueError("ByonoyBase can only have one plate holder assigned.")
       self.plate_holder._byonoy_base = self
-    return super().assign_child_resource(resource, location, reassign)
+    super().assign_child_resource(resource, location, reassign)
 
-  def check_can_drop_resource_here(self, resource: Resource) -> None:
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
     raise RuntimeError(
       "ByonoyBase does not support assigning child resources directly. "
       "Use the plate_holder or reader_holder to assign plates and the reader, respectively."
     )
 
 
-def byonoy_absorbance96_base_and_reader(name: str, assign=True) -> Tuple[ByonoyBase, PlateReader]:
+def byonoy_absorbance96_base_and_reader(
+  name: str, assign: bool = True
+) -> Tuple[ByonoyBase, PlateReader]:
   """Creates a ByonoyBase and a PlateReader instance."""
   byonoy_base = ByonoyBase(name=name + "_base")
   reader = PlateReader(

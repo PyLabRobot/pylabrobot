@@ -309,6 +309,6 @@ class Plate(ItemizedResource["Well"]):
 
     return wells
 
-  def check_can_drop_resource_here(self, resource: Resource) -> None:
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
     if not isinstance(resource, Lid):
       raise RuntimeError(f"Can only drop Lid resources onto Plate '{self.name}'.")
