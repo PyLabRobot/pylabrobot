@@ -6600,14 +6600,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="H0", command="QW", fmt="qw#")
     return bool(response.get("qw", 0) == 1)  # type?
 
-  async def head96_dispensing_drive_and_squeezer_driver_initialise(
+  async def head96_dispensing_drive_and_squeezer_driver_initialize(
     self,
     squeezer_speed: float = 15.0,  # mm/sec
     squeezer_acceleration: float = 62.0,  # mm/sec**2,
     squeezer_current_limit: int = 15,
     dispensing_drive_current_limit: int = 7,
   ):
-    """Initialise 96-head's dispensing drive AND squeezer drive
+    """Initialize 96-head's dispensing drive AND squeezer drive
 
     This command...
       - drops any tips that might be on the channel (in place, without moving to trash!)
