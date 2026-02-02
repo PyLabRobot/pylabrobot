@@ -103,8 +103,8 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
 def eppendorf_96_wellplate_1000ul_Vb(name: str) -> Plate:
   """Eppendorf Deepwell Plate 96/1000uL, cat. no.: 951032921"""
 
-  material_z_thickness = 0
-  well_diameter_top = 7.0
+  material_z_thickness = 1.05  # measured with ztouch_probe_z_height_using_channel
+  well_diameter_top = 7.0  # from spec
 
   return Plate(
     name=name,
