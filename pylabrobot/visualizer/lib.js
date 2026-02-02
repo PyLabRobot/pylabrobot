@@ -1205,6 +1205,161 @@ class TubeRack extends Resource {
 
 class PlateHolder extends ResourceHolder {}
 
+// Track the currently open pipette info panel so it can be refreshed on state updates.
+var _pipetteInfoState = null; // { ch, kind ("channel"|"tip"), anchorDropdown }
+
+function buildChannelAttrs(ch, headState) {
+  var chState = headState[ch] || {};
+  var tipData = chState.tip;
+  var hasTip = tipData !== null && tipData !== undefined;
+  var attrs = [{ key: "channel", value: ch }];
+  if (hasTip) {
+    attrs.push({ key: "has_tip", value: "true" });
+    attrs.push({ key: "tip_type", value: tipData.type || "Unknown" });
+    attrs.push({ key: "tip_size", value: (tipData.tip_size || "").replace(/_/g, " ") });
+    attrs.push({ key: "max_volume", value: (tipData.maximal_volume || "?") + " \u00B5L" });
+    attrs.push({ key: "has_filter", value: tipData.has_filter ? "Yes" : "No" });
+    attrs.push({ key: "tip_length", value: (tipData.total_tip_length || "?") + " mm" });
+  } else {
+    attrs.push({ key: "has_tip", value: "false" });
+  }
+  return attrs;
+}
+
+function buildTipAttrs(ch, headState) {
+  var chState = headState[ch] || {};
+  var tipData = chState.tip;
+  var tipStateData = chState.tip_state;
+  if (!tipData) return null;
+  var attrs = [
+    { key: "name", value: tipData.name || "Unknown" },
+    { key: "type", value: tipData.type || "Unknown" },
+    { key: "tip_size", value: (tipData.tip_size || "").replace(/_/g, " ") },
+    { key: "total_tip_length", value: (tipData.total_tip_length || "?") + " mm" },
+    { key: "has_filter", value: tipData.has_filter ? "Yes" : "No" },
+    { key: "maximal_volume", value: (tipData.maximal_volume || "?") + " \u00B5L" },
+    { key: "pickup_method", value: (tipData.pickup_method || "").replace(/_/g, " ") },
+  ];
+  if (tipStateData) {
+    attrs.push({ key: "volume", value: (tipStateData.volume || 0) + " / " + (tipStateData.max_volume || "?") + " \u00B5L" });
+    attrs.push({ key: "origin", value: tipStateData.thing || "?" });
+  }
+  return attrs;
+}
+
+// Refresh the pipette info panel if one is open (called after state updates).
+function refreshPipetteInfoPanel(headState) {
+  if (!_pipetteInfoState) return;
+  var existing = document.getElementById("pipette-info-panel");
+  if (!existing) { _pipetteInfoState = null; return; }
+  var s = _pipetteInfoState;
+  var title, type, attrs;
+  if (s.kind === "channel") {
+    title = "Channel " + s.ch;
+    type = "PipetteChannel";
+    attrs = buildChannelAttrs(s.ch, headState);
+  } else {
+    title = "Tip @ Channel " + s.ch;
+    type = "Tip";
+    attrs = buildTipAttrs(s.ch, headState);
+    if (!attrs) {
+      // Tip was removed — close the panel
+      existing.remove();
+      _pipetteInfoState = null;
+      return;
+    }
+  }
+  // No toggle — force show with updated data
+  existing.remove();
+  _showPipetteInfoPanelInner(title, type, attrs, s.anchorDropdown);
+}
+
+// Build a UML-style info panel for a pipette channel or tip, shown on click.
+// `title` is the header name, `type` is the guillemet type label,
+// `attrs` is an array of {key, value} pairs.
+function showPipetteInfoPanel(title, type, attrs, anchorDropdown, ch, kind) {
+  var existing = document.getElementById("pipette-info-panel");
+  if (existing) {
+    // Toggle off if clicking same thing
+    if (existing.dataset.key === title) {
+      existing.remove();
+      _pipetteInfoState = null;
+      return;
+    }
+    existing.remove();
+  }
+  _pipetteInfoState = { ch: ch, kind: kind, anchorDropdown: anchorDropdown };
+  _showPipetteInfoPanelInner(title, type, attrs, anchorDropdown);
+}
+
+function _showPipetteInfoPanelInner(title, type, attrs, anchorDropdown) {
+
+  var panel = document.createElement("div");
+  panel.className = "uml-panel";
+  panel.id = "pipette-info-panel";
+  panel.dataset.key = title;
+
+  var closeBtn = document.createElement("button");
+  closeBtn.className = "uml-close-btn";
+  closeBtn.textContent = "\u00D7";
+  closeBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    panel.remove();
+  });
+  panel.appendChild(closeBtn);
+
+  var header = document.createElement("div");
+  header.className = "uml-header";
+  var nameDiv = document.createElement("div");
+  nameDiv.className = "uml-header-name";
+  nameDiv.textContent = title;
+  var typeDiv = document.createElement("div");
+  typeDiv.className = "uml-header-type";
+  typeDiv.textContent = "\u00AB" + type + "\u00BB";
+  header.appendChild(nameDiv);
+  header.appendChild(typeDiv);
+  panel.appendChild(header);
+
+  var sep = document.createElement("div");
+  sep.className = "uml-separator";
+  panel.appendChild(sep);
+
+  var section = document.createElement("div");
+  section.className = "uml-section";
+  var sTitle = document.createElement("div");
+  sTitle.className = "uml-section-title";
+  sTitle.textContent = "Attributes";
+  section.appendChild(sTitle);
+  for (var i = 0; i < attrs.length; i++) {
+    var row = document.createElement("div");
+    row.className = "uml-row";
+    var keySpan = document.createElement("span");
+    keySpan.className = "uml-key";
+    keySpan.textContent = attrs[i].key + ":";
+    var valSpan = document.createElement("span");
+    valSpan.className = "uml-value";
+    valSpan.textContent = " " + attrs[i].value;
+    row.appendChild(keySpan);
+    row.appendChild(valSpan);
+    section.appendChild(row);
+  }
+  panel.appendChild(section);
+
+  var mainEl = document.querySelector("main");
+  if (!mainEl) return;
+  mainEl.appendChild(panel);
+
+  // Position to the left of the single-channel dropdown
+  if (anchorDropdown) {
+    var mainRect = mainEl.getBoundingClientRect();
+    var ddRect = anchorDropdown.getBoundingClientRect();
+    var panelW = panel.offsetWidth;
+    panel.style.top = (ddRect.top - mainRect.top) + "px";
+    panel.style.right = "auto";
+    panel.style.left = (ddRect.right - mainRect.left + 8) + "px";
+  }
+}
+
 function fillHeadIcons(panel, headState) {
   panel.innerHTML = "";
   // Fixed height: pipette (27) + max tip (80mm * 0.8 = 64px)
@@ -1225,37 +1380,96 @@ function fillHeadIcons(panel, headState) {
     col.style.display = "flex";
     col.style.flexDirection = "column";
     col.style.alignItems = "center";
+    col.style.position = "relative";
+    // Label + channel cylinder: clickable with hover glow
     var label = document.createElement("span");
     label.textContent = ch;
     label.style.fontSize = "15px";
     label.style.fontWeight = "700";
     label.style.color = "#888";
     label.style.marginBottom = "2px";
+    label.style.cursor = "pointer";
+    (function (ch) {
+      label.addEventListener("click", function (e) {
+        e.stopPropagation();
+        showPipetteInfoPanel("Channel " + ch, "PipetteChannel", buildChannelAttrs(ch, headState), panel, ch, "channel");
+      });
+    })(ch);
     col.appendChild(label);
     var icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     icon.setAttribute("width", "14");
     icon.setAttribute("height", String(fixedSvgH));
     icon.setAttribute("viewBox", "0 0 14 " + fixedSvgH);
-    // Black cylinder (top): 14px wide, 20px tall with rounded ends
-    var shapes =
+    icon.style.overflow = "visible";
+    icon.style.display = "block";
+    // Glow filters for hover
+    var defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    defs.innerHTML =
+      '<filter id="chGlow' + ci + '" x="-200%" y="-200%" width="500%" height="500%">' +
+        '<feFlood flood-color="#99DDFF" flood-opacity="1" result="color"/>' +
+        '<feComposite in="color" in2="SourceAlpha" operator="in" result="colored"/>' +
+        '<feGaussianBlur in="colored" stdDeviation="4" result="glow1"/>' +
+        '<feGaussianBlur in="colored" stdDeviation="8" result="glow2"/>' +
+        '<feGaussianBlur in="colored" stdDeviation="14" result="glow3"/>' +
+        '<feMerge><feMergeNode in="glow3"/><feMergeNode in="glow2"/><feMergeNode in="glow1"/><feMergeNode in="SourceGraphic"/></feMerge>' +
+      '</filter>' +
+      '<filter id="tipGlow' + ci + '" x="-200%" y="-200%" width="500%" height="500%">' +
+        '<feFlood flood-color="#EEDD88" flood-opacity="1" result="color"/>' +
+        '<feComposite in="color" in2="SourceAlpha" operator="in" result="colored"/>' +
+        '<feGaussianBlur in="colored" stdDeviation="4" result="glow1"/>' +
+        '<feGaussianBlur in="colored" stdDeviation="8" result="glow2"/>' +
+        '<feGaussianBlur in="colored" stdDeviation="14" result="glow3"/>' +
+        '<feMerge><feMergeNode in="glow3"/><feMergeNode in="glow2"/><feMergeNode in="glow1"/><feMergeNode in="SourceGraphic"/></feMerge>' +
+      '</filter>';
+    icon.appendChild(defs);
+    // Channel shapes (black cylinder + silver cylinder) — hover glow + click
+    var channelG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    channelG.style.cursor = "pointer";
+    (function (idx, ch) {
+      channelG.addEventListener("mouseenter", function () { this.setAttribute("filter", "url(#chGlow" + idx + ")"); });
+      channelG.addEventListener("mouseleave", function () { this.removeAttribute("filter"); });
+      channelG.addEventListener("click", function (e) {
+        e.stopPropagation();
+        showPipetteInfoPanel("Channel " + ch, "PipetteChannel", buildChannelAttrs(ch, headState), panel, ch, "channel");
+      });
+    })(ci, ch);
+    channelG.innerHTML =
       '<rect x="0" y="1" width="14" height="18" rx="3" ry="3" fill="#333"/>' +
       '<ellipse cx="7" cy="2" rx="7" ry="2" fill="#555"/>' +
       '<ellipse cx="7" cy="19" rx="7" ry="2" fill="#222"/>' +
-      // Silver cylinder (bottom): 10px wide, 5px tall, centered
       '<rect x="2" y="20" width="10" height="4" rx="2" ry="2" fill="#b0b0b0"/>' +
       '<ellipse cx="7" cy="20" rx="5" ry="1.5" fill="#ccc"/>' +
       '<ellipse cx="7" cy="24" rx="5" ry="1.5" fill="#999"/>';
+    icon.appendChild(channelG);
     if (hasTip) {
-      // Tip: straight section (40% of length) then taper to point (60%)
+      var collarH = 6.5;
+      var collarY = 19.5;
+      var bodyStart = collarY + collarH;
       var straightH = Math.round(tipLenPx * 0.4);
       var taperH = tipLenPx - straightH;
-      var straightEnd = 25 + straightH;
+      var straightEnd = bodyStart + straightH;
       var tipEnd = straightEnd + taperH;
-      shapes +=
-        '<rect x="3" y="25" width="8" height="' + straightH + '" rx="1" ry="1" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>' +
-        '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' 7,' + tipEnd + '" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>';
+      var tipG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      tipG.style.cursor = "pointer";
+      (function (idx) {
+        tipG.addEventListener("mouseenter", function () { this.setAttribute("filter", "url(#tipGlow" + idx + ")"); });
+        tipG.addEventListener("mouseleave", function () { this.removeAttribute("filter"); });
+      })(ci);
+      var botW = (tipData.total_tip_length > 50) ? 2 : 1;
+      var botL = 7 - botW / 2;
+      var botR = 7 + botW / 2;
+      tipG.innerHTML =
+        '<rect x="1.5" y="' + collarY + '" width="11" height="' + collarH + '" rx="0.5" ry="0.5" fill="#c8c8c8" fill-opacity="0.5" stroke="#888" stroke-width="0.8"/>' +
+        '<rect x="3" y="' + bodyStart + '" width="8" height="' + straightH + '" rx="1" ry="1" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>' +
+        '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' ' + botR + ',' + tipEnd + ' ' + botL + ',' + tipEnd + '" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>';
+      (function (ch) {
+        tipG.addEventListener("click", function (e) {
+          e.stopPropagation();
+          showPipetteInfoPanel("Tip @ Channel " + ch, "Tip", buildTipAttrs(ch, headState), panel, ch, "tip");
+        });
+      })(ch);
+      icon.appendChild(tipG);
     }
-    icon.innerHTML = shapes;
     col.appendChild(icon);
     panel.appendChild(col);
   }
@@ -1627,6 +1841,7 @@ class LiquidHandler extends Resource {
       var panel = document.getElementById("single-channel-dropdown-" + this.name);
       if (panel) {
         fillHeadIcons(panel, this.headState);
+        refreshPipetteInfoPanel(this.headState);
       }
     }
     if ("head96_state" in state) {
