@@ -153,6 +153,11 @@ function getLocationWrt(resource, wrtName) {
 var scaleX, scaleY;
 
 var resources = {}; // name -> Resource object
+// Serialized resource data saved before resources are destroyed (e.g. picked up by arm).
+// Used by the arm panel to re-instantiate the resource and draw it on a live Konva stage
+// using the exact same draw() code as the main canvas — guaranteeing visual consistency.
+// Each entry is a plain JS object from resource.serialize() (~1-5 KB for a 96-well plate).
+var resourceSnapshots = {}; // name -> serialized resource data
 
 var rootResource = null; // the root resource for fit-to-viewport
 
@@ -941,6 +946,13 @@ class Well extends Container {
     this.cross_section_type = cross_section_type;
   }
 
+  serialize() {
+    return {
+      ...super.serialize(),
+      cross_section_type: this.cross_section_type,
+    };
+  }
+
   drawMainShape() {
     const mainShape = new Konva.Group({});
     if (this.cross_section_type === "circle") {
@@ -1195,19 +1207,19 @@ class PlateHolder extends ResourceHolder {}
 
 function fillHeadIcons(panel, headState) {
   panel.innerHTML = "";
-  panel.style.display = "flex";
-  panel.style.flexWrap = "wrap";
-  panel.style.gap = "6px";
-  panel.style.alignItems = "flex-start";
+  // Fixed height: pipette (27) + max tip (80mm * 0.8 = 64px)
+  var maxTipPx = 64; // 80mm max tip
+  var fixedSvgH = 27 + maxTipPx;
   var channels = Object.keys(headState).sort(function (a, b) { return +a - +b; });
   for (var ci = 0; ci < channels.length; ci++) {
     var ch = channels[ci];
     var tipData = headState[ch] && headState[ch].tip;
     var hasTip = tipData !== null && tipData !== undefined;
-    // Scale tip length: total_tip_length in mm, map to px (0.4 px/mm, min 10, max 40)
+    // Scale tip length: total_tip_length in mm, map to px (0.8 px/mm, clamp 10mm–80mm)
     var tipLenPx = 0;
     if (hasTip && tipData.total_tip_length) {
-      tipLenPx = Math.max(10, Math.min(40, tipData.total_tip_length * 0.4));
+      var clampedMm = Math.max(10, Math.min(80, tipData.total_tip_length));
+      tipLenPx = clampedMm * 0.8;
     }
     var col = document.createElement("div");
     col.style.display = "flex";
@@ -1220,12 +1232,10 @@ function fillHeadIcons(panel, headState) {
     label.style.color = "#888";
     label.style.marginBottom = "2px";
     col.appendChild(label);
-    // Base pipette is 27px; tip adds a straight section + taper below
-    var svgH = hasTip ? 27 + tipLenPx : 27;
     var icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     icon.setAttribute("width", "14");
-    icon.setAttribute("height", String(svgH));
-    icon.setAttribute("viewBox", "0 0 14 " + svgH);
+    icon.setAttribute("height", String(fixedSvgH));
+    icon.setAttribute("viewBox", "0 0 14 " + fixedSvgH);
     // Black cylinder (top): 14px wide, 20px tall with rounded ends
     var shapes =
       '<rect x="0" y="1" width="14" height="18" rx="3" ry="3" fill="#333"/>' +
@@ -1242,12 +1252,305 @@ function fillHeadIcons(panel, headState) {
       var straightEnd = 25 + straightH;
       var tipEnd = straightEnd + taperH;
       shapes +=
-        '<rect x="3" y="25" width="8" height="' + straightH + '" rx="1" ry="1" fill="#e8e8e8" stroke="#bbb" stroke-width="0.5"/>' +
-        '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' 7,' + tipEnd + '" fill="#e8e8e8" stroke="#bbb" stroke-width="0.5"/>';
+        '<rect x="3" y="25" width="8" height="' + straightH + '" rx="1" ry="1" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>' +
+        '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' 7,' + tipEnd + '" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>';
     }
     icon.innerHTML = shapes;
     col.appendChild(icon);
     panel.appendChild(col);
+  }
+}
+
+function fillHead96Grid(panel, head96State) {
+  panel.innerHTML = "";
+  // Split channels into groups of 96 (one grid per multi-channel pipette)
+  var allChannels = Object.keys(head96State).sort(function (a, b) { return +a - +b; });
+  var numPipettes = Math.max(1, Math.ceil(allChannels.length / 96));
+  // Compute dot size to fit within panel height
+  var panelH = parseFloat(panel.style.height) || 0;
+  var availH = panelH > 0 ? panelH - 32 - 12 - 3 : 100;
+  // 8 rows with gaps: 8d + 7*0.25d = 9.75d = availH
+  var dotSize = Math.max(6, Math.min(14, Math.floor(availH / 9.75)));
+  var gapSize = Math.max(1, Math.round(dotSize * 0.25));
+  for (var p = 0; p < numPipettes; p++) {
+    var startCh = p * 96;
+    var box = document.createElement("div");
+    box.style.border = "1.5px solid #aaa";
+    box.style.borderRadius = "6px";
+    box.style.padding = "6px";
+    box.style.background = "rgba(245, 245, 245, 0.6)";
+    box.style.display = "inline-block";
+    var grid = document.createElement("div");
+    grid.style.display = "grid";
+    grid.style.gridTemplateColumns = "repeat(12, " + dotSize + "px)";
+    grid.style.gridTemplateRows = "repeat(8, " + dotSize + "px)";
+    grid.style.gap = gapSize + "px";
+    // 8 rows x 12 cols, column-major within each 96-group
+    for (var row = 0; row < 8; row++) {
+      for (var col = 0; col < 12; col++) {
+        var ch = startCh + col * 8 + row;
+        var chState = head96State[String(ch)] || head96State[ch];
+        var hasTip = chState && chState.tip !== null && chState.tip !== undefined;
+        var dot = document.createElement("div");
+        dot.style.width = dotSize + "px";
+        dot.style.height = dotSize + "px";
+        dot.style.borderRadius = "50%";
+        dot.style.border = "1.5px solid " + (hasTip ? "#555" : "#bbb");
+        dot.style.background = hasTip ? "#666" : "#e8e8e8";
+        dot.title = "Channel " + ch + (hasTip ? " (tip)" : "");
+        grid.appendChild(dot);
+      }
+    }
+    // Pipette index label (only when multiple 96-head pipettes)
+    if (numPipettes > 1) {
+      var wrapper = document.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.style.flexDirection = "column";
+      wrapper.style.alignItems = "center";
+      var idLabel = document.createElement("span");
+      idLabel.textContent = String(p);
+      idLabel.style.fontSize = "15px";
+      idLabel.style.fontWeight = "700";
+      idLabel.style.color = "#888";
+      idLabel.style.marginBottom = "2px";
+      wrapper.appendChild(idLabel);
+      box.appendChild(grid);
+      wrapper.appendChild(box);
+      panel.appendChild(wrapper);
+    } else {
+      box.appendChild(grid);
+      panel.appendChild(box);
+    }
+  }
+}
+
+function buildSingleArm(armData) {
+  // Build one gripper visualization column
+  var hasPlate = armData !== null && armData !== undefined;
+  var col = document.createElement("div");
+  col.style.display = "flex";
+  col.style.flexDirection = "column";
+  col.style.alignItems = "center";
+  col.style.justifyContent = "center";
+
+  // Compute scaled plate dimensions for gripper sizing.
+  // The serialized resource data (saved before destruction in resourceSnapshots) is used
+  // to re-instantiate the resource and draw it on a live Konva stage inside the arm panel,
+  // using the exact same draw() code as the main canvas.
+  var plateW = 52, plateH = 22;
+  var snapshot = null; // serialized resource data, or null
+  if (hasPlate) {
+    snapshot = resourceSnapshots[armData.resource_name] || null;
+    var sizeX = snapshot ? snapshot.size_x : (armData.size_x || 127);
+    var sizeY = snapshot ? snapshot.size_y : (armData.size_y || 86);
+    var scale = Math.min(80 / sizeX, 80 / sizeY);
+    plateW = Math.round(sizeX * scale);
+    plateH = Math.round(sizeY * scale);
+  }
+
+  // Carriage uses a fixed "closed" gap regardless of plate presence.
+  // Fingers spread outward to accommodate a held plate.
+  // SVG is always wide enough for a standard plate (127×86 mm) so the popup
+  // does not resize when a plate is picked up or dropped.
+  var stdPlateW = Math.round(127 * Math.min(80 / 127, 80 / 86)); // ≈80px
+  var minFingerGap = Math.round((stdPlateW + 16) * 1.1);          // ≈106px
+  var closedGap = Math.round((52 + 16) * 1.1); // default closed spacing
+  var fingerGap = hasPlate ? Math.round((plateW + 16) * 1.1) : closedGap;
+  var svgW = Math.max(closedGap, fingerGap, minFingerGap) + 28; // 14px margin each side (room for outer guide bars)
+  var svgH = 110;
+  var cx = svgW / 2; // centre x
+
+  // Finger (rail) positions spread based on plate size
+  var lRailX = cx - fingerGap / 2 - 7; // left rail, offset outward from center
+  var rRailX = cx + fingerGap / 2 - 1; // right rail, offset outward from center
+
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", String(svgW));
+  svg.setAttribute("height", String(svgH));
+  svg.setAttribute("viewBox", "0 0 " + svgW + " " + svgH);
+  var shapes = "";
+
+  // Horizontal guide bars — drawn first (behind rails), extending inward from each finger
+  var barH = 5.1, barW = 12, barY = 10; // aligned with top of rails
+  shapes += '<rect x="' + (lRailX + 7) + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" rx="1" ry="1" fill="#555" stroke="#444" stroke-width="0.6"/>';
+  shapes += '<rect x="' + (rRailX + 1 - barW) + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" rx="1" ry="1" fill="#555" stroke="#444" stroke-width="0.6"/>';
+
+  // Draw rails after guide bars (painter's order)
+  // Left rail (7px wide, 90% of original 8px)
+  shapes += '<rect x="' + lRailX + '" y="10" width="7" height="75" fill="#333" stroke="#222" stroke-width="1"/>';
+  // Right rail
+  shapes += '<rect x="' + (rRailX + 1) + '" y="10" width="7" height="75" fill="#333" stroke="#222" stroke-width="1"/>';
+
+  // Top carriage block (grey, wide) — fixed size, drawn after rails so it covers them
+  var carriageW = closedGap + 8;
+  var carriageX = cx - carriageW / 2;
+  shapes += '<rect x="' + carriageX + '" y="0" width="' + carriageW + '" height="24" rx="2" ry="2" fill="#aaa" stroke="#666" stroke-width="1.2"/>';
+  // Darker top strip on carriage
+  shapes += '<rect x="' + carriageX + '" y="0" width="' + carriageW + '" height="7" rx="2" ry="2" fill="#888" stroke="#666" stroke-width="1.2"/>';
+  // Centre mounting post
+  shapes += '<rect x="' + (cx - 4) + '" y="3" width="8" height="18" fill="#666" stroke="#555" stroke-width="0.8"/>';
+
+  // Cushion geometry: pad y=74, height=22 → center at y=85
+  var cushY = 74, cushH = 22, pinH = 2.4;
+  var cushCenterY = cushY + cushH / 2;       // 85
+  var pinOffset = 5;                          // distance from center to pin center
+  var pinTopY = cushCenterY - pinOffset - pinH / 2;    // 78.8
+  var pinBotY = cushCenterY + pinOffset - pinH / 2;    // 88.8
+
+  // Left finger cushion — pins drawn first (behind), then vertical pad on top
+  var lCushX = lRailX + 7 + 2; // rail width + gap
+  shapes += '<rect x="' + (lCushX + 2) + '" y="' + pinTopY + '" width="5" height="' + pinH + '" rx="0.5" ry="0.5" fill="#555" stroke="#333" stroke-width="0.4"/>';
+  shapes += '<rect x="' + (lCushX + 2) + '" y="' + pinBotY + '" width="5" height="' + pinH + '" rx="0.5" ry="0.5" fill="#555" stroke="#333" stroke-width="0.4"/>';
+  shapes += '<rect x="' + lCushX + '" y="' + cushY + '" width="4" height="' + cushH + '" rx="1" ry="1" fill="#444" stroke="#333" stroke-width="0.6"/>';
+
+  // Right finger cushion — pins drawn first (behind), then vertical pad on top
+  var rCushX = rRailX + 1 - 2 - 4; // rail left edge - gap - cushion width
+  shapes += '<rect x="' + (rCushX - 3) + '" y="' + pinTopY + '" width="5" height="' + pinH + '" rx="0.5" ry="0.5" fill="#555" stroke="#333" stroke-width="0.4"/>';
+  shapes += '<rect x="' + (rCushX - 3) + '" y="' + pinBotY + '" width="5" height="' + pinH + '" rx="0.5" ry="0.5" fill="#555" stroke="#333" stroke-width="0.4"/>';
+  shapes += '<rect x="' + rCushX + '" y="' + cushY + '" width="4" height="' + cushH + '" rx="1" ry="1" fill="#444" stroke="#333" stroke-width="0.6"/>';
+
+  svg.innerHTML = shapes;
+  // Wrap the SVG and plate in a positioned container.
+  var svgContainer = document.createElement("div");
+  svgContainer.style.position = "relative";
+  svgContainer.style.width = svgW + "px";
+  svgContainer.style.height = svgH + "px";
+  svgContainer.appendChild(svg);
+
+  if (hasPlate && snapshot) {
+    // Render the plate using the exact same Konva draw() code as the main canvas.
+    // The serialized resource data (saved before destruction) is re-instantiated via
+    // loadResource() and drawn on a temporary DOM-attached Konva stage. The result is
+    // exported as a PNG data URL and displayed as an <img> overlay on the gripper SVG.
+    // Konva requires its container to be in the DOM to render, so we use a hidden div
+    // attached to document.body, then clean up after export.
+    // Cost: one temporary Konva stage + ~97 nodes for a 96-well plate, created and
+    // destroyed each time the arm panel updates.
+    var plateX = cx - plateW / 2;
+    var plateY = 85 - plateH / 2;
+    try {
+      var realW = Math.ceil(snapshot.size_x);
+      var realH = Math.ceil(snapshot.size_y);
+      // Create a hidden div in the DOM for Konva to render into
+      var tmpDiv = document.createElement("div");
+      tmpDiv.style.position = "fixed";
+      tmpDiv.style.left = "-9999px";
+      tmpDiv.style.top = "-9999px";
+      document.body.appendChild(tmpDiv);
+      var plateStage = new Konva.Stage({ container: tmpDiv, width: realW, height: realH });
+      var plateLayer = new Konva.Layer();
+      plateStage.add(plateLayer);
+      // Re-instantiate the resource from saved serialized data and draw it.
+      // Temporarily save/restore global resources to avoid conflicts.
+      var savedRes = {};
+      var snapshotData = JSON.parse(JSON.stringify(snapshot));
+      snapshotData.parent_name = undefined;
+      snapshotData.location = { x: 0, y: 0, z: 0, type: "Coordinate" };
+      function _saveKey(n) { if (n in resources) savedRes[n] = resources[n]; }
+      _saveKey(snapshotData.name);
+      for (var si = 0; si < (snapshotData.children || []).length; si++) {
+        _saveKey(snapshotData.children[si].name);
+      }
+      var plateCopy = loadResource(snapshotData);
+      plateCopy.draw(plateLayer);
+      plateLayer.draw();
+      // Export to data URL
+      var plateDataUrl = plateStage.toDataURL({ pixelRatio: 2 });
+      // Clean up: restore resources, destroy offscreen stage
+      delete resources[plateCopy.name];
+      for (var ci2 = 0; ci2 < plateCopy.children.length; ci2++) {
+        delete resources[plateCopy.children[ci2].name];
+      }
+      for (var rk in savedRes) { resources[rk] = savedRes[rk]; }
+      plateStage.destroy();
+      document.body.removeChild(tmpDiv);
+      // Display as an <img> overlay
+      var plateImg = document.createElement("img");
+      plateImg.src = plateDataUrl;
+      plateImg.style.position = "absolute";
+      plateImg.style.left = plateX + "px";
+      plateImg.style.top = plateY + "px";
+      plateImg.style.width = plateW + "px";
+      plateImg.style.height = plateH + "px";
+      plateImg.style.pointerEvents = "none";
+      svgContainer.appendChild(plateImg);
+    } catch (e) {
+      console.warn("[arm plate render] failed:", e);
+    }
+  } else if (hasPlate) {
+    // Fallback: simple colored rectangle when no serialized data is available
+    var plateX2 = cx - plateW / 2;
+    var plateY2 = 85 - plateH / 2;
+    var fallbackColor = RESOURCE_COLORS[armData.resource_type] || RESOURCE_COLORS["Resource"];
+    var fallbackSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    fallbackSvg.setAttribute("width", String(svgW));
+    fallbackSvg.setAttribute("height", String(svgH));
+    fallbackSvg.setAttribute("viewBox", "0 0 " + svgW + " " + svgH);
+    fallbackSvg.style.position = "absolute";
+    fallbackSvg.style.left = "0";
+    fallbackSvg.style.top = "0";
+    fallbackSvg.style.pointerEvents = "none";
+    fallbackSvg.innerHTML = '<rect x="' + plateX2 + '" y="' + plateY2 + '" width="' + plateW +
+      '" height="' + plateH + '" fill="' + fallbackColor + '" stroke="#222" stroke-width="1.2"/>';
+    svgContainer.appendChild(fallbackSvg);
+  }
+
+  col.appendChild(svgContainer);
+  var label = document.createElement("div");
+  label.style.fontSize = "11px";
+  label.style.fontWeight = "600";
+  label.style.color = "#666";
+  label.style.marginTop = "4px";
+  label.style.textAlign = "center";
+  if (hasPlate) {
+    label.textContent = armData.resource_name + " (" + armData.resource_type + ")";
+  } else {
+    label.textContent = "No plate held";
+  }
+  col.appendChild(label);
+  return col;
+}
+
+function fillArmPanel(panel, armState) {
+  panel.innerHTML = "";
+  if (!armState || Object.keys(armState).length === 0) {
+    // Match the dimensions of a normal arm panel (closed gripper SVG + label)
+    var stdW = Math.round((Math.round(127 * Math.min(80 / 127, 80 / 86)) + 16) * 1.1) + 28;
+    var msg = document.createElement("div");
+    msg.style.display = "flex";
+    msg.style.alignItems = "center";
+    msg.style.justifyContent = "center";
+    msg.style.width = stdW + "px";
+    msg.style.height = "130px";
+    msg.style.padding = "16px";
+    msg.style.boxSizing = "border-box";
+    msg.style.color = "#888";
+    msg.style.fontSize = "13px";
+    msg.style.fontWeight = "500";
+    msg.style.textAlign = "center";
+    msg.textContent = "No robotic arm is installed on this liquid handler.";
+    panel.appendChild(msg);
+    return;
+  }
+  var arms = Object.keys(armState).sort(function (a, b) { return +a - +b; });
+  for (var i = 0; i < arms.length; i++) {
+    var armId = arms[i];
+    var wrapper = document.createElement("div");
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.alignItems = "center";
+    // Arm index label (only when multiple arms)
+    if (arms.length > 1) {
+      var idLabel = document.createElement("span");
+      idLabel.textContent = armId;
+      idLabel.style.fontSize = "15px";
+      idLabel.style.fontWeight = "700";
+      idLabel.style.color = "#888";
+      idLabel.style.marginBottom = "2px";
+      wrapper.appendChild(idLabel);
+    }
+    wrapper.appendChild(buildSingleArm(armState[armId]));
+    panel.appendChild(wrapper);
   }
 }
 
@@ -1256,6 +1559,8 @@ class LiquidHandler extends Resource {
     super(resource);
     this.numHeads = 0;
     this.headState = {};
+    this.head96State = {};
+    this.armState = {};
   }
 
   drawMainShape() {
@@ -1266,10 +1571,39 @@ class LiquidHandler extends Resource {
     if (state.head_state) {
       this.headState = state.head_state;
       this.numHeads = Object.keys(state.head_state).length;
-      // Update dropdown panel if it exists
       var panel = document.getElementById("single-channel-dropdown-" + this.name);
       if (panel) {
         fillHeadIcons(panel, this.headState);
+      }
+    }
+    if (state.head96_state) {
+      this.head96State = state.head96_state;
+      var panel96 = document.getElementById("multi-channel-dropdown-" + this.name);
+      if (panel96) {
+        fillHead96Grid(panel96, this.head96State);
+      }
+    }
+    if ("arm_state" in state) {
+      this.armState = state.arm_state;
+      // Snapshot each held resource NOW, while it is still in the resources dict.
+      // pick_up_resource() sends set_state BEFORE resource_unassigned fires, so
+      // the resource and all its children are still intact at this point.
+      for (var armKey in (this.armState || {})) {
+        var ad = this.armState[armKey];
+        if (ad && ad.resource_name && !resourceSnapshots[ad.resource_name]) {
+          var res = resources[ad.resource_name];
+          if (res) {
+            try {
+              resourceSnapshots[ad.resource_name] = res.serialize();
+            } catch (e) {
+              console.warn("[arm snapshot] failed for " + ad.resource_name, e);
+            }
+          }
+        }
+      }
+      var armPanel = document.getElementById("arm-dropdown-" + this.name);
+      if (armPanel) {
+        fillArmPanel(armPanel, this.armState);
       }
     }
   }
@@ -3183,11 +3517,28 @@ function buildNavbarLHModules() {
     var group = document.createElement("div");
     group.className = "navbar-pipette-group";
 
-    // Label
-    var label = document.createElement("span");
+    // Label (styled as button without changing appearance)
+    var label = document.createElement("button");
     label.className = "navbar-pipette-label";
-    label.textContent = lhName;
+    label.innerHTML = lhName + "<br>Modules";
     group.appendChild(label);
+
+    // Collapsible container for module buttons
+    var moduleBtns = document.createElement("div");
+    moduleBtns.className = "navbar-module-btns";
+    group.appendChild(moduleBtns);
+
+    // Toggle module buttons on label click
+    label.addEventListener("click", function () {
+      var collapsed = moduleBtns.classList.toggle("collapsed");
+      label.classList.toggle("collapsed", collapsed);
+      // Close any open dropdowns when collapsing
+      if (collapsed) {
+        var dropdowns = document.querySelectorAll(".module-dropdown.open");
+        dropdowns.forEach(function (d) { d.classList.remove("open"); });
+        group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
+      }
+    });
 
     // Multi-channel button
     var multiBtn = document.createElement("button");
@@ -3200,7 +3551,7 @@ function buildNavbarLHModules() {
     multiImg.style.height = "44px";
     multiImg.style.objectFit = "contain";
     multiBtn.appendChild(multiImg);
-    group.appendChild(multiBtn);
+    moduleBtns.appendChild(multiBtn);
 
     // Single-channel button
     var singleBtn = document.createElement("button");
@@ -3213,7 +3564,51 @@ function buildNavbarLHModules() {
     singleImg.style.height = "44px";
     singleImg.style.objectFit = "contain";
     singleBtn.appendChild(singleImg);
-    group.appendChild(singleBtn);
+    moduleBtns.appendChild(singleBtn);
+
+    // Helper: position both panels based on the single-channel button position
+    function positionPanels(handlerName, singleBtnRef) {
+      var mainEl = document.querySelector("main");
+      if (!mainEl) return;
+      var mainRect = mainEl.getBoundingClientRect();
+      var btnRect = singleBtnRef.getBoundingClientRect();
+      var topPx = (btnRect.bottom - mainRect.top + 20);
+      var singleCenterPx = (btnRect.left - mainRect.left + btnRect.width / 2);
+
+      var singlePanel = document.getElementById("single-channel-dropdown-" + handlerName);
+      if (singlePanel) {
+        singlePanel.style.top = topPx + "px";
+        singlePanel.style.left = singleCenterPx + "px";
+      }
+
+      // Measure single panel (temporarily show if hidden)
+      var singleW = 0, singleH = 0, singleLeft = singleCenterPx;
+      if (singlePanel) {
+        var wasHidden = !singlePanel.classList.contains("open");
+        if (wasHidden) { singlePanel.style.visibility = "hidden"; singlePanel.classList.add("open"); }
+        singleW = singlePanel.offsetWidth;
+        singleH = singlePanel.offsetHeight;
+        singleLeft = singleCenterPx - singleW / 2;
+        if (wasHidden) { singlePanel.classList.remove("open"); singlePanel.style.visibility = ""; }
+      }
+
+      var multiPanel = document.getElementById("multi-channel-dropdown-" + handlerName);
+      if (multiPanel && multiPanel.classList.contains("open")) {
+        multiPanel.style.transform = "none";
+        multiPanel.style.top = topPx + "px";
+        multiPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
+        multiPanel.style.left = (singleLeft - multiPanel.offsetWidth - 8) + "px";
+      }
+
+      var armPanel = document.getElementById("arm-dropdown-" + handlerName);
+      if (armPanel && armPanel.classList.contains("open")) {
+        armPanel.style.transform = "none";
+        armPanel.style.top = topPx + "px";
+        armPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
+        var singleRight = singleLeft + singleW;
+        armPanel.style.left = (singleRight + 8) + "px";
+      }
+    }
 
     // Single-channel dropdown panel
     (function (btn, handlerName) {
@@ -3221,30 +3616,49 @@ function buildNavbarLHModules() {
       btn.addEventListener("click", function () {
         var existing = document.getElementById(panelId);
         if (existing) {
-          // Toggle
           var isOpen = existing.classList.toggle("open");
           btn.classList.toggle("active", isOpen);
+          positionPanels(handlerName, btn);
           return;
         }
-        // Create the dropdown panel inside <main>
         var mainEl = document.querySelector("main");
         if (!mainEl) return;
         var panel = document.createElement("div");
         panel.className = "module-dropdown open";
         panel.id = panelId;
-        // Position below the button
-        var btnRect = btn.getBoundingClientRect();
-        var mainRect = mainEl.getBoundingClientRect();
-        panel.style.top = (btnRect.bottom - mainRect.top + 20) + "px";
-        panel.style.left = (btnRect.left - mainRect.left + btnRect.width / 2) + "px";
-        // Show head icons from LiquidHandler state
         var lhResource = resources[handlerName];
         var headState = (lhResource && lhResource.headState) ? lhResource.headState : {};
         fillHeadIcons(panel, headState);
         mainEl.appendChild(panel);
         btn.classList.add("active");
+        positionPanels(handlerName, btn);
       });
     })(singleBtn, lhName);
+
+    // Multi-channel dropdown panel
+    (function (btn, handlerName, singleBtnRef) {
+      var panelId = "multi-channel-dropdown-" + handlerName;
+      btn.addEventListener("click", function () {
+        var existing = document.getElementById(panelId);
+        if (existing) {
+          var isOpen = existing.classList.toggle("open");
+          btn.classList.toggle("active", isOpen);
+          if (isOpen) positionPanels(handlerName, singleBtnRef);
+          return;
+        }
+        var mainEl = document.querySelector("main");
+        if (!mainEl) return;
+        var panel = document.createElement("div");
+        panel.className = "module-dropdown multi-channel open";
+        panel.id = panelId;
+        var lhResource = resources[handlerName];
+        var head96State = (lhResource && lhResource.head96State) ? lhResource.head96State : {};
+        fillHead96Grid(panel, head96State);
+        mainEl.appendChild(panel);
+        positionPanels(handlerName, singleBtnRef);
+        btn.classList.add("active");
+      });
+    })(multiBtn, lhName, singleBtn);
 
     // Integrated arm button
     var armBtn = document.createElement("button");
@@ -3257,7 +3671,32 @@ function buildNavbarLHModules() {
     armImg.style.height = "44px";
     armImg.style.objectFit = "contain";
     armBtn.appendChild(armImg);
-    group.appendChild(armBtn);
+    moduleBtns.appendChild(armBtn);
+
+    // Arm dropdown panel
+    (function (btn, handlerName, singleBtnRef) {
+      var panelId = "arm-dropdown-" + handlerName;
+      btn.addEventListener("click", function () {
+        var existing = document.getElementById(panelId);
+        if (existing) {
+          var isOpen = existing.classList.toggle("open");
+          btn.classList.toggle("active", isOpen);
+          if (isOpen) positionPanels(handlerName, singleBtnRef);
+          return;
+        }
+        var mainEl = document.querySelector("main");
+        if (!mainEl) return;
+        var panel = document.createElement("div");
+        panel.className = "module-dropdown arm open";
+        panel.id = panelId;
+        var lhResource = resources[handlerName];
+        var armState = (lhResource && lhResource.armState) ? lhResource.armState : {};
+        fillArmPanel(panel, armState);
+        mainEl.appendChild(panel);
+        positionPanels(handlerName, singleBtnRef);
+        btn.classList.add("active");
+      });
+    })(armBtn, lhName, singleBtn);
 
     container.appendChild(group);
   }

@@ -38,6 +38,21 @@ function setRootResource(data) {
   buildResourceTree(resource);
 }
 
+// Save the full serialized resource data before it is destroyed.
+// Called from the resource_unassigned handler while the resource and all its
+// children are still intact. The serialized data is later used by buildSingleArm
+// to create a live Konva stage using the exact same draw() code as the main canvas.
+// Cost: one serialize() call per unassigned resource — negligible.
+function snapshotResource(resourceName) {
+  var res = resources[resourceName];
+  if (!res) return;
+  try {
+    resourceSnapshots[resourceName] = res.serialize();
+  } catch (e) {
+    console.warn("[snapshot] failed for " + resourceName, e);
+  }
+}
+
 function removeResource(resourceName) {
   let resource = resources[resourceName];
   resource.destroy();
@@ -73,6 +88,10 @@ async function processCentralEvent(event, data) {
       break;
 
     case "resource_unassigned":
+      // Snapshot the resource before destruction so the arm panel can show a
+      // pixel-perfect replica. Done here (not in destroy()) because the Konva
+      // group and all children are guaranteed intact at this point.
+      snapshotResource(data.resource_name);
       removeResourceFromTree(data.resource_name);
       removeResource(data.resource_name);
       break;
