@@ -257,7 +257,6 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     plate: Plate,
     wells: List[Well],
     wavelength: int,
-    num_measurement_replicates: int = 1,
   ) -> List[dict]:
     """
     Measure sample absorbance in each well at the specified wavelength.
@@ -265,34 +264,20 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
     Args:
       wavelength: Signal wavelength in nanometers.
       plate: The plate being read. Included for API uniformity.
-      wells, Subset of wells to return. If omitted, all 96 wells are returned.
-      num_measurement_replicates: Number of technical replicate reads to acquire.  Replicates are taken sequentially and averaged per well.  (Handled at the backend level for faster acquisition and a simpler interface.)
+      wells: Subset of wells to return. If omitted, all 96 wells are returned.
     """
 
     assert (
       wavelength in self.available_wavelengths
     ), f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
 
-    # 1. Collect technical replicates
-    technical_replicates = []
-    for _ in range(num_measurement_replicates):
-      rows = await self._run_abs_measurement(
-        signal_wl=wavelength,
-        reference_wl=0,
-        is_reference=False,
-      )
-      technical_replicates.append(rows)
+    rows = await self._run_abs_measurement(
+      signal_wl=wavelength,
+      reference_wl=0,
+      is_reference=False,
+    )
 
-    # 2. Average the replicates (flat 96-element list)
-    if num_measurement_replicates == 1:
-      averaged_rows = technical_replicates[0]
-    else:
-      averaged_rows = [
-        sum(rep[i] for rep in technical_replicates) / num_measurement_replicates for i in range(96)
-      ]
-
-    # 3. Convert flat -> 8x12 matrix
-    matrix = reshape_2d(averaged_rows, (8, 12))
+    matrix = reshape_2d(rows, (8, 12))
 
     # dictionary output for filtered wells
     return [
