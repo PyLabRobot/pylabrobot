@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import usb.core
 
@@ -11,16 +11,16 @@ from .spark_packet_parser import parse_single_spark_packet
 
 
 class SparkReaderAsync:
-  def __init__(self, vid=VENDOR_ID):
-    self.vid = vid
-    self.devices = {}
-    self.seq_num = 0
-    self.lock = asyncio.Lock()
-    self.msgs = []
+  def __init__(self, vid: int = VENDOR_ID) -> None:
+    self.vid: int = vid
+    self.devices: Dict[SparkDevice, USB] = {}
+    self.seq_num: int = 0
+    self.lock: asyncio.Lock = asyncio.Lock()
+    self.msgs: List[Any] = []
     self.cur_reader: Optional[USB] = None
     self.cur_endpoint_addr: Optional[int] = None
 
-  async def connect(self):
+  async def connect(self) -> None:
     logging.info(f"Scanning for devices with VID={hex(self.vid)}...")
 
     for device_type in SparkDevice:
@@ -29,7 +29,7 @@ class SparkReaderAsync:
 
       try:
 
-        def configure(dev):
+        def configure(dev: usb.core.Device) -> None:
           try:
             if dev.is_kernel_driver_active(0):
               logging.debug(f"Detaching kernel driver from {device_type.name} interface 0")
@@ -51,7 +51,7 @@ class SparkReaderAsync:
           max_workers=16,
         )
 
-        await reader.setup()
+        await reader.setup()  # type: ignore[no-untyped-call]
         self.devices[device_type] = reader
         logging.info(f"Successfully configured {device_type.name}")
 
@@ -66,15 +66,18 @@ class SparkReaderAsync:
 
     logging.info(f"Successfully connected to {len(self.devices)} devices.")
 
-  def _calculate_checksum(self, data):
+  def _calculate_checksum(self, data: bytes) -> int:
     checksum = 0
     for byte in data:
       checksum ^= byte
     return checksum
 
   async def send_command(
-    self, command_str, device_type=SparkDevice.PLATE_TRANSPORT, attempts=10000
-  ):
+    self,
+    command_str: str,
+    device_type: SparkDevice = SparkDevice.PLATE_TRANSPORT,
+    attempts: int = 10000,
+  ) -> Optional[str]:
     if device_type not in self.devices:
       raise RuntimeError(f"Device type {device_type} not connected.")
 
@@ -118,7 +121,13 @@ class SparkReaderAsync:
         logging.error(f"Response task exception: {e}")
         raise e
 
-  def _init_read(self, device_type, endpoint, count=512, read_timeout=2000):
+  def _init_read(
+    self,
+    device_type: SparkDevice,
+    endpoint: SparkEndpoint,
+    count: int = 512,
+    read_timeout: int = 2000,
+  ) -> "asyncio.Task[Any]":
     logging.debug(f"Initiating read task on {device_type.name} ep {hex(endpoint.value)}...")
     self.cur_reader = self.devices[device_type]
     self.cur_endpoint_addr = endpoint.value
@@ -129,7 +138,9 @@ class SparkReaderAsync:
       )
     )
 
-  async def _get_response(self, read_task, timeout=2000, attempts=10000):
+  async def _get_response(
+    self, read_task: "asyncio.Task[Any]", timeout: int = 2000, attempts: int = 10000
+  ) -> Optional[Dict[str, Any]]:
     try:
       data = await read_task
 
@@ -179,22 +190,25 @@ class SparkReaderAsync:
       logging.error(f"Error in get_response: {e}", exc_info=True)
       return None
 
-  def clear_messages(self):
+  def clear_messages(self) -> None:
     """Clear the list of recorded RespMessage payloads."""
     self.msgs = []
 
   async def start_background_read(
-    self, device_type, endpoint=SparkEndpoint.INTERRUPT_IN, read_timeout=100
-  ):
+    self,
+    device_type: SparkDevice,
+    endpoint: SparkEndpoint = SparkEndpoint.INTERRUPT_IN,
+    read_timeout: int = 100,
+  ) -> Tuple[Optional["asyncio.Task[None]"], Optional[asyncio.Event], Optional[List[bytes]]]:
     if device_type not in self.devices:
       logging.error(f"Device type {device_type} not connected.")
       return None, None, None
 
     reader = self.devices[device_type]
     stop_event = asyncio.Event()
-    results = []
+    results: List[bytes] = []
 
-    async def background_reader():
+    async def background_reader() -> None:
       logging.info(
         f"Starting background reader for {device_type.name} {endpoint.name} (0x{endpoint.value:02x})"
       )
@@ -219,10 +233,10 @@ class SparkReaderAsync:
     task = asyncio.create_task(background_reader())
     return task, stop_event, results
 
-  async def close(self):
+  async def close(self) -> None:
     for device_type, reader in self.devices.items():
       try:
-        await reader.stop()
+        await reader.stop()  # type: ignore[no-untyped-call]
         logging.info(f"{device_type.name} resources released.")
       except Exception as e:
         logging.error(f"Error closing {device_type.name}: {e}")

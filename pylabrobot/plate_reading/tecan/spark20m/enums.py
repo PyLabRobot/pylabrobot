@@ -1,6 +1,5 @@
 from enum import Enum
 
-
 # Tecan Spark USB Vendor ID
 VENDOR_ID = 0x0C47
 

@@ -15,10 +15,10 @@ logging.basicConfig(level=logging.CRITICAL)
 
 
 class TestAbsorbanceProcessor(unittest.TestCase):
-  def setUp(self):
+  def setUp(self) -> None:
     self.processor = AbsorbanceProcessor()
 
-  def test_process_success(self):
+  def test_process_success(self) -> None:
     # Mock _parse_raw_data to return a controlled structure
     # We need a reference sequence (grouped) and a measurement sequence (standalone)
 
@@ -76,9 +76,10 @@ class TestAbsorbanceProcessor(unittest.TestCase):
     expected_ratio = (200 / 1900) / 0.5
     expected_h9 = -math.log10(expected_ratio)
 
+    assert isinstance(results[0][0], float)
     self.assertAlmostEqual(results[0][0], expected_h9, places=5)
 
-  def test_process_missing_reference(self):
+  def test_process_missing_reference(self) -> None:
     # Only standalone sequences, no grouped reference
     parsed_data = {"SEQ_MEAS": [{"type": "standalone", "block": {"measurements": []}}]}
     with patch.object(self.processor, "_parse_raw_data", return_value=parsed_data):
@@ -86,12 +87,12 @@ class TestAbsorbanceProcessor(unittest.TestCase):
 
     self.assertEqual(results, [])
 
-  def test_process_empty_data(self):
+  def test_process_empty_data(self) -> None:
     with patch.object(self.processor, "_parse_raw_data", return_value={}):
       results = self.processor.process([])
     self.assertEqual(results, [])
 
-  def test_zero_division_protection(self):
+  def test_zero_division_protection(self) -> None:
     # Setup data that would cause division by zero if not handled
     # E.g. ref_rd_dark = 0 => avg_rd_ref = avg_rd_dark
 
@@ -117,7 +118,7 @@ class TestAbsorbanceProcessor(unittest.TestCase):
     # If ref_ratio_h9 is NaN (due to 0 division), then final ratio is NaN, so h9 is Error
     self.assertEqual(results[0][0], "Error")
 
-  def test_process_real_data(self):
+  def test_process_real_data(self) -> None:
     abs = [
       b"\x88\t\x00\x01\x13\x93",
       b"\x83\t\x00\x02\x00\x02\x8a",
@@ -218,10 +219,10 @@ class TestAbsorbanceProcessor(unittest.TestCase):
 
 
 class TestFluorescenceProcessor(unittest.TestCase):
-  def setUp(self):
+  def setUp(self) -> None:
     self.processor = FluorescenceProcessor()
 
-  def test_process_success(self):
+  def test_process_success(self) -> None:
     # Calibration Sequence (Grouped, count=2)
     # Block 0: Dark
     # signalDark = 50, refDark = 100
@@ -259,9 +260,10 @@ class TestFluorescenceProcessor(unittest.TestCase):
     self.assertEqual(len(results[0]), 1)
 
     expected_rfu = (20000 - 50) / (30000 - 100) * k_val
+    assert isinstance(results[0][0], float)
     self.assertAlmostEqual(results[0][0], expected_rfu, places=3)
 
-  def test_process_missing_calibration(self):
+  def test_process_missing_calibration(self) -> None:
     parsed_data = {
       "SEQ_MEAS": [
         {"type": "standalone", "block": {"structure_type": "nested_mult", "measurements": []}}
@@ -271,7 +273,7 @@ class TestFluorescenceProcessor(unittest.TestCase):
       results = self.processor.process([])
     self.assertEqual(results, [])
 
-  def test_process_invalid_dark_block(self):
+  def test_process_invalid_dark_block(self) -> None:
     # Missing 'DARK' in header_types
     dark_block = {
       "header_types": ["U16RD", "U16MD"],
@@ -289,7 +291,7 @@ class TestFluorescenceProcessor(unittest.TestCase):
     # Should return empty list because Block 0 does not look like Dark calibration
     self.assertEqual(results, [])
 
-  def test_process_real_data(self):
+  def test_process_real_data(self) -> None:
     fluo = [
       b"\x88\x0f\x00\x01\x13\x95",
       b"\x83\x0f\x00\x02\x00\x02\x8c",
