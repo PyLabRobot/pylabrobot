@@ -6614,6 +6614,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="H0", command="QW", fmt="qw#")
     return bool(response.get("qw", 0) == 1)  # type?
 
+  async def head96_dispensing_drive_and_squeezer_driver_initialize(
+    self,
+    squeezer_speed: float = 15.0,  # mm/sec
+    squeezer_acceleration: float = 62.0,  # mm/sec**2,
+    squeezer_current_limit: int = 15,
+    dispensing_drive_current_limit: int = 7,
+  ):
+    """Initialize 96-head's dispensing drive AND squeezer drive
+
+    This command...
+      - drops any tips that might be on the channel (in place, without moving to trash!)
+      - moves the dispense drive to volume position 215.92 uL
+        (after tip pickup it will be at 218.19 uL)
+
+    Args:
+      squeezer_speed: Speed of the movement (mm/sec). Default is 15.0 mm/sec.
+      squeezer_acceleration: Acceleration of the movement (mm/sec**2). Default is 62.0 mm/sec**2.
+      squeezer_current_limit: Current limit for the squeezer drive (1-15). Default is 15.
+      dispensing_drive_current_limit: Current limit for the dispensing drive (1-15). Default is 7.
+    """
+
+    if not (0.01 <= squeezer_speed <= 16.69):
+      raise ValueError(
+        f"96-head squeezer drive speed must be between 0.01 and 16.69 mm/sec, is {squeezer_speed}"
+      )
+    if not (1.04 <= squeezer_acceleration <= 62.6):
+      raise ValueError(
+        "96-head squeezer drive acceleration must be between 1.04 and "
+        f"62.6 mm/sec**2, is {squeezer_acceleration}"
+      )
+    if not (1 <= squeezer_current_limit <= 15):
+      raise ValueError(
+        "96-head squeezer drive current limit must be between 1 and 15, "
+        f"is {squeezer_current_limit}"
+      )
+    if not (1 <= dispensing_drive_current_limit <= 15):
+      raise ValueError(
+        "96-head dispensing drive current limit must be between 1 and 15, "
+        f"is {dispensing_drive_current_limit}"
+      )
+
+    squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
+    squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
+      squeezer_acceleration
+    )
+
+    resp = await self.send_command(
+      module="H0",
+      command="PI",
+      sv=f"{squeezer_speed_increment:05}",
+      sr=f"{squeezer_acceleration_increment:06}",
+      sw=f"{squeezer_current_limit:02}",
+      dw=f"{dispensing_drive_current_limit:02}",
+    )
+
+    return resp
+
   # -------------- 3.10.2 96-Head Movements --------------
 
   # Conversion factors for 96-Head (mm per increment)
@@ -6978,6 +7035,34 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
+
+  # # # Granular commands # # #
+
+  async def head96_dispensing_drive_move_to_home_volume(
+    self,
+  ):
+    """Move the 96-head dispensing drive into its home position (vol=0.0 uL).
+
+    .. warning::
+      This firmware command is known to be broken: the 96-head dispensing drive cannot reach
+      vol=0.0 uL, which typically raises
+      ``STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted
+      area')}``.
+    """
+
+    logger.warning(
+      "head96_dispensing_drive_move_to_home_volume is a known broken firmware command: "
+      "the 96-head dispensing drive cannot reach vol=0.0 uL and will likely raise "
+      "STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted "
+      "area')}. Attempting to send the command anyway."
+    )
+
+    return await self.send_command(
+      module="H0",
+      command="DL",
+    )
+
+  # # # "Atomic" liquid handling commands # # #
 
   @need_iswap_parked
   @_requires_head96
@@ -7596,6 +7681,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = 0
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP = 1244.59
+
   @_requires_head96
   async def head96_dispensing_drive_move_to_position(
     self,
@@ -7615,7 +7703,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       current_protection_limiter: Current protection limiter (0-15), default 15
     """
 
-    if not (0 <= position <= 1244.59):
+    if not (
+      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
+      <= position
+      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
+    ):
       raise ValueError("position must be between 0 and 1244.59")
     if not (0.1 <= speed <= 1063.75):
       raise ValueError("speed must be between 0.1 and 1063.75")
