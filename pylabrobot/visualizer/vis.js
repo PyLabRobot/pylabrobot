@@ -106,6 +106,10 @@ async function processCentralEvent(event, data) {
       if (rootName) buildResourceTree(resources[rootName]);
       break;
 
+    case "show_modules":
+      openAllModulePanels();
+      break;
+
     default:
       throw new Error(`Unknown event: ${event}`);
   }

@@ -86,6 +86,7 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
     await self.client.send('{"event": "ready"}')
     _ = await self.client.recv()  # set_root_resource
     _ = await self.client.recv()  # set_state
+    _ = await self.client.recv()  # show_modules
 
     await self.vis.send_command("test", wait_for_response=False)
     recv = await self.client.recv()

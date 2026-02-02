@@ -1263,6 +1263,22 @@ function fillHeadIcons(panel, headState) {
 
 function fillHead96Grid(panel, head96State) {
   panel.innerHTML = "";
+  if (!head96State || Object.keys(head96State).length === 0) {
+    // Set panel dimensions to match a normal 96-head grid, then center message
+    panel.style.minWidth = "180px";
+    panel.style.minHeight = "130px";
+    panel.style.alignItems = "center";
+    panel.style.justifyContent = "center";
+    var msg = document.createElement("span");
+    msg.style.color = "#888";
+    msg.style.fontSize = "13px";
+    msg.style.fontWeight = "500";
+    msg.style.textAlign = "center";
+    msg.style.padding = "16px";
+    msg.textContent = "No multi-channel pipette is installed on this liquid handler.";
+    panel.appendChild(msg);
+    return;
+  }
   // Split channels into groups of 96 (one grid per multi-channel pipette)
   var allChannels = Object.keys(head96State).sort(function (a, b) { return +a - +b; });
   var numPipettes = Math.max(1, Math.ceil(allChannels.length / 96));
@@ -1514,20 +1530,18 @@ function buildSingleArm(armData) {
 function fillArmPanel(panel, armState) {
   panel.innerHTML = "";
   if (!armState || Object.keys(armState).length === 0) {
-    // Match the dimensions of a normal arm panel (closed gripper SVG + label)
+    // Set panel dimensions to match a normal arm panel, then center message
     var stdW = Math.round((Math.round(127 * Math.min(80 / 127, 80 / 86)) + 16) * 1.1) + 28;
-    var msg = document.createElement("div");
-    msg.style.display = "flex";
-    msg.style.alignItems = "center";
-    msg.style.justifyContent = "center";
-    msg.style.width = stdW + "px";
-    msg.style.height = "130px";
-    msg.style.padding = "16px";
-    msg.style.boxSizing = "border-box";
+    panel.style.minWidth = stdW + "px";
+    panel.style.minHeight = "130px";
+    panel.style.alignItems = "center";
+    panel.style.justifyContent = "center";
+    var msg = document.createElement("span");
     msg.style.color = "#888";
     msg.style.fontSize = "13px";
     msg.style.fontWeight = "500";
     msg.style.textAlign = "center";
+    msg.style.padding = "16px";
     msg.textContent = "No robotic arm is installed on this liquid handler.";
     panel.appendChild(msg);
     return;
@@ -1576,8 +1590,11 @@ class LiquidHandler extends Resource {
         fillHeadIcons(panel, this.headState);
       }
     }
-    if (state.head96_state) {
+    if ("head96_state" in state) {
       this.head96State = state.head96_state;
+      // Show/hide multi-channel button based on whether the module exists
+      var multiBtn = document.getElementById("multi-channel-btn-" + this.name);
+      if (multiBtn) multiBtn.style.display = (this.head96State !== null && this.head96State !== undefined) ? "" : "none";
       var panel96 = document.getElementById("multi-channel-dropdown-" + this.name);
       if (panel96) {
         fillHead96Grid(panel96, this.head96State);
@@ -1585,6 +1602,9 @@ class LiquidHandler extends Resource {
     }
     if ("arm_state" in state) {
       this.armState = state.arm_state;
+      // Show/hide arm button based on whether the module exists
+      var armBtnEl = document.getElementById("arm-btn-" + this.name);
+      if (armBtnEl) armBtnEl.style.display = (this.armState !== null && this.armState !== undefined) ? "" : "none";
       // Snapshot each held resource NOW, while it is still in the resources dict.
       // pick_up_resource() sends set_state BEFORE resource_unassigned fires, so
       // the resource and all its children are still intact at this point.
@@ -3540,9 +3560,12 @@ function buildNavbarLHModules() {
       }
     });
 
-    // Multi-channel button
+    // Multi-channel button (hidden unless setState has already confirmed module exists)
+    var lhRes = resources[lhName];
     var multiBtn = document.createElement("button");
     multiBtn.className = "navbar-pipette-btn";
+    multiBtn.id = "multi-channel-btn-" + lhName;
+    multiBtn.style.display = (lhRes && lhRes.head96State !== null && lhRes.head96State !== undefined) ? "" : "none";
     multiBtn.title = "Multi-Channel Pipettes";
     var multiImg = document.createElement("img");
     multiImg.src = "img/multi_channel_pipette.png";
@@ -3556,6 +3579,7 @@ function buildNavbarLHModules() {
     // Single-channel button
     var singleBtn = document.createElement("button");
     singleBtn.className = "navbar-pipette-btn";
+    singleBtn.id = "single-channel-btn-" + lhName;
     singleBtn.title = "Single-Channel Pipettes";
     var singleImg = document.createElement("img");
     singleImg.src = "img/single_channel_pipette.png";
@@ -3660,9 +3684,11 @@ function buildNavbarLHModules() {
       });
     })(multiBtn, lhName, singleBtn);
 
-    // Integrated arm button
+    // Integrated arm button (hidden unless setState has already confirmed module exists)
     var armBtn = document.createElement("button");
     armBtn.className = "navbar-pipette-btn";
+    armBtn.id = "arm-btn-" + lhName;
+    armBtn.style.display = (lhRes && lhRes.armState !== null && lhRes.armState !== undefined) ? "" : "none";
     armBtn.title = "Integrated Arm";
     var armImg = document.createElement("img");
     armImg.src = "img/integrated_arm.png";
@@ -3699,5 +3725,26 @@ function buildNavbarLHModules() {
     })(armBtn, lhName, singleBtn);
 
     container.appendChild(group);
+  }
+}
+
+/**
+ * Programmatically open all visible module panels (single-channel, multi-channel, arm)
+ * for every LiquidHandler. Buttons that are hidden (module absent) are skipped.
+ */
+function openAllModulePanels() {
+  for (var name in resources) {
+    if (!(resources[name] instanceof LiquidHandler)) continue;
+    var btns = [
+      document.getElementById("single-channel-btn-" + name),
+      document.getElementById("multi-channel-btn-" + name),
+      document.getElementById("arm-btn-" + name),
+    ];
+    for (var i = 0; i < btns.length; i++) {
+      var btn = btns[i];
+      if (btn && btn.style.display !== "none") {
+        btn.click();
+      }
+    }
   }
 }
