@@ -103,7 +103,7 @@ async function processCentralEvent(event, data) {
       const rootName = Object.keys(resources).find(
         (n) => resources[n] && !resources[n].parent
       );
-      if (rootName) buildResourceTree(resources[rootName]);
+      if (rootName) buildResourceTree(resources[rootName], { rebuildNavbar: false });
       break;
 
     case "show_modules":

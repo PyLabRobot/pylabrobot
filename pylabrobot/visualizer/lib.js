@@ -2343,7 +2343,7 @@ function buildTreeNodeDOM(resource, depth, slotIndex) {
   return node;
 }
 
-function buildResourceTree(rootResource) {
+function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
   const treeContainer = document.getElementById("resource-tree");
   if (!treeContainer) return;
   treeContainer.innerHTML = "";
@@ -2426,7 +2426,7 @@ function buildResourceTree(rootResource) {
 
   treeContainer.appendChild(rootNode);
   buildWrtDropdown();
-  buildNavbarLHModules();
+  if (rebuildNavbar) buildNavbarLHModules();
 }
 
 function addResourceToTree(resource) {
