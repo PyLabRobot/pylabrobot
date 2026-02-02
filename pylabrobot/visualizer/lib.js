@@ -120,7 +120,6 @@ function getWrtAnchorOffset(wrtResource) {
   else if (yRef && yRef.value === "back") yOff = wrtResource.size_y;
 
   var zOff = 0;
-  var zNA = false;
   if (zRef) {
     if (zRef.value === "center") zOff = wrtResource.size_z / 2;
     else if (zRef.value === "top") zOff = wrtResource.size_z;
@@ -155,7 +154,6 @@ var scaleX, scaleY;
 
 var resources = {}; // name -> Resource object
 
-var homeView = null; // saved initial view {x, y, scaleX, scaleY}
 var rootResource = null; // the root resource for fit-to-viewport
 
 function fitToViewport() {
