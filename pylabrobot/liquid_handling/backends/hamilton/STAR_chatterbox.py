@@ -144,7 +144,7 @@ class STARChatterboxBackend(STARBackend):
     # Bit 2: 96-head (based on __init__ parameter)
     xl_value = 0
     if self._iswap_installed:
-      xl_value |= 0b10   # Add iSWAP (bit 1)
+      xl_value |= 0b10  # Add iSWAP (bit 1)
     if self._core96_head_installed:
       xl_value |= 0b100  # Add 96-head (bit 2)
 

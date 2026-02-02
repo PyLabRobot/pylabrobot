@@ -187,8 +187,11 @@ class LiquidHandler(Resource, Machine):
     serialize the state of the liquid handler and all children (the deck)."""
 
     head_state = {channel: tracker.serialize() for channel, tracker in self.head.items()}
-    head96_state = {channel: tracker.serialize() for channel, tracker in self.head96.items()} \
-      if self.head96 else None
+    head96_state = (
+      {channel: tracker.serialize() for channel, tracker in self.head96.items()}
+      if self.head96
+      else None
+    )
     if self._resource_pickups:
       arm_state: Optional[Dict[int, Any]] = {}
       for arm_id, pickup in self._resource_pickups.items():

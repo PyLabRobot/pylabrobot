@@ -309,10 +309,11 @@ class Visualizer:
 
     # 3. Query the Jupyter REST API using the kernel connection file.
     try:
-      import ipykernel  # type: ignore[import-untyped]
       import json as _json
       import re
       import urllib.request
+
+      import ipykernel  # type: ignore[import-untyped]
 
       # Get the kernel id from the connection file path.
       connection_file = ipykernel.get_connection_file()
