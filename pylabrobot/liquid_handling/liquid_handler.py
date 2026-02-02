@@ -106,6 +106,7 @@ class LiquidHandler(Resource, Machine):
     backend: LiquidHandlerBackend,
     deck: Deck,
     default_offset_head96: Optional[Coordinate] = None,
+    name: Optional[str] = None,
   ):
     """Initialize a LiquidHandler.
 
@@ -113,11 +114,12 @@ class LiquidHandler(Resource, Machine):
       backend: Backend to use.
       deck: Deck to use.
       default_offset_head96: Base offset applied to all 96-head operations.
+      name: Name of the liquid handler. If not provided, defaults to ``lh_{deck.name}``.
     """
 
     Resource.__init__(
       self,
-      name=f"lh_{deck.name}",
+      name=name if name is not None else f"lh_{deck.name}",
       size_x=deck._size_x,
       size_y=deck._size_y,
       size_z=deck._size_z,
@@ -1677,6 +1679,13 @@ class LiquidHandler(Resource, Machine):
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
+      containers = resource
+    else:
+      raise TypeError(
+        f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
+        f" for {resource}"
+      )
 
     if len(containers) == 1:  # single container
       container = containers[0]
@@ -1814,10 +1823,17 @@ class LiquidHandler(Resource, Machine):
     containers: Sequence[Container]
     if isinstance(resource, Plate):
       if resource.has_lid():
-        raise ValueError("Dispensing to plate with lid")
+        raise ValueError("Dispensing to plate with lid is not possible. Remove the lid first.")
       containers = resource.get_all_items() if resource.num_items > 1 else [resource.get_item(0)]
     elif isinstance(resource, Container):
       containers = [resource]
+    elif isinstance(resource, list) and all(isinstance(w, Well) for w in resource):
+      containers = resource
+    else:
+      raise TypeError(
+        f"Resource must be a Plate, Container, or list of Wells, got {type(resource)} "
+        f"for {resource}"
+      )
 
     # if we have enough liquid in the tip, remove it from the tip tracker for accounting.
     # if we do not (for example because the plunger was up on tip pickup), and we

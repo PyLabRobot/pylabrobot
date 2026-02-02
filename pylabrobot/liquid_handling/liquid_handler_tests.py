@@ -41,6 +41,7 @@ from pylabrobot.resources.hamilton import (
   hamilton_96_tiprack_300uL_filter,
   hamilton_96_tiprack_1000uL_filter,
 )
+from pylabrobot.resources.revvity.plates import Revvity_384_wellplate_28ul_Ub
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
   set_volume_tracking,
@@ -167,6 +168,17 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     # Get unknown resource.
     with self.assertRaises(ResourceNotFoundError):
       self.lh.deck.get_resource("unknown resource")
+
+  def test_name_parameter(self):
+    # Default name is derived from deck name
+    deck = STARLetDeck()
+    lh = LiquidHandler(_create_mock_backend(), deck=deck)
+    self.assertEqual(lh.name, f"lh_{deck.name}")
+
+    # Custom name
+    deck2 = STARLetDeck()
+    lh2 = LiquidHandler(_create_mock_backend(), deck=deck2, name="my_liquid_handler")
+    self.assertEqual(lh2.name, "my_liquid_handler")
 
   def test_subcoordinates(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
@@ -616,6 +628,37 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       )
     )
 
+  async def test_dispense96_with_quadrant_well_list(self):
+    plate_384 = Revvity_384_wellplate_28ul_Ub(name="plate_384")
+    self.deck.assign_child_resource(plate_384, location=Coordinate(400, 100, 0))
+    quadrant_wells = plate_384.get_quadrant("tl")
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate96(self.plate, volume=10)
+
+    self.lh.backend.dispense96 = unittest.mock.AsyncMock()  # type: ignore
+    await self.lh.dispense96(quadrant_wells, 10)
+    self.lh.backend.dispense96.assert_called_with(  # type: ignore
+      dispense=MultiHeadDispensePlate(
+        wells=quadrant_wells,
+        offset=Coordinate.zero(),
+        tips=[self.lh.head96[i].get_tip() for i in range(96)],
+        volume=10,
+        flow_rate=None,
+        liquid_height=None,
+        blow_out_air_volume=None,
+        mix=None,
+      )
+    )
+
+  async def test_dispense96_well_list_mixed_parents(self):
+    plate2 = Cor_96_wellplate_360ul_Fb(name="plate2")
+    self.deck.assign_child_resource(plate2, location=Coordinate(400, 100, 0))
+    mixed = self.plate.get_all_items()[:48] + plate2.get_all_items()[:48]
+    await self.lh.pick_up_tips96(self.tip_rack)
+    with self.assertRaises(ValueError):
+      await self.lh.dispense96(mixed, 10)
+
   async def test_transfer(self):
     t = self.tip_rack.get_item("A1").get_tip()
     self.lh.update_head_state({0: t})
@@ -1047,4 +1090,21 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     assert all(self.lh.head96[i].get_tip().tracker.volume == 0 for i in range(96))
     assert well.tracker.get_used_volume() == 10 * 96
 
+    await self.lh.return_tips96()
+
+  async def test_96_head_volume_tracking_well_list(self):
+    plate_384 = Revvity_384_wellplate_28ul_Ub(name="plate_384")
+    self.deck.assign_child_resource(plate_384, location=Coordinate(600, 100, 0))
+    quadrant_wells = plate_384.get_quadrant("tl")
+    for well in quadrant_wells:
+      well.tracker.set_volume(10)
+
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate96(quadrant_wells, volume=10)
+    assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 10 for i in range(96))
+    assert all(w.tracker.get_used_volume() == 0 for w in quadrant_wells)
+
+    await self.lh.dispense96(quadrant_wells, volume=10)
+    assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 0 for i in range(96))
+    assert all(w.tracker.get_used_volume() == 10 for w in quadrant_wells)
     await self.lh.return_tips96()
