@@ -41,6 +41,85 @@ nav.navbar .status-box {
   margin-right: 16px;
 }
 
+#navbar-lh-modules {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.navbar-pipette-group {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #ced4da;
+  border-radius: 6px;
+  background: #f8f9fa;
+  overflow: hidden;
+}
+
+.navbar-pipette-label {
+  padding: 0 8px 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  white-space: nowrap;
+  border-right: 1px solid #ced4da;
+  height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.navbar-pipette-btn {
+  border: none;
+  background: transparent;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s, background 0.15s;
+  padding: 0;
+}
+
+.navbar-pipette-btn:hover {
+  opacity: 1;
+  background: #dee2e6;
+}
+
+.navbar-pipette-btn + .navbar-pipette-btn {
+  border-left: 1px solid #ced4da;
+}
+
+.navbar-pipette-btn.active {
+  background: #cfe2ff;
+  opacity: 1;
+}
+
+.module-dropdown {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 2px solid #999;
+  border-radius: 8px;
+  padding: 16px 20px;
+  z-index: 5;
+  width: fit-content;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  display: none;
+}
+
+.module-dropdown.open {
+  display: flex;
+}
+
 .content {
   height: calc(100vh - 60px);
   margin: 0;

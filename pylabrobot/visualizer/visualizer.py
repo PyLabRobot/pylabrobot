@@ -564,10 +564,9 @@ class Visualizer:
 
     def save_resource_state(resource: Resource):
       """Recursively save the state of the resource and all child resources."""
-      if hasattr(resource, "tracker"):
-        resource_state = resource.tracker.serialize()
-        if resource_state is not None:
-          state[resource.name] = resource_state
+      resource_state = resource.serialize_state()
+      if resource_state:
+        state[resource.name] = resource_state
       for child in resource.children:
         save_resource_state(child)
 

@@ -1195,9 +1195,85 @@ class TubeRack extends Resource {
 
 class PlateHolder extends ResourceHolder {}
 
+function fillHeadIcons(panel, headState) {
+  panel.innerHTML = "";
+  panel.style.display = "flex";
+  panel.style.flexWrap = "wrap";
+  panel.style.gap = "6px";
+  panel.style.alignItems = "flex-start";
+  var channels = Object.keys(headState).sort(function (a, b) { return +a - +b; });
+  for (var ci = 0; ci < channels.length; ci++) {
+    var ch = channels[ci];
+    var tipData = headState[ch] && headState[ch].tip;
+    var hasTip = tipData !== null && tipData !== undefined;
+    // Scale tip length: total_tip_length in mm, map to px (0.4 px/mm, min 10, max 40)
+    var tipLenPx = 0;
+    if (hasTip && tipData.total_tip_length) {
+      tipLenPx = Math.max(10, Math.min(40, tipData.total_tip_length * 0.4));
+    }
+    var col = document.createElement("div");
+    col.style.display = "flex";
+    col.style.flexDirection = "column";
+    col.style.alignItems = "center";
+    var label = document.createElement("span");
+    label.textContent = ch;
+    label.style.fontSize = "15px";
+    label.style.fontWeight = "700";
+    label.style.color = "#888";
+    label.style.marginBottom = "2px";
+    col.appendChild(label);
+    // Base pipette is 27px; tip adds a straight section + taper below
+    var svgH = hasTip ? 27 + tipLenPx : 27;
+    var icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("width", "14");
+    icon.setAttribute("height", String(svgH));
+    icon.setAttribute("viewBox", "0 0 14 " + svgH);
+    // Black cylinder (top): 14px wide, 20px tall with rounded ends
+    var shapes =
+      '<rect x="0" y="1" width="14" height="18" rx="3" ry="3" fill="#333"/>' +
+      '<ellipse cx="7" cy="2" rx="7" ry="2" fill="#555"/>' +
+      '<ellipse cx="7" cy="19" rx="7" ry="2" fill="#222"/>' +
+      // Silver cylinder (bottom): 10px wide, 5px tall, centered
+      '<rect x="2" y="20" width="10" height="4" rx="2" ry="2" fill="#b0b0b0"/>' +
+      '<ellipse cx="7" cy="20" rx="5" ry="1.5" fill="#ccc"/>' +
+      '<ellipse cx="7" cy="24" rx="5" ry="1.5" fill="#999"/>';
+    if (hasTip) {
+      // Tip: straight section (40% of length) then taper to point (60%)
+      var straightH = Math.round(tipLenPx * 0.4);
+      var taperH = tipLenPx - straightH;
+      var straightEnd = 25 + straightH;
+      var tipEnd = straightEnd + taperH;
+      shapes +=
+        '<rect x="3" y="25" width="8" height="' + straightH + '" rx="1" ry="1" fill="#e8e8e8" stroke="#bbb" stroke-width="0.5"/>' +
+        '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' 7,' + tipEnd + '" fill="#e8e8e8" stroke="#bbb" stroke-width="0.5"/>';
+    }
+    icon.innerHTML = shapes;
+    col.appendChild(icon);
+    panel.appendChild(col);
+  }
+}
+
 class LiquidHandler extends Resource {
+  constructor(resource) {
+    super(resource);
+    this.numHeads = 0;
+    this.headState = {};
+  }
+
   drawMainShape() {
     return undefined; // just draw the children (deck and so on)
+  }
+
+  setState(state) {
+    if (state.head_state) {
+      this.headState = state.head_state;
+      this.numHeads = Object.keys(state.head_state).length;
+      // Update dropdown panel if it exists
+      var panel = document.getElementById("single-channel-dropdown-" + this.name);
+      if (panel) {
+        fillHeadIcons(panel, this.headState);
+      }
+    }
   }
 }
 
@@ -1998,6 +2074,7 @@ function buildResourceTree(rootResource) {
 
   treeContainer.appendChild(rootNode);
   buildWrtDropdown();
+  buildNavbarLHModules();
 }
 
 function addResourceToTree(resource) {
@@ -2944,3 +3021,246 @@ window.addEventListener("load", function () {
     });
   }
 });
+
+// ===========================================================================
+// Navbar Liquid Handler Module Buttons
+// ===========================================================================
+
+function makeSVG(viewBox, innerHTML) {
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "40");
+  svg.setAttribute("height", "40");
+  svg.setAttribute("viewBox", viewBox);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.innerHTML = innerHTML;
+  return svg;
+}
+
+var multiChannelSVG = (function () {
+  var body =
+    '<g stroke-linejoin="round">' +
+    // === Main body — large isometric block ===
+    '<polygon points="20,0 38,7 20,14 2,7" fill="#e0e0e0" stroke="#888" stroke-width="0.7"/>' +
+    '<polygon points="2,7 20,14 20,26 2,19" fill="#c8c8c8" stroke="#888" stroke-width="0.7"/>' +
+    '<polygon points="38,7 20,14 20,26 38,19" fill="#b0b0b0" stroke="#888" stroke-width="0.7"/>' +
+    '<line x1="20" y1="14" x2="20" y2="26" stroke="#999" stroke-width="0.6"/>' +
+    // === Dark adapter plate ===
+    '<polygon points="20,24 38,17 38,19 20,26 2,19 2,17" fill="#333" stroke="#222" stroke-width="0.7"/>' +
+    '<polygon points="2,19 20,26 20,28 2,21" fill="#222" stroke="#111" stroke-width="0.5"/>' +
+    '<polygon points="38,19 20,26 20,28 38,21" fill="#2a2a2a" stroke="#111" stroke-width="0.5"/>';
+
+  // === Isometric tip grid ===
+  // The adapter plate bottom face is a diamond:
+  //   back=(20,21), left=(2,21), front=(20,28), right=(38,21)
+  // Isometric axes on this face:
+  //   "column" axis: left→right = from (2,21) toward (38,21) through back → direction (+2.25, -0.44)
+  //   "row" axis: back→front = from back toward (20,28) → direction (-2.25, +0.44) per step
+  // But we want to shift each row forward (toward viewer).
+  //
+  // Grid: 8 columns x 6 rows. Origin at center of adapter bottom face.
+  // Column direction (along right edge): dx_c=+2.25, dy_c=-0.44
+  // Row direction (toward front): dx_r=-2.25, dy_r=+0.44
+  // Center of bottom face: (20, 24.5)
+
+  var cx = 20, cy = 24.5;
+  var cols = 8, rows = 6;
+  var dx_c = 2.1, dy_c = -0.75;   // step per column (going right-back)
+  var dx_r = -2.1, dy_r = 0.75;   // step per row (going left-front)
+  var tipLen = 11;                  // tip length (straight down)
+
+  // Collect all tips with their positions, sorted back-to-front for correct overlap
+  var tips = [];
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      var cc = c - (cols - 1) / 2;  // center columns
+      var rr = r - (rows - 1) / 2;  // center rows
+      var x = cx + cc * dx_c + rr * dx_r;
+      var y = cy + cc * dy_c + rr * dy_r;
+      // depth: back rows (low r) are far, front rows (high r) are near
+      tips.push({ x: x, y: y, row: r });
+    }
+  }
+  // Sort back-to-front (low y first = back = draw first)
+  tips.sort(function (a, b) { return a.y - b.y; });
+
+  var tipsSvg = '';
+  for (var i = 0; i < tips.length; i++) {
+    var t = tips[i];
+    // Depth shading: back rows lighter, front rows darker
+    var frac = t.row / (rows - 1); // 0=back, 1=front
+    var gray = Math.round(180 - frac * 150); // 180 (light) → 30 (dark)
+    var sw = 0.5 + frac * 0.5;               // 0.5 → 1.0 stroke width
+    var color = 'rgb(' + gray + ',' + gray + ',' + gray + ')';
+    var x1 = t.x.toFixed(1);
+    var y1 = t.y.toFixed(1);
+    var y2 = (t.y + tipLen).toFixed(1);
+    tipsSvg += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x1 + '" y2="' + y2 +
+               '" stroke="' + color + '" stroke-width="' + sw.toFixed(2) + '"/>';
+  }
+
+  return body + tipsSvg + '</g>';
+})();
+
+var singleChannelSVG =
+  '<g fill="#222" stroke="none">' +
+  '<rect x="4" y="0" width="12" height="3.5" rx="0.5"/>' +
+  '<rect x="8" y="3.5" width="3" height="4.5"/>' +
+  '<rect x="2" y="8" width="16" height="2.5" rx="0.5"/>' +
+  '<rect x="5" y="10.5" width="10" height="21.5" rx="1"/>' +
+  '<rect x="6.5" y="14.5" width="5" height="1.8" rx="0.3" fill="#fff"/>' +
+  '<rect x="6.5" y="18" width="5" height="1.8" rx="0.3" fill="#fff"/>' +
+  '<rect x="6.5" y="21.5" width="5" height="1.8" rx="0.3" fill="#fff"/>' +
+  '<rect x="6.5" y="25" width="5" height="1.8" rx="0.3" fill="#fff"/>' +
+  '<path d="M7 32 L13 32 L11 36 L9 36 Z"/>' +
+  '<rect x="9" y="36" width="2" height="10" rx="0.5"/>' +
+  '</g>';
+
+var integratedArmSVG =
+  '<g stroke-linejoin="round">' +
+  // --- Dark vertical column (isometric cylinder) ---
+  // Column left face
+  '<polygon points="11,2 15,0 15,14 11,16" fill="#2a2a2a" stroke="#111" stroke-width="0.6"/>' +
+  // Column right face
+  '<polygon points="15,0 21,3 21,17 15,14" fill="#444" stroke="#111" stroke-width="0.6"/>' +
+  // Column top ellipse
+  '<polygon points="11,2 15,0 21,3 17,5" fill="#555" stroke="#222" stroke-width="0.6"/>' +
+  // Highlight strip
+  '<polygon points="14,1 16,0 16,14 14,15" fill="#666" stroke="none" opacity="0.5"/>' +
+  // --- White carriage plate (isometric box) ---
+  // Plate top face
+  '<polygon points="4,16 16,11 28,16 16,21" fill="#ddd" stroke="#888" stroke-width="0.6"/>' +
+  // Plate front-left face
+  '<polygon points="4,16 16,21 16,24 4,19" fill="#c0c0c0" stroke="#888" stroke-width="0.6"/>' +
+  // Plate front-right face
+  '<polygon points="16,21 28,16 28,19 16,24" fill="#aaa" stroke="#888" stroke-width="0.6"/>' +
+  // --- Back arm (upper rail, extends front-right) ---
+  // Back arm top
+  '<polygon points="16,17 32,24 34,23 18,16" fill="#aaa" stroke="#777" stroke-width="0.5"/>' +
+  // Back arm front face
+  '<polygon points="16,17 32,24 32,26.5 16,19.5" fill="#909090" stroke="#777" stroke-width="0.5"/>' +
+  // Back arm right end
+  '<polygon points="32,24 34,23 34,25.5 32,26.5" fill="#808080" stroke="#666" stroke-width="0.5"/>' +
+  // --- Front arm (lower rail, extends front-right) ---
+  // Front arm top
+  '<polygon points="10,20 26,27 28,26 12,19" fill="#aaa" stroke="#777" stroke-width="0.5"/>' +
+  // Front arm front face
+  '<polygon points="10,20 26,27 26,29.5 10,22.5" fill="#909090" stroke="#777" stroke-width="0.5"/>' +
+  // Front arm right end
+  '<polygon points="26,27 28,26 28,28.5 26,29.5" fill="#808080" stroke="#666" stroke-width="0.5"/>' +
+  // --- Back gripper (at end of back arm) ---
+  // Back crossbar top
+  '<polygon points="32,24 34,23 38,25 36,26" fill="#2a2a2a" stroke="#111" stroke-width="0.5"/>' +
+  // Back crossbar front
+  '<polygon points="32,24 36,26 36,28 32,26" fill="#1a1a1a" stroke="#111" stroke-width="0.5"/>' +
+  // Back left finger
+  '<polygon points="32,26 33.5,25.3 33.5,33 32,33.7" fill="#222" stroke="#111" stroke-width="0.4"/>' +
+  // Back right finger
+  '<polygon points="35,27.3 36.5,26.5 36.5,34.5 35,35.3" fill="#222" stroke="#111" stroke-width="0.4"/>' +
+  // --- Front gripper (at end of front arm) ---
+  // Front crossbar top
+  '<polygon points="26,27 28,26 32,28 30,29" fill="#1a1a1a" stroke="#000" stroke-width="0.5"/>' +
+  // Front crossbar front
+  '<polygon points="26,27 30,29 30,31 26,29" fill="#111" stroke="#000" stroke-width="0.5"/>' +
+  // Front left finger
+  '<polygon points="26,29 27.5,28.3 27.5,37 26,37.7" fill="#1a1a1a" stroke="#000" stroke-width="0.4"/>' +
+  // Front right finger
+  '<polygon points="29,30.3 30.5,29.5 30.5,38.5 29,39.3" fill="#1a1a1a" stroke="#000" stroke-width="0.4"/>' +
+  '</g>';
+
+function buildNavbarLHModules() {
+  var container = document.getElementById("navbar-lh-modules");
+  if (!container) return;
+  container.innerHTML = "";
+
+  // Find all LiquidHandler resources
+  var lhNames = [];
+  for (var name in resources) {
+    if (resources[name] instanceof LiquidHandler) {
+      lhNames.push(name);
+    }
+  }
+
+  for (var i = 0; i < lhNames.length; i++) {
+    var lhName = lhNames[i];
+    var group = document.createElement("div");
+    group.className = "navbar-pipette-group";
+
+    // Label
+    var label = document.createElement("span");
+    label.className = "navbar-pipette-label";
+    label.textContent = lhName;
+    group.appendChild(label);
+
+    // Multi-channel button
+    var multiBtn = document.createElement("button");
+    multiBtn.className = "navbar-pipette-btn";
+    multiBtn.title = "Multi-Channel Pipettes";
+    var multiImg = document.createElement("img");
+    multiImg.src = "img/multi_channel_pipette.png";
+    multiImg.alt = "Multi-Channel Pipettes";
+    multiImg.style.width = "44px";
+    multiImg.style.height = "44px";
+    multiImg.style.objectFit = "contain";
+    multiBtn.appendChild(multiImg);
+    group.appendChild(multiBtn);
+
+    // Single-channel button
+    var singleBtn = document.createElement("button");
+    singleBtn.className = "navbar-pipette-btn";
+    singleBtn.title = "Single-Channel Pipettes";
+    var singleImg = document.createElement("img");
+    singleImg.src = "img/single_channel_pipette.png";
+    singleImg.alt = "Single-Channel Pipettes";
+    singleImg.style.width = "44px";
+    singleImg.style.height = "44px";
+    singleImg.style.objectFit = "contain";
+    singleBtn.appendChild(singleImg);
+    group.appendChild(singleBtn);
+
+    // Single-channel dropdown panel
+    (function (btn, handlerName) {
+      var panelId = "single-channel-dropdown-" + handlerName;
+      btn.addEventListener("click", function () {
+        var existing = document.getElementById(panelId);
+        if (existing) {
+          // Toggle
+          var isOpen = existing.classList.toggle("open");
+          btn.classList.toggle("active", isOpen);
+          return;
+        }
+        // Create the dropdown panel inside <main>
+        var mainEl = document.querySelector("main");
+        if (!mainEl) return;
+        var panel = document.createElement("div");
+        panel.className = "module-dropdown open";
+        panel.id = panelId;
+        // Position below the button
+        var btnRect = btn.getBoundingClientRect();
+        var mainRect = mainEl.getBoundingClientRect();
+        panel.style.top = (btnRect.bottom - mainRect.top + 20) + "px";
+        panel.style.left = (btnRect.left - mainRect.left + btnRect.width / 2) + "px";
+        // Show head icons from LiquidHandler state
+        var lhResource = resources[handlerName];
+        var headState = (lhResource && lhResource.headState) ? lhResource.headState : {};
+        fillHeadIcons(panel, headState);
+        mainEl.appendChild(panel);
+        btn.classList.add("active");
+      });
+    })(singleBtn, lhName);
+
+    // Integrated arm button
+    var armBtn = document.createElement("button");
+    armBtn.className = "navbar-pipette-btn";
+    armBtn.title = "Integrated Arm";
+    var armImg = document.createElement("img");
+    armImg.src = "img/integrated_arm.png";
+    armImg.alt = "Integrated Arm";
+    armImg.style.width = "44px";
+    armImg.style.height = "44px";
+    armImg.style.objectFit = "contain";
+    armBtn.appendChild(armImg);
+    group.appendChild(armBtn);
+
+    container.appendChild(group);
+  }
+}
