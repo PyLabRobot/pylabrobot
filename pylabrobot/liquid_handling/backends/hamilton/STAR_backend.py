@@ -1535,6 +1535,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # ============== LiquidHandlerBackend methods ==============
 
+  # # # # Single-Channel Pipette Commands # # # #
+
+  # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
+
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
+    """Request the minimum Y spacing for a given channel.
+    Args:
+      channel_idx: the channel index to query. (0-indexed)
+    Returns:
+      The minimum Y spacing in mm.
+    """
+
+    if not 0 <= channel_idx <= self.num_channels - 1:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, " f"got {channel_idx}."
+      )
+
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx),
+      command="VY",
+      fmt="yc### (n)",
+    )
+    return self.y_drive_increment_to_mm(resp["yc"][1])
+
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Check if a position is reachable by a channel (center-based)."""
     if not (0 <= channel_idx < self.num_channels):
@@ -1567,6 +1591,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
+
+  # # # ACTION Commands # # #
 
   async def pick_up_tips(
     self,
