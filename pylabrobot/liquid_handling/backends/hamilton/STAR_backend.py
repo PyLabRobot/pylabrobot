@@ -123,6 +123,23 @@ def need_iswap_parked(
   return wrapper
 
 
+def _requires_head96(
+  method: Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]],
+) -> Callable[Concatenate["STARBackend", _P], Coroutine[Any, Any, _R]]:
+  """Ensure that a 96-head is installed before running the command."""
+
+  @functools.wraps(method)
+  async def wrapper(self: "STARBackend", *args, **kwargs):
+    if not self.core96_head_installed:
+      raise RuntimeError(
+        "This command requires a 96-head, but none is installed. "
+        "Check your instrument configuration."
+      )
+    return await method(self, *args, **kwargs)
+
+  return wrapper
+
+
 def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
   """Parse a machine command or response string according to a format string.
 
@@ -1518,6 +1535,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # ============== LiquidHandlerBackend methods ==============
 
+  # # # # Single-Channel Pipette Commands # # # #
+
+  # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
+
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
+    """Request the minimum Y spacing for a given channel.
+    Args:
+      channel_idx: the channel index to query. (0-indexed)
+    Returns:
+      The minimum Y spacing in mm.
+    """
+
+    if not 0 <= channel_idx <= self.num_channels - 1:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, " f"got {channel_idx}."
+      )
+
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx),
+      command="VY",
+      fmt="yc### (n)",
+    )
+    return self.y_drive_increment_to_mm(resp["yc"][1])
+
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Check if a position is reachable by a channel (center-based)."""
     if not (0 <= channel_idx < self.num_channels):
@@ -1550,6 +1591,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
+
+  # # # ACTION Commands # # #
 
   async def pick_up_tips(
     self,
@@ -1825,7 +1868,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
     # Detect liquid heights
-    absolute_heights_measurements: Dict[int, List[float]] = {ch: [] for ch in use_channels}
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
+      ch: [] for ch in use_channels
+    }
 
     lowest_immers_positions = [
       container.get_absolute_location("c", "c", "cavity_bottom").z
@@ -1844,7 +1889,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     try:
       for _ in range(n_replicates):
         if lld_mode == self.LLDMode.GAMMA:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._move_z_drive_to_liquid_surface_using_clld(
                 channel_idx=channel,
@@ -1855,11 +1900,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True,
           )
 
         else:
-          await asyncio.gather(
+          results = await asyncio.gather(
             *[
               self._search_for_surface_using_plld(
                 channel_idx=channel,
@@ -1874,28 +1920,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
               for channel, lip, sps in zip(
                 use_channels, lowest_immers_positions, start_pos_searches
               )
-            ]
+            ],
+            return_exceptions=True,
           )
 
-        # Get heights for ALL channels (indexed 0 to self.num_channels-1) but only store for used channels
+        # Get heights for ALL channels, handling failures for channels with no liquid
+        # (indexed 0 to self.num_channels-1) but only store for used channels
         current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for ch_idx in use_channels:
-          height = current_absolute_liquid_heights[ch_idx]
+        for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
+          if isinstance(result, STARFirmwareError):
+            # Check if it's specifically the "no liquid found" error
+            error_msg = str(result).lower()
+            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+              height = None  # No liquid detected - this is expected
+              msg = (
+                f"Channel {ch_idx}: No liquid detected. Could be because there is "
+                f"no liquid in container {containers[idx].name} or liquid level is too low."
+              )
+              if lld_mode == self.LLDMode.GAMMA:
+                msg += " Consider using pressure-based LLD if liquid is believed to exist."
+              logger.warning(msg)
+            else:
+              # Some other firmware error - re-raise it
+              raise result
+          elif isinstance(result, Exception):
+            # Some other unexpected error - re-raise it
+            raise result
+          else:
+            height = current_absolute_liquid_heights[ch_idx]
           absolute_heights_measurements[ch_idx].append(height)
     except:
       await self.move_all_channels_in_z_safety()
       raise
 
-    # Compute average heights per channel and convert to relative to well bottom
-    absolute_liquid_heights = [
-      sum(absolute_heights_measurements[ch]) / len(absolute_heights_measurements[ch])
-      for ch in use_channels
-    ]
+    # Compute liquid heights relative to well bottom
+    relative_to_well: List[float] = []
+    inconsistent_channels: List[str] = []
 
-    relative_to_well = [
-      absolute_liquid_height - resource.get_absolute_location("c", "c", "cavity_bottom").z
-      for resource, absolute_liquid_height in zip(containers, absolute_liquid_heights)
-    ]
+    for ch, container in zip(use_channels, containers):
+      measurements = absolute_heights_measurements[ch]
+      valid = [m for m in measurements if m is not None]
+      cavity_bottom = container.get_absolute_location("c", "c", "cavity_bottom").z
+
+      if len(valid) == 0:
+        relative_to_well.append(0.0)
+      elif len(valid) == len(measurements):
+        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
+      else:
+        inconsistent_channels.append(
+          f"Channel {ch}: {len(valid)}/{len(measurements)} replicates detected liquid"
+        )
+
+    if inconsistent_channels:
+      raise RuntimeError(
+        "Inconsistent liquid detection across replicates. "
+        "This may indicate liquid levels near the detection limit:\n"
+        + "\n".join(inconsistent_channels)
+      )
 
     if move_to_z_safety_after:
       await self.move_all_channels_in_z_safety()
@@ -2365,8 +2446,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       z_drive_speed_during_2nd_section_search, [30.0] * n
     )
     cup_upper_edge = fill_in_defaults(cup_upper_edge, [0.0] * n)
-    ratio_liquid_rise_to_tip_deep_in = fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
-    immersion_depth_2nd_section = fill_in_defaults(immersion_depth_2nd_section, [0.0] * n)
+
+    # Deprecated params - warn if passed, but don't use them
+    if ratio_liquid_rise_to_tip_deep_in is not None:
+      warnings.warn(
+        "ratio_liquid_rise_to_tip_deep_in is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+    if immersion_depth_2nd_section is not None:
+      warnings.warn(
+        "immersion_depth_2nd_section is deprecated and will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
 
     if probe_liquid_height:
       if any(op.liquid_height is not None for op in ops):
@@ -2487,8 +2580,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           round(zs * 10) for zs in z_drive_speed_during_2nd_section_search
         ],
         cup_upper_edge=[round(cue * 10) for cue in cup_upper_edge],
-        ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
-        immersion_depth_2nd_section=[round(id_ * 10) for id_ in immersion_depth_2nd_section],
         minimum_traverse_height_at_beginning_of_a_command=round(
           (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
@@ -2834,6 +2925,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return ret
 
+  @_requires_head96
   async def pick_up_tips96(
     self,
     pickup: PickupTipRack,
@@ -2874,8 +2966,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if tip_pickup_method not in {"from_rack", "from_waste", "full_blowout"}:
       raise ValueError(f"Invalid tip_pickup_method: '{tip_pickup_method}'.")
-
-    assert self.core96_head_installed, "96 head must be installed"
 
     prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
     if prototypical_tip is None:
@@ -2939,6 +3029,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         raise plr_e from e
       raise e
 
+  @_requires_head96
   async def drop_tips96(
     self,
     drop: DropTipRack,
@@ -2947,7 +3038,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     experimental_alignment_tipspot_identifier: str = "A1",
   ):
     """Drop tips from the 96 head."""
-    assert self.core96_head_installed, "96 head must be installed"
 
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
@@ -2978,6 +3068,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ),
     )
 
+  @_requires_head96
   async def aspirate96(
     self,
     aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer],
@@ -3133,8 +3224,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
     # # # delete # # #
 
-    assert self.core96_head_installed, "96 head must be installed"
-
     # get the first well and tip as representatives
     if isinstance(aspiration, MultiHeadAspirationPlate):
       plate = aspiration.wells[0].parent
@@ -3143,9 +3232,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
       if rot.z % 360 == 180:
-        ref_well = plate.get_well("H12")
+        ref_well = aspiration.wells[-1]
       elif rot.z % 360 == 0:
-        ref_well = plate.get_well("A1")
+        ref_well = aspiration.wells[0]
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
@@ -3207,11 +3296,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_traverse_height_at_beginning_of_a_command=round(
         (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimal_end_height=round((min_z_endpos or self._channel_traversal_height) * 10),
+      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_no_lld=round(liquid_height * 10),
       pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      maximum_immersion_depth=round((minimum_height or position.z) * 10),
+      minimum_height=round((minimum_height or position.z) * 10),
       second_section_height=round(second_section_height * 10),
       second_section_ratio=round(second_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
@@ -3237,6 +3326,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       recording_mode=0,
     )
 
+  @_requires_head96
   async def dispense96(
     self,
     dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
@@ -3409,8 +3499,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
     # # # delete # # #
 
-    assert self.core96_head_installed, "96 head must be installed"
-
     # get the first well and tip as representatives
     if isinstance(dispense, MultiHeadDispensePlate):
       plate = dispense.wells[0].parent
@@ -3419,9 +3507,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if rot.x % 360 != 0 or rot.y % 360 != 0:
         raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
       if rot.z % 360 == 180:
-        ref_well = plate.get_well("H12")
+        ref_well = dispense.wells[-1]
       elif rot.z % 360 == 0:
-        ref_well = plate.get_well("A1")
+        ref_well = dispense.wells[0]
       else:
         raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
 
@@ -6298,6 +6386,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Returns:
       0 = no tip, 1 = Tip in gripper (for each channel)
     """
+    warnings.warn(  # TODO: remove 2026-06
+      "`request_tip_presence` is deprecated and will be "
+      "removed in 2026-06 use `channels_sense_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.channels_sense_tip_presence()
+
+  async def channels_sense_tip_presence(self) -> List[int]:
+    """Measure tip presence on all single channels using their sleeve sensors.
+
+    Returns:
+      List of integers where 0 = no tip, 1 = tip present (for each channel)
+    """
 
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
     return cast(List[int], resp.get("rt"))
@@ -6538,6 +6640,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="H0", command="QW", fmt="qw#")
     return bool(response.get("qw", 0) == 1)  # type?
 
+  async def head96_dispensing_drive_and_squeezer_driver_initialize(
+    self,
+    squeezer_speed: float = 15.0,  # mm/sec
+    squeezer_acceleration: float = 62.0,  # mm/sec**2,
+    squeezer_current_limit: int = 15,
+    dispensing_drive_current_limit: int = 7,
+  ):
+    """Initialize 96-head's dispensing drive AND squeezer drive
+
+    This command...
+      - drops any tips that might be on the channel (in place, without moving to trash!)
+      - moves the dispense drive to volume position 215.92 uL
+        (after tip pickup it will be at 218.19 uL)
+
+    Args:
+      squeezer_speed: Speed of the movement (mm/sec). Default is 15.0 mm/sec.
+      squeezer_acceleration: Acceleration of the movement (mm/sec**2). Default is 62.0 mm/sec**2.
+      squeezer_current_limit: Current limit for the squeezer drive (1-15). Default is 15.
+      dispensing_drive_current_limit: Current limit for the dispensing drive (1-15). Default is 7.
+    """
+
+    if not (0.01 <= squeezer_speed <= 16.69):
+      raise ValueError(
+        f"96-head squeezer drive speed must be between 0.01 and 16.69 mm/sec, is {squeezer_speed}"
+      )
+    if not (1.04 <= squeezer_acceleration <= 62.6):
+      raise ValueError(
+        "96-head squeezer drive acceleration must be between 1.04 and "
+        f"62.6 mm/sec**2, is {squeezer_acceleration}"
+      )
+    if not (1 <= squeezer_current_limit <= 15):
+      raise ValueError(
+        "96-head squeezer drive current limit must be between 1 and 15, "
+        f"is {squeezer_current_limit}"
+      )
+    if not (1 <= dispensing_drive_current_limit <= 15):
+      raise ValueError(
+        "96-head dispensing drive current limit must be between 1 and 15, "
+        f"is {dispensing_drive_current_limit}"
+      )
+
+    squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
+    squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
+      squeezer_acceleration
+    )
+
+    resp = await self.send_command(
+      module="H0",
+      command="PI",
+      sv=f"{squeezer_speed_increment:05}",
+      sr=f"{squeezer_acceleration_increment:06}",
+      sw=f"{squeezer_current_limit:02}",
+      dw=f"{dispensing_drive_current_limit:02}",
+    )
+
+    return resp
+
   # -------------- 3.10.2 96-Head Movements --------------
 
   # Conversion factors for 96-Head (mm per increment)
@@ -6619,10 +6778,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
     return await self.head96_move_to_z_safety()
 
+  @_requires_head96
   async def head96_move_to_z_safety(self):
     """Move 96-Head to Z safety coordinate, i.e. z=342.5 mm."""
     return await self.send_command(module="C0", command="EV")
 
+  @_requires_head96
   async def head96_park(
     self,
   ):
@@ -6631,10 +6792,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Uses firmware default speeds and accelerations.
     """
 
-    assert self.core96_head_installed, "requires 96-head to be installed"
-
     return await self.send_command(module="H0", command="MO")
 
+  @_requires_head96
   async def head96_move_x(self, x: float):
     """Move the 96-head to a specified X-axis coordinate.
 
@@ -6649,9 +6809,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       Response from the hardware command.
 
     Raises:
-      AssertionError: If 96-head not installed or parameter out of range.
+      RuntimeError: If 96-head is not installed.
+      AssertionError: If parameter out of range.
     """
-    assert self.core96_head_installed, "requires 96-head to be installed"
     assert -271 <= x <= 974, "x must be between -271.0 and 974.0 mm"
 
     current_pos = await self.head96_request_position()
@@ -6660,6 +6820,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       minimum_height_at_beginning_of_a_command=current_pos.z - 10,
     )
 
+  @_requires_head96
   async def head96_move_y(
     self,
     y: float,
@@ -6679,7 +6840,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       Response from the hardware command.
 
     Raises:
-      AssertionError: If 96-head not installed, firmware info missing, or parameters out of range.
+      RuntimeError: If 96-head is not installed.
+      AssertionError: If firmware info missing or parameters out of range.
 
     Note:
       Maximum speed varies by firmware version:
@@ -6687,8 +6849,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       - 2021+: 625.0 mm/sec (40,000 increments)
       The exact firmware version introducing this change is undocumented.
     """
-    # Validate 96-head installation and firmware info availability
-    assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
       self._head96_information is not None
     ), "requires 96-head firmware version information for safe operation"
@@ -6731,6 +6891,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
+  @_requires_head96
   async def head96_move_z(
     self,
     z: float,
@@ -6750,14 +6911,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       Response from the hardware command.
 
     Raises:
-      AssertionError: If 96-head not installed, firmware info missing, or parameters out of range.
+      RuntimeError: If 96-head is not installed.
+      AssertionError: If firmware info missing or parameters out of range.
 
     Note:
       Firmware versions from 2021+ use 1:1 acceleration scaling, while pre-2021 versions
       use 100x scaling. Both maintain a 100,000 increment upper limit.
     """
-    # Validate 96-head installation and firmware info availability
-    assert self.core96_head_installed, "requires 96-head to be installed"
     assert (
       self._head96_information is not None
     ), "requires 96-head firmware version information for safe operation"
@@ -6799,6 +6959,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
   @need_iswap_parked
+  @_requires_head96
   async def pick_up_tips_core96(
     self,
     x_position: int,
@@ -6851,6 +7012,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   @need_iswap_parked
+  @_requires_head96
   async def discard_tips_core96(
     self,
     x_position: int,
@@ -6900,7 +7062,36 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
 
+  # # # Granular commands # # #
+
+  async def head96_dispensing_drive_move_to_home_volume(
+    self,
+  ):
+    """Move the 96-head dispensing drive into its home position (vol=0.0 uL).
+
+    .. warning::
+      This firmware command is known to be broken: the 96-head dispensing drive cannot reach
+      vol=0.0 uL, which typically raises
+      ``STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted
+      area')}``.
+    """
+
+    logger.warning(
+      "head96_dispensing_drive_move_to_home_volume is a known broken firmware command: "
+      "the 96-head dispensing drive cannot reach vol=0.0 uL and will likely raise "
+      "STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted "
+      "area')}. Attempting to send the command anyway."
+    )
+
+    return await self.send_command(
+      module="H0",
+      command="DL",
+    )
+
+  # # # "Atomic" liquid handling commands # # #
+
   @need_iswap_parked
+  @_requires_head96
   async def aspirate_core_96(
     self,
     aspiration_type: int = 0,
@@ -7164,6 +7355,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   @need_iswap_parked
+  @_requires_head96
   async def dispense_core_96(
     self,
     dispensing_mode: int = 0,
@@ -7440,6 +7632,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.4 Adjustment & movement commands --------------
 
+  @_requires_head96
   async def move_core_96_head_to_defined_position(
     self,
     x: float,
@@ -7481,6 +7674,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
+  @_requires_head96
   async def head96_move_to_coordinate(
     self,
     coordinate: Coordinate,
@@ -7513,6 +7707,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = 0
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP = 1244.59
+
+  @_requires_head96
   async def head96_dispensing_drive_move_to_position(
     self,
     position,
@@ -7531,7 +7729,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       current_protection_limiter: Current protection limiter (0-15), default 15
     """
 
-    if not (0 <= position <= 1244.59):
+    if not (
+      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
+      <= position
+      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
+    ):
       raise ValueError("position must be between 0 and 1244.59")
     if not (0.1 <= speed <= 1063.75):
       raise ValueError("speed must be between 0.1 and 1063.75")
@@ -7624,13 +7826,35 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # -------------- 3.10.6 Query CoRe 96 Head --------------
 
   async def request_tip_presence_in_core_96_head(self):
-    """Request Tip presence in CoRe 96 Head
+    """Deprecated - use `head96_request_tip_presence` instead.
 
     Returns:
-      qh: 0 = no tips, 1 = TipRack are picked up
+      dictionary with key qh:
+        qh: 0 = no tips, 1 = tips are picked up
     """
+    warnings.warn(  # TODO: remove 2026-06
+      "`request_tip_presence_in_core_96_head` is deprecated and will be "
+      "removed in 2026-06 use `head96_request_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
 
     return await self.send_command(module="C0", command="QH", fmt="qh#")
+
+  async def head96_request_tip_presence(self) -> int:
+    """Request Tip presence on the 96-Head
+
+    Note: this command requests this information from the STAR(let)'s
+      internal memory.
+      It does not directly sense whether tips are present.
+
+    Returns:
+      0 = no tips
+      1 = firmware believes tips are on the 96-head
+    """
+    resp = await self.send_command(module="C0", command="QH", fmt="qh#")
+
+    return int(resp["qh"])
 
   async def request_position_of_core_96_head(self):
     """Deprecated - use `head96_request_position` instead."""
