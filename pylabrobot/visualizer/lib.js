@@ -2203,7 +2203,7 @@ class LiquidHandler extends Resource {
     }
     if ("head96_state" in state) {
       this.head96State = state.head96_state;
-      // Show/hide multi-channel button based on whether the module exists
+      // Show/hide multi-channel button based on whether the actuator exists
       var multiBtn = document.getElementById("multi-channel-btn-" + this.name);
       if (multiBtn) multiBtn.style.display = (this.head96State !== null && this.head96State !== undefined) ? "" : "none";
       var panel96 = document.getElementById("multi-channel-dropdown-" + this.name);
@@ -2213,7 +2213,7 @@ class LiquidHandler extends Resource {
     }
     if ("arm_state" in state) {
       this.armState = state.arm_state;
-      // Show/hide arm button based on whether the module exists
+      // Show/hide arm button based on whether the actuator exists
       var armBtnEl = document.getElementById("arm-btn-" + this.name);
       if (armBtnEl) armBtnEl.style.display = (this.armState !== null && this.armState !== undefined) ? "" : "none";
       // Snapshot each held resource NOW, while it is still in the resources dict.
@@ -2571,7 +2571,7 @@ function _captureLoop() {
   var captureW = mainEl.offsetWidth;
   var captureH = mainEl.offsetHeight;
   var mainRect = mainEl.getBoundingClientRect();
-  var overflows = mainEl.querySelectorAll(".module-dropdown.open, .tool-panel, .uml-panel");
+  var overflows = mainEl.querySelectorAll(".actuator-dropdown.open, .tool-panel, .uml-panel");
   overflows.forEach(function (el) {
     var r = el.getBoundingClientRect();
     var right = r.right - mainRect.left;
@@ -3068,7 +3068,7 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
 
   treeContainer.appendChild(rootNode);
   buildWrtDropdown();
-  if (rebuildNavbar) buildNavbarLHModules();
+  if (rebuildNavbar) buildNavbarLHActuators();
 }
 
 function addResourceToTree(resource) {
@@ -4100,7 +4100,7 @@ window.addEventListener("load", function () {
 });
 
 // ===========================================================================
-// Navbar Liquid Handler Module Buttons
+// Navbar Liquid Handler Actuator Buttons
 // ===========================================================================
 
 function makeSVG(viewBox, innerHTML) {
@@ -4244,8 +4244,8 @@ var integratedArmSVG =
   '<polygon points="29,30.3 30.5,29.5 30.5,38.5 29,39.3" fill="#1a1a1a" stroke="#000" stroke-width="0.4"/>' +
   '</g>';
 
-function buildNavbarLHModules() {
-  var container = document.getElementById("navbar-lh-modules");
+function buildNavbarLHActuators() {
+  var container = document.getElementById("navbar-lh-actuators");
   if (!container) return;
   container.innerHTML = "";
 
@@ -4269,24 +4269,24 @@ function buildNavbarLHModules() {
     label.innerHTML = lhName + "<br>Actuators";
     group.appendChild(label);
 
-    // Collapsible container for module buttons
-    var moduleBtns = document.createElement("div");
-    moduleBtns.className = "navbar-module-btns";
-    group.appendChild(moduleBtns);
+    // Collapsible container for actuator buttons
+    var actuatorBtns = document.createElement("div");
+    actuatorBtns.className = "navbar-actuator-btns";
+    group.appendChild(actuatorBtns);
 
-    // Toggle module buttons on label click
+    // Toggle actuator buttons on label click
     label.addEventListener("click", function () {
-      var collapsed = moduleBtns.classList.toggle("collapsed");
+      var collapsed = actuatorBtns.classList.toggle("collapsed");
       label.classList.toggle("collapsed", collapsed);
       // Close any open dropdowns when collapsing
       if (collapsed) {
-        var dropdowns = document.querySelectorAll(".module-dropdown.open");
+        var dropdowns = document.querySelectorAll(".actuator-dropdown.open");
         dropdowns.forEach(function (d) { d.classList.remove("open"); });
         group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
       }
     });
 
-    // Multi-channel button (hidden unless setState has already confirmed module exists)
+    // Multi-channel button (hidden unless setState has already confirmed actuator exists)
     var lhRes = resources[lhName];
     var multiBtn = document.createElement("button");
     multiBtn.className = "navbar-pipette-btn";
@@ -4300,7 +4300,7 @@ function buildNavbarLHModules() {
     multiImg.style.height = "44px";
     multiImg.style.objectFit = "contain";
     multiBtn.appendChild(multiImg);
-    moduleBtns.appendChild(multiBtn);
+    actuatorBtns.appendChild(multiBtn);
 
     // Single-channel button
     var singleBtn = document.createElement("button");
@@ -4314,7 +4314,7 @@ function buildNavbarLHModules() {
     singleImg.style.height = "44px";
     singleImg.style.objectFit = "contain";
     singleBtn.appendChild(singleImg);
-    moduleBtns.appendChild(singleBtn);
+    actuatorBtns.appendChild(singleBtn);
 
     // Helper: position both panels based on the single-channel button position
     function positionPanels(handlerName, singleBtnRef) {
@@ -4396,7 +4396,7 @@ function buildNavbarLHModules() {
         var mainEl = document.querySelector("main");
         if (!mainEl) return;
         var panel = document.createElement("div");
-        panel.className = "module-dropdown open";
+        panel.className = "actuator-dropdown open";
         panel.id = panelId;
         var lhResource = resources[handlerName];
         var headState = (lhResource && lhResource.headState) ? lhResource.headState : {};
@@ -4421,7 +4421,7 @@ function buildNavbarLHModules() {
         var mainEl = document.querySelector("main");
         if (!mainEl) return;
         var panel = document.createElement("div");
-        panel.className = "module-dropdown multi-channel open";
+        panel.className = "actuator-dropdown multi-channel open";
         panel.id = panelId;
         var lhResource = resources[handlerName];
         var head96State = (lhResource && lhResource.head96State) ? lhResource.head96State : {};
@@ -4432,7 +4432,7 @@ function buildNavbarLHModules() {
       });
     })(multiBtn, lhName, singleBtn);
 
-    // Integrated arm button (hidden unless setState has already confirmed module exists)
+    // Integrated arm button (hidden unless setState has already confirmed actuator exists)
     var armBtn = document.createElement("button");
     armBtn.className = "navbar-pipette-btn";
     armBtn.id = "arm-btn-" + lhName;
@@ -4445,7 +4445,7 @@ function buildNavbarLHModules() {
     armImg.style.height = "44px";
     armImg.style.objectFit = "contain";
     armBtn.appendChild(armImg);
-    moduleBtns.appendChild(armBtn);
+    actuatorBtns.appendChild(armBtn);
 
     // Arm dropdown panel
     (function (btn, handlerName, singleBtnRef) {
@@ -4461,7 +4461,7 @@ function buildNavbarLHModules() {
         var mainEl = document.querySelector("main");
         if (!mainEl) return;
         var panel = document.createElement("div");
-        panel.className = "module-dropdown arm open";
+        panel.className = "actuator-dropdown arm open";
         panel.id = panelId;
         var lhResource = resources[handlerName];
         var armState = (lhResource && lhResource.armState) ? lhResource.armState : {};
@@ -4477,10 +4477,10 @@ function buildNavbarLHModules() {
 }
 
 /**
- * Programmatically open all visible module panels (single-channel, multi-channel, arm)
- * for every LiquidHandler. Buttons that are hidden (module absent) are skipped.
+ * Programmatically open all visible actuator panels (single-channel, multi-channel, arm)
+ * for every LiquidHandler. Buttons that are hidden (actuator absent) are skipped.
  */
-function openAllModulePanels() {
+function openAllActuatorPanels() {
   for (var name in resources) {
     if (!(resources[name] instanceof LiquidHandler)) continue;
     var btns = [

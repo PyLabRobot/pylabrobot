@@ -79,7 +79,7 @@ class Visualizer:
     open_browser: bool = True,
     name: Optional[str] = None,
     favicon: Optional[str] = None,
-    show_modules_at_start: bool = True,
+    show_actuators_at_start: bool = True,
   ):
     """Create a new Visualizer. Use :meth:`.setup` to start the visualization.
 
@@ -94,12 +94,12 @@ class Visualizer:
         calling script or notebook is detected automatically.
       favicon: Path to a ``.png`` file to use as the browser tab icon. If ``None``, the
         PyLabRobot logo is used.
-      show_modules_at_start: If ``True``, module popups (pipettes, arm) are opened automatically
+      show_actuators_at_start: If ``True``, actuator popups (pipettes, arm) are opened automatically
         when the visualizer starts.
     """
 
     self.setup_finished = False
-    self._show_modules_at_start = show_modules_at_start
+    self._show_actuators_at_start = show_actuators_at_start
 
     if name is not None:
       self._source_filename = name
@@ -610,8 +610,8 @@ class Visualizer:
     save_resource_state(self._root_resource)
     await self.send_command("set_state", state, wait_for_response=False)
 
-    if self._show_modules_at_start:
-      await self.send_command("show_modules", {}, wait_for_response=False)
+    if self._show_actuators_at_start:
+      await self.send_command("show_actuators", {}, wait_for_response=False)
 
   def _handle_resource_assigned_callback(self, resource: Resource) -> None:
     """Called when a resource is assigned to a resource already in the tree starting from the

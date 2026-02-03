@@ -41,7 +41,7 @@ nav.navbar .status-box {
   margin-right: 16px;
 }
 
-#navbar-lh-modules {
+#navbar-lh-actuators {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -100,7 +100,7 @@ nav.navbar .status-box {
   border-left: 1px solid #ced4da;
 }
 
-.navbar-module-btns {
+.navbar-actuator-btns {
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -109,7 +109,7 @@ nav.navbar .status-box {
   opacity: 1;
 }
 
-.navbar-module-btns.collapsed {
+.navbar-actuator-btns.collapsed {
   max-width: 0;
   opacity: 0;
 }
@@ -123,7 +123,7 @@ nav.navbar .status-box {
   opacity: 1;
 }
 
-.module-dropdown {
+.actuator-dropdown {
   position: absolute;
   top: 0;
   left: 50%;
@@ -140,7 +140,7 @@ nav.navbar .status-box {
   display: none;
 }
 
-.module-dropdown.open {
+.actuator-dropdown.open {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -149,13 +149,13 @@ nav.navbar .status-box {
   box-sizing: border-box;
 }
 
-.module-dropdown.multi-channel.open {
+.actuator-dropdown.multi-channel.open {
   gap: 10px;
   align-items: center;
   justify-content: center;
 }
 
-.module-dropdown.arm.open {
+.actuator-dropdown.arm.open {
   align-items: center;
   justify-content: center;
 }
@@ -735,18 +735,42 @@ main {
 
 #status-indicator.connected {
   background-color: green;
+  animation: dot-glow-connected 4s ease-in-out infinite;
 }
 
 #status-indicator.disconnected {
   background-color: red;
+  animation: dot-glow-disconnected 4s ease-in-out infinite;
 }
 
 #status-label.connected {
   color: green;
+  animation: glow-connected 4s ease-in-out infinite;
 }
 
 #status-label.disconnected {
   color: red;
+  animation: glow-disconnected 4s ease-in-out infinite;
+}
+
+@keyframes glow-connected {
+  0%, 100% { text-shadow: none; }
+  50% { text-shadow: 0 0 9px rgba(187, 204, 51, 0.7), 0 0 19px rgba(187, 204, 51, 0.4), 0 0 25px rgba(187, 204, 51, 0.15); }
+}
+
+@keyframes glow-disconnected {
+  0%, 100% { text-shadow: none; }
+  50% { text-shadow: 0 0 9px rgba(238, 136, 102, 0.7), 0 0 19px rgba(238, 136, 102, 0.4), 0 0 25px rgba(238, 136, 102, 0.15); }
+}
+
+@keyframes dot-glow-connected {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 9px rgba(187, 204, 51, 0.7), 0 0 19px rgba(187, 204, 51, 0.4), 0 0 25px rgba(187, 204, 51, 0.15); }
+}
+
+@keyframes dot-glow-disconnected {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 9px rgba(238, 136, 102, 0.7), 0 0 19px rgba(238, 136, 102, 0.4), 0 0 25px rgba(238, 136, 102, 0.15); }
 }
 
 h3.form-row-header {

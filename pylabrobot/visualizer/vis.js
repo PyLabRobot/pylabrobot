@@ -106,8 +106,8 @@ async function processCentralEvent(event, data) {
       if (rootName) buildResourceTree(resources[rootName], { rebuildNavbar: false });
       break;
 
-    case "show_modules":
-      openAllModulePanels();
+    case "show_actuators":
+      openAllActuatorPanels();
       break;
 
     default:
