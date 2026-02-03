@@ -14,6 +14,7 @@ from pylabrobot.resources import (
   Resource,
 )
 from pylabrobot.visualizer import Visualizer
+from pylabrobot.visualizer.visualizer import _serialize_with_methods
 
 
 class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
@@ -75,7 +76,7 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
       {
         "event": "set_root_resource",
         "data": {
-          "resource": self.r.serialize(),
+          "resource": _serialize_with_methods(self.r),
         },
         "id": "0001",
         "version": STANDARD_FORM_JSON_VERSION,
@@ -116,7 +117,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.vis.send_command.assert_called_once_with(  # type: ignore[attr-defined]
       event="resource_assigned",
       data={
-        "resource": child.serialize(),
+        "resource": _serialize_with_methods(child),
         "state": child.serialize_all_state(),
         "parent_name": "root",
       },

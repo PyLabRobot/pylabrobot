@@ -27,6 +27,35 @@ from pylabrobot.resources.volume_tracker import set_volume_tracking
 logger = logging.getLogger("pylabrobot")
 
 
+def _get_public_methods(resource: Resource) -> list:
+  """Get public method signatures from a resource instance for the visualizer UI."""
+  methods = []
+  for name in dir(resource):
+    if name.startswith("_"):
+      continue
+    try:
+      attr = getattr(type(resource), name, None)
+    except Exception:
+      continue
+    if attr is None or not callable(attr) or isinstance(attr, property):
+      continue
+    try:
+      sig = inspect.signature(attr)
+      params = [p for p in sig.parameters if p != "self"]
+      methods.append(f"{name}({', '.join(params)})")
+    except (ValueError, TypeError):
+      methods.append(f"{name}()")
+  return sorted(methods)
+
+
+def _serialize_with_methods(resource: Resource) -> dict:
+  """Serialize a resource and enrich with Python method signatures for the visualizer."""
+  data = resource.serialize()
+  data["methods"] = _get_public_methods(resource)
+  data["children"] = [_serialize_with_methods(child) for child in resource.children]
+  return data
+
+
 class Visualizer:
   """A class for visualizing resources and their states in a web browser.
 
@@ -562,7 +591,7 @@ class Visualizer:
     # send the serialized root resource (including all children) to the browser
     await self.send_command(
       "set_root_resource",
-      {"resource": self._root_resource.serialize()},
+      {"resource": _serialize_with_methods(self._root_resource)},
       wait_for_response=False,
     )
 
@@ -601,7 +630,7 @@ class Visualizer:
 
     # Send a `resource_assigned` event to the browser.
     data = {
-      "resource": resource.serialize(),
+      "resource": _serialize_with_methods(resource),
       "state": resource.serialize_all_state(),
       "parent_name": (resource.parent.name if resource.parent else None),
     }

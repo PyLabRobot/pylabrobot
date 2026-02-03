@@ -522,6 +522,7 @@ class Resource {
     this.parent = parent;
     this.resourceType = resourceData.type || this.constructor.name;
     this.category = resourceData.category || "";
+    this.methods = resourceData.methods || [];
 
     this.color = "#5B6D8F";
 
@@ -3399,6 +3400,18 @@ function expandAllTreeNodes() {
   buildWrtDropdown();
 }
 
+function showToDepth() {
+  var tree = document.getElementById("resource-tree");
+  if (!tree) return;
+  var maxDepth = getTreeDepthLimit();
+  var roots = tree.querySelectorAll(":scope > .tree-node");
+  roots.forEach(function (root) {
+    setTreeNodeExpansion(root, 0, maxDepth, true);
+    setTreeNodeExpansion(root, 0, maxDepth, false);
+  });
+  buildWrtDropdown();
+}
+
 function collapseAllTreeNodes() {
   var tree = document.getElementById("resource-tree");
   if (!tree) return;
@@ -3414,14 +3427,50 @@ function collapseAllTreeNodes() {
 window.addEventListener("load", function () {
   var expandBtn = document.getElementById("expand-all-btn");
   var collapseBtn = document.getElementById("collapse-all-btn");
-  if (expandBtn) expandBtn.addEventListener("click", expandAllTreeNodes);
-  if (collapseBtn) collapseBtn.addEventListener("click", collapseAllTreeNodes);
+  var treeExpanded = true;
+  if (expandBtn) expandBtn.addEventListener("click", function () {
+    if (treeExpanded) {
+      // Collapse all: force depth 0
+      var tree = document.getElementById("resource-tree");
+      if (tree) {
+        tree.querySelectorAll(".tree-node-children").forEach(function (el) {
+          el.classList.add("collapsed");
+        });
+        tree.querySelectorAll(".tree-node-arrow.has-children").forEach(function (el) {
+          el.textContent = "\u25B6";
+        });
+        buildWrtDropdown();
+      }
+      expandBtn.title = "Expand All";
+      expandBtn.innerHTML = '<svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+        '<polyline points="3,7 7,3 11,7"/>' +
+        '<polyline points="3,11 7,15 11,11"/>' +
+        '</svg>';
+    } else {
+      // Expand all without updating depth input
+      var tree = document.getElementById("resource-tree");
+      if (tree) {
+        tree.querySelectorAll(".tree-node-children.collapsed").forEach(function (el) {
+          el.classList.remove("collapsed");
+        });
+        tree.querySelectorAll(".tree-node-arrow.has-children").forEach(function (el) {
+          el.textContent = "\u25BC";
+        });
+        buildWrtDropdown();
+      }
+      expandBtn.title = "Collapse All";
+      expandBtn.innerHTML = '<svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+        '<polyline points="3,3 7,7 11,3"/>' +
+        '<polyline points="3,15 7,11 11,15"/>' +
+        '</svg>';
+    }
+    treeExpanded = !treeExpanded;
+  });
+  if (collapseBtn) collapseBtn.addEventListener("click", showToDepth);
 
   var depthInput = document.getElementById("tree-depth-input");
   if (depthInput) {
-    depthInput.addEventListener("input", function () {
-      collapseAllTreeNodes();
-    });
+    // depth input no longer auto-applies; user must click the button
   }
 
   // Left toolbar tool switching
@@ -3881,19 +3930,10 @@ function getUmlAttributes(resource) {
 }
 
 function getUmlMethods(resource) {
-  var methods = ["getAbsoluteLocation()", "serialize()", "draw()", "destroy()"];
-  if (resource instanceof Container) {
-    methods.push("getVolume()");
-    methods.push("setVolume()");
-    methods.push("setState()");
+  if (resource.methods && resource.methods.length > 0) {
+    return resource.methods;
   }
-  if (resource instanceof TipSpot) {
-    methods.push("setState()");
-  }
-  if (resource instanceof Plate || resource instanceof TipRack || resource instanceof TubeRack) {
-    methods.push("update()");
-  }
-  return methods;
+  return [];
 }
 
 function buildUmlPanelDOM(resource) {
@@ -3961,18 +4001,50 @@ function buildUmlPanelDOM(resource) {
   // Methods section
   var methodsSection = document.createElement("div");
   methodsSection.className = "uml-section";
+
+  var methodsHeader = document.createElement("div");
+  methodsHeader.style.display = "flex";
+  methodsHeader.style.alignItems = "center";
+  methodsHeader.style.justifyContent = "space-between";
+  methodsHeader.style.cursor = "pointer";
+
   var methodsTitle = document.createElement("div");
   methodsTitle.className = "uml-section-title";
   methodsTitle.textContent = "Methods";
-  methodsSection.appendChild(methodsTitle);
+  methodsTitle.style.marginBottom = "0";
+
+  var toggleBtn = document.createElement("button");
+  toggleBtn.style.background = "none";
+  toggleBtn.style.border = "none";
+  toggleBtn.style.cursor = "pointer";
+  toggleBtn.style.padding = "0 2px";
+  toggleBtn.style.fontSize = "12px";
+  toggleBtn.style.color = "#999";
+  toggleBtn.style.lineHeight = "1";
+  toggleBtn.innerHTML = "&#9660;";
+
+  methodsHeader.appendChild(methodsTitle);
+  methodsHeader.appendChild(toggleBtn);
+  methodsSection.appendChild(methodsHeader);
+
+  var methodsList = document.createElement("div");
+  methodsList.style.display = "none";
 
   var methods = getUmlMethods(resource);
   for (var i = 0; i < methods.length; i++) {
     var methodDiv = document.createElement("div");
     methodDiv.className = "uml-method";
     methodDiv.textContent = methods[i];
-    methodsSection.appendChild(methodDiv);
+    methodsList.appendChild(methodDiv);
   }
+  methodsSection.appendChild(methodsList);
+
+  methodsHeader.addEventListener("click", function () {
+    var collapsed = methodsList.style.display === "none";
+    methodsList.style.display = collapsed ? "block" : "none";
+    toggleBtn.innerHTML = collapsed ? "&#9650;" : "&#9660;";
+  });
+
   panel.appendChild(methodsSection);
 
   return panel;

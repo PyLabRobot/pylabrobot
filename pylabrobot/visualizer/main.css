@@ -517,14 +517,20 @@ main {
   background: #dee2e6;
 }
 
+#collapse-all-btn {
+  width: 32px;
+  border-radius: 4px 0 0 4px;
+  border-right: none;
+}
+
 .tree-depth-input {
-  width: 36px;
+  width: 32px;
   height: 26px;
   text-align: center;
   font-size: 13px;
   font-weight: 600;
   border: 1px solid #ced4da;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
   background: #f8f9fa;
   color: #333;
   padding: 0 2px;

@@ -274,19 +274,22 @@
         <div class="sidepanel-header">
           <span class="sidepanel-title">Workcell Tree</span>
           <div class="sidepanel-header-actions">
-            <button class="tree-action-btn" id="expand-all-btn" title="Expand to depth">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3,5 7,9 11,5"/>
-                <line x1="3" y1="1" x2="11" y2="1"/>
+            <button class="tree-action-btn" id="expand-all-btn" title="Collapse All">
+              <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3,3 7,7 11,3"/>
+                <polyline points="3,15 7,11 11,15"/>
               </svg>
             </button>
-            <button class="tree-action-btn" id="collapse-all-btn" title="Collapse to depth">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3,9 7,5 11,9"/>
-                <line x1="3" y1="13" x2="11" y2="13"/>
-              </svg>
-            </button>
-            <input type="number" id="tree-depth-input" class="tree-depth-input" value="1" min="0" max="20" title="Depth levels below root">
+            <div style="display:flex;">
+              <button class="tree-action-btn" id="collapse-all-btn" title="Show up to depth...">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="1" y1="3" x2="10" y2="3"/>
+                  <line x1="4" y1="7" x2="13" y2="7"/>
+                  <line x1="7" y1="11" x2="13" y2="11"/>
+                </svg>
+              </button>
+              <input type="number" id="tree-depth-input" class="tree-depth-input" value="1" min="0" max="20" title="Depth levels below root">
+            </div>
           </div>
         </div>
         <div id="resource-tree"></div>
