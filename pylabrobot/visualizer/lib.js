@@ -347,6 +347,7 @@ let isRecording = false;
 let recordingCounter = 0; // Counter to track the number of recorded frames
 var frameImages = [];
 let frameInterval = 8;
+var _recordingTimer = null;
 
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
@@ -760,6 +761,9 @@ class Resource {
           updateCoordsPanel(null);
         }
       });
+      this.mainShape.on("dblclick dbltap", () => {
+        showUmlPanel(this.name);
+      });
     }
   }
 
@@ -861,12 +865,7 @@ class Resource {
   update() {
     this.draw(resourceLayer);
 
-    if (isRecording) {
-      if (recordingCounter % frameInterval == 0) {
-        stageToBlob(stage, handleBlob);
-      }
-      recordingCounter += 1;
-    }
+    // GIF frame capture is now driven by _recordingTimer (setInterval)
   }
 
   setState() {}
@@ -2505,7 +2504,10 @@ async function startRecording() {
   var info = document.getElementById("progressBar");
   info.innerText = " GIF Rendering Progress: " + Math.round(0 * 100) + "%";
 
-  stageToBlob(stage, handleBlob);
+  // Start sequential capture loop: capture a frame, wait for the interval,
+  // then capture the next. This guarantees every tick produces a frame
+  // even when html2canvas is slower than the interval.
+  _captureLoop();
 
   gifResetUI();
   gifShowRecordingUI();
@@ -2517,24 +2519,24 @@ function stopRecording() {
 
   // Turn recording off
   isRecording = false;
+  if (_recordingTimer) { clearTimeout(_recordingTimer); _recordingTimer = null; }
 
-  // Render the final image
-  // Do it twice bc it looks better
-
-  stageToBlob(stage, handleBlob);
-  stageToBlob(stage, handleBlob);
-
-  gif = new GIF({
-    workers: 10,
-    workerScript: "gif.worker.js",
-    background: "#FFFFFF",
-    width: stage.width(),
-    height: stage.height(),
-  });
+  // Wait for any in-flight capture to finish before building GIF
+  setTimeout(function () {
+    // Use dimensions from the first captured frame (includes overflow)
+    var gifW = frameImages.length > 0 ? frameImages[0].width : stage.width();
+    var gifH = frameImages.length > 0 ? frameImages[0].height : stage.height();
+    gif = new GIF({
+      workers: 10,
+      workerScript: "gif.worker.js",
+      background: "#FFFFFF",
+      width: gifW,
+      height: gifH,
+    });
 
   // Add each frame to the GIF
   for (var i = 0; i < frameImages.length; i++) {
-    gif.addFrame(frameImages[i], { delay: 1 });
+    gif.addFrame(frameImages[i], { delay: Math.max(200, frameInterval * 50) });
   }
 
   // Add progress bar based on how much the gif is rendered
@@ -2551,32 +2553,59 @@ function stopRecording() {
     gifShowStartUI();
   });
 
-  gif.render();
+    gif.render();
+  }, 1500);
 }
 
-// convert stage to a blob and handle the blob
-function stageToBlob(stage, callback) {
-  stage.toBlob({
-    callback: callback,
-    mimeType: "image/jpg",
-    quality: 0.3,
+// Capture the entire <main> element (canvas + overlays) as a frame
+// Sequential capture loop: capture one frame, wait for the remaining interval
+// time, then schedule the next. Every tick produces exactly one frame.
+function _captureLoop() {
+  if (!isRecording) return;
+  var intervalMs = Math.max(200, frameInterval * 50);
+  var startTime = Date.now();
+  var mainEl = document.querySelector("main");
+  if (!mainEl) return;
+  // Compute capture size including any rightward/downward overflow
+  var captureW = mainEl.offsetWidth;
+  var captureH = mainEl.offsetHeight;
+  var mainRect = mainEl.getBoundingClientRect();
+  var overflows = mainEl.querySelectorAll(".module-dropdown.open, .tool-panel, .uml-panel");
+  overflows.forEach(function (el) {
+    var r = el.getBoundingClientRect();
+    var right = r.right - mainRect.left;
+    var bottom = r.bottom - mainRect.top;
+    if (right > captureW) captureW = Math.ceil(right);
+    if (bottom > captureH) captureH = Math.ceil(bottom);
   });
-}
-
-// handle the blob (e.g., create an Image element and add it to frameImages)
-function handleBlob(blob) {
-  const url = URL.createObjectURL(blob);
-  const myImg = new Image();
-
-  myImg.src = url;
-  myImg.width = stage.width();
-  myImg.height = stage.height();
-
-  frameImages.push(myImg);
-
-  myImg.onload = function () {
-    URL.revokeObjectURL(url); // Free up memory
-  };
+  html2canvas(mainEl, {
+    backgroundColor: "#FFFFFF",
+    scale: 1,
+    useCORS: true,
+    logging: false,
+    width: captureW,
+    height: captureH,
+  }).then(function (canvas) {
+    canvas.toBlob(function (blob) {
+      if (blob) {
+        var url = URL.createObjectURL(blob);
+        var myImg = new Image();
+        myImg.src = url;
+        myImg.width = canvas.width;
+        myImg.height = canvas.height;
+        frameImages.push(myImg);
+        myImg.onload = function () { URL.revokeObjectURL(url); };
+      }
+      // Wait for the remaining interval time before next capture
+      var elapsed = Date.now() - startTime;
+      var waitMs = Math.max(0, intervalMs - elapsed);
+      _recordingTimer = setTimeout(_captureLoop, waitMs);
+    }, "image/jpeg", 0.3);
+  }).catch(function () {
+    var elapsed = Date.now() - startTime;
+    var waitMs = Math.max(0, intervalMs - elapsed);
+    _recordingTimer = setTimeout(_captureLoop, waitMs);
+  });
 }
 
 // Set up event listeners for the buttons
@@ -2622,9 +2651,10 @@ document
 
     this.value = value; // Update the slider value
     document.getElementById("current-value").textContent =
-      "Frame Save Interval: " + value;
+      "Frame Interval: " + value;
 
     frameInterval = value;
+    // New interval takes effect on the next iteration of _captureLoop automatically
   });
 
 window.addEventListener("load", function () {
@@ -3792,6 +3822,7 @@ window.addEventListener("load", function () {
 // ===========================================================================
 
 var umlPanelResourceName = null;
+var _umlPanelOpenedAt = 0;
 
 function getUmlAttributes(resource) {
   var attrs = [];
@@ -3958,6 +3989,7 @@ function showUmlPanel(resourceName) {
   }
 
   umlPanelResourceName = resourceName;
+  _umlPanelOpenedAt = Date.now();
 
   // Remove existing panel
   var existing = document.getElementById("uml-panel");
@@ -3985,8 +4017,11 @@ window.addEventListener("load", function () {
   if (kanvas) {
     kanvas.addEventListener("click", function (e) {
       // Only close if the click is directly on the kanvas container (not on a child)
+      // Skip if a panel was just opened (e.g. via dblclick) to avoid race conditions
       if (e.target === kanvas || e.target.tagName === "CANVAS") {
-        hideUmlPanel();
+        if (Date.now() - _umlPanelOpenedAt > 400) {
+          hideUmlPanel();
+        }
       }
     });
   }
@@ -4218,14 +4253,13 @@ function buildNavbarLHModules() {
       var singleCenterPx = (btnRect.left - mainRect.left + btnRect.width / 2);
 
       var singlePanel = document.getElementById("single-channel-dropdown-" + handlerName);
-      if (singlePanel) {
-        singlePanel.style.top = topPx + "px";
-        singlePanel.style.left = singleCenterPx + "px";
-      }
 
       // Measure single panel (temporarily show if hidden)
       var singleW = 0, singleH = 0, singleLeft = singleCenterPx;
       if (singlePanel) {
+        // Temporarily set left + transform so we can measure offsetWidth accurately
+        singlePanel.style.top = topPx + "px";
+        singlePanel.style.left = singleCenterPx + "px";
         var wasHidden = !singlePanel.classList.contains("open");
         if (wasHidden) { singlePanel.style.visibility = "hidden"; singlePanel.classList.add("open"); }
         singleW = singlePanel.offsetWidth;
@@ -4234,17 +4268,40 @@ function buildNavbarLHModules() {
         if (wasHidden) { singlePanel.classList.remove("open"); singlePanel.style.visibility = ""; }
       }
 
+      // Determine multi-channel and arm panel widths for clamping
       var multiPanel = document.getElementById("multi-channel-dropdown-" + handlerName);
+      var armPanel = document.getElementById("arm-dropdown-" + handlerName);
+      var multiW = 0;
       if (multiPanel && multiPanel.classList.contains("open")) {
         multiPanel.style.transform = "none";
-        multiPanel.style.top = topPx + "px";
-        multiPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
-        multiPanel.style.left = (singleLeft - multiPanel.offsetWidth - 8) + "px";
+        multiW = multiPanel.offsetWidth;
       }
-
-      var armPanel = document.getElementById("arm-dropdown-" + handlerName);
+      var armW = 0;
       if (armPanel && armPanel.classList.contains("open")) {
         armPanel.style.transform = "none";
+        armW = armPanel.offsetWidth;
+      }
+
+      // Clamp: ensure the leftmost panel doesn't go below 0
+      var totalLeftEdge = singleLeft - (multiW > 0 ? multiW + 8 : 0);
+      if (totalLeftEdge < 0) {
+        singleLeft = singleLeft + (-totalLeftEdge);
+      }
+
+      // Always position single panel with direct left (no CSS transform),
+      // because html2canvas misrenders translateX(-50%).
+      if (singlePanel) {
+        singlePanel.style.transform = "none";
+        singlePanel.style.left = Math.max(0, singleLeft) + "px";
+      }
+
+      if (multiPanel && multiPanel.classList.contains("open")) {
+        multiPanel.style.top = topPx + "px";
+        multiPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
+        multiPanel.style.left = Math.max(0, singleLeft - multiW - 8) + "px";
+      }
+
+      if (armPanel && armPanel.classList.contains("open")) {
         armPanel.style.top = topPx + "px";
         armPanel.style.height = singleH > 0 ? singleH + "px" : "auto";
         var singleRight = singleLeft + singleW;
