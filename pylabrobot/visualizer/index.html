@@ -33,7 +33,7 @@
           PyLabRobot Visualizer</a
         >
 
-        <span id="source-filename" style="margin-left: 16px; font-size: 18px; font-weight: 700; color: #333;">{{ source_filename }}</span>
+        <span id="source-filename" style="margin-left: 16px; font-size: 18px; font-weight: 700; color: #333; min-width: 316px; display: inline-block;">{{ source_filename }}</span>
         <div class="navbar-divider" style="margin: 0 14px; height: 95%;"></div>
         <div id="navbar-lh-modules"></div>
 
@@ -104,7 +104,27 @@
       <main>
         <div id="kanvas"></div>
         <div id="coords-panel" class="tool-panel" style="display: none;">
-          <div class="tool-panel-title">Resource location...</div>
+          <div class="tool-panel-title" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Resource location...</span>
+            <svg width="22" height="22" viewBox="0 0 22 22" style="flex-shrink: 0;">
+              <defs>
+                <filter id="resLocGlow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+                  <feFlood flood-color="#BBCC33" flood-opacity="0.8" result="color"/>
+                  <feComposite in="color" in2="blur" operator="in" result="glow"/>
+                  <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <g filter="url(#resLocGlow)">
+                <circle cx="11" cy="11" r="6" fill="none" stroke="#99DDFF" stroke-width="3.125"/>
+                <circle cx="11" cy="11" r="2.4375" fill="#99DDFF" opacity="0.95"/>
+                <line x1="0.5" y1="11" x2="5" y2="11" stroke="#99DDFF" stroke-width="2.5"/>
+                <line x1="17" y1="11" x2="21.5" y2="11" stroke="#99DDFF" stroke-width="2.5"/>
+                <line x1="11" y1="0.5" x2="11" y2="5" stroke="#99DDFF" stroke-width="2.5"/>
+                <line x1="11" y1="17" x2="11" y2="21.5" stroke="#99DDFF" stroke-width="2.5"/>
+              </g>
+            </svg>
+          </div>
           <div class="tool-panel-axes">
             <div class="tool-panel-row">
               <span class="tool-panel-label" style="color: #b02a37;">x</span>
@@ -137,6 +157,14 @@
             <select class="tool-panel-select" id="coords-wrt-ref" title="with regards to">
               <option value="root" selected>(abs)</option>
             </select>
+            <svg width="22" height="22" viewBox="0 0 22 22" style="flex-shrink: 0; margin-left: 2px;">
+              <circle cx="11" cy="11" r="6" fill="none" stroke="#FFAABB" stroke-width="3.125"/>
+              <circle cx="11" cy="11" r="2.4375" fill="#FFAABB" opacity="0.95"/>
+              <line x1="0.5" y1="11" x2="5" y2="11" stroke="#FFAABB" stroke-width="2.5"/>
+              <line x1="17" y1="11" x2="21.5" y2="11" stroke="#FFAABB" stroke-width="2.5"/>
+              <line x1="11" y1="0.5" x2="11" y2="5" stroke="#FFAABB" stroke-width="2.5"/>
+              <line x1="11" y1="17" x2="11" y2="21.5" stroke="#FFAABB" stroke-width="2.5"/>
+            </svg>
           </div>
           <div class="tool-panel-axes">
             <div class="tool-panel-row">
@@ -163,6 +191,16 @@
                 <option value="top">top</option>
                 <option value="cavity_bottom">cavity_bottom</option>
               </select>
+            </div>
+          </div>
+          <div style="width: 105%; align-self: center; height: 1px; background: #ced4da; margin-top: 8px;"></div>
+          <div class="tool-panel-title" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: baseline;">Recorded Measurements <span style="font-weight: 600; font-size: 14px; font-family: monospace; color: #1a4b8c;">mm</span></div>
+          <div id="coords-measurements" style="max-height: 270px; overflow-y: auto; width: 100%;">
+            <div id="coords-measurements-hint" style="color: #aaa; font-size: 12px; line-height: 1.6; max-width: 0; min-width: 100%;">
+              1. Choose a "with regards to" (wrt) resource<br>
+              2. Set reference options above for both the wrt and the investigated resource<br>
+              3. Hover over a resource to preview<br>
+              4. Click to record the measurement
             </div>
           </div>
         </div>

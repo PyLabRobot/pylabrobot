@@ -403,7 +403,8 @@ main {
 }
 
 .tool-panel-row-full .tool-panel-select {
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 80px;
 }
 
 .tool-panel-select {

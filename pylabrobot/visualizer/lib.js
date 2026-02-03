@@ -35,6 +35,8 @@ var selectedResource;
 
 var canvasWidth, canvasHeight;
 var activeTool = "cursor"; // "cursor" or "coords"
+var wrtHighlightCircle;
+var resHighlightBullseye;
 
 function buildWrtDropdown() {
   var wrtSelect = document.getElementById("coords-wrt-ref");
@@ -82,6 +84,163 @@ function buildWrtDropdown() {
 
 function updateCoordsPanel(resource) {
   // No-op; dropdown is built once via buildWrtDropdown.
+}
+
+function updateWrtHighlight() {
+  if (wrtHighlightCircle) { wrtHighlightCircle.destroy(); wrtHighlightCircle = undefined; }
+  if (activeTool !== "coords") return;
+  var wrtRef = document.getElementById("coords-wrt-ref");
+  var wrtName = wrtRef ? wrtRef.value : null;
+  var wrtRes = wrtName ? resources[wrtName] : null;
+  if (!wrtRes) return;
+  var wrtAbs = wrtRes.getAbsoluteLocation();
+  var wrtOff = getWrtAnchorOffset(wrtRes);
+  var cx = wrtAbs.x + wrtOff.x;
+  var cy = wrtAbs.y + wrtOff.y;
+  var r = 9.2;
+  var barH = r * 1.0125;
+  var wrtHaloColor = "#DDDDDD";
+  var wrtHaloExtra = 4;
+  wrtHighlightCircle = new Konva.Group();
+  // Halo: blurred duplicate behind
+  var wrtHaloGroup = new Konva.Group({ opacity: 0.5 });
+  wrtHaloGroup.filters([Konva.Filters.Blur]);
+  wrtHaloGroup.blurRadius(6);
+  wrtHaloGroup.add(new Konva.Circle({
+    x: cx, y: cy, radius: r,
+    fill: "transparent", stroke: wrtHaloColor, strokeWidth: 4.32 + wrtHaloExtra * 2,
+  }));
+  wrtHaloGroup.add(new Konva.Circle({
+    x: cx, y: cy, radius: 2.4 + wrtHaloExtra / 2,
+    fill: wrtHaloColor,
+  }));
+  wrtHaloGroup.add(new Konva.Line({
+    points: [cx - r - barH, cy, cx - r, cy],
+    stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
+  }));
+  wrtHaloGroup.add(new Konva.Line({
+    points: [cx + r, cy, cx + r + barH, cy],
+    stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
+  }));
+  wrtHaloGroup.add(new Konva.Line({
+    points: [cx, cy - r - barH, cx, cy - r],
+    stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
+  }));
+  wrtHaloGroup.add(new Konva.Line({
+    points: [cx, cy + r, cx, cy + r + barH],
+    stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
+  }));
+  wrtHaloGroup.cache({ x: cx - r - barH - 20, y: cy - r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
+  wrtHighlightCircle.add(wrtHaloGroup);
+  // Main bullseye on top
+  wrtHighlightCircle.add(new Konva.Circle({
+    x: cx, y: cy, radius: r,
+    fill: "transparent", stroke: "#FFAABB", strokeWidth: 4.32,
+  }));
+  wrtHighlightCircle.add(new Konva.Circle({
+    x: cx, y: cy, radius: 2.4,
+    fill: "#FFAABB", opacity: 0.85,
+  }));
+  wrtHighlightCircle.add(new Konva.Line({
+    points: [cx - r - barH, cy, cx - r, cy],
+    stroke: "#FFAABB", strokeWidth: 3.6,
+  }));
+  wrtHighlightCircle.add(new Konva.Line({
+    points: [cx + r, cy, cx + r + barH, cy],
+    stroke: "#FFAABB", strokeWidth: 3.6,
+  }));
+  wrtHighlightCircle.add(new Konva.Line({
+    points: [cx, cy - r - barH, cx, cy - r],
+    stroke: "#FFAABB", strokeWidth: 3.6,
+  }));
+  wrtHighlightCircle.add(new Konva.Line({
+    points: [cx, cy + r, cx, cy + r + barH],
+    stroke: "#FFAABB", strokeWidth: 3.6,
+  }));
+  resourceLayer.add(wrtHighlightCircle);
+  wrtHighlightCircle.moveToTop();
+  resourceLayer.draw();
+}
+
+function showResHighlightBullseye(resource) {
+  if (resHighlightBullseye) { resHighlightBullseye.destroy(); resHighlightBullseye = undefined; }
+  if (!resource) return;
+  var abs = resource.getAbsoluteLocation();
+  var xRef = document.getElementById("coords-x-ref");
+  var yRef = document.getElementById("coords-y-ref");
+  var xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? resource.size_x / 2 : resource.size_x;
+  var yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? resource.size_y / 2 : resource.size_y;
+  var cx = abs.x + xOff;
+  var cy = abs.y + yOff;
+  var r = 9.2;
+  var barH = r * 1.0125;
+  var color = "#99DDFF";
+  var haloColor = "#BBCC33";
+  resHighlightBullseye = new Konva.Group();
+  // Halo: blurred, thicker duplicate of every element behind the bullseye
+  var haloExtra = 4;
+  var haloOpacity = 0.5;
+  var haloGroup = new Konva.Group({
+    opacity: haloOpacity,
+  });
+  haloGroup.filters([Konva.Filters.Blur]);
+  haloGroup.blurRadius(6);
+  haloGroup.cache({ x: cx - r - barH - 20, y: cy - r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
+  haloGroup.add(new Konva.Circle({
+    x: cx, y: cy, radius: r,
+    fill: "transparent", stroke: haloColor, strokeWidth: 4.32 + haloExtra * 2,
+  }));
+  haloGroup.add(new Konva.Circle({
+    x: cx, y: cy, radius: 2.4 + haloExtra / 2,
+    fill: haloColor,
+  }));
+  haloGroup.add(new Konva.Line({
+    points: [cx - r - barH, cy, cx - r, cy],
+    stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
+  }));
+  haloGroup.add(new Konva.Line({
+    points: [cx + r, cy, cx + r + barH, cy],
+    stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
+  }));
+  haloGroup.add(new Konva.Line({
+    points: [cx, cy - r - barH, cx, cy - r],
+    stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
+  }));
+  haloGroup.add(new Konva.Line({
+    points: [cx, cy + r, cx, cy + r + barH],
+    stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
+  }));
+  // Must cache after adding children for blur filter to work
+  haloGroup.cache({ x: cx - r - barH - 20, y: cy - r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
+  resHighlightBullseye.add(haloGroup);
+  // Main bullseye on top
+  resHighlightBullseye.add(new Konva.Circle({
+    x: cx, y: cy, radius: r,
+    fill: "transparent", stroke: color, strokeWidth: 4.32,
+  }));
+  resHighlightBullseye.add(new Konva.Circle({
+    x: cx, y: cy, radius: 2.4,
+    fill: color, opacity: 0.85,
+  }));
+  resHighlightBullseye.add(new Konva.Line({
+    points: [cx - r - barH, cy, cx - r, cy],
+    stroke: color, strokeWidth: 3.6,
+  }));
+  resHighlightBullseye.add(new Konva.Line({
+    points: [cx + r, cy, cx + r + barH, cy],
+    stroke: color, strokeWidth: 3.6,
+  }));
+  resHighlightBullseye.add(new Konva.Line({
+    points: [cx, cy - r - barH, cx, cy - r],
+    stroke: color, strokeWidth: 3.6,
+  }));
+  resHighlightBullseye.add(new Konva.Line({
+    points: [cx, cy + r, cx, cy + r + barH],
+    stroke: color, strokeWidth: 3.6,
+  }));
+  resourceLayer.add(resHighlightBullseye);
+  resHighlightBullseye.moveToTop();
+  resourceLayer.draw();
 }
 
 function getAncestorAtDepth(resource, depth) {
@@ -496,10 +655,108 @@ class Resource {
         }
         if (activeTool === "coords") {
           updateCoordsPanel(this);
+          showResHighlightBullseye(this);
+        }
+      });
+      this.mainShape.on("click", () => {
+        if (activeTool === "coords") {
+          const xRef = document.getElementById("coords-x-ref");
+          const yRef = document.getElementById("coords-y-ref");
+          const zRef = document.getElementById("coords-z-ref");
+          const wrtRef = document.getElementById("coords-wrt-ref");
+          const wrtName = wrtRef ? wrtRef.value : "root";
+          const base = getLocationWrt(this, wrtName);
+          const xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? this.size_x / 2 : this.size_x;
+          const yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? this.size_y / 2 : this.size_y;
+          var zOff = 0;
+          var zNA = false;
+          if (zRef) {
+            if (zRef.value === "center") zOff = this.size_z / 2;
+            else if (zRef.value === "top") zOff = this.size_z;
+            else if (zRef.value === "cavity_bottom") {
+              if (this instanceof Container && this.material_z_thickness != null) {
+                zOff = this.material_z_thickness;
+              } else {
+                zNA = true;
+              }
+            }
+          }
+          const cx = base.x + xOff;
+          const cy = base.y + yOff;
+          const cz = (base.z || 0) + zOff;
+          const czStr = zNA ? "na" : cz.toFixed(1);
+          const container = document.getElementById("coords-measurements");
+          if (container) {
+            const xLabel = xRef ? xRef.value : "left";
+            const yLabel = yRef ? yRef.value : "front";
+            const zLabel = zRef ? zRef.value : "bottom";
+            const row = document.createElement("div");
+            row.style.padding = "5px 0";
+            row.style.borderBottom = "2px solid #ced4da";
+            row.style.fontSize = "14px";
+            row.style.lineHeight = "1.4";
+            row.style.display = "flex";
+            row.style.alignItems = "flex-start";
+
+            const content = document.createElement("div");
+            content.style.flex = "1";
+
+            const xl = xLabel[0];
+            const yl = yLabel[0];
+            const zl = zLabel[0];
+            const wrtXRef = document.getElementById("coords-wrt-x-ref");
+            const wrtYRef = document.getElementById("coords-wrt-y-ref");
+            const wrtZRef = document.getElementById("coords-wrt-z-ref");
+            const wxl = wrtXRef ? wrtXRef.value[0] : "l";
+            const wyl = wrtYRef ? wrtYRef.value[0] : "f";
+            const wzl = wrtZRef ? wrtZRef.value[0] : "b";
+
+            const nameLine = document.createElement("div");
+            nameLine.style.fontWeight = "600";
+            nameLine.style.color = "#333";
+            nameLine.textContent = `${this.name} (${xl}, ${yl}, ${zl})`;
+
+            const wrtLine = document.createElement("div");
+            wrtLine.style.color = "#888";
+            wrtLine.style.fontSize = "12px";
+            wrtLine.textContent = `wrt ${wrtName} (${wxl}, ${wyl}, ${wzl})`;
+
+            const coordLine = document.createElement("div");
+            coordLine.style.fontFamily = "monospace";
+            coordLine.style.color = "#1a4b8c";
+            coordLine.style.fontWeight = "600";
+            coordLine.textContent = `(${cx.toFixed(1)}, ${cy.toFixed(1)}, ${czStr})`;
+
+            content.appendChild(nameLine);
+            content.appendChild(wrtLine);
+            content.appendChild(coordLine);
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "×";
+            deleteBtn.style.background = "none";
+            deleteBtn.style.border = "none";
+            deleteBtn.style.color = "#aaa";
+            deleteBtn.style.fontSize = "18px";
+            deleteBtn.style.cursor = "pointer";
+            deleteBtn.style.padding = "0 2px";
+            deleteBtn.style.lineHeight = "1";
+            deleteBtn.style.flexShrink = "0";
+            deleteBtn.onmouseover = () => { deleteBtn.style.color = "#d33"; };
+            deleteBtn.onmouseout = () => { deleteBtn.style.color = "#aaa"; };
+            deleteBtn.onclick = () => { row.remove(); };
+
+            row.appendChild(content);
+            row.appendChild(deleteBtn);
+            var hint = document.getElementById("coords-measurements-hint");
+            if (hint) hint.remove();
+            container.appendChild(row);
+            container.scrollTop = container.scrollHeight;
+          }
         }
       });
       this.mainShape.on("mouseout", () => {
         tooltip.destroy();
+        showResHighlightBullseye(null);
         if (typeof clearSidebarHighlight === "function") {
           clearSidebarHighlight();
         }
@@ -3051,10 +3308,17 @@ window.addEventListener("load", function () {
     if (coordsPanel) coordsPanel.style.display = tool === "coords" ? "" : "none";
     if (gifPanel) gifPanel.style.display = tool === "gif" ? "" : "none";
     if (tool !== "coords") updateCoordsPanel(null);
+    updateWrtHighlight();
   }
   if (cursorBtn) cursorBtn.addEventListener("click", function () { setActiveTool("cursor"); });
   if (coordsBtn) coordsBtn.addEventListener("click", function () { setActiveTool("coords"); });
   if (gifBtn) gifBtn.addEventListener("click", function () { setActiveTool("gif"); });
+
+  // Update wrt highlight when dropdowns change
+  ["coords-wrt-ref", "coords-wrt-x-ref", "coords-wrt-y-ref", "coords-wrt-z-ref"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("change", updateWrtHighlight);
+  });
 
   // Left toolbar collapse toggle
   var leftToggle = document.getElementById("toolbar-left-toggle");
