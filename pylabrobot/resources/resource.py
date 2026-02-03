@@ -760,7 +760,7 @@ class Resource:
     if barcode is not None:
       resource.barcode = Barcode.deserialize(barcode)
     if preferred_pickup_location is not None:
-      resource.preferred_pickup_location = Coordinate.deserialize(preferred_pickup_location)
+      resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
