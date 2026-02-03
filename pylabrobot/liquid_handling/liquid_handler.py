@@ -1952,7 +1952,7 @@ class LiquidHandler(Resource, Machine):
     self,
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: float = 0,
+    pickup_distance_from_top: Optional[float] = None,
     direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs,
   ):
@@ -1963,6 +1963,18 @@ class LiquidHandler(Resource, Machine):
       pickup_distance_from_top=pickup_distance_from_top,
       direction=direction,
     )
+
+    if pickup_distance_from_top is None:
+      if resource.preferred_pickup_location is not None:
+        logger.debug(
+          f"Using preferred pickup location for resource {resource.name} as pickup_distance_from_top was not specified."
+        )
+        pickup_distance_from_top = resource.preferred_pickup_location.z
+      else:
+        logger.debug(
+          f"No preferred pickup location for resource {resource.name}. Using default pickup distance of 5mm."
+        )
+        pickup_distance_from_top = 5.0
 
     if self._resource_pickup is not None:
       raise RuntimeError(f"Resource {self._resource_pickup.resource.name} already picked up")
