@@ -10,6 +10,7 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
   import hid  # type: ignore
+  from hid import HIDException
 
   USE_HID = True
 except ImportError as e:
@@ -156,7 +157,12 @@ class HID(IOBase):
 
     def _read():
       assert self.device is not None, "forgot to call setup?"
-      return self.device.read(size, timeout=int(timeout))
+      try:
+        return self.device.read(size, timeout=int(timeout))
+      except HIDException as e:
+        if str(e) == "Success":
+          return b""
+        raise
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")
