@@ -754,10 +754,13 @@ class Resource:
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
     barcode = data_copy.pop("barcode", None)
+    preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
       resource.barcode = Barcode.deserialize(barcode)
+    if preferred_pickup_location is not None:
+      resource.preferred_pickup_location = Coordinate.deserialize(preferred_pickup_location)
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
