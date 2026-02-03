@@ -1547,13 +1547,18 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       The minimum Y spacing in mm.
     """
 
-    resp = await self.send_command(self.channel_id(channel_idx), "VY")
+    if not 0 <= channel_idx <= self.num_channels-1:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, "
+        f"got {channel_idx}."
+      )
 
-    y_spacing_increments = int(resp.split("yc")[-1].split()[1])
-
-    y_spacing_in_mm = self.y_drive_increment_to_mm(y_spacing_increments)
-
-    return y_spacing_in_mm
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx),
+      command="VY",
+      fmt="yc### (n)",
+    )
+    return self.y_drive_increment_to_mm(resp["yc"][1])
 
 
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
