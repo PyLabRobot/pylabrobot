@@ -1539,7 +1539,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
 
-  async def channel_request_minimum_y_spacing(self, channel_idx: int) -> float:
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
     """Request the minimum Y spacing for a given channel.
     Args:
       channel_idx: the channel index to query. (0-indexed)
@@ -1547,10 +1547,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       The minimum Y spacing in mm.
     """
 
-    if not 0 <= channel_idx <= self.num_channels-1:
+    if not 0 <= channel_idx <= self.num_channels - 1:
       raise ValueError(
-        f"channel_idx must be between 0 and {self.num_channels - 1}, "
-        f"got {channel_idx}."
+        f"channel_idx must be between 0 and {self.num_channels - 1}, " f"got {channel_idx}."
       )
 
     resp = await self.send_command(
@@ -1559,7 +1558,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       fmt="yc### (n)",
     )
     return self.y_drive_increment_to_mm(resp["yc"][1])
-
 
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Check if a position is reachable by a channel (center-based)."""
