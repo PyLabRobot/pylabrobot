@@ -3,8 +3,6 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, cast
 
-from hid import HIDException
-
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
@@ -12,6 +10,7 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
   import hid  # type: ignore
+  from hid import HIDException
 
   USE_HID = True
 except ImportError as e:
