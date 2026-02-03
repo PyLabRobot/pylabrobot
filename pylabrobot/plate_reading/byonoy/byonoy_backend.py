@@ -1,13 +1,14 @@
 import abc
 import asyncio
 import enum
-import struct
 import threading
 import time
 from typing import Dict, List, Optional
 
+from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
 from pylabrobot.plate_reading.backend import PlateReaderBackend
+from pylabrobot.plate_reading.byonoy.parser import encode_hid_report
 from pylabrobot.resources import Plate, Well
 from pylabrobot.utils.list import reshape_2d
 
@@ -50,39 +51,23 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
 
     await self.io.stop()
 
-  def _assemble_command(
-    self, report_id: int, payload_fmt: str, payload: list, routing_info: bytes
-  ) -> bytes:
-    # based on `encode_hid_report` function
-
-    # Encode the payload
-    binary_payload = struct.pack(payload_fmt, *payload)
-
-    # Encode the full report (header + payload)
-    header_fmt = "<H"
-    binary_header = struct.pack(header_fmt, report_id)
-    packet = binary_header + binary_payload
+  def _assemble_command(self, report_id: int, payload: bytes, routing_info: bytes) -> bytes:
+    packet = Writer().u16(report_id).raw_bytes(payload).finish()
     packet += b"\x00" * (62 - len(packet)) + routing_info  # pad to 64 bytes
-
     return packet
 
   async def send_command(
     self,
     report_id: int,
-    payload_fmt: str,
-    payload: list,
+    payload: bytes,
     wait_for_response: bool = True,
     routing_info: bytes = b"\x00\x00",
   ) -> Optional[bytes]:
-    command = self._assemble_command(
-      report_id, payload_fmt=payload_fmt, payload=payload, routing_info=routing_info
-    )
+    command = self._assemble_command(report_id, payload=payload, routing_info=routing_info)
 
     await self.io.write(command)
     if not wait_for_response:
       return None
-
-    response = b""
 
     t0 = time.time()
     while True:
@@ -94,7 +79,7 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
         continue
 
       # if the first 2 bytes do not match, we continue reading
-      response_report_id, *_ = struct.unpack("<H", response[:2])
+      response_report_id = Reader(response).u16()
       if report_id == response_report_id:
         break
     return response
@@ -113,9 +98,14 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
     """Main ping loop that runs in the background thread."""
     while not self._stop_background.is_set():
       if self._sending_pings:
-        # don't read in background thread, data might get lost here
-        # not needed?
-        pass
+        # don't read in background thread, data might get lost here. don't use send_command
+        payload = Writer().u8(1).finish()
+        cmd = self._assemble_command(
+          report_id=0x0040,  # command id: HEARTBEAT_IN
+          payload=payload,
+          routing_info=b"\x00\x00",
+        )
+        await self.io.write(cmd)
 
       self._stop_background.wait(self._ping_interval)
 
@@ -151,61 +141,63 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
 
     self.available_wavelengths = await self.get_available_absorbance_wavelengths()
 
-    msg = (
-      f"Connected to Bynoy {self.io.device_info['product_string']} (via HID with "
-      f"VID={self.io.device_info['vendor_id']}:PID={self.io.device_info['product_id']}) "
-      f"on {self.io.device_info['path']}\n"
-      f"Identified available wavelengths: {self.available_wavelengths} nm"
-    )
-    if verbose:
-      print(msg)
-
   async def get_available_absorbance_wavelengths(self) -> List[float]:
-    available_wavelengths_r = await self.send_command(
+    response = await self.send_command(
       report_id=0x0330,
-      payload_fmt="<30h",
-      payload=[0] * 30,
+      payload=b"\x00" * 60,  # 30 x i16
       wait_for_response=True,
       routing_info=b"\x80\x40",
     )
-    assert available_wavelengths_r is not None, "Failed to get available wavelengths."
-    # cut out the first 2 bytes, then read the next 2 bytes as an integer
-    # 64 - 4 = 60. 60/2 = 30 16 bit integers
-    available_wavelengths = list(struct.unpack("<30h", available_wavelengths_r[2:62]))
-    available_wavelengths = [w for w in available_wavelengths if w != 0]
-    return available_wavelengths
+    assert response is not None, "Failed to get available wavelengths."
+
+    # Skip the first 2 bytes (report_id), then read 30 signed 16-bit integers
+    reader = Reader(response[2:])
+    available_wavelengths = [reader.i16() for _ in range(30)]
+    return [w for w in available_wavelengths if w != 0]
 
   async def _run_abs_measurement(self, signal_wl: int, reference_wl: int, is_reference: bool):
     """Perform an absorbance measurement or reference measurement.
     This contains all shared logic between initialization and real measurements."""
 
-    # (1) SUPPORTED_REPORTS_IN   (0x0010)
+    # (1) SUPPORTED_REPORTS_IN (0x0010)
     await self.send_command(
       report_id=0x0010,
-      payload_fmt="<BB29H",
-      payload=[0, 0, *([0] * 29)],
+      payload=b"\x00" * 60,  # seq, seq_len, ids[29]
       wait_for_response=False,
     )
 
-    # (2) DEVICE_DATA_READ_IN    (0x0200)
+    # (2) DEVICE_DATA_READ_IN (0x0200)
+    payload2 = (
+      Writer()
+      .u16(7)  # field_index
+      .u8(0)  # flags
+      .raw_bytes(b"\x00" * 52)  # data
+      .finish()
+    )
     await self.send_command(
       report_id=0x0200,
-      payload_fmt="<HB52s",
-      payload=[7, 0, b"\x00" * 52],
+      payload=payload2,
       wait_for_response=False,
     )
 
     # (3) ABS_TRIGGER_MEASUREMENT_OUT (0x0320)
+    payload3 = (
+      Writer()
+      .i16(signal_wl)
+      .i16(reference_wl)
+      .u8(int(is_reference))
+      .u8(0)  # flags
+      .finish()
+    )
     await self.send_command(
       report_id=0x0320,
-      payload_fmt="<hhBB",
-      payload=[signal_wl, reference_wl, int(is_reference), 0],
+      payload=payload3,
       wait_for_response=False,
       routing_info=b"\x00\x40",
     )
 
     # (4) Collect chunks (report_id 0x0500)
-    rows = []
+    rows: List[float] = []
     t0 = time.time()
 
     while True:
@@ -216,20 +208,19 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
       if len(chunk) == 0:
         continue
 
-      report_id = int.from_bytes(chunk[:2], "little")
+      reader = Reader(chunk)
+      report_id = reader.u16()
 
       # Only handle the measurement packets
       if report_id == 0x0500:
-        (
-          seq,
-          seq_len,
-          signal_wl_nm,
-          reference_wl_nm,
-          duration_ms,
-          *row,
-          flags,
-          progress,
-        ) = struct.unpack("<BBhhI12fBB", chunk[2:-2])
+        seq = reader.u8()
+        seq_len = reader.u8()
+        _ = reader.i16()  # signal_wl_nm
+        _ = reader.i16()  # reference_wl_nm
+        _ = reader.u32()  # duration_ms
+        row = [reader.f32() for _ in range(12)]
+        _ = reader.u8()  # flags
+        _ = reader.u8()  # progress
 
         rows.extend(row)
 
@@ -319,37 +310,44 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
   ) -> List[Dict]:
     """integration_time: in seconds, default 2 s"""
 
+    # SUPPORTED_REPORTS_IN (0x0010)
     await self.send_command(
-      report_id=0x0010,  # SUPPORTED_REPORTS_IN
-      payload_fmt="<BB29H",
-      # "seq", "seq_len", "ids"
-      payload=[0, 0, *([0] * 29)],
+      report_id=0x0010,
+      payload=b"\x00" * 60,  # seq, seq_len, ids[29]
       wait_for_response=False,
     )
 
+    # DEVICE_DATA_READ_IN (0x0200)
+    payload2 = (
+      Writer()
+      .u16(7)  # field_index
+      .u8(0)  # flags
+      .raw_bytes(b"\x00" * 52)  # data
+      .finish()
+    )
     await self.send_command(
-      report_id=0x0200,  # DEVICE_DATA_READ_IN
-      payload_fmt="<HB52s",
-      # field_index", "flags", "data"
-      payload=[7, 0, b"\x00" * 52],
+      report_id=0x0200,
+      payload=payload2,
       wait_for_response=False,
     )
 
+    # LUM_TRIGGER_MEASUREMENT_OUT (0x0340)
+    payload3 = (
+      Writer()
+      .i32(int(integration_time * 1000 * 1000))  # integration_time_us
+      .raw_bytes(b"\xff" * 12)  # channels_selected
+      .u8(0)  # is_reference_measurement
+      .u8(0)  # flags
+      .finish()
+    )
     await self.send_command(
-      report_id=0x0340,  # LUM_TRIGGER_MEASUREMENT_OUT
-      payload_fmt="<i12sBB",
-      # "integration_time_us", "channels_selected", "is_reference_measurement", "flags",
-      payload=[
-        int(integration_time * 1000 * 1000),
-        b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
-        0,
-        0,
-      ],
+      report_id=0x0340,
+      payload=payload3,
       wait_for_response=False,
     )
 
     t0 = time.time()
-    all_rows = []
+    all_rows: List[float] = []
 
     while True:
       if time.time() - t0 > 120:  # read for 2 minutes max. typical is 1m5s.
@@ -359,14 +357,19 @@ class ByonoyLuminescence96AutomateBackend(_ByonoyBase):
       if len(chunk) == 0:
         continue
 
-      report_id, *_ = struct.unpack("<H", chunk[:2])
+      reader = Reader(chunk)
+      report_id = reader.u16()
 
       if report_id == 0x0600:  # REP_LUM96_MEASUREMENT_IN
-        seq, seq_len, integration_time_us, duration_ms, *row, flags, progress = struct.unpack(
-          "<BBII12fBB", chunk[2:-2]
-        )
+        seq = reader.u8()
+        seq_len = reader.u8()
+        _ = reader.u32()  # integration_time_us
+        _ = reader.u32()  # duration_ms
+        row = [reader.f32() for _ in range(12)]
+        _ = reader.u8()  # flags
+        _ = reader.u8()  # progress
+
         all_rows.extend(row)
-        _, _, _, _, _ = integration_time_us, duration_ms, row, flags, progress
 
         if seq == seq_len - 1:
           break
