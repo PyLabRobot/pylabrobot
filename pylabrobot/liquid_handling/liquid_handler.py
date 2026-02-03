@@ -106,6 +106,7 @@ class LiquidHandler(Resource, Machine):
     backend: LiquidHandlerBackend,
     deck: Deck,
     default_offset_head96: Optional[Coordinate] = None,
+    name: Optional[str] = None,
   ):
     """Initialize a LiquidHandler.
 
@@ -113,11 +114,12 @@ class LiquidHandler(Resource, Machine):
       backend: Backend to use.
       deck: Deck to use.
       default_offset_head96: Base offset applied to all 96-head operations.
+      name: Name of the liquid handler. If not provided, defaults to ``lh_{deck.name}``.
     """
 
     Resource.__init__(
       self,
-      name=f"lh_{deck.name}",
+      name=name if name is not None else f"lh_{deck.name}",
       size_x=deck._size_x,
       size_y=deck._size_y,
       size_z=deck._size_z,
