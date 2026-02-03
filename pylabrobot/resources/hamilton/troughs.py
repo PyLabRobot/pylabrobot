@@ -102,19 +102,21 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
 
 _hamilton_1_trough_120ml_Vb_height_to_volume_measurements = {
   0.0: 0.0,
-  2.2: 500.0,
-  3.5: 1_000.0,
-  4.7: 2_000.0,
-  5.6: 3_000.0,
-  6.3: 4_000.0,
-  10.4: 10_000.0,
-  18.0: 20_000.0,
-  25.3: 30_000.0,
-  35.6: 40_000.0,
-  45.7: 60_000.0,
-  58.5: 80_000.0,
-  70.5: 100_000.0,
-  80.5: 120_000.0,
+  5.85: 4_000.0,
+  6.3: 6_000.0,
+  6.98: 8_000.0,
+  7.72: 10_000.0,
+  8.48: 12_000.0,
+  9.82: 15_000.0,
+  13.05: 20_000.0,
+  18.25: 30_000.0,
+  23.29: 40_000.0,
+  33.07: 60_000.0,
+  42.42: 80_000.0,
+  51.55: 100_000.0,
+  61.87: 120_000.0,
+  70.62: 140_000.0,
+  80.0: 160_000.0,
 }
 _hamilton_1_trough_120ml_Vb_volume_to_height_measurements = {
   v: k for k, v in _hamilton_1_trough_120ml_Vb_height_to_volume_measurements.items()
@@ -152,10 +154,10 @@ def _compute_height_from_volume_hamilton_1_trough_120ml_Vb(volume_ul: float) -> 
 
 
 def hamilton_1_trough_120ml_Vb(name: str) -> Trough:
-  """Hamilton cat. no.: ??? (white/translucent)
-  Trough 120 mL, w lid, self standing (V-bottom).
+  """Hamilton cat. no.: 194052 (white/translucent)
+  Trough 120 mL, without lid, self standing (V-bottom).
   True maximal volume capacity ~120 mL.
-  Compatible with Trough_CAR_?? (??? <- not yet integrated into PLR!).
+  Compatible with Trough_CAR_?? (194058 <- not yet integrated into PLR!).
   """
   warnings.warn(
     "hamilton_1_trough_120ml_Vb has 3 (!) in-container support beams that can interfere with "
@@ -168,8 +170,8 @@ def hamilton_1_trough_120ml_Vb(name: str) -> Trough:
     size_x=19.0,
     size_y=142.5,
     size_z=80.0,
-    material_z_thickness=1.58,
-    through_base_to_container_base=1.0,
+    material_z_thickness=1.54, # ztouch measured
+    through_base_to_container_base=1.1, # ztouch measured
     max_volume=120_000,  # units: µL
     model=hamilton_1_trough_120ml_Vb.__name__,
     bottom_type=TroughBottomType.V,
