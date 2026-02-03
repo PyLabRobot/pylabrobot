@@ -37,6 +37,7 @@ var canvasWidth, canvasHeight;
 var activeTool = "cursor"; // "cursor" or "coords"
 var wrtHighlightCircle;
 var resHighlightBullseye;
+var deltaLinesGroup = null; // Konva.Group for Δ lines between resource and wrt bullseyes
 
 function buildWrtDropdown() {
   var wrtSelect = document.getElementById("coords-wrt-ref");
@@ -100,6 +101,154 @@ function updateWrtBullseyeScale() {
   resourceLayer.draw();
 }
 
+function updateTooltipScale() {
+  if (!tooltip) return;
+  var ts = Math.pow(1 / Math.abs(stage.scaleX()), 0.97);
+  tooltip.scaleX(ts);
+  tooltip.scaleY(-ts);
+}
+
+function clearDeltaLines() {
+  if (deltaLinesGroup) { deltaLinesGroup.destroy(); deltaLinesGroup = null; }
+  resourceLayer.draw();
+}
+
+function updateDeltaLinesScale() {
+  if (!deltaLinesGroup) return;
+  var s = Math.pow(1 / Math.abs(stage.scaleX()), 0.95);
+  deltaLinesGroup.getChildren().forEach(function (child) {
+    if (child.getClassName() === "Label") {
+      child.scaleY(-s);
+      child.scaleX(s);
+    } else if (child.getClassName() === "Line") {
+      child.strokeWidth(child._baseStrokeWidth * s);
+      child.dash([14 * s, 6 * s]);
+    }
+  });
+  resourceLayer.draw();
+}
+
+function drawDeltaLines(resource) {
+  if (deltaLinesGroup) { deltaLinesGroup.destroy(); deltaLinesGroup = null; }
+  if (!resource || activeTool !== "coords") return;
+  var toggle = document.getElementById("delta-lines-toggle");
+  if (toggle && !toggle.checked) return;
+
+  // Get WRT bullseye position
+  var wrtRef = document.getElementById("coords-wrt-ref");
+  var wrtName = wrtRef ? wrtRef.value : null;
+  var wrtRes = wrtName ? resources[wrtName] : null;
+  if (!wrtRes) return;
+  var wrtAbs = wrtRes.getAbsoluteLocation();
+  var wrtOff = getWrtAnchorOffset(wrtRes);
+  var wx = wrtAbs.x + wrtOff.x;
+  var wy = wrtAbs.y + wrtOff.y;
+
+  // Get resource bullseye position
+  var abs = resource.getAbsoluteLocation();
+  var xRef = document.getElementById("coords-x-ref");
+  var yRef = document.getElementById("coords-y-ref");
+  var xOff = !xRef || xRef.value === "left" ? 0 : xRef.value === "center" ? resource.size_x / 2 : resource.size_x;
+  var yOff = !yRef || yRef.value === "front" ? 0 : yRef.value === "center" ? resource.size_y / 2 : resource.size_y;
+  var rx = abs.x + xOff;
+  var ry = abs.y + yOff;
+
+  var dx = rx - wx;
+  var dy = ry - wy;
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+
+  deltaLinesGroup = new Konva.Group({ listening: false });
+  var s = Math.pow(1 / Math.abs(stage.scaleX()), 0.95);
+  var xColor = "#dc3545"; // matches x-axis legend
+  var yColor = "#198754"; // matches y-axis legend
+  var xHalo = "#EE8866";
+  var yHalo = "#BBCC33";
+  var corner = { x: rx, y: wy }; // L-shape corner
+
+  // Halo lines (thicker, behind main lines)
+  var xHaloLine = new Konva.Line({
+    points: [wx, wy, corner.x, corner.y],
+    stroke: xHalo, strokeWidth: 8 * s, dash: [14 * s, 6 * s], opacity: 0.4,
+  });
+  xHaloLine._baseStrokeWidth = 8;
+  deltaLinesGroup.add(xHaloLine);
+
+  var yHaloLine = new Konva.Line({
+    points: [corner.x, corner.y, rx, ry],
+    stroke: yHalo, strokeWidth: 8 * s, dash: [14 * s, 6 * s], opacity: 0.4,
+  });
+  yHaloLine._baseStrokeWidth = 8;
+  deltaLinesGroup.add(yHaloLine);
+
+  // Main horizontal line (Δx): wrt → corner
+  var xLine = new Konva.Line({
+    points: [wx, wy, corner.x, corner.y],
+    stroke: xColor, strokeWidth: 3 * s, dash: [14 * s, 6 * s],
+  });
+  xLine._baseStrokeWidth = 3;
+  deltaLinesGroup.add(xLine);
+
+  // Main vertical line (Δy): corner → resource
+  var yLine = new Konva.Line({
+    points: [corner.x, corner.y, rx, ry],
+    stroke: yColor, strokeWidth: 3 * s, dash: [14 * s, 6 * s],
+  });
+  yLine._baseStrokeWidth = 3;
+  deltaLinesGroup.add(yLine);
+
+  // Δx label at midpoint of horizontal line
+  var dxLabel = new Konva.Label({
+    x: (wx + corner.x) / 2,
+    y: wy,
+  });
+  dxLabel.add(new Konva.Tag({
+    fill: "white",
+    opacity: 0.85,
+    cornerRadius: 3,
+  }));
+  dxLabel.add(new Konva.Text({
+    text: "\u0394x=" + dx.toFixed(1),
+    fontSize: 18,
+    fill: xColor,
+    fontStyle: "bold",
+    fontFamily: "Arial",
+    padding: 3,
+  }));
+  dxLabel.offsetX(dxLabel.width() / 2);
+  dxLabel.offsetY(-4);
+  dxLabel.scaleY(-s);
+  dxLabel.scaleX(s);
+  deltaLinesGroup.add(dxLabel);
+
+  // Δy label at midpoint of vertical line
+  var dyLabel = new Konva.Label({
+    x: rx,
+    y: (wy + ry) / 2,
+  });
+  dyLabel.add(new Konva.Tag({
+    fill: "white",
+    opacity: 0.85,
+    cornerRadius: 3,
+  }));
+  dyLabel.add(new Konva.Text({
+    text: "\u0394y=" + dy.toFixed(1),
+    fontSize: 18,
+    fill: yColor,
+    fontStyle: "bold",
+    fontFamily: "Arial",
+    padding: 3,
+  }));
+  dyLabel.offsetY(dyLabel.height() / 2);
+  dyLabel.offsetX(-6);
+  dyLabel.scaleY(-s);
+  dyLabel.scaleX(s);
+  deltaLinesGroup.add(dyLabel);
+
+  resourceLayer.add(deltaLinesGroup);
+  deltaLinesGroup.moveToTop();
+  resourceLayer.draw();
+}
+
 function updateWrtHighlight() {
   if (wrtHighlightCircle) { wrtHighlightCircle.destroy(); wrtHighlightCircle = undefined; }
   if (activeTool !== "coords") return;
@@ -115,7 +264,7 @@ function updateWrtHighlight() {
   var barH = r * 1.0125;
   var wrtHaloColor = "#DDDDDD";
   var wrtHaloExtra = 4;
-  wrtHighlightCircle = new Konva.Group({ x: cx, y: cy });
+  wrtHighlightCircle = new Konva.Group({ x: cx, y: cy, listening: false });
   // Halo: blurred duplicate behind
   var wrtHaloGroup = new Konva.Group({ opacity: 0.5 });
   wrtHaloGroup.filters([Konva.Filters.Blur]);
@@ -174,6 +323,8 @@ function updateWrtHighlight() {
   resourceLayer.add(wrtHighlightCircle);
   wrtHighlightCircle.moveToTop();
   updateWrtBullseyeScale();
+  updateTooltipScale();
+  updateDeltaLinesScale();
 }
 
 function updateBullseyeScale() {
@@ -206,7 +357,7 @@ function showResHighlightBullseye(resource) {
   var color = "#99DDFF";
   var haloColor = "#BBCC33";
   // Position group at bullseye center; draw elements relative to (0,0)
-  resHighlightBullseye = new Konva.Group({ x: cx, y: cy });
+  resHighlightBullseye = new Konva.Group({ x: cx, y: cy, listening: false });
   // Halo: blurred, thicker duplicate of every element behind the bullseye
   var haloExtra = 4;
   var haloOpacity = 0.5;
@@ -366,6 +517,8 @@ function fitToViewport() {
   if (typeof updateScaleBar === "function") updateScaleBar();
   updateBullseyeScale();
   updateWrtBullseyeScale();
+  updateTooltipScale();
+  updateDeltaLinesScale();
 }
 
 let trash;
@@ -653,7 +806,7 @@ class Resource {
         }
         tooltip = new Konva.Label({
           x: x + this.size_x / 2,
-          y: y + this.size_y / 2,
+          y: y + this.size_y / 2 + (activeTool === "coords" ? this.size_y * 0.25 : 0),
           opacity: 0.75,
         });
         tooltip.add(
@@ -673,12 +826,15 @@ class Resource {
           new Konva.Text({
             text: labelText,
             fontFamily: "Arial",
-            fontSize: activeTool === "coords" ? 14 : 18,
+            fontSize: activeTool === "coords" ? 17.5 : 21.4,
+            lineHeight: activeTool === "coords" ? 1.6 : 1.2,
             padding: 5,
             fill: "white",
           })
         );
-        tooltip.scaleY(-1);
+        var ts = Math.pow(1 / Math.abs(stage.scaleX()), 0.97);
+        tooltip.scaleX(ts);
+        tooltip.scaleY(-ts);
         layer.add(tooltip);
         if (typeof highlightSidebarRow === "function") {
           highlightSidebarRow(this.name);
@@ -686,6 +842,7 @@ class Resource {
         if (activeTool === "coords") {
           updateCoordsPanel(this);
           showResHighlightBullseye(this);
+          drawDeltaLines(this);
         }
       });
       this.mainShape.on("click", () => {
@@ -787,6 +944,7 @@ class Resource {
       this.mainShape.on("mouseout", () => {
         tooltip.destroy();
         showResHighlightBullseye(null);
+        clearDeltaLines();
         if (typeof clearSidebarHighlight === "function") {
           clearSidebarHighlight();
         }
@@ -958,14 +1116,15 @@ class HamiltonSTARDeck extends Deck {
 
       // Add a text label every 5 rails. Rails are 1-indexed.
       // Keep in mind that the stage is flipped vertically.
-      if ((i + 1) % 5 === 0) {
+      if ((i + 1) % 5 === 0 || i === 0) {
         const railLabel = new Konva.Text({
-          x: 100 + i * 22.5, // 22.5 mm per rail
+          x: 100 + i * 22.5 + 11.25, // center of rail (between lines)
           y: 50,
           text: i + 1,
-          fontSize: 12,
+          fontSize: 15,
           fill: "black",
         });
+        railLabel.offsetX(railLabel.width() / 2);
         railLabel.scaleY(-1); // Flip the text vertically
         mainShape.add(railLabel);
       }
@@ -1031,14 +1190,15 @@ class VantageDeck extends Deck {
       });
       mainShape.add(rail);
 
-      if ((i + 1) % 5 === 0) {
+      if ((i + 1) % 5 === 0 || i === 0) {
         const railLabel = new Konva.Text({
-          x: railX,
+          x: railX + 11.25, // center of rail (between lines)
           y: 50,
           text: i + 1,
-          fontSize: 12,
+          fontSize: 15,
           fill: "black",
         });
+        railLabel.offsetX(railLabel.width() / 2);
         railLabel.scaleY(-1);
         mainShape.add(railLabel);
       }
@@ -1747,10 +1907,36 @@ function fillHeadIcons(panel, headState) {
       var botW = (tipData.total_tip_length > 50) ? 2 : 1;
       var botL = 7 - botW / 2;
       var botR = 7 + botW / 2;
-      tipG.innerHTML =
+      var tipShapes =
         '<rect x="1.5" y="' + collarY + '" width="11" height="' + collarH + '" rx="0.5" ry="0.5" fill="#c8c8c8" fill-opacity="0.5" stroke="#888" stroke-width="0.8"/>' +
         '<rect x="3" y="' + bodyStart + '" width="8" height="' + straightH + '" rx="1" ry="1" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>' +
         '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' ' + botR + ',' + tipEnd + ' ' + botL + ',' + tipEnd + '" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>';
+      // Volume fill overlay
+      var fillSvg = "";
+      var chTipState = (headState[ch] || {}).tip_state;
+      var fillRatio = 0;
+      if (chTipState && chTipState.max_volume > 0) {
+        fillRatio = Math.min(1, (chTipState.volume || 0) / chTipState.max_volume);
+      }
+      if (fillRatio > 0) {
+        var totalFillableH = straightH + taperH;
+        var fillH = fillRatio * totalFillableH;
+        var fillColor = "rgba(0,119,187,0.45)";
+        if (fillH <= taperH) {
+          var widthAtFill = botW + (8 - botW) * (fillH / taperH);
+          var leftX = 7 - widthAtFill / 2;
+          var rightX = 7 + widthAtFill / 2;
+          var fillTop = tipEnd - fillH;
+          fillSvg = '<polygon points="' + botL + ',' + tipEnd + ' ' + botR + ',' + tipEnd + ' ' + rightX + ',' + fillTop + ' ' + leftX + ',' + fillTop + '" fill="' + fillColor + '" stroke="none"/>';
+        } else {
+          var bodyFillH = fillH - taperH;
+          var bodyFillY = straightEnd - bodyFillH;
+          fillSvg =
+            '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' ' + botR + ',' + tipEnd + ' ' + botL + ',' + tipEnd + '" fill="' + fillColor + '" stroke="none"/>' +
+            '<rect x="3" y="' + bodyFillY + '" width="8" height="' + bodyFillH + '" fill="' + fillColor + '" stroke="none"/>';
+        }
+      }
+      tipG.innerHTML = tipShapes + fillSvg;
       var tipTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
       tipTitle.textContent = "Tip on channel " + ch + " — click for details";
       tipG.appendChild(tipTitle);
@@ -2471,7 +2657,7 @@ window.addEventListener("load", function () {
     const newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy;
 
     // Clamp zoom level
-    const clampedScale = Math.max(0.1, Math.min(15, newScale));
+    const clampedScale = Math.max(0.1, Math.min(30, newScale));
 
     stage.scaleX(clampedScale);
     stage.scaleY(-clampedScale); // keep Y flipped
@@ -2484,6 +2670,8 @@ window.addEventListener("load", function () {
     updateScaleBar();
     updateBullseyeScale();
     updateWrtBullseyeScale();
+    updateTooltipScale();
+    updateDeltaLinesScale();
   });
 
   updateScaleBar();
@@ -2529,6 +2717,8 @@ window.addEventListener("load", function () {
     if (typeof updateScaleBar === "function") updateScaleBar();
     updateBullseyeScale();
     updateWrtBullseyeScale();
+    updateTooltipScale();
+    updateDeltaLinesScale();
   }
 
   var zoomInBtn = document.getElementById("zoom-in-btn");
@@ -3411,6 +3601,8 @@ function focusOnResource(resourceName) {
   if (typeof updateScaleBar === "function") updateScaleBar();
   updateBullseyeScale();
   updateWrtBullseyeScale();
+  updateTooltipScale();
+  updateDeltaLinesScale();
   stage.batchDraw();
 
   // Also highlight the resource
@@ -3559,7 +3751,10 @@ window.addEventListener("load", function () {
     if (gifBtn) gifBtn.classList.toggle("active", tool === "gif");
     if (coordsPanel) coordsPanel.style.display = tool === "coords" ? "" : "none";
     if (gifPanel) gifPanel.style.display = tool === "gif" ? "" : "none";
-    if (tool !== "coords") updateCoordsPanel(null);
+    if (tool !== "coords") {
+      updateCoordsPanel(null);
+    }
+    clearDeltaLines();
     updateWrtHighlight();
   }
   if (cursorBtn) cursorBtn.addEventListener("click", function () { setActiveTool("cursor"); });
