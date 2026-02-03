@@ -75,6 +75,8 @@ class Resource:
     category: The category of the resource, e.g. `tips`, `plate_carrier`, etc.
     model: The model of the resource (optional).
     barcode: The barcode of the resource (optional).
+    preferred_pickup_location: The location where the center of the gripper should be when picking
+      up this resource, relative to the resource's origin (optional).
   """
 
   def __init__(
@@ -87,6 +89,7 @@ class Resource:
     category: Optional[str] = None,
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
+    preferred_pickup_location: Optional[Coordinate] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -97,6 +100,7 @@ class Resource:
     self.category = category
     self.model = model
     self.barcode = barcode
+    self.preferred_pickup_location = preferred_pickup_location
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
@@ -132,6 +136,7 @@ class Resource:
       "category": self.category,
       "model": self.model,
       "barcode": self.barcode.serialize() if self.barcode is not None else None,
+      "preferred_pickup_location": serialize(self.preferred_pickup_location),
       "children": [child.serialize() for child in self.children],
       "parent_name": self.parent.name if self.parent is not None else None,
     }
