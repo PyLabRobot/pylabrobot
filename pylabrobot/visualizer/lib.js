@@ -808,6 +808,7 @@ class Resource {
           x: x + this.size_x / 2,
           y: y + this.size_y / 2 + (activeTool === "coords" ? this.size_y * 0.25 : 0),
           opacity: 0.75,
+          listening: false,
         });
         tooltip.add(
           new Konva.Tag({
