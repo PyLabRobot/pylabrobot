@@ -86,6 +86,20 @@ function updateCoordsPanel(resource) {
   // No-op; dropdown is built once via buildWrtDropdown.
 }
 
+function updateWrtBullseyeScale() {
+  if (!wrtHighlightCircle) return;
+  var s = Math.pow(1 / Math.abs(stage.scaleX()), 0.95);
+  wrtHighlightCircle.scaleX(s);
+  wrtHighlightCircle.scaleY(s);
+  var haloGroup = wrtHighlightCircle.getChildren()[0];
+  if (haloGroup && haloGroup.clearCache) {
+    var r = 9.2, barH = r * 1.0125;
+    var pad = 20 / s;
+    haloGroup.cache({ x: -r - barH - pad, y: -r - barH - pad, width: (r + barH) * 2 + pad * 2, height: (r + barH) * 2 + pad * 2 });
+  }
+  resourceLayer.draw();
+}
+
 function updateWrtHighlight() {
   if (wrtHighlightCircle) { wrtHighlightCircle.destroy(); wrtHighlightCircle = undefined; }
   if (activeTool !== "coords") return;
@@ -101,64 +115,79 @@ function updateWrtHighlight() {
   var barH = r * 1.0125;
   var wrtHaloColor = "#DDDDDD";
   var wrtHaloExtra = 4;
-  wrtHighlightCircle = new Konva.Group();
+  wrtHighlightCircle = new Konva.Group({ x: cx, y: cy });
   // Halo: blurred duplicate behind
   var wrtHaloGroup = new Konva.Group({ opacity: 0.5 });
   wrtHaloGroup.filters([Konva.Filters.Blur]);
   wrtHaloGroup.blurRadius(6);
   wrtHaloGroup.add(new Konva.Circle({
-    x: cx, y: cy, radius: r,
+    x: 0, y: 0, radius: r,
     fill: "transparent", stroke: wrtHaloColor, strokeWidth: 4.32 + wrtHaloExtra * 2,
   }));
   wrtHaloGroup.add(new Konva.Circle({
-    x: cx, y: cy, radius: 2.4 + wrtHaloExtra / 2,
+    x: 0, y: 0, radius: 2.4 + wrtHaloExtra / 2,
     fill: wrtHaloColor,
   }));
   wrtHaloGroup.add(new Konva.Line({
-    points: [cx - r - barH, cy, cx - r, cy],
+    points: [-r - barH, 0, -r, 0],
     stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
   }));
   wrtHaloGroup.add(new Konva.Line({
-    points: [cx + r, cy, cx + r + barH, cy],
+    points: [r, 0, r + barH, 0],
     stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
   }));
   wrtHaloGroup.add(new Konva.Line({
-    points: [cx, cy - r - barH, cx, cy - r],
+    points: [0, -r - barH, 0, -r],
     stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
   }));
   wrtHaloGroup.add(new Konva.Line({
-    points: [cx, cy + r, cx, cy + r + barH],
+    points: [0, r, 0, r + barH],
     stroke: wrtHaloColor, strokeWidth: 3.6 + wrtHaloExtra * 2,
   }));
-  wrtHaloGroup.cache({ x: cx - r - barH - 20, y: cy - r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
+  wrtHaloGroup.cache({ x: -r - barH - 20, y: -r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
   wrtHighlightCircle.add(wrtHaloGroup);
   // Main bullseye on top
   wrtHighlightCircle.add(new Konva.Circle({
-    x: cx, y: cy, radius: r,
+    x: 0, y: 0, radius: r,
     fill: "transparent", stroke: "#FFAABB", strokeWidth: 4.32,
   }));
   wrtHighlightCircle.add(new Konva.Circle({
-    x: cx, y: cy, radius: 2.4,
+    x: 0, y: 0, radius: 2.4,
     fill: "#FFAABB", opacity: 0.85,
   }));
   wrtHighlightCircle.add(new Konva.Line({
-    points: [cx - r - barH, cy, cx - r, cy],
+    points: [-r - barH, 0, -r, 0],
     stroke: "#FFAABB", strokeWidth: 3.6,
   }));
   wrtHighlightCircle.add(new Konva.Line({
-    points: [cx + r, cy, cx + r + barH, cy],
+    points: [r, 0, r + barH, 0],
     stroke: "#FFAABB", strokeWidth: 3.6,
   }));
   wrtHighlightCircle.add(new Konva.Line({
-    points: [cx, cy - r - barH, cx, cy - r],
+    points: [0, -r - barH, 0, -r],
     stroke: "#FFAABB", strokeWidth: 3.6,
   }));
   wrtHighlightCircle.add(new Konva.Line({
-    points: [cx, cy + r, cx, cy + r + barH],
+    points: [0, r, 0, r + barH],
     stroke: "#FFAABB", strokeWidth: 3.6,
   }));
   resourceLayer.add(wrtHighlightCircle);
   wrtHighlightCircle.moveToTop();
+  updateWrtBullseyeScale();
+}
+
+function updateBullseyeScale() {
+  if (!resHighlightBullseye) return;
+  var s = Math.pow(1 / Math.abs(stage.scaleX()), 0.95);
+  resHighlightBullseye.scaleX(s);
+  resHighlightBullseye.scaleY(s);
+  // Re-cache halo for blur filter at new scale
+  var haloGroup = resHighlightBullseye.getChildren()[0];
+  if (haloGroup && haloGroup.clearCache) {
+    var r = 9.2, barH = r * 1.0125;
+    var pad = 20 / s;
+    haloGroup.cache({ x: -r - barH - pad, y: -r - barH - pad, width: (r + barH) * 2 + pad * 2, height: (r + barH) * 2 + pad * 2 });
+  }
   resourceLayer.draw();
 }
 
@@ -176,7 +205,8 @@ function showResHighlightBullseye(resource) {
   var barH = r * 1.0125;
   var color = "#99DDFF";
   var haloColor = "#BBCC33";
-  resHighlightBullseye = new Konva.Group();
+  // Position group at bullseye center; draw elements relative to (0,0)
+  resHighlightBullseye = new Konva.Group({ x: cx, y: cy });
   // Halo: blurred, thicker duplicate of every element behind the bullseye
   var haloExtra = 4;
   var haloOpacity = 0.5;
@@ -185,62 +215,62 @@ function showResHighlightBullseye(resource) {
   });
   haloGroup.filters([Konva.Filters.Blur]);
   haloGroup.blurRadius(6);
-  haloGroup.cache({ x: cx - r - barH - 20, y: cy - r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
   haloGroup.add(new Konva.Circle({
-    x: cx, y: cy, radius: r,
+    x: 0, y: 0, radius: r,
     fill: "transparent", stroke: haloColor, strokeWidth: 4.32 + haloExtra * 2,
   }));
   haloGroup.add(new Konva.Circle({
-    x: cx, y: cy, radius: 2.4 + haloExtra / 2,
+    x: 0, y: 0, radius: 2.4 + haloExtra / 2,
     fill: haloColor,
   }));
   haloGroup.add(new Konva.Line({
-    points: [cx - r - barH, cy, cx - r, cy],
+    points: [-r - barH, 0, -r, 0],
     stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
   }));
   haloGroup.add(new Konva.Line({
-    points: [cx + r, cy, cx + r + barH, cy],
+    points: [r, 0, r + barH, 0],
     stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
   }));
   haloGroup.add(new Konva.Line({
-    points: [cx, cy - r - barH, cx, cy - r],
+    points: [0, -r - barH, 0, -r],
     stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
   }));
   haloGroup.add(new Konva.Line({
-    points: [cx, cy + r, cx, cy + r + barH],
+    points: [0, r, 0, r + barH],
     stroke: haloColor, strokeWidth: 3.6 + haloExtra * 2,
   }));
   // Must cache after adding children for blur filter to work
-  haloGroup.cache({ x: cx - r - barH - 20, y: cy - r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
+  haloGroup.cache({ x: -r - barH - 20, y: -r - barH - 20, width: (r + barH) * 2 + 40, height: (r + barH) * 2 + 40 });
   resHighlightBullseye.add(haloGroup);
   // Main bullseye on top
   resHighlightBullseye.add(new Konva.Circle({
-    x: cx, y: cy, radius: r,
+    x: 0, y: 0, radius: r,
     fill: "transparent", stroke: color, strokeWidth: 4.32,
   }));
   resHighlightBullseye.add(new Konva.Circle({
-    x: cx, y: cy, radius: 2.4,
+    x: 0, y: 0, radius: 2.4,
     fill: color, opacity: 0.85,
   }));
   resHighlightBullseye.add(new Konva.Line({
-    points: [cx - r - barH, cy, cx - r, cy],
+    points: [-r - barH, 0, -r, 0],
     stroke: color, strokeWidth: 3.6,
   }));
   resHighlightBullseye.add(new Konva.Line({
-    points: [cx + r, cy, cx + r + barH, cy],
+    points: [r, 0, r + barH, 0],
     stroke: color, strokeWidth: 3.6,
   }));
   resHighlightBullseye.add(new Konva.Line({
-    points: [cx, cy - r - barH, cx, cy - r],
+    points: [0, -r - barH, 0, -r],
     stroke: color, strokeWidth: 3.6,
   }));
   resHighlightBullseye.add(new Konva.Line({
-    points: [cx, cy + r, cx, cy + r + barH],
+    points: [0, r, 0, r + barH],
     stroke: color, strokeWidth: 3.6,
   }));
   resourceLayer.add(resHighlightBullseye);
   resHighlightBullseye.moveToTop();
-  resourceLayer.draw();
+  // Apply inverse scale so bullseye appears constant size
+  updateBullseyeScale();
 }
 
 function getAncestorAtDepth(resource, depth) {
@@ -334,6 +364,8 @@ function fitToViewport() {
   stage.y(centerY);
 
   if (typeof updateScaleBar === "function") updateScaleBar();
+  updateBullseyeScale();
+  updateWrtBullseyeScale();
 }
 
 let trash;
@@ -1642,6 +1674,7 @@ function fillHeadIcons(panel, headState) {
     label.style.color = "#888";
     label.style.marginBottom = "2px";
     label.style.cursor = "pointer";
+    label.title = "Channel " + ch + " — click for details";
     (function (ch) {
       label.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -1693,6 +1726,9 @@ function fillHeadIcons(panel, headState) {
       '<rect x="2" y="20" width="10" height="4" rx="2" ry="2" fill="#b0b0b0"/>' +
       '<ellipse cx="7" cy="20" rx="5" ry="1.5" fill="#ccc"/>' +
       '<ellipse cx="7" cy="24" rx="5" ry="1.5" fill="#999"/>';
+    var channelTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    channelTitle.textContent = "Channel " + ch + " — click for details";
+    channelG.appendChild(channelTitle);
     icon.appendChild(channelG);
     if (hasTip) {
       var collarH = 6.5;
@@ -1715,6 +1751,9 @@ function fillHeadIcons(panel, headState) {
         '<rect x="1.5" y="' + collarY + '" width="11" height="' + collarH + '" rx="0.5" ry="0.5" fill="#c8c8c8" fill-opacity="0.5" stroke="#888" stroke-width="0.8"/>' +
         '<rect x="3" y="' + bodyStart + '" width="8" height="' + straightH + '" rx="1" ry="1" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>' +
         '<polygon points="3,' + straightEnd + ' 11,' + straightEnd + ' ' + botR + ',' + tipEnd + ' ' + botL + ',' + tipEnd + '" fill="#d0d0d0" stroke="#888" stroke-width="0.8"/>';
+      var tipTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      tipTitle.textContent = "Tip on channel " + ch + " — click for details";
+      tipG.appendChild(tipTitle);
       (function (ch) {
         tipG.addEventListener("click", function (e) {
           e.stopPropagation();
@@ -1796,6 +1835,7 @@ function fillHead96Grid(panel, head96State) {
     box.style.padding = "6px";
     box.style.background = "#444";
     box.style.cursor = "pointer";
+    box.title = "96-head pipette — click for details";
     box.onmouseover = function () { box.style.boxShadow = "0 0 8px 3px rgba(68, 187, 153, 0.5), 0 0 20px 6px rgba(68, 187, 153, 0.25)"; };
     box.onmouseout = function () { box.style.boxShadow = "none"; };
     (function (startCh, head96State) {
@@ -2018,6 +2058,9 @@ function buildSingleArm(armData, anchorDropdown, armId) {
   var gripperG = document.createElementNS("http://www.w3.org/2000/svg", "g");
   gripperG.innerHTML = shapes;
   gripperG.style.cursor = "pointer";
+  var gripperTitle = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  gripperTitle.textContent = "Arm " + armId + (hasResource ? " — holding " + armData.resource_name : " — empty") + " — click for details";
+  gripperG.appendChild(gripperTitle);
   gripperG.addEventListener("mouseenter", function () { gripperG.setAttribute("filter", "url(#armGlow)"); });
   gripperG.addEventListener("mouseleave", function () { gripperG.removeAttribute("filter"); });
   gripperG.addEventListener("click", function (e) {
@@ -2171,6 +2214,7 @@ function fillArmPanel(panel, armState) {
       idLabel.style.fontWeight = "700";
       idLabel.style.color = "#888";
       idLabel.style.marginBottom = "2px";
+      idLabel.title = "Arm " + armId + " — click gripper for details";
       wrapper.appendChild(idLabel);
     }
     wrapper.appendChild(buildSingleArm(armState[armId], panel, armId));
@@ -2427,7 +2471,7 @@ window.addEventListener("load", function () {
     const newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy;
 
     // Clamp zoom level
-    const clampedScale = Math.max(0.1, Math.min(10, newScale));
+    const clampedScale = Math.max(0.1, Math.min(15, newScale));
 
     stage.scaleX(clampedScale);
     stage.scaleY(-clampedScale); // keep Y flipped
@@ -2438,6 +2482,8 @@ window.addEventListener("load", function () {
     };
     stage.position(newPos);
     updateScaleBar();
+    updateBullseyeScale();
+    updateWrtBullseyeScale();
   });
 
   updateScaleBar();
@@ -2464,6 +2510,31 @@ window.addEventListener("load", function () {
       setTimeout(function () { homeBtn.classList.remove("clicked"); }, 400);
     });
   }
+
+  // Zoom buttons
+  function zoomByFactor(factor) {
+    var oldScale = stage.scaleX();
+    var newScale = Math.max(0.1, Math.min(15, oldScale * factor));
+    var center = { x: stage.width() / 2, y: stage.height() / 2 };
+    var mousePointTo = {
+      x: (center.x - stage.x()) / oldScale,
+      y: (center.y - stage.y()) / stage.scaleY(),
+    };
+    stage.scaleX(newScale);
+    stage.scaleY(-newScale);
+    stage.position({
+      x: center.x - mousePointTo.x * newScale,
+      y: center.y - mousePointTo.y * (-newScale),
+    });
+    if (typeof updateScaleBar === "function") updateScaleBar();
+    updateBullseyeScale();
+    updateWrtBullseyeScale();
+  }
+
+  var zoomInBtn = document.getElementById("zoom-in-btn");
+  var zoomOutBtn = document.getElementById("zoom-out-btn");
+  if (zoomInBtn) zoomInBtn.addEventListener("click", function () { zoomByFactor(1.2); });
+  if (zoomOutBtn) zoomOutBtn.addEventListener("click", function () { zoomByFactor(1 / 1.2); });
 
   // Check if there is an after stage setup callback, and if so, call it.
   if (typeof afterStageSetup === "function") {
@@ -3338,6 +3409,8 @@ function focusOnResource(resourceName) {
   stage.y(centerY);
 
   if (typeof updateScaleBar === "function") updateScaleBar();
+  updateBullseyeScale();
+  updateWrtBullseyeScale();
   stage.batchDraw();
 
   // Also highlight the resource
@@ -4437,10 +4510,10 @@ function buildNavbarLHActuators() {
     armBtn.className = "navbar-pipette-btn";
     armBtn.id = "arm-btn-" + lhName;
     armBtn.style.display = (lhRes && lhRes.armState !== null && lhRes.armState !== undefined) ? "" : "none";
-    armBtn.title = "Integrated Arm";
+    armBtn.title = "Integrated Arms";
     var armImg = document.createElement("img");
     armImg.src = "img/integrated_arm.png";
-    armImg.alt = "Integrated Arm";
+    armImg.alt = "Integrated Arms";
     armImg.style.width = "44px";
     armImg.style.height = "44px";
     armImg.style.objectFit = "contain";
