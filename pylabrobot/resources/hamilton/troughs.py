@@ -95,12 +95,11 @@ def hamilton_1_trough_60ml_Vb(name: str) -> Trough:
   )
 
 
-
 # --------------------------------------------------------------------------- #
 # Hamilton 1-trough 120 mL (V-bottom)
 # --------------------------------------------------------------------------- #
 
-_hamilton_1_trough_120ml_Vb_height_to_volume_measurements = {
+_hamilton_1_trough_120mL_Vb_height_to_volume_measurements = {
   0.0: 0.0,
   5.85: 4_000.0,
   6.3: 6_000.0,
@@ -118,12 +117,12 @@ _hamilton_1_trough_120ml_Vb_height_to_volume_measurements = {
   70.62: 140_000.0,
   80.0: 160_000.0,
 }
-_hamilton_1_trough_120ml_Vb_volume_to_height_measurements = {
-  v: k for k, v in _hamilton_1_trough_120ml_Vb_height_to_volume_measurements.items()
+_hamilton_1_trough_120mL_Vb_volume_to_height_measurements = {
+  v: k for k, v in _hamilton_1_trough_120mL_Vb_height_to_volume_measurements.items()
 }
 
 
-def _compute_volume_from_height_hamilton_1_trough_120ml_Vb(h: float) -> float:
+def _compute_volume_from_height_hamilton_1_trough_120mL_Vb(h: float) -> float:
   """Estimate liquid volume (µL) from observed liquid height (mm)
   in the Hamilton 1-trough 120 mL (V-bottom, conductive),
   using piecewise linear interpolation.
@@ -134,12 +133,12 @@ def _compute_volume_from_height_hamilton_1_trough_120ml_Vb(h: float) -> float:
     raise ValueError(f"Height {h} is too large for hamilton_1_trough_120ml_Vb.")
 
   vol_ul = interpolate_1d(
-    h, _hamilton_1_trough_120ml_Vb_height_to_volume_measurements, bounds_handling="error"
+    h, _hamilton_1_trough_120mL_Vb_height_to_volume_measurements, bounds_handling="error"
   )
   return round(max(0.0, vol_ul), 3)
 
 
-def _compute_height_from_volume_hamilton_1_trough_120ml_Vb(volume_ul: float) -> float:
+def _compute_height_from_volume_hamilton_1_trough_120mL_Vb(volume_ul: float) -> float:
   """Estimate liquid height (mm) from known liquid volume (µL)
   in the Hamilton 1-trough 120 mL (V-bottom, conductive),
   using piecewise linear interpolation.
@@ -148,12 +147,12 @@ def _compute_height_from_volume_hamilton_1_trough_120ml_Vb(volume_ul: float) -> 
     raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
 
   h_mm = interpolate_1d(
-    volume_ul, _hamilton_1_trough_120ml_Vb_volume_to_height_measurements, bounds_handling="error"
+    volume_ul, _hamilton_1_trough_120mL_Vb_volume_to_height_measurements, bounds_handling="error"
   )
   return round(max(0.0, h_mm), 3)
 
 
-def hamilton_1_trough_120ml_Vb(name: str) -> Trough:
+def hamilton_1_trough_120mL_Vb(name: str) -> Trough:
   """Hamilton cat. no.: 194052 (white/translucent)
   Trough 120 mL, without lid, self standing (V-bottom).
   True maximal volume capacity ~120 mL.
@@ -170,13 +169,13 @@ def hamilton_1_trough_120ml_Vb(name: str) -> Trough:
     size_x=19.0,
     size_y=142.5,
     size_z=80.0,
-    material_z_thickness=1.54, # ztouch measured
-    through_base_to_container_base=1.1, # ztouch measured
+    material_z_thickness=1.54,  # ztouch measured
+    through_base_to_container_base=1.1,  # ztouch measured
     max_volume=120_000,  # units: µL
-    model=hamilton_1_trough_120ml_Vb.__name__,
+    model=hamilton_1_trough_120mL_Vb.__name__,
     bottom_type=TroughBottomType.V,
-    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_120ml_Vb,
-    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_120ml_Vb,
+    compute_volume_from_height=_compute_volume_from_height_hamilton_1_trough_120mL_Vb,
+    compute_height_from_volume=_compute_height_from_volume_hamilton_1_trough_120mL_Vb,
   )
 
 
