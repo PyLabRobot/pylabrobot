@@ -4265,7 +4265,8 @@ function buildNavbarLHModules() {
     // Label (styled as button without changing appearance)
     var label = document.createElement("button");
     label.className = "navbar-pipette-label";
-    label.innerHTML = lhName + "<br>Modules";
+    label.title = "Show/hide liquid handler actuators";
+    label.innerHTML = lhName + "<br>Actuators";
     group.appendChild(label);
 
     // Collapsible container for module buttons

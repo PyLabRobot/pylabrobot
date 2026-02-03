@@ -514,7 +514,7 @@ main {
 
 .tree-action-btn:hover {
   opacity: 1;
-  background: #dee2e6;
+  background: #99DDFF;
 }
 
 #collapse-all-btn {
@@ -535,6 +535,11 @@ main {
   color: #333;
   padding: 0 2px;
   -moz-appearance: textfield;
+  transition: background 0.15s ease;
+}
+
+.tree-depth-input:hover {
+  background: #99DDFF;
 }
 
 .tree-depth-input::-webkit-outer-spin-button,
