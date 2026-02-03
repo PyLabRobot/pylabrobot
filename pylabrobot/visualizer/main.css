@@ -431,6 +431,11 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+@keyframes pendingPulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.55; }
+}
+
 /* Sidepanel */
 #sidepanel {
   position: relative;

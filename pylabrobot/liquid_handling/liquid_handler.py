@@ -198,6 +198,7 @@ class LiquidHandler(Resource, Machine):
         if pickup is not None:
           res = pickup.resource
           arm_entry: Dict[str, Any] = {
+            "has_resource": True,
             "resource_name": res.name,
             "resource_type": type(res).__name__,
             "direction": pickup.direction.name,

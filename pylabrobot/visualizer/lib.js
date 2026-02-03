@@ -293,10 +293,6 @@ function getWrtAnchorOffset(wrtResource) {
 }
 
 function getLocationWrt(resource, wrtName) {
-  // If wrt is the sidebar root, return absolute location.
-  if (sidebarRootResource && wrtName === sidebarRootResource.name) {
-    return resource.getAbsoluteLocation();
-  }
   var wrtResource = resources[wrtName];
   if (!wrtResource) return resource.getAbsoluteLocation();
   var abs = resource.getAbsoluteLocation();
@@ -1727,9 +1723,42 @@ function fillHeadIcons(panel, headState) {
       })(ch);
       icon.appendChild(tipG);
     }
+    // Pending tip: pulsing blurred overlay
+    var chStateObj = headState[ch] || {};
+    var pendingTip = chStateObj.pending_tip;
+    var currentTip = chStateObj.tip;
+    var isPending = (pendingTip !== null && pendingTip !== undefined) !== (currentTip !== null && currentTip !== undefined);
+    if (isPending) {
+      var pendingFilter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+      pendingFilter.setAttribute("id", "pendingGlow" + ci);
+      pendingFilter.setAttribute("x", "-100%");
+      pendingFilter.setAttribute("y", "-100%");
+      pendingFilter.setAttribute("width", "300%");
+      pendingFilter.setAttribute("height", "300%");
+      pendingFilter.innerHTML = '<feGaussianBlur stdDeviation="3"/>';
+      defs.appendChild(pendingFilter);
+      var pendingRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      pendingRect.setAttribute("x", "0");
+      pendingRect.setAttribute("y", "1");
+      pendingRect.setAttribute("width", "14");
+      pendingRect.setAttribute("height", String(fixedSvgH - 1));
+      pendingRect.setAttribute("rx", "3");
+      pendingRect.setAttribute("fill", "#EE8866");
+      pendingRect.setAttribute("filter", "url(#pendingGlow" + ci + ")");
+      pendingRect.style.pointerEvents = "none";
+      pendingRect.style.animation = "pendingPulse 1.5s ease-in-out infinite";
+      icon.appendChild(pendingRect);
+    }
     col.appendChild(icon);
     panel.appendChild(col);
   }
+}
+
+function head96PosId(ch, startCh) {
+  var local = ch - startCh;
+  var row = local % 8;
+  var col = Math.floor(local / 8);
+  return String.fromCharCode(65 + row) + (col + 1);
 }
 
 function fillHead96Grid(panel, head96State) {
@@ -1766,6 +1795,23 @@ function fillHead96Grid(panel, head96State) {
     box.style.borderRadius = "6px";
     box.style.padding = "6px";
     box.style.background = "#444";
+    box.style.cursor = "pointer";
+    box.onmouseover = function () { box.style.boxShadow = "0 0 8px 3px rgba(68, 187, 153, 0.5), 0 0 20px 6px rgba(68, 187, 153, 0.25)"; };
+    box.onmouseout = function () { box.style.boxShadow = "none"; };
+    (function (startCh, head96State) {
+      box.addEventListener("click", function (e) {
+        var tipCount = 0;
+        for (var i = startCh; i < startCh + 96; i++) {
+          var s = head96State[String(i)] || head96State[i];
+          if (s && s.tip !== null && s.tip !== undefined) tipCount++;
+        }
+        var attrs = [
+          { key: "channels", value: "96" },
+          { key: "tips_loaded", value: tipCount + " / 96" },
+        ];
+        showPipetteInfoPanel("96-Head Pipette", "CoRe96Head", attrs, panel, String(startCh), "channel");
+      });
+    })(startCh, head96State);
     box.style.display = "inline-flex";
     box.style.flexDirection = "column";
     box.style.alignItems = "center";
@@ -1786,7 +1832,30 @@ function fillHead96Grid(panel, head96State) {
         dot.style.borderRadius = "50%";
         dot.style.border = "1.5px solid " + (hasTip ? "#40CDA1" : "#555");
         dot.style.background = hasTip ? "#40CDA1" : "white";
-        dot.title = "Channel " + ch + (hasTip ? " (tip)" : "");
+        var posId = head96PosId(ch, startCh);
+        dot.title = "Channel " + ch + " / " + posId + (hasTip ? " (tip)" : "");
+        if (hasTip) {
+          dot.style.cursor = "pointer";
+          dot.onmouseover = function () { this.style.boxShadow = "0 0 6px 2px rgba(238, 221, 136, 0.6), 0 0 14px 4px rgba(238, 221, 136, 0.3)"; };
+          dot.onmouseout = function () { this.style.boxShadow = "none"; };
+          (function (ch, posId) {
+            dot.addEventListener("click", function (e) {
+              e.stopPropagation();
+              var tipAttrs = buildTipAttrs(String(ch), head96State);
+              if (tipAttrs) {
+                showPipetteInfoPanel("Tip @ Channel " + ch + " / " + posId, "Tip", tipAttrs, panel, String(ch), "tip");
+              }
+            });
+          })(ch, posId);
+        } else {
+          (function (ch, posId) {
+            dot.style.cursor = "pointer";
+            dot.addEventListener("click", function (e) {
+              e.stopPropagation();
+              showPipetteInfoPanel("Channel " + ch + " / " + posId, "PipetteChannel", buildChannelAttrs(String(ch), head96State), panel, String(ch), "channel");
+            });
+          })(ch, posId);
+        }
         grid.appendChild(dot);
       }
     }
@@ -1850,9 +1919,9 @@ function fillHead96Grid(panel, head96State) {
   }
 }
 
-function buildSingleArm(armData) {
+function buildSingleArm(armData, anchorDropdown, armId) {
   // Build one gripper visualization column
-  var hasPlate = armData !== null && armData !== undefined;
+  var hasResource = armData !== null && armData !== undefined;
   var col = document.createElement("div");
   col.style.display = "flex";
   col.style.flexDirection = "column";
@@ -1865,7 +1934,7 @@ function buildSingleArm(armData) {
   // using the exact same draw() code as the main canvas.
   var plateW = 52, plateH = 22;
   var snapshot = null; // serialized resource data, or null
-  if (hasPlate) {
+  if (hasResource) {
     snapshot = resourceSnapshots[armData.resource_name] || null;
     var sizeX = snapshot ? snapshot.size_x : (armData.size_x || 127);
     var sizeY = snapshot ? snapshot.size_y : (armData.size_y || 86);
@@ -1881,7 +1950,7 @@ function buildSingleArm(armData) {
   var stdPlateW = Math.round(127 * Math.min(80 / 127, 80 / 86)); // ≈80px
   var minFingerGap = Math.round((stdPlateW + 16) * 1.1);          // ≈106px
   var closedGap = Math.round((52 + 16) * 1.1); // default closed spacing
-  var fingerGap = hasPlate ? Math.round((plateW + 16) * 1.1) : closedGap;
+  var fingerGap = hasResource ? Math.round((plateW + 16) * 1.1) : closedGap;
   var svgW = Math.max(closedGap, fingerGap, minFingerGap) + 28; // 14px margin each side (room for outer guide bars)
   var svgH = 110;
   var cx = svgW / 2; // centre x
@@ -1894,6 +1963,17 @@ function buildSingleArm(armData) {
   svg.setAttribute("width", String(svgW));
   svg.setAttribute("height", String(svgH));
   svg.setAttribute("viewBox", "0 0 " + svgW + " " + svgH);
+  svg.style.overflow = "visible";
+  var defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+  defs.innerHTML =
+    '<filter id="armGlow" x="-50%" y="-50%" width="200%" height="200%">' +
+      '<feFlood flood-color="#44BB99" flood-opacity="0.5" result="color"/>' +
+      '<feComposite in="color" in2="SourceAlpha" operator="in" result="colored"/>' +
+      '<feGaussianBlur in="colored" stdDeviation="3" result="glow1"/>' +
+      '<feGaussianBlur in="colored" stdDeviation="6" result="glow2"/>' +
+      '<feMerge><feMergeNode in="glow2"/><feMergeNode in="glow1"/><feMergeNode in="SourceGraphic"/></feMerge>' +
+    '</filter>';
+  svg.appendChild(defs);
   var shapes = "";
 
   // Horizontal guide bars — drawn first (behind rails), extending inward from each finger
@@ -1935,7 +2015,26 @@ function buildSingleArm(armData) {
   shapes += '<rect x="' + (rCushX - 3) + '" y="' + pinBotY + '" width="5" height="' + pinH + '" rx="0.5" ry="0.5" fill="#555" stroke="#333" stroke-width="0.4"/>';
   shapes += '<rect x="' + rCushX + '" y="' + cushY + '" width="4" height="' + cushH + '" rx="1" ry="1" fill="#444" stroke="#333" stroke-width="0.6"/>';
 
-  svg.innerHTML = shapes;
+  var gripperG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  gripperG.innerHTML = shapes;
+  gripperG.style.cursor = "pointer";
+  gripperG.addEventListener("mouseenter", function () { gripperG.setAttribute("filter", "url(#armGlow)"); });
+  gripperG.addEventListener("mouseleave", function () { gripperG.removeAttribute("filter"); });
+  gripperG.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var attrs = [{ key: "arm", value: armId }];
+    attrs.push({ key: "has_resource", value: hasResource ? "true" : "false" });
+    if (hasResource) {
+      attrs.push({ key: "resource_name", value: armData.resource_name });
+      attrs.push({ key: "resource_type", value: armData.resource_type || "Unknown" });
+      attrs.push({ key: "direction", value: armData.direction || "?" });
+      attrs.push({ key: "pickup_distance_from_top", value: (armData.pickup_distance_from_top || 0) + " mm" });
+      attrs.push({ key: "size", value: (armData.size_x || "?") + " × " + (armData.size_y || "?") + " × " + (armData.size_z || "?") + " mm" });
+      if (armData.num_items_x) attrs.push({ key: "wells", value: (armData.num_items_x * (armData.num_items_y || 1)) });
+    }
+    showPipetteInfoPanel("Arm " + armId, "IntegratedArm", attrs, anchorDropdown, armId, "channel");
+  });
+  svg.appendChild(gripperG);
   // Wrap the SVG and plate in a positioned container.
   var svgContainer = document.createElement("div");
   svgContainer.style.position = "relative";
@@ -1943,7 +2042,7 @@ function buildSingleArm(armData) {
   svgContainer.style.height = svgH + "px";
   svgContainer.appendChild(svg);
 
-  if (hasPlate && snapshot) {
+  if (hasResource && snapshot) {
     // Render the plate using the exact same Konva draw() code as the main canvas.
     // The serialized resource data (saved before destruction) is re-instantiated via
     // loadResource() and drawn on a temporary DOM-attached Konva stage. The result is
@@ -2003,7 +2102,7 @@ function buildSingleArm(armData) {
     } catch (e) {
       console.warn("[arm plate render] failed:", e);
     }
-  } else if (hasPlate) {
+  } else if (hasResource) {
     // Fallback: simple colored rectangle when no serialized data is available
     var plateX2 = cx - plateW / 2;
     var plateY2 = 85 - plateH / 2;
@@ -2021,6 +2120,7 @@ function buildSingleArm(armData) {
     svgContainer.appendChild(fallbackSvg);
   }
 
+  svgContainer.style.cursor = "pointer";
   col.appendChild(svgContainer);
   var label = document.createElement("div");
   label.style.fontSize = "11px";
@@ -2028,10 +2128,10 @@ function buildSingleArm(armData) {
   label.style.color = "#666";
   label.style.marginTop = "4px";
   label.style.textAlign = "center";
-  if (hasPlate) {
+  if (hasResource) {
     label.textContent = armData.resource_name + " (" + armData.resource_type + ")";
   } else {
-    label.textContent = "No plate held";
+    label.textContent = "No resource held";
   }
   col.appendChild(label);
   return col;
@@ -2073,7 +2173,7 @@ function fillArmPanel(panel, armState) {
       idLabel.style.marginBottom = "2px";
       wrapper.appendChild(idLabel);
     }
-    wrapper.appendChild(buildSingleArm(armState[armId]));
+    wrapper.appendChild(buildSingleArm(armState[armId], panel, armId));
     panel.appendChild(wrapper);
   }
 }
