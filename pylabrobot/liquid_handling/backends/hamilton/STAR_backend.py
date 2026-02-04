@@ -59,6 +59,8 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.liquid_handling.utils import (
+  MIN_SPACING_BETWEEN_CHANNELS,
+  MIN_SPACING_EDGE,
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
@@ -1880,17 +1882,22 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Handle tip positioning ... if SINGLE container instance
     if resource_offsets is None:
       if len(set(containers)) == 1:
-        resource_offsets = get_wide_single_resource_liquid_op_offsets(
-          resource=containers[0], num_channels=len(containers)
-        )
+        container_size_y = containers[0].get_absolute_size_y()
+        min_required = MIN_SPACING_EDGE * 2 + (len(containers) - 1) * MIN_SPACING_BETWEEN_CHANNELS
+        if container_size_y >= min_required:
+          resource_offsets = get_wide_single_resource_liquid_op_offsets(
+            resource=containers[0], num_channels=len(containers)
+          )
 
-        if len(use_channels) % 2 != 0:
-          # Hamilton 1000 uL channels are 9 mm apart, so offset by half the distance
-          # + extra for the potential central 'splash guard'
-          y_offset = 5.5
-          resource_offsets = [
-            resource_offsets[i] + Coordinate(0, y_offset, 0) for i in range(len(use_channels))
-          ]
+          if len(use_channels) % 2 != 0:
+            # Hamilton 1000 uL channels are 9 mm apart, so offset by half the distance
+            # + extra for the potential central 'splash guard'
+            y_offset = 5.5
+            resource_offsets = [
+              resource_offsets[i] + Coordinate(0, y_offset, 0) for i in range(len(use_channels))
+            ]
+        # else: container too small to fit all channels — fall back to center offsets.
+        # Y sub-batching will serialize channels that can't coexist.
 
     resource_offsets = resource_offsets or [Coordinate.zero()] * len(containers)
 
