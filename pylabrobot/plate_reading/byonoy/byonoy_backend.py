@@ -8,7 +8,6 @@ from typing import Dict, List, Optional
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.hid import HID
 from pylabrobot.plate_reading.backend import PlateReaderBackend
-from pylabrobot.plate_reading.byonoy.parser import encode_hid_report
 from pylabrobot.resources import Plate, Well
 from pylabrobot.utils.list import reshape_2d
 

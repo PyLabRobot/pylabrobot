@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 
 from pylabrobot.plate_reading.byonoy.byonoy_backend import ByonoyLuminescence96AutomateBackend
 from pylabrobot.plate_reading.plate_reader import PlateReader
-from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, ResourceHolder
+from pylabrobot.resources import Coordinate, PlateHolder, Resource, ResourceHolder
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.rotation import Rotation
 
