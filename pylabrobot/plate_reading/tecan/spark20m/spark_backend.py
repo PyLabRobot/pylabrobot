@@ -24,7 +24,7 @@ from .controls.spark_enums import (
 )
 from .controls.system_control import SystemControl
 from .enums import SparkDevice, SparkEndpoint
-from .spark_processor import AbsorbanceProcessor, FluorescenceProcessor
+from .spark_processor import process_absorbance, process_fluorescence
 from .spark_reader_async import SparkReaderAsync
 
 logger = logging.getLogger(__name__)
@@ -36,9 +36,6 @@ class SparkBackend(PlateReaderBackend):
   def __init__(self, vid: int = 0x0C47) -> None:
     self.vid = vid
     self.reader = SparkReaderAsync(vid=self.vid)
-
-    self.absorbance_processor = AbsorbanceProcessor()
-    self.fluorescence_processor = FluorescenceProcessor()
 
     # Initialize controls
     self.config_control = ConfigControl(self.reader.send_command)
@@ -164,7 +161,7 @@ class SparkBackend(PlateReaderBackend):
       await self.data_control.turn_all_interval_messages_off()
 
     # Process results
-    data_matrix = self.absorbance_processor.process(results)
+    data_matrix = process_absorbance(results)
     avg_temp = await self.get_average_temperature()
 
     # Construct the response
@@ -249,7 +246,7 @@ class SparkBackend(PlateReaderBackend):
       await self.data_control.turn_all_interval_messages_off()
 
     # Process results
-    data_matrix = self.fluorescence_processor.process(results)
+    data_matrix = process_fluorescence(results)
     avg_temp = await self.get_average_temperature()
 
     return [

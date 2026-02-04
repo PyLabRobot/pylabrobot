@@ -24,18 +24,16 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     self.mock_reader.close = AsyncMock()
     self.mock_reader.send_command = AsyncMock(return_value=True)
 
-    # Patch Processors
+    # Patch processor functions
     self.abs_proc_patcher = patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.AbsorbanceProcessor"
+      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.process_absorbance"
     )
-    self.MockAbsProcClass = self.abs_proc_patcher.start()
-    self.mock_abs_proc = self.MockAbsProcClass.return_value
+    self.mock_process_absorbance = self.abs_proc_patcher.start()
 
     self.fluo_proc_patcher = patch(
-      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.FluorescenceProcessor"
+      "pylabrobot.plate_reading.tecan.spark20m.spark_backend.process_fluorescence"
     )
-    self.MockFluoProcClass = self.fluo_proc_patcher.start()
-    self.mock_fluo_proc = self.MockFluoProcClass.return_value
+    self.mock_process_fluorescence = self.fluo_proc_patcher.start()
 
     self.backend = SparkBackend()
 
@@ -61,7 +59,7 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     bg_task.set_result(None)
     self.mock_reader.start_background_read = AsyncMock(return_value=(bg_task, stop_event, []))
 
-    self.mock_abs_proc.process.return_value = [[0.5]]
+    self.mock_process_absorbance.return_value = [[0.5]]
 
     plate = MagicMock(spec=Plate)
     plate.num_items_x = 2
@@ -93,7 +91,7 @@ class TestSparkBackend(unittest.IsolatedAsyncioTestCase):
     bg_task.set_result(None)
     self.mock_reader.start_background_read = AsyncMock(return_value=(bg_task, stop_event, []))
 
-    self.mock_fluo_proc.process.return_value = [[100.0]]
+    self.mock_process_fluorescence.return_value = [[100.0]]
 
     plate = MagicMock(spec=Plate)
     plate.num_items_x = 2
