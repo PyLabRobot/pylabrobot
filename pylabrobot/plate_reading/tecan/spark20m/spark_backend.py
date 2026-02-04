@@ -179,7 +179,7 @@ class SparkBackend(PlateReaderBackend):
     wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
-    focal_height: float = 20000,  # Unused
+    focal_height: float = 20000,
     bandwidth: int = 200,
     num_reads: int = 30,
     gain: int = 117,
