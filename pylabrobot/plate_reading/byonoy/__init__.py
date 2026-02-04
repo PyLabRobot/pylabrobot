@@ -1,4 +1,4 @@
-from .byonoy import (
+from .byonoy_a96a import (
   byonoy_a96a,
   byonoy_a96a_detection_unit,
   byonoy_a96a_illumination_unit,
