@@ -1,0 +1,1 @@
+from .infinite_backend import InfiniteScanConfig, TecanInfinite200ProBackend
