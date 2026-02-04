@@ -1781,6 +1781,33 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     search_speed: float = 10.0,
     n_replicates: int = 1,
     move_to_z_safety_after: bool = True,
+    # Shared detection parameters
+    channel_acceleration: float = 800.0,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: float = 0.0,
+    # cLLD-specific parameters (used when lld_mode=GAMMA)
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    # pLLD-specific parameters (used when lld_mode=PRESSURE)
+    channel_speed_above_start_pos_search: float = 120.0,
+    z_drive_current_limit: int = 3,
+    tip_has_filter: bool = False,
+    dispense_drive_speed: float = 5.0,
+    dispense_drive_acceleration: float = 0.2,
+    dispense_drive_max_speed: float = 14.5,
+    dispense_drive_current_limit: int = 3,
+    plld_detection_edge: int = 30,
+    plld_detection_drop: int = 10,
+    clld_verification: bool = False,
+    clld_detection_edge: int = 10,
+    clld_detection_drop: int = 2,
+    max_delta_plld_clld: float = 5.0,
+    plld_mode: Optional[PressureLLDMode] = None,  # defaults to PressureLLDMode.LIQUID
+    plld_foam_detection_drop: int = 30,
+    plld_foam_detection_edge_tolerance: int = 30,
+    plld_foam_ad_values: int = 30,
+    plld_foam_search_speed: float = 10.0,
+    dispense_back_plld_volume: Optional[float] = None,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -1791,11 +1818,38 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use for probing (0-indexed).
-      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts to avoid center dividers. Defaults to container centers.
-      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based. Defaults to capacitive.
+      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single
+        containers with odd channel counts to avoid center dividers. Defaults to container centers.
+      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.
+        Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
-      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
+      move_to_z_safety_after: Whether to move channels to safe Z height after probing.
+        Default True.
+      channel_acceleration: Search acceleration in mm/s^2. Default 800.0.
+      post_detection_trajectory: Post-detection move mode (0 or 1). Default 1.
+      post_detection_dist: Distance in mm to move up after detection. Default 0.0.
+      detection_edge: cLLD edge steepness threshold (0-1023). Default 10.
+      detection_drop: cLLD offset after edge detection (0-1023). Default 2.
+      channel_speed_above_start_pos_search: pLLD speed above search start in mm/s. Default 120.0.
+      z_drive_current_limit: pLLD Z-drive current limit. Default 3.
+      tip_has_filter: Whether tip has a filter. Default False.
+      dispense_drive_speed: pLLD dispense drive speed in mm/s. Default 5.0.
+      dispense_drive_acceleration: pLLD dispense drive acceleration in mm/s^2. Default 0.2.
+      dispense_drive_max_speed: pLLD dispense drive max speed in mm/s. Default 14.5.
+      dispense_drive_current_limit: pLLD dispense drive current limit. Default 3.
+      plld_detection_edge: pLLD edge detection threshold. Default 30.
+      plld_detection_drop: pLLD detection drop. Default 10.
+      clld_verification: Enable cLLD verification in pLLD mode. Default False.
+      clld_detection_edge: cLLD verification edge threshold. Default 10.
+      clld_detection_drop: cLLD verification drop. Default 2.
+      max_delta_plld_clld: Max allowed delta between pLLD and cLLD in mm. Default 5.0.
+      plld_mode: Pressure LLD mode. Defaults to PressureLLDMode.LIQUID for pLLD.
+      plld_foam_detection_drop: Foam detection drop. Default 30.
+      plld_foam_detection_edge_tolerance: Foam detection edge tolerance. Default 30.
+      plld_foam_ad_values: Foam AD values. Default 30.
+      plld_foam_search_speed: Foam search speed in mm/s. Default 10.0.
+      dispense_back_plld_volume: Volume to dispense back after pLLD in uL. Default None.
 
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
@@ -1890,43 +1944,59 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for container, tip_len in zip(containers, tip_lengths)
     ]
 
+    if lld_mode == self.LLDMode.GAMMA:
+      detect_func = self._move_z_drive_to_liquid_surface_using_clld
+      extra_kwargs: dict = {
+        "channel_acceleration": channel_acceleration,
+        "detection_edge": detection_edge,
+        "detection_drop": detection_drop,
+        "post_detection_trajectory": post_detection_trajectory,
+        "post_detection_dist": post_detection_dist,
+      }
+    else:
+      detect_func = self._search_for_surface_using_plld
+      extra_kwargs = {
+        "channel_acceleration": channel_acceleration,
+        "channel_speed_above_start_pos_search": channel_speed_above_start_pos_search,
+        "z_drive_current_limit": z_drive_current_limit,
+        "tip_has_filter": tip_has_filter,
+        "dispense_drive_speed": dispense_drive_speed,
+        "dispense_drive_acceleration": dispense_drive_acceleration,
+        "dispense_drive_max_speed": dispense_drive_max_speed,
+        "dispense_drive_current_limit": dispense_drive_current_limit,
+        "plld_detection_edge": plld_detection_edge,
+        "plld_detection_drop": plld_detection_drop,
+        "clld_verification": clld_verification,
+        "clld_detection_edge": clld_detection_edge,
+        "clld_detection_drop": clld_detection_drop,
+        "max_delta_plld_clld": max_delta_plld_clld,
+        "plld_mode": plld_mode if plld_mode is not None else self.PressureLLDMode.LIQUID,
+        "plld_foam_detection_drop": plld_foam_detection_drop,
+        "plld_foam_detection_edge_tolerance": plld_foam_detection_edge_tolerance,
+        "plld_foam_ad_values": plld_foam_ad_values,
+        "plld_foam_search_speed": plld_foam_search_speed,
+        "dispense_back_plld_volume": dispense_back_plld_volume,
+        "post_detection_trajectory": post_detection_trajectory,
+        "post_detection_dist": post_detection_dist,
+      }
+
     try:
       for _ in range(n_replicates):
-        if lld_mode == self.LLDMode.GAMMA:
-          results = await asyncio.gather(
-            *[
-              self._move_z_drive_to_liquid_surface_using_clld(
-                channel_idx=channel,
-                lowest_immers_pos=lip,
-                start_pos_search=sps,
-                channel_speed=search_speed,
-              )
-              for channel, lip, sps in zip(
-                use_channels, lowest_immers_positions, start_pos_searches
-              )
-            ],
-            return_exceptions=True,
-          )
-
-        else:
-          results = await asyncio.gather(
-            *[
-              self._search_for_surface_using_plld(
-                channel_idx=channel,
-                lowest_immers_pos=lip,
-                start_pos_search=sps,
-                channel_speed=search_speed,
-                dispense_drive_speed=5.0,
-                plld_mode=self.PressureLLDMode.LIQUID,
-                clld_verification=False,
-                post_detection_dist=0.0,
-              )
-              for channel, lip, sps in zip(
-                use_channels, lowest_immers_positions, start_pos_searches
-              )
-            ],
-            return_exceptions=True,
-          )
+        results = await asyncio.gather(
+          *[
+            detect_func(
+              channel_idx=channel,
+              lowest_immers_pos=lip,
+              start_pos_search=sps,
+              channel_speed=search_speed,
+              **extra_kwargs,
+            )
+            for channel, lip, sps in zip(
+              use_channels, lowest_immers_positions, start_pos_searches
+            )
+          ],
+          return_exceptions=True,
+        )
 
         # Get heights for ALL channels, handling failures for channels with no liquid
         # (indexed 0 to self.num_channels-1) but only store for used channels
