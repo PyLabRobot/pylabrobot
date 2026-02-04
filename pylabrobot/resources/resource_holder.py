@@ -41,6 +41,7 @@ class ResourceHolder(Resource):
     category="resource_holder",
     model=None,
     child_location: Coordinate = Coordinate.zero(),
+    preferred_pickup_location: Optional[Coordinate] = None,
   ):
     super().__init__(
       name=name,
@@ -50,6 +51,7 @@ class ResourceHolder(Resource):
       rotation=rotation,
       category=category,
       model=model,
+      preferred_pickup_location=preferred_pickup_location,
     )
     self.child_location = child_location
 
