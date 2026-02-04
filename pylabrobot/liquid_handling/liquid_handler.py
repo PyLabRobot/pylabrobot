@@ -326,7 +326,7 @@ class LiquidHandler(Resource, Machine):
   def _log_command(self, name: str, **kwargs) -> None:
     params = ", ".join(f"{k}={self._format_param(v)}" for k, v in kwargs.items())
     logger.debug("%s(%s)", name, params)
-      
+
   # Attempt to add function of repeated going into same well instead of raising error of well too small.
   # This part changes the return into a list-valued argument to be accepted by the Backend and leave Scalars where required.
 
@@ -340,23 +340,24 @@ class LiquidHandler(Resource, Machine):
     normalized = {}
 
     for key, val in backend_kwargs.items():
-        if key in self._SCALAR_BACKEND_KWARGS:
-            normalized[key] = val
-            continue
-        if val is None:
-            normalized[key] = None
-        elif isinstance(val, list):
-            if index is not None:
-              if index >= len(val):
-                raise ValueError(
-                  f"Backend kwarg '{key}' has length {len(val)}, "
-                  f"but channel index {index} was requested.")
-              normalized[key] = [val[index]]
-            else:
-              normalized[key] = val
+      if key in self._SCALAR_BACKEND_KWARGS:
+        normalized[key] = val
+        continue
+      if val is None:
+        normalized[key] = None
+      elif isinstance(val, list):
+        if index is not None:
+          if index >= len(val):
+            raise ValueError(
+              f"Backend kwarg '{key}' has length {len(val)}, "
+              f"but channel index {index} was requested."
+            )
+          normalized[key] = [val[index]]
         else:
-            normalized[key] = [val] * n_ops
-    return normalized 
+          normalized[key] = val
+      else:
+        normalized[key] = [val] * n_ops
+    return normalized
 
   async def _run_backend_op(
     self,
@@ -372,35 +373,20 @@ class LiquidHandler(Resource, Machine):
     when geometry spacing is not possible.
     """
     if sequential and len(use_channels) > 1:
-         # ⚠️ Debug log for sequential fallback
-        logger.debug(
-            "Sequential fallback active: operating one channel at a time "
-            "with %d channels", 
-            len(use_channels)
-        )
+      # ⚠️ Debug log for sequential fallback
+      logger.debug(
+        "Sequential fallback active: operating one channel at a time " "with %d channels",
+        len(use_channels),
+      )
 
-        for i, (ch, op) in enumerate(zip(use_channels, ops)):
-            normalized_kwargs = self._normalize_backend_kwargs(
-                backend_kwargs,
-                n_ops=1,
-                index=i)
-            
-            await fn(
-                ops=[op],
-                use_channels=[ch],
-                **normalized_kwargs)
+      for i, (ch, op) in enumerate(zip(use_channels, ops)):
+        normalized_kwargs = self._normalize_backend_kwargs(backend_kwargs, n_ops=1, index=i)
+
+        await fn(ops=[op], use_channels=[ch], **normalized_kwargs)
     else:
-        normalized_kwargs = self._normalize_backend_kwargs(
-            backend_kwargs,
-            n_ops=len(ops))
-        await fn(
-            ops=ops,
-            use_channels=use_channels,
-            **normalized_kwargs)
+      normalized_kwargs = self._normalize_backend_kwargs(backend_kwargs, n_ops=len(ops))
+      await fn(ops=ops, use_channels=use_channels, **normalized_kwargs)
 
-
-
-  
   def get_picked_up_resource(self) -> Optional[Resource]:
     """Get the resource that is currently picked up.
 
@@ -965,7 +951,7 @@ class LiquidHandler(Resource, Machine):
 
     # Adding Sequential function, but is default off.
     sequential = False
-    
+
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
@@ -986,10 +972,7 @@ class LiquidHandler(Resource, Machine):
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
       # Detect sequential fallback
-      sequential = (
-        len(use_channels) > 1
-        and len(set((o.x, o.y, o.z) for o in offsets)) == 1
-      )
+      sequential = len(use_channels) > 1 and len(set((o.x, o.y, o.z) for o in offsets)) == 1
 
     # create operations
     aspirations = [
