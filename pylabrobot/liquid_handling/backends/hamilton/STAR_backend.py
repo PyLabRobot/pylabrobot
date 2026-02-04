@@ -1905,6 +1905,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
       raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
 
+    if len(use_channels) != len(set(use_channels)):
+      raise ValueError("use_channels must not contain duplicates.")
+
     if not len(containers) == len(use_channels) == len(resource_offsets):
       raise ValueError(
         "Length of containers, use_channels, resource_offsets and tip_lengths must match."
@@ -1936,10 +1939,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       for resource, offset in zip(containers, resource_offsets)
     ]
 
-    # Group indices by unique X position (preserving order of first appearance)
+    # Group indices by unique X position (preserving order of first appearance).
+    # Round to 0.1mm to avoid floating point splitting of same-position containers.
     x_groups: Dict[float, List[int]] = {}
     for i, x in enumerate(x_pos):
-      x_groups.setdefault(x, []).append(i)
+      x_rounded = round(x, 1)
+      x_groups.setdefault(x_rounded, []).append(i)
 
     # Precompute detection function and kwargs (mode doesn't change between groups)
     if lld_mode == self.LLDMode.GAMMA:
@@ -1985,7 +1990,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     try:
       is_first_x_group = True
-      for x, indices in x_groups.items():
+      for _, indices in x_groups.items():
+        # Use the actual (non-rounded) X position of the first container in this group
+        group_x = x_pos[indices[0]]
+
         # Raise channels before moving X carriage (tips may be lowered from previous group)
         if not is_first_x_group:
           if min_traverse_height_during_command is None:
@@ -1995,7 +2003,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             await self.position_channels_in_z_direction(
               {ch: min_traverse_height_during_command for ch in prev_channels}
             )
-        await self.move_channel_x(0, x)
+        await self.move_channel_x(0, group_x)
 
         # Within this X group, partition into Y sub-batches of channels that can be
         # positioned simultaneously. Channels must be in descending Y order by channel
@@ -2076,9 +2084,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                   channel_speed=search_speed,
                   **extra_kwargs,
                 )
-                for channel, lip, sps in zip(
-                  batch_channels, batch_lowest_immers, batch_start_pos
-                )
+                for channel, lip, sps in zip(batch_channels, batch_lowest_immers, batch_start_pos)
               ],
               return_exceptions=True,
             )
