@@ -7,6 +7,13 @@ from .spark_packet_parser import SparkParser
 
 logger = logging.getLogger(__name__)
 
+# Block indices in the calibration sequence
+DARK_BLOCK_INDEX = 0
+REFERENCE_BLOCK_INDEX = 1
+
+# 16-bit ADC maximum value (2^16)
+UINT16_MAX = 65536.0
+
 
 def _parse_raw_data(raw_results: List[bytes]) -> Dict[int, Any]:
   parser = SparkParser(raw_results)
@@ -51,13 +58,13 @@ def process_absorbance(raw_results: List[bytes]) -> List[List[float]]:
     return empty_result
 
   try:
-    # Calculate average dark values from reference sequence (Block 0)
-    dark_block = parsed_data[ref_seq_key][0]["blocks"][0]
+    # Calculate average dark values from reference sequence
+    dark_block = parsed_data[ref_seq_key][0]["blocks"][DARK_BLOCK_INDEX]
     avg_rd_dark = statistics.mean(p["U16RD_DARK_0"] for p in dark_block["rd_md_pairs"])
     avg_md_dark = statistics.mean(p["U16MD_DARK_1"] for p in dark_block["rd_md_pairs"])
 
-    # Calculate average reference values from reference sequence (Block 1)
-    ref_block = parsed_data[ref_seq_key][0]["blocks"][1]
+    # Calculate average reference values from reference sequence
+    ref_block = parsed_data[ref_seq_key][0]["blocks"][REFERENCE_BLOCK_INDEX]
     avg_rd_ref = statistics.mean(p["U16RD_0"] for p in ref_block["rd_md_pairs"])
     avg_md_ref = statistics.mean(p["U16MD_1"] for p in ref_block["rd_md_pairs"])
 
@@ -133,13 +140,12 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
 
   try:
     # Extract dark values
-    # Assuming grouped sequence block 0 is dark
     cal_seq_data = parsed_data[ref_seq_key][0]
-    block0 = cal_seq_data["blocks"][0]
+    dark_block = cal_seq_data["blocks"][DARK_BLOCK_INDEX]
 
     # Check if it has dark headers
-    if any("DARK" in t for t in block0.get("header_types", [])):
-      dark_pairs = block0["rd_md_pairs"]
+    if any("DARK" in t for t in dark_block.get("header_types", [])):
+      dark_pairs = dark_block["rd_md_pairs"]
       signal_dark_values = []
       ref_dark_values = []
 
@@ -157,12 +163,12 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
       signal_dark = statistics.mean(signal_dark_values)
       ref_dark = statistics.mean(ref_dark_values)
     else:
-      logger.error("Block 0 does not look like Dark calibration.")
+      logger.error("Dark block does not look like Dark calibration.")
       return empty_result
 
     # Extract bright values
-    block1 = cal_seq_data["blocks"][1]
-    bright_pairs = block1["rd_md_pairs"]
+    ref_block = cal_seq_data["blocks"][REFERENCE_BLOCK_INDEX]
+    bright_pairs = ref_block["rd_md_pairs"]
     ref_bright_values: List[float] = []
     for pair in bright_pairs:
       rd_key = next((k for k in pair if "U16RD" in k), None)
@@ -176,7 +182,7 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
     ref_bright = statistics.mean(ref_bright_values)
 
     # Calculate K
-    k_val = (ref_bright - ref_dark) / (65536.0 - signal_dark) * 65536.0
+    k_val = (ref_bright - ref_dark) / (UINT16_MAX - signal_dark) * UINT16_MAX
 
     logger.debug(
       f"signal_dark: {signal_dark}, ref_dark: {ref_dark}, ref_bright: {ref_bright}, K: {k_val}"
