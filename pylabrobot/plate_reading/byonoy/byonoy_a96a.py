@@ -85,6 +85,7 @@ class ByonoyAbsorbanceBaseUnit(Resource):
     category: Optional[str] = None,
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
+    preferred_pickup_location: Optional[Coordinate] = None,
   ):
     super().__init__(
       name=name,
@@ -95,6 +96,7 @@ class ByonoyAbsorbanceBaseUnit(Resource):
       category=category,
       model=model,
       barcode=barcode,
+      preferred_pickup_location=preferred_pickup_location,
     )
 
     self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
