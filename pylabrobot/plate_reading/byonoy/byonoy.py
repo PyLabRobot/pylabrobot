@@ -6,8 +6,6 @@ from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, Resou
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.rotation import Rotation
 
-# NEW RESOURCE MODELLING SYSTEM FOR BYONOY A96A
-
 
 def byonoy_sbs_adapter(name: str) -> ResourceHolder:
   """Create a Byonoy SBS adapter `ResourceHolder`.
@@ -164,19 +162,19 @@ def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
 
 def byonoy_a96a_illumination_unit(name: str) -> Resource:
   """ """
-  # TODO: preferred pickup location
+  size_x = 155.26
+  size_y = 95.48
   return Resource(
     name=name,
-    size_x=155.26,
-    size_y=95.48,
+    size_x=size_x,
+    size_y=size_y,
     size_z=42.898,
     model="Byonoy A96A Illumination Unit",
+    preferred_pickup_location=Coordinate(x=size_x / 2, y=size_y / 2, z=29.5),
   )
 
 
-def byonoy_absorbance96_automate(
-  name: str, assign: bool = True
-) -> Tuple[ByonoyAbsorbance96Automate, Resource]:
+def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96Automate, Resource]:
   """Creates a ByonoyBase and a PlateReader instance."""
   reader = byonoy_a96a_detection_unit(
     name=name + "_reader",
