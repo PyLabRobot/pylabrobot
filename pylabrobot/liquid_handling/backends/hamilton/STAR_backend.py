@@ -1886,19 +1886,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if resource_offsets is None:
       if len(set(containers)) == 1:
         container_size_y = containers[0].get_absolute_size_y()
-        min_required = MIN_SPACING_EDGE * 2 + (len(containers) - 1) * MIN_SPACING_BETWEEN_CHANNELS
+        # For non-consecutive channels (e.g. [0,1,2,5,6,7]), we must account for
+        # phantom intermediate channels (3,4) that physically exist between them.
+        # Compute offsets for the full channel range (min to max), then pick only
+        # the offsets corresponding to the actual channels being used.
+        num_channels_in_span = max(use_channels) - min(use_channels) + 1
+        min_required = (
+          MIN_SPACING_EDGE * 2 + (num_channels_in_span - 1) * MIN_SPACING_BETWEEN_CHANNELS
+        )
         if container_size_y >= min_required:
-          resource_offsets = get_wide_single_resource_liquid_op_offsets(
-            resource=containers[0], num_channels=len(containers)
+          all_offsets = get_wide_single_resource_liquid_op_offsets(
+            containers[0], num_channels_in_span
           )
+          min_ch = min(use_channels)
+          resource_offsets = [all_offsets[ch - min_ch] for ch in use_channels]
 
-          if len(use_channels) % 2 != 0:
-            # Hamilton 1000 uL channels are 9 mm apart, so offset by half the distance
-            # + extra for the potential central 'splash guard'
+          if num_channels_in_span % 2 != 0:
             y_offset = 5.5
-            resource_offsets = [
-              resource_offsets[i] + Coordinate(0, y_offset, 0) for i in range(len(use_channels))
-            ]
+            resource_offsets = [offset + Coordinate(0, y_offset, 0) for offset in resource_offsets]
         # else: container too small to fit all channels — fall back to center offsets.
         # Y sub-batching will serialize channels that can't coexist.
 
