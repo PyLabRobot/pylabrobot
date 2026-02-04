@@ -55,17 +55,16 @@ class PlateReader(ResourceHolder, Machine):
     location: Optional[Coordinate] = None,
     reassign: bool = True,
   ):
-    if len(self.children) >= 1:
+    if len([c for c in self.children if isinstance(c, Plate)]) >= 1:
       raise ValueError("There already is a plate in the plate reader.")
-    if not isinstance(resource, Plate):
-      raise ValueError("The resource must be a Plate.")
 
     super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def get_plate(self) -> Plate:
-    if len(self.children) == 0:
+    plate_children = [c for c in self.children if isinstance(c, Plate)]
+    if len(plate_children) == 0:
       raise NoPlateError("There is no plate in the plate reader.")
-    return cast(Plate, self.children[0])
+    return cast(Plate, plate_children[0])
 
   @need_setup_finished
   async def open(self, **backend_kwargs) -> None:

@@ -80,20 +80,19 @@ class ByonoyAbsorbanceBaseUnit(Resource):
   def __init__(
     self,
     name: str,
+    size_x: float = 155.26,
+    size_y: float = 95.48,
+    size_z: float = 18.5,
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
   ):
-    base_size_x = 155.26
-    base_size_y = 95.48
-    base_size_z = 18.5
-
     super().__init__(
       name=name,
-      size_x=base_size_x,
-      size_y=base_size_y,
-      size_z=base_size_z,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
       rotation=rotation,
       category=category,
       model=model,
@@ -112,8 +111,8 @@ class ByonoyAbsorbanceBaseUnit(Resource):
 
     self.illumination_unit_holder = ResourceHolder(
       name=self.name + "_illumination_unit_holder",
-      size_x=base_size_x,
-      size_y=base_size_y,
+      size_x=size_x,
+      size_y=size_y,
       size_z=0,
       child_location=Coordinate(x=0, y=0, z=14.1),
     )
@@ -175,7 +174,7 @@ def byonoy_a96a_illumination_unit(name: str) -> Resource:
   )
 
 
-def byonoy_absorbance96(
+def byonoy_absorbance96_automate(
   name: str, assign: bool = True
 ) -> Tuple[ByonoyAbsorbance96Automate, Resource]:
   """Creates a ByonoyBase and a PlateReader instance."""

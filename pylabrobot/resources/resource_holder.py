@@ -42,7 +42,15 @@ class ResourceHolder(Resource):
     model=None,
     child_location: Coordinate = Coordinate.zero(),
   ):
-    super().__init__(name, size_x, size_y, size_z, rotation, category, model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      rotation=rotation,
+      category=category,
+      model=model,
+    )
     self.child_location = child_location
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:
