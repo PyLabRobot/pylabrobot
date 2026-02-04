@@ -61,8 +61,7 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
   def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
     if self._byonoy_base is None:
       raise RuntimeError(
-        "ByonoyBase not assigned its plate holder. "
-        "Please assign a ByonoyBase instance to the plate holder."
+        "Plate holder not assigned to a ByonoyAbsorbanceBaseUnit. This should not happen."
       )
 
     if self._byonoy_base.illumination_unit_holder.resource is not None:
