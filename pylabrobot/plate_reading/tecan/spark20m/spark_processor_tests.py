@@ -7,17 +7,14 @@ import pytest
 
 # Configure logging to avoid pollution during tests
 from pylabrobot.plate_reading.tecan.spark20m.spark_processor import (
-  AbsorbanceProcessor,
-  FluorescenceProcessor,
+  process_absorbance,
+  process_fluorescence,
 )
 
 logging.basicConfig(level=logging.CRITICAL)
 
 
-class TestAbsorbanceProcessor(unittest.TestCase):
-  def setUp(self) -> None:
-    self.processor = AbsorbanceProcessor()
-
+class TestProcessAbsorbance(unittest.TestCase):
   def test_process_success(self) -> None:
     # Mock _parse_raw_data to return a controlled structure
     # We need a reference sequence (grouped) and a measurement sequence (standalone)
@@ -67,8 +64,11 @@ class TestAbsorbanceProcessor(unittest.TestCase):
       ],
     }
 
-    with patch.object(self.processor, "_parse_raw_data", return_value=parsed_data):
-      results = self.processor.process([])
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_absorbance([])
 
     self.assertEqual(len(results), 1)
     self.assertEqual(len(results[0]), 1)
@@ -82,14 +82,19 @@ class TestAbsorbanceProcessor(unittest.TestCase):
   def test_process_missing_reference(self) -> None:
     # Only standalone sequences, no grouped reference
     parsed_data = {"SEQ_MEAS": [{"type": "standalone", "block": {"measurements": []}}]}
-    with patch.object(self.processor, "_parse_raw_data", return_value=parsed_data):
-      results = self.processor.process([])
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_absorbance([])
 
     self.assertEqual(results, [])
 
   def test_process_empty_data(self) -> None:
-    with patch.object(self.processor, "_parse_raw_data", return_value={}):
-      results = self.processor.process([])
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data", return_value={}
+    ):
+      results = process_absorbance([])
     self.assertEqual(results, [])
 
   def test_zero_division_protection(self) -> None:
@@ -111,8 +116,11 @@ class TestAbsorbanceProcessor(unittest.TestCase):
       ],
     }
 
-    with patch.object(self.processor, "_parse_raw_data", return_value=parsed_data):
-      results = self.processor.process([])
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_absorbance([])
 
     # Should result in Error or handled gracefully
     # If ref_ratio_h9 is NaN (due to 0 division), then final ratio is NaN, so h9 is Error
@@ -181,8 +189,7 @@ class TestAbsorbanceProcessor(unittest.TestCase):
       b"\x83\x0b\x00\x07\x01\x00\x00:\xd4\x00\nj",
       b"\x83\x0b\x00(\xa2:\x91\xe1\xa1\x9e\x91[\xa1t\x91'\xa1\xc7\x91y\xa3o\x93\x08\xa4V\x93\xdc\xa7%\x96k\xa5q\x94\xe9\xa6\x07\x95f\xa3\xe5\x93\x8df",
     ]
-    absp = AbsorbanceProcessor()
-    proc = absp.process(abs)
+    proc = process_absorbance(abs)
     res = [
       [
         3.11063277753661,
@@ -218,10 +225,7 @@ class TestAbsorbanceProcessor(unittest.TestCase):
       assert proc_row == pytest.approx(res_row)
 
 
-class TestFluorescenceProcessor(unittest.TestCase):
-  def setUp(self) -> None:
-    self.processor = FluorescenceProcessor()
-
+class TestProcessFluorescence(unittest.TestCase):
   def test_process_success(self) -> None:
     # Calibration Sequence (Grouped, count=2)
     # Block 0: Dark
@@ -253,8 +257,11 @@ class TestFluorescenceProcessor(unittest.TestCase):
       "SEQ_MEAS": [{"type": "standalone", "block": meas_block}],
     }
 
-    with patch.object(self.processor, "_parse_raw_data", return_value=parsed_data):
-      results = self.processor.process([])
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_fluorescence([])
 
     self.assertEqual(len(results), 1)
     self.assertEqual(len(results[0]), 1)
@@ -269,8 +276,11 @@ class TestFluorescenceProcessor(unittest.TestCase):
         {"type": "standalone", "block": {"structure_type": "nested_mult", "measurements": []}}
       ]
     }
-    with patch.object(self.processor, "_parse_raw_data", return_value=parsed_data):
-      results = self.processor.process([])
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_fluorescence([])
     self.assertEqual(results, [])
 
   def test_process_invalid_dark_block(self) -> None:
@@ -285,8 +295,11 @@ class TestFluorescenceProcessor(unittest.TestCase):
       "SEQ_CAL": [{"type": "grouped", "count": 2, "blocks": [dark_block, bright_block]}]
     }
 
-    with patch.object(self.processor, "_parse_raw_data", return_value=parsed_data):
-      results = self.processor.process([])
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_processor._parse_raw_data",
+      return_value=parsed_data,
+    ):
+      results = process_fluorescence([])
 
     # Should return empty list because Block 0 does not look like Dark calibration
     self.assertEqual(results, [])
@@ -329,8 +342,7 @@ class TestFluorescenceProcessor(unittest.TestCase):
       b"\x83\x10\x00\x06\x00\x008\xdf\x00\x1el",
       b"\x83\x10\x00x\xa3\x7f\xc10\xa8W\xcb\xb5\xa6\r\xc4\x1b\xa8T\xc6}\xa6\xeb\xc7\xb3\xa9\x0f\xccF\xa7\xec\xc6\x90\xa8\x02\xc9\xc2\xa9=\xc5\xa7\xaa\xa4\xc7\x9b\xa9d\xc1\x17\xa9\x91\xc8}\xa8\xfd\xc9\xed\xa7\xaf\xc6\xc1\xa8\x95\xcb\xf4\xa8E\xc7O\xa9\x8a\xc5:\xa8\xc6\xcc\xa6\xab \xca,\xa9C\xc5\x96\xa8\xef\xc7\xf0\xa9\x0c\xca\x9d\xa83\xc4Z\xa9V\xc2\x00\xa9\x86\xc6O\xaa&\xc94\xa9\x9f\xcb\x98\xa9j\xc6;\xa8\xb6\xc7\xe6\xa9\x81\xc99+",
     ]
-    fluop = FluorescenceProcessor()
-    proc = fluop.process(fluo)
+    proc = process_fluorescence(fluo)
     res = [
       [
         47948.62782562279,
