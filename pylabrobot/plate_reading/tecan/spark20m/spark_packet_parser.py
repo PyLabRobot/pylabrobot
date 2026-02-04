@@ -183,9 +183,8 @@ class MeasurementBlock:
     self.seq_num: int = header_packet.seq_num
     self.byte_buffer: bytes = b""
 
-    header_type_codes = list(self.header_packet.parsed_payload["data"])
     self.header_types: List[TDCLType] = []
-    for code in header_type_codes:
+    for code in self.header_packet.parsed_payload["data"]:
       type_info = TDCL_DATA_TYPE_MAP.get(code)
       if type_info:
         self.header_types.append(type_info)
@@ -240,7 +239,7 @@ class MeasurementBlock:
     }
 
     try:
-      inner_mult_index = -1
+      inner_mult_index = None
       rd_md_found = False
       for i in reversed(range(len(self.header_type_names))):
         if "U16RD" in self.header_type_names[i] or "U16MD" in self.header_type_names[i]:
@@ -249,18 +248,18 @@ class MeasurementBlock:
           inner_mult_index = i
           break
 
-      outer_mult_index = -1
-      if inner_mult_index > 0:
+      outer_mult_index = None
+      if inner_mult_index is not None and inner_mult_index > 0:
         for i in reversed(range(inner_mult_index)):
           if self.header_type_names[i] == "U16MULT":
             outer_mult_index = i
             break
 
-      if outer_mult_index != -1:
+      if outer_mult_index is not None:
         logger.info(f"Detected Nested MULT structure for seq {self.seq_num}")
         result["structure_type"] = "nested_mult"
         self._parse_nested_mult(result, outer_mult_index, inner_mult_index)
-      elif inner_mult_index != -1:
+      elif inner_mult_index is not None:
         logger.info(f"Detected Single MULT-RD-MD structure for seq {self.seq_num}")
         result["structure_type"] = "single_mult"
         self._parse_single_mult(result, inner_mult_index)
@@ -420,9 +419,8 @@ class SparkParser:
     header_idx = 0
     while header_idx < len(header_packets):
       header_packet = header_packets[header_idx]
-      header_type_codes = list(header_packet.parsed_payload["data"])
       header_type_names: List[str] = []
-      for c in header_type_codes:
+      for c in header_packet.parsed_payload["data"]:
         t_info = TDCL_DATA_TYPE_MAP.get(c)
         if t_info:
           header_type_names.append(t_info["name"])

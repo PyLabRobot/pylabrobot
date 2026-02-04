@@ -1,4 +1,5 @@
 import logging
+import statistics
 import time
 from typing import Dict, List, Optional
 
@@ -58,19 +59,17 @@ class SparkBackend(PlateReaderBackend):
     if not temp_msgs:
       return None
 
-    total_temp = 0.0
-    count = 0
+    temps = []
     for msg in temp_msgs:
       try:
-        total_temp += float(msg["args"][0])
-        count += 1
+        temps.append(float(msg["args"][0]))
       except (IndexError, ValueError, KeyError):
         continue
 
-    if count == 0:
+    if not temps:
       return None
 
-    return (total_temp / count) / 100.0
+    return statistics.mean(temps) / 100.0
 
   async def stop(self) -> None:
     """Close connections."""
