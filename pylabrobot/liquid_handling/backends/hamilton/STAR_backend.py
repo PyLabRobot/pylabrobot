@@ -1781,6 +1781,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     search_speed: float = 10.0,
     n_replicates: int = 1,
     move_to_z_safety_after: bool = True,
+    # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+    min_traverse_height_during_command: Optional[float] = None,
+    z_position_at_end_of_command: Optional[float] = None,
     # Shared detection parameters
     channel_acceleration: float = 800.0,
     post_detection_trajectory: Literal[0, 1] = 1,
@@ -1826,6 +1830,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       n_replicates: Number of measurements per channel. Default 1.
       move_to_z_safety_after: Whether to move channels to safe Z height after probing.
         Default True.
+      min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
+        channels to before the first batch. None (default) uses full Z safety.
+      min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
+        between batches (X groups and Y sub-batches). None (default) uses full Z safety.
+      z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
+        probing (only used when move_to_z_safety_after is True). None (default) uses full Z safety.
       channel_acceleration: Search acceleration in mm/s^2. Default 800.0.
       post_detection_trajectory: Post-detection move mode (0 or 1). Default 1.
       post_detection_dist: Distance in mm to move up after detection. Default 0.0.
@@ -1856,11 +1866,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     Raises:
       RuntimeError: If channels lack tips.
-      NotImplementedError: If channels require different X positions.
 
     Notes:
       - All specified channels must have tips attached
-      - All channels must be at the same X position (single-row operation)
+      - Containers at different X positions are probed in sequential groups (single X carriage)
       - For single containers with odd channel counts, Y-offsets are applied to avoid
         center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
     """
@@ -1902,48 +1911,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
-    # Move channels to safe Z height before starting
+    # Move all channels to Z safety first (including uninvolved channels), then optionally
+    # lower only the involved channels to the requested traverse height.
     await self.move_all_channels_in_z_safety()
+    if min_traverse_height_at_beginning_of_command is not None:
+      await self.position_channels_in_z_direction(
+        {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
+      )
 
-    # Check if all channels are on the same x position, then move there
+    # Compute X and Y positions for all containers
     x_pos = [
       resource.get_location_wrt(self.deck, x="c", y="c", z="b").x + offset.x
       for resource, offset in zip(containers, resource_offsets)
     ]
-    if len(set(x_pos)) > 1:  # TODO: implement
-      raise NotImplementedError(
-        "probe_liquid_heights is not yet supported for multiple x positions."
-      )
-    await self.move_channel_x(0, x_pos[0])
-
-    # Move channels to their y positions
     y_pos = [
       resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + offset.y
       for resource, offset in zip(containers, resource_offsets)
     ]
-    await self.position_channels_in_y_direction(
-      {channel: y for channel, y in zip(use_channels, y_pos)}
-    )
 
-    # Detect liquid heights
-    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
-      ch: [] for ch in use_channels
-    }
+    # Group indices by unique X position (preserving order of first appearance)
+    x_groups: Dict[float, List[int]] = {}
+    for i, x in enumerate(x_pos):
+      x_groups.setdefault(x, []).append(i)
 
-    lowest_immers_positions = [
-      container.get_absolute_location("c", "c", "cavity_bottom").z
-      + tip_len
-      - self.DEFAULT_TIP_FITTING_DEPTH
-      for container, tip_len in zip(containers, tip_lengths)
-    ]
-    start_pos_searches = [
-      container.get_absolute_location("c", "c", "t").z
-      + tip_len
-      - self.DEFAULT_TIP_FITTING_DEPTH
-      + 5
-      for container, tip_len in zip(containers, tip_lengths)
-    ]
-
+    # Precompute detection function and kwargs (mode doesn't change between groups)
     if lld_mode == self.LLDMode.GAMMA:
       detect_func = self._move_z_drive_to_liquid_surface_using_clld
       extra_kwargs: dict = {
@@ -1980,49 +1971,127 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "post_detection_dist": post_detection_dist,
       }
 
-    try:
-      for _ in range(n_replicates):
-        results = await asyncio.gather(
-          *[
-            detect_func(
-              channel_idx=channel,
-              lowest_immers_pos=lip,
-              start_pos_search=sps,
-              channel_speed=search_speed,
-              **extra_kwargs,
-            )
-            for channel, lip, sps in zip(
-              use_channels, lowest_immers_positions, start_pos_searches
-            )
-          ],
-          return_exceptions=True,
-        )
+    # Detect liquid heights, iterating over X groups sequentially (single X carriage)
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
+      ch: [] for ch in use_channels
+    }
 
-        # Get heights for ALL channels, handling failures for channels with no liquid
-        # (indexed 0 to self.num_channels-1) but only store for used channels
-        current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
-          if isinstance(result, STARFirmwareError):
-            # Check if it's specifically the "no liquid found" error
-            error_msg = str(result).lower()
-            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
-              height = None  # No liquid detected - this is expected
-              msg = (
-                f"Channel {ch_idx}: No liquid detected. Could be because there is "
-                f"no liquid in container {containers[idx].name} or liquid level is too low."
-              )
-              if lld_mode == self.LLDMode.GAMMA:
-                msg += " Consider using pressure-based LLD if liquid is believed to exist."
-              logger.warning(msg)
-            else:
-              # Some other firmware error - re-raise it
-              raise result
-          elif isinstance(result, Exception):
-            # Some other unexpected error - re-raise it
-            raise result
+    try:
+      is_first_x_group = True
+      for x, indices in x_groups.items():
+        # Raise channels before moving X carriage (tips may be lowered from previous group)
+        if not is_first_x_group:
+          if min_traverse_height_during_command is None:
+            await self.move_all_channels_in_z_safety()
           else:
-            height = current_absolute_liquid_heights[ch_idx]
-          absolute_heights_measurements[ch_idx].append(height)
+            prev_channels = [use_channels[i] for i in prev_indices]
+            await self.position_channels_in_z_direction(
+              {ch: min_traverse_height_during_command for ch in prev_channels}
+            )
+        await self.move_channel_x(0, x)
+
+        # Within this X group, partition into Y sub-batches of channels that can be
+        # positioned simultaneously. Channels must be in descending Y order by channel
+        # index, with at least _channel_minimum_y_spacing between consecutive channels.
+        # Sort by channel index ascending, then greedily assign to compatible batches.
+        sorted_entries = sorted(indices, key=lambda i: use_channels[i])
+        y_batches: List[List[int]] = []  # each batch is a list of indices into original arrays
+        for idx in sorted_entries:
+          ch = use_channels[idx]
+          y = y_pos[idx]
+          placed = False
+          for batch in y_batches:
+            last_idx = batch[-1]
+            last_ch = use_channels[last_idx]
+            last_y = y_pos[last_idx]
+            # Channel index increases, so Y must decrease by at least
+            # (channel gap) * minimum_spacing to leave room for intermediate channels.
+            if last_y - y >= (ch - last_ch) * self._channel_minimum_y_spacing:
+              batch.append(idx)
+              placed = True
+              break
+          if not placed:
+            y_batches.append([idx])
+
+        for y_batch_idx, y_batch in enumerate(y_batches):
+          batch_channels = [use_channels[i] for i in y_batch]
+          batch_containers = [containers[i] for i in y_batch]
+          batch_tip_lengths = [tip_lengths[i] for i in y_batch]
+
+          # Raise channels before Y repositioning (skip first batch in each X group —
+          # already safe from the X-group-level raise or initial raise)
+          if y_batch_idx > 0:
+            if min_traverse_height_during_command is None:
+              await self.move_all_channels_in_z_safety()
+            else:
+              prev_batch_channels = [use_channels[i] for i in y_batches[y_batch_idx - 1]]
+              await self.position_channels_in_z_direction(
+                {ch: min_traverse_height_during_command for ch in prev_batch_channels}
+              )
+
+          # Position the batch's channels in Y
+          await self.position_channels_in_y_direction(
+            {use_channels[i]: y_pos[i] for i in y_batch}
+          )
+
+          # Compute Z search bounds for this batch
+          batch_lowest_immers = [
+            container.get_absolute_location("c", "c", "cavity_bottom").z
+            + tip_len
+            - self.DEFAULT_TIP_FITTING_DEPTH
+            for container, tip_len in zip(batch_containers, batch_tip_lengths)
+          ]
+          batch_start_pos = [
+            container.get_absolute_location("c", "c", "t").z
+            + tip_len
+            - self.DEFAULT_TIP_FITTING_DEPTH
+            + 5
+            for container, tip_len in zip(batch_containers, batch_tip_lengths)
+          ]
+
+          # Run n_replicates detection loop for this batch
+          for _ in range(n_replicates):
+            results = await asyncio.gather(
+              *[
+                detect_func(
+                  channel_idx=channel,
+                  lowest_immers_pos=lip,
+                  start_pos_search=sps,
+                  channel_speed=search_speed,
+                  **extra_kwargs,
+                )
+                for channel, lip, sps in zip(
+                  batch_channels, batch_lowest_immers, batch_start_pos
+                )
+              ],
+              return_exceptions=True,
+            )
+
+            # Get heights for ALL channels, handling failures for channels with no liquid
+            current_absolute_liquid_heights = await self.request_pip_height_last_lld()
+            for local_idx, (ch_idx, result) in enumerate(zip(batch_channels, results)):
+              orig_idx = y_batch[local_idx]
+              if isinstance(result, STARFirmwareError):
+                error_msg = str(result).lower()
+                if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+                  height = None
+                  msg = (
+                    f"Channel {ch_idx}: No liquid detected. Could be because there is "
+                    f"no liquid in container {containers[orig_idx].name} or liquid level "
+                    f"is too low."
+                  )
+                  if lld_mode == self.LLDMode.GAMMA:
+                    msg += " Consider using pressure-based LLD if liquid is believed to exist."
+                  logger.warning(msg)
+                else:
+                  raise result
+              elif isinstance(result, Exception):
+                raise result
+              else:
+                height = current_absolute_liquid_heights[ch_idx]
+              absolute_heights_measurements[ch_idx].append(height)
+        prev_indices = y_batches[-1]  # last Y batch's indices, for Z raise on next X group
+        is_first_x_group = False
     except:
       await self.move_all_channels_in_z_safety()
       raise
@@ -2053,7 +2122,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     if move_to_z_safety_after:
-      await self.move_all_channels_in_z_safety()
+      if z_position_at_end_of_command is None:
+        await self.move_all_channels_in_z_safety()
+      else:
+        await self.position_channels_in_z_direction(
+          {ch: z_position_at_end_of_command for ch in use_channels}
+        )
 
     return relative_to_well
 
