@@ -32,8 +32,10 @@ class PlateReader(ResourceHolder, Machine):
     size_y: float,
     size_z: float,
     backend: PlateReaderBackend,
-    category: Optional[str] = None,
+    category: Optional[str] = "plate_reader",
     model: Optional[str] = None,
+    child_location: Coordinate = Coordinate.zero(),
+    preferred_pickup_location: Optional[Coordinate] = None,
   ) -> None:
     ResourceHolder.__init__(
       self,
@@ -43,6 +45,8 @@ class PlateReader(ResourceHolder, Machine):
       size_z=size_z,
       category=category,
       model=model,
+      child_location=child_location,
+      preferred_pickup_location=preferred_pickup_location,
     )
     Machine.__init__(self, backend=backend)
     self.backend: PlateReaderBackend = backend  # fix type
@@ -53,17 +57,16 @@ class PlateReader(ResourceHolder, Machine):
     location: Optional[Coordinate] = None,
     reassign: bool = True,
   ):
-    if len(self.children) >= 1:
+    if len([c for c in self.children if isinstance(c, Plate)]) >= 1:
       raise ValueError("There already is a plate in the plate reader.")
-    if not isinstance(resource, Plate):
-      raise ValueError("The resource must be a Plate.")
 
     super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def get_plate(self) -> Plate:
-    if len(self.children) == 0:
+    plate_children = [c for c in self.children if isinstance(c, Plate)]
+    if len(plate_children) == 0:
       raise NoPlateError("There is no plate in the plate reader.")
-    return cast(Plate, self.children[0])
+    return cast(Plate, plate_children[0])
 
   @need_setup_finished
   async def open(self, **backend_kwargs) -> None:
@@ -187,7 +190,6 @@ class PlateReader(ResourceHolder, Machine):
       focal_height=focal_height,
       **backend_kwargs,
     )
-
     if not use_new_return_type:
       logger.warning(
         "The return type of read_fluorescence will change in a future version. Please set "
@@ -195,3 +197,6 @@ class PlateReader(ResourceHolder, Machine):
       )
       return result[0]["data"]  # type: ignore[no-any-return]
     return result
+
+  def serialize(self) -> dict:
+    return {**Resource.serialize(self), **Machine.serialize(self)}

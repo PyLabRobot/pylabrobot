@@ -41,8 +41,18 @@ class ResourceHolder(Resource):
     category="resource_holder",
     model=None,
     child_location: Coordinate = Coordinate.zero(),
+    preferred_pickup_location: Optional[Coordinate] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, rotation, category, model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      rotation=rotation,
+      category=category,
+      model=model,
+      preferred_pickup_location=preferred_pickup_location,
+    )
     self.child_location = child_location
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:
@@ -76,3 +86,10 @@ class ResourceHolder(Resource):
 
   def serialize(self):
     return {**super().serialize(), "child_location": serialize(self.child_location)}
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    if self.resource is not None and resource is not self.resource:
+      raise RuntimeError(
+        f"Cannot drop resource {resource.name} onto resource holder {self.name} while it already has a resource. "
+        "Please remove the resource before dropping a new one."
+      )
