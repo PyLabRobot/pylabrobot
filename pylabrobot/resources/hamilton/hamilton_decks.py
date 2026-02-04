@@ -19,12 +19,12 @@ logger = logging.getLogger("pylabrobot")
 _RAILS_WIDTH = 22.5  # space between rails (mm)
 
 STARLET_NUM_RAILS = 32
-STARLET_SIZE_X = 1360
+STARLET_SIZE_X = 1005
 STARLET_SIZE_Y = 653.5
 STARLET_SIZE_Z = 900
 
 STAR_NUM_RAILS = 56
-STAR_SIZE_X = 1900
+STAR_SIZE_X = 1545
 STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
 
@@ -170,7 +170,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     def should_check_collision(res: Resource) -> bool:
       """Determine if collision detection should be performed for this resource."""
-      if isinstance(res, HamiltonCoreGrippers):
+      if isinstance(res, (HamiltonCoreGrippers, Trash)):
         return False
       return True
 
@@ -437,6 +437,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     name="deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
+    with_waste_block: bool = True,
     with_trash: bool = True,
     with_trash96: bool = True,
     with_teaching_rack: bool = True,
@@ -456,17 +457,6 @@ class HamiltonSTARDeck(HamiltonDeck):
       origin=origin,
     )
 
-    # assign trash area
-    if with_trash:
-      trash_x = (
-        size_x - 560
-      )  # only tested on STARLet, assume STAR is same distance from right max..
-
-      self.assign_child_resource(
-        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
-        location=Coordinate(x=trash_x, y=190.6, z=137.1),
-      )  # z I am not sure about
-
     self._trash96: Optional[Trash] = None
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
@@ -476,8 +466,14 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
-    if with_teaching_rack:
+    if with_waste_block:
       waste_block = Resource(name="waste_block", size_x=30, size_y=445.2, size_z=100)
+      self.assign_child_resource(
+        waste_block,
+        location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
+      )
+
+    if with_teaching_rack:
       tip_spots = [
         TipSpot(
           name=f"tip_spot_{i}",
@@ -501,15 +497,15 @@ class HamiltonSTARDeck(HamiltonDeck):
         model="hamilton_teaching_tip_rack",
       )
       waste_block.assign_child_resource(teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0))
-      self.assign_child_resource(
-        waste_block,
-        location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
-      )
 
-    if core_grippers is not None and not with_teaching_rack:
-      raise ValueError(
-        "core_grippers can only be added when with_teaching_rack is True, "
-        "as they are attached to the waste block."
+    # assign trash area, positioned 25mm to the right of the waste block
+    if with_trash:
+      waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
+      trash_x = waste_block_x + 25
+
+      self.assign_child_resource(
+        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+        location=Coordinate(x=trash_x, y=190.6, z=137.1),
       )
 
     if core_grippers == "1000uL-at-waste":  # "at waste"
@@ -530,6 +526,7 @@ class HamiltonSTARDeck(HamiltonDeck):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
+      "with_waste_block": False,  # data encoded as child. (not very pretty to have this key though...)
       "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
       "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }

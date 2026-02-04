@@ -21,7 +21,7 @@ class Deck(Resource):
   def __init__(
     self,
     name: str = "deck",
-    size_x: float = 1360,
+    size_x: float = 1005,
     size_y: float = 653.5,
     size_z: float = 900,
     origin: Coordinate = Coordinate(0, 0, 0),
