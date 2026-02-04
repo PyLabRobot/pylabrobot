@@ -1,7 +1,7 @@
 import logging
 import math
 import statistics
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from .spark_packet_parser import SparkParser
 
@@ -29,23 +29,14 @@ def _identify_sequences(parsed_data: Dict[Any, Any]) -> Tuple[Optional[Any], Lis
   return ref_seq_key, meas_seq_keys
 
 
-def _safe_log10(x: float) -> Union[float, str]:
-  try:
-    return -math.log10(x)
-  except ValueError:
-    return "Error"
-  except TypeError:
-    return "Error"
-
-
 def _safe_div(n: float, d: float) -> float:
   if d == 0:
     return float("nan")
   return n / d
 
 
-def process_absorbance(raw_results: List[bytes]) -> List[List[Union[float, str]]]:
-  empty_result: List[List[Union[float, str]]] = []
+def process_absorbance(raw_results: List[bytes]) -> List[List[float]]:
+  empty_result: List[List[float]] = []
 
   parsed_data = _parse_raw_data(raw_results)
   if not parsed_data:
@@ -97,9 +88,12 @@ def process_absorbance(raw_results: List[bytes]) -> List[List[Union[float, str]]
           valid_ratios = [r for r in ratios_md_rd if not math.isnan(r)]
           if valid_ratios:
             avg_ratio = statistics.mean(valid_ratios)
-            log_ratio = _safe_log10(avg_ratio)
+            if avg_ratio > 0:
+              log_ratio = -math.log10(avg_ratio)
+            else:
+              log_ratio = float("nan")
           else:
-            log_ratio = "Error"
+            log_ratio = float("nan")
 
           log_ratios_row.append(log_ratio)
         final_results_list.append(log_ratios_row)
@@ -115,8 +109,8 @@ def process_absorbance(raw_results: List[bytes]) -> List[List[Union[float, str]]
     return empty_result
 
 
-def process_fluorescence(raw_results: List[bytes]) -> List[List[Union[float, str]]]:
-  empty_result: List[List[Union[float, str]]] = []
+def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
+  empty_result: List[List[float]] = []
 
   parsed_data = _parse_raw_data(raw_results)
   if not parsed_data:
@@ -189,11 +183,11 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[Union[float, str
     )
 
     # Calculate RFU
-    final_results_list: List[List[Union[float, str]]] = []
+    final_results_list: List[List[float]] = []
     for seq_id in meas_seq_keys:
       meas_seq_data = parsed_data[seq_id][0]
       measurements = meas_seq_data["block"]["measurements"]
-      rfu_row: List[Union[float, str]] = []
+      rfu_row: List[float] = []
 
       for measurement in measurements:
         inner_loops = measurement["inner_loops"]
@@ -209,7 +203,7 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[Union[float, str
 
         if not raw_signal_values or not raw_ref_signal_values:
           logger.warning("Skipping measurement due to missing data.")
-          rfu_row.append("Error")
+          rfu_row.append(float("nan"))
           continue
 
         rawSignal = sum(raw_signal_values) / len(raw_signal_values)
