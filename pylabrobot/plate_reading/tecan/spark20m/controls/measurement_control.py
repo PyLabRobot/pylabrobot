@@ -75,8 +75,8 @@ class MeasurementControl(BaseControl):
     """Gets the current scan direction."""
     return await self.send_command("?SCAN DIRECTION")
 
+  @staticmethod
   def _format_scan_range(
-    self,
     coordinate: str,
     from_val: Optional[int],
     to_val: Optional[int],
