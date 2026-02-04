@@ -2029,10 +2029,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                 {ch: min_traverse_height_during_command for ch in prev_batch_channels}
               )
 
-          # Position the batch's channels in Y
-          await self.position_channels_in_y_direction(
-            {use_channels[i]: y_pos[i] for i in y_batch}
-          )
+          # Position the batch's channels in Y, including any intermediate channels
+          # (channels between batch members that aren't part of this batch) to ensure
+          # they don't violate the descending-order / minimum-spacing constraint.
+          y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in y_batch}
+          sorted_batch_chs = sorted(batch_channels)
+          for k in range(len(sorted_batch_chs) - 1):
+            ch_lo, ch_hi = sorted_batch_chs[k], sorted_batch_chs[k + 1]
+            for intermediate_ch in range(ch_lo + 1, ch_hi):
+              if intermediate_ch not in y_positions:
+                y_positions[intermediate_ch] = (
+                  y_positions[ch_lo] - (intermediate_ch - ch_lo) * self._channel_minimum_y_spacing
+                )
+          await self.position_channels_in_y_direction(y_positions)
 
           # Compute Z search bounds for this batch
           batch_lowest_immers = [
