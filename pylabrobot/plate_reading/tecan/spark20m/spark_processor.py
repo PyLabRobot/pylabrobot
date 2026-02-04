@@ -47,7 +47,7 @@ def process_absorbance(raw_results: List[bytes]) -> List[List[float]]:
 
   if ref_seq_key is None or not meas_seq_keys:
     logger.error("Could not identify Reference (grouped) and Measurement (standalone) sequences.")
-    logger.debug(f"Found sequences: {parsed_data.keys()}")
+    logger.debug(f"Found sequences: {list(parsed_data)}")
     return empty_result
 
   try:
@@ -144,8 +144,8 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
       ref_dark_values = []
 
       for pair in dark_pairs:
-        md_key = next((k for k in pair.keys() if "U16MD" in k), None)
-        rd_key = next((k for k in pair.keys() if "U16RD" in k), None)
+        md_key = next((k for k in pair if "U16MD" in k), None)
+        rd_key = next((k for k in pair if "U16RD" in k), None)
         if md_key and rd_key:
           signal_dark_values.append(pair[md_key])
           ref_dark_values.append(pair[rd_key])
@@ -165,7 +165,7 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
     bright_pairs = block1["rd_md_pairs"]
     ref_bright_values: List[float] = []
     for pair in bright_pairs:
-      rd_key = next((k for k in pair.keys() if "U16RD" in k), None)
+      rd_key = next((k for k in pair if "U16RD" in k), None)
       if rd_key:
         ref_bright_values.append(pair[rd_key])
 
@@ -195,8 +195,8 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
         raw_signal_values = []
         raw_ref_signal_values = []
         for loop in inner_loops:
-          md_key = next((k for k in loop.keys() if "U16MD" in k), None)
-          rd_key = next((k for k in loop.keys() if "U16RD" in k), None)
+          md_key = next((k for k in loop if "U16MD" in k), None)
+          rd_key = next((k for k in loop if "U16RD" in k), None)
           if md_key and rd_key:
             raw_signal_values.append(loop[md_key])
             raw_ref_signal_values.append(loop[rd_key])
