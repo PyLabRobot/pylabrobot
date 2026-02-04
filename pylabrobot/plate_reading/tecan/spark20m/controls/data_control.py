@@ -401,13 +401,13 @@ class DataControl(BaseControl):
 
   def _create_target_string(
     self,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> str:
     target_string = ""
-    if hwModule:
-      target_string += f" MODULE={hwModule.value}"
+    if hw_module:
+      target_string += f" MODULE={hw_module.value}"
     if number is not None:
       target_string += f" NUMBER={number}"
     if subcomponent:
@@ -416,35 +416,35 @@ class DataControl(BaseControl):
 
   async def get_upload_memory_scope(
     self,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Gets the upload memory scope."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     response = await self.send_command(f"#UPLOAD TYPE{target_string}")
     return response
 
   async def get_ranges_for_upload_memory_scope(
     self,
     memory_scope: str,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Gets the ranges for an upload memory scope."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     return await self.send_command(f"#UPLOAD{target_string} TYPE={memory_scope}")
 
   async def prepare_upload(
     self,
     memory_scope: str,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Prepares the device for upload."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     # This command uses data channel, which is not fully implemented yet.
     logging.warning("Prepare upload uses data channel, not fully implemented.")
     return await self.send_command(f"UPLOAD PREPARE{target_string} TYPE={memory_scope}")
@@ -454,24 +454,24 @@ class DataControl(BaseControl):
     offset: int,
     size: int,
     timeout: int,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Uploads a block of data."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     # This command uses data channel, which is not fully implemented yet.
     logging.warning("Upload block uses data channel, not fully implemented.")
     return await self.send_command(f"UPLOAD BLOCK{target_string} OFFSET={offset} SIZE={size}")
 
   async def get_upload_sections(
     self,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Gets the available upload sections."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     response = await self.send_command(f"#UPLOAD SECTION{target_string} NAME")
     return response
 
@@ -480,12 +480,12 @@ class DataControl(BaseControl):
     section_name: str,
     size: int,
     timeout: int,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Uploads a specific section."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     # This command uses data channel, which is not fully implemented yet.
     logging.warning("Upload section uses data channel, not fully implemented.")
     return await self.send_command(f"UPLOAD SECTION{target_string} NAME={section_name} SIZE={size}")
@@ -493,10 +493,10 @@ class DataControl(BaseControl):
   async def get_upload_section_size(
     self,
     section_name: str,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Gets the size of a specific upload section."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     return await self.send_command(f"?UPLOAD SECTION{target_string} NAME={section_name} SIZE")

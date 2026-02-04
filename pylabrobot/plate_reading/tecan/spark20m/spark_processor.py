@@ -154,8 +154,8 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
         logger.error("Could not extract Dark values.")
         return empty_result
 
-      signalDark = sum(signal_dark_values) / len(signal_dark_values)
-      refDark = sum(ref_dark_values) / len(ref_dark_values)
+      signal_dark = sum(signal_dark_values) / len(signal_dark_values)
+      ref_dark = sum(ref_dark_values) / len(ref_dark_values)
     else:
       logger.error("Block 0 does not look like Dark calibration.")
       return empty_result
@@ -173,13 +173,13 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
       logger.error("Could not extract Bright Reference values.")
       return empty_result
 
-    refBright = sum(ref_bright_values) / len(ref_bright_values)
+    ref_bright = sum(ref_bright_values) / len(ref_bright_values)
 
     # Calculate K
-    k_val = (refBright - refDark) / (65536.0 - signalDark) * 65536.0 * 1.0
+    k_val = (ref_bright - ref_dark) / (65536.0 - signal_dark) * 65536.0 * 1.0
 
     logger.debug(
-      f"signalDark: {signalDark}, refDark: {refDark}, refBright: {refBright}, K: {k_val}"
+      f"signal_dark: {signal_dark}, ref_dark: {ref_dark}, ref_bright: {ref_bright}, K: {k_val}"
     )
 
     # Calculate RFU
@@ -206,11 +206,11 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
           rfu_row.append(float("nan"))
           continue
 
-        rawSignal = sum(raw_signal_values) / len(raw_signal_values)
-        rawRefSignal = sum(raw_ref_signal_values) / len(raw_ref_signal_values)
+        raw_signal = sum(raw_signal_values) / len(raw_signal_values)
+        raw_ref_signal = sum(raw_ref_signal_values) / len(raw_ref_signal_values)
 
         # RFU Calculation
-        rfu = (rawSignal - signalDark) / (rawRefSignal - refDark) * k_val
+        rfu = (raw_signal - signal_dark) / (raw_ref_signal - ref_dark) * k_val
         rfu_row.append(rfu)
 
       final_results_list.append(rfu_row)
