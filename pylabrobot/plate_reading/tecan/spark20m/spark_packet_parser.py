@@ -242,7 +242,7 @@ class MeasurementBlock:
     try:
       inner_mult_index = -1
       rd_md_found = False
-      for i in range(len(self.header_type_names) - 1, -1, -1):
+      for i in reversed(range(len(self.header_type_names))):
         if "U16RD" in self.header_type_names[i] or "U16MD" in self.header_type_names[i]:
           rd_md_found = True
         if rd_md_found and self.header_type_names[i] == "U16MULT":
@@ -251,7 +251,7 @@ class MeasurementBlock:
 
       outer_mult_index = -1
       if inner_mult_index > 0:
-        for i in range(inner_mult_index - 1, -1, -1):
+        for i in reversed(range(inner_mult_index)):
           if self.header_type_names[i] == "U16MULT":
             outer_mult_index = i
             break
