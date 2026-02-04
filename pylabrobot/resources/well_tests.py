@@ -29,6 +29,7 @@ class TestWell(unittest.TestCase):
         "max_volume": 10,
         "model": "model",
         "barcode": None,
+        "preferred_pickup_location": None,
         "category": "well",
         "children": [],
         "type": "Well",
