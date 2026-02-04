@@ -169,6 +169,17 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ResourceNotFoundError):
       self.lh.deck.get_resource("unknown resource")
 
+  def test_name_parameter(self):
+    # Default name is derived from deck name
+    deck = STARLetDeck()
+    lh = LiquidHandler(_create_mock_backend(), deck=deck)
+    self.assertEqual(lh.name, f"lh_{deck.name}")
+
+    # Custom name
+    deck2 = STARLetDeck()
+    lh2 = LiquidHandler(_create_mock_backend(), deck=deck2, name="my_liquid_handler")
+    self.assertEqual(lh2.name, "my_liquid_handler")
+
   def test_subcoordinates(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")

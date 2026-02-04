@@ -71,6 +71,10 @@ class STARChatterboxBackend(STARBackend):
     else:
       self._head96_information = None
 
+  async def stop(self):
+    await LiquidHandlerBackend.stop(self)
+    self._setup_done = False
+
   # # # # # # # # Low-level command sending/receiving # # # # # # # #
 
   async def _write_and_read_command(

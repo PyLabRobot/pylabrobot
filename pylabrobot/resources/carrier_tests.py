@@ -222,6 +222,7 @@ class CarrierTests(unittest.TestCase):
         "category": "tip_carrier",
         "model": None,
         "barcode": None,
+        "preferred_pickup_location": None,
         "parent_name": None,
         "children": [
           {
@@ -243,6 +244,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-1",
@@ -263,6 +265,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-2",
@@ -283,6 +286,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-3",
@@ -303,6 +307,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
           {
             "name": "tip_car-4",
@@ -323,6 +328,7 @@ class CarrierTests(unittest.TestCase):
             "parent_name": "tip_car",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           },
         ],
       },
