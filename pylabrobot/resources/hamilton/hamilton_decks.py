@@ -500,7 +500,11 @@ class HamiltonSTARDeck(HamiltonDeck):
 
     # assign trash area, positioned 25mm to the right of the waste block
     if with_trash:
-      waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
+      if with_waste_block:
+        waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
+      else:
+        # Fallback: anchor to the rightmost rail when no waste block is present.
+        waste_block_x = self.rails_to_location(self.num_rails - 1).x
       trash_x = waste_block_x + 25
 
       self.assign_child_resource(
