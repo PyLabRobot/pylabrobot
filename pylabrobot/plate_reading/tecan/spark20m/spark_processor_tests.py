@@ -122,9 +122,9 @@ class TestProcessAbsorbance(unittest.TestCase):
     ):
       results = process_absorbance([])
 
-    # Should result in Error or handled gracefully
-    # If ref_ratio_h9 is NaN (due to 0 division), then final ratio is NaN, so h9 is Error
-    self.assertEqual(results[0][0], "Error")
+    # Should result in nan or handled gracefully
+    # If ref_ratio_h9 is NaN (due to 0 division), then final ratio is NaN, so h9 is nan
+    self.assertTrue(math.isnan(results[0][0]))
 
   def test_process_real_data(self) -> None:
     abs = [
