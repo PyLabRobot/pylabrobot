@@ -1969,7 +1969,7 @@ class LiquidHandler(Resource, Machine):
         logger.debug(
           f"Using preferred pickup location for resource {resource.name} as pickup_distance_from_top was not specified."
         )
-        pickup_distance_from_top = resource.preferred_pickup_location.z
+        pickup_distance_from_top = resource.get_size_z() - resource.preferred_pickup_location.z
       else:
         logger.debug(
           f"No preferred pickup location for resource {resource.name}. Using default pickup distance of 5mm."
