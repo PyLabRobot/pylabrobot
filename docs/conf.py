@@ -42,6 +42,7 @@ extensions = [
   "IPython.sphinxext.ipython_console_highlighting",
   "sphinx_reredirects",
   "sphinx_sitemap",
+  "sphinx_tabs.tabs"
 ]
 
 intersphinx_mapping = {
