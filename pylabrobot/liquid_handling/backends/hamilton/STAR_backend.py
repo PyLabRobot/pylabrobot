@@ -2176,8 +2176,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       Volumes in each container (uL).
 
     Raises:
-      ValueError: If any container doesn't support height-to-volume conversion (raised by probe_liquid_heights).
-      NotImplementedError: If channels require different X positions.
+      ValueError: If any container doesn't support height-to-volume conversion.
 
     Notes:
     - Delegates all motion, LLD, validation, and safety logic to probe_liquid_heights
