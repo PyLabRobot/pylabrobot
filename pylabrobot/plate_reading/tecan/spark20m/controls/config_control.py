@@ -479,13 +479,13 @@ class ConfigControl(BaseControl):
 
   def _create_target_string(
     self,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> str:
     target_string = ""
-    if hwModule:
-      target_string += f" MODULE={hwModule.value}"
+    if hw_module:
+      target_string += f" MODULE={hw_module.value}"
     if number is not None:
       target_string += f" NUMBER={number}"
     if subcomponent:
@@ -494,21 +494,21 @@ class ConfigControl(BaseControl):
 
   async def get_dead_time_config(
     self,
-    hwModule: Optional[ModuleType] = None,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Gets the dead time configuration."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
+    target_string = self._create_target_string(hw_module, number, subcomponent)
     return await self.send_command(f"?CONFIG{target_string} DEADTIME")
 
   async def set_dead_time_config(
     self,
-    deadTime: int,
-    hwModule: Optional[ModuleType] = None,
+    dead_time: int,
+    hw_module: Optional[ModuleType] = None,
     number: Optional[int] = None,
     subcomponent: Optional[str] = None,
   ) -> Optional[str]:
     """Sets the dead time configuration."""
-    target_string = self._create_target_string(hwModule, number, subcomponent)
-    return await self.send_command(f"CONFIG{target_string} DEADTIME={deadTime}")
+    target_string = self._create_target_string(hw_module, number, subcomponent)
+    return await self.send_command(f"CONFIG{target_string} DEADTIME={dead_time}")
