@@ -153,7 +153,7 @@ class OpticsControl(BaseControl):
     self, hw_module: Optional[ModuleType] = None, number: Optional[int] = None
   ) -> Optional[str]:
     """Gets the lower wavelength limit for the empty position in the emission filter."""
-    command = "?CONFIG FILTER=EMISSION TYPE=EMPTY"
+    command = "?CONFIG FILTER=EMISSION TYPE=EMPTY LOWERWAVELENGTH"
     if hw_module:
       command += f" MODULE={hw_module.value}"
     if number is not None:
@@ -164,7 +164,7 @@ class OpticsControl(BaseControl):
     self, hw_module: Optional[ModuleType] = None, number: Optional[int] = None
   ) -> Optional[str]:
     """Gets the upper wavelength limit for the empty position in the emission filter."""
-    command = "?CONFIG FILTER=EMISSION TYPE=EMPTY"
+    command = "?CONFIG FILTER=EMISSION TYPE=EMPTY UPPERWAVELENGTH"
     if hw_module:
       command += f" MODULE={hw_module.value}"
     if number is not None:

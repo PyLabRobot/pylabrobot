@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from .base_control import BaseControl
 from .spark_enums import ModuleType, ShakingMode, ShakingName
