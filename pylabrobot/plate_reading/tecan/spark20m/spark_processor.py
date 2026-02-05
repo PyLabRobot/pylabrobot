@@ -182,7 +182,11 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
     ref_bright = statistics.mean(ref_bright_values)
 
     # Calculate K
-    k_val = (ref_bright - ref_dark) / (UINT16_MAX - signal_dark) * UINT16_MAX
+    denominator = UINT16_MAX - signal_dark
+    if denominator == 0:
+      logger.error("Division by zero: signal_dark equals UINT16_MAX")
+      return empty_result
+    k_val = (ref_bright - ref_dark) / denominator * UINT16_MAX
 
     logger.debug(
       f"signal_dark: {signal_dark}, ref_dark: {ref_dark}, ref_bright: {ref_bright}, K: {k_val}"
