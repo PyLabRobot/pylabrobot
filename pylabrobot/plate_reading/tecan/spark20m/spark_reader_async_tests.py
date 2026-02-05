@@ -80,7 +80,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     with patch.object(self.reader, "_get_response") as mock_get_response:
       mock_get_response.return_value = {"payload": {"message": "OK"}}
       with patch.object(self.reader, "_calculate_checksum", return_value=0x99):
-        success = await self.reader.send_command("CMD", attempts=10)
+        success = await self.reader.send_command("CMD", timeout=1.0)
 
     self.assertTrue(success)
     # Expected message: header + payload + checksum
@@ -94,7 +94,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
   async def test_send_command_device_not_connected(self) -> None:
     with self.assertRaisesRegex(RuntimeError, "Device type .* not connected"):
-      await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION, attempts=10)
+      await self.reader.send_command("CMD", device_type=SparkDevice.ABSORPTION, timeout=1.0)
 
   async def test_get_response_success(self) -> None:
     # Mock parse_single_spark_packet
@@ -136,7 +136,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
       read_task = asyncio.create_task(return_initial_data())
 
-      parsed = await self.reader._get_response(read_task, attempts=5)
+      parsed = await self.reader._get_response(read_task, timeout=1.0)
 
       self.assertEqual(parsed, {"type": "RespReady", "payload": "done"})
       self.assertIn("msg1", self.reader.msgs)
