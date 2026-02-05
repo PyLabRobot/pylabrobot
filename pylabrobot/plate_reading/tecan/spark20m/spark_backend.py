@@ -143,7 +143,9 @@ class SparkBackend(PlateReaderBackend):
     )
 
     if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError("Failed to start background read")
+      raise RuntimeError(
+        f"Failed to start background read for {SparkDevice.ABSORPTION.name} on {SparkEndpoint.BULK_IN.name}"
+      )
 
     try:
       # Execute Measurement Sequence
@@ -229,7 +231,9 @@ class SparkBackend(PlateReaderBackend):
     )
 
     if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError("Failed to start background read")
+      raise RuntimeError(
+        f"Failed to start background read for {SparkDevice.FLUORESCENCE.name} on {SparkEndpoint.BULK_IN1.name}"
+      )
 
     try:
       # Execute Measurement Sequence
