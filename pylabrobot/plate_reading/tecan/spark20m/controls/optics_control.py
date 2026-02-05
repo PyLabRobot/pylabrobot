@@ -1,27 +1,15 @@
-from enum import Enum
 from typing import Optional
 
 from .base_control import BaseControl
 from .spark_enums import (
   FilterType,
   FluorescenceCarrier,
+  LaserPowerState,
+  LightingState,
+  MirrorCarrier,
   MirrorType,
   ModuleType,
 )
-
-
-class MirrorCarrier(Enum):
-  MIRROR1 = "MIRROR1"
-
-
-class LaserPowerState(Enum):
-  ON = "ON"
-  OFF = "OFF"
-
-
-class LightingState(Enum):
-  ON = "ON"
-  OFF = "OFF"
 
 
 class OpticsControl(BaseControl):
