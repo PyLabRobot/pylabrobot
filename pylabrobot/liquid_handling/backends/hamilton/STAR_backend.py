@@ -1942,7 +1942,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
     # Default: move all channels to Z safety first (including uninvolved channels),
-    # be conservative on safety but allow repeated calls with minimial "channel jumping"
+    # be conservative on safety but allow repeated calls with minimal "channel jumping"
     if move_to_z_safety_before:
       await self.move_all_channels_in_z_safety()
     # Optional: lower only the involved channels to the requested traverse height

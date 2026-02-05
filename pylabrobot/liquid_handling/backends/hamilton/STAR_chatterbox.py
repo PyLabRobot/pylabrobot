@@ -1,16 +1,25 @@
 import datetime
 from contextlib import asynccontextmanager
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import Head96Information, STARBackend
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
+  Head96Information,
+  STARBackend,
+)
+from pylabrobot.resources.container import Container
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.well import Well
 
 
 class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
 
-  def __init__(self, num_channels: int = 8, core96_head_installed: bool = True):
+  def __init__(
+    self,
+    num_channels: int = 8,
+    core96_head_installed: bool = True,
+  ):
     """Initialize a chatter box backend.
 
     Args:
@@ -208,6 +217,15 @@ class STARChatterboxBackend(STARBackend):
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
 
+  async def move_channel_x(self, channel: int, x: float):
+    print(f"moving channel {channel} to x: {x}")
+
+  async def move_all_channels_in_z_safety(self):
+    print("moving all channels to z safety")
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    print(f"positioning channels in z: {zs}")
+
   # # # # # # # # 1_000 uL Channel: Complex Commands # # # # # # # #
 
   async def step_off_foil(
@@ -276,3 +294,48 @@ class STARChatterboxBackend(STARBackend):
     finally:
       messages.append("end slow iswap")
       print(" | ".join(messages))
+
+  # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
+
+  async def probe_liquid_heights(
+    self,
+    containers: List[Container],
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    **kwargs,
+  ) -> List[float]:
+    """Probe liquid heights by computing from tracked container volumes.
+
+    Instead of simulating hardware LLD, this mock computes liquid heights directly from
+    each container's volume tracker using `container.compute_height_from_volume()`.
+
+    Args:
+      containers: List of Container objects to probe.
+      use_channels: Channel indices (unused in mock, but validated for tip presence).
+      resource_offsets: Optional offsets (unused in mock).
+      **kwargs: Additional LLD parameters (unused in mock).
+
+    Returns:
+      Liquid heights in mm from cavity bottom for each container, computed from tracked volumes.
+
+    Raises:
+      NotImplementedError: If a container doesn't support compute_height_from_volume.
+    """
+    if use_channels is None:
+      use_channels = list(range(len(containers)))
+
+    # Validate tip presence using tip tracker
+    for ch in use_channels:
+      self.head[ch].get_tip()  # Raises NoTipError if no tip
+
+    heights: List[float] = []
+    for container in containers:
+      volume = container.tracker.get_used_volume()
+      if volume == 0:
+        heights.append(0.0)
+      else:
+        height = container.compute_height_from_volume(volume)
+        heights.append(height)
+
+    print(f"probe_liquid_heights: {[f'{h:.2f}' for h in heights]} mm")
+    return heights
