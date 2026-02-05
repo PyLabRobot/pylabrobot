@@ -43,7 +43,6 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     """Initialize a chatter box backend."""
     super().__init__()
     self._num_channels = num_channels
-    self.num_arms = 1
 
   async def setup(self):
     await super().setup()
