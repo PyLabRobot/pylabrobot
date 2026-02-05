@@ -2024,28 +2024,59 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
             )
         await self.move_channel_x(0, group_x)
 
-        # Within this X group, partition into Y sub-batches of channels that can be
-        # positioned simultaneously. Channels must be in descending Y order by channel
-        # index, with at least _channel_minimum_y_spacing between consecutive channels.
-        # Sort by channel index ascending, then greedily assign to compatible batches.
-        sorted_entries = sorted(indices, key=lambda i: use_channels[i])
-        y_batches: List[List[int]] = []  # each batch is a list of indices into original arrays
-        for idx in sorted_entries:
-          ch = use_channels[idx]
-          y = y_pos[idx]
-          placed = False
-          for batch in y_batches:
-            last_idx = batch[-1]
-            last_ch = use_channels[last_idx]
-            last_y = y_pos[last_idx]
-            # Channel index increases, so Y must decrease by at least
-            # (channel gap) * minimum_spacing to leave room for intermediate channels.
-            if last_y - y >= (ch - last_ch) * self._channel_minimum_y_spacing:
-              batch.append(idx)
-              placed = True
+        # ──────────────────────────────────────────────────────────────────────────
+        # INTERVAL PARTITIONING: Pack channels into minimum parallel batches
+        # ──────────────────────────────────────────────────────────────────────────
+        #
+        # PHYSICAL CONSTRAINT:
+        #   Channels are mounted on a single Y-carriage with fixed minimum spacing.
+        #   Channel 0 sits at the back (high Y), channel 7 at the front (low Y).
+        #   Two channels can only probe together if their target Y positions respect
+        #   this physical ordering with sufficient gaps for any channels between them.
+        #
+        #   Example: channels 2 and 5 probing together need at least 3× min_spacing
+        #   between their Y positions (room for phantom channels 3, 4).
+        #
+        # MATHEMATICAL SIMPLIFICATION:
+        #   Raw constraint: y[i] - y[j] >= (j - i) × min_spacing  (for i < j)
+        #
+        #   Define: normalized_y = y + channel_index × min_spacing
+        #   This "shifts" each channel's Y by its index, collapsing the constraint to:
+        #       normalized_y[i] >= normalized_y[j]  (for i < j in same batch)
+        #
+        #   Now we simply need each batch to have decreasing normalized_y values.
+        #
+        # ALGORITHM (First-Fit Decreasing, optimal for interval partitioning):
+        #   Process channels by index. For each, find the first batch it fits into
+        #   (where batch's last normalized_y >= channel's normalized_y), or create new.
+        #   This greedy approach is provably optimal for minimum batch count.
+        #
+        # ──────────────────────────────────────────────────────────────────────────
+
+        min_spacing = self._channel_minimum_y_spacing
+        channels_by_index = sorted(indices, key=lambda i: use_channels[i])
+
+        batches: List[List[int]] = []
+        batch_floors: List[float] = []  # lowest normalized_y in each batch (determines what fits)
+
+        for idx in channels_by_index:
+          channel = use_channels[idx]
+          normalized_y = y_pos[idx] + channel * min_spacing
+
+          # Find first batch that can accept this channel
+          assigned = False
+          for batch_idx, floor in enumerate(batch_floors):
+            if floor >= normalized_y:
+              batches[batch_idx].append(idx)
+              batch_floors[batch_idx] = normalized_y
+              assigned = True
               break
-          if not placed:
-            y_batches.append([idx])
+
+          if not assigned:
+            batches.append([idx])
+            batch_floors.append(normalized_y)
+
+        y_batches = batches
 
         for y_batch_idx, y_batch in enumerate(y_batches):
           batch_channels = [use_channels[i] for i in y_batch]
