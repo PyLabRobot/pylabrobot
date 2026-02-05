@@ -735,7 +735,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # target_vols and source_vol specified
     with self.assertRaises(TypeError):
-      await self.lh.transfer(
+      await self.lh.experimental_transfer(
         self.plate.get_well("A1"),
         self.plate["A1:H1"],
         source_vol=100,
@@ -744,7 +744,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # target_vols and ratios specified
     with self.assertRaises(TypeError):
-      await self.lh.transfer(
+      await self.lh.experimental_transfer(
         self.plate.get_well("A1"),
         self.plate["A1:H1"],
         ratios=[1] * 8,
