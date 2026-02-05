@@ -1187,9 +1187,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       serial_number=serial_number,
     )
 
-    self.iswap_installed: Optional[bool] = None
-    self.autoload_installed: Optional[bool] = None
-    self.core96_head_installed: Optional[bool] = None
+    self.iswap_installed: bool = False
+    self.autoload_installed: bool = False
+    self.core96_head_installed: bool = False
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
@@ -1448,6 +1448,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
+    self.num_arms = 1 if self.iswap_installed else 0
     self._head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()

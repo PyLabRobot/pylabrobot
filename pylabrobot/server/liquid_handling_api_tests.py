@@ -26,6 +26,8 @@ def _create_mock_backend(num_channels: int = 8):
   """Create a mock LiquidHandlerBackend with the specified number of channels."""
   mock = unittest.mock.create_autospec(LiquidHandlerBackend, instance=True)
   type(mock).num_channels = PropertyMock(return_value=num_channels)
+  mock.num_arms = 1
+  mock.core96_head_installed = True
   mock.can_pick_up_tip.return_value = True
   return mock
 

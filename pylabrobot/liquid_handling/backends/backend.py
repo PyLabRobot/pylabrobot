@@ -37,6 +37,8 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   def __init__(self):
     super().__init__()
     self.setup_finished = False
+    self.num_arms: int = 0
+    self.core96_head_installed: bool = False
     self._deck: Optional[Deck] = None
     self._head: Optional[Dict[int, TipTracker]] = None
     self._head96: Optional[Dict[int, TipTracker]] = None

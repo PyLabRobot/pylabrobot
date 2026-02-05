@@ -145,7 +145,16 @@ class LiquidHandler(Resource, Machine):
     self.location = Coordinate.zero()
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
-    self._resource_pickup: Optional[ResourcePickup] = None
+    self._resource_pickups: Dict[int, Optional[ResourcePickup]] = {}
+
+  @property
+  def _resource_pickup(self) -> Optional[ResourcePickup]:
+    """Backward-compatible access to the first arm's pickup state."""
+    return self._resource_pickups.get(0)
+
+  @_resource_pickup.setter
+  def _resource_pickup(self, value: Optional[ResourcePickup]) -> None:
+    self._resource_pickups[0] = value
 
   async def setup(self, **backend_kwargs):
     """Prepare the robot for use."""
@@ -158,16 +167,58 @@ class LiquidHandler(Resource, Machine):
     await super().setup(**backend_kwargs)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
-    self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
 
-    self._resource_pickup = None
+    self.head96 = (
+      {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
+      if self.backend.core96_head_installed
+      else {}
+    )
+
+    self.backend.set_heads(head=self.head, head96=self.head96 or None)
+
+    for tracker in self.head.values():
+      tracker.register_callback(self._state_updated)
+    for tracker in self.head96.values():
+      tracker.register_callback(self._state_updated)
+
+    self._resource_pickups = {a: None for a in range(self.backend.num_arms)}
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
     serialize the state of the liquid handler and all children (the deck)."""
 
     head_state = {channel: tracker.serialize() for channel, tracker in self.head.items()}
-    return {"head_state": head_state}
+    head96_state = (
+      {channel: tracker.serialize() for channel, tracker in self.head96.items()}
+      if self.head96
+      else None
+    )
+    arm_state: Optional[Dict[int, Any]]
+    if self._resource_pickups:
+      arm_state = {}
+      for arm_id, pickup in self._resource_pickups.items():
+        if pickup is not None:
+          res = pickup.resource
+          arm_entry: Dict[str, Any] = {
+            "has_resource": True,
+            "resource_name": res.name,
+            "resource_type": type(res).__name__,
+            "direction": pickup.direction.name,
+            "pickup_distance_from_top": pickup.pickup_distance_from_top,
+            "size_x": res.get_size_x(),
+            "size_y": res.get_size_y(),
+            "size_z": res.get_size_z(),
+          }
+          if hasattr(res, "num_items_x"):
+            arm_entry["num_items_x"] = res.num_items_x
+          if hasattr(res, "num_items_y"):
+            arm_entry["num_items_y"] = res.num_items_y
+          arm_state[arm_id] = arm_entry
+        else:
+          arm_state[arm_id] = None
+    else:
+      arm_state = None
+    return {"head_state": head_state, "head96_state": head96_state, "arm_state": arm_state}
 
   def load_state(self, state: Dict[str, Any]):
     """Load the liquid handler state from a file. Use :meth:`~Resource.load_all_state` to load the
@@ -176,6 +227,14 @@ class LiquidHandler(Resource, Machine):
     head_state = state["head_state"]
     for channel, tracker_state in head_state.items():
       self.head[channel].load_state(tracker_state)
+
+    head96_state = state.get("head96_state", {})
+    if head96_state and self.head96:
+      for channel, tracker_state in head96_state.items():
+        self.head96[channel].load_state(tracker_state)
+
+    # arm_state is informational only (read via serialize_state); no load needed since
+    # _resource_pickup is set/cleared by pick_up_resource/drop_resource at runtime.
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """Update the state of the liquid handler head.
@@ -1964,6 +2023,9 @@ class LiquidHandler(Resource, Machine):
       direction=direction,
     )
 
+    if self.setup_finished and not self._resource_pickups:
+      raise RuntimeError("No robotic arm is installed on this liquid handler.")
+
     if pickup_distance_from_top is None:
       if resource.preferred_pickup_location is not None:
         logger.debug(
@@ -2000,6 +2062,8 @@ class LiquidHandler(Resource, Machine):
     except Exception as e:
       self._resource_pickup = None
       raise e
+
+    self._state_updated()
 
   async def move_picked_up_resource(
     self,
@@ -2166,6 +2230,7 @@ class LiquidHandler(Resource, Machine):
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
     self._resource_pickup = None
+    self._state_updated()
 
     # we rotate the resource on top of its original rotation. So in order to set the new rotation,
     # we have to subtract its current rotation.
