@@ -1,21 +1,8 @@
 import logging
-from enum import Enum
 from typing import List, Optional, Union
 
 from .base_control import BaseControl
-from .spark_enums import MeasurementMode, ModuleType
-
-
-class ScanDirection(Enum):
-  UP = "UP"
-  DOWN = "DOWN"
-  ALTERNATE_UP = "ALTERNATE_UP"
-  ALTERNATE_DOWN = "ALTERNATE_DOWN"
-
-
-class ScanDarkState(Enum):
-  TRUE = "TRUE"
-  FALSE = "FALSE"
+from .spark_enums import MeasurementMode, ModuleType, ScanDarkState, ScanDirection
 
 
 class MeasurementControl(BaseControl):
