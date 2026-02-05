@@ -98,8 +98,10 @@ def process_absorbance(raw_results: List[bytes]) -> List[List[float]]:
             if avg_ratio > 0:
               log_ratio = -math.log10(avg_ratio)
             else:
+              logger.warning(f"Non-positive avg_ratio ({avg_ratio}) in sequence {seq_key}")
               log_ratio = float("nan")
           else:
+            logger.warning(f"All ratios are NaN in sequence {seq_key}")
             log_ratio = float("nan")
 
           log_ratios_row.append(log_ratio)
