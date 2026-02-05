@@ -2028,7 +2028,7 @@ class LiquidHandler(Resource, Machine):
         logger.debug(
           f"Using preferred pickup location for resource {resource.name} as pickup_distance_from_top was not specified."
         )
-        pickup_distance_from_top = resource.preferred_pickup_location.z
+        pickup_distance_from_top = resource.get_size_z() - resource.preferred_pickup_location.z
       else:
         logger.debug(
           f"No preferred pickup location for resource {resource.name}. Using default pickup distance of 5mm."
@@ -2115,6 +2115,9 @@ class LiquidHandler(Resource, Machine):
     if self._resource_pickup is None:
       raise RuntimeError("No resource picked up")
     resource = self._resource_pickup.resource
+
+    if isinstance(destination, Resource):
+      destination.check_can_drop_resource_here(resource)
 
     # compute rotation based on the pickup_direction and drop_direction
     if self._resource_pickup.direction == direction:
@@ -2466,7 +2469,7 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
-  def serialize(self):
+  def serialize(self) -> dict:
     return {
       **Resource.serialize(self),
       **Machine.serialize(self),

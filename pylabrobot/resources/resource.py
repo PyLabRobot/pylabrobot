@@ -255,7 +255,7 @@ class Resource:
     """
 
     if self.location is None:
-      raise NoLocationError(f"Resource {self.name} has no location.")
+      raise NoLocationError(f"Resource '{self.name}' has no location.")
 
     rotated_anchor = Coordinate(
       *matrix_vector_multiply_3x3(
@@ -949,6 +949,9 @@ class Resource:
     # Baseline validity checks for attaching `resource` under `self`
     # (delegated to `_check_assignment` to stay consistent as rules evolve).
     self._check_assignment(resource=resource, reassign=reassign)
+
+    # Tree-wide invariants enforced at the root (e.g., global naming constraints).
+    # self.get_root()._check_naming_conflicts(resource=resource)
 
     # Subclasses can add stricter “drop rules” here.
     # Examples:
