@@ -1881,6 +1881,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if use_channels is None:
       use_channels = list(range(len(containers)))
+    if len(use_channels) == 0:
+      raise ValueError("use_channels must not be empty.")
+    if not all(0 <= ch < self.num_channels for ch in use_channels):
+      raise ValueError(
+        f"All use_channels must be integers in range [0, {self.num_channels - 1}], "
+        f"got {use_channels}."
+      )
 
     # Handle tip positioning ... if SINGLE container instance
     if resource_offsets is None:
@@ -1920,7 +1927,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if not len(containers) == len(use_channels) == len(resource_offsets):
       raise ValueError(
-        "Length of containers, use_channels, resource_offsets and tip_lengths must match."
+        "Length of containers, use_channels, and resource_offsets must match."
         f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)}."
       )
 
@@ -1957,6 +1964,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_groups.setdefault(x_rounded, []).append(i)
 
     # Precompute detection function and kwargs (mode doesn't change between groups)
+    detect_func: Callable[..., Any]
     if lld_mode == self.LLDMode.GAMMA:
       detect_func = self._move_z_drive_to_liquid_surface_using_clld
       extra_kwargs: dict = {
@@ -2000,6 +2008,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     try:
       is_first_x_group = True
+      prev_indices: Optional[List[int]] = None
       for _, indices in x_groups.items():
         # Use the actual (non-rounded) X position of the first container in this group
         group_x = x_pos[indices[0]]
