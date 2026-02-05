@@ -106,6 +106,7 @@ class LiquidHandler(Resource, Machine):
     backend: LiquidHandlerBackend,
     deck: Deck,
     default_offset_head96: Optional[Coordinate] = None,
+    name: Optional[str] = None,
   ):
     """Initialize a LiquidHandler.
 
@@ -113,11 +114,12 @@ class LiquidHandler(Resource, Machine):
       backend: Backend to use.
       deck: Deck to use.
       default_offset_head96: Base offset applied to all 96-head operations.
+      name: Name of the liquid handler. If not provided, defaults to ``lh_{deck.name}``.
     """
 
     Resource.__init__(
       self,
-      name=f"lh_{deck.name}",
+      name=name if name is not None else f"lh_{deck.name}",
       size_x=deck._size_x,
       size_y=deck._size_y,
       size_z=deck._size_z,
@@ -1950,7 +1952,7 @@ class LiquidHandler(Resource, Machine):
     self,
     resource: Resource,
     offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: float = 0,
+    pickup_distance_from_top: Optional[float] = None,
     direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs,
   ):
@@ -1961,6 +1963,18 @@ class LiquidHandler(Resource, Machine):
       pickup_distance_from_top=pickup_distance_from_top,
       direction=direction,
     )
+
+    if pickup_distance_from_top is None:
+      if resource.preferred_pickup_location is not None:
+        logger.debug(
+          f"Using preferred pickup location for resource {resource.name} as pickup_distance_from_top was not specified."
+        )
+        pickup_distance_from_top = resource.get_size_z() - resource.preferred_pickup_location.z
+      else:
+        logger.debug(
+          f"No preferred pickup location for resource {resource.name}. Using default pickup distance of 5mm."
+        )
+        pickup_distance_from_top = 5.0
 
     if self._resource_pickup is not None:
       raise RuntimeError(f"Resource {self._resource_pickup.resource.name} already picked up")
@@ -2040,6 +2054,9 @@ class LiquidHandler(Resource, Machine):
     if self._resource_pickup is None:
       raise RuntimeError("No resource picked up")
     resource = self._resource_pickup.resource
+
+    if isinstance(destination, Resource):
+      destination.check_can_drop_resource_here(resource)
 
     # compute rotation based on the pickup_direction and drop_direction
     if self._resource_pickup.direction == direction:
@@ -2390,7 +2407,7 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
-  def serialize(self):
+  def serialize(self) -> dict:
     return {
       **Resource.serialize(self),
       **Machine.serialize(self),
