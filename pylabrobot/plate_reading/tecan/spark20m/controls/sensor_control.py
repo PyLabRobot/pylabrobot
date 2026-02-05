@@ -1,23 +1,14 @@
 import logging
-from enum import Enum
 from typing import Optional
 
 from .base_control import BaseControl
-from .spark_enums import InstrumentMessageType, ModuleType
-
-
-class temperatureDevice(Enum):
-  PLATE = "PLATE"
-
-
-class temperatureState(Enum):
-  ON = "ON"
-  OFF = "OFF"
-
-
-class chillerState(Enum):
-  ON = "ON"
-  OFF = "OFF"
+from .spark_enums import (
+  ChillerState,
+  InstrumentMessageType,
+  ModuleType,
+  TemperatureDevice,
+  TemperatureState,
+)
 
 
 class SensorControl(BaseControl):
@@ -259,7 +250,7 @@ class SensorControl(BaseControl):
     """Gets the current injector carrier state."""
     return await self.send_command("?SENSOR INJECTOR_CARRIER")
 
-  async def get_current_temperature(self, device: temperatureDevice) -> Optional[str]:
+  async def get_current_temperature(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the current temperature for a specific device."""
     return await self.send_command(f"?TEMPERATURE DEVICE={device.value} CURRENT")
 
@@ -300,59 +291,59 @@ class SensorControl(BaseControl):
     response = await self.send_command("#TEMPERATURE DEVICE")
     return response
 
-  async def get_temperature_parameters(self, device: temperatureDevice) -> Optional[str]:
+  async def get_temperature_parameters(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the parameters for a specific temperature device."""
     response = await self.send_command(f"#TEMPERATURE DEVICE={device.value}")
     return response
 
-  async def get_temperature_target_range(self, device: temperatureDevice) -> Optional[str]:
+  async def get_temperature_target_range(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the target temperature range for a specific device."""
     return await self.send_command(f"#TEMPERATURE DEVICE={device.value} TARGET")
 
-  async def get_temperature_target_modes(self, device: temperatureDevice) -> Optional[str]:
+  async def get_temperature_target_modes(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the available target modes for a specific temperature device."""
     response = await self.send_command(f"#TEMPERATURE DEVICE={device.value} TARGET_MODE")
     return response
 
-  async def get_temperature_states(self, device: temperatureDevice) -> Optional[str]:
+  async def get_temperature_states(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the available states for a specific temperature device."""
     response = await self.send_command(f"#TEMPERATURE DEVICE={device.value} STATE")
     return response
 
-  async def get_temperature_target(self, device: temperatureDevice) -> Optional[str]:
+  async def get_temperature_target(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the current target temperature for a specific device."""
     return await self.send_command(f"?TEMPERATURE DEVICE={device.value} TARGET")
 
-  async def set_temperature_target(self, device: temperatureDevice, target: float) -> Optional[str]:
+  async def set_temperature_target(self, device: TemperatureDevice, target: float) -> Optional[str]:
     """Sets the target temperature for a specific device."""
     return await self.send_command(f"TEMPERATURE DEVICE={device.value} TARGET={target}")
 
-  async def get_temperature_target_mode(self, device: temperatureDevice) -> Optional[str]:
+  async def get_temperature_target_mode(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the current target mode for a specific temperature device."""
     return await self.send_command(f"?TEMPERATURE DEVICE={device.value} TARGET_MODE")
 
   async def set_temperature_target_mode(
-    self, device: temperatureDevice, target_mode: str
+    self, device: TemperatureDevice, target_mode: str
   ) -> Optional[str]:
     """Sets the target mode for a specific temperature device."""
     return await self.send_command(f"TEMPERATURE DEVICE={device.value} TARGET_MODE={target_mode}")
 
-  async def get_temperature_state(self, device: temperatureDevice) -> Optional[str]:
+  async def get_temperature_state(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the current state for a specific temperature device."""
     return await self.send_command(f"?TEMPERATURE DEVICE={device.value} STATE")
 
   async def set_temperature_state(
-    self, device: temperatureDevice, state: temperatureState
+    self, device: TemperatureDevice, state: TemperatureState
   ) -> Optional[str]:
     """Sets the state for a specific temperature device."""
     return await self.send_command(f"TEMPERATURE DEVICE={device.value} STATE={state.value}")
 
-  async def get_current_chiller_state(self, device: temperatureDevice) -> Optional[str]:
+  async def get_current_chiller_state(self, device: TemperatureDevice) -> Optional[str]:
     """Gets the current chiller state for a specific device."""
     return await self.send_command(f"?TEMPERATURE DEVICE={device.value} CHILLER")
 
   async def set_chiller_state(
-    self, device: temperatureDevice, state: chillerState
+    self, device: TemperatureDevice, state: ChillerState
   ) -> Optional[str]:
     """Sets the chiller state for a specific device."""
     return await self.send_command(f"TEMPERATURE DEVICE={device.value} CHILLER={state.value}")
