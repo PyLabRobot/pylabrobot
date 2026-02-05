@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import usb.core
@@ -76,7 +77,7 @@ class SparkReaderAsync:
     self,
     command_str: str,
     device_type: SparkDevice = SparkDevice.PLATE_TRANSPORT,
-    attempts: int = 10000,
+    timeout: float = 60.0,
   ) -> Optional[str]:
     if device_type not in self.devices:
       raise RuntimeError(f"Device type {device_type} not connected.")
@@ -88,7 +89,7 @@ class SparkReaderAsync:
       # Set up read task before sending command
       read_task = self._init_read(device_type, SparkEndpoint.INTERRUPT_IN)
       await asyncio.sleep(0.01)
-      response_task = asyncio.create_task(self._get_response(read_task, attempts=attempts))
+      response_task = asyncio.create_task(self._get_response(read_task, timeout=timeout))
 
       try:
         logging.debug(f"Sending to {device_type.name}: {command_str}")
@@ -142,7 +143,7 @@ class SparkReaderAsync:
     )
 
   async def _get_response(
-    self, read_task: "asyncio.Task[Any]", timeout: int = 2000, attempts: int = 10000
+    self, read_task: "asyncio.Task[Any]", timeout: float = 60.0
   ) -> Optional[Dict[str, Any]]:
     try:
       data = await read_task
@@ -160,11 +161,11 @@ class SparkReaderAsync:
       elif parsed.get("type") == "RespError":
         raise Exception(parsed)
 
-      while parsed.get("type") != "RespReady" and attempts > 0:
-        attempts -= 1
+      deadline = time.monotonic() + timeout
+      while parsed.get("type") != "RespReady" and time.monotonic() < deadline:
         try:
           await asyncio.sleep(0.01)
-          logging.debug(f"Still busy, retrying... attempts left: {attempts}")
+          logging.debug(f"Still busy, retrying... time left: {deadline - time.monotonic():.1f}s")
           if self.cur_reader is None or self.cur_endpoint_addr is None:
             raise RuntimeError("Current reader or endpoint not set")
 
