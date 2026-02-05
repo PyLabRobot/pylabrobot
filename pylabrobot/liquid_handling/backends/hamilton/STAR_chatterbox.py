@@ -297,6 +297,21 @@ class STARChatterboxBackend(STARBackend):
 
   # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
 
+  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
+    """Return tip length from the tip tracker.
+
+    Args:
+      channel_idx: Index of the pipetting channel (0-indexed).
+
+    Returns:
+      The tip length in mm from the tip tracker.
+
+    Raises:
+      NoTipError: If no tip is present on the channel (via tip tracker).
+    """
+    tip = self.head[channel_idx].get_tip()
+    return tip.total_tip_length
+
   async def probe_liquid_heights(
     self,
     containers: List[Container],
