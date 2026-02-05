@@ -222,7 +222,7 @@ def process_fluorescence(raw_results: List[bytes]) -> List[List[float]]:
         raw_ref_signal = statistics.mean(raw_ref_signal_values)
 
         # RFU Calculation
-        rfu = (raw_signal - signal_dark) / (raw_ref_signal - ref_dark) * k_val
+        rfu = _safe_div(raw_signal - signal_dark, raw_ref_signal - ref_dark) * k_val
         rfu_row.append(rfu)
 
       final_results_list.append(rfu_row)
