@@ -90,26 +90,22 @@ class SparkReaderAsync:
       await asyncio.sleep(0.01)
       response_task = asyncio.create_task(self._get_response(read_task, attempts=attempts))
 
-      logging.debug(f"Sending to {device_type.name}: {command_str}")
-      payload = command_str.encode("ascii")
-      payload_len = len(payload)
-
-      header = bytes([0x01, self.seq_num, 0x00, payload_len])
-      message = header + payload + bytes([self._calculate_checksum(header + payload)])
-      self.seq_num = (self.seq_num + 1) % 256
-
       try:
+        logging.debug(f"Sending to {device_type.name}: {command_str}")
+        payload = command_str.encode("ascii")
+        payload_len = len(payload)
+
+        header = bytes([0x01, self.seq_num, 0x00, payload_len])
+        message = header + payload + bytes([self._calculate_checksum(header + payload)])
+        self.seq_num = (self.seq_num + 1) % 256
+
         await reader.write_to_endpoint(endpoint_addr, message)
         logging.debug(f"Sent message to {device_type.name}: {message.hex()}")
-      except Exception as e:
-        logging.error(f"Error sending command to {device_type.name}: {e}", exc_info=True)
-        raise e
 
-      # Wait for response
-      if not response_task.done():
-        await response_task
+        # Wait for response
+        if not response_task.done():
+          await response_task
 
-      try:
         response = response_task.result()
         logging.debug(f"Response: {response}")
         return (
@@ -118,8 +114,11 @@ class SparkReaderAsync:
           else None
         )
       except Exception as e:
-        logging.error(f"Response task exception: {e}")
-        raise e
+        logging.error(f"Error in send_command to {device_type.name}: {e}", exc_info=True)
+        raise
+      finally:
+        if not response_task.done():
+          response_task.cancel()
 
   def _init_read(
     self,
