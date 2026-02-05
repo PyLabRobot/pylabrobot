@@ -2015,6 +2015,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
         # Raise channels before moving X carriage (tips may be lowered from previous group)
         if not is_first_x_group:
+          assert prev_indices is not None
           if min_traverse_height_during_command is None:
             await self.move_all_channels_in_z_safety()
           else:
