@@ -10,7 +10,7 @@ from pylabrobot.resources.well import Well
 
 from .controls.config_control import ConfigControl
 from .controls.data_control import DataControl
-from .controls.measurement_control import MeasurementControl, ScanDirection
+from .controls.measurement_control import MeasurementControl
 from .controls.optics_control import OpticsControl
 from .controls.plate_transport_control import PlateControl
 from .controls.sensor_control import SensorControl
@@ -22,6 +22,7 @@ from .controls.spark_enums import (
   MirrorType,
   MovementSpeed,
   PlatePosition,
+  ScanDirection,
 )
 from .controls.system_control import SystemControl
 from .enums import SparkDevice, SparkEndpoint
