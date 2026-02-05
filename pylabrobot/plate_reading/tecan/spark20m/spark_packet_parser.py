@@ -108,7 +108,10 @@ class SparkPacket:
         return self._parse_resp_error(is_async=True)
       return {"raw_payload": self.payload_bytes}
     except Exception as e:
-      logger.error(f"Error parsing payload for type {self.type} (seq {self.seq_num}): {e}")
+      logger.error(
+        f"Error parsing payload for type {self.type} (seq {self.seq_num}): {e}. "
+        f"Raw: {self.raw_data[:40].hex()}{'...' if len(self.raw_data) > 40 else ''}"
+      )
       return {"parsing_error": str(e), "raw_payload": self.payload_bytes}
 
   def _parse_resp_ready(self) -> Dict[str, Any]:
