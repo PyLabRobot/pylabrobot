@@ -119,6 +119,10 @@ class SparkReaderAsync:
       finally:
         if not response_task.done():
           response_task.cancel()
+          try:
+            await response_task
+          except asyncio.CancelledError:
+            pass
 
   def _init_read(
     self,
