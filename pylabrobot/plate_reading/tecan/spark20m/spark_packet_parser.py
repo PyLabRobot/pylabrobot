@@ -258,7 +258,7 @@ class MeasurementBlock:
             outer_mult_index = i
             break
 
-      if outer_mult_index is not None:
+      if outer_mult_index is not None and inner_mult_index is not None:
         logger.info(f"Detected Nested MULT structure for seq {self.seq_num}")
         result["structure_type"] = "nested_mult"
         self._parse_nested_mult(result, outer_mult_index, inner_mult_index)

@@ -211,13 +211,13 @@ class SparkBackend(PlateReaderBackend):
       FilterType.BANDPASS,
       wavelength=em_wavelength,
       bandwidth=bandwidth,
-      carrier=FluorescenceCarrier.MONOCHROMATOR_EMISSION,
+      carrier=FluorescenceCarrier.MONOCHROMATOR,
     )
     await self.optics_control.set_excitation_filter(
       FilterType.BANDPASS,
       wavelength=ex_wavelength,
       bandwidth=bandwidth,
-      carrier=FluorescenceCarrier.MONOCHROMATOR_EXCITATION,
+      carrier=FluorescenceCarrier.MONOCHROMATOR,
     )
 
     await self.measurement_control.set_scan_direction(ScanDirection.ALTERNATE_UP)
