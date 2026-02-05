@@ -59,7 +59,6 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.liquid_handling.utils import (
-  MIN_SPACING_BETWEEN_CHANNELS,
   MIN_SPACING_EDGE,
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
@@ -1782,6 +1781,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 1,
+    move_to_z_safety_before: bool = True,
     move_to_z_safety_after: bool = True,
     allow_duplicate_channels: bool = False,
     # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
@@ -1899,11 +1899,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         # the offsets corresponding to the actual channels being used.
         num_channels_in_span = max(use_channels) - min(use_channels) + 1
         min_required = (
-          MIN_SPACING_EDGE * 2 + (num_channels_in_span - 1) * MIN_SPACING_BETWEEN_CHANNELS
+          MIN_SPACING_EDGE * 2 + (num_channels_in_span - 1) * self._channel_minimum_y_spacing
         )
         if container_size_y >= min_required:
           all_offsets = get_wide_single_resource_liquid_op_offsets(
-            containers[0], num_channels_in_span
+            resource=containers[0],
+            num_channels=num_channels_in_span,
+            min_spacing=self._channel_minimum_y_spacing,
           )
           min_ch = min(use_channels)
           resource_offsets = [all_offsets[ch - min_ch] for ch in use_channels]
@@ -1922,7 +1924,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if not allow_duplicate_channels and len(use_channels) != len(set(use_channels)):
       raise ValueError(
-        "use_channels must not contain duplicates. Set allow_duplicate_channels=True to override."
+        "use_channels must not contain duplicates. "
+        "Set `allow_duplicate_channels=True` to override."
       )
 
     if not len(containers) == len(use_channels) == len(resource_offsets):
@@ -1938,9 +1941,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
-    # Move all channels to Z safety first (including uninvolved channels), then optionally
-    # lower only the involved channels to the requested traverse height.
-    await self.move_all_channels_in_z_safety()
+    # Default: move all channels to Z safety first (including uninvolved channels),
+    # be conservative on safety but allow repeated calls with minimial "channel jumping"
+    if move_to_z_safety_before:
+      await self.move_all_channels_in_z_safety()
+    # Optional: lower only the involved channels to the requested traverse height
     if min_traverse_height_at_beginning_of_command is not None:
       await self.position_channels_in_z_direction(
         {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
@@ -1968,16 +1973,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if lld_mode == self.LLDMode.GAMMA:
       detect_func = self._move_z_drive_to_liquid_surface_using_clld
       extra_kwargs: dict = {
-        "channel_acceleration": channel_acceleration,
         "detection_edge": detection_edge,
         "detection_drop": detection_drop,
-        "post_detection_trajectory": post_detection_trajectory,
-        "post_detection_dist": post_detection_dist,
       }
     else:
       detect_func = self._search_for_surface_using_plld
       extra_kwargs = {
-        "channel_acceleration": channel_acceleration,
         "channel_speed_above_start_pos_search": channel_speed_above_start_pos_search,
         "z_drive_current_limit": z_drive_current_limit,
         "tip_has_filter": tip_has_filter,
@@ -1997,8 +1998,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "plld_foam_ad_values": plld_foam_ad_values,
         "plld_foam_search_speed": plld_foam_search_speed,
         "dispense_back_plld_volume": dispense_back_plld_volume,
-        "post_detection_trajectory": post_detection_trajectory,
-        "post_detection_dist": post_detection_dist,
       }
 
     # Detect liquid heights, iterating over X groups sequentially (single X carriage)
@@ -2102,6 +2101,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
                   lowest_immers_pos=lip,
                   start_pos_search=sps,
                   channel_speed=search_speed,
+                  channel_acceleration=channel_acceleration,
+                  post_detection_trajectory=post_detection_trajectory,
+                  post_detection_dist=post_detection_dist,
                   **extra_kwargs,
                 )
                 for channel, lip, sps in zip(batch_channels, batch_lowest_immers, batch_start_pos)
@@ -11288,7 +11290,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       if spread == "wide":
         offsets = get_wide_single_resource_liquid_op_offsets(
-          well, num_channels=len(piercing_channels)
+          resource=well,
+          num_channels=len(piercing_channels),
+          min_spacing=self._channel_minimum_y_spacing,
         )
       else:
         offsets = get_tight_single_resource_liquid_op_offsets(
