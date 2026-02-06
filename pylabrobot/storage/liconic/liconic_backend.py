@@ -367,10 +367,8 @@ class LiconicBackend(IncubatorBackend):
     UNTESTED. Unsure if WR DM39 00250 sets 25 Hz or if WR DM39 00025 does. Assuming former."""
     if frequency < 1.0 or frequency > 50.0:
       raise ValueError("Shaking frequency must be between 1.0 and 50.0 Hz")
-    else:
-      frequency_value = int(frequency)  # assuming incubator expects frequency in 0.1 Hz units
-      frequency = frequency_value * 10
-      await self._send_command(f"WR DM39 {str(frequency).zfill(5)}")
+    frequency_value = int(frequency * 10)  # PLC expects 0.1 Hz units: 25 Hz -> 250
+    await self._send_command(f"WR DM39 {str(frequency_value).zfill(5)}")
     await self._send_command("ST 1913")
     await self._wait_ready()
 
@@ -468,6 +466,7 @@ class LiconicBackend(IncubatorBackend):
     UNTESTED."""
     n2_val = int(n2_level * 10000)  # PLC uses 0.01% units: 0.9 fraction -> 9000 -> 90.0%
     await self._send_command(f"WR DM895 {str(n2_val).zfill(5)}")
+    await self._wait_ready()
 
   async def get_n2_level(self) -> float:
     """Get the N2 level of the incubator as a fraction (0.0 to 1.0).
