@@ -157,11 +157,6 @@ class SensorControl(BaseControl):
     """Gets the value of a specific counter for a module."""
     return await self.send_command(f"?COUNTER {counter} MODULE={module.value}")
 
-  async def get_buzzer_states(self) -> Optional[str]:
-    """Gets the available buzzer states."""
-    response = await self.send_command("#GASCONTROL BUZZER")
-    return response
-
   async def enable_hardware_button(self, button: str) -> Optional[str]:
     """Enables the specified hardware button."""
     return await self.send_command(f"HWBUTTON {button.upper()}=ENABLED")
@@ -174,10 +169,6 @@ class SensorControl(BaseControl):
     """Checks if the specified hardware button is enabled."""
     response = await self.send_command(f"?HWBUTTON {button.upper()}")
     return response == f"{button.upper()}=ENABLED"
-
-  async def get_instrument_state(self) -> Optional[str]:
-    """Gets the instrument state."""
-    return await self.send_command("?INSTRUMENT STATE")
 
   async def get_instrument_checksum(self) -> Optional[str]:
     """Gets the instrument checksum."""

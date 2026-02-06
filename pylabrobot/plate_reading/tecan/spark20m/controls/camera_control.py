@@ -257,10 +257,6 @@ class CameraControl(BaseControl):
     """Prepares the camera."""
     return await self.send_command(f"CAMERA PREPARE BRIGHTNESS={brightness.value}")
 
-  async def get_camera_driver_version(self) -> Optional[str]:
-    """Gets the camera driver version."""
-    return await self.send_command("?INFO HARDWARE_VERSION")
-
   async def set_camera_instrument_serial_number(self, serial_number: str) -> Optional[str]:
     """Sets the camera instrument serial number."""
     return await self.send_command(f"CAMERA INSTRUMENTSERIALNUMBER={serial_number}")
