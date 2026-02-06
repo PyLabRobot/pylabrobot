@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Awaitable, Callable, Optional
 
@@ -10,6 +11,8 @@ from pylabrobot.barcode_scanners.backend import (
 )
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
+
+logger = logging.getLogger(__name__)
 
 
 class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
@@ -39,9 +42,9 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
 
   async def setup(self):
     await self.io.setup()
-    await self.initialize_scanner()
+    await self.initialize()
 
-  async def initialize_scanner(self):
+  async def initialize(self):
     """Initialize the Keyence barcode scanner."""
 
     response = await self.send_command("RMOTOR")
@@ -50,7 +53,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     while time.time() < deadline:
       response = await self.send_command("RMOTOR")
       if response.strip() == "MOTORON":
-        print("Barcode scanner motor is ON.")
+        logger.info("Barcode scanner motor is ON.")
         break
       elif response.strip() == "MOTOROFF":
         raise BarcodeScannerError("Failed to initialize Keyence barcode scanner: Motor is off.")
@@ -84,19 +87,18 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
         response = await asyncio.wait_for(self.io.readline(), timeout=1.0)
         if response:
           decoded = response.decode(self.serial_messaging_encoding).strip()
-          print(f"Received from barcode scanner: {decoded}")
           if decoded:
             try:
               await on_response(decoded)  # Call the callback
             except Exception as e:
-              print(f"Error in callback: {e}")
+              logger.error(f"Error in on_response callback: {e}", exc_info=True)
             if stop_condition and stop_condition(decoded):
               break
       except asyncio.TimeoutError:
-        print("Barcode scanner timeout, continuing...")
+        logger.warning("Timeout while waiting for barcode scanner response.")
         continue
       except Exception as e:
-        print(f"Error reading from barcode scanner: {e}")
+        logger.error(f"Error while reading from barcode scanner: {e}", exc_info=True)
         continue
 
   async def stop(self):
