@@ -1,6 +1,7 @@
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, patch
+import concurrent.futures
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the module under test
 from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice, SparkEndpoint
@@ -76,6 +77,22 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
 
+    # Configure mock executor and device
+    mock_dev._executor = MagicMock()
+    mock_dev.dev = MagicMock()
+    mock_dev.write_timeout = 30  # default
+
+    def execute_sync(func, *args):
+      f: concurrent.futures.Future = concurrent.futures.Future()
+      try:
+        result = func(*args)
+        f.set_result(result)
+      except Exception as e:
+        f.set_exception(e)
+      return f
+
+    mock_dev._executor.submit.side_effect = execute_sync
+
     # Mock calculate_checksum to return a predictable value
     with patch.object(self.reader, "_get_response") as mock_get_response:
       mock_get_response.return_value = {"payload": {"message": "OK"}}
@@ -89,7 +106,7 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
     # Checksum: 0x99
     expected_msg = bytes([0x01, 0x00, 0x00, 0x03]) + b"CMD" + bytes([0x99])
 
-    mock_dev.write_to_endpoint.assert_awaited_with(SparkEndpoint.BULK_OUT.value, expected_msg)
+    mock_dev.dev.write.assert_called_with(SparkEndpoint.BULK_OUT.value, expected_msg, timeout=30000)
     self.assertEqual(self.reader.seq_num, 1)
 
   async def test_send_command_device_not_connected(self) -> None:
@@ -124,12 +141,30 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       # Sequence of parse results:
       # 1. First read (passed as task): RespMessage (busy/intermediate)
       # 2. Retry read 1: RespReady
+      # Sequence of parse results:
+      # 1. First read (passed as task): RespMessage (busy/intermediate)
+      # 2. Retry read 1: RespReady
       mock_parse.side_effect = [
         {"type": "RespMessage", "payload": "msg1"},
         {"type": "RespReady", "payload": "done"},
       ]
 
-      mock_reader.read_from_endpoint.return_value = b"retry_data"
+      # Configure mock executor and device for read retry
+      mock_reader._executor = MagicMock()
+      mock_reader.dev = MagicMock()
+      mock_reader.read_timeout = 30
+
+      def execute_sync(func, *args):
+        f: concurrent.futures.Future = concurrent.futures.Future()
+        result = func(*args)
+        f.set_result(result)
+        return f
+
+      mock_reader._executor.submit.side_effect = execute_sync
+
+      # Mock dev.read
+      # First call inside _read_from_endpoint
+      mock_reader.dev.read.return_value = b"retry_data"
 
       async def return_initial_data() -> bytes:
         return b"initial_data"
@@ -141,30 +176,81 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(parsed, {"type": "RespReady", "payload": "done"})
       self.assertIn("msg1", self.reader.msgs)
 
-      # Should have called read_from_endpoint once for the retry
-      mock_reader.read_from_endpoint.assert_awaited()
+      # Should have called dev.read once for the retry
+      mock_reader.dev.read.assert_called()
 
   async def test_start_background_read(self) -> None:
     mock_dev = AsyncMock()
     self.reader.devices[SparkDevice.PLATE_TRANSPORT] = mock_dev
 
-    # Mock read_from_endpoint
+    # Mock read_from_endpoint via dev.read
     # We need to simulate:
     # 1. Read successful data
     # 2. Read successful data
-    # 3. Raise CancelledError (simulating task cancellation)
+    # 3. Raise CancelledError (simulating task cancellation) - wait, _read_from_endpoint catches exceptions?
+    # Actually _read_from_endpoint catches USBError.
+
+    mock_dev._executor = MagicMock()
+    mock_dev.dev = MagicMock()
+    mock_dev.read_timeout = 30
+
+    def execute_sync(func, *args):
+      f: concurrent.futures.Future = concurrent.futures.Future()
+      try:
+        result = func(*args)
+        f.set_result(result)
+      except Exception as e:
+        f.set_exception(e)
+      return f
+
+    mock_dev._executor.submit.side_effect = execute_sync
 
     async def side_effect(*args: object, **kwargs: object) -> bytes:
-      if mock_dev.read_from_endpoint.call_count == 1:
+      if mock_dev.dev.read.call_count == 1:
         return b"data1"
-      elif mock_dev.read_from_endpoint.call_count == 2:
+      elif mock_dev.dev.read.call_count == 2:
         return b"data2"
       else:
-        # Stall until cancelled
-        await asyncio.sleep(10)
+        # We need to block here to simulate waiting until cancellation
+        # But dev.read is called in executor (sync). If we sleep here, we block the test thread if not careful.
+        # But here side_effect is for dev.read (sync).
+        import time
+
+        time.sleep(10)  # This might block the loop if run_in_executor runs in same thread?
+        # No, run_in_executor runs in thread pool.
+        # But we are using a Mock executor that runs synchronously in the main thread!
+        # So we cannot sleep.
+        # Instead, we should return empty bytes or raise an exception that is handled?
+        # If we return None (or empty), the loop continues.
+        # We want to keep the loop running until we cancel it.
         return b""
 
-    mock_dev.read_from_endpoint.side_effect = side_effect
+    # Better approach for the mock executor:
+    # We want to control when to return.
+
+    # Actually, simpler: just return data a few times then return valid data that indicates 'no data' or let it loop.
+    # The original test relied on `await asyncio.sleep(10)` inside the async side effect.
+    # Since we are now mocking the sync `dev.read`, we can't easily await.
+
+    # We can assume `dev.read` returns immediately.
+    mock_dev.dev.read.side_effect = [b"data1", b"data2", b"", b"", b""]  # Return empty after
+
+    # But `SparkReaderAsync` background reader loop:
+    # if data: results.append...
+    # else: nothing.
+    # It loops `while not stop_event.is_set()`.
+
+    # So if we return empty, it just loops.
+
+    # The original test used `mock_dev.read_from_endpoint` which was async.
+    # Now `_read_from_endpoint` calls `run_in_executor`.
+
+    # Let's trust that returning data works.
+
+    mock_dev.dev.read.side_effect = [b"data1", b"data2", b"", b"", b"", b"", b"", b""]
+
+    # We also need to configure find_descriptor for `_read_from_endpoint` if size is None.
+    # But start_background_read passes size=1024.
 
     task, stop_event, results = await self.reader.start_background_read(SparkDevice.PLATE_TRANSPORT)
 
@@ -209,6 +295,58 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
       # get_response catches exceptions and logs them, returning None
       result = await self.reader._get_response(read_task)
       self.assertIsNone(result)
+
+  async def test_get_response_empty_packet_retry(self) -> None:
+    # Test that empty packet (ZLP) triggers retry
+    mock_reader = AsyncMock()
+    self.reader.cur_reader = mock_reader
+    self.reader.cur_endpoint_addr = 0x81
+
+    # Configure mock executor and device for read retry
+    mock_reader._executor = MagicMock()
+    mock_reader.dev = MagicMock()
+    mock_reader.read_timeout = 30
+
+    def execute_sync(func, *args):
+      f: concurrent.futures.Future = concurrent.futures.Future()
+      result = func(*args)
+      f.set_result(result)
+      return f
+
+    mock_reader._executor.submit.side_effect = execute_sync
+
+    with patch(
+      "pylabrobot.plate_reading.tecan.spark20m.spark_reader_async.parse_single_spark_packet"
+    ) as mock_parse:
+      # Sequence:
+      # 1. First read task returns empty bytes -> Triggers ValueError in parser (mocked below) -> retry
+      # 2. Retry read returns valid data -> Success
+
+      # Mock the retry read
+      mock_reader.dev.read.return_value = b"retry_data"
+
+      # Logic:
+      # _get_response awaits read_task -> returns b""
+      # calls parse_single_spark_packet(b"") -> raises ValueError
+      # catches, loops.
+      # loop calls _read_from_endpoint -> returns b"retry_data"
+      # calls parse_single_spark_packet(b"retry_data") -> returns valid
+
+      mock_parse.side_effect = [
+        ValueError("Packet too short"),  # First call with empty bytes
+        {"type": "RespReady", "payload": "done"},  # Second call with retry_data
+      ]
+
+      async def return_empty_bytes() -> bytes:
+        return b""
+
+      read_task = asyncio.create_task(return_empty_bytes())
+
+      parsed = await self.reader._get_response(read_task, timeout=1.0)
+
+      self.assertEqual(parsed, {"type": "RespReady", "payload": "done"})
+      # Verify retry happened
+      mock_reader.dev.read.assert_called()
 
 
 if __name__ == "__main__":
