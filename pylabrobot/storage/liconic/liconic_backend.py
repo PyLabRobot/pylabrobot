@@ -565,8 +565,9 @@ class LiconicBackend(IncubatorBackend):
     return {
       **super().serialize(),
       "port": self.io.port,
+      "model": self.model.value,
     }
 
   @classmethod
   def deserialize(cls, data: dict):
-    return cls(port=data["port"])
+    return cls(port=data["port"], model=data["model"])
