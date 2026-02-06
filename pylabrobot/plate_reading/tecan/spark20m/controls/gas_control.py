@@ -54,6 +54,11 @@ class GasControl(BaseControl):
     """Sets the gas sensor power state (True for ON, False for OFF)."""
     return await self.send_command(f"GASCONTROL POWER={state.value}")
 
+  async def get_buzzer_states(self) -> Optional[str]:
+    """Gets the available buzzer states."""
+    response = await self.send_command("#GASCONTROL BUZZER")
+    return response
+
   async def acknowledge_audio_gas_warning(self) -> Optional[str]:
     """Acknowledges the audio gas warning, turning off the buzzer."""
     return await self.send_command("GASCONTROL BUZZER=OFF")
