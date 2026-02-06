@@ -145,7 +145,11 @@ class LiconicBackend(IncubatorBackend):
     if match:
       site_height = int(match.group(1))
       site_num = int(rack.model.split("_")[-1])
-      return LICONIC_SITE_HEIGHT_TO_STEPS.get(site_height), site_num
+      if site_height not in LICONIC_SITE_HEIGHT_TO_STEPS:
+        raise ValueError(
+          f"Unknown site height {site_height}mm - not in LICONIC_SITE_HEIGHT_TO_STEPS"
+        )
+      return LICONIC_SITE_HEIGHT_TO_STEPS[site_height], site_num
     raise ValueError(
       f"Could not parse site height and pos num from PlateCarrier model: {rack.model}"
     )
