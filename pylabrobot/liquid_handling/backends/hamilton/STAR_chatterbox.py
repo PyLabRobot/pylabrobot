@@ -7,13 +7,13 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   Head96Information,
   STARBackend,
 )
+from pylabrobot.resources.container import Container
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.well import Well
 
 # Type aliases for nested enums (for cleaner signatures)
 LLDMode = STARBackend.LLDMode
 PressureLLDMode = STARBackend.PressureLLDMode
-from pylabrobot.resources.container import Container
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.well import Well
 
 
 class STARChatterboxBackend(STARBackend):
