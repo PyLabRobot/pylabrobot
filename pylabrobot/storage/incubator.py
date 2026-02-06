@@ -215,39 +215,39 @@ class Incubator(Machine, Resource):
     return await self.backend.get_target_temperature()
 
   async def set_humidity(self, humidity: float):
-    """Set the humidity of the incubator in percentage (%)."""
+    """Set the humidity of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.set_humidity(humidity)
 
   async def get_humidity(self) -> float:
-    """Get the humidity of the incubator in percentage (%)."""
+    """Get the humidity of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.get_humidity()
 
   async def get_target_humidity(self) -> float:
-    """Get the set value humidity of the incubator in percentage (%)."""
+    """Get the set value humidity of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.get_target_humidity()
 
   async def set_co2_level(self, co2_level: float):
-    """Set the CO2 level of the incubator in percentage (%)."""
+    """Set the CO2 level of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.set_co2_level(co2_level)
 
   async def get_co2_level(self) -> float:
-    """Get the CO2 level of the incubator in percentage (%)."""
+    """Get the CO2 level of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.get_co2_level()
 
   async def get_target_co2_level(self) -> float:
-    """Get the set value CO2 level of the incubator in percentage (%)."""
+    """Get the set value CO2 level of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.get_target_co2_level()
 
   async def set_n2_level(self, n2_level: float):
-    """Set the N2 level of the incubator in percentage (%)."""
+    """Set the N2 level of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.set_n2_level(n2_level)
 
   async def get_n2_level(self) -> float:
-    """Get the N2 level of the incubator in percentage (%)."""
+    """Get the N2 level of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.get_n2_level()
 
   async def get_target_n2_level(self) -> float:
-    """Get the set value N2 level of the incubator in percentage (%)."""
+    """Get the set value N2 level of the incubator as a fraction (0.0 to 1.0)."""
     return await self.backend.get_target_n2_level()
 
   async def move_position_to_position(

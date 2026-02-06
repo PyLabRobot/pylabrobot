@@ -57,39 +57,39 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def set_humidity(self, humidity: float):
-    """Set operation humidity of the incubator in % RH; e.g. 90.0% RH."""
+    """Set operation humidity of the incubator as a fraction; e.g. 0.9 for 90% RH."""
 
   @abstractmethod
   async def get_humidity(self) -> float:
-    """Get the current humidity of the incubator in % RH; e.g. 90.0% RH."""
+    """Get the current humidity of the incubator as a fraction; e.g. 0.9 for 90% RH."""
 
   @abstractmethod
   async def get_target_humidity(self) -> float:
-    """Get the set value humidity of the incubator in % RH; e.g. 90.0% RH."""
+    """Get the set value humidity of the incubator as a fraction; e.g. 0.9 for 90% RH."""
 
   @abstractmethod
   async def set_co2_level(self, co2_level: float):
-    """Set operation CO2 level of the incubator in %; e.g. 5.0%."""
+    """Set operation CO2 level of the incubator as a fraction; e.g. 0.05 for 5%."""
 
   @abstractmethod
   async def get_co2_level(self) -> float:
-    """Get the current CO2 level of the incubator in %; e.g. 5.0%."""
+    """Get the current CO2 level of the incubator as a fraction; e.g. 0.05 for 5%."""
 
   @abstractmethod
   async def get_target_co2_level(self) -> float:
-    """Get the set value CO2 level of the incubator in %; e.g. 5.0%."""
+    """Get the set value CO2 level of the incubator as a fraction; e.g. 0.05 for 5%."""
 
   @abstractmethod
   async def set_n2_level(self, n2_level: float):
-    """Set operation N2 level of the incubator in %; e.g. 90.0%."""
+    """Set operation N2 level of the incubator as a fraction; e.g. 0.9 for 90%."""
 
   @abstractmethod
   async def get_n2_level(self) -> float:
-    """Get the current N2 level of the incubator in %; e.g. 90.0%."""
+    """Get the current N2 level of the incubator as a fraction; e.g. 0.9 for 90%."""
 
   @abstractmethod
   async def get_target_n2_level(self) -> float:
-    """Get the set value N2 level of the incubator in %; e.g. 90.0%."""
+    """Get the set value N2 level of the incubator as a fraction; e.g. 0.9 for 90%."""
 
   @abstractmethod
   async def move_position_to_position(

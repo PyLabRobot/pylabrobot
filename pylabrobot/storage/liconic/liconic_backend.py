@@ -391,93 +391,94 @@ class LiconicBackend(IncubatorBackend):
       raise RuntimeError(f"Invalid set temperature value received from incubator: {resp!r}")
 
   async def set_humidity(self, humidity: float):
-    """Set the humidity of the incubator in percentage (%)."""
+    """Set the humidity of the incubator as a fraction (0.0 to 1.0)."""
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
 
-    humidity_val = int(humidity * 10)
+    humidity_val = int(humidity * 1000)  # PLC uses 0.1% units: 0.9 fraction -> 900 -> 90.0%
     await self._send_command_plc(f"WR DM893 {str(humidity_val).zfill(5)}")
     await self._wait_ready()
 
   async def get_humidity(self) -> float:
-    """Get the actual humidity of the incubator in percentage (%)."""
+    """Get the actual humidity of the incubator as a fraction (0.0 to 1.0)."""
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
 
     resp = await self._send_command_plc("RD DM983")
     try:
       humidity_value = int(resp)
-      humidity = humidity_value / 10.0
+      humidity = humidity_value / 1000.0  # PLC uses 0.1% units: 900 -> 0.9 fraction
       return humidity
     except ValueError:
       raise RuntimeError(f"Invalid humidity value received from incubator: {resp!r}")
 
   async def get_target_humidity(self) -> float:
-    """Get the set value humidity of the incubator in percentage (%)."""
+    """Get the set value humidity of the incubator as a fraction (0.0 to 1.0)."""
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
 
     resp = await self._send_command_plc("RD DM893")
     try:
       humidity_value = int(resp)
-      humidity = humidity_value / 10.0
+      humidity = humidity_value / 1000.0  # PLC uses 0.1% units: 900 -> 0.9 fraction
       return humidity
     except ValueError:
       raise RuntimeError(f"Invalid set humidity value received from incubator: {resp!r}")
 
   # UNTESTED
   async def set_co2_level(self, co2_level: float):
-    """Set the CO2 level of the incubator in 1/100% vol. percentage (%) 500 = 5.0 % ."""
-    co2_val = int(co2_level * 100)
+    """Set the CO2 level of the incubator as a fraction (0.0 to 1.0). PLC uses 1/100% vol units
+    (e.g. 500 = 5.0%), so 0.05 fraction -> 500."""
+    co2_val = int(co2_level * 10000)  # PLC uses 0.01% units: 0.05 fraction -> 500 -> 5.0%
     await self._send_command_plc(f"WR DM894 {str(co2_val).zfill(5)}")
     await self._wait_ready()
 
   # UNTESTED
   async def get_co2_level(self) -> float:
-    """Get the CO2 level of the incubator in percentage (%)."""
+    """Get the CO2 level of the incubator as a fraction (0.0 to 1.0)."""
     resp = await self._send_command_plc("RD DM984")
     try:
       co2_value = int(resp)
-      co2 = co2_value / 100.0
+      co2 = co2_value / 10000.0  # PLC uses 0.01% units: 500 -> 0.05 fraction
       return co2
     except ValueError:
       raise RuntimeError(f"Invalid co2 value received from incubator: {resp!r}")
 
   # UNTESTED
   async def get_target_co2_level(self) -> float:
-    """Get the set value CO2 level of the incubator in percentage (%)."""
+    """Get the set value CO2 level of the incubator as a fraction (0.0 to 1.0)."""
     resp = await self._send_command_plc("RD DM894")
     try:
       co2_set_value = int(resp)
-      co2 = co2_set_value / 100.0
+      co2 = co2_set_value / 10000.0  # PLC uses 0.01% units: 500 -> 0.05 fraction
       return co2
     except ValueError:
       raise RuntimeError(f"Invalid co2 set value received from incubator: {resp!r}")
 
   # UNTESTED
   async def set_n2_level(self, n2_level: float):
-    """Set the N2 level of the incubator in percentage (%)."""
-    n2_val = int(n2_level * 100)
+    """Set the N2 level of the incubator as a fraction (0.0 to 1.0)."""
+    n2_val = int(n2_level * 10000)  # PLC uses 0.01% units: 0.9 fraction -> 9000 -> 90.0%
     await self._send_command_plc(f"WR DM895 {str(n2_val).zfill(5)}")
 
   # UNTESTED
   async def get_n2_level(self) -> float:
-    """Get the N2 level of the incubator in percentage (%)."""
+    """Get the N2 level of the incubator as a fraction (0.0 to 1.0)."""
     resp = await self._send_command_plc("RD DM985")
     try:
       n2_value = int(resp)
-      n2 = n2_value / 100.0
+      n2 = n2_value / 10000.0  # PLC uses 0.01% units: 9000 -> 0.9 fraction
       return n2
     except ValueError:
       raise RuntimeError(f"Invalid N2 value received from incubator: {resp!r}")
 
   # UNTESTED
   async def get_target_n2_level(self) -> float:
-    """Get the set value N2 level of the incubator in percentage (%)."""
+    """Get the set value N2 level of the incubator as a fraction (0.0 to 1.0)."""
     resp = await self._send_command_plc("RD DM895")
     try:
       n2_set_value = int(resp)
-      n2 = n2_set_value / 100.0
+      n2 = n2_set_value / 10000.0  # PLC uses 0.01% units: 9000 -> 0.9 fraction
       return n2
     except ValueError:
       raise RuntimeError(f"Invalid N2 set value received from incubator: {resp!r}")
