@@ -66,7 +66,7 @@ class LiconicBackend(IncubatorBackend):
     self.model = model
     self._racks: List[PlateCarrier] = []
 
-    self.io_plc = Serial(
+    self.io = Serial(
       port=port,
       baudrate=self.default_baud,
       bytesize=serial.EIGHTBITS,
@@ -90,40 +90,40 @@ class LiconicBackend(IncubatorBackend):
     5. Poll ready-flag: RD 1915 → wait for "1"<CR><LF>
     """
     try:
-      await self.io_plc.setup()
+      await self.io.setup()
     except serial.SerialException as e:
-      raise RuntimeError(f"Could not open {self.io_plc.port}: {e}")
+      raise RuntimeError(f"Could not open {self.io.port}: {e}") from e
 
-    await self.io_plc.send_break(duration=0.2)  # >100 ms required
+    await self.io.send_break(duration=0.2)  # >100 ms required
     await asyncio.sleep(0.15)
-    await self.io_plc.reset_input_buffer()
-    await self.io_plc.reset_output_buffer()
+    await self.io.reset_input_buffer()
+    await self.io.reset_output_buffer()
 
-    await self.io_plc.write(b"CR\r")
+    await self.io.write(b"CR\r")
     deadline = time.time() + self.init_timeout
     while time.time() < deadline:
-      resp = await self.io_plc.readline()  # reads through LF
+      resp = await self.io.readline()  # reads through LF
       if resp.strip() == b"CC":
         break
     else:
-      await self.io_plc.stop()
+      await self.io.stop()
       raise TimeoutError(f"No CC response from Liconic PLC within {self.init_timeout} seconds")
 
-    await self.io_plc.write(b"ST 1801\r")
-    resp = await self.io_plc.readline()
+    await self.io.write(b"ST 1801\r")
+    resp = await self.io.readline()
     if resp.strip() != b"OK":
-      await self.io_plc.stop()
+      await self.io.stop()
       raise RuntimeError(f"Unexpected reply to ST 1801: {resp!r}")
 
     deadline = time.time() + self.start_timeout
     while time.time() < deadline:
-      await self.io_plc.write(b"RD 1915\r")
-      flag = await self.io_plc.readline()
+      await self.io.write(b"RD 1915\r")
+      flag = await self.io.readline()
       if flag.strip() == b"1":
         break
       await asyncio.sleep(self.poll_interval)
     else:
-      await self.io_plc.stop()
+      await self.io.stop()
       raise TimeoutError(f"PLC did not signal ready within {self.start_timeout} seconds")
 
   def _site_to_m_n(self, site: PlateHolder) -> Tuple[int, int]:
@@ -151,23 +151,23 @@ class LiconicBackend(IncubatorBackend):
     )
 
   async def stop(self):
-    await self.io_plc.stop()
+    await self.io.stop()
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
     warnings.warn("Liconic racks need to be configured manually on each setup")
 
   async def initialize(self):
-    await self._send_command_plc("ST 1900")
-    await self._send_command_plc("ST 1801")
+    await self._send_command("ST 1900")
+    await self._send_command("ST 1801")
     await self._wait_ready()
 
   async def open_door(self):
-    await self._send_command_plc("ST 1901")
+    await self._send_command("ST 1901")
     await self._wait_ready()
 
   async def close_door(self):
-    await self._send_command_plc("ST 1902")
+    await self._send_command("ST 1902")
     await self._wait_ready()
 
   async def fetch_plate_to_loading_tray(self, plate: Plate, read_barcode: bool = False):
@@ -178,34 +178,34 @@ class LiconicBackend(IncubatorBackend):
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
 
-    await self._send_command_plc(f"WR DM0 {m}")  # carousel number
-    await self._send_command_plc(f"WR DM23 {step_size}")  # motor step size
-    await self._send_command_plc(f"WR DM25 {pos_num}")  # number of positions in cassette
-    await self._send_command_plc(f"WR DM5 {n}")  # plate position in carousel
+    await self._send_command(f"WR DM0 {m}")  # carousel number
+    await self._send_command(f"WR DM23 {step_size}")  # motor step size
+    await self._send_command(f"WR DM25 {pos_num}")  # number of positions in cassette
+    await self._send_command(f"WR DM5 {n}")  # plate position in carousel
 
     if read_barcode:
       plate.barcode = await self.read_barcode_inline(m, n)
 
-    await self._send_command_plc("ST 1905")  # plate to transfer station
+    await self._send_command("ST 1905")  # plate to transfer station
     await self._wait_ready()
-    await self._send_command_plc("ST 1903")  # terminate access
+    await self._send_command("ST 1903")  # terminate access
 
   async def take_in_plate(self, plate: Plate, site: PlateHolder, read_barcode: bool = False):
     """Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
 
-    await self._send_command_plc(f"WR DM0 {m}")  # carousel number
-    await self._send_command_plc(f"WR DM23 {step_size}")  # motor step size
-    await self._send_command_plc(f"WR DM25 {pos_num}")  # number of positions in cassette
-    await self._send_command_plc(f"WR DM5 {n}")  # plate position in cassette
-    await self._send_command_plc("ST 1904")  # plate from transfer station
+    await self._send_command(f"WR DM0 {m}")  # carousel number
+    await self._send_command(f"WR DM23 {step_size}")  # motor step size
+    await self._send_command(f"WR DM25 {pos_num}")  # number of positions in cassette
+    await self._send_command(f"WR DM5 {n}")  # plate position in cassette
+    await self._send_command("ST 1904")  # plate from transfer station
     await self._wait_ready()
 
     if read_barcode:
       plate.barcode = await self.read_barcode_inline(m, n)
 
-    await self._send_command_plc("ST 1903")  # terminate access
+    await self._send_command("ST 1903")  # terminate access
 
   async def move_position_to_position(
     self, plate: Plate, dest_site: PlateHolder, read_barcode: bool = False
@@ -221,56 +221,56 @@ class LiconicBackend(IncubatorBackend):
     orig_m, orig_n = self._site_to_m_n(orig_site)  # origin cassette # and plate position #
     dest_m, dest_n = self._site_to_m_n(dest_site)  # destination cassette # and plate position #
 
-    await self._send_command_plc(f"WR DM0 {orig_m}")  # origin cassette #
+    await self._send_command(f"WR DM0 {orig_m}")  # origin cassette #
     orig_step_size, orig_pos_num = self._carrier_to_steps_pos(orig_site)
     dest_step_size, dest_pos_num = self._carrier_to_steps_pos(dest_site)
 
-    await self._send_command_plc(f"WR DM0 {orig_m}")  # carousel number
-    await self._send_command_plc(f"WR DM23 {orig_step_size}")  # motor step size
-    await self._send_command_plc(f"WR DM25 {orig_pos_num}")  # number of positions in cassette
-    await self._send_command_plc(f"WR DM5 {orig_n}")  # origin plate position #
+    await self._send_command(f"WR DM0 {orig_m}")  # carousel number
+    await self._send_command(f"WR DM23 {orig_step_size}")  # motor step size
+    await self._send_command(f"WR DM25 {orig_pos_num}")  # number of positions in cassette
+    await self._send_command(f"WR DM5 {orig_n}")  # origin plate position #
 
     if read_barcode:
       plate.barcode = await self.read_barcode_inline(orig_m, orig_n)
 
-    await self._send_command_plc("ST 1908")  # pick plate from origin position
+    await self._send_command("ST 1908")  # pick plate from origin position
 
     await self._wait_ready()
 
     if orig_m != dest_m:
-      await self._send_command_plc(f"WR DM0 {dest_m}")  # destination cassette # if different
-    await self._send_command_plc(f"WR DM23 {dest_step_size}")  # motor step size
-    await self._send_command_plc(f"WR DM25 {dest_pos_num}")  # number of positions in cassette
-    await self._send_command_plc(f"WR DM5 {dest_n}")  # destination plate position #
-    await self._send_command_plc("ST 1909")  # place plate in destination position
+      await self._send_command(f"WR DM0 {dest_m}")  # destination cassette # if different
+    await self._send_command(f"WR DM23 {dest_step_size}")  # motor step size
+    await self._send_command(f"WR DM25 {dest_pos_num}")  # number of positions in cassette
+    await self._send_command(f"WR DM5 {dest_n}")  # destination plate position #
+    await self._send_command("ST 1909")  # place plate in destination position
 
     await self._wait_ready()
-    await self._send_command_plc("ST 1903")  # terminate access
+    await self._send_command("ST 1903")  # terminate access
 
   async def read_barcode_inline(self, cassette: int, plt_position: int) -> Barcode:
     if self.barcode_scanner is None:
       raise RuntimeError("Barcode scanner not configured for this incubator instance")
 
-    await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
+    await self._send_command("ST 1910")  # move shovel to barcode reading position
     await self._wait_ready()
     barcode = await self.barcode_scanner.scan()
     logger.info(
       f"Read barcode from plate at cassette {cassette}, position {plt_position}: {barcode.data}"
     )
-    reset = await self._send_command_plc("RS 1910")  # move shovel back to normal position
+    reset = await self._send_command("RS 1910")  # move shovel back to normal position
     if reset != "OK":
       raise RuntimeError("Failed to reset shovel position after barcode reading")
     await self._wait_ready()
     return barcode
 
-  async def _send_command_plc(self, command: str) -> str:
+  async def _send_command(self, command: str) -> str:
     """
     Send an ASCII command to the Liconic PLC over serial and return the response.
     """
     cmd = command.strip() + "\r"
     logger.debug(f"Sending command to Liconic PLC: {cmd!r}")
-    await self.io_plc.write(cmd.encode(self.serial_message_encoding))
-    resp = (await self.io_plc.read(128)).decode(self.serial_message_encoding)
+    await self.io.write(cmd.encode(self.serial_message_encoding))
+    resp = (await self.io.read(128)).decode(self.serial_message_encoding)
     if not resp:
       raise RuntimeError(f"No response from Liconic PLC for command {command!r}")
     resp = resp.strip()
@@ -289,7 +289,7 @@ class LiconicBackend(IncubatorBackend):
     start = time.time()
     deadline = start + timeout
     while time.time() < deadline:
-      resp = await self._send_command_plc("RD 1914")
+      resp = await self._send_command("RD 1914")
       if resp == "1":
         return
       await asyncio.sleep(0.1)
@@ -303,13 +303,13 @@ class LiconicBackend(IncubatorBackend):
     start = time.time()
     deadline = start + timeout
     while time.time() < deadline:
-      resp = await self._send_command_plc("RD 1915")
+      resp = await self._send_command("RD 1915")
       if resp == "1":
         return
       await asyncio.sleep(0.1)
-    err_flag = await self._send_command_plc("RD 1814")
+    err_flag = await self._send_command("RD 1814")
     if err_flag == "1":
-      error = await self._send_command_plc("RD DM200")
+      error = await self._send_command("RD DM200")
       for member in HandlingError:
         if error == member.value:
           raise handler_error_map[member]
@@ -324,7 +324,7 @@ class LiconicBackend(IncubatorBackend):
 
     temp_value = int(temperature * 10)
     temp_str = str(temp_value).zfill(5)
-    await self._send_command_plc(f"WR DM890 {temp_str}")
+    await self._send_command(f"WR DM890 {temp_str}")
     await self._wait_ready()
 
   async def get_temperature(self) -> float:
@@ -332,7 +332,7 @@ class LiconicBackend(IncubatorBackend):
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
 
-    resp = await self._send_command_plc("RD DM982")
+    resp = await self._send_command("RD DM982")
     try:
       temp_value = int(resp)
       temperature = temp_value / 10.0
@@ -352,7 +352,7 @@ class LiconicBackend(IncubatorBackend):
   # Should be in Hz
   async def get_shaker_speed(self) -> float:
     """Gets the current shaker speed default = 25"""
-    speed_val = await self._send_command_plc("RD DM39")
+    speed_val = await self._send_command("RD DM39")
     speed = int(speed_val) / 10.0
     await self._wait_ready()
     return speed
@@ -367,14 +367,14 @@ class LiconicBackend(IncubatorBackend):
     else:
       frequency_value = int(frequency)  # assuming incubator expects frequency in 0.1 Hz units
       frequency = frequency_value * 10
-      await self._send_command_plc(f"WR DM39 {str(frequency).zfill(5)}")
-    await self._send_command_plc("ST 1913")
+      await self._send_command(f"WR DM39 {str(frequency).zfill(5)}")
+    await self._send_command("ST 1913")
     await self._wait_ready()
 
   # UNTESTED
   async def stop_shaking(self):
     """Stop shaking. Using command RS 1913"""
-    await self._send_command_plc("RS 1913")
+    await self._send_command("RS 1913")
     await self._wait_ready()
 
   async def get_target_temperature(self) -> float:
@@ -382,7 +382,7 @@ class LiconicBackend(IncubatorBackend):
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
 
-    resp = await self._send_command_plc("RD DM890")
+    resp = await self._send_command("RD DM890")
     try:
       temp_value = int(resp)
       temperature = temp_value / 10.0
@@ -396,7 +396,7 @@ class LiconicBackend(IncubatorBackend):
       raise NotImplementedError("Climate control is not supported on this model")
 
     humidity_val = int(humidity * 1000)  # PLC uses 0.1% units: 0.9 fraction -> 900 -> 90.0%
-    await self._send_command_plc(f"WR DM893 {str(humidity_val).zfill(5)}")
+    await self._send_command(f"WR DM893 {str(humidity_val).zfill(5)}")
     await self._wait_ready()
 
   async def get_humidity(self) -> float:
@@ -404,7 +404,7 @@ class LiconicBackend(IncubatorBackend):
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
 
-    resp = await self._send_command_plc("RD DM983")
+    resp = await self._send_command("RD DM983")
     try:
       humidity_value = int(resp)
       humidity = humidity_value / 1000.0  # PLC uses 0.1% units: 900 -> 0.9 fraction
@@ -417,7 +417,7 @@ class LiconicBackend(IncubatorBackend):
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
 
-    resp = await self._send_command_plc("RD DM893")
+    resp = await self._send_command("RD DM893")
     try:
       humidity_value = int(resp)
       humidity = humidity_value / 1000.0  # PLC uses 0.1% units: 900 -> 0.9 fraction
@@ -430,13 +430,13 @@ class LiconicBackend(IncubatorBackend):
     """Set the CO2 level of the incubator as a fraction (0.0 to 1.0). PLC uses 1/100% vol units
     (e.g. 500 = 5.0%), so 0.05 fraction -> 500."""
     co2_val = int(co2_level * 10000)  # PLC uses 0.01% units: 0.05 fraction -> 500 -> 5.0%
-    await self._send_command_plc(f"WR DM894 {str(co2_val).zfill(5)}")
+    await self._send_command(f"WR DM894 {str(co2_val).zfill(5)}")
     await self._wait_ready()
 
   # UNTESTED
   async def get_co2_level(self) -> float:
     """Get the CO2 level of the incubator as a fraction (0.0 to 1.0)."""
-    resp = await self._send_command_plc("RD DM984")
+    resp = await self._send_command("RD DM984")
     try:
       co2_value = int(resp)
       co2 = co2_value / 10000.0  # PLC uses 0.01% units: 500 -> 0.05 fraction
@@ -447,7 +447,7 @@ class LiconicBackend(IncubatorBackend):
   # UNTESTED
   async def get_target_co2_level(self) -> float:
     """Get the set value CO2 level of the incubator as a fraction (0.0 to 1.0)."""
-    resp = await self._send_command_plc("RD DM894")
+    resp = await self._send_command("RD DM894")
     try:
       co2_set_value = int(resp)
       co2 = co2_set_value / 10000.0  # PLC uses 0.01% units: 500 -> 0.05 fraction
@@ -459,12 +459,12 @@ class LiconicBackend(IncubatorBackend):
   async def set_n2_level(self, n2_level: float):
     """Set the N2 level of the incubator as a fraction (0.0 to 1.0)."""
     n2_val = int(n2_level * 10000)  # PLC uses 0.01% units: 0.9 fraction -> 9000 -> 90.0%
-    await self._send_command_plc(f"WR DM895 {str(n2_val).zfill(5)}")
+    await self._send_command(f"WR DM895 {str(n2_val).zfill(5)}")
 
   # UNTESTED
   async def get_n2_level(self) -> float:
     """Get the N2 level of the incubator as a fraction (0.0 to 1.0)."""
-    resp = await self._send_command_plc("RD DM985")
+    resp = await self._send_command("RD DM985")
     try:
       n2_value = int(resp)
       n2 = n2_value / 10000.0  # PLC uses 0.01% units: 9000 -> 0.9 fraction
@@ -475,7 +475,7 @@ class LiconicBackend(IncubatorBackend):
   # UNTESTED
   async def get_target_n2_level(self) -> float:
     """Get the set value N2 level of the incubator as a fraction (0.0 to 1.0)."""
-    resp = await self._send_command_plc("RD DM895")
+    resp = await self._send_command("RD DM895")
     try:
       n2_set_value = int(resp)
       n2 = n2_set_value / 10000.0  # PLC uses 0.01% units: 9000 -> 0.9 fraction
@@ -488,20 +488,20 @@ class LiconicBackend(IncubatorBackend):
   # Another avenue is to read the first byte of T16 or T17 but don't have ability to test
   async def turn_swap_station(self, home: bool):
     """Turn the swap station of the incubator. If home is True, turn to home position."""
-    resp = await self._send_command_plc("RD 1912")
+    resp = await self._send_command("RD 1912")
     if home and resp == "1":
-      await self._send_command_plc("RS 1912")
+      await self._send_command("RS 1912")
     else:
-      await self._send_command_plc("ST 1912")
+      await self._send_command("ST 1912")
 
   # UNTESTED
   # Activate plate sensor (ST 1911) used in HT units only because it is off by default
   async def check_shovel_sensor(self) -> bool:
     """First need to activate shovel transfer sensor deactivated by default, wait 0.1 seconds
     and then Check if the shovel plate sensor is activated."""
-    await self._send_command_plc("ST 1911")
+    await self._send_command("ST 1911")
     await asyncio.sleep(0.1)
-    resp = await self._send_command_plc("RD 1812")
+    resp = await self._send_command("RD 1812")
     if resp == "1":
       return True
     elif resp == "0":
@@ -512,7 +512,7 @@ class LiconicBackend(IncubatorBackend):
   # UNTESTED
   async def check_transfer_sensor(self) -> bool:
     """Check if the transfer plate sensor is activated."""
-    resp = await self._send_command_plc("RD 1813")
+    resp = await self._send_command("RD 1813")
     if resp == "1":
       return True
     elif resp == "0":
@@ -523,7 +523,7 @@ class LiconicBackend(IncubatorBackend):
   # UNTESTED
   async def check_second_transfer_sensor(self) -> bool:
     """Check if the second transfer plate sensor is activated."""
-    resp = await self._send_command_plc("RD 1807")
+    resp = await self._send_command("RD 1807")
     if resp == "1":
       return True
     elif resp == "0":
@@ -539,11 +539,11 @@ class LiconicBackend(IncubatorBackend):
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
 
-    await self._send_command_plc(f"WR DM0 {m}")  # carousel number
-    await self._send_command_plc(f"WR DM23 {step_size}")  # pitch of plate in mm
-    await self._send_command_plc(f"WR DM25 {pos_num}")  # plate
-    await self._send_command_plc(f"WR DM5 {n}")  # plate position in carousel
-    await self._send_command_plc("ST 1910")  # move shovel to barcode reading position
+    await self._send_command(f"WR DM0 {m}")  # carousel number
+    await self._send_command(f"WR DM23 {step_size}")  # pitch of plate in mm
+    await self._send_command(f"WR DM25 {pos_num}")  # plate
+    await self._send_command(f"WR DM5 {n}")  # plate position in carousel
+    await self._send_command("ST 1910")  # move shovel to barcode reading position
 
     barcode = await self.barcode_scanner.scan()
     logger.info(f"Scanned barcode: {barcode.data}")
@@ -552,7 +552,7 @@ class LiconicBackend(IncubatorBackend):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "port": self.io_plc.port,
+      "port": self.io.port,
     }
 
   @classmethod
