@@ -372,16 +372,42 @@ class STARChatterboxBackend(STARBackend):
       NotImplementedError: If a container doesn't support compute_height_from_volume.
     """
     # Unused parameters kept for signature compatibility:
-    _ = (lld_mode, search_speed, n_replicates, move_to_z_safety_before, move_to_z_safety_after,
-         allow_duplicate_channels, min_traverse_height_at_beginning_of_command,
-         min_traverse_height_during_command, z_position_at_end_of_command, channel_acceleration,
-         post_detection_trajectory, post_detection_dist, detection_edge, detection_drop,
-         channel_speed_above_start_pos_search, z_drive_current_limit, tip_has_filter,
-         dispense_drive_speed, dispense_drive_acceleration, dispense_drive_max_speed,
-         dispense_drive_current_limit, plld_detection_edge, plld_detection_drop, clld_verification,
-         clld_detection_edge, clld_detection_drop, max_delta_plld_clld, plld_mode,
-         plld_foam_detection_drop, plld_foam_detection_edge_tolerance, plld_foam_ad_values,
-         plld_foam_search_speed, dispense_back_plld_volume, resource_offsets)
+    _ = (
+      lld_mode,
+      search_speed,
+      n_replicates,
+      move_to_z_safety_before,
+      move_to_z_safety_after,
+      allow_duplicate_channels,
+      min_traverse_height_at_beginning_of_command,
+      min_traverse_height_during_command,
+      z_position_at_end_of_command,
+      channel_acceleration,
+      post_detection_trajectory,
+      post_detection_dist,
+      detection_edge,
+      detection_drop,
+      channel_speed_above_start_pos_search,
+      z_drive_current_limit,
+      tip_has_filter,
+      dispense_drive_speed,
+      dispense_drive_acceleration,
+      dispense_drive_max_speed,
+      dispense_drive_current_limit,
+      plld_detection_edge,
+      plld_detection_drop,
+      clld_verification,
+      clld_detection_edge,
+      clld_detection_drop,
+      max_delta_plld_clld,
+      plld_mode,
+      plld_foam_detection_drop,
+      plld_foam_detection_edge_tolerance,
+      plld_foam_ad_values,
+      plld_foam_search_speed,
+      dispense_back_plld_volume,
+      resource_offsets,
+    )
     if use_channels is None:
       use_channels = list(range(len(containers)))
 
