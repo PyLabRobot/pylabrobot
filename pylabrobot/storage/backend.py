@@ -55,7 +55,7 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
   """ Methods added for Liconic incubator options."""
 
   @abstractmethod
-  async def get_set_temperature(self) -> float:
+  async def get_target_temperature(self) -> float:
     """Get the set value temperature of the incubator in degrees Celsius."""
     pass
 
@@ -70,7 +70,7 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def get_set_humidity(self) -> float:
+  async def get_target_humidity(self) -> float:
     """Get the set value humidity of the incubator in % RH; e.g. 90.0% RH."""
     pass
 
@@ -85,7 +85,7 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def get_set_co2_level(self) -> float:
+  async def get_target_co2_level(self) -> float:
     """Get the set value CO2 level of the incubator in %; e.g. 5.0%."""
     pass
 
@@ -100,7 +100,7 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def get_set_n2_level(self) -> float:
+  async def get_target_n2_level(self) -> float:
     """Get the set value N2 level of the incubator in %; e.g. 90.0%."""
     pass
 

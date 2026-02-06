@@ -377,7 +377,7 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command_plc("RS 1913")
     await self._wait_ready()
 
-  async def get_set_temperature(self) -> float:
+  async def get_target_temperature(self) -> float:
     """Get the set value temperature of the incubator in degrees Celsius."""
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
@@ -412,7 +412,7 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid humidity value received from incubator: {resp!r}")
 
-  async def get_set_humidity(self) -> float:
+  async def get_target_humidity(self) -> float:
     """Get the set value humidity of the incubator in percentage (%)."""
     if self.model.value.split("_")[-1] == "NC":
       raise NotImplementedError("Climate control is not supported on this model")
@@ -444,7 +444,7 @@ class LiconicBackend(IncubatorBackend):
       raise RuntimeError(f"Invalid co2 value received from incubator: {resp!r}")
 
   # UNTESTED
-  async def get_set_co2_level(self) -> float:
+  async def get_target_co2_level(self) -> float:
     """Get the set value CO2 level of the incubator in percentage (%)."""
     resp = await self._send_command_plc("RD DM894")
     try:
@@ -472,7 +472,7 @@ class LiconicBackend(IncubatorBackend):
       raise RuntimeError(f"Invalid N2 value received from incubator: {resp!r}")
 
   # UNTESTED
-  async def get_set_n2_level(self) -> float:
+  async def get_target_n2_level(self) -> float:
     """Get the set value N2 level of the incubator in percentage (%)."""
     resp = await self._send_command_plc("RD DM895")
     try:

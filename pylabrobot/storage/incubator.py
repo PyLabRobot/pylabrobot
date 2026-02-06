@@ -213,9 +213,9 @@ class Incubator(Machine, Resource):
   async def scan_barcode(self, site: PlateHolder):
     return await self.backend.scan_barcode(site)
 
-  async def get_set_temperature(self) -> float:
+  async def get_target_temperature(self) -> float:
     """Get the set value temperature of the incubator in degrees Celsius."""
-    return await self.backend.get_set_temperature()
+    return await self.backend.get_target_temperature()
 
   async def set_humidity(self, humidity: float):
     """Set the humidity of the incubator in percentage (%)."""
@@ -225,9 +225,9 @@ class Incubator(Machine, Resource):
     """Get the humidity of the incubator in percentage (%)."""
     return await self.backend.get_humidity()
 
-  async def get_set_humidity(self) -> float:
+  async def get_target_humidity(self) -> float:
     """Get the set value humidity of the incubator in percentage (%)."""
-    return await self.backend.get_set_humidity()
+    return await self.backend.get_target_humidity()
 
   async def set_co2_level(self, co2_level: float):
     """Set the CO2 level of the incubator in percentage (%)."""
@@ -237,9 +237,9 @@ class Incubator(Machine, Resource):
     """Get the CO2 level of the incubator in percentage (%)."""
     return await self.backend.get_co2_level()
 
-  async def get_set_co2_level(self) -> float:
+  async def get_target_co2_level(self) -> float:
     """Get the set value CO2 level of the incubator in percentage (%)."""
-    return await self.backend.get_set_co2_level()
+    return await self.backend.get_target_co2_level()
 
   async def set_n2_level(self, n2_level: float):
     """Set the N2 level of the incubator in percentage (%)."""
@@ -249,9 +249,9 @@ class Incubator(Machine, Resource):
     """Get the N2 level of the incubator in percentage (%)."""
     return await self.backend.get_n2_level()
 
-  async def get_set_n2_level(self) -> float:
+  async def get_target_n2_level(self) -> float:
     """Get the set value N2 level of the incubator in percentage (%)."""
-    return await self.backend.get_set_n2_level()
+    return await self.backend.get_target_n2_level()
 
   async def turn_swap_station(self, home: bool):
     """Turn the swap station of the incubator. If home is True, turn to home position."""
