@@ -61,7 +61,7 @@ class LiconicBackend(IncubatorBackend):
       try:
         model = LiconicType(model)
       except ValueError:
-        raise ValueError(f"Unsupported Liconic model: '{model}")
+        raise ValueError(f"Unsupported Liconic model: '{model}'")
 
     self.model = model
     self._racks: List[PlateCarrier] = []
