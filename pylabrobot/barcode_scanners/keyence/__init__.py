@@ -1,0 +1,1 @@
+from .barcode_scanner_backend import KeyenceBarcodeScannerBackend
