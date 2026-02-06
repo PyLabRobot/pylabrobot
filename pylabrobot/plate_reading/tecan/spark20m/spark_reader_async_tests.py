@@ -1,6 +1,6 @@
 import asyncio
-import unittest
 import concurrent.futures
+import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the module under test
