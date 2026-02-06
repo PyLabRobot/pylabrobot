@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import time
-from typing import Awaitable, Callable, Optional
 
 import serial
 
@@ -47,8 +46,6 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
   async def initialize(self):
     """Initialize the Keyence barcode scanner."""
 
-    response = await self.send_command("RMOTOR")
-
     deadline = time.time() + self.init_timeout
     while time.time() < deadline:
       response = await self.send_command("RMOTOR")
@@ -70,36 +67,6 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
     response = await self.io.read()
     return response.decode(self.serial_messaging_encoding).strip()
-
-  async def send_command_and_stream(
-    self,
-    command: str,
-    on_response: Callable[[str], Awaitable[None]],
-    timeout: float = 5.0,
-    stop_condition: Optional[Callable[[str], bool]] = None,
-  ):
-    """Send a command and call on_response for each barcode response."""
-    await self.io.write((command + "\r").encode(self.serial_messaging_encoding))
-    deadline = time.time() + timeout
-
-    while time.time() < deadline:
-      try:
-        response = await asyncio.wait_for(self.io.readline(), timeout=1.0)
-        if response:
-          decoded = response.decode(self.serial_messaging_encoding).strip()
-          if decoded:
-            try:
-              await on_response(decoded)  # Call the callback
-            except Exception as e:
-              logger.error(f"Error in on_response callback: {e}", exc_info=True)
-            if stop_condition and stop_condition(decoded):
-              break
-      except asyncio.TimeoutError:
-        logger.warning("Timeout while waiting for barcode scanner response.")
-        continue
-      except Exception as e:
-        logger.error(f"Error while reading from barcode scanner: {e}", exc_info=True)
-        continue
 
   async def stop(self):
     await self.io.stop()
