@@ -97,7 +97,7 @@ handler_error_map: Dict[HandlingError, Exception] = {
   HandlingError.USER_ACCESS_ERROR: LiconicHandlerGeneralError(
     "Unauthorized user access in combination with manual rotation of carrousel"
   ),
-  HandlingError.STACKER_SLOT_ERROR: LiconicHandlerGeneralError("Stacker slot cannot be reached "),
+  HandlingError.STACKER_SLOT_ERROR: LiconicHandlerGeneralError("Stacker slot cannot be reached"),
   HandlingError.REMOTE_ACCESS_LEVEL_ERROR: LiconicHandlerGeneralError(
     "Undefined stacker level has been requested"
   ),
@@ -105,7 +105,7 @@ handler_error_map: Dict[HandlingError, Exception] = {
     "Export operation while plate is on transfer station"
   ),
   HandlingError.LIFT_INITIALIZATION_ERROR: LiconicHandlerGeneralError(
-    "Lift could not be initialized "
+    "Lift could not be initialized"
   ),
   HandlingError.PLATE_ON_SHOVEL_DETECTION: LiconicHandlerGeneralError(
     "Trying to load a plate, when a plate is already on the shovel"
@@ -113,7 +113,7 @@ handler_error_map: Dict[HandlingError, Exception] = {
   HandlingError.NO_PLATE_ON_SHOVEL_DETECTION: LiconicHandlerGeneralError(
     "Trying to remove or place plate with no plate on the shovel"
   ),
-  HandlingError.NO_RECOVERY: LiconicHandlerGeneralError("Recovery was not possible "),
+  HandlingError.NO_RECOVERY: LiconicHandlerGeneralError("Recovery was not possible"),
   HandlingError.IMPORT_PLATE_STACKER_POSITIONING_ERROR: LiconicHandlerImportPlateError(
     "Carrousel could not reach desired radial position during Import Plate procedure or Lift could not reach transfer level during Import Plate procedure."
   ),

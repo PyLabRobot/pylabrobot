@@ -317,7 +317,7 @@ class LiconicBackend(IncubatorBackend):
       for member in HandlingError:
         if error == member.value:
           raise handler_error_map[member]
-      raise RuntimeError(f" Liconic Handler in unknown error state with memory showing {error}")
+      raise RuntimeError(f"Liconic Handler in unknown error state with memory showing {error}")
     raise TimeoutError(f"Incubator did not become ready within {timeout} seconds")
 
   async def set_temperature(self, temperature: float):
