@@ -210,9 +210,6 @@ class Incubator(Machine, Resource):
       model=data["model"],
     )
 
-  async def scan_barcode(self, site: PlateHolder):
-    return await self.backend.scan_barcode(site)
-
   async def get_target_temperature(self) -> float:
     """Get the set value temperature of the incubator in degrees Celsius."""
     return await self.backend.get_target_temperature()
@@ -252,22 +249,6 @@ class Incubator(Machine, Resource):
   async def get_target_n2_level(self) -> float:
     """Get the set value N2 level of the incubator in percentage (%)."""
     return await self.backend.get_target_n2_level()
-
-  async def turn_swap_station(self, home: bool):
-    """Turn the swap station of the incubator. If home is True, turn to home position."""
-    return await self.backend.turn_swap_station(home)
-
-  async def check_shovel_sensor(self) -> bool:
-    """Check if the shovel plate sensor is activated."""
-    return await self.backend.check_shovel_sensor()
-
-  async def check_transfer_sensor(self) -> bool:
-    """Check if the transfer plate sensor is activated."""
-    return await self.backend.check_transfer_sensor()
-
-  async def check_second_transfer_sensor(self) -> bool:
-    """Check if the second transfer plate sensor is activated."""
-    return await self.backend.check_second_transfer_sensor()
 
   async def move_position_to_position(
     self, plate_name: str, dest_site: PlateHolder, **backend_kwargs
