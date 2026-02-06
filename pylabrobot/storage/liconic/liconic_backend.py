@@ -340,28 +340,27 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid temperature value received from incubator: {resp!r}")
 
-  # UNTESTED
-  # Unsure if 1 means ON and 0 means OFF, needs to be confirmed.
   async def shaker_status(self) -> int:
-    """Determines whether the shaker is ON (1) or OFF (0)"""
+    """Determines whether the shaker is ON (1) or OFF (0).
+
+    UNTESTED. Unsure if 1 means ON and 0 means OFF, needs to be confirmed."""
     # TODO: Missing PLC command - need to determine correct command from Liconic documentation
     raise NotImplementedError("shaker_status command not yet implemented")
 
-  # UNTESTED
-  # Unsure if a liconic will return 00250 for 25 or 00025. Assuming former.
-  # Should be in Hz
   async def get_shaker_speed(self) -> float:
-    """Gets the current shaker speed default = 25"""
+    """Gets the current shaker speed in Hz, default = 25.
+
+    UNTESTED. Unsure if Liconic returns 00250 for 25 or 00025. Assuming former."""
     speed_val = await self._send_command("RD DM39")
     speed = int(speed_val) / 10.0
     await self._wait_ready()
     return speed
 
-  # UNTESTED
-  # Unsure if setting WR DM39 00250 will set it at 25 Hz or if WR DM39 00025 will. Assuming former
   async def start_shaking(self, frequency):
-    """Start shaking. Must be between 1 and 50 Hz. Frequency by default is 10 Hz. Using command
-    ST 1913. This functionality is not currently able to be tested."""
+    """Start shaking. Must be between 1 and 50 Hz. Frequency by default is 10 Hz. Uses command
+    ST 1913.
+
+    UNTESTED. Unsure if WR DM39 00250 sets 25 Hz or if WR DM39 00025 does. Assuming former."""
     if frequency < 1.0 or frequency > 50.0:
       raise ValueError("Shaking frequency must be between 1.0 and 50.0 Hz")
     else:
@@ -371,9 +370,10 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command("ST 1913")
     await self._wait_ready()
 
-  # UNTESTED
   async def stop_shaking(self):
-    """Stop shaking. Using command RS 1913"""
+    """Stop shaking. Uses command RS 1913.
+
+    UNTESTED."""
     await self._send_command("RS 1913")
     await self._wait_ready()
 
@@ -425,17 +425,19 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid set humidity value received from incubator: {resp!r}")
 
-  # UNTESTED
   async def set_co2_level(self, co2_level: float):
     """Set the CO2 level of the incubator as a fraction (0.0 to 1.0). PLC uses 1/100% vol units
-    (e.g. 500 = 5.0%), so 0.05 fraction -> 500."""
+    (e.g. 500 = 5.0%), so 0.05 fraction -> 500.
+
+    UNTESTED."""
     co2_val = int(co2_level * 10000)  # PLC uses 0.01% units: 0.05 fraction -> 500 -> 5.0%
     await self._send_command(f"WR DM894 {str(co2_val).zfill(5)}")
     await self._wait_ready()
 
-  # UNTESTED
   async def get_co2_level(self) -> float:
-    """Get the CO2 level of the incubator as a fraction (0.0 to 1.0)."""
+    """Get the CO2 level of the incubator as a fraction (0.0 to 1.0).
+
+    UNTESTED."""
     resp = await self._send_command("RD DM984")
     try:
       co2_value = int(resp)
@@ -444,9 +446,10 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid co2 value received from incubator: {resp!r}")
 
-  # UNTESTED
   async def get_target_co2_level(self) -> float:
-    """Get the set value CO2 level of the incubator as a fraction (0.0 to 1.0)."""
+    """Get the set value CO2 level of the incubator as a fraction (0.0 to 1.0).
+
+    UNTESTED."""
     resp = await self._send_command("RD DM894")
     try:
       co2_set_value = int(resp)
@@ -455,15 +458,17 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid co2 set value received from incubator: {resp!r}")
 
-  # UNTESTED
   async def set_n2_level(self, n2_level: float):
-    """Set the N2 level of the incubator as a fraction (0.0 to 1.0)."""
+    """Set the N2 level of the incubator as a fraction (0.0 to 1.0).
+
+    UNTESTED."""
     n2_val = int(n2_level * 10000)  # PLC uses 0.01% units: 0.9 fraction -> 9000 -> 90.0%
     await self._send_command(f"WR DM895 {str(n2_val).zfill(5)}")
 
-  # UNTESTED
   async def get_n2_level(self) -> float:
-    """Get the N2 level of the incubator as a fraction (0.0 to 1.0)."""
+    """Get the N2 level of the incubator as a fraction (0.0 to 1.0).
+
+    UNTESTED."""
     resp = await self._send_command("RD DM985")
     try:
       n2_value = int(resp)
@@ -472,9 +477,10 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid N2 value received from incubator: {resp!r}")
 
-  # UNTESTED
   async def get_target_n2_level(self) -> float:
-    """Get the set value N2 level of the incubator as a fraction (0.0 to 1.0)."""
+    """Get the set value N2 level of the incubator as a fraction (0.0 to 1.0).
+
+    UNTESTED."""
     resp = await self._send_command("RD DM895")
     try:
       n2_set_value = int(resp)
@@ -483,22 +489,22 @@ class LiconicBackend(IncubatorBackend):
     except ValueError:
       raise RuntimeError(f"Invalid N2 set value received from incubator: {resp!r}")
 
-  # UNTESTED
-  # Unsure what RD 1912 returns (is 1 home or swapped?)
-  # Another avenue is to read the first byte of T16 or T17 but don't have ability to test
   async def turn_swap_station(self, home: bool):
-    """Turn the swap station of the incubator. If home is True, turn to home position."""
+    """Turn the swap station of the incubator. If home is True, turn to home position.
+
+    UNTESTED. Unsure what RD 1912 returns (is 1 home or swapped?). Another avenue is to read the
+    first byte of T16 or T17 but don't have ability to test."""
     resp = await self._send_command("RD 1912")
     if home and resp == "1":
       await self._send_command("RS 1912")
     else:
       await self._send_command("ST 1912")
 
-  # UNTESTED
-  # Activate plate sensor (ST 1911) used in HT units only because it is off by default
   async def check_shovel_sensor(self) -> bool:
-    """First need to activate shovel transfer sensor deactivated by default, wait 0.1 seconds
-    and then Check if the shovel plate sensor is activated."""
+    """Activate shovel transfer sensor (ST 1911, off by default on HT units), wait 0.1 seconds,
+    then check if the shovel plate sensor is activated.
+
+    UNTESTED."""
     await self._send_command("ST 1911")
     await asyncio.sleep(0.1)
     resp = await self._send_command("RD 1812")
@@ -509,9 +515,10 @@ class LiconicBackend(IncubatorBackend):
     else:
       raise RuntimeError(f"Unexpected response from incubator read shovel sensor: {resp!r}")
 
-  # UNTESTED
   async def check_transfer_sensor(self) -> bool:
-    """Check if the transfer plate sensor is activated."""
+    """Check if the transfer plate sensor is activated.
+
+    UNTESTED."""
     resp = await self._send_command("RD 1813")
     if resp == "1":
       return True
@@ -520,9 +527,10 @@ class LiconicBackend(IncubatorBackend):
     else:
       raise RuntimeError(f"Unexpected response from read transfer station sensor: {resp!r}")
 
-  # UNTESTED
   async def check_second_transfer_sensor(self) -> bool:
-    """Check if the second transfer plate sensor is activated."""
+    """Check if the second transfer plate sensor is activated.
+
+    UNTESTED."""
     resp = await self._send_command("RD 1807")
     if resp == "1":
       return True
