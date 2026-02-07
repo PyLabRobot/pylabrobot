@@ -3,7 +3,7 @@ from typing import Optional, Union
 
 from pylabrobot.arms.backend import AccessPattern, SCARABackend
 from pylabrobot.arms.precise_flex.coords import PreciseFlexCartesianCoords
-from pylabrobot.arms.standard import JointCoords
+from pylabrobot.arms.standard import GripperPose, JointCoords
 from pylabrobot.machines.machine import Machine
 
 
@@ -28,7 +28,7 @@ class ExperimentalSCARA(Machine):
     """Get the current position of the arm in joint space."""
     return await self.backend.get_joint_position(**backend_kwargs)
 
-  async def get_cartesian_position(self, **backend_kwargs) -> PreciseFlexCartesianCoords:
+  async def get_cartesian_position(self, **backend_kwargs) -> GripperPose:
     """Get the current position of the arm in 3D space."""
     return await self.backend.get_cartesian_position(**backend_kwargs)
 
