@@ -25,7 +25,7 @@ from .controls.spark_enums import (
   ScanDirection,
 )
 from .controls.system_control import SystemControl
-from .enums import SparkDevice, SparkEndpoint
+from .enums import SparkDevice
 from .spark_processor import process_absorbance, process_fluorescence
 from .spark_reader_async import SparkReaderAsync
 
@@ -139,14 +139,10 @@ class SparkBackend(PlateReaderBackend):
     )
 
     # Start Background Read
-    bg_task, stop_event, results = await self.reader.start_background_read(
-      SparkDevice.ABSORPTION, SparkEndpoint.BULK_IN
-    )
+    bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.ABSORPTION)
 
     if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(
-        f"Failed to start background read for {SparkDevice.ABSORPTION.name} on {SparkEndpoint.BULK_IN.name}"
-      )
+      raise RuntimeError(f"Failed to start background read for {SparkDevice.ABSORPTION.name}")
 
     try:
       # Execute Measurement Sequence
@@ -159,8 +155,8 @@ class SparkBackend(PlateReaderBackend):
       stop_event.set()
       await bg_task
 
-      await self.measurement_control.end_measurement()
       await self.data_control.turn_all_interval_messages_off()
+      await self.measurement_control.end_measurement()
 
     # Process results
     data_matrix = process_absorbance(results)
@@ -227,14 +223,10 @@ class SparkBackend(PlateReaderBackend):
     await self.measurement_control.set_number_of_reads(num_reads)
 
     # Start Background Read
-    bg_task, stop_event, results = await self.reader.start_background_read(
-      SparkDevice.FLUORESCENCE, SparkEndpoint.BULK_IN1
-    )
+    bg_task, stop_event, results = await self.reader.start_background_read(SparkDevice.FLUORESCENCE)
 
     if bg_task is None or stop_event is None or results is None:
-      raise RuntimeError(
-        f"Failed to start background read for {SparkDevice.FLUORESCENCE.name} on {SparkEndpoint.BULK_IN1.name}"
-      )
+      raise RuntimeError(f"Failed to start background read for {SparkDevice.FLUORESCENCE.name} ")
 
     try:
       # Execute Measurement Sequence
@@ -246,8 +238,8 @@ class SparkBackend(PlateReaderBackend):
       stop_event.set()
       await bg_task
 
-      await self.measurement_control.end_measurement()
       await self.data_control.turn_all_interval_messages_off()
+      await self.measurement_control.end_measurement()
 
     # Process results
     data_matrix = process_fluorescence(results)

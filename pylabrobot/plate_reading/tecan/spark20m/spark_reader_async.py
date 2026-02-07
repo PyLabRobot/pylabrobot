@@ -6,10 +6,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import usb.core
 
 from pylabrobot.io.usb import USB
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
-from .enums import VENDOR_ID, SparkDevice, SparkEndpoint
-from .spark_packet_parser import parse_single_spark_packet
+from .enums import VENDOR_ID, DEVICE_ENDPOINTS, SparkDevice, SparkEndpoint
+from .spark_packet_parser import parse_single_spark_packet, PACKET_TYPE
 
 
 class SparkReaderAsync:
@@ -19,91 +18,6 @@ class SparkReaderAsync:
     self.seq_num: int = 0
     self.lock: asyncio.Lock = asyncio.Lock()
     self.msgs: List[Any] = []
-    self.cur_reader: Optional[USB] = None
-    self.cur_endpoint_addr: Optional[int] = None
-
-  async def _write_to_endpoint(
-    self, reader: USB, endpoint: int, data: bytes, timeout: Optional[float] = None
-  ) -> None:
-    """Write data to a specific endpoint.
-
-    Args:
-      reader: The USB reader instance.
-      endpoint: The endpoint address to write to.
-      data: The data to write.
-      timeout: The timeout for writing to the device in seconds. If `None`, use the default timeout.
-    """
-
-    if timeout is None:
-      timeout = reader.write_timeout
-
-    loop = asyncio.get_running_loop()
-    if reader._executor is None:
-      raise RuntimeError("Call setup() first.")
-
-    dev = reader.dev
-    if dev is None:
-      raise RuntimeError("Device not connected.")
-
-    await loop.run_in_executor(
-      reader._executor,
-      lambda: dev.write(endpoint, data, timeout=int(timeout * 1000)),
-    )
-    logging.log(LOG_LEVEL_IO, "%s write to ep 0x%02x: %s", reader._unique_id, endpoint, data)
-
-  async def _read_from_endpoint(
-    self,
-    reader: USB,
-    endpoint: int,
-    size: Optional[int] = None,
-    timeout: Optional[float] = None,
-  ) -> Optional[bytes]:
-    """Read data from a specific endpoint.
-
-    Args:
-      reader: The USB reader instance.
-      endpoint: The endpoint address to read from.
-      size: The number of bytes to read. If `None`, read up to the max packet size.
-      timeout: The timeout for reading from the device in seconds. If `None`, use the default
-        timeout.
-    """
-    dev = reader.dev
-    if dev is None:
-      raise RuntimeError("Device not connected.")
-
-    if timeout is None:
-      timeout = reader.read_timeout
-
-    if size is None:
-      # find endpoint object to get max packet size
-      # this is slow, but we can't do much else without knowing the size
-      # assuming endpoint is in the active interface
-      cfg = dev.get_active_configuration()
-      intf = cfg[(0, 0)]
-      ep = usb.util.find_descriptor(
-        intf,
-        custom_match=lambda e: e.bEndpointAddress == endpoint,
-      )
-      if ep is None:
-        raise ValueError(f"Endpoint 0x{endpoint:02x} not found.")
-      size = ep.wMaxPacketSize
-
-    loop = asyncio.get_running_loop()
-    if reader._executor is None:
-      raise RuntimeError("Call setup() first.")
-
-    try:
-      res = await loop.run_in_executor(
-        reader._executor,
-        lambda: dev.read(endpoint, size, timeout=int(timeout * 1000)),
-      )
-      if res is not None:
-        return bytes(res)
-      return None
-    except usb.core.USBError as e:
-      if e.errno == 110:  # Timeout
-        return None
-      raise e
 
   async def connect(self) -> None:
     logging.info(f"Scanning for devices with VID={hex(self.vid)}...")
@@ -129,20 +43,24 @@ class SparkReaderAsync:
           dev.set_configuration(0)
           dev.set_configuration(1)
 
+        endpoints: Optional[Dict[str, SparkEndpoint]] = DEVICE_ENDPOINTS.get(device_type)
+        if endpoints is None:
+          logging.warning(f"No endpoints defined for {device_type.name}, skipping.")
+          continue
+
         reader = USB(
           id_vendor=self.vid,
           id_product=device_type.value,
           configuration_callback=configure,
           max_workers=16,
+          read_endpoint_address=endpoints["read_status"].value,
+          write_endpoint_address=endpoints["write"].value,
         )
 
-        await reader.setup()  # type: ignore[no-untyped-call]
+        await reader.setup(empty_buffer=False)  # type: ignore[no-untyped-call]
         self.devices[device_type] = reader
         logging.info(f"Successfully configured {device_type.name}")
 
-      except RuntimeError:
-        # Device not found
-        pass
       except Exception as e:
         logging.error(f"Error configuring {device_type.name}: {e}")
 
@@ -157,6 +75,58 @@ class SparkReaderAsync:
       checksum ^= byte
     return checksum
 
+  async def _read_packet_in_executor(
+    self,
+    reader: USB,
+    endpoint: Optional[int] = None,
+    size: Optional[int] = None,
+    timeout: Optional[float] = None,
+  ) -> Optional[bytes]:
+    loop = asyncio.get_running_loop()
+    if reader._executor is None:
+      raise RuntimeError("Call setup() first.")
+
+    start_time = time.monotonic()
+
+    while True:
+      # Calculate remaining timeout if a timeout is set
+      current_timeout = timeout
+      if timeout is not None:
+        elapsed = time.monotonic() - start_time
+        if elapsed > timeout:
+          return None  # Timeout
+        current_timeout = timeout - elapsed
+
+      data = await loop.run_in_executor(
+        reader._executor,
+        lambda: reader._read_packet(size=size, timeout=current_timeout, endpoint=endpoint),
+      )
+
+      if data is None:
+        return None
+
+      # Validation Logic
+      if len(data) < 5:  # Header(4) + Checksum(1) min
+        logging.warning(f"Packet too short ({len(data)}), ignoring: {data.hex()}")
+        continue
+
+      # Check indicator
+      if data[0] not in PACKET_TYPE:
+        logging.warning(f"Invalid packet indicator {data[0]}, ignoring: {data.hex()}")
+        continue
+
+      # Check length
+      # bytes 2-3 are payload length (Big Endian)
+      payload_len = (data[2] << 8) | data[3]
+      expected_len = 4 + payload_len + 1  # Header + Payload + Checksum
+      if len(data) < expected_len:
+        logging.warning(
+          f"Packet data shorter than payload length (got {len(data)}, expected {expected_len}), ignoring: {data.hex()}"
+        )
+        continue
+
+      return data
+
   async def send_command(
     self,
     command_str: str,
@@ -167,13 +137,16 @@ class SparkReaderAsync:
       raise RuntimeError(f"Device type {device_type} not connected.")
 
     reader = self.devices[device_type]
-    endpoint_addr = SparkEndpoint.BULK_OUT.value
+    endpoints = DEVICE_ENDPOINTS.get(device_type)
+    if not endpoints:
+      raise ValueError(f"No endpoints defined for {device_type}")
 
     async with self.lock:
       # Set up read task before sending command
-      read_task = self._init_read(device_type, SparkEndpoint.INTERRUPT_IN)
+      read_task = self._init_read(reader)
       await asyncio.sleep(0.01)
-      response_task = asyncio.create_task(self._get_response(read_task, timeout=timeout))
+
+      response_task = asyncio.create_task(self._get_response(read_task, reader, timeout=timeout))
 
       try:
         logging.debug(f"Sending to {device_type.name}: {command_str}")
@@ -184,7 +157,7 @@ class SparkReaderAsync:
         message = header + payload + bytes([self._calculate_checksum(header + payload)])
         self.seq_num = (self.seq_num + 1) % 256
 
-        await self._write_to_endpoint(reader, endpoint_addr, message)
+        await reader.write(message)
         logging.debug(f"Sent message to {device_type.name}: {message.hex()}")
 
         # Wait for response
@@ -211,23 +184,25 @@ class SparkReaderAsync:
 
   def _init_read(
     self,
-    device_type: SparkDevice,
-    endpoint: SparkEndpoint,
+    reader: USB,
     count: int = 512,
     read_timeout: int = 2000,
-  ) -> "asyncio.Task[Any]":
-    logging.debug(f"Initiating read task on {device_type.name} ep {hex(endpoint.value)}...")
-    self.cur_reader = self.devices[device_type]
-    self.cur_endpoint_addr = endpoint.value
+  ) -> "asyncio.Future[Any]":
     # Convert read_timeout from milliseconds to seconds for USB class.
-    return asyncio.create_task(
-      self._read_from_endpoint(
-        self.cur_reader, self.cur_endpoint_addr, size=count, timeout=read_timeout / 1000.0
+    return asyncio.ensure_future(
+      self._read_packet_in_executor(
+        reader=reader,
+        endpoint=None,
+        size=count,
+        timeout=read_timeout / 1000.0,
       )
     )
 
   async def _get_response(
-    self, read_task: "asyncio.Task[Any]", timeout: float = 60.0
+    self,
+    read_task: "asyncio.Future[Any]",
+    reader: USB,
+    timeout: float = 60.0,
   ) -> Optional[Dict[str, Any]]:
     try:
       data = await read_task
@@ -257,11 +232,9 @@ class SparkReaderAsync:
         try:
           await asyncio.sleep(0.01)
           logging.debug(f"Still busy, retrying... time left: {deadline - time.monotonic():.1f}s")
-          if self.cur_reader is None or self.cur_endpoint_addr is None:
-            raise RuntimeError("Current reader or endpoint not set")
 
-          resp = await self._read_from_endpoint(
-            self.cur_reader, self.cur_endpoint_addr, size=512, timeout=0.02
+          resp = await self._read_packet_in_executor(
+            reader=reader, endpoint=None, size=512, timeout=0.02
           )
 
           if resp:
@@ -292,7 +265,6 @@ class SparkReaderAsync:
   async def start_background_read(
     self,
     device_type: SparkDevice,
-    endpoint: SparkEndpoint = SparkEndpoint.INTERRUPT_IN,
     read_timeout: int = 100,
   ) -> Tuple[Optional["asyncio.Task[None]"], Optional[asyncio.Event], Optional[List[bytes]]]:
     if device_type not in self.devices:
@@ -302,6 +274,11 @@ class SparkReaderAsync:
     reader = self.devices[device_type]
     stop_event = asyncio.Event()
     results: List[bytes] = []
+    endpoints = DEVICE_ENDPOINTS.get(device_type)
+    if endpoints is None:
+      logging.error(f"No endpoints for {device_type.name}")
+      return None, None, None
+    endpoint = endpoints["read_data"]
 
     async def background_reader() -> None:
       logging.info(
@@ -311,8 +288,11 @@ class SparkReaderAsync:
         await asyncio.sleep(0.2)  # Avoid tight loop
         try:
           # timeout in seconds
-          data = await self._read_from_endpoint(
-            reader, endpoint.value, size=1024, timeout=read_timeout / 1000.0
+          data = await self._read_packet_in_executor(
+            reader=reader,
+            endpoint=endpoint.value,
+            size=1024,
+            timeout=read_timeout / 1000.0,
           )
           if data:
             results.append(bytes(data))
