@@ -346,7 +346,6 @@ class Visualizer:
     # 3. Query the Jupyter REST API using the kernel connection file.
     try:
       import json as _json
-      import re
       import urllib.request
 
       import ipykernel  # type: ignore[import-untyped]
