@@ -20,3 +20,25 @@ class SparkEndpoint(Enum):
   BULK_IN1 = 0x81
   BULK_OUT = 0x01
   INTERRUPT_IN = 0x83
+
+
+DEVICE_ENDPOINTS = {
+  SparkDevice.FLUORESCENCE: {
+    "write": SparkEndpoint.BULK_OUT,
+    "read_status": SparkEndpoint.BULK_IN1,
+    "read_data": SparkEndpoint.BULK_IN1,
+  },
+  SparkDevice.ABSORPTION: {
+    "write": SparkEndpoint.BULK_OUT,
+    "read_status": SparkEndpoint.INTERRUPT_IN,
+    "read_data": SparkEndpoint.BULK_IN,
+  },
+  SparkDevice.PLATE_TRANSPORT: {
+    "write": SparkEndpoint.BULK_OUT,
+    "read_status": SparkEndpoint.INTERRUPT_IN,
+  },
+  SparkDevice.LUMINESCENCE: {
+    "write": SparkEndpoint.BULK_OUT,
+    "read_status": SparkEndpoint.INTERRUPT_IN,
+  },
+}
