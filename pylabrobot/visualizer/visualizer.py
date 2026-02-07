@@ -329,13 +329,13 @@ class Visualizer:
       ipython = get_ipython()  # type: ignore[name-defined]  # noqa: F821
       vsc_file = getattr(ipython, "user_ns", {}).get("__vsc_ipynb_file__")
       if vsc_file:
-        return os.path.basename(vsc_file)
+        return str(os.path.basename(vsc_file))
     except NameError:
       pass
 
     # 2. Try ipynbname package (works for classic Jupyter Notebook and JupyterLab).
     try:
-      import ipynbname  # type: ignore[import-untyped]
+      import ipynbname  # type: ignore[import-untyped,import-not-found]
 
       nb_path = ipynbname.path()
       if nb_path:
@@ -359,14 +359,14 @@ class Visualizer:
       # First, try to get server info from jupyter_core / notebook.
       servers = []
       try:
-        from jupyter_server.serverapp import list_running_servers  # type: ignore[import-untyped]
+        from jupyter_server.serverapp import list_running_servers  # type: ignore[import-untyped,import-not-found]
 
         servers = list(list_running_servers())
       except Exception:
         pass
       if not servers:
         try:
-          from notebook.notebookapp import list_running_servers  # type: ignore[import-untyped]
+          from notebook.notebookapp import list_running_servers  # type: ignore[import-untyped,import-not-found,no-redef]
 
           servers = list(list_running_servers())
         except Exception:
@@ -387,7 +387,7 @@ class Visualizer:
             if kid == kernel_id:
               nb_path = sess.get("notebook", {}).get("path", "") or sess.get("path", "")
               if nb_path:
-                return os.path.basename(nb_path)
+                return str(os.path.basename(nb_path))
         except Exception:
           continue
     except Exception:
