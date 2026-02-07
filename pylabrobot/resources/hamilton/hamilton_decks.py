@@ -542,7 +542,7 @@ class HamiltonSTARDeck(HamiltonDeck):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "with_waste_block": False,  # data encoded as child. (not very pretty to have this key though...)
+      "with_waste_block": any(child.name == "waste_block" for child in self.children),
       "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
       "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }
