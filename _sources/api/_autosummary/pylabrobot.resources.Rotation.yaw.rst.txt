@@ -1,0 +1,6 @@
+pylabrobot.resources.Rotation.yaw
+=================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: Rotation.yaw

@@ -1,0 +1,55 @@
+﻿pylabrobot.centrifuge.vspin\_backend.VSpinBackend
+=================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. autoclass:: VSpinBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VSpinBackend.bucket_1_remainder
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VSpinBackend.__init__
+      ~VSpinBackend.close_door
+      ~VSpinBackend.configure_and_initialize
+      ~VSpinBackend.deserialize
+      ~VSpinBackend.g_to_rpm
+      ~VSpinBackend.get_all_instances
+      ~VSpinBackend.get_bucket_1_position
+      ~VSpinBackend.get_bucket_locked
+      ~VSpinBackend.get_door_locked
+      ~VSpinBackend.get_door_open
+      ~VSpinBackend.get_home_position
+      ~VSpinBackend.get_position
+      ~VSpinBackend.get_tachometer
+      ~VSpinBackend.go_to_bucket1
+      ~VSpinBackend.go_to_bucket2
+      ~VSpinBackend.go_to_position
+      ~VSpinBackend.initialize
+      ~VSpinBackend.lock_bucket
+      ~VSpinBackend.lock_door
+      ~VSpinBackend.open_door
+      ~VSpinBackend.serialize
+      ~VSpinBackend.set_bucket_1_position_to_current
+      ~VSpinBackend.set_configuration_data
+      ~VSpinBackend.setup
+      ~VSpinBackend.spin
+      ~VSpinBackend.stop
+      ~VSpinBackend.unlock_bucket
+      ~VSpinBackend.unlock_door
+   
+   

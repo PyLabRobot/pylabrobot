@@ -1,0 +1,397 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Moving plate onto Alpaqua magnet using CORE grippers\n",
+    "\n",
+    "- tags: #resourcemovement #plateadapter #hamiltonstar\n",
+    "- Last updated: 2025-10-27"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Prerequisites\n",
+    "\n",
+    "- Machines used:\n",
+    "  - Hamilton STAR\n",
+    "- Non-PLR dependencies: None \n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Preview of Machine Behvaiour"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<video width=\"640\" controls autoplay loop>\n",
+    "  <source src=\"./assets/star_movement_plate_to_alpaqua_core/animation.mp4\" type=\"video/mp4\">\n",
+    "  Your browser does not support the video tag.\n",
+    "</video>"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Protocol Mode"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "protocol_mode = \"simulation\" # \"execution\" or \"simulation\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Import Statements"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Non-PLR Dependencies\n",
+    "\n",
+    "None"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Machine & Visualizer"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load_ext autoreload\n",
+    "%autoreload 2\n",
+    "       \n",
+    "import random \n",
+    "import time\n",
+    "\n",
+    "from pylabrobot.liquid_handling import LiquidHandler\n",
+    "from pylabrobot.resources.hamilton import STARLetDeck\n",
+    "from pylabrobot.visualizer.visualizer import Visualizer\n",
+    "\n",
+    "if protocol_mode == \"execution\":\n",
+    "\n",
+    "  from pylabrobot.liquid_handling.backends import STARBackend\n",
+    "\n",
+    "  backend = STARBackend()\n",
+    "\n",
+    "elif protocol_mode == \"simulation\":\n",
+    "\n",
+    "  from pylabrobot.liquid_handling.backends.hamilton.STAR_chatterbox import STARChatterboxBackend\n",
+    "    \n",
+    "  backend = STARChatterboxBackend()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Required Resources"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import (\n",
+    "  hamilton_mfx_carrier_L5_base,\n",
+    "  hamilton_mfx_plateholder_DWP_metal_tapped,\n",
+    "  hamilton_mfx_plateholder_DWP_flat,\n",
+    "  alpaqua_96_plateadapter_magnum_flx,\n",
+    "  Azenta4titudeFrameStar_96_wellplate_200ul_Vb,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Note: if you're unsure whether you have the resources mentioned in a PLR automated Protocol, use Python's inbuild `help` function to check out the resource definition's docstring - they always contain the manufacturer's catalogue/part number (and if available a direct link to the product page):"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Help on function hamilton_mfx_plateholder_DWP_metal_tapped in module pylabrobot.resources.hamilton.mfx_modules:\n",
+      "\n",
+      "hamilton_mfx_plateholder_DWP_metal_tapped(name: str) -> pylabrobot.resources.carrier.PlateHolder\n",
+      "    Hamilton MFX DWP Module (cat.-no. 188042 / 188042-00).\n",
+      "    Hamilton name: 'MFX_DWP_rackbased_module'\n",
+      "    It also contains metal clamps at the corners.\n",
+      "    https://www.hamiltoncompany.com/other-robotics/188042\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "help(hamilton_mfx_plateholder_DWP_metal_tapped) # for more information visit the docs 'Resource Management' section"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Instantiate Frontend & Connect to Machine"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Websocket server started at http://127.0.0.1:2121\n",
+      "File server started at http://127.0.0.1:1337 . Open this URL in your browser.\n",
+      "C0CDid0001\n"
+     ]
+    }
+   ],
+   "source": [
+    "deck = STARLetDeck()\n",
+    "lh = LiquidHandler(backend=backend, deck=deck)\n",
+    "\n",
+    "await lh.setup()\n",
+    "\n",
+    "vis = Visualizer(resource=lh)\n",
+    "await vis.setup()\n",
+    "\n",
+    "await backend.disable_cover_control() # 😈"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Configure Deck Layout"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Setup MFX Carrier for Magnetic Bead Resuspension\n",
+    "\n",
+    "mfx_plateholder_dwp_0 = hamilton_mfx_plateholder_DWP_metal_tapped(\n",
+    "    name=f\"mfx_plateholder_dwp_tapped_dwp_0\"\n",
+    ")\n",
+    "\n",
+    "mfx_carrier_tapped_plate_holder_example = hamilton_mfx_carrier_L5_base(\n",
+    "  name=\"mfx_carrier_tapped_plate_holder_example\",\n",
+    "  modules={\n",
+    "    0: mfx_plateholder_dwp_0,\n",
+    "  }\n",
+    ")\n",
+    "\n",
+    "mfx_carrier_tapped_plate_holder_example[0] = Azenta4titudeFrameStar_96_wellplate_200ul_Vb(\n",
+    "  name=\"wash_plate_0\"\n",
+    ")\n",
+    "\n",
+    "deck.assign_child_resource(mfx_carrier_tapped_plate_holder_example, rails=1)\n",
+    "\n",
+    "# Setup Magnet-carrying MFX Carrier\n",
+    "\n",
+    "plateholder_flat_0 = hamilton_mfx_plateholder_DWP_flat(name=f\"plateholder_flat_0\")\n",
+    "magnet_0 = alpaqua_96_plateadapter_magnum_flx(name=f\"alpaqua_magnet_0\")\n",
+    "plateholder_flat_0.assign_child_resource(magnet_0)\n",
+    "\n",
+    "mfx_carrier_magnet_example = hamilton_mfx_carrier_L5_base(\n",
+    "  name=\"mfx_carrier_magnet_example\",\n",
+    "  modules={\n",
+    "    0: plateholder_flat_0,\n",
+    "  }\n",
+    ")\n",
+    "magnet_0.plate_z_offset = 0.62  # <===== PLATE-SPECIFIC !\n",
+    "# empirical: distance between Alpaqua magnet hole bottom to\n",
+    "# cavity_bottom of the well that is placed on top of it\n",
+    "# use ztouch_probing to measure both \n",
+    "\n",
+    "deck.assign_child_resource(mfx_carrier_magnet_example, rails=8)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Execution"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Move Plate Onto Magnet PlateAdapter"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "C0ZPid0002xs01679xd0yj1147yv0050zj1932zy0500yo0885yg0825yw40th2800te2800\n",
+      "C0ZRid0003xs03254xd0yj1138zj2162zi000zy0500yo0885th2800te2800\n",
+      "False\n"
+     ]
+    }
+   ],
+   "source": [
+    "plate_index = 0 # always design for throughput adaptivness ;)\n",
+    "\n",
+    "plate_to_move = lh.deck.get_resource(f\"wash_plate_{plate_index}\")\n",
+    "move_target = lh.deck.get_resource(f\"alpaqua_magnet_{plate_index}\")\n",
+    "\n",
+    "\n",
+    "back_channel_idx = random.randint(1, 6)  # Reduce wear & tear on any single channel\n",
+    "\n",
+    "if protocol_mode == \"simulation\":\n",
+    "  time.sleep(2)\n",
+    "    \n",
+    "await lh.move_plate(\n",
+    "  plate=plate_to_move,\n",
+    "  to=move_target,\n",
+    "  use_arm=\"core\",\n",
+    "  channel_1=back_channel_idx,\n",
+    "  channel_2=back_channel_idx + 1,\n",
+    "  pickup_distance_from_top=6,\n",
+    "  core_grip_strength=40,\n",
+    "  return_core_gripper=False,\n",
+    ")\n",
+    "\n",
+    "if protocol_mode == \"execution\":\n",
+    "  # \"smart\" command, will ask operator for input if it cannot find plate in move_target location\n",
+    "  # place into condition for simulation mode\n",
+    "\n",
+    "  # (1) check transfer success, (2) push plate flush\n",
+    "  await backend.core_check_resource_exists_at_location_center(\n",
+    "    location=plate_to_move.get_absolute_location(),\n",
+    "    resource=plate_to_move,\n",
+    "    gripper_y_margin=9,\n",
+    "    enable_recovery=True,\n",
+    "    audio_feedback=False,\n",
+    "  )\n",
+    "\n",
+    "print(backend.core_parked)\n",
+    "# >>> False # save time - keep CORE grippers on channels during magnetisation time\n",
+    "\n",
+    "if protocol_mode == \"simulation\":\n",
+    "  time.sleep(2)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Move Plate back onto tapped PlateHolder"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "C0ZPid0004xs03254xd0yj1138yv0050zj2162zy0500yo0885yg0825yw40th2800te2800\n",
+      "C0ZRid0005xs01679xd0yj1147zj1932zi000zy0500yo0885th2800te2800\n",
+      "C0ZSid0006xs07975xd0ya1250yb1070tp2150tz2050th2800te2800\n",
+      "True\n"
+     ]
+    }
+   ],
+   "source": [
+    "move_target = lh.deck.get_resource(f\"mfx_plateholder_dwp_tapped_dwp_{plate_index}\")\n",
+    "\n",
+    "await lh.move_plate(\n",
+    "  plate=plate_to_move,\n",
+    "  to=move_target,\n",
+    "  use_arm=\"core\",\n",
+    "  channel_1=back_channel_idx,\n",
+    "  channel_2=back_channel_idx + 1,\n",
+    "  pickup_distance_from_top=6,\n",
+    "  core_grip_strength=40,\n",
+    "  return_core_gripper=False,\n",
+    ")\n",
+    "\n",
+    "if protocol_mode == \"execution\":\n",
+    "\n",
+    "  await backend.core_check_resource_exists_at_location_center(\n",
+    "    location=plate_to_move.get_absolute_location(),\n",
+    "    resource=plate_to_move,\n",
+    "    gripper_y_margin=9,\n",
+    "    enable_recovery=True,\n",
+    "    audio_feedback=False,\n",
+    "  )\n",
+    "   \n",
+    "await backend.return_core_gripper_tools()\n",
+    "\n",
+    "print(backend.core_parked)\n",
+    "# >>> True"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "plr",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.11"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

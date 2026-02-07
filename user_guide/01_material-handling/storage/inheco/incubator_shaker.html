@@ -1,0 +1,1627 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Inheco Incubator (Shaker) &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plr_cards.css?v=bbd25712" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/01_material-handling/storage/inheco/incubator_shaker';</script>
+    <script src="../../../../_static/plr_cards.js?v=0d03ad13"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/01_material-handling/storage/inheco/incubator_shaker.html" />
+    <link rel="icon" href="../../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="Inheco SCILA storage unit" href="scila.html" />
+    <link rel="prev" title="TFS Cytomat Series" href="../cytomat.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../_getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../_getting-started/units.html">Default Units</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/_hamilton-star.html">Hamilton STAR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/96head.html">Using the 96 head</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/autoload_and_1d_barcode_reader.html">Using the autoload &amp; 1D barcode reader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/iswap-module.html">iSWAP Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/y-probing.html">Y-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/z-probing.html">Z-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/foil.html">Foil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/hamilton-liquid-classes.html">Using “Hamilton Liquid Classes” with Pylabrobot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/core-grippers.html">Co-Re Grippers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-star/surface-following.html">Surface following</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/opentrons-ot2/hello-world.html">OT2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../00_liquid-handling/pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/mixing.html">Mixing</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../_material-handling.html">Material Handling</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../arms/c_scara/precise-flex-pf400/hello-world.html">PreciseFlex PF400 and PF3400 robots</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../centrifuge/_centrifuge.html">Centrifuges</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../centrifuge/agilent_vspin.html">Agilent VSpin</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../heating_shaking/inheco.html">Inheco ThermoShake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../heating_shaking/qinstruments.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../fans/fans.html">Fans (Air Filtration Systems)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../fans/hamilton_hepa_scap.html">Hamilton HEPA Fan</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../sealers/a4s.html">Azenta a4S</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../temperature-controllers/temperature-controllers.html">Temperature Controllers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../temperature-controllers/ot-temperature-controller.html">Opentrons Temperature Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../temperature-controllers/hamilton-heater-cooler.html">Hamilton Heater Cooler (HHC)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../temperature-controllers/inheco.html">Hello World, Inheco CPAC!</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../storage.html">Storage</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../cytomat.html">TFS Cytomat Series</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">Inheco Incubator (Shaker)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scila.html">Inheco SCILA storage unit</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../tilting.html">Tilting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../thermocycling/thermocycling.html">Thermocycling</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../02_analytical/_analytical.html">Analytical</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../02_analytical/flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../02_analytical/plate-reading/plate-reading.html">Plate reading</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/bmg-clariostar.html">BMG Labtech CLARIOstar (Plus)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/byonoy/absorbance.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/byonoy/luminescence.html">Byonoy Luminescence 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/byonoy.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/cytation.html">Cytation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/plate-reading/synergyh1.html">Synergy H1</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../02_analytical/scales/scales.html">Scales</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../02_analytical/scales/mettler-toledo-WXS205SDU.html">Mettler Toledo Precision Scales</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/validation.html">aP Validation Against Log File Example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../_material-handling.html" class="nav-link">Material Handling</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../storage.html" class="nav-link">Storage</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Inheco Incubator (Shaker)</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="inheco-incubator-shaker">
+<h1>Inheco Incubator (Shaker)<a class="headerlink" href="#inheco-incubator-shaker" title="Link to this heading">#</a></h1>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Summary</p></th>
+<th class="head"><p>Image</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><ul style="font-size:15px; line-height:1.6; margin-top:0;"> <li><a href="https://www.inheco.com/incubator-shaker.html" target="_blank"><b>OEM Link</b></a></li> <li><b>Communication Protocol / Hardware:</b> Serial / USB-A/B</li> <li><b>Communication Level:</b> Firmware (documentation shared by OEM)</li> <li>Same command set for: <ul> <li>Incubator “MP”</li> <li>Incubator “DWP”</li> <li>Incubator Shaker “MP”</li> <li>Incubator Shaker “DWP”</li> </ul></li> <li>VID:PID <code>0403:6001</code></li> <li>Takes in a single plate via a loading tray, heats it to the set temperature, and shakes it to the set RPM.</li> </ul></p></td>
+<td><p><div style="width:320px; text-align:center;"> <img alt="shaker" src="../../../../_images/inheco_incubator_shaker_mp_dwp.png" /> <br><i>Figure: Inheco Incubator Shaker MP &amp; DWP models</i> </div></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="about-the-machine-s">
+<h2>About the Machine(s)<a class="headerlink" href="#about-the-machine-s" title="Link to this heading">#</a></h2>
+<p>Inheco incubator shakers are modular machines used for plate storage, temperature control and shaking.
+They differentiate themselves:</p>
+<ul class="simple">
+<li><p><strong>heater shakers</strong> … heat a material on which a plate is being placed; open-access; non-uniform temperature distribution around the plate; enables shaking of plate.</p></li>
+<li><p><strong>incubator shakers</strong> … an enclosed chamber that is being heated and houses a plate; plate access is controlled via a loading tray and a door; <em>highly uniform temperature distribution around the plate</em>; enables shaking of plate.</p></li>
+</ul>
+<p>The Inheco incubator devices come in 4 versions, dependent on (1) whether they provide a shaking feature &amp; (2) the size of plates they accept:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head text-center"><p><strong>RTS Code</strong></p></th>
+<th class="head text-center"><p><strong>Shaking Feature</strong></p></th>
+<th class="head text-center"><p><strong>Plate Format</strong></p></th>
+<th class="head text-left"><p><strong>Device Identifier</strong></p></th>
+<th class="head text-left"><p><strong>Typical Model</strong></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">0</span></code></p></td>
+<td class="text-center"><p>❌ No</p></td>
+<td class="text-center"><p>MP (Microplate)</p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">incubator_mp</span></code></p></td>
+<td class="text-left"><p>INHECO Incubator MP</p></td>
+</tr>
+<tr class="row-odd"><td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+<td class="text-center"><p>✅ Yes</p></td>
+<td class="text-center"><p>MP (Microplate)</p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">incubator_shaker_mp</span></code></p></td>
+<td class="text-left"><p>INHECO Incubator Shaker MP</p></td>
+</tr>
+<tr class="row-even"><td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">2</span></code></p></td>
+<td class="text-center"><p>❌ No</p></td>
+<td class="text-center"><p>DWP (Deepwell Plate)</p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">incubator_dwp</span></code></p></td>
+<td class="text-left"><p>INHECO Incubator DWP</p></td>
+</tr>
+<tr class="row-odd"><td class="text-center"><p><code class="docutils literal notranslate"><span class="pre">3</span></code></p></td>
+<td class="text-center"><p>✅ Yes</p></td>
+<td class="text-center"><p>DWP (Deepwell Plate)</p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">incubator_shaker_dwp</span></code></p></td>
+<td class="text-left"><p>INHECO Incubator Shaker DWP</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Note: All 4 machines can be controlled with the same PyLabRobot Backend, called <code class="docutils literal notranslate"><span class="pre">InhecoIncubatorShakerBackend</span></code>!</p>
+</div>
+</section>
+<hr class="docutils" />
+<section id="setup-instructions-physical">
+<h2>Setup Instructions (Physical)<a class="headerlink" href="#setup-instructions-physical" title="Link to this heading">#</a></h2>
+<p><img alt="copy-me" src="../../../../_images/inheco_incubator_shaker_physical_setup_overview.png" /></p>
+<p>To facilitate integration, multiple devices can be placed on top of each other to form an Incubator Shaker Stack (see infographic above), but care has to be taken to not overstrain the connections:</p>
+<p>Each of the 4 different shaker types requires a different amount of power.
+An easier way to identify the configurations possible is to think of “incubator power credits” - <strong>no stack must exceed 5 power credits</strong> (see User and Installation Manual):</p>
+<ol class="arabic simple">
+<li><p>An “incubator MP” -&gt; 1 “incubator power credits” -&gt; 5 units can be stacked on top of each other.</p></li>
+<li><p>An “incubator DWP” -&gt; 1.25 “incubator power credits” -&gt; 4 units.</p></li>
+<li><p>An “incubator shaker MP” -&gt; 1.6 “incubator power credits” -&gt; 3 units</p></li>
+<li><p>An “incubator shaker DWP” -&gt; 2.5 “incubator power credits” -&gt; 2 units</p></li>
+</ol>
+<p>However, the machines in a single stack can be of any of the 4 types.
+This means you could create stacks of:</p>
+<ul class="simple">
+<li><p>2x “incubator DWP” (1.25 credits) + 1x “incubator shaker DWP” (2.5 credits)</p></li>
+<li><p>3x “incubator MP” (1 credits) + 1x “incubator shaker MP” (1.6 credits) [shown in the infographic above]</p></li>
+</ul>
+<p>When a stack would exceed more than 5 “incubator power credits”, you <strong>must build multiple stacks</strong> (ask your Inheco sales representative if you are unsure before trying this out).</p>
+<p>The benefit of this setup is that only <strong>one</strong> power cable and only <strong>one</strong> USB cable have to be plugged into the machine at the very bottom of a machine (i.e. stack index 0).
+Machines above the bottom one only need to be connected with the machine below it using the 15-pin SUB-D connectors that come with each machine when bought from Inheco.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Note: In PyLabRobot, the stack is the central control element and is controlled via its own instance of the <code class="docutils literal notranslate"><span class="pre">InhecoIncubatorShakerStackBackend</span></code>.</p>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Explanation</p></th>
+<th class="head"><p>Image</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><div style="font-size:15px; line-height:1.6; margin-top:0;"> To connect an <code>InhecoIncubatorShakerStackBackend</code> you must set the <b>DIP switch identifier</b> on the back of the bottom machine: <ul style="margin-left:20px;"> <li>located on the back of the bottom machine,</li> <li>defines the DIP switch configuration for the entire stack.</li> </ul> <h3>Setting the DIP switch to generate a machine address</h3> Each machine has a 4-pin DIP switch. Each pin can be <code>UP</code> (<code>0</code>) or <code>DOWN</code> (<code>1</code>). <br><br> <i>Note:</i> the two pins to the left of the DIP switch are not part of the addressing and should remain in the <code>DOWN</code> position. <br><br> This forms a <i>4-bit binary address</i>: <ul> <li>All pins at <code>0</code> → binary <code>0 0 0 0</code> → decimal <code>0</code></li> <li>All pins at <code>1</code> → binary <code>1 1 1 1</code> → decimal <code>15</code> (<code>2<sup>4</sup>-1</code>)</li> </ul> This address is crucial for generating valid communication commands for your Inheco stack. </div></p></td>
+<td><p><div style="width:320px; text-align:center;"> <img alt="dip switches" src="../../../../_images/inheco_incubator_shaker_dip_switch_addressing.png" /> <br><i>Figure: DIP switch layout to generate different identifiers/addresses</i> </div></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<hr class="docutils" />
+<section id="setup-instructions-programmatic">
+<h2>Setup Instructions (Programmatic)<a class="headerlink" href="#setup-instructions-programmatic" title="Link to this heading">#</a></h2>
+<p>After the two cables have been connected to the bottom-most Inheco Incubator Shaker, you have to…</p>
+<ol class="arabic simple">
+<li><p>instantiate the <code class="docutils literal notranslate"><span class="pre">InhecoIncubatorShakerStackBackend</span></code> and give it the correct <code class="docutils literal notranslate"><span class="pre">dip_switch_id</span></code> &amp; <code class="docutils literal notranslate"><span class="pre">stack_index</span></code>, and</p></li>
+<li><p>create a <code class="docutils literal notranslate"><span class="pre">IncubatorShakerStack</span></code> frontend and give it the new backend instance.</p></li>
+</ol>
+<p>The “stack” is the central interface to all units in it.
+The stack automatically identifies all units inside it (including their type), and will create both the correct connection and a physical instance for it.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Before a connection has been established the incubator shaker’s front LED blinks.
+After the connection has successfully been made, the LED will continuously be on.</p>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.storage.inheco</span><span class="w"> </span><span class="kn">import</span> <span class="n">IncubatorShakerStack</span><span class="p">,</span> <span class="n">InhecoIncubatorShakerStackBackend</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span> <span class="c1"># only needed for examples in this tutorial, optional for your purposes</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span> <span class="c1"># only needed for examples in this tutorial, optional for your purposes</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">iis_stack_backend</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span>
+
+<span class="n">iis_stack</span> <span class="o">=</span> <span class="n">IncubatorShakerStack</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">iis_stack_backend</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you are interested in seeing information about the machine you are connecting to, you can set the <code class="docutils literal notranslate"><span class="pre">.setup()</span></code> optional argument <code class="docutils literal notranslate"><span class="pre">verbose</span></code> to <code class="docutils literal notranslate"><span class="pre">True</span></code>:</p>
+<ol class="arabic simple">
+<li><p>serial port used for connection</p></li>
+<li><p>DIP switch ID used and verified</p></li>
+<li><p>number of units identified in the stack</p></li>
+<li><p>composition (index and type of units) of the stack</p></li>
+</ol>
+</div>
+</section>
+<section id="usage-controlling-individual-units">
+<h2>Usage: Controlling Individual Units<a class="headerlink" href="#usage-controlling-individual-units" title="Link to this heading">#</a></h2>
+<section id="addressing-units-sensing-plate-presence">
+<h3>Addressing Units &amp; Sensing Plate Presence<a class="headerlink" href="#addressing-units-sensing-plate-presence" title="Link to this heading">#</a></h3>
+<p>The stack interface enables fast, direct access to any machine in a stack.</p>
+<p>Every Inheco incubator (shaker) contains an internal, reflection-based plate sensor.
+(This is very useful e.g. when someone has forgotten their plate in the incubator 👀)</p>
+<p>Let’s use this as an example of how you can address different units in the stack individually:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">iis_stack</span><span class="o">.</span><span class="n">num_units</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>2
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iis_stack</span><span class="o">.</span><span class="n">num_units</span><span class="p">):</span>
+  <span class="n">plate_presence_check</span> <span class="o">=</span> <span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">request_plate_in_incubator</span><span class="p">()</span>
+  <span class="nb">print</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">plate_presence_check</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>0 False
+1 False
+</pre></div>
+</div>
+</div>
+</div>
+<p>Option 2: Addressing individual units by calling the stack backend with the correct stack_index</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iis_stack</span><span class="o">.</span><span class="n">num_units</span><span class="p">):</span>
+  <span class="n">plate_presence_check</span> <span class="o">=</span> <span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">backend</span><span class="o">.</span><span class="n">request_plate_in_incubator</span><span class="p">(</span>
+    <span class="n">stack_index</span><span class="o">=</span><span class="n">idx</span>
+  <span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">plate_presence_check</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>0 False
+1 False
+</pre></div>
+</div>
+</div>
+</div>
+<p>Option 3: Storing each unit as a handy variable</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">incubator_shaker_0</span> <span class="o">=</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">plate_presence_check_0</span> <span class="o">=</span> <span class="k">await</span> <span class="n">incubator_shaker_0</span><span class="o">.</span><span class="n">request_plate_in_incubator</span><span class="p">()</span>
+
+<span class="n">incubator_shaker_1</span> <span class="o">=</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="n">plate_presence_check_1</span> <span class="o">=</span> <span class="k">await</span> <span class="n">incubator_shaker_1</span><span class="o">.</span><span class="n">request_plate_in_incubator</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">plate_presence_check_0</span><span class="p">,</span> <span class="n">plate_presence_check_1</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>False False
+</pre></div>
+</div>
+</div>
+</div>
+<p>We usually use the direct indexing of the frontend method but it is up to you to choose.
+e.g.: storing of units in separate variables can be very useful when using many stacks.</p>
+</section>
+<section id="using-loading-tray">
+<h3>Using Loading Tray<a class="headerlink" href="#using-loading-tray" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iis_stack</span><span class="o">.</span><span class="n">num_units</span><span class="p">):</span>
+  <span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+  <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+  <span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><strong>On parallelization of commands to machines in the same incubator shaker stack</strong></p>
+<p>Each machine in the same stack communicates via the same USB(-A to -B) cable.
+As a result, if you send multiple commands at the same time, they will be queued and executed one after another.</p>
+<p>This means you cannot open all incubator shakers in the same stack at the same time.</p>
+<p>However, if you arrange your Inheco Incubators into different stacks this should still be possible.</p>
+</div>
+</section>
+<section id="temperature-control">
+<h3>Temperature Control<a class="headerlink" href="#temperature-control" title="Link to this heading">#</a></h3>
+<p>Show current temperature in °C</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iis_stack</span><span class="o">.</span><span class="n">num_units</span><span class="p">):</span>
+  <span class="n">current_temp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">get_temperature</span><span class="p">()</span>
+  <span class="nb">print</span><span class="p">(</span><span class="n">current_temp</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>20.1
+23.6
+</pre></div>
+</div>
+</div>
+</div>
+<p>Time how long the machine takes to reach target temperature using standard Python - no need to re-invent the wheel</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">target_temperature</span> <span class="o">=</span> <span class="mi">37</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">start_temperature_control</span><span class="p">(</span><span class="n">target_temperature</span><span class="p">)</span>
+
+<span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Quick check of how the temperature increases for 5 sec</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+  <span class="n">current_temp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_temperature</span><span class="p">(</span><span class="n">sensor</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="n">current_temp</span><span class="p">)</span>
+
+  <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>20.3
+20.7
+21.6
+22.6
+23.5
+</pre></div>
+</div>
+</div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Explanation</p></th>
+<th class="head"><p>Image</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><div style="font-size:15px; line-height:1.7; margin-top:0; padding-right:20px;"> <p>The Inheco Incubator (Shaker) contains three independent temperature sensors:</p> <ol style="margin-top:0; margin-bottom:10px; padding-left:20px;"> <li>main sensor — close to the door/front, inside the machine</li> <li>validation sensor — back, inside the machine</li> <li>boost sensor — on heating foil, inside the machine</li> </ol> <p>By default, <code>iis_stack[0].get_temperature()</code>’s argument is set to <code>sensor=”main”</code>.<br> This can be changed to any of the following:</p> <ul style="margin-top:0; padding-left:20px;"> <li><code>”main”</code></li> <li><code>”dif”</code></li> <li><code>”boost”</code></li> <li><code>”mean”</code> — takes all three sensors’ measurements and returns their geometric mean</li> </ul> </div></p></td>
+<td><p><div style="width:280px; text-align:center;"> <img alt="sensor positions" src="../../../../_images/inheco_incubator_shaker_t_sensor_positioning.png" /> <br><i style="font-size:13px; color:#6c757d;">Figure: Inheco Incubator Shaker Temperature Sensor Positioning</i> </div></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Wait until target temperature has been reached:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">temp_reached</span> <span class="o">=</span> <span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">wait_for_temperature</span><span class="p">(</span>
+  <span class="n">sensor</span> <span class="o">=</span> <span class="s2">&quot;mean&quot;</span><span class="p">,</span>
+  <span class="n">tolerance</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span> <span class="c1"># ℃ - default: 0.2</span>
+  <span class="n">interval_s</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span> <span class="c1"># sec - default: 0.5</span>
+  <span class="n">show_progress_bar</span> <span class="o">=</span> <span class="kc">True</span> <span class="c1"># default: False</span>
+<span class="p">)</span>
+
+<span class="n">elapsed_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">time taken to reach target temperature </span><span class="si">{</span><span class="n">target_temperature</span><span class="si">}</span><span class="s2">°C: </span><span class="si">{</span><span class="nb">round</span><span class="p">(</span><span class="n">elapsed_time</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s2"> sec&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Simple stopping of temperature control without stopping (i.e. breaking the connection) the machine itself:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">stop_temperature_control</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">is_temperature_control_enabled</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>False
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="shaking-control">
+<h3>Shaking Control<a class="headerlink" href="#shaking-control" title="Link to this heading">#</a></h3>
+<p>Only Incubator “Shakers” can use shaking commands.</p>
+<p>During <code class="docutils literal notranslate"><span class="pre">.setup()</span></code> the machine will check whether it is an <code class="docutils literal notranslate"><span class="pre">incubator_shaker</span></code> (“MP” or “DWP”) and the Python backend only allows shaking commands being sent to the machine if it is an <code class="docutils literal notranslate"><span class="pre">incubator_shaker</span></code>, i.e. the following commands will not work if you have pure incubators.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span><span class="n">rpm</span><span class="o">=</span><span class="mi">800</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">stop_shaking</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Inheco incubator shakers support precise, programmable motion in both the <strong>X</strong> and <strong>Y</strong> axes.
+The resulting shaking pattern is defined by five parameters:</p>
+<ul class="simple">
+<li><p><strong>Amplitude in X</strong> (<code class="docutils literal notranslate"><span class="pre">Aₓ</span></code>, 0–3 mm)</p></li>
+<li><p><strong>Amplitude in Y</strong> (<code class="docutils literal notranslate"><span class="pre">Aᵧ</span></code>, 0–3 mm)</p></li>
+<li><p><strong>Frequency in X</strong> (<code class="docutils literal notranslate"><span class="pre">fₓ</span></code>, 6.6–30.0 Hz)</p></li>
+<li><p><strong>Frequency in Y</strong> (<code class="docutils literal notranslate"><span class="pre">fᵧ</span></code>, 6.6–30.0 Hz)</p></li>
+<li><p><strong>Phase shift</strong> (<code class="docutils literal notranslate"><span class="pre">φ</span></code>, the angular offset between X and Y motion, in degrees)</p></li>
+</ul>
+<p>Different combinations of these parameters produce circular, linear, elliptical, or
+figure-eight movement paths.</p>
+<hr class="docutils" />
+<section id="predefined-shaking-patterns-in-pylabrobot">
+<h4>Predefined Shaking Patterns in PyLabRobot<a class="headerlink" href="#predefined-shaking-patterns-in-pylabrobot" title="Link to this heading">#</a></h4>
+<p>To simplify configuration, PyLabRobot provides predefined motion presets that map common use cases to specific parameter combinations:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Pattern</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Parameter relationship</p></th>
+<th class="head"><p>Required speed attribute</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">orbital</span></code></p></td>
+<td><p>Circular shaking</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">=</span> <span class="pre">Aᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">90°</span></code>, <code class="docutils literal notranslate"><span class="pre">fₓ</span> <span class="pre">=</span> <span class="pre">fᵧ</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rpm</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">elliptical</span></code></p></td>
+<td><p>Elliptical motion</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">≠</span> <span class="pre">Aᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">90°</span></code>, <code class="docutils literal notranslate"><span class="pre">fₓ</span> <span class="pre">=</span> <span class="pre">fᵧ</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rpm</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">figure_eight</span></code></p></td>
+<td><p>Figure-eight (Lissajous) motion</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">≈</span> <span class="pre">Aᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">90°</span></code>, <code class="docutils literal notranslate"><span class="pre">fᵧ</span> <span class="pre">=</span> <span class="pre">2</span> <span class="pre">fₓ</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rpm</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">linear_x</span></code></p></td>
+<td><p>Linear motion along X</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Aᵧ</span> <span class="pre">=</span> <span class="pre">0</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">frequency_hz</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">linear_y</span></code></p></td>
+<td><p>Linear motion along Y</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">=</span> <span class="pre">0</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">frequency_hz</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The default behaviour of <code class="docutils literal notranslate"><span class="pre">.shake()</span></code> uses…</p>
+<ul class="simple">
+<li><p>an orbital shaking pattern,</p></li>
+<li><p>x amplitude = 3 mm,</p></li>
+<li><p>y amplitude = 3 mm.</p></li>
+</ul>
+<p>(see “Simplest usage” example above)</p>
+</div>
+<p>Orbital shaking example with modified amplitudes</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span>
+    <span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;orbital&quot;</span><span class="p">,</span>
+    <span class="n">rpm</span><span class="o">=</span><span class="mi">800</span><span class="p">,</span>
+    <span class="n">amplitude_x_mm</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+    <span class="n">amplitude_y_mm</span><span class="o">=</span><span class="mf">2.0</span>
+<span class="p">)</span>
+
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">stop_shaking</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Elliptical shaking example with modified amplitudes:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span>
+    <span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;elliptical&quot;</span><span class="p">,</span>
+    <span class="n">rpm</span><span class="o">=</span><span class="mi">800</span><span class="p">,</span>
+    <span class="n">amplitude_x_mm</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span>
+    <span class="n">amplitude_y_mm</span><span class="o">=</span><span class="mf">2.5</span>
+<span class="p">)</span>
+
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">stop_shaking</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Figure-eight shaking example:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span>
+    <span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;figure_eight&quot;</span><span class="p">,</span>
+    <span class="n">rpm</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">stop_shaking</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>If you feel adventurous, see the math that goes into the calculation of different shaking patterns here:</p>
+<details>
+<summary><b>📘 How PyLabRobot Implements Inheco Shaking Patterns (Mathematical Overview)</b></summary>
+<p>Inheco incubator shakers move a plate by oscillating the platform in two directions — <strong>X</strong> and <strong>Y</strong> — at programmable amplitudes, frequencies, and phase offsets.</p>
+<hr class="docutils" />
+<p><strong>The Core Equations</strong></p>
+<p>The motion of the platform is described by two sinusoidal functions:</p>
+<p>[
+\begin{aligned}
+x(t) &amp;= Aₓ \sin(2\pi fₓ t) \
+y(t) &amp;= Aᵧ \sin(2\pi fᵧ t + φ)
+\end{aligned}
+]</p>
+<p>Where:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head text-left"><p>Symbol</p></th>
+<th class="head text-left"><p>Meaning</p></th>
+<th class="head text-left"><p>Example</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span></code>, <code class="docutils literal notranslate"><span class="pre">Aᵧ</span></code></p></td>
+<td class="text-left"><p>Amplitudes (mm) — how far the plate moves in X and Y</p></td>
+<td class="text-left"><p>2.5 mm</p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">fₓ</span></code>, <code class="docutils literal notranslate"><span class="pre">fᵧ</span></code></p></td>
+<td class="text-left"><p>Frequencies (Hz) — how fast each axis oscillates</p></td>
+<td class="text-left"><p>10 Hz, 20 Hz</p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">φ</span></code></p></td>
+<td class="text-left"><p>Phase shift (°) — timing offset between X and Y</p></td>
+<td class="text-left"><p>0°, 90°, 180°</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Each axis moves smoothly back and forth like a spring.<br />
+When these two motions combine, they trace elegant paths such as circles, ellipses, or figure-eights.</p>
+<hr class="docutils" />
+<p><strong>Pattern Intuition</strong></p>
+<p>Different shaking patterns are created by adjusting the relationships between these parameters:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head text-left"><p>Pattern</p></th>
+<th class="head text-left"><p>Conditions</p></th>
+<th class="head text-left"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td class="text-left"><p><strong>Linear X</strong></p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">Aᵧ</span> <span class="pre">=</span> <span class="pre">0</span></code></p></td>
+<td class="text-left"><p>Motion only along X (back-and-forth line)</p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><strong>Linear Y</strong></p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">=</span> <span class="pre">0</span></code></p></td>
+<td class="text-left"><p>Motion only along Y</p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p><strong>Orbital</strong></p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">=</span> <span class="pre">Aᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">fₓ</span> <span class="pre">=</span> <span class="pre">fᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">90°</span></code></p></td>
+<td class="text-left"><p>Perfect circular motion</p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><strong>Elliptical</strong></p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">≠</span> <span class="pre">Aᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">fₓ</span> <span class="pre">=</span> <span class="pre">fᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">90°</span></code></p></td>
+<td class="text-left"><p>Elongated circle (ellipse)</p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p><strong>Figure-Eight (Lissajous)</strong></p></td>
+<td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">≈</span> <span class="pre">Aᵧ</span></code>, <code class="docutils literal notranslate"><span class="pre">fᵧ</span> <span class="pre">=</span> <span class="pre">2</span> <span class="pre">fₓ</span></code>, <code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">90°</span></code></p></td>
+<td class="text-left"><p>Double-loop path shaped like ∞</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<hr class="docutils" />
+<p><strong>Example: Figure-Eight Motion</strong></p>
+<p>In firmware terms:</p>
+<p>SSP20,20,100,200,90
+ASE1</p>
+<p>corresponds to:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Aₓ</span> <span class="pre">=</span> <span class="pre">Aᵧ</span> <span class="pre">=</span> <span class="pre">2.0</span> <span class="pre">mm</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fₓ</span> <span class="pre">=</span> <span class="pre">10.0</span> <span class="pre">Hz</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fᵧ</span> <span class="pre">=</span> <span class="pre">20.0</span> <span class="pre">Hz</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">φ</span> <span class="pre">=</span> <span class="pre">90°</span></code></p></li>
+</ul>
+<p>This combination makes the platform’s Y motion twice as fast as its X motion —<br />
+the resulting path is a <strong>Lissajous figure</strong>, visually resembling a “figure-8”.</p>
+<hr class="docutils" />
+<p><strong>Why This Matters</strong></p>
+<p>By controlling these parameters precisely:</p>
+<ul class="simple">
+<li><p>The <strong>mixing efficiency</strong> can be tuned to the liquid’s viscosity.</p></li>
+<li><p>The <strong>path geometry</strong> affects shear stress and aeration.</p></li>
+<li><p><strong>Repeatable motion profiles</strong> ensure reproducibility across runs.</p></li>
+</ul>
+<p>Understanding this relationship helps you select the right pattern
+(<code class="docutils literal notranslate"><span class="pre">orbital</span></code>, <code class="docutils literal notranslate"><span class="pre">elliptical</span></code>, <code class="docutils literal notranslate"><span class="pre">figure_eight</span></code>, etc.) for your experiment.</p>
+</details>
+</section>
+</section>
+<section id="empowerment-showcase">
+<h3>Empowerment Showcase<a class="headerlink" href="#empowerment-showcase" title="Link to this heading">#</a></h3>
+<p>With control of multiple single incubator shakers a whole array of complex experimental &amp; optimisation processes is possible.</p>
+<p>This PyLabRobot integration aims to make these machine powers as accessible as possible.</p>
+<p>One still relatively simple example:
+Parallelize shaking of different incubators with different shaking + temperature conditions … did someone say “Design of Experiments” 👀📊</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">start_temperature_control</span><span class="p">(</span><span class="mi">29</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">start_temperature_control</span><span class="p">(</span><span class="mi">37</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">wait_for_temperature</span><span class="p">(</span><span class="n">sensor</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="n">show_progress_bar</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">wait_for_temperature</span><span class="p">(</span><span class="n">sensor</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="n">show_progress_bar</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span>
+  <span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;orbital&quot;</span><span class="p">,</span>
+  <span class="n">rpm</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span>
+  <span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;figure_eight&quot;</span><span class="p">,</span>
+  <span class="n">rpm</span><span class="o">=</span><span class="mi">800</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">stop_temperature_control</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">stop_temperature_control</span><span class="p">()</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">stop_shaking</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">stop_shaking</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Waiting for target temperature 29.00 °C...
+
+[████████████████████████████████████----] 29.20 °C  (Δ=0.20 °C | ETA:    3.0s)
+[OK] Target temperature reached.
+Waiting for target temperature 37.00 °C...
+
+[█████████████---------------------------] 36.87 °C  (Δ=0.13 °C | ETA:    4.3s)
+[OK] Target temperature reached.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="self-test-maintenance-plr-beta">
+<h3>Self Test / Maintenance (PLR beta)<a class="headerlink" href="#self-test-maintenance-plr-beta" title="Link to this heading">#</a></h3>
+<p>The Inheco firmware provides a “self-test” which checks the drawer, temperature and shaking features.
+This test can take up to 5 min.</p>
+<p>The test <em>must be</em> performed without a plate in the incubator.</p>
+<p>It generates a binary code in which each position represents a machine subsystem:</p>
+<ul class="simple">
+<li><p>Bit 0: Drawer</p></li>
+<li><p>Bit 1: Homogeneity Sensor 3 versus Sensor 1 (&gt;2 K)</p></li>
+<li><p>Bit 2: Homogeneity Sensor 2 versus Sensor 1 (&gt;2 K)</p></li>
+<li><p>Bit 3: Sensor 1 doesn’t reach Target Temperature after 130 sec.</p></li>
+<li><p>Bit 4: Y-Amplitude Shaker</p></li>
+<li><p>Bit 5: X-Amplitude Shaker</p></li>
+<li><p>Bit 6: Phase Shift Shaker</p></li>
+<li><p>Bit 7: Y-Frequency Shaker</p></li>
+<li><p>Bit 8: X-Frequency Shaker</p></li>
+<li><p>Bit 9: Line Boost-Heater broken</p></li>
+<li><p>Bit 10: Line Main-Heater broken</p></li>
+</ul>
+<p>A <code class="docutils literal notranslate"><span class="pre">0</span></code> means no error has been found for that subsystem, and a <code class="docutils literal notranslate"><span class="pre">1</span></code> means there is a hardware fault.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">perform_self_test</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{
+  &quot;drawer_error&quot;: False,
+  &quot;homogeneity_sensor_3_vs_1_error&quot;: False,
+  &quot;homogeneity_sensor_2_vs_1_error&quot;: False,
+  &quot;sensor_1_target_temp_error&quot;: False,
+  &quot;y_amplitude_shaker_error&quot;: False,
+  &quot;x_amplitude_shaker_error&quot;: False,
+  &quot;phase_shift_shaker_error&quot;: False,
+  &quot;y_frequency_shaker_error&quot;: False,
+  &quot;x_frequency_shaker_error&quot;: False,
+  &quot;line_boost_heater_broken&quot;: False,
+  &quot;line_main_heater_broken&quot;: False,
+}
+</pre></div>
+</div>
+</div>
+</div>
+<p>This is a beta feature in PyLabRobot and we will verify the interpretation with the PyLabRobot supporting OEM, Inheco - all our machines appear to be fully functional, i.e. we couldn’t check whether a faulty machine will correctly be flagged by this self-test.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="usage-master-control-via-the-stack-frontend">
+<h2>Usage: Master Control via the Stack Frontend 🦾<a class="headerlink" href="#usage-master-control-via-the-stack-frontend" title="Link to this heading">#</a></h2>
+<p>Even though loops make setting temperatures fast and efficient, we found it is too much code.</p>
+<p>This is why we enabled the frontend to have “master control commands” for all units in a stack.</p>
+<section id="querying-statuses">
+<h3>Querying Statuses<a class="headerlink" href="#querying-statuses" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">request_loading_tray_states</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: &#39;closed&#39;, 1: &#39;closed&#39;}
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">request_temperature_control_states</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: False, 1: False}
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">request_shaking_states</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: False, 1: False}
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="master-commands-loading-trays">
+<h3>Master Commands - Loading Trays<a class="headerlink" href="#master-commands-loading-trays" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">open_all</span><span class="p">()</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">request_loading_tray_states</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: &#39;open&#39;, 1: &#39;open&#39;}
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">close_all</span><span class="p">()</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">request_loading_tray_states</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: &#39;closed&#39;, 1: &#39;closed&#39;}
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="master-commands-temperature-control">
+<h3>Master Commands - Temperature Control<a class="headerlink" href="#master-commands-temperature-control" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">start_all_temperature_control</span><span class="p">(</span><span class="n">target_temperature</span><span class="o">=</span><span class="mi">37</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+
+<span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">get_all_temperatures</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: 37.8, 1: 34.4}
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">stop_all_temperature_control</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="master-commands-shaking-control">
+<h3>Master Commands - Shaking Control<a class="headerlink" href="#master-commands-shaking-control" title="Link to this heading">#</a></h3>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">request_shaking_states</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: False, 1: False}
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="closing-connection">
+<h2>Closing Connection<a class="headerlink" href="#closing-connection" title="Link to this heading">#</a></h2>
+<p>Standard PyLabRobot way of closing the communication to the machine, i.e. the stack:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>This stops all temperature control, and all shaking before disconnecting from the stack.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you develop a small script that you find yourself re-using and that goes beyond the simple “hello world, inheco incubator shaker”-style examples here, please consider contributing it back to the PyLabRobot community as a Cookbook Recipe.</p>
+</div>
+</section>
+<hr class="docutils" />
+<section id="usage-multiple-stacks">
+<h2>Usage: Multiple Stacks<a class="headerlink" href="#usage-multiple-stacks" title="Link to this heading">#</a></h2>
+<p>To connect more than one machine stack:</p>
+<ul class="simple">
+<li><p>instantiate a separate backend and frontend for each,</p></li>
+<li><p>you <strong>must</strong> hand the serial port to each stack’s backend explicitly</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When using one stack, PyLabRobot finds the machine’s port automatically based on its unique VID:PID,
+if multiple machines are found with the same VID:PID there is ambiguity</p>
+<ul class="simple">
+<li><p>e.g. the VSpin &amp; Cytation 5 use the same identifier combo :’)</p></li>
+</ul>
+</div>
+<ul class="simple">
+<li><p>perform a setup for each stack.</p></li>
+</ul>
+<p>(set on the back of the bottom-most machine):</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">iis_stack_backend_0</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/cu.usbserial-130&quot;</span><span class="p">)</span>
+<span class="n">iis_stack_0</span> <span class="o">=</span> <span class="n">IncubatorShakerStack</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">iis_stack_backend_0</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">iis_stack</span><span class="o">.</span><span class="n">setup</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">iis_stack_backend_1</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span> <span class="o">=</span> <span class="mi">7</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/cu.usbserial-42&quot;</span><span class="p">)</span>
+<span class="n">iis_stack_1</span> <span class="o">=</span> <span class="n">IncubatorShakerStack</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">iis_stack_backend_1</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">iis_stack_1</span><span class="o">.</span><span class="n">setup</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">iis_stack_backend_2</span> <span class="o">=</span> <span class="n">InhecoIncubatorShakerStackBackend</span><span class="p">(</span><span class="n">dip_switch_id</span> <span class="o">=</span> <span class="mi">11</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="s2">&quot;/dev/cu.usbserial-123&quot;</span><span class="p">)</span>
+<span class="n">iis_stack_2</span> <span class="o">=</span> <span class="n">IncubatorShakerStack</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">iis_stack_backend_2</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">iis_stack_2</span><span class="o">.</span><span class="n">setup</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../cytomat.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">TFS Cytomat Series</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="scila.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Inheco SCILA storage unit</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#about-the-machine-s">About the Machine(s)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-instructions-physical">Setup Instructions (Physical)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-instructions-programmatic">Setup Instructions (Programmatic)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage-controlling-individual-units">Usage: Controlling Individual Units</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#addressing-units-sensing-plate-presence">Addressing Units &amp; Sensing Plate Presence</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#using-loading-tray">Using Loading Tray</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temperature-control">Temperature Control</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shaking-control">Shaking Control</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#predefined-shaking-patterns-in-pylabrobot">Predefined Shaking Patterns in PyLabRobot</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#empowerment-showcase">Empowerment Showcase</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#self-test-maintenance-plr-beta">Self Test / Maintenance (PLR beta)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage-master-control-via-the-stack-frontend">Usage: Master Control via the Stack Frontend 🦾</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#querying-statuses">Querying Statuses</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#master-commands-loading-trays">Master Commands - Loading Trays</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#master-commands-temperature-control">Master Commands - Temperature Control</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#master-commands-shaking-control">Master Commands - Shaking Control</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#closing-connection">Closing Connection</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#usage-multiple-stacks">Usage: Multiple Stacks</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/01_material-handling/storage/inheco/incubator_shaker.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../../../_sources/user_guide/01_material-handling/storage/inheco/incubator_shaker.ipynb.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

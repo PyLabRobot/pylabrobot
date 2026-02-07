@@ -1,0 +1,1325 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Using the autoload &amp; 1D barcode reader &#8212; PyLabRobot  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=bbd25712" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/00_liquid-handling/hamilton-star/autoload_and_1d_barcode_reader';</script>
+    <script src="../../../_static/plr_cards.js?v=0d03ad13"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/00_liquid-handling/hamilton-star/autoload_and_1d_barcode_reader.html" />
+    <link rel="icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="iSWAP Module" href="iswap-module.html" />
+    <link rel="prev" title="Using the 96 head" href="96head.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../_getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../_getting-started/plr-architecture.html">How PLR Works</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../_getting-started/units.html">Default Units</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../_getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../_liquid-handling.html">Liquid Handling</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="_hamilton-star.html">Hamilton STAR</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="basic.html">Getting started with liquid handling on a Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="96head.html">Using the 96 head</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">Using the autoload &amp; 1D barcode reader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iswap-module.html">iSWAP Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="star_lld.html">Liquid level detection on Hamilton STAR(let)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="y-probing.html">Y-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="z-probing.html">Z-probing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="foil.html">Foil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="hamilton-liquid-classes.html">Using “Hamilton Liquid Classes” with Pylabrobot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="core-grippers.html">Co-Re Grippers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="surface-following.html">Surface following</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../hamilton-vantage/_hamilton-vantage.html">Hamilton Vantage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hamilton-prep/_hamilton-prep.html">Hamilton Prep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../opentrons-ot2/hello-world.html">OT2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tecan-evo/_tecan-evo.html">Tecan EVO</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../pumps/_pumps.html">Pumps</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../pumps/cole-parmer-masterflex.html">Cole Parmer Masterflex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mixing.html">Mixing</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../01_material-handling/_material-handling.html">Material Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/arms/_arm.html">Arm</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../01_material-handling/arms/c_scara/_scara.html">SCARA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../01_material-handling/arms/c_scara/precise-flex-pf400/hello-world.html">PreciseFlex PF400 and PF3400 robots</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/centrifuge/_centrifuge.html">Centrifuges</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/centrifuge/agilent_vspin.html">Agilent VSpin</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/heating_shaking/heating_shaking.html">Heater Shakers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/heating_shaking/inheco.html">Inheco ThermoShake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/heating_shaking/hamilton.html">Hamilton Heater Shaker</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/heating_shaking/qinstruments.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/fans/fans.html">Fans (Air Filtration Systems)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/fans/hamilton_hepa_scap.html">Hamilton HEPA Fan</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/sealers/sealers.html">Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/sealers/a4s.html">Azenta a4S</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/temperature-controllers/temperature-controllers.html">Temperature Controllers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/temperature-controllers/ot-temperature-controller.html">Opentrons Temperature Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/temperature-controllers/hamilton-heater-cooler.html">Hamilton Heater Cooler (HHC)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/temperature-controllers/inheco.html">Hello World, Inheco CPAC!</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../01_material-handling/storage/storage.html">Storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/storage/cytomat.html">TFS Cytomat Series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/storage/inheco/incubator_shaker.html">Inheco Incubator (Shaker)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../01_material-handling/storage/inheco/scila.html">Inheco SCILA storage unit</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../01_material-handling/tilting.html">Tilting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../01_material-handling/thermocycling/thermocycling.html">Thermocycling</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../02_analytical/_analytical.html">Analytical</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../02_analytical/flow-cytometers/_flow-cytometers.html">Flow Cytometers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/flow-cytometers/beckman-coulter-cytoflex.html">Beckman CytoFLEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../02_analytical/plate-reading/plate-reading.html">Plate reading</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/bmg-clariostar.html">BMG Labtech CLARIOstar (Plus)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/byonoy/absorbance.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/byonoy/luminescence.html">Byonoy Luminescence 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/byonoy.html">Byonoy Absorbance 96 Automate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/cytation.html">Cytation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/plate-reading/synergyh1.html">Synergy H1</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../02_analytical/scales/scales.html">Scales</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../02_analytical/scales/mettler-toledo-WXS205SDU.html">Mettler Toledo Precision Scales</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/validation.html">aP Validation Against Log File Example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../_liquid-handling.html" class="nav-link">Liquid Handling</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="_hamilton-star.html" class="nav-link">Hamilton STAR</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Using the autoload &amp; 1D barcode reader</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="using-the-autoload-1d-barcode-reader">
+<h1>Using the autoload &amp; 1D barcode reader<a class="headerlink" href="#using-the-autoload-1d-barcode-reader" title="Link to this heading">#</a></h1>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Summary</p></th>
+<th class="head"><p>Image</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><ul style="font-size:15px; line-height:1.6; margin-top:0;"><li><b>Feature:</b> Autoload with integrated 1D barcode reader</li><li><b>Operation:</b> Automatically loads carriers and plates from the front-loading tray onto the STAR deck.</li><li><b>Barcode Recognition:</b> Scans 1D barcodes on carriers, plates, tube racks, and tip racks to confirm ID and placement.</li><li><b>Purpose:</b> Reduces manual deck verification by ensuring that physically loaded carriers match the expected layout.</li><li><b>Workflow Benefit:</b> Verification + Speeds up run setup through hands-free loading and automatic identification.</li><li><b>Best For:</b> High-throughput or frequently changing deck configurations.</li></ul></p></td>
+<td><p><div style="width:320px; text-align:center;"><img alt="real_autoload" src="../../../_images/hamilton_star_autoload.png" /><br><i>Figure: Hamilton STAR Autoload system</i></div></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="background-architecture-of-hamilton-star-let-autoload">
+<h2>Background: Architecture of Hamilton STAR(let) Autoload<a class="headerlink" href="#background-architecture-of-hamilton-star-let-autoload" title="Link to this heading">#</a></h2>
+<p><img alt="hamilton_star_overview" src="../../../_images/hamilton_autoload_overview.png" /></p>
+</section>
+<section id="setup">
+<h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.liquid_handling</span><span class="w"> </span><span class="kn">import</span> <span class="n">LiquidHandler</span><span class="p">,</span> <span class="n">STARBackend</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARDeck</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+  <span class="n">TIP_CAR_480_A00</span><span class="p">,</span>
+  <span class="n">PLT_CAR_L5AC_A00</span><span class="p">,</span>
+  <span class="n">hamilton_96_tiprack_50uL</span><span class="p">,</span>
+  <span class="n">Cor_96_wellplate_360ul_Fb</span>
+<span class="p">)</span>
+
+<span class="n">star</span> <span class="o">=</span> <span class="n">STARBackend</span><span class="p">()</span>
+<span class="n">lh</span> <span class="o">=</span> <span class="n">LiquidHandler</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="n">star</span><span class="p">,</span> <span class="n">deck</span><span class="o">=</span><span class="n">STARDeck</span><span class="p">())</span>
+<span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+
+<span class="c1"># assign a tip rack carrier</span>
+<span class="n">tip_carrier</span> <span class="o">=</span> <span class="n">TIP_CAR_480_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tip_carrier&quot;</span><span class="p">)</span>
+<span class="n">tip_carrier</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip_rack</span> <span class="o">=</span> <span class="n">hamilton_96_tiprack_50uL</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tip_rack&quot;</span><span class="p">)</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+<span class="c1"># assign a plate carrier</span>
+<span class="n">plt_carrier</span> <span class="o">=</span> <span class="n">PLT_CAR_L5AC_A00</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plt_carrier&quot;</span><span class="p">)</span>
+<span class="n">plt_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">plate</span> <span class="o">=</span> <span class="n">Cor_96_wellplate_360ul_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;plt&quot;</span><span class="p">)</span>
+<span class="n">lh</span><span class="o">.</span><span class="n">deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plt_carrier</span><span class="p">,</span> <span class="n">rails</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Two starting points are possible:</p>
+<ol class="arabic simple">
+<li><p>Carriers have been moved directly on the deck.</p></li>
+<li><p>Carriers have been left on the loading tray.</p></li>
+</ol>
+<p>Here we assume we’re starting with (1) Carriers have been moved directly on the deck.</p>
+</div>
+</section>
+<section id="querying-autoload-state">
+<h2>Querying autoload state<a class="headerlink" href="#querying-autoload-state" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">star</span><span class="o">.</span><span class="n">autoload_installed</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>True
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">request_autoload_track</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>54
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">request_autoload_type</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;ML-STAR with 1D Barcode Scanner&#39;
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="sensing-carriers">
+<h2>Sensing carriers<a class="headerlink" href="#sensing-carriers" title="Link to this heading">#</a></h2>
+<p>The autoload sled has a front-facing proximity sensor.
+This sensor can be used to scan the entire loading tray to identify whether there are any carriers currently on the loading tray:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">request_presence_of_carriers_on_loading_tray</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[]
+</pre></div>
+</div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The autoload detects <em>only</em> the right-most track occupied by a carrier!</p>
+</div>
+<p>Similarly, if you only want to investigate a single position this can be done too.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">request_presence_of_single_carrier_on_loading_tray</span><span class="p">(</span>
+    <span class="n">track</span><span class="o">=</span><span class="mi">44</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>False
+</pre></div>
+</div>
+</div>
+</div>
+<p>The counterpart to checking for carriers on the loading tray is checking for presence of carriers on the liquid handler’s deck:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">request_presence_of_carriers_on_deck</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[15, 35]
+</pre></div>
+</div>
+</div>
+</div>
+<p>Note that we have assigned the carriers based on the left-most track they are occupying but the <code class="docutils literal notranslate"><span class="pre">request_presence_of_carriers_on_deck()</span></code> detects the right-most track of carriers:</p>
+<ul class="simple">
+<li><p>tip_carrier: left-most track = 10, 6 tracks wide, right-most track  15</p></li>
+<li><p>plt_carrier: left-most track = 30, 6 tracks wide, right-most track  35</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">.request_presence_of_carriers_on_deck()</span></code> is technically not an ‘autoload’ command.
+It uses the presence sensors at the back of the STAR(let) deck to identify whether a carrier is present.
+i.e. there is no autoload movement involved, and it therefore works for STAR(let)s without an integrated barcode sensor too.</p>
+</div>
+<p>Together these <code class="docutils literal notranslate"><span class="pre">STAR</span></code> methods enable capturing a full picture of the state of carriers on your liquid handler.</p>
+</section>
+<section id="moving-autoload">
+<h2>Moving autoload<a class="headerlink" href="#moving-autoload" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Always ensure the carrier handler is safely tucked away during movement.</span>
+<span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">move_autoload_to_save_z_position</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;C0IVid0018er00/00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">move_autoload_to_track</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;I0XPid0020er00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">park_autoload</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;I0XPid0022er00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="basic-load-unload">
+<h2>Basic Load &amp; Unload<a class="headerlink" href="#basic-load-unload" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">unload_carrier</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">,</span> <span class="n">park_autoload_after</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;C0CRid0023er00/00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">load_carrier</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">,</span> <span class="n">park_autoload_after</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;carrier_barcode&#39;: Barcode(data=&#39;08T0241707&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ &#39;container_barcodes&#39;: None}
+</pre></div>
+</div>
+</div>
+</div>
+<section id="command-architecture-for-un-loading-barcode-reading">
+<h3>Command Architecture for (Un)Loading &amp; Barcode Reading<a class="headerlink" href="#command-architecture-for-un-loading-barcode-reading" title="Link to this heading">#</a></h3>
+<p>From a firmware-perspective a carrier can be in 3 “states”:</p>
+<ol class="arabic simple">
+<li><p>On the deck</p></li>
+<li><p>On the autoload belt</p></li>
+<li><p>On the loading tray</p></li>
+</ol>
+<p>PyLabRobot enables easy transfer between these 3 states with these <code class="docutils literal notranslate"><span class="pre">STARBackend</span></code> methods:</p>
+<p><img alt="hamilton_star_overview" src="../../../_images/hamilton_autoload_state_transfer.png" /></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We could not find a command that enables the movement sequence: deck &gt; autoload_belt &gt; loading_tray yet.
+<code class="docutils literal notranslate"><span class="pre">.unload_carrier_after_carrier_barcode_scanning()</span></code> requires <code class="docutils literal notranslate"><span class="pre">.load_carrier_from_tray_and_scan_carrier_barcode()</span></code> to precede it.</p>
+</div>
+</section>
+</section>
+<section id="d-barcode-reading">
+<h2>1D Barcode reading<a class="headerlink" href="#d-barcode-reading" title="Link to this heading">#</a></h2>
+<p>There are 2 main types of 1D barcodes one a classic STAR(let) deck:</p>
+<ol class="arabic simple">
+<li><p>Carrier barcodes (orientation=vertical; located at the right-back of the carrier)</p></li>
+<li><p>Container barcodes:</p>
+<ul class="simple">
+<li><p>TipRack barcodes (orientation=horizontal)</p></li>
+<li><p>Plate barcodes (orientation=horizontal)</p></li>
+<li><p>Tube barcodes (orientation=vertical)</p></li>
+</ul>
+</li>
+</ol>
+<section id="d-barcode-symbologies">
+<h3>1D Barcode Symbologies<a class="headerlink" href="#d-barcode-symbologies" title="Link to this heading">#</a></h3>
+<p>All barcodes must follow a standard encoding scheme, i.e. a “symbology”.
+Before reading barcodes it is important to know what barcode symbology you are expecting to read!</p>
+<p>The following barcode symbologies can be detected by the system:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">list</span><span class="p">(</span><span class="n">star</span><span class="o">.</span><span class="n">barcode_1d_symbology_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>[&#39;ISBT Standard&#39;,
+ &#39;Code 128 (Subset B and C)&#39;,
+ &#39;Code 39&#39;,
+ &#39;Codebar&#39;,
+ &#39;Code 2of5 Interleaved&#39;,
+ &#39;UPC A/E&#39;,
+ &#39;YESN/EAN 8&#39;,
+ &#39;ANY 1D&#39;]
+</pre></div>
+</div>
+</div>
+</div>
+<p>For the highest reading safety Hamilton recommends to use barcode type <code class="docutils literal notranslate"><span class="pre">Code128</span> <span class="pre">(subset</span> <span class="pre">B</span> <span class="pre">and</span> <span class="pre">C)</span></code>.</p>
+<p>This is the default symbology chosen in PyLabRobot commands:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">star</span><span class="o">.</span><span class="n">_default_1d_symbology</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;Code 128 (Subset B and C)&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<p>However, you can directly set or change the expected barcode symbology:</p>
+<p>The fastest way to read your barcode <em>when</em> your carriers are already on the deck is to move the carrier out to the identification position:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">set_1d_barcode_type</span><span class="p">(</span><span class="s2">&quot;ISBT Standard&quot;</span><span class="p">)</span>
+
+<span class="n">star</span><span class="o">.</span><span class="n">_default_1d_symbology</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;ISBT Standard&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">set_1d_barcode_type</span><span class="p">(</span><span class="s2">&quot;Code 128 (Subset B and C)&quot;</span><span class="p">)</span>
+
+<span class="n">star</span><span class="o">.</span><span class="n">_default_1d_symbology</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;Code 128 (Subset B and C)&#39;
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="loading-with-with-barcode-reading">
+<h3>Loading with with Barcode Reading<a class="headerlink" href="#loading-with-with-barcode-reading" title="Link to this heading">#</a></h3>
+<p>1D barcode reading via the autoload can only occur during carrier loading actions.
+So let’s first unload the carrier:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">unload_carrier</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">,</span> <span class="n">park_autoload_after</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;C0CRid0029er00/00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<p>…and this time activate reading both (1) the carrier barcord and (2) the container barcode:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">barcode_readings</span> <span class="o">=</span> <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">load_carrier</span><span class="p">(</span>
+    <span class="n">carrier</span><span class="o">=</span><span class="n">tip_carrier</span><span class="p">,</span>
+    <span class="n">carrier_barcode_reading</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">barcode_reading</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="c1"># barcode_symbology=&quot;Code 39&quot;,</span>
+    <span class="c1"># barcode_reading_direction=&quot;horizontal&quot;,</span>
+    <span class="c1"># no_container_per_carrier=5,</span>
+    <span class="n">park_autoload_after</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>This returns a dictionary:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">barcode_readings</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{&#39;carrier_barcode&#39;: Barcode(data=&#39;08T0241707&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ &#39;container_barcodes&#39;: {0: Barcode(data=&#39;18235938752776512151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+  1: Barcode(data=&#39;18235938752776527151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+  2: Barcode(data=&#39;18235938752776549151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+  3: None,
+  4: Barcode(data=&#39;18235938752776513151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;)}}
+</pre></div>
+</div>
+</div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The default behaviour of the 1D barcode scanner is set to read the standard 5x tip- and plate-carrier positions.
+If you are reading barcodes on a different carrier (e.g. tube or trough carrier) you will have to modify the default parameters.</p>
+</div>
+<p><img alt="hamilton_star_overview" src="../../../_images/hamilton_autoload_correct_1d_barcode_height.png" /></p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The 1D barcode scanner uses a (class 2) laser targeted to a fixed height.
+This is especially important when reading horizontal barcodes.
+The z-height of the laser (during horizonatal) barcode reading is <code class="docutils literal notranslate"><span class="pre">z=219</span></code> or 119 mm above the deck surface.
+If your 1D barcode is not precisely positioned at this height, the 1D barcode reader cannot read your barcode.
+To facilitate this height, use “DWP” carriers/MFX plate_holders for plates &gt;40 mm in <code class="docutils literal notranslate"><span class="pre">size_z</span></code>, and “MP” carriers/MFX plate_holders for plates ~15 mm in <code class="docutils literal notranslate"><span class="pre">size_z</span></code>.</p>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="advanced-1d-barcode-reading">
+<h2>Advanced 1D Barcode Reading<a class="headerlink" href="#advanced-1d-barcode-reading" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">unload_carrier</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">,</span> <span class="n">park_autoload_after</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;C0CRid0035er00/00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<p><strong>Loading tray -&gt; Autoload Belt (Carrier Barcode Reading) -&gt; Loading Tray</strong></p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">load_carrier_from_tray_and_scan_carrier_barcode</span><span class="p">(</span>
+    <span class="n">tip_carrier</span><span class="p">,</span>
+    <span class="c1"># barcode_position = 4.3,  # mm</span>
+    <span class="c1"># barcode_reading_window_width = 38.0,  # mm</span>
+    <span class="c1"># reading_speed = 128.1,  # mm/sec</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Barcode(data=&#39;08T0241707&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;)
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">unload_carrier_after_carrier_barcode_scanning</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;C0CAid0037er00/00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<p><strong>Loading tray -&gt; Autoload Belt (Carrier Barcode Reading) -&gt; Deck (Container Barcode Reading)</strong></p>
+<p>-&gt; same as simply <code class="docutils literal notranslate"><span class="pre">.load_carrier()</span></code> but split into separate components</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">load_carrier_from_tray_and_scan_carrier_barcode</span><span class="p">(</span>
+    <span class="n">tip_carrier</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Barcode(data=&#39;08T0241707&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;)
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">reading</span> <span class="o">=</span> <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">load_carrier_from_autoload_belt</span><span class="p">(</span>
+    <span class="n">barcode_reading</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">park_autoload_after</span><span class="o">=</span><span class="kc">False</span>
+    <span class="c1"># barcode_reading_direction = &quot;horizontal&quot;,</span>
+    <span class="c1"># barcode_symbology = &quot;Code 128 (Subset B and C)&quot;</span>
+    <span class="c1"># reading_position_of_first_barcode = 63.0,  # mm</span>
+    <span class="c1"># no_container_per_carrier = 5,</span>
+    <span class="c1"># distance_between_containers = 96.0,  # mm</span>
+    <span class="c1"># width_of_reading_window = 38.0,  # mm</span>
+    <span class="c1"># reading_speed = 128.1,  # mm/secs</span>
+    <span class="p">)</span>
+<span class="n">reading</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: Barcode(data=&#39;18235938752776512151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ 1: Barcode(data=&#39;18235938752776527151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ 2: Barcode(data=&#39;18235938752776549151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ 3: None,
+ 4: Barcode(data=&#39;18235938752776513151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;)}
+</pre></div>
+</div>
+</div>
+</div>
+<p><strong>Deck -&gt; Autoload Belt -&gt; Deck (with container barcode reading only)</strong></p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">take_carrier_out_to_autoload_belt</span><span class="p">(</span><span class="n">tip_carrier</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">reading</span> <span class="o">=</span> <span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">load_carrier_from_autoload_belt</span><span class="p">(</span>
+    <span class="n">barcode_reading</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">park_autoload_after</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="n">reading</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>{0: Barcode(data=&#39;18235938752776512151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ 1: Barcode(data=&#39;18235938752776527151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ 2: Barcode(data=&#39;18235938752776549151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;),
+ 3: None,
+ 4: Barcode(data=&#39;18235938752776513151&#39;, symbology=&#39;Code 128 (Subset B and C)&#39;, position_on_resource=&#39;right&#39;)}
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">move_autoload_to_save_z_position</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;C0IVid0045er00/00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">star</span><span class="o">.</span><span class="n">park_autoload</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;I0XPid0047er00&#39;
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="close-connection">
+<h2>Close Connection<a class="headerlink" href="#close-connection" title="Link to this heading">#</a></h2>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">lh</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Someone did not set up the deck according to the definition in the <code class="docutils literal notranslate"><span class="pre">Setup</span></code> section above.
+What is different between sensed physical reality and the deck model? ;)</p>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="96head.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Using the 96 head</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="iswap-module.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">iSWAP Module</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#background-architecture-of-hamilton-star-let-autoload">Background: Architecture of Hamilton STAR(let) Autoload</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup">Setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#querying-autoload-state">Querying autoload state</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sensing-carriers">Sensing carriers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#moving-autoload">Moving autoload</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-load-unload">Basic Load &amp; Unload</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#command-architecture-for-un-loading-barcode-reading">Command Architecture for (Un)Loading &amp; Barcode Reading</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#d-barcode-reading">1D Barcode reading</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#d-barcode-symbologies">1D Barcode Symbologies</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-with-with-barcode-reading">Loading with with Barcode Reading</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-1d-barcode-reading">Advanced 1D Barcode Reading</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#close-connection">Close Connection</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/00_liquid-handling/hamilton-star/autoload_and_1d_barcode_reader.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../../_sources/user_guide/00_liquid-handling/hamilton-star/autoload_and_1d_barcode_reader.ipynb.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

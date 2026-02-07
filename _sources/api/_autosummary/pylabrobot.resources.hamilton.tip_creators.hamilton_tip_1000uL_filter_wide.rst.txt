@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.hamilton\_tip\_1000uL\_filter\_wide
+===============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autofunction:: hamilton_tip_1000uL_filter_wide

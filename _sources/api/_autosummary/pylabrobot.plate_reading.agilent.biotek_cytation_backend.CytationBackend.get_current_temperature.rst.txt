@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.agilent.biotek\_cytation\_backend.CytationBackend.get\_current\_temperature
+=====================================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent.biotek_cytation_backend
+
+.. automethod:: CytationBackend.get_current_temperature

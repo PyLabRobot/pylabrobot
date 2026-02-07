@@ -1,0 +1,1133 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "01bd78dc-183e-45fe-a3b0-59c8666b4f14",
+   "metadata": {},
+   "source": [
+    "# Inheco Incubator (Shaker)\n",
+    "\n",
+    "| Summary | Image |\n",
+    "|------------|--------|\n",
+    "| <ul style=\"font-size:15px; line-height:1.6; margin-top:0;\"> <li><a href=\"https://www.inheco.com/incubator-shaker.html\" target=\"_blank\"><b>OEM Link</b></a></li> <li><b>Communication Protocol / Hardware:</b> Serial / USB-A/B</li> <li><b>Communication Level:</b> Firmware (documentation shared by OEM)</li> <li>Same command set for: <ul> <li>Incubator “MP”</li> <li>Incubator “DWP”</li> <li>Incubator Shaker “MP”</li> <li>Incubator Shaker “DWP”</li> </ul></li> <li>VID:PID <code>0403:6001</code></li> <li>Takes in a single plate via a loading tray, heats it to the set temperature, and shakes it to the set RPM.</li> </ul> | <div style=\"width:320px; text-align:center;\"> ![shaker](img/inheco_incubator_shaker_mp_dwp.png) <br><i>Figure: Inheco Incubator Shaker MP & DWP models</i> </div> |\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "70f74446-c274-4803-a6ce-6c9c2d7d3bba",
+   "metadata": {},
+   "source": [
+    "## About the Machine(s)\n",
+    "\n",
+    "Inheco incubator shakers are modular machines used for plate storage, temperature control and shaking.\n",
+    "They differentiate themselves:\n",
+    "- **heater shakers** ... heat a material on which a plate is being placed; open-access; non-uniform temperature distribution around the plate; enables shaking of plate.\n",
+    "- **incubator shakers** ... an enclosed chamber that is being heated and houses a plate; plate access is controlled via a loading tray and a door; *highly uniform temperature distribution around the plate*; enables shaking of plate.\n",
+    "\n",
+    "The Inheco incubator devices come in 4 versions, dependent on (1) whether they provide a shaking feature & (2) the size of plates they accept:\n",
+    "\n",
+    "\n",
+    "| **RTS Code** | **Shaking Feature** | **Plate Format** | **Device Identifier** | **Typical Model** |\n",
+    "|:-------------:|:--------------:|:----------------:|:----------------------|:------------------|\n",
+    "| `0` | ❌ No | MP (Microplate) | `incubator_mp` | INHECO Incubator MP | \n",
+    "| `1` | ✅ Yes | MP (Microplate) | `incubator_shaker_mp` | INHECO Incubator Shaker MP | \n",
+    "| `2` | ❌ No | DWP (Deepwell Plate) | `incubator_dwp` | INHECO Incubator DWP | \n",
+    "| `3` | ✅ Yes | DWP (Deepwell Plate) | `incubator_shaker_dwp` | INHECO Incubator Shaker DWP | \n",
+    "\n",
+    "\n",
+    "```{note}\n",
+    "Note: All 4 machines can be controlled with the same PyLabRobot Backend, called `InhecoIncubatorShakerBackend`!\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "42739583-9f29-4063-983d-18dcdfea61ba",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Setup Instructions (Physical)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "38dcc34a",
+   "metadata": {},
+   "source": [
+    "![copy-me](img/inheco_incubator_shaker_physical_setup_overview.png)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e0f0ef32-566b-4fa3-b358-db2a703957de",
+   "metadata": {},
+   "source": [
+    "To facilitate integration, multiple devices can be placed on top of each other to form an Incubator Shaker Stack (see infographic above), but care has to be taken to not overstrain the connections:\n",
+    "\n",
+    "Each of the 4 different shaker types requires a different amount of power.\n",
+    "An easier way to identify the configurations possible is to think of \"incubator power credits\" - **no stack must exceed 5 power credits** (see User and Installation Manual):\n",
+    "\n",
+    "1. An \"incubator MP\" -> 1 \"incubator power credits\" -> 5 units can be stacked on top of each other.\n",
+    "2. An \"incubator DWP\" -> 1.25 \"incubator power credits\" -> 4 units.\n",
+    "3. An \"incubator shaker MP\" -> 1.6 \"incubator power credits\" -> 3 units\n",
+    "4. An \"incubator shaker DWP\" -> 2.5 \"incubator power credits\" -> 2 units\n",
+    "\n",
+    "However, the machines in a single stack can be of any of the 4 types.\n",
+    "This means you could create stacks of: \n",
+    "- 2x \"incubator DWP\" (1.25 credits) + 1x \"incubator shaker DWP\" (2.5 credits)\n",
+    "- 3x \"incubator MP\" (1 credits) + 1x \"incubator shaker MP\" (1.6 credits) [shown in the infographic above]\n",
+    "\n",
+    "When a stack would exceed more than 5 \"incubator power credits\", you **must build multiple stacks** (ask your Inheco sales representative if you are unsure before trying this out).\n",
+    "\n",
+    "The benefit of this setup is that only **one** power cable and only **one** USB cable have to be plugged into the machine at the very bottom of a machine (i.e. stack index 0).\n",
+    "Machines above the bottom one only need to be connected with the machine below it using the 15-pin SUB-D connectors that come with each machine when bought from Inheco.\n",
+    "\n",
+    "```{note}\n",
+    "Note: In PyLabRobot, the stack is the central control element and is controlled via its own instance of the `InhecoIncubatorShakerStackBackend`.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "69f8951f",
+   "metadata": {},
+   "source": [
+    "| Explanation | Image |\n",
+    "|------------|--------|\n",
+    "| <div style=\"font-size:15px; line-height:1.6; margin-top:0;\"> To connect an <code>InhecoIncubatorShakerStackBackend</code> you must set the <b>DIP switch identifier</b> on the back of the bottom machine: <ul style=\"margin-left:20px;\"> <li>located on the back of the bottom machine,</li> <li>defines the DIP switch configuration for the entire stack.</li> </ul> <h3>Setting the DIP switch to generate a machine address</h3> Each machine has a 4-pin DIP switch. Each pin can be <code>UP</code> (<code>0</code>) or <code>DOWN</code> (<code>1</code>). <br><br> <i>Note:</i> the two pins to the left of the DIP switch are not part of the addressing and should remain in the <code>DOWN</code> position. <br><br> This forms a <i>4-bit binary address</i>: <ul> <li>All pins at <code>0</code> → binary <code>0 0 0 0</code> → decimal <code>0</code></li> <li>All pins at <code>1</code> → binary <code>1 1 1 1</code> → decimal <code>15</code> (<code>2<sup>4</sup>-1</code>)</li> </ul> This address is crucial for generating valid communication commands for your Inheco stack. </div> | <div style=\"width:320px; text-align:center;\"> ![dip switches](img/inheco_incubator_shaker_dip_switch_addressing.png) <br><i>Figure: DIP switch layout to generate different identifiers/addresses</i> </div> |\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d0d6256e-673a-4979-88cc-d07959ce92ea",
+   "metadata": {},
+   "source": "---\n## Setup Instructions (Programmatic)\n\nAfter the two cables have been connected to the bottom-most Inheco Incubator Shaker, you have to...\n1. instantiate the `InhecoIncubatorShakerStackBackend` and give it the correct `dip_switch_id` & `stack_index`, and\n2. create a `IncubatorShakerStack` frontend and give it the new backend instance.\n\nThe \"stack\" is the central interface to all units in it.\nThe stack automatically identifies all units inside it (including their type), and will create both the correct connection and a physical instance for it.\n\n```{note}\nBefore a connection has been established the incubator shaker's front LED blinks.\nAfter the connection has successfully been made, the LED will continuously be on.\n```"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c9acf6e1-2465-42fd-bad8-f6d3fc052e97",
+   "metadata": {},
+   "outputs": [],
+   "source": "from pylabrobot.storage.inheco import IncubatorShakerStack, InhecoIncubatorShakerStackBackend\n\nimport asyncio # only needed for examples in this tutorial, optional for your purposes\nimport time # only needed for examples in this tutorial, optional for your purposes"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "bb6e529f-3bb3-46de-87af-5931269b04e4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "iis_stack_backend = InhecoIncubatorShakerStackBackend(dip_switch_id = 2)\n",
+    "\n",
+    "iis_stack = IncubatorShakerStack(backend=iis_stack_backend)\n",
+    "\n",
+    "await iis_stack.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c2c7002f-a11b-402e-8100-5d9eb528a1f0",
+   "metadata": {},
+   "source": [
+    "```{note}\n",
+    "If you are interested in seeing information about the machine you are connecting to, you can set the `.setup()` optional argument `verbose` to `True`:\n",
+    "1. serial port used for connection\n",
+    "2. DIP switch ID used and verified\n",
+    "3. number of units identified in the stack\n",
+    "4. composition (index and type of units) of the stack \n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0a17aadb-8373-4e24-9678-7c4453fc8661",
+   "metadata": {},
+   "source": [
+    "## Usage: Controlling Individual Units"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "92e7123a-8aa7-41b7-baa9-9765bddaffe9",
+   "metadata": {},
+   "source": [
+    "### Addressing Units & Sensing Plate Presence\n",
+    "\n",
+    "The stack interface enables fast, direct access to any machine in a stack.\n",
+    "\n",
+    "Every Inheco incubator (shaker) contains an internal, reflection-based plate sensor.\n",
+    "(This is very useful e.g. when someone has forgotten their plate in the incubator 👀)\n",
+    "\n",
+    "Let's use this as an example of how you can address different units in the stack individually:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "0585bf87-7d00-4d1e-9ce3-f58617d66961",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "2"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "iis_stack.num_units"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7642febc-5a5e-4e17-be6d-8a75fae7a1f4",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "0 False\n",
+      "1 False\n"
+     ]
+    }
+   ],
+   "source": [
+    "for idx in range(iis_stack.num_units):\n",
+    "  plate_presence_check = await iis_stack[idx].request_plate_in_incubator()\n",
+    "  print(idx, plate_presence_check)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "051629ac",
+   "metadata": {},
+   "source": [
+    "Option 2: Addressing individual units by calling the stack backend with the correct stack_index"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "04fa7214-fb34-4230-8fb4-f20e66a8e476",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "0 False\n",
+      "1 False\n"
+     ]
+    }
+   ],
+   "source": [
+    "for idx in range(iis_stack.num_units):\n",
+    "  plate_presence_check = await iis_stack.backend.request_plate_in_incubator(\n",
+    "    stack_index=idx\n",
+    "  )\n",
+    "  print(idx, plate_presence_check)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "59e6c797",
+   "metadata": {},
+   "source": [
+    "Option 3: Storing each unit as a handy variable"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "87ed2d05-620a-4e8a-9578-bd5d27a81e2a",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "False False\n"
+     ]
+    }
+   ],
+   "source": [
+    "incubator_shaker_0 = iis_stack[0]\n",
+    "plate_presence_check_0 = await incubator_shaker_0.request_plate_in_incubator()\n",
+    "\n",
+    "incubator_shaker_1 = iis_stack[1]\n",
+    "plate_presence_check_1 = await incubator_shaker_1.request_plate_in_incubator()\n",
+    "\n",
+    "print(plate_presence_check_0, plate_presence_check_1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "dea2645e-5426-43c0-9511-35b30aa290cb",
+   "metadata": {},
+   "source": "We usually use the direct indexing of the frontend method but it is up to you to choose.\ne.g.: storing of units in separate variables can be very useful when using many stacks."
+  },
+  {
+   "cell_type": "markdown",
+   "id": "a30de061-fc3f-434c-882e-4972c8404479",
+   "metadata": {},
+   "source": [
+    "### Using Loading Tray"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e6009273-a626-4de9-a9db-0f0de8021a0e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "for idx in range(iis_stack.num_units):\n",
+    "  await iis_stack[idx].open()\n",
+    "  await asyncio.sleep(2)\n",
+    "  await iis_stack[idx].close()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7d86ace1-7522-4630-ad10-6f4b944fbfc9",
+   "metadata": {},
+   "source": [
+    "```{warning}\n",
+    "**On parallelization of commands to machines in the same incubator shaker stack**\n",
+    "\n",
+    "Each machine in the same stack communicates via the same USB(-A to -B) cable.\n",
+    "As a result, if you send multiple commands at the same time, they will be queued and executed one after another.\n",
+    "\n",
+    "This means you cannot open all incubator shakers in the same stack at the same time.\n",
+    "\n",
+    "However, if you arrange your Inheco Incubators into different stacks this should still be possible.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6aaef05a-2cb9-4b12-bf86-ae6d63665036",
+   "metadata": {},
+   "source": [
+    "### Temperature Control"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7e28b749",
+   "metadata": {},
+   "source": [
+    "Show current temperature in °C"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c8da2cf9-cbeb-4202-8ef7-2cc583ce16c4",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "20.1\n",
+      "23.6\n"
+     ]
+    }
+   ],
+   "source": [
+    "for idx in range(iis_stack.num_units):\n",
+    "  current_temp = await iis_stack[idx].get_temperature()\n",
+    "  print(current_temp)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e35729c9",
+   "metadata": {},
+   "source": [
+    "Time how long the machine takes to reach target temperature using standard Python - no need to re-invent the wheel"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "92fe00a9-9546-4d11-9a3c-c644188ea0c0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "target_temperature = 37\n",
+    "\n",
+    "await iis_stack[0].start_temperature_control(target_temperature)\n",
+    "\n",
+    "start_time = time.time()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d8cf8808",
+   "metadata": {},
+   "source": [
+    "Quick check of how the temperature increases for 5 sec"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b635baae-0cc9-4d10-8644-c377f94656b9",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "20.3\n",
+      "20.7\n",
+      "21.6\n",
+      "22.6\n",
+      "23.5\n"
+     ]
+    }
+   ],
+   "source": [
+    "for x in range(5):\n",
+    "  current_temp = await iis_stack[0].get_temperature(sensor=\"main\")\n",
+    "  print(current_temp)\n",
+    "\n",
+    "  time.sleep(1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "438e19d7-714d-46f3-8a9e-f00798ca9893",
+   "metadata": {},
+   "source": [
+    "| Explanation | Image |\n",
+    "|------------|--------|\n",
+    "| <div style=\"font-size:15px; line-height:1.7; margin-top:0; padding-right:20px;\"> <p>The Inheco Incubator (Shaker) contains three independent temperature sensors:</p> <ol style=\"margin-top:0; margin-bottom:10px; padding-left:20px;\"> <li>main sensor — close to the door/front, inside the machine</li> <li>validation sensor — back, inside the machine</li> <li>boost sensor — on heating foil, inside the machine</li> </ol> <p>By default, <code>iis_stack[0].get_temperature()</code>’s argument is set to <code>sensor=\"main\"</code>.<br> This can be changed to any of the following:</p> <ul style=\"margin-top:0; padding-left:20px;\"> <li><code>\"main\"</code></li> <li><code>\"dif\"</code></li> <li><code>\"boost\"</code></li> <li><code>\"mean\"</code> — takes all three sensors’ measurements and returns their geometric mean</li> </ul> </div> | <div style=\"width:280px; text-align:center;\"> ![sensor positions](img/inheco_incubator_shaker_t_sensor_positioning.png) <br><i style=\"font-size:13px; color:#6c757d;\">Figure: Inheco Incubator Shaker Temperature Sensor Positioning</i> </div> |\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "aebaf1c5",
+   "metadata": {},
+   "source": "Wait until target temperature has been reached:"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8c5caa89-e5c5-49de-996f-a13cd790aa61",
+   "metadata": {},
+   "outputs": [],
+   "source": "temp_reached = await iis_stack[0].wait_for_temperature(\n  sensor = \"mean\",\n  tolerance = 0.1, # ℃ - default: 0.2\n  interval_s = 0.2, # sec - default: 0.5\n  show_progress_bar = True # default: False\n)\n\nelapsed_time = time.time() - start_time\n\nprint(f\"\\ntime taken to reach target temperature {target_temperature}°C: {round(elapsed_time, 1)} sec\")"
+  },
+  {
+   "cell_type": "markdown",
+   "id": "55235ece",
+   "metadata": {},
+   "source": [
+    "Simple stopping of temperature control without stopping (i.e. breaking the connection) the machine itself:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "88e17cd9-de42-4f6e-9db0-b74ad74e4a85",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await iis_stack[0].stop_temperature_control()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b5a0ff93-ee2e-4049-86f7-59815163d6f2",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "False"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack[0].is_temperature_control_enabled()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "58c0aa31-9b6b-426f-a038-cdb80614c005",
+   "metadata": {},
+   "source": [
+    "### Shaking Control\n",
+    "\n",
+    "Only Incubator \"Shakers\" can use shaking commands.\n",
+    "\n",
+    "During `.setup()` the machine will check whether it is an `incubator_shaker` (\"MP\" or \"DWP\") and the Python backend only allows shaking commands being sent to the machine if it is an `incubator_shaker`, i.e. the following commands will not work if you have pure incubators."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "fdac2882-59c2-4531-a115-97a644765476",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await iis_stack[0].shake(rpm=800)\n",
+    "\n",
+    "await asyncio.sleep(5)\n",
+    "\n",
+    "await iis_stack[0].stop_shaking()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fc1da4bf-452e-4ead-bd8a-64d219449a64",
+   "metadata": {},
+   "source": [
+    "Inheco incubator shakers support precise, programmable motion in both the **X** and **Y** axes.\n",
+    "The resulting shaking pattern is defined by five parameters:\n",
+    "\n",
+    "- **Amplitude in X** (`Aₓ`, 0–3 mm)\n",
+    "- **Amplitude in Y** (`Aᵧ`, 0–3 mm)\n",
+    "- **Frequency in X** (`fₓ`, 6.6–30.0 Hz)\n",
+    "- **Frequency in Y** (`fᵧ`, 6.6–30.0 Hz)\n",
+    "- **Phase shift** (`φ`, the angular offset between X and Y motion, in degrees)\n",
+    "\n",
+    "Different combinations of these parameters produce circular, linear, elliptical, or\n",
+    "figure-eight movement paths.\n",
+    "\n",
+    "---\n",
+    "\n",
+    "#### Predefined Shaking Patterns in PyLabRobot\n",
+    "\n",
+    "To simplify configuration, PyLabRobot provides predefined motion presets that map common use cases to specific parameter combinations:\n",
+    "\n",
+    "| Pattern | Description | Parameter relationship | Required speed attribute |\n",
+    "|----------|--------------|------------------------|---------------------------|\n",
+    "| `orbital` | Circular shaking | `Aₓ = Aᵧ`, `φ = 90°`, `fₓ = fᵧ` | `rpm` |\n",
+    "| `elliptical` | Elliptical motion | `Aₓ ≠ Aᵧ`, `φ = 90°`, `fₓ = fᵧ` | `rpm` |\n",
+    "| `figure_eight` | Figure-eight (Lissajous) motion | `Aₓ ≈ Aᵧ`, `φ = 90°`, `fᵧ = 2 fₓ` | `rpm` |\n",
+    "| `linear_x` | Linear motion along X | `Aᵧ = 0` | `frequency_hz` |\n",
+    "| `linear_y` | Linear motion along Y | `Aₓ = 0` | `frequency_hz` |\n",
+    "\n",
+    "```{note}\n",
+    "The default behaviour of `.shake()` uses...\n",
+    "- an orbital shaking pattern,\n",
+    "- x amplitude = 3 mm,\n",
+    "- y amplitude = 3 mm.\n",
+    "\n",
+    "(see “Simplest usage” example above)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "637c7550",
+   "metadata": {},
+   "source": [
+    "Orbital shaking example with modified amplitudes"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "21ef6992-fdd2-47f7-b739-0de4cb1022e0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await iis_stack[0].shake(\n",
+    "    pattern=\"orbital\",\n",
+    "    rpm=800,\n",
+    "    amplitude_x_mm=2.0,\n",
+    "    amplitude_y_mm=2.0\n",
+    ")\n",
+    "\n",
+    "await asyncio.sleep(5)\n",
+    "\n",
+    "await iis_stack[0].stop_shaking()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2a9b5212",
+   "metadata": {},
+   "source": [
+    "Elliptical shaking example with modified amplitudes:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8b6d28a3-6c02-47cd-a5e0-1e01cc35e4d0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await iis_stack[0].shake(\n",
+    "    pattern=\"elliptical\",\n",
+    "    rpm=800,\n",
+    "    amplitude_x_mm=2.5,\n",
+    "    amplitude_y_mm=2.5\n",
+    ")\n",
+    "\n",
+    "await asyncio.sleep(5)\n",
+    "\n",
+    "await iis_stack[0].stop_shaking()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f1a72cea",
+   "metadata": {},
+   "source": [
+    "Figure-eight shaking example:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bd1b713c-0c1f-4e6c-81b0-88cee4ba8719",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await iis_stack[0].shake(\n",
+    "    pattern=\"figure_eight\",\n",
+    "    rpm=400,\n",
+    ")\n",
+    "\n",
+    "await asyncio.sleep(5)\n",
+    "\n",
+    "await iis_stack[0].stop_shaking()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9eb382d9-3432-4d0e-9514-02f25eb7ef68",
+   "metadata": {},
+   "source": [
+    "If you feel adventurous, see the math that goes into the calculation of different shaking patterns here:"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "97014c29-c023-4259-aa3f-1b7fa85c9c24",
+   "metadata": {},
+   "source": [
+    "<details>\n",
+    "<summary><b>📘 How PyLabRobot Implements Inheco Shaking Patterns (Mathematical Overview)</b></summary>\n",
+    "\n",
+    "Inheco incubator shakers move a plate by oscillating the platform in two directions — **X** and **Y** — at programmable amplitudes, frequencies, and phase offsets.\n",
+    "\n",
+    "---\n",
+    "\n",
+    "**The Core Equations**\n",
+    "\n",
+    "The motion of the platform is described by two sinusoidal functions:\n",
+    "\n",
+    "\\[\n",
+    "\\begin{aligned}\n",
+    "x(t) &= Aₓ \\sin(2\\pi fₓ t) \\\\\n",
+    "y(t) &= Aᵧ \\sin(2\\pi fᵧ t + φ)\n",
+    "\\end{aligned}\n",
+    "\\]\n",
+    "\n",
+    "Where:\n",
+    "\n",
+    "| Symbol | Meaning | Example |\n",
+    "|:--|:--|:--|\n",
+    "| `Aₓ`, `Aᵧ` | Amplitudes (mm) — how far the plate moves in X and Y | 2.5 mm |\n",
+    "| `fₓ`, `fᵧ` | Frequencies (Hz) — how fast each axis oscillates | 10 Hz, 20 Hz |\n",
+    "| `φ` | Phase shift (°) — timing offset between X and Y | 0°, 90°, 180° |\n",
+    "\n",
+    "Each axis moves smoothly back and forth like a spring.  \n",
+    "When these two motions combine, they trace elegant paths such as circles, ellipses, or figure-eights.\n",
+    "\n",
+    "---\n",
+    "\n",
+    "**Pattern Intuition**\n",
+    "\n",
+    "Different shaking patterns are created by adjusting the relationships between these parameters:\n",
+    "\n",
+    "| Pattern | Conditions | Description |\n",
+    "|:--|:--|:--|\n",
+    "| **Linear X** | `Aᵧ = 0` | Motion only along X (back-and-forth line) |\n",
+    "| **Linear Y** | `Aₓ = 0` | Motion only along Y |\n",
+    "| **Orbital** | `Aₓ = Aᵧ`, `fₓ = fᵧ`, `φ = 90°` | Perfect circular motion |\n",
+    "| **Elliptical** | `Aₓ ≠ Aᵧ`, `fₓ = fᵧ`, `φ = 90°` | Elongated circle (ellipse) |\n",
+    "| **Figure-Eight (Lissajous)** | `Aₓ ≈ Aᵧ`, `fᵧ = 2 fₓ`, `φ = 90°` | Double-loop path shaped like ∞ |\n",
+    "\n",
+    "---\n",
+    "\n",
+    "**Example: Figure-Eight Motion**\n",
+    "\n",
+    "In firmware terms:\n",
+    "\n",
+    "SSP20,20,100,200,90\n",
+    "ASE1\n",
+    "\n",
+    "\n",
+    "corresponds to:\n",
+    "\n",
+    "- `Aₓ = Aᵧ = 2.0 mm`\n",
+    "- `fₓ = 10.0 Hz`\n",
+    "- `fᵧ = 20.0 Hz`\n",
+    "- `φ = 90°`\n",
+    "\n",
+    "This combination makes the platform’s Y motion twice as fast as its X motion —  \n",
+    "the resulting path is a **Lissajous figure**, visually resembling a “figure-8”.\n",
+    "\n",
+    "---\n",
+    "\n",
+    "**Why This Matters**\n",
+    "\n",
+    "By controlling these parameters precisely:\n",
+    "- The **mixing efficiency** can be tuned to the liquid’s viscosity.\n",
+    "- The **path geometry** affects shear stress and aeration.\n",
+    "- **Repeatable motion profiles** ensure reproducibility across runs.\n",
+    "\n",
+    "Understanding this relationship helps you select the right pattern\n",
+    "(`orbital`, `elliptical`, `figure_eight`, etc.) for your experiment.\n",
+    "\n",
+    "</details>\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d18c1605-e179-4b89-932c-a1d1fd00ae10",
+   "metadata": {},
+   "source": [
+    "### Empowerment Showcase\n",
+    "\n",
+    "With control of multiple single incubator shakers a whole array of complex experimental & optimisation processes is possible.\n",
+    "\n",
+    "This PyLabRobot integration aims to make these machine powers as accessible as possible.\n",
+    "\n",
+    "One still relatively simple example:\n",
+    "Parallelize shaking of different incubators with different shaking + temperature conditions ... did someone say \"Design of Experiments\" 👀📊"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9016a568-3e26-4041-95cf-149d6fbe9bd6",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Waiting for target temperature 29.00 °C...\n",
+      "\n",
+      "[████████████████████████████████████----] 29.20 °C  (Δ=0.20 °C | ETA:    3.0s)\n",
+      "[OK] Target temperature reached.\n",
+      "Waiting for target temperature 37.00 °C...\n",
+      "\n",
+      "[█████████████---------------------------] 36.87 °C  (Δ=0.13 °C | ETA:    4.3s)\n",
+      "[OK] Target temperature reached.\n"
+     ]
+    }
+   ],
+   "source": [
+    "await iis_stack[0].start_temperature_control(29)\n",
+    "await iis_stack[1].start_temperature_control(37)\n",
+    "\n",
+    "await iis_stack[0].wait_for_temperature(sensor=\"mean\", show_progress_bar=True)\n",
+    "await iis_stack[1].wait_for_temperature(sensor=\"mean\", show_progress_bar=True)\n",
+    "\n",
+    "\n",
+    "await iis_stack[0].shake(\n",
+    "  pattern=\"orbital\",\n",
+    "  rpm=500,\n",
+    ")\n",
+    "\n",
+    "await iis_stack[1].shake(\n",
+    "  pattern=\"figure_eight\",\n",
+    "  rpm=800,\n",
+    ")\n",
+    "\n",
+    "await asyncio.sleep(10)\n",
+    "\n",
+    "await iis_stack[0].stop_temperature_control()\n",
+    "await iis_stack[1].stop_temperature_control()\n",
+    "\n",
+    "await iis_stack[0].stop_shaking()\n",
+    "await iis_stack[1].stop_shaking()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4db6a1e0-ed03-4359-9ab8-e19246d082cf",
+   "metadata": {},
+   "source": [
+    "### Self Test / Maintenance (PLR beta)\n",
+    "\n",
+    "The Inheco firmware provides a \"self-test\" which checks the drawer, temperature and shaking features.\n",
+    "This test can take up to 5 min.\n",
+    "\n",
+    "The test *must be* performed without a plate in the incubator.\n",
+    "\n",
+    "It generates a binary code in which each position represents a machine subsystem:\n",
+    "- Bit 0: Drawer\n",
+    "- Bit 1: Homogeneity Sensor 3 versus Sensor 1 (>2 K)\n",
+    "- Bit 2: Homogeneity Sensor 2 versus Sensor 1 (>2 K)\n",
+    "- Bit 3: Sensor 1 doesn’t reach Target Temperature after 130 sec.\n",
+    "- Bit 4: Y-Amplitude Shaker\n",
+    "- Bit 5: X-Amplitude Shaker\n",
+    "- Bit 6: Phase Shift Shaker\n",
+    "- Bit 7: Y-Frequency Shaker\n",
+    "- Bit 8: X-Frequency Shaker\n",
+    "- Bit 9: Line Boost-Heater broken\n",
+    "- Bit 10: Line Main-Heater broken\n",
+    "\n",
+    "A `0` means no error has been found for that subsystem, and a `1` means there is a hardware fault."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1c46a480-6d0f-4792-b388-12ce9c3513f6",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{\n",
+       "  \"drawer_error\": False,\n",
+       "  \"homogeneity_sensor_3_vs_1_error\": False,\n",
+       "  \"homogeneity_sensor_2_vs_1_error\": False,\n",
+       "  \"sensor_1_target_temp_error\": False,\n",
+       "  \"y_amplitude_shaker_error\": False,\n",
+       "  \"x_amplitude_shaker_error\": False,\n",
+       "  \"phase_shift_shaker_error\": False,\n",
+       "  \"y_frequency_shaker_error\": False,\n",
+       "  \"x_frequency_shaker_error\": False,\n",
+       "  \"line_boost_heater_broken\": False,\n",
+       "  \"line_main_heater_broken\": False,\n",
+       "}\n"
+      ]
+     },
+     "execution_count": 19,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack[0].perform_self_test()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "a2d15a39-a2e4-4d7e-ac9a-5b93770bfa9b",
+   "metadata": {},
+   "source": [
+    "This is a beta feature in PyLabRobot and we will verify the interpretation with the PyLabRobot supporting OEM, Inheco - all our machines appear to be fully functional, i.e. we couldn't check whether a faulty machine will correctly be flagged by this self-test."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e9c95159-484c-4a21-9cdb-43c4ee017bbe",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Usage: Master Control via the Stack Frontend 🦾\n",
+    "\n",
+    "Even though loops make setting temperatures fast and efficient, we found it is too much code.\n",
+    "\n",
+    "This is why we enabled the frontend to have \"master control commands\" for all units in a stack."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f81a3965-280f-4163-8fae-53db746e6c62",
+   "metadata": {},
+   "source": [
+    "### Querying Statuses"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9d9a782b-49f0-4c5f-8c33-504c44ccc289",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: 'closed', 1: 'closed'}"
+      ]
+     },
+     "execution_count": 20,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack.request_loading_tray_states()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "445accca-0dc4-4713-bbe5-4212ff8741d8",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: False, 1: False}"
+      ]
+     },
+     "execution_count": 21,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack.request_temperature_control_states()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "96a443ac-dfb8-4744-9f42-14e74c84f333",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: False, 1: False}"
+      ]
+     },
+     "execution_count": 22,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack.request_shaking_states()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "a1660de6-b823-45ca-ada3-916c2e17d571",
+   "metadata": {},
+   "source": "### Master Commands - Loading Trays"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1c71f19f-10f5-4a38-9dad-b87967b89220",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: 'open', 1: 'open'}"
+      ]
+     },
+     "execution_count": 23,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack.open_all()\n",
+    "\n",
+    "await iis_stack.request_loading_tray_states()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "57fe0f47-f2ab-44db-bc0f-5cbea1f11e2c",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: 'closed', 1: 'closed'}"
+      ]
+     },
+     "execution_count": 24,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack.close_all()\n",
+    "\n",
+    "await iis_stack.request_loading_tray_states()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6660d186-971a-42dc-927f-52b1689de27c",
+   "metadata": {},
+   "source": "### Master Commands - Temperature Control"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d534ff6a-7b7b-45f7-aa6a-07c0387f286f",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: 37.8, 1: 34.4}"
+      ]
+     },
+     "execution_count": 25,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack.start_all_temperature_control(target_temperature=37)\n",
+    "\n",
+    "await asyncio.sleep(10)\n",
+    "\n",
+    "await iis_stack.get_all_temperatures()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7e98bbf3-aed4-4ae8-a888-9c588d5189a2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await iis_stack.stop_all_temperature_control()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "71fb31e4-9cd5-4f4b-8bdb-2bb1e6e2835c",
+   "metadata": {},
+   "source": "### Master Commands - Shaking Control"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "163db59d-3ae2-4dec-880a-53b323ca00bc",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{0: False, 1: False}"
+      ]
+     },
+     "execution_count": 27,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await iis_stack.request_shaking_states()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7f34eb41-cb4a-4fbb-8c7c-36400dead6c4",
+   "metadata": {},
+   "source": [
+    "## Closing Connection\n",
+    "\n",
+    "Standard PyLabRobot way of closing the communication to the machine, i.e. the stack:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2c6fd6d7-c85c-4fc3-a35c-e23b9b18ee1d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await iis_stack.stop()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "20cf4f13-0e54-4c26-9201-83140b738c35",
+   "metadata": {},
+   "source": [
+    "This stops all temperature control, and all shaking before disconnecting from the stack."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "509f8bc7-9e9c-4250-b854-b2a0c8ded9e8",
+   "metadata": {},
+   "source": [
+    "```{note}\n",
+    "If you develop a small script that you find yourself re-using and that goes beyond the simple \"hello world, inheco incubator shaker\"-style examples here, please consider contributing it back to the PyLabRobot community as a Cookbook Recipe.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "98db023d-d081-4bce-be7e-466735b439c7",
+   "metadata": {},
+   "source": "---\n## Usage: Multiple Stacks\n\nTo connect more than one machine stack:\n- instantiate a separate backend and frontend for each,\n- you **must** hand the serial port to each stack's backend explicitly\n\n```{note}\nWhen using one stack, PyLabRobot finds the machine's port automatically based on its unique VID:PID,\nif multiple machines are found with the same VID:PID there is ambiguity\n- e.g. the VSpin & Cytation 5 use the same identifier combo :')\n```\n- perform a setup for each stack. \n\n(set on the back of the bottom-most machine):\n"
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1f7a4e50-9888-4327-8de1-097fe523590a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "iis_stack_backend_0 = InhecoIncubatorShakerStackBackend(dip_switch_id = 2, port=\"/dev/cu.usbserial-130\")\n",
+    "iis_stack_0 = IncubatorShakerStack(backend=iis_stack_backend_0)\n",
+    "await iis_stack.setup(verbose=True)\n",
+    "\n",
+    "iis_stack_backend_1 = InhecoIncubatorShakerStackBackend(dip_switch_id = 7, port=\"/dev/cu.usbserial-42\")\n",
+    "iis_stack_1 = IncubatorShakerStack(backend=iis_stack_backend_1)\n",
+    "await iis_stack_1.setup(verbose=True)\n",
+    "\n",
+    "iis_stack_backend_2 = InhecoIncubatorShakerStackBackend(dip_switch_id = 11, port=\"/dev/cu.usbserial-123\")\n",
+    "iis_stack_2 = IncubatorShakerStack(backend=iis_stack_backend_2)\n",
+    "await iis_stack_2.setup(verbose=True)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "plr",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.11"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

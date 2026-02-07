@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.get\_block\_status
+====================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.chatterbox
+
+.. automethod:: ThermocyclerChatterboxBackend.get_block_status
