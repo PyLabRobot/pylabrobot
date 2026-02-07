@@ -195,27 +195,10 @@ class LiquidHandler(Resource, Machine):
     )
     arm_state: Optional[Dict[int, Any]]
     if self._resource_pickups:
-      arm_state = {}
-      for arm_id, pickup in self._resource_pickups.items():
-        if pickup is not None:
-          res = pickup.resource
-          arm_entry: Dict[str, Any] = {
-            "has_resource": True,
-            "resource_name": res.name,
-            "resource_type": type(res).__name__,
-            "direction": pickup.direction.name,
-            "pickup_distance_from_top": pickup.pickup_distance_from_top,
-            "size_x": res.get_size_x(),
-            "size_y": res.get_size_y(),
-            "size_z": res.get_size_z(),
-          }
-          if hasattr(res, "num_items_x"):
-            arm_entry["num_items_x"] = res.num_items_x
-          if hasattr(res, "num_items_y"):
-            arm_entry["num_items_y"] = res.num_items_y
-          arm_state[arm_id] = arm_entry
-        else:
-          arm_state[arm_id] = None
+      arm_state = {
+        arm_id: serialize(pickup) if pickup is not None else None
+        for arm_id, pickup in self._resource_pickups.items()
+      }
     else:
       arm_state = None
     return {"head_state": head_state, "head96_state": head96_state, "arm_state": arm_state}

@@ -34,10 +34,11 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     setup_finished: Whether the backend has been set up.
   """
 
+  num_arms: int = 0
+
   def __init__(self):
     super().__init__()
     self.setup_finished = False
-    self.num_arms: int = 0
     self.core96_head_installed: bool = False
     self._deck: Optional[Deck] = None
     self._head: Optional[Dict[int, TipTracker]] = None
