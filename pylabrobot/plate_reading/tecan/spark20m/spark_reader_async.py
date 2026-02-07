@@ -7,8 +7,8 @@ import usb.core
 
 from pylabrobot.io.usb import USB
 
-from .enums import VENDOR_ID, DEVICE_ENDPOINTS, SparkDevice, SparkEndpoint
-from .spark_packet_parser import parse_single_spark_packet, PACKET_TYPE
+from .enums import DEVICE_ENDPOINTS, VENDOR_ID, SparkDevice, SparkEndpoint
+from .spark_packet_parser import PACKET_TYPE, parse_single_spark_packet
 
 
 class SparkReaderAsync:
