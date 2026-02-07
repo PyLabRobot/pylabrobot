@@ -21,24 +21,28 @@ from pylabrobot.resources import (
 )
 
 
+def _make_test_deck() -> Deck:
+  return Deck(size_x=100, size_y=100, size_z=100)
+
+
 class DeckTests(unittest.TestCase):
   """Tests for the `Deck` class."""
 
   def test_assign_resource(self):
-    deck = Deck()
+    deck = _make_test_deck()
     resource = Resource(name="resource", size_x=1, size_y=1, size_z=1)
     deck.assign_child_resource(resource, location=Coordinate.zero())
     self.assertEqual(deck.get_resource("resource"), resource)
 
   def test_assign_resource_twice(self):
-    deck = Deck()
+    deck = _make_test_deck()
     resource = Resource(name="resource", size_x=1, size_y=1, size_z=1)
     deck.assign_child_resource(resource, location=Coordinate.zero())
     with self.assertRaises(ValueError):
       deck.assign_child_resource(resource, location=Coordinate.zero())
 
   def test_clear(self):
-    deck = Deck()
+    deck = _make_test_deck()
     r1 = Resource(name="r1", size_x=1, size_y=1, size_z=1)
     r2 = Resource(name="r2", size_x=1, size_y=1, size_z=1)
     r3 = Resource(name="r3", size_x=1, size_y=1, size_z=1)
@@ -54,7 +58,7 @@ class DeckTests(unittest.TestCase):
     tmp_dir = tempfile.gettempdir()
 
     # test with custom classes
-    custom_1 = Deck()
+    custom_1 = _make_test_deck()
     tc = TipCarrier(
       "tc",
       200,
