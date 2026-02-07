@@ -42,7 +42,7 @@ from .rotation import Rotation
 from .sergi import *
 from .tecan import *
 from .thermo_fisher import *
-from .tip_rack import TipRack, TipSpot
+from .tip_rack import EmbeddedTipRack, NestedTipRack, StandingTipRack, TipRack, TipSpot
 from .tip_tracker import (
   TipTracker,
   does_tip_tracking,
