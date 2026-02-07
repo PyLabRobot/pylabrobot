@@ -402,8 +402,8 @@ def hamilton_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
     size_x=45,  # from venus
     size_y=45,  # from venus
     size_z=24,  # from venus
-    back_channel_y_center=0,
-    front_channel_y_center=-26,
+    back_channel_y_center=26,
+    front_channel_y_center=0,
     model=hamilton_core_gripper_1000ul_at_waste.__name__,
   )
 
@@ -419,8 +419,8 @@ def hamilton_core_gripper_1000ul_5ml_on_waste() -> HamiltonCoreGrippers:
     size_x=39,  # from venus
     size_y=61,  # from venus
     size_z=24,  # from venus
-    back_channel_y_center=0,
-    front_channel_y_center=-18,
+    back_channel_y_center=18,
+    front_channel_y_center=0,
     model=hamilton_core_gripper_1000ul_5ml_on_waste.__name__,
   )
 
@@ -516,14 +516,14 @@ class HamiltonSTARDeck(HamiltonDeck):
       x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_at_waste(),
-        location=Coordinate(x=x, y=105.550, z=205) - waste_block.location,
+        location=Coordinate(x=x, y=105.550 - 26, z=205) - waste_block.location,
         # ignore_collision=True,
       )
     elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
       x = 1337.5 if num_rails == STAR_NUM_RAILS else 797.5
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_5ml_on_waste(),
-        location=Coordinate(x=x, y=125, z=205) - waste_block.location,
+        location=Coordinate(x=x, y=125 - 18, z=205) - waste_block.location,
         # ignore_collision=True,
       )
 
