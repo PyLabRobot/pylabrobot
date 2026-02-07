@@ -178,7 +178,6 @@ class STARCommandCatcher(STARBackend):
   async def setup(self) -> None:  # type: ignore
     self._num_channels = 8
     self.iswap_installed = True
-    self.num_arms = 1
     self.core96_head_installed = True
     self._core_parked = True
 
@@ -263,7 +262,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR.core96_head_installed = True
     self.STAR.iswap_installed = True
-    self.STAR.num_arms = 1
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1095,7 +1093,6 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.STAR._num_channels = 8
     self.STAR.core96_head_installed = True
     self.STAR.iswap_installed = True
-    self.STAR.num_arms = 1
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1225,7 +1222,6 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     self.star._num_channels = 8
     self.star.core96_head_installed = True
     self.star.iswap_installed = True
-    self.star.num_arms = 1
     self.star.setup = unittest.mock.AsyncMock()
     self.star._core_parked = True
     self.star._iswap_parked = True
@@ -1422,7 +1418,6 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.backend._num_channels = 8
     self.backend.core96_head_installed = True
     self.backend.iswap_installed = True
-    self.backend.num_arms = 1
     self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True

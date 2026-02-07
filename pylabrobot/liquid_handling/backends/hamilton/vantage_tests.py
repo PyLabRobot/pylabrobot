@@ -217,8 +217,8 @@ class VantageCommandCatcher(VantageBackend):
     self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True
-    self.num_arms = 1
-    self.core96_head_installed = True
+    self._num_arms = 1
+    self._head96_installed = True
 
   async def send_command(
     self,

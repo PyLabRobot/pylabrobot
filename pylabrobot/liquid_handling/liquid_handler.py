@@ -145,8 +145,7 @@ class LiquidHandler(Resource, Machine):
     self.location = Coordinate.zero()
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
-    num_arms = getattr(self.backend, "num_arms", 0)
-    self._resource_pickups: Dict[int, Optional[ResourcePickup]] = {a: None for a in range(num_arms)}
+    self._resource_pickups: Dict[int, Optional[ResourcePickup]] = {}
 
   @property
   def _resource_pickup(self) -> Optional[ResourcePickup]:
@@ -169,8 +168,11 @@ class LiquidHandler(Resource, Machine):
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
-    has_head96 = getattr(self.backend, "core96_head_installed", True)
-    self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)} if has_head96 else {}
+    self.head96 = (
+      {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
+      if self.backend.head96_installed
+      else {}
+    )
 
     self.backend.set_heads(head=self.head, head96=self.head96 or None)
 
@@ -179,8 +181,7 @@ class LiquidHandler(Resource, Machine):
     for tracker in self.head96.values():
       tracker.register_callback(self._state_updated)
 
-    num_arms = getattr(self.backend, "num_arms", 0)
-    self._resource_pickups = {a: None for a in range(num_arms)}
+    self._resource_pickups = {a: None for a in range(self.backend.num_arms)}
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
@@ -192,28 +193,12 @@ class LiquidHandler(Resource, Machine):
       if self.head96
       else None
     )
+    arm_state: Optional[Dict[int, Any]]
     if self._resource_pickups:
-      arm_state: Optional[Dict[int, Any]] = {}
-      for arm_id, pickup in self._resource_pickups.items():
-        if pickup is not None:
-          res = pickup.resource
-          arm_entry: Dict[str, Any] = {
-            "has_resource": True,
-            "resource_name": res.name,
-            "resource_type": type(res).__name__,
-            "direction": pickup.direction.name,
-            "pickup_distance_from_top": pickup.pickup_distance_from_top,
-            "size_x": res.get_size_x(),
-            "size_y": res.get_size_y(),
-            "size_z": res.get_size_z(),
-          }
-          if hasattr(res, "num_items_x"):
-            arm_entry["num_items_x"] = res.num_items_x
-          if hasattr(res, "num_items_y"):
-            arm_entry["num_items_y"] = res.num_items_y
-          arm_state[arm_id] = arm_entry
-        else:
-          arm_state[arm_id] = None
+      arm_state = {
+        arm_id: serialize(pickup) if pickup is not None else None
+        for arm_id, pickup in self._resource_pickups.items()
+      }
     else:
       arm_state = None
     return {"head_state": head_state, "head96_state": head96_state, "arm_state": arm_state}
@@ -227,8 +212,9 @@ class LiquidHandler(Resource, Machine):
       self.head[channel].load_state(tracker_state)
 
     head96_state = state.get("head96_state", {})
-    for channel, tracker_state in head96_state.items():
-      self.head96[channel].load_state(tracker_state)
+    if head96_state and self.head96:
+      for channel, tracker_state in head96_state.items():
+        self.head96[channel].load_state(tracker_state)
 
     # arm_state is informational only (read via serialize_state); no load needed since
     # _resource_pickup is set/cleared by pick_up_resource/drop_resource at runtime.
@@ -2020,7 +2006,7 @@ class LiquidHandler(Resource, Machine):
       direction=direction,
     )
 
-    if not self._resource_pickups:
+    if self.setup_finished and not self._resource_pickups:
       raise RuntimeError("No robotic arm is installed on this liquid handler.")
 
     if pickup_distance_from_top is None:

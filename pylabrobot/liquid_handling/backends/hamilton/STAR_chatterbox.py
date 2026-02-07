@@ -60,7 +60,6 @@ class STARChatterboxBackend(STARBackend):
     # Use bitwise operations to check specific bits
     self.iswap_installed = bool(xl_value & 0b10)  # Check bit 1
     self.core96_head_installed = bool(xl_value & 0b100)  # Check bit 2
-    self.num_arms = 1 if self.iswap_installed else 0
 
     # Parse autoload from kb configuration byte
     configuration_data1 = bin(conf["kb"]).split("b")[-1].zfill(8)

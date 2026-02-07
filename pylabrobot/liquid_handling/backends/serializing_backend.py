@@ -30,6 +30,8 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def __init__(self, num_channels: int):
     LiquidHandlerBackend.__init__(self)
     self._num_channels = num_channels
+    self._num_arms = 1
+    self._head96_installed = True
 
   @property
   def num_channels(self) -> int:
