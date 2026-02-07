@@ -359,14 +359,18 @@ class Visualizer:
       # First, try to get server info from jupyter_core / notebook.
       servers = []
       try:
-        from jupyter_server.serverapp import list_running_servers  # type: ignore[import-untyped,import-not-found]
+        from jupyter_server.serverapp import (
+          list_running_servers,  # type: ignore[import-untyped,import-not-found]
+        )
 
         servers = list(list_running_servers())
       except Exception:
         pass
       if not servers:
         try:
-          from notebook.notebookapp import list_running_servers  # type: ignore[import-untyped,import-not-found,no-redef]
+          from notebook.notebookapp import (
+            list_running_servers,  # type: ignore[import-untyped,import-not-found,no-redef]
+          )
 
           servers = list(list_running_servers())
         except Exception:
