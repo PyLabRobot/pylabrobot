@@ -445,7 +445,10 @@ class HamiltonSTARDeck(HamiltonDeck):
       Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
     ] = "1000uL-5mL-on-waste",
   ) -> None:
-    """Create a new STAR(let) deck of the given size."""
+    """Create a new STAR(let) deck of the given size.
+
+    `with_trash` and `with_teaching_rack` require `with_waste_block` to be true.
+    """
 
     super().__init__(
       num_rails=num_rails,
@@ -473,44 +476,53 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
       )
 
-    if with_teaching_rack:
-      tip_spots = [
-        TipSpot(
-          name=f"tip_spot_{i}",
-          size_x=9.0,
-          size_y=9.0,
-          size_z=0,
-          make_tip=hamilton_tip_300uL_filter,
+      # assign trash area, positioned 25mm to the right of the waste block
+      # only run if the waste block is actually assigned.
+      if with_trash:
+        if with_waste_block:
+          waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
+        else:
+          # Fallback: anchor to the rightmost rail when no waste block is present.
+          waste_block_x = self.rails_to_location(self.num_rails - 1).x
+
+        trash_x = waste_block_x + 25
+
+        self.assign_child_resource(
+          resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+          location=Coordinate(x=trash_x, y=190.6, z=137.1),
         )
-        for i in range(8)
-      ]
-      for i, ts in enumerate(tip_spots):
-        ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=23.1)  # A1 == index 0, topmost tip
 
-      teaching_tip_rack = TipRack(
-        name="teaching_tip_rack",
-        size_x=9,
-        size_y=9 * 8,
-        size_z=50.4,
-        ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("ABCDEFGH")},
-        with_tips=True,
-        model="hamilton_teaching_tip_rack",
-      )
-      waste_block.assign_child_resource(teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0))
+      if with_teaching_rack:
+        tip_spots = [
+          TipSpot(
+            name=f"tip_spot_{i}",
+            size_x=9.0,
+            size_y=9.0,
+            size_z=0,
+            make_tip=hamilton_tip_300uL_filter,
+          )
+          for i in range(8)
+        ]
+        for i, ts in enumerate(tip_spots):
+          ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=23.1)  # A1 == index 0, topmost tip
 
-    # assign trash area, positioned 25mm to the right of the waste block
-    if with_trash:
-      if with_waste_block:
-        waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
-      else:
-        # Fallback: anchor to the rightmost rail when no waste block is present.
-        waste_block_x = self.rails_to_location(self.num_rails - 1).x
-      trash_x = waste_block_x + 25
-
-      self.assign_child_resource(
-        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
-        location=Coordinate(x=trash_x, y=190.6, z=137.1),
-      )
+        teaching_tip_rack = TipRack(
+          name="teaching_tip_rack",
+          size_x=9,
+          size_y=9 * 8,
+          size_z=50.4,
+          ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("ABCDEFGH")},
+          with_tips=True,
+          model="hamilton_teaching_tip_rack",
+        )
+        waste_block.assign_child_resource(
+          teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
+        )
+    else:
+      if with_trash:
+        raise RuntimeError("Trash area cannot be created when no waste block is present.")
+      if with_teaching_rack:
+        raise RuntimeError("Teaching rack cannot be created when no waste block is present.")
 
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
