@@ -170,7 +170,7 @@ class LiquidHandler(Resource, Machine):
 
     self.head96 = (
       {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
-      if self.backend.core96_head_installed
+      if self.backend.head96_installed
       else {}
     )
 
