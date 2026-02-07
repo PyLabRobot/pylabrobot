@@ -1187,9 +1187,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       serial_number=serial_number,
     )
 
-    self.iswap_installed: bool = False
-    self.autoload_installed: bool = False
-    self.core96_head_installed: bool = False
+    self.iswap_installed: Optional[bool] = None
+    self.autoload_installed: Optional[bool] = None
+    self.core96_head_installed: Optional[bool] = None
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
