@@ -43,14 +43,14 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   def __init__(self):
     super().__init__()
     self.setup_finished = False
-    self.core96_head_installed: Optional[bool] = False
+    self._head96_installed: Optional[bool] = False
     self._deck: Optional[Deck] = None
     self._head: Optional[Dict[int, TipTracker]] = None
     self._head96: Optional[Dict[int, TipTracker]] = None
 
   @property
   def head96_installed(self) -> Optional[bool]:
-    return self.core96_head_installed
+    return self._head96_installed
 
   def set_deck(self, deck: Deck):
     """Set the deck for the robot. Called automatically by `LiquidHandler.setup` or can be called

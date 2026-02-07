@@ -44,7 +44,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     super().__init__()
     self._num_channels = num_channels
     self._num_arms = 1
-    self.core96_head_installed = True
+    self._head96_installed = True
 
   async def setup(self):
     await super().setup()
