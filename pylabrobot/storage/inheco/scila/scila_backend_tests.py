@@ -206,27 +206,32 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     )
 
   def test_serialize(self):
-    backend = SCILABackend(scila_ip="169.254.1.117", client_ip="192.168.1.10")
-    data = backend.serialize()
+    self.mock_sila_interface.machine_ip = "169.254.1.117"
+    self.mock_sila_interface.client_ip = "192.168.1.10"
+    data = self.backend.serialize()
     self.assertEqual(data["scila_ip"], "169.254.1.117")
     self.assertEqual(data["client_ip"], "192.168.1.10")
 
   def test_serialize_no_client_ip(self):
+    self.mock_sila_interface.machine_ip = "127.0.0.1"
+    self.mock_sila_interface.client_ip = None
     data = self.backend.serialize()
     self.assertEqual(data["scila_ip"], "127.0.0.1")
     self.assertIsNone(data["client_ip"])
 
   def test_deserialize(self):
     data = {"scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
-    backend = SCILABackend.deserialize(data)
-    self.assertEqual(backend._scila_ip, "169.254.1.117")
-    self.assertEqual(backend._client_ip, "192.168.1.10")
+    SCILABackend.deserialize(data)
+    self.MockInhecoSiLAInterface.assert_called_with(
+      client_ip="192.168.1.10", machine_ip="169.254.1.117"
+    )
 
   def test_deserialize_no_client_ip(self):
     data = {"scila_ip": "169.254.1.117"}
-    backend = SCILABackend.deserialize(data)
-    self.assertEqual(backend._scila_ip, "169.254.1.117")
-    self.assertIsNone(backend._client_ip)
+    SCILABackend.deserialize(data)
+    self.MockInhecoSiLAInterface.assert_called_with(
+      client_ip=None, machine_ip="169.254.1.117"
+    )
 
 
 if __name__ == "__main__":
