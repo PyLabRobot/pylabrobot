@@ -98,6 +98,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
   async def test_open(self):
     for drawer_id in [1, 2, 3, 4]:
       with self.subTest(drawer_id=drawer_id):
+        self.mock_sila_interface.send_command.reset_mock()
         await self.backend.open(drawer_id)
         self.mock_sila_interface.send_command.assert_any_call("PrepareForInput", position=drawer_id)
         self.mock_sila_interface.send_command.assert_any_call("OpenDoor")
@@ -109,6 +110,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
   async def test_close(self):
     for drawer_id in [1, 2, 3, 4]:
       with self.subTest(drawer_id=drawer_id):
+        self.mock_sila_interface.send_command.reset_mock()
         await self.backend.close(drawer_id)
         self.mock_sila_interface.send_command.assert_any_call(
           "PrepareForOutput", position=drawer_id
@@ -148,6 +150,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
       (4, "Closed"),
     ]:
       with self.subTest(drawer_id=drawer_id):
+        self.mock_sila_interface.send_command.reset_mock()
         self.mock_sila_interface.send_command.return_value = ET.fromstring(
           "<Response>"
           "  <Parameter name='Drawer1'><String>Opened</String></Parameter>"

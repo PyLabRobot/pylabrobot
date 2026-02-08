@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, overload
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
@@ -31,9 +31,10 @@ def _get_params(root: ET.Element, names: list[str]) -> dict[str, object]:
   return {n: _get_param(root, n) for n in names}
 
 
-class SCILABackend(MachineBackend):
-  DrawerStatus = Literal["Opened", "Closed"]
+DrawerStatus = Literal["Opened", "Closed"]
 
+
+class SCILABackend(MachineBackend):
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
     self._scila_ip = scila_ip
     self._client_ip = client_ip
@@ -89,9 +90,17 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
     await self._sila_interface.send_command("CloseDoor")
 
+  @overload
+  async def request_drawer_status(self, drawer_id: int) -> DrawerStatus:
+    ...
+
+  @overload
+  async def request_drawer_status(self, drawer_id: None = None) -> dict[str, DrawerStatus]:
+    ...
+
   async def request_drawer_status(
     self, drawer_id: Optional[int] = None
-  ) -> Union[dict[str, "DrawerStatus"], "DrawerStatus"]:
+  ) -> dict[str, DrawerStatus] | DrawerStatus:
     if drawer_id is not None and drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     root = await self._sila_interface.send_command("GetDoorStatus")
@@ -127,9 +136,9 @@ class SCILABackend(MachineBackend):
   async def stop_temperature_control(self) -> None:
     await self._sila_interface.send_command("SetTemperature", temperatureControl=False)
 
-  def serialize(self) -> dict:
+  def serialize(self) -> dict[str, Any]:
     return {**super().serialize(), "scila_ip": self._scila_ip, "client_ip": self._client_ip}
 
   @classmethod
-  def deserialize(cls, data: dict) -> "SCILABackend":
+  def deserialize(cls, data: dict[str, Any]) -> "SCILABackend":
     return cls(scila_ip=data["scila_ip"], client_ip=data.get("client_ip"))
