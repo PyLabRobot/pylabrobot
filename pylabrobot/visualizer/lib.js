@@ -4535,7 +4535,10 @@ function buildNavbarLHActuators() {
     var label = document.createElement("button");
     label.className = "navbar-pipette-label";
     label.title = "Show/hide liquid handler actuators";
-    label.innerHTML = lhName + "<br>Actuators";
+    label.textContent = "";
+    label.appendChild(document.createTextNode(lhName));
+    label.appendChild(document.createElement("br"));
+    label.appendChild(document.createTextNode("Actuators"));
     group.appendChild(label);
 
     // Collapsible container for actuator buttons
