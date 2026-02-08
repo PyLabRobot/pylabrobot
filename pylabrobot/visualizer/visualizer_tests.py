@@ -14,7 +14,7 @@ from pylabrobot.resources import (
   Resource,
 )
 from pylabrobot.visualizer import Visualizer
-from pylabrobot.visualizer.visualizer import _sanitize_floats
+from pylabrobot.visualizer.visualizer import _sanitize_floats, _serialize_with_methods
 
 
 class SanitizeFloatsTests(unittest.TestCase):
@@ -119,7 +119,7 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
       {
         "event": "set_root_resource",
         "data": {
-          "resource": self.r.serialize(),
+          "resource": _serialize_with_methods(self.r),
         },
         "id": "0001",
         "version": STANDARD_FORM_JSON_VERSION,
@@ -130,11 +130,36 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
     await self.client.send('{"event": "ready"}')
     _ = await self.client.recv()  # set_root_resource
     _ = await self.client.recv()  # set_state
+    _ = await self.client.recv()  # show_machine_tools
 
     await self.vis.send_command("test", wait_for_response=False)
     recv = await self.client.recv()
     data = json.loads(recv)
     self.assertEqual(data["event"], "test")
+
+
+class VisualizerShowMachineToolsTests(unittest.IsolatedAsyncioTestCase):
+  """Tests for the show_machine_tools_at_start parameter."""
+
+  async def test_show_machine_tools_at_start_false(self):
+    """When show_machine_tools_at_start=False, the show_machine_tools event should not be sent."""
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(r, open_browser=False, show_machine_tools_at_start=False)
+    vis.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    await vis.setup()
+
+    # Simulate browser ready
+    await vis._send_resources_and_state()
+
+    # Check that show_machine_tools was never sent
+    for call in vis.send_command.call_args_list:  # type: ignore[attr-defined]
+      self.assertNotEqual(
+        call[1].get("event") if call[1] else call[0][0],
+        "show_machine_tools",
+        "show_machine_tools event should not be sent when show_machine_tools_at_start=False",
+      )
+
+    await vis.stop()
 
 
 class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -159,7 +184,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.vis.send_command.assert_called_once_with(  # type: ignore[attr-defined]
       event="resource_assigned",
       data={
-        "resource": child.serialize(),
+        "resource": _serialize_with_methods(child),
         "state": child.serialize_all_state(),
         "parent_name": "root",
       },
