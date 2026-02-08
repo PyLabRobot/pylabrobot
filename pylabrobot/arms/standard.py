@@ -7,6 +7,6 @@ JointCoords = Iterable[float]
 
 
 @dataclass
-class CartesianCoords:
+class GripperPose:
   location: Coordinate
   rotation: Rotation

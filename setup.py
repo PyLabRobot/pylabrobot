@@ -30,6 +30,8 @@ extras_inheco = ["hid==1.0.8"]
 
 extras_agrow = ["pymodbus==3.6.8"]
 
+extras_kx2 = ["python-can"]
+
 extras_dev = (
   extras_fw
   + extras_http
@@ -40,6 +42,7 @@ extras_dev = (
   + extras_server
   + extras_inheco
   + extras_agrow
+  + extras_kx2
   + [
     "pydata-sphinx-theme==0.16.1",
     "myst_nb==1.3.0",
@@ -56,7 +59,7 @@ extras_dev = (
 )
 
 # Some extras are not available on all platforms. `dev` should be available everywhere
-extras_all = extras_dev
+extras_all = extras_dev + extras_kx2
 
 setup(
   name="PyLabRobot",
@@ -78,6 +81,7 @@ setup(
     "opentrons": extras_opentrons,
     "server": extras_server,
     "agrow": extras_agrow,
+    "kx2": extras_kx2,
     "dev": extras_dev,
     "all": extras_all,
   },

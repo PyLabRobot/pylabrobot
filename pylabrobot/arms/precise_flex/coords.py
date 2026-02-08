@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from pylabrobot.arms.standard import CartesianCoords
+from pylabrobot.arms.standard import GripperPose
 
 
 class ElbowOrientation(Enum):
@@ -11,5 +11,5 @@ class ElbowOrientation(Enum):
 
 
 @dataclass
-class PreciseFlexCartesianCoords(CartesianCoords):
+class PreciseFlexCartesianCoords(GripperPose):
   orientation: Optional[ElbowOrientation] = None
