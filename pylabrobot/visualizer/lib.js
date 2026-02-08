@@ -83,9 +83,7 @@ function buildWrtDropdown() {
   }
 }
 
-function updateCoordsPanel(resource) {
-  // No-op; dropdown is built once via buildWrtDropdown.
-}
+
 
 function updateWrtBullseyeScale() {
   if (!wrtHighlightCircle) return;
@@ -841,7 +839,6 @@ class Resource {
           highlightSidebarRow(this.name);
         }
         if (activeTool === "coords") {
-          updateCoordsPanel(this);
           showResHighlightBullseye(this);
           drawDeltaLines(this);
         }
@@ -948,9 +945,6 @@ class Resource {
         clearDeltaLines();
         if (typeof clearSidebarHighlight === "function") {
           clearSidebarHighlight();
-        }
-        if (activeTool === "coords") {
-          updateCoordsPanel(null);
         }
       });
       this.mainShape.on("dblclick dbltap", () => {
@@ -3752,9 +3746,6 @@ window.addEventListener("load", function () {
     if (gifBtn) gifBtn.classList.toggle("active", tool === "gif");
     if (coordsPanel) coordsPanel.style.display = tool === "coords" ? "" : "none";
     if (gifPanel) gifPanel.style.display = tool === "gif" ? "" : "none";
-    if (tool !== "coords") {
-      updateCoordsPanel(null);
-    }
     clearDeltaLines();
     updateWrtHighlight();
   }
