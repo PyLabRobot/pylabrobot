@@ -36,8 +36,6 @@ DrawerStatus = Literal["Opened", "Closed"]
 
 class SCILABackend(MachineBackend):
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
-    self._scila_ip = scila_ip
-    self._client_ip = client_ip
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
   async def setup(self) -> None:
@@ -90,8 +88,6 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
     await self._sila_interface.send_command("CloseDoor")
 
-  DrawerStatus = Literal["Opened", "Closed"]
-
   async def request_drawer_statuses(self) -> Dict[str, DrawerStatus]:
     root = await self._sila_interface.send_command("GetDoorStatus")
     return _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])  # type: ignore
@@ -128,7 +124,7 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("SetTemperature", temperatureControl=False)
 
   def serialize(self) -> dict[str, Any]:
-    return {**super().serialize(), "scila_ip": self._scila_ip, "client_ip": self._client_ip}
+    return {**super().serialize(), "scila_ip": self._sila_interface.machine_ip, "client_ip": self._sila_interface.client_ip}
 
   @classmethod
   def deserialize(cls, data: dict[str, Any]) -> "SCILABackend":
