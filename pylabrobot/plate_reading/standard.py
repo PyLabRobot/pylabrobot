@@ -17,6 +17,7 @@ except ImportError:
 
 
 class Objective(enum.Enum):
+  # From Cytation
   O_40X_PL_APO = enum.auto()
   O_60X_PL_FL = enum.auto()
   O_4X_PL_FL = enum.auto()
@@ -39,6 +40,9 @@ class Objective(enum.Enum):
   O_100X_OIL_PL_APO = enum.auto()
   O_60X_OIL_PL_APO = enum.auto()
   O_20X_PL_APO = enum.auto()
+
+  # Pico
+  O_2_5X_N_PLAN = enum.auto()
 
   @property
   def magnification(self) -> float:
@@ -65,6 +69,7 @@ class Objective(enum.Enum):
       Objective.O_100X_OIL_PL_APO: 100,
       Objective.O_60X_OIL_PL_APO: 60,
       Objective.O_20X_PL_APO: 20,
+      Objective.O_2_5X_N_PLAN: 2.5,
     }[self]
 
 
@@ -95,6 +100,8 @@ class ImagingMode(enum.Enum):
   TAG_BFP = enum.auto()
   TEXAS_RED = enum.auto()
   YFP = enum.auto()
+
+  FITC = enum.auto()
 
 
 class NoPlateError(Exception):
