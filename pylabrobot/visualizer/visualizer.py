@@ -21,8 +21,6 @@ except ImportError as e:
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.resources import Resource
-from pylabrobot.resources.tip_tracker import set_tip_tracking
-from pylabrobot.resources.volume_tracker import set_volume_tracking
 
 logger = logging.getLogger("pylabrobot")
 
@@ -417,10 +415,6 @@ class Visualizer:
 
     if self.setup_finished:
       raise RuntimeError("The visualizer has already been started.")
-
-    # Enable tip and volume tracking so the visualizer receives real-time state updates.
-    set_tip_tracking(True)
-    set_volume_tracking(True)
 
     await self._run_ws_server()
     self._run_file_server()
