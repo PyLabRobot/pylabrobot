@@ -1208,6 +1208,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._setup_done = False
 
   @property
+  def num_arms(self) -> int:
+    return 1 if self.iswap_installed else 0
+
+  @property
+  def head96_installed(self) -> Optional[bool]:
+    return self.core96_head_installed
+
+  @property
   def unsafe(self) -> "UnSafe":
     """Actions that have a higher risk of damaging the robot. Use with care!"""
     return self._unsafe
