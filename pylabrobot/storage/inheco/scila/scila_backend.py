@@ -88,14 +88,16 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
     await self._sila_interface.send_command("CloseDoor")
 
-  async def request_drawer_statuses(self) -> Dict[str, DrawerStatus]:
+  async def request_drawer_statuses(self) -> Dict[int, DrawerStatus]:
     root = await self._sila_interface.send_command("GetDoorStatus")
-    return _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])  # type: ignore
+    params = _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])
+    return {i: params[f"Drawer{i}"] for i in range(1, 5)}  # type: ignore
 
   async def request_drawer_status(self, drawer_id: int) -> DrawerStatus:
     if drawer_id not in {1, 2, 3, 4}:
-      positions = await self.request_drawer_statuses()
-    return positions[f"Drawer{drawer_id}"]
+      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
+    positions = await self.request_drawer_statuses()
+    return positions[drawer_id]
 
   async def request_co2_flow_status(self) -> str:
     root = await self._sila_interface.send_command("GetCO2FlowStatus")

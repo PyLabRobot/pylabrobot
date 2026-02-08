@@ -134,10 +134,10 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       positions,
       {
-        "drawer1": "Opened",
-        "drawer2": "Closed",
-        "drawer3": "Opened",
-        "drawer4": "Closed",
+        1: "Opened",
+        2: "Closed",
+        3: "Opened",
+        4: "Closed",
       },
     )
     self.mock_sila_interface.send_command.assert_called_with("GetDoorStatus")
