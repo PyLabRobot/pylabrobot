@@ -241,12 +241,16 @@ class Visualizer:
       "data": data,
       "event": event,
     }
-    # Python's json.dumps outputs bare Infinity/-Infinity for float('inf'), which is
-    # not valid JSON and causes JSON.parse() in the browser to throw SyntaxError.
-    # Replace bare tokens with quoted strings so the browser's JSON reviver can handle them.
-    serialized = json.dumps(command_data)
-    serialized = serialized.replace(": Infinity", ': "Infinity"')
-    serialized = serialized.replace(": -Infinity", ': "-Infinity"')
+
+    def _default(obj):
+      if isinstance(obj, float):
+        if obj == float("inf"):
+          return "Infinity"
+        if obj == float("-inf"):
+          return "-Infinity"
+      raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+    serialized = json.dumps(command_data, allow_nan=False, default=_default)
     return serialized, id_
 
   def has_connection(self) -> bool:
