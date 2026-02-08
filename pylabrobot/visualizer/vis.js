@@ -99,11 +99,10 @@ async function processCentralEvent(event, data) {
     case "set_state":
       let allStates = data;
       setState(allStates);
-      // Rebuild the sidepanel tree so summaries reflect the updated state
-      const rootName = Object.keys(resources).find(
-        (n) => resources[n] && !resources[n].parent
-      );
-      if (rootName) buildResourceTree(resources[rootName], { rebuildNavbar: false });
+      // Update only the affected sidepanel nodes instead of rebuilding the entire tree
+      for (let resourceName in allStates) {
+        updateSidepanelState(resourceName);
+      }
       break;
 
     case "show_actuators":
