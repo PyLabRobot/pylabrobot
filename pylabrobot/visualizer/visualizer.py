@@ -52,7 +52,7 @@ def _get_public_methods(cls: type) -> list:
 def _serialize_with_methods(resource: Resource) -> dict:
   """Serialize a resource and enrich with Python method signatures for the visualizer."""
   data = resource.serialize()
-  data["methods"] = _get_public_methods(type(resource))
+  data["methods"] = _get_public_methods(type(resource))  # type: ignore[arg-type]
   data["children"] = [_serialize_with_methods(child) for child in resource.children]
   return data
 
