@@ -57,6 +57,7 @@ from .standard import (
   MultiHeadAspirationPlate,
   MultiHeadDispensePlate,
   Pickup,
+  ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
 )
@@ -66,6 +67,8 @@ def _create_mock_backend(num_channels: int = 8):
   """Create a mock LiquidHandlerBackend with the specified number of channels."""
   mock = unittest.mock.create_autospec(LiquidHandlerBackend, instance=True)
   type(mock).num_channels = PropertyMock(return_value=num_channels)
+  type(mock).num_arms = PropertyMock(return_value=1)
+  type(mock).head96_installed = PropertyMock(return_value=True)
   mock.can_pick_up_tip.return_value = True
   return mock
 
@@ -1108,3 +1111,99 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     assert all(self.lh.head96[i].get_tip().tracker.get_used_volume() == 0 for i in range(96))
     assert all(w.tracker.get_used_volume() == 10 for w in quadrant_wells)
     await self.lh.return_tips96()
+
+
+class TestLiquidHandlerSerializeState(unittest.IsolatedAsyncioTestCase):
+  """Tests for LiquidHandler.serialize_state() and load_state()."""
+
+  async def asyncSetUp(self):
+    self.backend = _create_mock_backend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
+    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
+    self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    await self.lh.setup()
+
+  async def test_serialize_state_after_setup(self):
+    state = self.lh.serialize_state()
+    self.assertIn("head_state", state)
+    self.assertIn("head96_state", state)
+    self.assertIn("arm_state", state)
+
+    # 8 channels, all without tips
+    self.assertEqual(len(state["head_state"]), 8)
+    for channel_state in state["head_state"].values():
+      self.assertIsNone(channel_state["tip"])
+
+    # 96 channels for head96
+    self.assertEqual(len(state["head96_state"]), 96)
+
+    # 1 arm, no resource picked up
+    self.assertEqual(state["arm_state"], {0: None})
+
+  async def test_serialize_state_no_head96(self):
+    backend = _create_mock_backend(num_channels=8)
+    type(backend).head96_installed = PropertyMock(return_value=False)
+    deck = STARLetDeck()
+    lh = LiquidHandler(backend=backend, deck=deck)
+    await lh.setup()
+
+    state = lh.serialize_state()
+    self.assertIsNone(state["head96_state"])
+
+  async def test_serialize_state_no_arms(self):
+    backend = _create_mock_backend(num_channels=8)
+    type(backend).num_arms = PropertyMock(return_value=0)
+    deck = STARLetDeck()
+    lh = LiquidHandler(backend=backend, deck=deck)
+    await lh.setup()
+
+    state = lh.serialize_state()
+    self.assertIsNone(state["arm_state"])
+
+  async def test_serialize_state_with_resource_pickup(self):
+    resource = self.plate
+    pickup = ResourcePickup(
+      resource=resource,
+      offset=Coordinate.zero(),
+      pickup_distance_from_top=5.0,
+      direction=GripDirection.FRONT,
+    )
+    self.lh._resource_pickup = pickup
+
+    state = self.lh.serialize_state()
+    arm_state = state["arm_state"]
+    self.assertIsNotNone(arm_state[0])
+
+    serialized_pickup = arm_state[0]
+    self.assertEqual(serialized_pickup["type"], "ResourcePickup")
+    self.assertEqual(serialized_pickup["pickup_distance_from_top"], 5.0)
+    self.assertEqual(serialized_pickup["direction"], "FRONT")
+    self.assertIn("resource", serialized_pickup)
+    self.assertEqual(serialized_pickup["resource"]["name"], "plate")
+
+  async def test_serialize_state_arm_none_after_drop(self):
+    self.lh._resource_pickup = ResourcePickup(
+      resource=self.plate,
+      offset=Coordinate.zero(),
+      pickup_distance_from_top=5.0,
+      direction=GripDirection.LEFT,
+    )
+    self.assertIsNotNone(self.lh.serialize_state()["arm_state"][0])
+
+    self.lh._resource_pickup = None
+    self.assertEqual(self.lh.serialize_state()["arm_state"], {0: None})
+
+  async def test_load_state_head(self):
+    state = self.lh.serialize_state()
+    # Modify a tracker, load old state, verify it's restored
+    self.lh.head[0]._tip = hamilton_96_tiprack_300uL_filter(name="tmp").get_item("A1").get_tip()
+    self.lh.load_state(state)
+    self.assertIsNone(self.lh.head[0]._tip)
+
+  async def test_load_state_backward_compatible(self):
+    # Old state format without head96_state or arm_state
+    old_state = {"head_state": {c: self.lh.head[c].serialize() for c in self.lh.head}}
+    self.lh.load_state(old_state)  # should not raise
