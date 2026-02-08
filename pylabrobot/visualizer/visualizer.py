@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import http.server
 import inspect
 import json
@@ -25,14 +26,15 @@ from pylabrobot.resources import Resource
 logger = logging.getLogger("pylabrobot")
 
 
-def _get_public_methods(resource: Resource) -> list:
-  """Get public method signatures from a resource instance for the visualizer UI."""
+@functools.lru_cache(maxsize=None)
+def _get_public_methods(cls: type) -> list:
+  """Get public method signatures from a resource class for the visualizer UI."""
   methods = []
-  for name in dir(resource):
+  for name in dir(cls):
     if name.startswith("_"):
       continue
     try:
-      attr = getattr(type(resource), name, None)
+      attr = getattr(cls, name, None)
     except Exception:
       continue
     if attr is None or not callable(attr) or isinstance(attr, property):
@@ -49,7 +51,7 @@ def _get_public_methods(resource: Resource) -> list:
 def _serialize_with_methods(resource: Resource) -> dict:
   """Serialize a resource and enrich with Python method signatures for the visualizer."""
   data = resource.serialize()
-  data["methods"] = _get_public_methods(resource)
+  data["methods"] = _get_public_methods(type(resource))
   data["children"] = [_serialize_with_methods(child) for child in resource.children]
   return data
 
