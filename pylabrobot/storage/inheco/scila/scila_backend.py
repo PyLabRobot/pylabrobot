@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from typing import Any, Literal, Optional, overload
+from typing import Any, Dict, Literal, Optional, Union, overload
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
@@ -90,25 +90,16 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
     await self._sila_interface.send_command("CloseDoor")
 
-  @overload
-  async def request_drawer_status(self, drawer_id: int) -> DrawerStatus:
-    ...
+  DrawerStatus = Literal["Opened", "Closed"]
 
-  @overload
-  async def request_drawer_status(self, drawer_id: None = None) -> dict[str, DrawerStatus]:
-    ...
-
-  async def request_drawer_status(
-    self, drawer_id: Optional[int] = None
-  ) -> dict[str, DrawerStatus] | DrawerStatus:
-    if drawer_id is not None and drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
+  async def request_drawer_statuses(self) -> Dict[str, DrawerStatus]:
     root = await self._sila_interface.send_command("GetDoorStatus")
-    raw = _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])
-    statuses = {k.lower(): v for k, v in raw.items()}
-    if drawer_id is not None:
-      return statuses[f"drawer{drawer_id}"]  # type: ignore
-    return statuses  # type: ignore
+    return _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])  # type: ignore
+
+  async def request_drawer_status(self, drawer_id: int) -> DrawerStatus:
+    if drawer_id not in {1, 2, 3, 4}:
+      positions = await self.request_drawer_statuses()
+    return positions[f"Drawer{drawer_id}"]
 
   async def request_co2_flow_status(self) -> str:
     root = await self._sila_interface.send_command("GetCO2FlowStatus")
@@ -128,7 +119,7 @@ class SCILABackend(MachineBackend):
     root = await self._sila_interface.send_command("GetValveStatus")
     return _get_params(root, ["H2O", "CO2 Normal", "CO2 Boost"])  # type: ignore
 
-  async def start_temperature_control(self, temperature: float) -> None:
+  async def set_temperature(self, temperature: float) -> None:
     await self._sila_interface.send_command(
       "SetTemperature", targetTemperature=temperature, temperatureControl=True
     )

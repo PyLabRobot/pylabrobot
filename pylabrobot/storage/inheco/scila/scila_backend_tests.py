@@ -130,7 +130,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
       "  <Parameter name='Drawer4'><String>Closed</String></Parameter>"
       "</Response>"
     )
-    positions = await self.backend.request_drawer_status()
+    positions = await self.backend.request_drawer_statuses()
     self.assertEqual(
       positions,
       {
