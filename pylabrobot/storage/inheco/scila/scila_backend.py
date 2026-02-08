@@ -117,7 +117,7 @@ class SCILABackend(MachineBackend):
     root = await self._sila_interface.send_command("GetValveStatus")
     return _get_params(root, ["H2O", "CO2 Normal", "CO2 Boost"])  # type: ignore
 
-  async def set_temperature(self, temperature: float) -> None:
+  async def start_temperature_control(self, temperature: float) -> None:
     await self._sila_interface.send_command(
       "SetTemperature", targetTemperature=temperature, temperatureControl=True
     )
