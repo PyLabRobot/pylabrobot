@@ -3704,21 +3704,22 @@ class KX2Backend:
       target[KX2Axis.ELBOW] = self.convert_elbow_position_to_angle(target[KX2Axis.ELBOW])
 
     # Ensure per-axis ready and clamp travel limits like
-    for ax in axes:
-      if self.unlimited_travel_ax[ax]:
-        continue
-      high = self.max_travel_ax[ax]
-      low = self.min_travel_ax[ax]
-      if target[ax] > high:
-        if (target[ax] - high) < 0.1:
-          target[ax] = high
-        else:
-          raise ValueError(f"Axis {ax!r} above max travel")
-      if target[ax] < low:
-        if (low - target[ax]) < 0.1:
-          target[ax] = low
-        else:
-          raise ValueError(f"Axis {ax!r} below min travel")
+    # for ax in axes:
+    #   if self.unlimited_travel_ax[ax]:
+    #     continue
+    #   high = self.max_travel_ax[ax]
+    #   low = self.min_travel_ax[ax]
+    #   print("ax", ax, "target", target[ax], "low", low, "high", high)
+    #   if target[ax] > high:
+    #     if (target[ax] - high) < 0.1:
+    #       target[ax] = high
+    #     else:
+    #       raise ValueError(f"Axis {ax!r} above max travel")
+    #   if target[ax] < low:
+    #     if (low - target[ax]) < 0.1:
+    #       target[ax] = low
+    #     else:
+    #       raise ValueError(f"Axis {ax!r} below min travel")
 
     # Clearance check
     if KX2Axis.Z in axes:
@@ -3865,6 +3866,7 @@ class KX2Backend:
     cmd_vel_pct: float,
     cmd_accel_pct: float,
   ) -> None:
+    print("cmd", cmd_pos)
     plan = await self.calculate_move_abs_all_axes(
       cmd_pos=cmd_pos,
       cmd_vel_pct=cmd_vel_pct,
