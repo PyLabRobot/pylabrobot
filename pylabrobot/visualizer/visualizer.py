@@ -653,10 +653,15 @@ class Visualizer:
     """Called when the state of a resource is updated. Updates are batched so that
     rapid successive changes (e.g. 96-channel pickup) are sent as a single message."""
 
-    self._pending_state_updates[resource.name] = resource.serialize_state()
+    state = resource.serialize_state()
+    self.loop.call_soon_threadsafe(self._enqueue_state_update, resource.name, state)
+
+  def _enqueue_state_update(self, name: str, state: dict) -> None:
+    """Enqueue a state update on the event loop thread and schedule a flush if needed."""
+    self._pending_state_updates[name] = state
     if not self._flush_scheduled:
       self._flush_scheduled = True
-      self.loop.call_soon_threadsafe(self._flush_state_updates)
+      self.loop.call_soon(self._flush_state_updates)
 
   def _flush_state_updates(self) -> None:
     """Send all pending state updates as a single ``set_state`` event."""
