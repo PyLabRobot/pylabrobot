@@ -98,7 +98,7 @@ class Visualizer:
     open_browser: bool = True,
     name: Optional[str] = None,
     favicon: Optional[str] = None,
-    show_actuators_at_start: bool = True,
+    show_machine_tools_at_start: bool = True,
   ):
     """Create a new Visualizer. Use :meth:`.setup` to start the visualization.
 
@@ -113,12 +113,12 @@ class Visualizer:
         calling script or notebook is detected automatically.
       favicon: Path to a ``.png`` file to use as the browser tab icon. If ``None``, the
         PyLabRobot logo is used.
-      show_actuators_at_start: If ``True``, actuator popups (pipettes, arm) are opened automatically
-        when the visualizer starts.
+      show_machine_tools_at_start: If ``True``, machine tool popups (pipettes, arm) are opened
+        automatically when the visualizer starts.
     """
 
     self.setup_finished = False
-    self._show_actuators_at_start = show_actuators_at_start
+    self._show_machine_tools_at_start = show_machine_tools_at_start
 
     if name is not None:
       self._source_filename = name
@@ -416,7 +416,7 @@ class Visualizer:
         continue
       basename = os.path.basename(fname)
       if "ipykernel" in fname or fname.startswith("<"):
-        return ""
+        continue
       if basename.endswith(".py"):
         return basename
 
@@ -614,7 +614,7 @@ class Visualizer:
     def save_resource_state(resource: Resource):
       """Recursively save the state of the resource and all child resources."""
       resource_state = resource.serialize_state()
-      if resource_state:
+      if resource_state is not None:
         state[resource.name] = resource_state
       for child in resource.children:
         save_resource_state(child)
@@ -622,8 +622,8 @@ class Visualizer:
     save_resource_state(self._root_resource)
     await self.send_command("set_state", state, wait_for_response=False)
 
-    if self._show_actuators_at_start:
-      await self.send_command("show_actuators", {}, wait_for_response=False)
+    if self._show_machine_tools_at_start:
+      await self.send_command("show_machine_tools", {}, wait_for_response=False)
 
   def _handle_resource_assigned_callback(self, resource: Resource) -> None:
     """Called when a resource is assigned to a resource already in the tree starting from the

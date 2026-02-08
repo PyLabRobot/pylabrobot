@@ -2428,7 +2428,7 @@ class LiquidHandler extends Resource {
     }
     if ("head96_state" in state) {
       this.head96State = state.head96_state;
-      // Show/hide multi-channel button based on whether the actuator exists
+      // Show/hide multi-channel button based on whether the machine tool exists
       var multiBtn = document.getElementById("multi-channel-btn-" + this.name);
       if (multiBtn) multiBtn.style.display = (this.head96State !== null && this.head96State !== undefined) ? "" : "none";
       var panel96 = document.getElementById("multi-channel-dropdown-" + this.name);
@@ -2438,7 +2438,7 @@ class LiquidHandler extends Resource {
     }
     if ("arm_state" in state) {
       this.armState = state.arm_state;
-      // Show/hide arm button based on whether the actuator exists
+      // Show/hide arm button based on whether the machine tool exists
       var armBtnEl = document.getElementById("arm-btn-" + this.name);
       if (armBtnEl) armBtnEl.style.display = (this.armState !== null && this.armState !== undefined) ? "" : "none";
       // Snapshot each held resource NOW, while it is still in the resources dict.
@@ -2827,7 +2827,7 @@ function _captureLoop() {
   var captureW = mainEl.offsetWidth;
   var captureH = mainEl.offsetHeight;
   var mainRect = mainEl.getBoundingClientRect();
-  var overflows = mainEl.querySelectorAll(".actuator-dropdown.open, .tool-panel, .uml-panel");
+  var overflows = mainEl.querySelectorAll(".machine-tool-dropdown.open, .tool-panel, .uml-panel");
   overflows.forEach(function (el) {
     var r = el.getBoundingClientRect();
     var right = r.right - mainRect.left;
@@ -3324,7 +3324,7 @@ function buildResourceTree(rootResource, { rebuildNavbar = true } = {}) {
 
   treeContainer.appendChild(rootNode);
   buildWrtDropdown();
-  if (rebuildNavbar) buildNavbarLHActuators();
+  if (rebuildNavbar) buildNavbarLHMachineTools();
 }
 
 function addResourceToTree(resource) {
@@ -3685,7 +3685,7 @@ function collapseAllTreeNodes() {
 
 // Sidepanel collapse toggle, resize, expand/collapse all
 window.addEventListener("load", function () {
-  var expandBtn = document.getElementById("expand-all-btn");
+  var expandBtn = document.getElementById("toggle-expand-btn");
   var collapseBtn = document.getElementById("collapse-all-btn");
   var treeExpanded = true;
   if (expandBtn) expandBtn.addEventListener("click", function () {
@@ -4360,7 +4360,7 @@ window.addEventListener("load", function () {
 });
 
 // ===========================================================================
-// Navbar Liquid Handler Actuator Buttons
+// Navbar Liquid Handler Machine Tool Buttons
 // ===========================================================================
 
 function makeSVG(viewBox, innerHTML) {
@@ -4504,8 +4504,8 @@ var integratedArmSVG =
   '<polygon points="29,30.3 30.5,29.5 30.5,38.5 29,39.3" fill="#1a1a1a" stroke="#000" stroke-width="0.4"/>' +
   '</g>';
 
-function buildNavbarLHActuators() {
-  var container = document.getElementById("navbar-lh-actuators");
+function buildNavbarLHMachineTools() {
+  var container = document.getElementById("navbar-lh-machine-tools");
   if (!container) return;
   container.innerHTML = "";
 
@@ -4525,31 +4525,31 @@ function buildNavbarLHActuators() {
     // Label (styled as button without changing appearance)
     var label = document.createElement("button");
     label.className = "navbar-pipette-label";
-    label.title = "Show/hide liquid handler actuators";
+    label.title = "Show/hide liquid handler machine tools";
     label.textContent = "";
     label.appendChild(document.createTextNode(lhName));
     label.appendChild(document.createElement("br"));
-    label.appendChild(document.createTextNode("Actuators"));
+    label.appendChild(document.createTextNode("Machine Tools"));
     group.appendChild(label);
 
-    // Collapsible container for actuator buttons
-    var actuatorBtns = document.createElement("div");
-    actuatorBtns.className = "navbar-actuator-btns";
-    group.appendChild(actuatorBtns);
+    // Collapsible container for machine tool buttons
+    var machineToolBtns = document.createElement("div");
+    machineToolBtns.className = "navbar-machine-tool-btns";
+    group.appendChild(machineToolBtns);
 
-    // Toggle actuator buttons on label click
+    // Toggle machine tool buttons on label click
     label.addEventListener("click", function () {
-      var collapsed = actuatorBtns.classList.toggle("collapsed");
+      var collapsed = machineToolBtns.classList.toggle("collapsed");
       label.classList.toggle("collapsed", collapsed);
       // Close any open dropdowns when collapsing
       if (collapsed) {
-        var dropdowns = document.querySelectorAll(".actuator-dropdown.open");
+        var dropdowns = document.querySelectorAll(".machine-tool-dropdown.open");
         dropdowns.forEach(function (d) { d.classList.remove("open"); });
         group.querySelectorAll(".navbar-pipette-btn.active").forEach(function (b) { b.classList.remove("active"); });
       }
     });
 
-    // Multi-channel button (hidden unless setState has already confirmed actuator exists)
+    // Multi-channel button (hidden unless setState has already confirmed machine tool exists)
     var lhRes = resources[lhName];
     var multiBtn = document.createElement("button");
     multiBtn.className = "navbar-pipette-btn";
@@ -4563,7 +4563,7 @@ function buildNavbarLHActuators() {
     multiImg.style.height = "44px";
     multiImg.style.objectFit = "contain";
     multiBtn.appendChild(multiImg);
-    actuatorBtns.appendChild(multiBtn);
+    machineToolBtns.appendChild(multiBtn);
 
     // Single-channel button
     var singleBtn = document.createElement("button");
@@ -4577,7 +4577,7 @@ function buildNavbarLHActuators() {
     singleImg.style.height = "44px";
     singleImg.style.objectFit = "contain";
     singleBtn.appendChild(singleImg);
-    actuatorBtns.appendChild(singleBtn);
+    machineToolBtns.appendChild(singleBtn);
 
     // Helper: position both panels based on the single-channel button position
     function positionPanels(handlerName, singleBtnRef) {
@@ -4659,7 +4659,7 @@ function buildNavbarLHActuators() {
         var mainEl = document.querySelector("main");
         if (!mainEl) return;
         var panel = document.createElement("div");
-        panel.className = "actuator-dropdown open";
+        panel.className = "machine-tool-dropdown open";
         panel.id = panelId;
         var lhResource = resources[handlerName];
         var headState = (lhResource && lhResource.headState) ? lhResource.headState : {};
@@ -4684,7 +4684,7 @@ function buildNavbarLHActuators() {
         var mainEl = document.querySelector("main");
         if (!mainEl) return;
         var panel = document.createElement("div");
-        panel.className = "actuator-dropdown multi-channel open";
+        panel.className = "machine-tool-dropdown multi-channel open";
         panel.id = panelId;
         var lhResource = resources[handlerName];
         var head96State = (lhResource && lhResource.head96State) ? lhResource.head96State : {};
@@ -4695,7 +4695,7 @@ function buildNavbarLHActuators() {
       });
     })(multiBtn, lhName, singleBtn);
 
-    // Integrated arm button (hidden unless setState has already confirmed actuator exists)
+    // Integrated arm button (hidden unless setState has already confirmed machine tool exists)
     var armBtn = document.createElement("button");
     armBtn.className = "navbar-pipette-btn";
     armBtn.id = "arm-btn-" + lhName;
@@ -4708,7 +4708,7 @@ function buildNavbarLHActuators() {
     armImg.style.height = "44px";
     armImg.style.objectFit = "contain";
     armBtn.appendChild(armImg);
-    actuatorBtns.appendChild(armBtn);
+    machineToolBtns.appendChild(armBtn);
 
     // Arm dropdown panel
     (function (btn, handlerName, singleBtnRef) {
@@ -4724,7 +4724,7 @@ function buildNavbarLHActuators() {
         var mainEl = document.querySelector("main");
         if (!mainEl) return;
         var panel = document.createElement("div");
-        panel.className = "actuator-dropdown arm open";
+        panel.className = "machine-tool-dropdown arm open";
         panel.id = panelId;
         var lhResource = resources[handlerName];
         var armState = (lhResource && lhResource.armState) ? lhResource.armState : {};
@@ -4740,10 +4740,10 @@ function buildNavbarLHActuators() {
 }
 
 /**
- * Programmatically open all visible actuator panels (single-channel, multi-channel, arm)
- * for every LiquidHandler. Buttons that are hidden (actuator absent) are skipped.
+ * Programmatically open all visible machine tool panels (single-channel, multi-channel, arm)
+ * for every LiquidHandler. Buttons that are hidden (machine tool absent) are skipped.
  */
-function openAllActuatorPanels() {
+function openAllMachineToolPanels() {
   for (var name in resources) {
     if (!(resources[name] instanceof LiquidHandler)) continue;
     var btns = [

@@ -105,8 +105,8 @@ async function processCentralEvent(event, data) {
       }
       break;
 
-    case "show_actuators":
-      openAllActuatorPanels();
+    case "show_machine_tools":
+      openAllMachineToolPanels();
       break;
 
     default:

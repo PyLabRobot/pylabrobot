@@ -34,11 +34,11 @@
         >
 
         <span id="source-filename" title="Python source file being visualized">{{ source_filename }}</span>
-        <div class="navbar-divider navbar-divider-actuators"></div>
-        <div id="navbar-lh-actuators"></div>
+        <div class="navbar-divider navbar-divider-machine-tools"></div>
+        <div id="navbar-lh-machine-tools"></div>
 
         <div class="status-box">
-          <span onclick="openSocket();" id="status-indicator"></span>
+          <button type="button" onclick="openSocket();" id="status-indicator" aria-label="Reconnect to server"></button>
           <span id="status-label">Loading...</span>
         </div>
         <div class="navbar-divider"></div>
@@ -283,7 +283,7 @@
         <div class="sidepanel-header">
           <span class="sidepanel-title">Workcell Tree</span>
           <div class="sidepanel-header-actions">
-            <button class="tree-action-btn" id="expand-all-btn" title="Collapse All">
+            <button class="tree-action-btn" id="toggle-expand-btn" title="Collapse All">
               <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3,3 7,7 11,3"/>
                 <polyline points="3,15 7,11 11,15"/>

@@ -130,12 +130,36 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
     await self.client.send('{"event": "ready"}')
     _ = await self.client.recv()  # set_root_resource
     _ = await self.client.recv()  # set_state
-    _ = await self.client.recv()  # show_actuators
+    _ = await self.client.recv()  # show_machine_tools
 
     await self.vis.send_command("test", wait_for_response=False)
     recv = await self.client.recv()
     data = json.loads(recv)
     self.assertEqual(data["event"], "test")
+
+
+class VisualizerShowMachineToolsTests(unittest.IsolatedAsyncioTestCase):
+  """Tests for the show_machine_tools_at_start parameter."""
+
+  async def test_show_machine_tools_at_start_false(self):
+    """When show_machine_tools_at_start=False, the show_machine_tools event should not be sent."""
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(r, open_browser=False, show_machine_tools_at_start=False)
+    vis.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    await vis.setup()
+
+    # Simulate browser ready
+    await vis._send_resources_and_state()
+
+    # Check that show_machine_tools was never sent
+    for call in vis.send_command.call_args_list:  # type: ignore[attr-defined]
+      self.assertNotEqual(
+        call[1].get("event") if call[1] else call[0][0],
+        "show_machine_tools",
+        "show_machine_tools event should not be sent when show_machine_tools_at_start=False",
+      )
+
+    await vis.stop()
 
 
 class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):

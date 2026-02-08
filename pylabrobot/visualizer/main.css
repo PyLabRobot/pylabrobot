@@ -30,7 +30,7 @@ nav.navbar .container-fluid {
   flex-shrink: 0;
 }
 
-.navbar-divider-actuators {
+.navbar-divider-machine-tools {
   margin: 0 14px;
   height: 95%;
 }
@@ -55,7 +55,7 @@ nav.navbar .status-box {
   margin-right: 16px;
 }
 
-#navbar-lh-actuators {
+#navbar-lh-machine-tools {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -114,7 +114,7 @@ nav.navbar .status-box {
   border-left: 1px solid #ced4da;
 }
 
-.navbar-actuator-btns {
+.navbar-machine-tool-btns {
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -123,7 +123,7 @@ nav.navbar .status-box {
   opacity: 1;
 }
 
-.navbar-actuator-btns.collapsed {
+.navbar-machine-tool-btns.collapsed {
   max-width: 0;
   opacity: 0;
 }
@@ -137,7 +137,7 @@ nav.navbar .status-box {
   opacity: 1;
 }
 
-.actuator-dropdown {
+.machine-tool-dropdown {
   position: absolute;
   top: 0;
   left: 50%;
@@ -154,7 +154,7 @@ nav.navbar .status-box {
   display: none;
 }
 
-.actuator-dropdown.open {
+.machine-tool-dropdown.open {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -163,13 +163,13 @@ nav.navbar .status-box {
   box-sizing: border-box;
 }
 
-.actuator-dropdown.multi-channel.open {
+.machine-tool-dropdown.multi-channel.open {
   gap: 10px;
   align-items: center;
   justify-content: center;
 }
 
-.actuator-dropdown.arm.open {
+.machine-tool-dropdown.arm.open {
   align-items: center;
   justify-content: center;
 }
@@ -782,6 +782,8 @@ main {
   border-radius: 50%;
   display: inline-block;
   background-color: gray;
+  border: none;
+  padding: 0;
 }
 
 #status-label {
