@@ -229,9 +229,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
   def test_deserialize_no_client_ip(self):
     data = {"scila_ip": "169.254.1.117"}
     SCILABackend.deserialize(data)
-    self.MockInhecoSiLAInterface.assert_called_with(
-      client_ip=None, machine_ip="169.254.1.117"
-    )
+    self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
 
 
 if __name__ == "__main__":

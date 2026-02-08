@@ -126,7 +126,11 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("SetTemperature", temperatureControl=False)
 
   def serialize(self) -> dict[str, Any]:
-    return {**super().serialize(), "scila_ip": self._sila_interface.machine_ip, "client_ip": self._sila_interface.client_ip}
+    return {
+      **super().serialize(),
+      "scila_ip": self._sila_interface.machine_ip,
+      "client_ip": self._sila_interface.client_ip,
+    }
 
   @classmethod
   def deserialize(cls, data: dict[str, Any]) -> "SCILABackend":
