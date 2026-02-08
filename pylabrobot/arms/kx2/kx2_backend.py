@@ -732,7 +732,9 @@ class KX2Can:
 
       if mapped == TPDOMappedObject.StatusWord:
         if KX2Axis(node_id) in self._waiting_moves:
-          self._waiting_moves[KX2Axis(node_id)].set_result(None)
+          fut = self._waiting_moves[KX2Axis(node_id)]
+          if not fut.done():
+            fut.set_result(None)
 
         event_data = EventData(
           event_type=EventType.MotionStatusReceived,
@@ -792,7 +794,9 @@ class KX2Can:
             )
 
             if edge and logic_enabled and new_bit == 1:
-              self._waiting_moves[KX2Axis(node_id)].set_result(None)
+              fut = self._waiting_moves[KX2Axis(node_id)]
+              if not fut.done():
+                fut.set_result(None)
               print(f"Digital input {index4} enabled motor move done for node {node_id}")
 
           self.input_state[node_idx] = num6
@@ -990,31 +994,28 @@ class KX2Can:
       if message is None:  # timeout
         continue
 
-      response_type = message.arbitration_id >> 7
-      response_type_c = round(message.arbitration_id / 128)
-      assert (
-        response_type == response_type_c
-      ), f"Response type calculation mismatch: {response_type} != {response_type_c}"
-      node_id = message.arbitration_id & 0x7F
-      node_id_c = message.arbitration_id - (response_type * 128)
-      assert node_id == node_id_c, f"Node index calculation mismatch: {node_id} != {node_id_c}"
+      try:
+        response_type = message.arbitration_id >> 7
+        node_id = message.arbitration_id & 0x7F
 
-      if response_type == 0:
-        print("NMT message received, ignoring")
-      elif response_type == 1:
-        await self._process_emcy_message(node_id=node_id, message=message)
-      elif response_type in {3, 7, 9}:
-        await self._process_tpdo_message(
-          node_id=node_id, message=message, response_type=response_type
-        )
-      elif response_type == 5:
-        await self._process_binary_interpreter_response(node_id=node_id, message=message)
-      elif response_type == 11:
-        await self._process_sdo_response(node_id=node_id, message=message)
-      elif response_type == 14:
-        await self._process_motor_drive_restarted(node_id=node_id, message=message)
-      else:
-        print(f"Unknown CAN message type received: {response_type}")
+        if response_type == 0:
+          print("NMT message received, ignoring")
+        elif response_type == 1:
+          await self._process_emcy_message(node_id=node_id, message=message)
+        elif response_type in {3, 7, 9}:
+          await self._process_tpdo_message(
+            node_id=node_id, message=message, response_type=response_type
+          )
+        elif response_type == 5:
+          await self._process_binary_interpreter_response(node_id=node_id, message=message)
+        elif response_type == 11:
+          await self._process_sdo_response(node_id=node_id, message=message)
+        elif response_type == 14:
+          await self._process_motor_drive_restarted(node_id=node_id, message=message)
+        else:
+          print(f"Unknown CAN message type received: {response_type}")
+      except Exception as e:
+        print(f"Error processing CAN message (arb_id={message.arbitration_id:#x}): {e}")
 
   async def can_write(
     self,
