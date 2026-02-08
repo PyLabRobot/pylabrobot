@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
@@ -32,6 +32,8 @@ def _get_params(root: ET.Element, names: list[str]) -> dict[str, object]:
 
 
 class SCILABackend(MachineBackend):
+  DrawerStatus = Literal["Opened", "Closed"]
+
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
     self._scila_ip = scila_ip
     self._client_ip = client_ip
@@ -41,11 +43,11 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.setup()
     await self._reset_and_initialize()
 
-  async def stop(self):
+  async def stop(self) -> None:
     await self._sila_interface.close()
 
   async def _reset_and_initialize(self) -> None:
-    event_uri = f"http://{self._sila_interface._client_ip}:{self._sila_interface.bound_port}/"
+    event_uri = f"http://{self._sila_interface.client_ip}:{self._sila_interface.bound_port}/"
     await self._sila_interface.send_command(
       command="Reset", deviceId="MyController", eventReceiverURI=event_uri, simulationMode=False
     )
@@ -53,7 +55,8 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("Initialize")
 
   async def request_status(self) -> str:
-    # "standBy", "inError", "startup"
+    # GetStatus returns synchronously (return_code 1 = immediate dict), unlike other commands
+    # which return asynchronously (return_code 2 = XML via callback).
     resp = await self._sila_interface.send_command("GetStatus")
     return resp.get("GetStatusResponse", {}).get("state", "Unknown")  # type: ignore
 
@@ -61,11 +64,11 @@ class SCILABackend(MachineBackend):
     root = await self._sila_interface.send_command("GetLiquidLevel")
     return _get_param(root, "LiquidLevel")  # type: ignore
 
-  async def request_temperature_information(self) -> Dict[str, Any]:
+  async def request_temperature_information(self) -> dict[str, Any]:
     root = await self._sila_interface.send_command("GetTemperature")
     return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
 
-  async def get_temperature(self) -> float:
+  async def measure_temperature(self) -> float:
     return (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
 
   async def request_target_temperature(self) -> float:
@@ -86,25 +89,23 @@ class SCILABackend(MachineBackend):
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
     await self._sila_interface.send_command("CloseDoor")
 
-  DrawerStatus = Literal["Opened", "Closed"]
-
-  async def request_drawer_status(self) -> Dict[str, DrawerStatus]:
+  async def request_drawer_status(
+    self, drawer_id: Optional[int] = None
+  ) -> Union[dict[str, "DrawerStatus"], "DrawerStatus"]:
+    if drawer_id is not None and drawer_id not in {1, 2, 3, 4}:
+      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     root = await self._sila_interface.send_command("GetDoorStatus")
     raw = _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])
-    return {k.lower(): v for k, v in raw.items()}  # type: ignore
-
-  async def get_drawer_status(self, drawer_id: int) -> DrawerStatus:
-    if drawer_id not in {1, 2, 3, 4}:
-      raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
-    statuses = await self.request_drawer_status()
-    return statuses[f"drawer{drawer_id}"]
+    statuses = {k.lower(): v for k, v in raw.items()}
+    if drawer_id is not None:
+      return statuses[f"drawer{drawer_id}"]  # type: ignore
+    return statuses  # type: ignore
 
   async def request_co2_flow_status(self) -> str:
-    # "NOK", ...?
     root = await self._sila_interface.send_command("GetCO2FlowStatus")
     return _get_param(root, "CO2FlowStatus")  # type: ignore
 
-  async def request_valve_status(self) -> Dict[str, str]:
+  async def request_valve_status(self) -> dict[str, str]:
     """
     example:
 

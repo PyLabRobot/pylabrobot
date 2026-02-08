@@ -12,7 +12,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.MockInhecoSiLAInterface = self.patcher.start()
     self.mock_sila_interface = AsyncMock(spec=InhecoSiLAInterface)
     self.mock_sila_interface.bound_port = 80
-    self.mock_sila_interface._client_ip = "127.0.0.1"
+    self.mock_sila_interface.client_ip = "127.0.0.1"
     self.MockInhecoSiLAInterface.return_value = self.mock_sila_interface
     self.backend = SCILABackend(scila_ip="127.0.0.1")
 
@@ -62,7 +62,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     )
     self.mock_sila_interface.send_command.assert_called_with("GetTemperature")
 
-  async def test_get_temperature(self):
+  async def test_measure_temperature(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
       "<Response>"
       "  <Parameter name='CurrentTemperature'><Float64>25.0</Float64></Parameter>"
@@ -70,7 +70,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
       "  <Parameter name='TemperatureControl'><Boolean>true</Boolean></Parameter>"
       "</Response>"
     )
-    temp = await self.backend.get_temperature()
+    temp = await self.backend.measure_temperature()
     self.assertEqual(temp, 25.0)
 
   async def test_request_target_temperature(self):
@@ -140,7 +140,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     )
     self.mock_sila_interface.send_command.assert_called_with("GetDoorStatus")
 
-  async def test_get_drawer_status(self):
+  async def test_request_drawer_status_single(self):
     for drawer_id, expected_position in [
       (1, "Opened"),
       (2, "Closed"),
@@ -156,12 +156,12 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
           "  <Parameter name='Drawer4'><String>Closed</String></Parameter>"
           "</Response>"
         )
-        position = await self.backend.get_drawer_status(drawer_id)
+        position = await self.backend.request_drawer_status(drawer_id)
         self.assertEqual(position, expected_position)
 
-  async def test_get_drawer_status_invalid_id(self):
+  async def test_request_drawer_status_invalid_id(self):
     with self.assertRaises(ValueError):
-      await self.backend.get_drawer_status(5)
+      await self.backend.request_drawer_status(5)
 
   async def test_request_co2_flow_status(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
@@ -201,6 +201,29 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.mock_sila_interface.send_command.assert_called_with(
       "SetTemperature", temperatureControl=False
     )
+
+  def test_serialize(self):
+    backend = SCILABackend(scila_ip="169.254.1.117", client_ip="192.168.1.10")
+    data = backend.serialize()
+    self.assertEqual(data["scila_ip"], "169.254.1.117")
+    self.assertEqual(data["client_ip"], "192.168.1.10")
+
+  def test_serialize_no_client_ip(self):
+    data = self.backend.serialize()
+    self.assertEqual(data["scila_ip"], "127.0.0.1")
+    self.assertIsNone(data["client_ip"])
+
+  def test_deserialize(self):
+    data = {"scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
+    backend = SCILABackend.deserialize(data)
+    self.assertEqual(backend._scila_ip, "169.254.1.117")
+    self.assertEqual(backend._client_ip, "192.168.1.10")
+
+  def test_deserialize_no_client_ip(self):
+    data = {"scila_ip": "169.254.1.117"}
+    backend = SCILABackend.deserialize(data)
+    self.assertEqual(backend._scila_ip, "169.254.1.117")
+    self.assertIsNone(backend._client_ip)
 
 
 if __name__ == "__main__":
