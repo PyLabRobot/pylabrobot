@@ -443,6 +443,10 @@ class KX2Can:
     # Threading flags (for asyncio tasks)
     self._can_write_task_running = False
     self._can_read_task_running = True
+
+    # Store task references to prevent garbage collection
+    self._read_task: Optional[asyncio.Task] = None
+    self._write_task: Optional[asyncio.Task] = None
     self.b_pvt_thread_started = False
 
     # Can message queues
@@ -1071,9 +1075,29 @@ class KX2Can:
     self,
     baud_rate: int = 500000,
   ) -> None:
+    # Clean up previous connection if re-connecting
+    if self._read_task is not None and not self._read_task.done():
+      self._can_read_task_running = False
+      self._read_task.cancel()
+      try:
+        await self._read_task
+      except (asyncio.CancelledError, Exception):
+        pass
+    if self._write_task is not None and not self._write_task.done():
+      self._can_write_task_running = False
+      self._write_task.cancel()
+      try:
+        await self._write_task
+      except (asyncio.CancelledError, Exception):
+        pass
+    if self._can_device is not None:
+      self._can_device.shutdown()
+      self._can_device = None
+
     self.sending_sv_command = False
     self.move_error_code = 0
     self.pvt_time_interval_msec = 0
+    self.err_ctrl = [ErrCtrl() for _ in range(8)]
 
     # Determine max_node_id for array sizing if dynamic behavior is needed
     max_node_id = 6
@@ -1095,9 +1119,11 @@ class KX2Can:
       is_extended_id=False,
     )
 
-    # Start asyncio tasks
-    asyncio.create_task(self._can_read_task())
-    asyncio.create_task(self._can_write_task())
+    # Start asyncio tasks (store references to prevent GC)
+    self._can_read_task_running = True
+    self._can_write_task_running = False
+    self._read_task = asyncio.create_task(self._can_read_task())
+    self._write_task = asyncio.create_task(self._can_write_task())
 
     await asyncio.sleep(0.01)
 
