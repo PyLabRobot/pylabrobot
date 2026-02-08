@@ -4,6 +4,7 @@ import http.server
 import inspect
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -54,6 +55,24 @@ def _serialize_with_methods(resource: Resource) -> dict:
   data["methods"] = _get_public_methods(type(resource))
   data["children"] = [_serialize_with_methods(child) for child in resource.children]
   return data
+
+
+def _sanitize_floats(obj):
+  """Recursively replace non-finite floats (inf, -inf, nan) with string representations.
+
+  Python's ``json.dumps`` outputs bare ``Infinity``/``-Infinity``/``NaN`` tokens which are not
+  valid JSON and cause ``JSON.parse()`` in the browser to throw. Walking the structure before
+  serialization is more robust than post-hoc string replacement.
+  """
+  if isinstance(obj, float) and not math.isfinite(obj):
+    if math.isnan(obj):
+      return "NaN"
+    return "Infinity" if obj > 0 else "-Infinity"
+  if isinstance(obj, dict):
+    return {k: _sanitize_floats(v) for k, v in obj.items()}
+  if isinstance(obj, (list, tuple)):
+    return [_sanitize_floats(v) for v in obj]
+  return obj
 
 
 class Visualizer:
@@ -241,14 +260,7 @@ class Visualizer:
       "data": data,
       "event": event,
     }
-
-    # Python's json.dumps outputs bare Infinity/-Infinity for float('inf'), which is
-    # not valid JSON and causes JSON.parse() in the browser to throw SyntaxError.
-    # Replace bare tokens with quoted strings so the browser's JSON reviver can handle them.
-    serialized = json.dumps(command_data)
-    serialized = serialized.replace(": Infinity", ': "Infinity"')
-    serialized = serialized.replace(": -Infinity", ': "-Infinity"')
-    return serialized, id_
+    return json.dumps(_sanitize_floats(command_data)), id_
 
   def has_connection(self) -> bool:
     """Return `True` if a websocket connection has been established."""

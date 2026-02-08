@@ -14,7 +14,50 @@ from pylabrobot.resources import (
   Resource,
 )
 from pylabrobot.visualizer import Visualizer
-from pylabrobot.visualizer.visualizer import _serialize_with_methods
+from pylabrobot.visualizer.visualizer import _sanitize_floats, _serialize_with_methods
+
+
+class SanitizeFloatsTests(unittest.TestCase):
+  def test_inf_replaced(self):
+    result = _sanitize_floats({"v": float("inf")})
+    self.assertEqual(result, {"v": "Infinity"})
+    self.assertEqual(json.dumps(result), '{"v": "Infinity"}')
+
+  def test_neg_inf_replaced(self):
+    result = _sanitize_floats({"v": float("-inf")})
+    self.assertEqual(result, {"v": "-Infinity"})
+
+  def test_nan_replaced(self):
+    result = _sanitize_floats({"v": float("nan")})
+    self.assertEqual(result, {"v": "NaN"})
+
+  def test_finite_float_unchanged(self):
+    self.assertEqual(_sanitize_floats({"v": 3.14}), {"v": 3.14})
+
+  def test_non_floats_unchanged(self):
+    data = {"s": "hello", "i": 42, "b": True, "n": None}
+    self.assertEqual(_sanitize_floats(data), data)
+
+  def test_nested_dict(self):
+    data = {"a": {"b": {"c": float("inf")}}}
+    self.assertEqual(_sanitize_floats(data), {"a": {"b": {"c": "Infinity"}}})
+
+  def test_values_in_list(self):
+    data = {"vals": [1.0, float("inf"), float("-inf"), float("nan")]}
+    result = _sanitize_floats(data)
+    self.assertEqual(result, {"vals": [1.0, "Infinity", "-Infinity", "NaN"]})
+
+  def test_string_containing_infinity_not_touched(self):
+    data = {"msg": "status: Infinity reached"}
+    self.assertEqual(_sanitize_floats(data), data)
+
+  def test_result_is_valid_json(self):
+    data = {"a": float("inf"), "b": [float("-inf")], "c": {"d": float("nan")}}
+    serialized = json.dumps(_sanitize_floats(data))
+    roundtripped = json.loads(serialized)
+    self.assertEqual(roundtripped["a"], "Infinity")
+    self.assertEqual(roundtripped["b"], ["-Infinity"])
+    self.assertEqual(roundtripped["c"]["d"], "NaN")
 
 
 class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
