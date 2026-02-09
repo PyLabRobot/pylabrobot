@@ -129,16 +129,23 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
   def __init__(self) -> None:
     super().__init__(pid=0x1199, device_type=_ByonoyDevice.ABSORBANCE_96)
 
-  async def setup(self, verbose: bool = False, **backend_kwargs):
-    """Set up the plate reader. This should be called before any other methods."""
+  async def setup(self, verbose: bool = False, skip_initialization: bool = False, **backend_kwargs):
+    """Set up the plate reader. This should be called before any other methods.
+
+    Args:
+      skip_initialization: If True, skip the reference measurement and wavelength query.
+        Useful for debugging when the illumination unit is not positioned on the base.
+    """
 
     # Call the base setup (opens HID)
     await super().setup(**backend_kwargs)
 
-    # After device is online, run reference initialisation
-    await self.initialize_measurements()
-
-    self.available_wavelengths = await self.get_available_absorbance_wavelengths()
+    if not skip_initialization:
+      # After device is online, run reference initialisation
+      await self.initialize_measurements()
+      self.available_wavelengths = await self.get_available_absorbance_wavelengths()
+    else:
+      self.available_wavelengths = []
 
   async def get_available_absorbance_wavelengths(self) -> List[float]:
     response = await self.send_command(
