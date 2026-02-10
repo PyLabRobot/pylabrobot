@@ -129,9 +129,9 @@ class PlateAdapter(Resource):
       dz=data["dz"],
       adapter_hole_size_x=data["adapter_hole_size_x"],
       adapter_hole_size_y=data["adapter_hole_size_y"],
-      adapter_hole_dx=data["adapter_hole_dx"],
-      adapter_hole_dy=data["adapter_hole_dy"],
-      plate_z_offset=data["plate_z_offset"],
+      adapter_hole_dx=data.get("adapter_hole_dx", 9.0),
+      adapter_hole_dy=data.get("adapter_hole_dy", 9.0),
+      plate_z_offset=data.get("plate_z_offset", 0.0),
       category=data.get("category"),
       model=data.get("model"),
     )

@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from pylabrobot.serializer import deserialize, serialize
+from pylabrobot.serializer import compact, deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
@@ -717,7 +717,7 @@ class Resource:
       >>> deck.save("my_layout.json")
     """
 
-    serialized = self.serialize()
+    serialized = compact(self.serialize())
     with open(fn, "w", encoding="utf-8") as f:
       json.dump(serialized, f, indent=indent)
 
@@ -750,13 +750,14 @@ class Resource:
       "parent_name",
       "location",
     ]:  # delete meta keys
-      del data_copy[key]
-    children_data = data_copy.pop("children")
-    rotation = data_copy.pop("rotation")
+      data_copy.pop(key, None)
+    children_data = data_copy.pop("children", [])
+    rotation = data_copy.pop("rotation", None)
     barcode = data_copy.pop("barcode", None)
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
-    resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
+    if rotation is not None:
+      resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
       resource.barcode = Barcode.deserialize(barcode)
     if preferred_pickup_location is not None:

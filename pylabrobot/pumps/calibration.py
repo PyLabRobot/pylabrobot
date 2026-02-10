@@ -103,7 +103,7 @@ class PumpCalibration:
   def deserialize(cls, data: dict) -> PumpCalibration:
     return cls(
       calibration=data["calibration"],
-      calibration_mode=data["calibration_mode"],
+      calibration_mode=data.get("calibration_mode", "duration"),
     )
 
   @classmethod
