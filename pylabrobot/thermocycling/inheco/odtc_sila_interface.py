@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import urllib.request
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Literal, Optional, Set
 
 import xml.etree.ElementTree as ET
 
@@ -99,6 +100,48 @@ class SiLAState(str, Enum):
   INERROR = "inError"  # Device returns "inError" (camelCase per SCILABackend comment)
 
 
+# Default max wait for async command completion (3 hours). SiLA2-aligned: protocol execution always bounded.
+DEFAULT_LIFETIME_OF_EXECUTION: float = 10800.0
+
+# Buffer (seconds) added to estimated_remaining_time before starting polling loop.
+POLLING_START_BUFFER: float = 10.0
+
+
+def _parse_iso8601_duration_seconds(duration_str: str) -> Optional[float]:
+  """Parse ISO 8601 duration string to total seconds (supports D, H, M, S).
+
+  Examples: PT30.7S, PT30M, PT2H, PT1H30M10S, P1DT2H30M10.5S.
+  H, M, S are only parsed in the time part (after T) so P1M (month) is not treated as minutes.
+  Returns None if parsing fails.
+  """
+  if not isinstance(duration_str, str) or not duration_str.strip():
+    return None
+  total = 0.0
+  # Days: P1D
+  d_match = re.search(r"(\d+(?:\.\d+)?)D", duration_str, re.IGNORECASE)
+  if d_match:
+    total += float(d_match.group(1)) * 86400
+  # Time part (after T): H, M, S
+  time_part = re.search(r"T(.+)$", duration_str)
+  if time_part:
+    t = time_part.group(1)
+    h_match = re.search(r"(\d+(?:\.\d+)?)H", t, re.IGNORECASE)
+    if h_match:
+      total += float(h_match.group(1)) * 3600
+    m_match = re.search(r"(\d+(?:\.\d+)?)M", t, re.IGNORECASE)
+    if m_match:
+      total += float(m_match.group(1)) * 60
+    s_match = re.search(r"(\d+(?:\.\d+)?)S", t, re.IGNORECASE)
+    if s_match:
+      total += float(s_match.group(1))
+  else:
+    # No T: e.g. PT30.7S might be written as P30.7S in some variants; treat S only
+    s_match = re.search(r"(\d+(?:\.\d+)?)S", duration_str, re.IGNORECASE)
+    if s_match:
+      total += float(s_match.group(1))
+  return total if total > 0 else None
+
+
 @dataclass(frozen=True)
 class PendingCommand:
   """Tracks a pending async command."""
@@ -107,7 +150,7 @@ class PendingCommand:
   request_id: int
   fut: asyncio.Future[Any]
   started_at: float
-  timeout: Optional[float] = None  # Estimated duration from device response
+  estimated_remaining_time: Optional[float] = None  # Seconds from device duration (ISO 8601)
   lock_id: Optional[str] = None  # LockId sent with LockDevice command (for tracking)
 
 
@@ -218,9 +261,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     "ExecuteMethod": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
     "GetConfiguration": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
     "GetParameters": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "GetDeviceIdentification": {SiLAState.STARTUP: True, SiLAState.STANDBY: True, SiLAState.IDLE: True, SiLAState.BUSY: True},
+    "GetDeviceIdentification": {SiLAState.STARTUP: True, SiLAState.STANDBY: True, SiLAState.INITIALIZING: True, SiLAState.IDLE: True, SiLAState.BUSY: True},
     "GetLastData": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "GetStatus": {SiLAState.STARTUP: True, SiLAState.STANDBY: True, SiLAState.IDLE: True, SiLAState.BUSY: True},
+    "GetStatus": {SiLAState.STARTUP: True, SiLAState.STANDBY: True, SiLAState.INITIALIZING: True, SiLAState.IDLE: True, SiLAState.BUSY: True},
     "Initialize": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
     "LockDevice": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
     "OpenDoor": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
@@ -241,11 +284,24 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
   # Device-specific return codes that indicate DeviceError (InError state)
   DEVICE_ERROR_CODES: Set[int] = {1000, 2000, 2001, 2007}
 
+  # Terminal state for polling fallback: command name -> expected state when command is done (per STATE_ALLOWABILITY).
+  ASYNC_COMMAND_TERMINAL_STATE: Dict[str, str] = {
+    "Reset": "standby",
+    "Initialize": "idle",
+    "LockDevice": "standby",
+    "UnlockDevice": "standby",
+  }
+  # Default terminal state for other async commands (OpenDoor, CloseDoor, ExecuteMethod, StopMethod, etc.)
+  _DEFAULT_TERMINAL_STATE: str = "idle"
+
   def __init__(
     self,
     machine_ip: str,
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
+    poll_interval: float = 5.0,
+    lifetime_of_execution: Optional[float] = None,
+    on_response_event_missing: Literal["warn_and_continue", "error"] = "warn_and_continue",
   ) -> None:
     """Initialize ODTC SiLA interface.
 
@@ -253,8 +309,16 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       machine_ip: IP address of the ODTC device.
       client_ip: IP address of this client (auto-detected if None).
       logger: Logger instance (creates one if None).
+      poll_interval: Seconds between GetStatus calls in the polling fallback (SiLA2 subscribe_by_polling style).
+      lifetime_of_execution: Max seconds to wait for async completion (SiLA2 deadline). If None, use 3 hours.
+      on_response_event_missing: When polling sees terminal state but ResponseEvent was not received:
+          "warn_and_continue" -> resolve with None and log warning; "error" -> set exception.
     """
     super().__init__(machine_ip=machine_ip, client_ip=client_ip, logger=logger)
+
+    self._poll_interval = poll_interval
+    self._lifetime_of_execution = lifetime_of_execution
+    self._on_response_event_missing = on_response_event_missing
 
     # Multi-request tracking (replaces single _pending)
     self._pending_by_id: Dict[int, PendingCommand] = {}
@@ -344,6 +408,53 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     if command in ("PrepareForInput", "CloseDoor"):
       return "CloseDoor"
     return command
+
+  def _get_terminal_state(self, command: str) -> str:
+    """Return the device state that indicates this async command has finished (for polling fallback)."""
+    return self.ASYNC_COMMAND_TERMINAL_STATE.get(command, self._DEFAULT_TERMINAL_STATE)
+
+  def _complete_pending(
+    self,
+    request_id: int,
+    result: Any = None,
+    exception: Optional[BaseException] = None,
+    update_lock_state: bool = True,
+  ) -> None:
+    """Complete a pending command: cleanup and resolve its Future (single place for ResponseEvent and polling).
+
+    Args:
+      request_id: Pending command request_id.
+      result: Value to set on Future (ignored if exception is set).
+      exception: If set, set_exception on Future instead of set_result(result).
+      update_lock_state: If True (ResponseEvent path), apply LockDevice/UnlockDevice/Reset lock updates.
+    """
+    pending = self._pending_by_id.get(request_id)
+    if pending is None or pending.fut.done():
+      return
+
+    if update_lock_state:
+      if pending.name == "LockDevice" and pending.lock_id is not None:
+        self._lock_id = pending.lock_id
+        self._logger.info(f"Device locked with lockId: {self._lock_id}")
+      elif pending.name == "UnlockDevice":
+        self._lock_id = None
+        self._logger.info("Device unlocked")
+      elif pending.name == "Reset":
+        self._lock_id = None
+        self._logger.info("Device reset (unlocked)")
+
+    self._pending_by_id.pop(request_id, None)
+    self._active_request_ids.discard(request_id)
+    normalized_cmd = self._normalize_command_name(pending.name)
+    self._executing_commands.discard(normalized_cmd)
+
+    if not self._executing_commands and self._current_state == SiLAState.BUSY:
+      self._current_state = SiLAState.IDLE
+
+    if exception is not None:
+      pending.fut.set_exception(exception)
+    else:
+      pending.fut.set_result(result)
 
   def _validate_lock_id(self, lock_id: Optional[str]) -> None:
     """Validate lockId parameter.
@@ -478,7 +589,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
         self._logger.warning("ResponseEvent missing requestId")
         return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
-      # Find matching pending command
       pending = self._pending_by_id.get(request_id)
       if pending is None:
         self._logger.warning(f"ResponseEvent for unknown requestId: {request_id}")
@@ -488,47 +598,29 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
         self._logger.warning(f"ResponseEvent for already-completed requestId: {request_id}")
         return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
-      # Fix: Code 3 means "async finished" (SUCCESS), not error
+      # Code 3 = async finished (SUCCESS)
       if return_code == 3:
-        # Success - extract response data
         response_data = response_event.get("responseData", "")
         if response_data and response_data.strip():
           try:
             root = ET.fromstring(response_data)
-            pending.fut.set_result(root)
+            self._complete_pending(request_id, result=root, update_lock_state=True)
           except ET.ParseError as e:
             self._logger.error(f"Failed to parse ResponseEvent responseData: {e}")
-            pending.fut.set_exception(RuntimeError(f"Failed to parse response data: {e}"))
+            self._complete_pending(
+              request_id,
+              exception=RuntimeError(f"Failed to parse response data: {e}"),
+              update_lock_state=False,
+            )
         else:
-          # No response data - still success (e.g., OpenDoor, CloseDoor)
-          pending.fut.set_result(None)
-
-        # Handle LockDevice/UnlockDevice/Reset to update lock state (only on success)
-        if pending.name == "LockDevice" and pending.lock_id is not None:
-          self._lock_id = pending.lock_id
-          self._logger.info(f"Device locked with lockId: {self._lock_id}")
-        elif pending.name == "UnlockDevice":
-          self._lock_id = None
-          self._logger.info("Device unlocked")
-        elif pending.name == "Reset":
-          # Reset unlocks device implicitly
-          self._lock_id = None
-          self._logger.info("Device reset (unlocked)")
+          self._complete_pending(request_id, result=None, update_lock_state=True)
       else:
-        # Error or other code
         err_msg = message.replace("\n", " ") if message else f"Unknown error (code {return_code})"
-        pending.fut.set_exception(RuntimeError(f"Command {pending.name} failed with code {return_code}: '{err_msg}'"))
-
-      # Clean up
-      self._pending_by_id.pop(request_id, None)
-      self._active_request_ids.discard(request_id)
-      # Use normalized command name for cleanup
-      normalized_cmd = self._normalize_command_name(pending.name)
-      self._executing_commands.discard(normalized_cmd)
-
-      # Update state: if no more commands executing, transition busy -> idle
-      if not self._executing_commands and self._current_state == SiLAState.BUSY:
-        self._current_state = SiLAState.IDLE
+        self._complete_pending(
+          request_id,
+          exception=RuntimeError(f"Command {pending.name} failed with code {return_code}: '{err_msg}'"),
+          update_lock_state=False,
+        )
 
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
@@ -562,23 +654,24 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     # Handle ErrorEvent (recoverable errors with continuation tasks)
     if "ErrorEvent" in decoded:
       error_event = decoded["ErrorEvent"]
-      request_id = error_event.get("requestId")
+      req_id = error_event.get("requestId")
       return_value = error_event.get("returnValue", {})
       return_code = return_value.get("returnCode")
       message = return_value.get("message", "")
 
-      self._logger.error(f"ErrorEvent for requestId {request_id}: code {return_code}, message: {message}")
+      self._logger.error(f"ErrorEvent for requestId {req_id}: code {return_code}, message: {message}")
 
-      # Transition to ErrorHandling state
       self._current_state = SiLAState.ERRORHANDLING
 
-      # Find matching pending command and set exception
-      pending = self._pending_by_id.get(request_id)
-      if pending and not pending.fut.done():
-        err_msg = message.replace("\n", " ") if message else f"Error (code {return_code})"
-        pending.fut.set_exception(RuntimeError(f"Command {pending.name} error: '{err_msg}'"))
+      err_msg = message.replace("\n", " ") if message else f"Error (code {return_code})"
+      pending_err = self._pending_by_id.get(req_id)
+      if pending_err and not pending_err.fut.done():
+        self._complete_pending(
+          req_id,
+          exception=RuntimeError(f"Command {pending_err.name} error: '{err_msg}'"),
+          update_lock_state=False,
+        )
 
-      # TODO: Continuation task selection/response not implemented (out of scope)
       return SOAP_RESPONSE_ErrorEventResponse.encode("utf-8")
 
     # Unknown event type
@@ -600,6 +693,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     - LockId validation
     - Multi-request tracking
     - Proper return code handling
+    - Dual-track async completion: primary = ResponseEvent (push); fallback = GetStatus polling
+      after estimated_remaining_time (from device duration), bounded by lifetime_of_execution
+      (default 3 h). SiLA2-aligned: poll_interval (subscribe_by_polling style), lifetime_of_execution.
 
     Args:
       command: Command name.
@@ -721,40 +817,26 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       return decoded
 
     elif return_code == 2:
-      # Asynchronous command accepted - set up pending tracking
+      # Asynchronous command accepted - set up pending tracking and polling fallback
       fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
 
-      # Extract duration for timeout (if provided)
       result = decoded.get(f"{command}Response", {}).get(f"{command}Result", {})
       duration_str = result.get("duration")
-      timeout = None
+      estimated_remaining_time: Optional[float] = None
       if duration_str:
-        # Parse ISO 8601 duration (simplified - just extract seconds)
-        # Format: PT30.7S or P5DT4H12M17S
-        try:
-          # For now, just use a multiplier - proper parsing would use datetime.timedelta
-          # This is a simplified approach
-          if isinstance(duration_str, str) and "S" in duration_str:
-            # Extract seconds part
-            import re
-            match = re.search(r"(\d+(?:\.\d+)?)S", duration_str)
-            if match:
-              seconds = float(match.group(1))
-              timeout = seconds + 10.0  # Add 10s buffer
-        except Exception:
-          pass  # Ignore parsing errors, use None timeout
+        estimated_remaining_time = _parse_iso8601_duration_seconds(str(duration_str))
 
-      # Store lock_id for LockDevice commands so we can set it after success
       pending_lock_id = None
       if command == "LockDevice" and "lockId" in params:
         pending_lock_id = params["lockId"]
 
+      started_at = time.time()
       pending = PendingCommand(
         name=command,
         request_id=request_id,
         fut=fut,
-        started_at=time.time(),
-        timeout=timeout,
+        started_at=started_at,
+        estimated_remaining_time=estimated_remaining_time,
         lock_id=pending_lock_id,
       )
 
@@ -762,25 +844,65 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       self._active_request_ids.add(request_id)
       self._executing_commands.add(normalized_cmd)
 
-      # Update state: idle -> busy
       if self._current_state == SiLAState.IDLE:
         self._current_state = SiLAState.BUSY
 
-      # Handle return_request_id parameter
+      effective_lifetime = (
+        self._lifetime_of_execution
+        if self._lifetime_of_execution is not None
+        else DEFAULT_LIFETIME_OF_EXECUTION
+      )
+
+      async def _poll_until_complete() -> None:
+        if estimated_remaining_time is not None and estimated_remaining_time > 0:
+          await asyncio.sleep(estimated_remaining_time + POLLING_START_BUFFER)
+        while True:
+          pending_ref = self._pending_by_id.get(request_id)
+          if pending_ref is None:
+            break
+          if pending_ref.fut.done():
+            break
+          elapsed = time.time() - pending_ref.started_at
+          if elapsed >= effective_lifetime:
+            self._complete_pending(
+              request_id,
+              exception=RuntimeError(
+                f"Command {pending_ref.name} timed out (lifetime_of_execution exceeded: {effective_lifetime}s)"
+              ),
+              update_lock_state=False,
+            )
+            break
+          try:
+            decoded_status = await self.send_command("GetStatus")
+          except Exception:
+            await asyncio.sleep(self._poll_interval)
+            continue
+          state = decoded_status.get("GetStatusResponse", {}).get("state")
+          if state:
+            self._update_state_from_status(state)
+          terminal_state = self._get_terminal_state(pending_ref.name)
+          if state == terminal_state:
+            if self._on_response_event_missing == "warn_and_continue":
+              self._logger.warning(
+                "ResponseEvent not received; completed via GetStatus polling (possible sleep/network loss)"
+              )
+              self._complete_pending(request_id, result=None, update_lock_state=False)
+            else:
+              self._complete_pending(
+                request_id,
+                exception=RuntimeError(
+                  "ResponseEvent not received; device reported idle. Possible callback loss (e.g. sleep/network)."
+                ),
+                update_lock_state=False,
+              )
+            break
+          await asyncio.sleep(self._poll_interval)
+
+      asyncio.create_task(_poll_until_complete())
+
       if return_request_id:
-        # Return Future and request_id immediately (caller awaits)
         return (fut, request_id)
-      else:
-        # Existing behavior: await Future
-        try:
-          result = await fut
-          return result
-        except asyncio.TimeoutError:
-          # Clean up on timeout
-          self._pending_by_id.pop(request_id, None)
-          self._active_request_ids.discard(request_id)
-          self._executing_commands.discard(normalized_cmd)
-          raise RuntimeError(f"Command {command} timed out waiting for ResponseEvent")
+      return await fut
 
     else:
       # Error return code

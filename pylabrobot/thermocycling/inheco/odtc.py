@@ -109,6 +109,8 @@ class InhecoODTC(Thermocycler):
   - Depth (Y): 298 mm
   - Height (Z): 130 mm (with drawer closed)
 
+  To configure async command completion (polling fallback, timeout, behavior when ResponseEvent is lost), pass ``poll_interval``, ``lifetime_of_execution``, and ``on_response_event_missing`` to :class:`ODTCBackend`.
+
   Example usage:
     ```python
     from pylabrobot.thermocycling.inheco import InhecoODTC, ODTCBackend

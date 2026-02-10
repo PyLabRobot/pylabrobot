@@ -7,7 +7,11 @@ from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.thermocycling.inheco.odtc_backend import CommandExecution, MethodExecution, ODTCBackend
-from pylabrobot.thermocycling.inheco.odtc_sila_interface import ODTCSiLAInterface, SiLAState
+from pylabrobot.thermocycling.inheco.odtc_sila_interface import (
+  ODTCSiLAInterface,
+  SiLAState,
+  _parse_iso8601_duration_seconds,
+)
 
 
 class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
@@ -15,7 +19,7 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
 
   def setUp(self):
     """Set up test fixtures."""
-    self.interface = ODTCSiLAInterface(machine_ip="192.168.1.100")
+    self.interface = ODTCSiLAInterface(machine_ip="192.168.1.100", client_ip="127.0.0.1")
 
   def test_normalize_command_name(self):
     """Test command name normalization for aliases."""
@@ -34,6 +38,12 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     self.interface._current_state = SiLAState.STANDBY
     self.assertTrue(self.interface._check_state_allowability("GetStatus"))
     self.assertTrue(self.interface._check_state_allowability("Initialize"))
+    self.assertFalse(self.interface._check_state_allowability("ExecuteMethod"))
+
+    # GetStatus allowed during initializing (needed for polling and post-Initialize verification)
+    self.interface._current_state = SiLAState.INITIALIZING
+    self.assertTrue(self.interface._check_state_allowability("GetStatus"))
+    self.assertTrue(self.interface._check_state_allowability("GetDeviceIdentification"))
     self.assertFalse(self.interface._check_state_allowability("ExecuteMethod"))
 
     self.interface._current_state = SiLAState.IDLE
@@ -131,6 +141,142 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(RuntimeError):
       self.interface._handle_return_code(1000, "Device error", "ExecuteMethod", 123)
     self.assertEqual(self.interface._current_state, SiLAState.INERROR)
+
+  def test_get_terminal_state(self):
+    """Test terminal state map for polling fallback."""
+    self.assertEqual(self.interface._get_terminal_state("Reset"), "standby")
+    self.assertEqual(self.interface._get_terminal_state("Initialize"), "idle")
+    self.assertEqual(self.interface._get_terminal_state("LockDevice"), "standby")
+    self.assertEqual(self.interface._get_terminal_state("UnlockDevice"), "standby")
+    self.assertEqual(self.interface._get_terminal_state("OpenDoor"), "idle")
+    self.assertEqual(self.interface._get_terminal_state("ExecuteMethod"), "idle")
+
+
+  def test_parse_iso8601_duration_seconds(self):
+    """Test ISO 8601 duration parsing (seconds, minutes, hours)."""
+    self.assertEqual(_parse_iso8601_duration_seconds("PT30.7S"), 30.7)
+    self.assertEqual(_parse_iso8601_duration_seconds("PT30M"), 30 * 60)
+    self.assertEqual(_parse_iso8601_duration_seconds("PT2H"), 2 * 3600)
+    self.assertEqual(_parse_iso8601_duration_seconds("PT1H30M10S"), 3600 + 30 * 60 + 10)
+    self.assertEqual(_parse_iso8601_duration_seconds("PT0.1S"), 0.1)
+    self.assertIsNone(_parse_iso8601_duration_seconds(""))
+    self.assertIsNone(_parse_iso8601_duration_seconds("invalid"))
+    self.assertEqual(_parse_iso8601_duration_seconds("P1D"), 86400)
+
+
+# Minimal SOAP responses for dual-track tests (return_code 2 = async accepted; no duration = poll immediately).
+_OPEN_DOOR_ASYNC_RESPONSE = b"""<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <OpenDoorResponse xmlns="http://sila.coop">
+      <OpenDoorResult>
+        <returnCode>2</returnCode>
+        <message>Accepted</message>
+      </OpenDoorResult>
+    </OpenDoorResponse>
+  </s:Body>
+</s:Envelope>"""
+
+_GET_STATUS_IDLE_RESPONSE = b"""<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetStatusResponse xmlns="http://sila.coop">
+      <state>idle</state>
+      <GetStatusResult>
+        <returnCode>1</returnCode>
+        <message>Success</message>
+      </GetStatusResult>
+    </GetStatusResponse>
+  </s:Body>
+</s:Envelope>"""
+
+_OPEN_DOOR_ASYNC_RESPONSE_WITH_DURATION = b"""<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <OpenDoorResponse xmlns="http://sila.coop">
+      <OpenDoorResult>
+        <returnCode>2</returnCode>
+        <message>Accepted</message>
+        <duration>PT0.1S</duration>
+      </OpenDoorResult>
+    </OpenDoorResponse>
+  </s:Body>
+</s:Envelope>"""
+
+_GET_STATUS_BUSY_RESPONSE = b"""<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetStatusResponse xmlns="http://sila.coop">
+      <state>busy</state>
+      <GetStatusResult>
+        <returnCode>1</returnCode>
+        <message>Success</message>
+      </GetStatusResult>
+    </GetStatusResponse>
+  </s:Body>
+</s:Envelope>"""
+
+
+class TestODTCSiLADualTrack(unittest.IsolatedAsyncioTestCase):
+  """Tests for dual-track async completion (ResponseEvent + polling fallback)."""
+
+  async def test_polling_fallback_completes_when_no_response_event(self):
+    """When ResponseEvent never arrives, polling sees idle and completes Future (warn_and_continue)."""
+    call_count = 0
+
+    def mock_urlopen(req):
+      nonlocal call_count
+      call_count += 1
+      body = _OPEN_DOOR_ASYNC_RESPONSE if call_count == 1 else _GET_STATUS_IDLE_RESPONSE
+      resp = MagicMock()
+      resp.read.return_value = body
+      cm = MagicMock()
+      cm.__enter__.return_value = resp
+      cm.__exit__.return_value = None
+      return cm
+
+    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+      interface = ODTCSiLAInterface(
+        machine_ip="192.168.1.100",
+        client_ip="127.0.0.1",
+        poll_interval=0.05,
+        lifetime_of_execution=5.0,
+        on_response_event_missing="warn_and_continue",
+      )
+      interface._current_state = SiLAState.IDLE
+      # Do not call setup() so we avoid binding the HTTP server (sandbox/CI friendly).
+      result = await interface.send_command("OpenDoor", return_request_id=False)
+      self.assertIsNone(result)
+      self.assertGreaterEqual(call_count, 2)
+
+  async def test_lifetime_of_execution_exceeded_raises(self):
+    """When lifetime_of_execution is exceeded before terminal state, Future gets timeout exception."""
+    call_count = 0
+
+    def mock_urlopen(req):
+      nonlocal call_count
+      call_count += 1
+      body = _OPEN_DOOR_ASYNC_RESPONSE if call_count == 1 else _GET_STATUS_BUSY_RESPONSE
+      resp = MagicMock()
+      resp.read.return_value = body
+      cm = MagicMock()
+      cm.__enter__.return_value = resp
+      cm.__exit__.return_value = None
+      return cm
+
+    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+      interface = ODTCSiLAInterface(
+        machine_ip="192.168.1.100",
+        client_ip="127.0.0.1",
+        poll_interval=0.2,
+        lifetime_of_execution=0.5,
+        on_response_event_missing="warn_and_continue",
+      )
+      interface._current_state = SiLAState.IDLE
+      # Do not call setup() so we avoid binding the HTTP server (sandbox/CI friendly).
+      with self.assertRaises(RuntimeError) as cm:
+        await interface.send_command("OpenDoor", return_request_id=False)
+      self.assertIn("lifetime_of_execution", str(cm.exception))
 
 
 class TestODTCBackend(unittest.IsolatedAsyncioTestCase):

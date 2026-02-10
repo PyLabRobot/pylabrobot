@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Union, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
@@ -103,6 +103,9 @@ class ODTCBackend(ThermocyclerBackend):
     odtc_ip: str,
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
+    poll_interval: float = 5.0,
+    lifetime_of_execution: Optional[float] = None,
+    on_response_event_missing: Literal["warn_and_continue", "error"] = "warn_and_continue",
   ):
     """Initialize ODTC backend.
 
@@ -110,9 +113,19 @@ class ODTCBackend(ThermocyclerBackend):
       odtc_ip: IP address of the ODTC device.
       client_ip: IP address of this client (auto-detected if None).
       logger: Logger instance (creates one if None).
+      poll_interval: Seconds between GetStatus calls in the async completion polling fallback (SiLA2 subscribe_by_polling style). Default 5.0.
+      lifetime_of_execution: Max seconds to wait for async command completion (SiLA2 deadline). If None, uses 3 hours. Protocol execution is always bounded.
+      on_response_event_missing: When completion is detected via polling but ResponseEvent was not received: "warn_and_continue" (resolve with None, log warning) or "error" (set exception). Default "warn_and_continue".
     """
     super().__init__()
-    self._sila = ODTCSiLAInterface(machine_ip=odtc_ip, client_ip=client_ip, logger=logger)
+    self._sila = ODTCSiLAInterface(
+      machine_ip=odtc_ip,
+      client_ip=client_ip,
+      logger=logger,
+      poll_interval=poll_interval,
+      lifetime_of_execution=lifetime_of_execution,
+      on_response_event_missing=on_response_event_missing,
+    )
     self.logger = logger or logging.getLogger(__name__)
 
   async def setup(self) -> None:
