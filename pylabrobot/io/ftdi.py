@@ -58,6 +58,7 @@ class FTDI(IOBase):
     device_id: Optional[str] = None,
     vid: Optional[int] = None,
     pid: Optional[int] = None,
+    interface_select: Optional[int] = None,
   ):
     if not HAS_PYLIBFTDI:
       global _FTDI_ERROR
@@ -69,6 +70,7 @@ class FTDI(IOBase):
     self._device_id = device_id
     self._vid = vid
     self._pid = pid
+    self._interface_select = interface_select
 
     # Will be resolved in setup()
     self._dev: Optional[Device] = None
@@ -127,12 +129,16 @@ class FTDI(IOBase):
       # device matches all specified criteria
       candidates.append(device)
 
-    connected_devices_string = ", ".join(
-      [
-        f"{usb.util.get_string(d, d.iSerialNumber)} (VID:PID {d.idVendor:04x}:{d.idProduct:04x})"
-        for d in usb.core.find(find_all=True)
-      ]
-    )
+    connected_devices_list = []
+    for d in usb.core.find(find_all=True):
+      try:
+        sn = usb.util.get_string(d, d.iSerialNumber)
+      except ValueError:
+        sn = ""
+      connected_devices_list.append(f"{sn} (VID:PID {d.idVendor:04x}:{d.idProduct:04x})")
+
+    connected_devices_string = ", ".join(connected_devices_list)
+
     logger.debug(
       f"FTDI device resolution: found {len(candidates)} candidates for "
       f"VID:PID {self._vid}:{self._pid}, device_id {self._device_id}: " + connected_devices_string
@@ -171,7 +177,13 @@ class FTDI(IOBase):
       self._device_id = self._resolve_device_serial()
 
       # Create and open device
-      self._dev = Device(lazy_open=True, device_id=self.device_id, pid=self._pid, vid=self._vid)
+      self._dev = Device(
+        lazy_open=True,
+        device_id=self.device_id,
+        pid=self._pid,
+        vid=self._vid,
+        interface_select=self._interface_select,
+      )
       self._dev.open()
       logger.info(f"Successfully opened FTDI device: {self.device_id}")
     except FtdiError as e:

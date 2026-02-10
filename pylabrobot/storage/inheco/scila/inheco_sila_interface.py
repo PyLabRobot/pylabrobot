@@ -95,6 +95,14 @@ class InhecoSiLAInterface:
     self._closed = False
 
   @property
+  def client_ip(self) -> str:
+    return self._client_ip
+
+  @property
+  def machine_ip(self) -> str:
+    return self._machine_ip
+
+  @property
   def bound_port(self) -> int:
     if self._httpd is None:
       raise RuntimeError("Server not started yet")
