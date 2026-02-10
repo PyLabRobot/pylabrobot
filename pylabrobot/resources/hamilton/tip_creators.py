@@ -100,12 +100,12 @@ class HamiltonTip(Tip):
   @classmethod
   def deserialize(cls, data):
     return HamiltonTip(
-      name=data["name"],
+      name=data.get("name"),
       has_filter=data["has_filter"],
       total_tip_length=data["total_tip_length"],
       maximal_volume=data["maximal_volume"],
       tip_size=TipSize[data["tip_size"]],
-      pickup_method=TipPickupMethod[data["pickup_method"]],
+      pickup_method=TipPickupMethod[data.get("pickup_method", "OUT_OF_RACK")],
     )
 
 

@@ -101,16 +101,12 @@ class Socket(IOBase):
 
   @classmethod
   def deserialize(cls, data: dict) -> "Socket":
-    kwargs = {}
-    if "read_timeout" in data:
-      kwargs["read_timeout"] = data["read_timeout"]
-    if "write_timeout" in data:
-      kwargs["write_timeout"] = data["write_timeout"]
     return cls(
       human_readable_device_name=data["human_readable_device_name"],
       host=data["host"],
       port=data["port"],
-      **kwargs,
+      read_timeout=data.get("read_timeout", 30),
+      write_timeout=data.get("write_timeout", 30),
     )
 
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
