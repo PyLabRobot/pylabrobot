@@ -220,7 +220,9 @@ class Imager(Resource, Machine):
     gain: Gain = "machine-auto",
     **backend_kwargs,
   ) -> ImagingResult:
-    if not isinstance(exposure_time, (int, float, AutoExposure)):
+    if exposure_time != "machine-auto" and not isinstance(
+      exposure_time, (int, float, AutoExposure)
+    ):
       raise TypeError(f"Invalid exposure time: {exposure_time}")
     if (
       not isinstance(focal_height, (int, float))
