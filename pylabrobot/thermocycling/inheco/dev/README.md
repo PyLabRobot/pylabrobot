@@ -16,6 +16,7 @@ The ODTC implementation provides a complete interface for controlling Inheco ODT
 
 1. **`ODTCSiLAInterface`** (`odtc_sila_interface.py`)
    - Low-level SiLA communication (SOAP over HTTP)
+   - Exposes **`send_command`** (run and return result) and **`start_command`** (start and return handle) for consistency with automation patterns; backend uses these for `wait=True` vs `wait=False`
    - Handles parallelism rules, state management, and lockId validation
    - Tracks pending async commands and collects DataEvents
    - Manages state transitions (Startup → Standby → Idle → Busy)
@@ -48,9 +49,9 @@ Understanding the distinction between **Protocol** and **Method** is crucial for
   - Example: `Protocol(stages=[Stage(steps=[Step(temperature=95.0, hold_seconds=30.0)])])`
 
 ### Method (ODTC Device)
-- **`ODTCMethod`** or **`ODTCPreMethod`**: ODTC-specific XML-defined method stored on the device
+- **`ODTCMethod`** or **`ODTCPreMethod`**: ODTC-specific XML-defined method stored on the device. In ODTC/SiLA, a **method** is the device's runnable protocol (thermocycling program).
   - Contains ODTC-specific parameters (overshoot, slopes, PID settings)
-  - Stored on the device with a unique **method name** (string identifier)
+  - Stored on the device with a unique **method name** (string identifier; SiLA: `methodName`)
   - Example: `"PCR_30cycles"` is a method name stored on the device
 
 ### Method Name (String)
@@ -64,12 +65,13 @@ Understanding the distinction between **Protocol** and **Method** is crucial for
 **High-level methods (recommended):**
 - `upload_protocol(protocol, name="method_name")` - Upload a `Protocol` to device as a method
 - `run_protocol(protocol=..., method_name=...)` - Upload and run a `Protocol`, or run existing method by name
-- `list_methods()` - List all method names (both Methods and PreMethods) on device
+- `list_methods()` - List all method names (both Methods and PreMethods) on device; returns list of method name strings
 - `get_method(name)` - Get `ODTCMethod` or `ODTCPreMethod` by name from device
 - `set_mount_temperature(temperature)` - Set mount temperature (creates PreMethod internally)
 
 **Lower-level methods (for advanced use):**
 - `get_method_set()` - Get full `ODTCMethodSet` (all methods and premethods)
+- `backend.get_method(name)` / `backend.list_methods()` - Same as resource; backend uses `get_method` and `list_methods` (normalized with resource)
 - `backend.execute_method(method_name)` - Execute method by name (backend-level)
 
 ### Workflow Examples
@@ -132,10 +134,12 @@ await tc.setup()
 # Device transitions: Startup → Standby → Idle
 ```
 
-The `setup()` method:
+The `setup()` method prepares the connection and brings the device to idle:
 1. Starts HTTP server for receiving SiLA events (ResponseEvent, StatusEvent, DataEvent)
-2. Calls `Reset()` to register event receiver URI and move to `standby`
-3. Calls `Initialize()` to move to `idle` (ready for commands)
+2. Calls SiLA `Reset()` to register event receiver URI and move to `standby`
+3. Calls SiLA `Initialize()` to move to `idle` (ready for commands)
+
+Use `setup()` for lifecycle/connection; `initialize()` is the SiLA command (standby→idle) and is called by `setup()` when needed.
 
 ### Cleanup
 
@@ -189,7 +193,7 @@ await door_opening.wait()  # Explicit wait method
 
 #### CommandExecution Handle
 
-The `CommandExecution` handle provides:
+The `CommandExecution` handle (sometimes called a job or task handle in other automation systems) provides:
 
 - **`request_id`**: SiLA request ID for tracking DataEvents
 - **`command_name`**: Name of the executing command

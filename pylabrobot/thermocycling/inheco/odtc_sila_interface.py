@@ -24,7 +24,58 @@ import xml.etree.ElementTree as ET
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
 from pylabrobot.storage.inheco.scila.soap import soap_decode, soap_encode, XSI
 
+
+# -----------------------------------------------------------------------------
+# SiLA/ODTC exceptions (typed command and device errors)
+# -----------------------------------------------------------------------------
+
+
+class SiLAError(RuntimeError):
+  """Base exception for SiLA command and device errors."""
+
+  pass
+
+
+class SiLACommandRejected(SiLAError):
+  """Command rejected: device busy (return code 4) or not allowed in state (return code 9)."""
+
+  pass
+
+
+class SiLALockIdError(SiLAError):
+  """LockId mismatch (return code 5)."""
+
+  pass
+
+
+class SiLARequestIdError(SiLAError):
+  """Invalid or duplicate requestId (return code 6)."""
+
+  pass
+
+
+class SiLAParameterError(SiLAError):
+  """Invalid command parameter (return code 11)."""
+
+  pass
+
+
+class SiLADeviceError(SiLAError):
+  """Device-specific error (return codes 1000, 2000, 2001, 2007, etc.)."""
+
+  pass
+
+
+class SiLATimeoutError(SiLAError):
+  """Command timed out: lifetime_of_execution exceeded or ResponseEvent not received."""
+
+  pass
+
+
+# -----------------------------------------------------------------------------
 # SOAP responses for events
+# -----------------------------------------------------------------------------
+
 SOAP_RESPONSE_ResponseEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
   <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:xsd="http://www.w3.org/2001/XMLSchema">
@@ -471,7 +522,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     # Device is locked - must provide matching lockId
     if lock_id != self._lock_id:
-      raise RuntimeError(
+      raise SiLALockIdError(
         f"Device is locked with lockId '{self._lock_id}', "
         f"but command provided lockId '{lock_id}'. Return code: 5"
       )
@@ -523,21 +574,21 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       return
     elif return_code == 4:
       # Device busy
-      raise RuntimeError(f"Command {command_name} rejected: Device is busy (return code 4)")
+      raise SiLACommandRejected(f"Command {command_name} rejected: Device is busy (return code 4)")
     elif return_code == 5:
       # LockId error
-      raise RuntimeError(f"Command {command_name} rejected: LockId mismatch (return code 5)")
+      raise SiLALockIdError(f"Command {command_name} rejected: LockId mismatch (return code 5)")
     elif return_code == 6:
       # RequestId error
-      raise RuntimeError(f"Command {command_name} rejected: Invalid or duplicate requestId (return code 6)")
+      raise SiLARequestIdError(f"Command {command_name} rejected: Invalid or duplicate requestId (return code 6)")
     elif return_code == 9:
       # Command not allowed in this state
-      raise RuntimeError(
+      raise SiLACommandRejected(
         f"Command {command_name} not allowed in state {self._current_state.value} (return code 9)"
       )
     elif return_code == 11:
       # Invalid parameter
-      raise RuntimeError(f"Command {command_name} rejected: Invalid parameter (return code 11): {message}")
+      raise SiLAParameterError(f"Command {command_name} rejected: Invalid parameter (return code 11): {message}")
     elif return_code == 12:
       # Finished with warning
       self._logger.warning(f"Command {command_name} finished with warning (return code 12): {message}")
@@ -547,7 +598,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       if return_code in self.DEVICE_ERROR_CODES:
         # DeviceError - transition to InError
         self._current_state = SiLAState.INERROR
-        raise RuntimeError(
+        raise SiLADeviceError(
           f"Command {command_name} failed with device error (return code {return_code}): {message}"
         )
       else:
@@ -561,7 +612,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           self._current_state = SiLAState.ERRORHANDLING
     else:
       # Unknown return code
-      raise RuntimeError(f"Command {command_name} returned unknown code {return_code}: {message}")
+      raise SiLAError(f"Command {command_name} returned unknown code {return_code}: {message}")
 
   async def _on_http(self, req: InhecoSiLAInterface._HTTPRequest) -> bytes:
     """Handle incoming HTTP requests from device (events).
@@ -678,93 +729,56 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     self._logger.warning("Unknown event type received")
     return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
-  async def send_command(
+  async def _execute_command(
     self,
     command: str,
     lock_id: Optional[str] = None,
-    return_request_id: bool = False,
-    **kwargs,
-  ) -> Any | tuple[asyncio.Future[Any], int]:
-    """Send a SiLA command with parallelism, state, and lockId validation.
+    **kwargs: Any,
+  ) -> Any | tuple[asyncio.Future[Any], int, Optional[float], float]:
+    """Execute a SiLA command; return decoded dict (sync) or (fut, request_id, eta, started_at) (async).
 
-    Overrides base class to add:
-    - Parallelism checking
-    - State allowability checking
-    - LockId validation
-    - Multi-request tracking
-    - Proper return code handling
-    - Dual-track async completion: primary = ResponseEvent (push); fallback = GetStatus polling
-      after estimated_remaining_time (from device duration), bounded by lifetime_of_execution
-      (default 3 h). SiLA2-aligned: poll_interval (subscribe_by_polling style), lifetime_of_execution.
-
-    Args:
-      command: Command name.
-      lock_id: LockId (defaults to None, validated if device is locked).
-      return_request_id: If True and command is async (return_code==2),
-          return (Future, request_id) tuple instead of awaiting Future.
-          Caller must await the Future themselves.
-      **kwargs: Additional command parameters.
-
-    Returns:
-      - For sync commands (return_code==1): decoded response dict
-      - For async commands with return_request_id=False: result after awaiting Future
-      - For async commands with return_request_id=True: (Future, request_id) tuple
-
-    Raises:
-      RuntimeError: For validation failures, return code errors, or state violations.
+    Internal helper used by send_command and start_command. Callers should use
+    send_command (run and return result) or start_command (start and return handle).
     """
     if self._closed:
       raise RuntimeError("Interface is closed")
 
-    # GetStatus doesn't require lockId per ODTC doc section 2
     if command != "GetStatus":
       self._validate_lock_id(lock_id)
 
-    # Check state allowability
     if not self._check_state_allowability(command):
-      raise RuntimeError(
+      raise SiLACommandRejected(
         f"Command {command} not allowed in state {self._current_state.value} (return code 9)"
       )
 
-    # Synchronous read-only commands (GetStatus, GetDeviceIdentification) should always be allowed
-    # They are non-interfering queries that can run at any time, even during method execution
     if command not in self.SYNCHRONOUS_COMMANDS:
-      # Check parallelism (for commands in the table)
       normalized_cmd = self._normalize_command_name(command)
       if normalized_cmd in self.PARALLELISM_TABLE:
         async with self._parallelism_lock:
           if not self._check_parallelism(normalized_cmd):
-            raise RuntimeError(
+            raise SiLACommandRejected(
               f"Command {command} cannot run in parallel with currently executing commands (return code 4)"
             )
       else:
-        # Command not in parallelism table - default to sequential (safe)
         async with self._parallelism_lock:
           if self._executing_commands:
-            # If any command is executing and this command isn't in table, reject
-            raise RuntimeError(
+            raise SiLACommandRejected(
               f"Command {command} not in parallelism table and device is busy (return code 4)"
             )
+    else:
+      normalized_cmd = self._normalize_command_name(command)
 
-    # Generate request_id (reuse base class method)
     request_id = self._make_request_id()
-
-    # Check for duplicate request_id (unlikely but guard against it)
     if request_id in self._active_request_ids:
-      raise RuntimeError(f"Duplicate requestId generated: {request_id} (return code 6)")
+      raise SiLARequestIdError(f"Duplicate requestId generated: {request_id} (return code 6)")
 
-    # Build command parameters
     params: Dict[str, Any] = {"requestId": request_id, **kwargs}
-    # Add lockId if provided (or if device is locked, it's required)
-    if command != "GetStatus":  # GetStatus exception
+    if command != "GetStatus":
       if self._lock_id is not None:
-        # Device is locked - must provide lockId
         params["lockId"] = lock_id if lock_id is not None else self._lock_id
       elif lock_id is not None:
-        # Device not locked but lockId provided - include it
         params["lockId"] = lock_id
 
-    # Encode SOAP request
     cmd_xml = soap_encode(
       command,
       params,
@@ -772,7 +786,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       extra_method_xmlns={"i": XSI},
     )
 
-    # Make POST request
     url = f"http://{self._machine_ip}:8080/"
     req = urllib.request.Request(
       url=url,
@@ -787,39 +800,25 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       },
     )
 
-    # Execute request
     def _do_request() -> bytes:
       with urllib.request.urlopen(req) as resp:
         return resp.read()  # type: ignore
 
     body = await asyncio.to_thread(_do_request)
     decoded = soap_decode(body.decode("utf-8"))
-
-    # Extract return code and message
     return_code, message = self._get_return_code_and_message(command, decoded)
+    self._logger.debug(f"Command {command} returned code {return_code}: {message}")
 
-    # Debug logging for return code
-    self._logger.debug(
-      f"Command {command} returned code {return_code}: {message}"
-    )
-
-    # Handle return codes
     if return_code == 1:
-      # Synchronous success (GetStatus, GetDeviceIdentification)
-      # Update state from GetStatus response if applicable
       if command == "GetStatus":
-        # ODTC standard: GetStatusResponse -> state
-        # GetStatusResult contains return code info, but state is a direct child of GetStatusResponse
         get_status_response = decoded.get("GetStatusResponse", {})
         state = get_status_response.get("state")
         if state:
           self._update_state_from_status(state)
       return decoded
 
-    elif return_code == 2:
-      # Asynchronous command accepted - set up pending tracking and polling fallback
+    if return_code == 2:
       fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
-
       result = decoded.get(f"{command}Response", {}).get(f"{command}Result", {})
       duration_str = result.get("duration")
       estimated_remaining_time: Optional[float] = None
@@ -854,8 +853,17 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       )
 
       async def _poll_until_complete() -> None:
-        if estimated_remaining_time is not None and estimated_remaining_time > 0:
-          await asyncio.sleep(estimated_remaining_time + POLLING_START_BUFFER)
+        while True:
+          pending_ref = self._pending_by_id.get(request_id)
+          if pending_ref is None or pending_ref.fut.done():
+            break
+          remaining_wait = (
+            started_at + (estimated_remaining_time or 0) + POLLING_START_BUFFER - time.time()
+          )
+          if remaining_wait > 0:
+            await asyncio.sleep(min(remaining_wait, self._poll_interval))
+            continue
+          break
         while True:
           pending_ref = self._pending_by_id.get(request_id)
           if pending_ref is None:
@@ -866,7 +874,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           if elapsed >= effective_lifetime:
             self._complete_pending(
               request_id,
-              exception=RuntimeError(
+              exception=SiLATimeoutError(
                 f"Command {pending_ref.name} timed out (lifetime_of_execution exceeded: {effective_lifetime}s)"
               ),
               update_lock_state=False,
@@ -890,7 +898,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
             else:
               self._complete_pending(
                 request_id,
-                exception=RuntimeError(
+                exception=SiLATimeoutError(
                   "ResponseEvent not received; device reported idle. Possible callback loss (e.g. sleep/network)."
                 ),
                 update_lock_state=False,
@@ -899,13 +907,70 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           await asyncio.sleep(self._poll_interval)
 
       asyncio.create_task(_poll_until_complete())
+      return (fut, request_id, estimated_remaining_time, started_at)
 
-      if return_request_id:
-        return (fut, request_id)
-      return await fut
+    self._handle_return_code(return_code, message, command, request_id)
+    raise SiLAError(f"Command {command} failed: {return_code} {message}")
 
-    else:
-      # Error return code
-      self._handle_return_code(return_code, message, command, request_id)
-      # Should not reach here (handle_return_code raises), but just in case:
-      raise RuntimeError(f"Command {command} failed: {return_code} {message}")
+  async def send_command(
+    self,
+    command: str,
+    lock_id: Optional[str] = None,
+    **kwargs: Any,
+  ) -> Any:
+    """Run a SiLA command and return the result (blocking until done).
+
+    Use for any command when you want the decoded result. For async device
+    commands (e.g. OpenDoor, ExecuteMethod), this awaits completion and
+    returns the result (or raises). For sync commands (GetStatus,
+    GetDeviceIdentification), returns the decoded dict immediately.
+
+    Args:
+      command: Command name.
+      lock_id: LockId (defaults to None, validated if device is locked).
+      **kwargs: Additional command parameters.
+
+    Returns:
+      Decoded response dict (sync) or result after awaiting (async).
+
+    Raises:
+      SiLAError and subclasses: For validation, return code, or state violations.
+    """
+    result = await self._execute_command(command, lock_id=lock_id, **kwargs)
+    if isinstance(result, tuple):
+      return await result[0]
+    return result
+
+  async def start_command(
+    self,
+    command: str,
+    lock_id: Optional[str] = None,
+    **kwargs: Any,
+  ) -> tuple[asyncio.Future[Any], int, Optional[float], float]:
+    """Start a SiLA command and return a handle (future + request_id, eta, started_at).
+
+    Use for async device commands (OpenDoor, CloseDoor, ExecuteMethod,
+    Initialize, Reset, LockDevice, UnlockDevice, StopMethod) when you want
+    a handle to await, poll, or compose with. Do not use for sync-only
+    commands (GetStatus, GetDeviceIdentification); use send_command instead.
+
+    Args:
+      command: Command name (must be an async command).
+      lock_id: LockId (defaults to None, validated if device is locked).
+      **kwargs: Additional command parameters.
+
+    Returns:
+      (future, request_id, estimated_remaining_time, started_at) tuple.
+      Await the future for the result or to propagate exceptions.
+
+    Raises:
+      ValueError: If the device returned sync (return_code 1); start_command
+        is for async commands only.
+      SiLAError and subclasses: For validation, return code, or state violations.
+    """
+    result = await self._execute_command(command, lock_id=lock_id, **kwargs)
+    if isinstance(result, tuple):
+      return result
+    raise ValueError(
+      "start_command is for async commands only; device returned sync response (return_code 1)"
+    )

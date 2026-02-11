@@ -351,21 +351,25 @@ class InhecoODTC(Thermocycler):
   async def get_method(self, name: str) -> Optional[Union[ODTCMethod, ODTCPreMethod]]:
     """Get a method by name from the device (searches both methods and premethods).
 
+    In ODTC/SiLA, a method is a runnable protocol (thermocycling program).
+
     Args:
       name: Method name to retrieve.
 
     Returns:
       ODTCMethod or ODTCPreMethod if found, None otherwise.
     """
-    return await self.backend.get_method_by_name(name)
+    return await self.backend.get_method(name)
 
   async def list_methods(self) -> List[str]:
     """List all method names (both methods and premethods) on the device.
 
+    In ODTC/SiLA, a method is a runnable protocol (thermocycling program).
+
     Returns:
-      List of method names.
+      List of method names (strings).
     """
-    return await self.backend.list_method_names()
+    return await self.backend.list_methods()
 
   async def stop_method(self, wait: bool = True) -> Optional[CommandExecution]:
     """Stop any currently running method.

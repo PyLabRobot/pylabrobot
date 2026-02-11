@@ -10,7 +10,12 @@ from typing import Any, Dict, List, Literal, Optional, Union, cast
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
-from .odtc_sila_interface import ODTCSiLAInterface, SiLAState
+from .odtc_sila_interface import (
+  DEFAULT_LIFETIME_OF_EXECUTION,
+  ODTCSiLAInterface,
+  POLLING_START_BUFFER,
+  SiLAState,
+)
 from .odtc_xml import (
   ODTCMethod,
   ODTCMethodSet,
@@ -29,26 +34,74 @@ from .odtc_xml import (
 
 @dataclass
 class CommandExecution:
-  """Base handle for an executing async command that can be awaited or checked.
+  """Handle for an executing async command (SiLA return_code 2).
 
-  This handle is returned from async commands when wait=False and provides:
+  Sometimes called a job or task handle in other automation systems.
+  Returned from async commands when wait=False. Provides:
   - Awaitable interface (can be awaited like a Task)
   - Request ID access for DataEvent tracking
   - Command completion waiting
+  - done, status, estimated_remaining_time, started_at, lifetime for ETA and resumable wait
   """
 
   request_id: int
   command_name: str
   _future: asyncio.Future[Any]
   backend: "ODTCBackend"
+  estimated_remaining_time: Optional[float] = None  # seconds from device duration
+  started_at: Optional[float] = None  # time.time() when command was sent
+  lifetime: Optional[float] = None  # max wait seconds (for resumable wait)
 
   def __await__(self):
     """Make this awaitable like a Task."""
     return self._future.__await__()
 
+  @property
+  def done(self) -> bool:
+    """True if the command has finished (success or error)."""
+    return self._future.done()
+
+  @property
+  def status(self) -> str:
+    """'running', 'success', or 'error'."""
+    if not self._future.done():
+      return "running"
+    try:
+      self._future.result()
+      return "success"
+    except Exception:
+      return "error"
+
   async def wait(self) -> None:
     """Wait for command completion."""
     await self._future
+
+  async def wait_resumable(self, poll_interval: float = 5.0) -> None:
+    """Wait for completion using only GetStatus and handle timing (resumable after restart).
+
+    Use when the in-memory Future is not available (e.g. after process restart).
+    Persist the handle (request_id, started_at, estimated_remaining_time, lifetime),
+    reconnect the backend, then call this. Uses backend.wait_for_completion_by_time.
+    Terminal state is 'idle' for most commands.
+
+    Args:
+      poll_interval: Seconds between GetStatus calls.
+
+    Raises:
+      TimeoutError: If lifetime exceeded before device reached terminal state.
+    """
+    import time
+
+    started_at = self.started_at if self.started_at is not None else time.time()
+    lifetime = self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
+    await self.backend.wait_for_completion_by_time(
+      request_id=self.request_id,
+      started_at=started_at,
+      estimated_remaining_time=self.estimated_remaining_time,
+      lifetime=lifetime,
+      poll_interval=poll_interval,
+      terminal_state="idle",
+    )
 
   async def get_data_events(self) -> List[Dict[str, Any]]:
     """Get DataEvents for this command execution.
@@ -62,15 +115,15 @@ class CommandExecution:
 
 @dataclass
 class MethodExecution(CommandExecution):
-  """Handle for an executing method (protocol) with method-specific features.
+  """Handle for an executing method (SiLA ExecuteMethod; method = runnable protocol).
 
-  This handle is returned from execute_method(wait=False) and provides:
+  Returned from execute_method(wait=False). Provides:
   - All features from CommandExecution (awaitable, request_id, DataEvents)
   - Method-specific status checking
-  - Method stopping capability
+  - Method stopping capability (SiLA: StopMethod)
   """
 
-  method_name: str
+  method_name: str = ""  # default required after parent's optional fields
 
   def __post_init__(self):
     """Set command_name to ExecuteMethod for parent class."""
@@ -129,14 +182,17 @@ class ODTCBackend(ThermocyclerBackend):
     self.logger = logger or logging.getLogger(__name__)
 
   async def setup(self) -> None:
-    """Initialize the ODTC device connection.
+    """Prepare the ODTC connection and bring the device to idle.
 
     Performs the full SiLA connection lifecycle:
     1. Sets up the HTTP event receiver server
     2. Calls Reset to move from startup -> standby and register event receiver
     3. Waits for Reset to complete and checks state
-    4. Calls Initialize to move from standby -> idle
+    4. Calls Initialize (SiLA command) to move from standby -> idle
     5. Verifies device is in idle state after Initialize
+
+    This is lifecycle/connection setup; initialize() is the SiLA command that
+    moves standby -> idle (called by setup() when needed).
     """
     # Step 1: Set up the HTTP event receiver server
     await self._sila.setup()
@@ -188,6 +244,49 @@ class ODTCBackend(ThermocyclerBackend):
       "odtc_ip": self._sila._machine_ip,
       "port": self._sila.bound_port,
     }
+
+  def _get_effective_lifetime(self) -> float:
+    """Effective max wait for async command completion (seconds)."""
+    if self._sila._lifetime_of_execution is not None:
+      return self._sila._lifetime_of_execution
+    return DEFAULT_LIFETIME_OF_EXECUTION
+
+  async def _run_async_command(
+    self,
+    command_name: str,
+    wait: bool,
+    execution_class: type,
+    method_name: Optional[str] = None,
+    **send_kwargs: Any,
+  ) -> Optional[Union[CommandExecution, MethodExecution]]:
+    """Run an async SiLA command; return None if wait else execution handle."""
+    if wait:
+      await self._sila.send_command(command_name, **send_kwargs)
+      return None
+    fut, request_id, eta, started_at = await self._sila.start_command(
+      command_name, **send_kwargs
+    )
+    lifetime = self._get_effective_lifetime()
+    if execution_class is MethodExecution:
+      return MethodExecution(
+        request_id=request_id,
+        command_name="ExecuteMethod",
+        _future=fut,
+        backend=self,
+        estimated_remaining_time=eta,
+        started_at=started_at,
+        lifetime=lifetime,
+        method_name=method_name or "",
+      )
+    return CommandExecution(
+      request_id=request_id,
+      command_name=command_name,
+      _future=fut,
+      backend=self,
+      estimated_remaining_time=eta,
+      started_at=started_at,
+      lifetime=lifetime,
+    )
 
   # ============================================================================
   # Response Parsing Utilities
@@ -304,29 +403,19 @@ class ODTCBackend(ThermocyclerBackend):
     return str(state)
 
   async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
-    """Initialize the device (must be in standby state).
+    """Initialize the device (SiLA command: standby -> idle).
+
+    Call when device is in standby; setup() performs the full lifecycle
+    including Reset and Initialize. SiLA command: Initialize.
 
     Args:
-      wait: If True, block until completion. If False, return CommandExecution handle.
+      wait: If True, block until completion. If False, return an execution
+          handle (CommandExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: CommandExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
-    if wait:
-      await self._sila.send_command("Initialize", return_request_id=False)
-      return None
-    else:
-      fut, request_id = await self._sila.send_command(
-        "Initialize",
-        return_request_id=True
-      )
-      return CommandExecution(
-        request_id=request_id,
-        command_name="Initialize",
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command("Initialize", wait, CommandExecution)
 
   async def reset(
     self,
@@ -335,43 +424,28 @@ class ODTCBackend(ThermocyclerBackend):
     simulation_mode: bool = False,
     wait: bool = True,
   ) -> Optional[CommandExecution]:
-    """Reset the device.
+    """Reset the device (SiLA command: startup -> standby, register event receiver).
 
     Args:
-      device_id: Device identifier.
-      event_receiver_uri: Event receiver URI (auto-detected if None).
-      simulation_mode: Enable simulation mode.
-      wait: If True, block until completion. If False, return CommandExecution handle.
+      device_id: Device identifier (SiLA: deviceId).
+      event_receiver_uri: Event receiver URI (SiLA: eventReceiverURI; auto-detected if None).
+      simulation_mode: Enable simulation mode (SiLA: simulationMode).
+      wait: If True, block until completion. If False, return an execution
+          handle (CommandExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: CommandExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
     if event_receiver_uri is None:
       event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
-    if wait:
-      await self._sila.send_command(
-        "Reset",
-        return_request_id=False,
-        deviceId=device_id,
-        eventReceiverURI=event_receiver_uri,
-        simulationMode=simulation_mode,
-      )
-      return None
-    else:
-      fut, request_id = await self._sila.send_command(
-        "Reset",
-        return_request_id=True,
-        deviceId=device_id,
-        eventReceiverURI=event_receiver_uri,
-        simulationMode=simulation_mode,
-      )
-      return CommandExecution(
-        request_id=request_id,
-        command_name="Reset",
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command(
+      "Reset",
+      wait,
+      CommandExecution,
+      deviceId=device_id,
+      eventReceiverURI=event_receiver_uri,
+      simulationMode=simulation_mode,
+    )
 
   async def get_device_identification(self) -> dict:
     """Get device identification information.
@@ -391,116 +465,65 @@ class ODTCBackend(ThermocyclerBackend):
     return result if isinstance(result, dict) else {}
 
   async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True) -> Optional[CommandExecution]:
-    """Lock the device for exclusive access.
+    """Lock the device for exclusive access (SiLA: LockDevice).
 
     Args:
-      lock_id: Unique lock identifier.
-      lock_timeout: Lock timeout in seconds (optional).
-      wait: If True, block until completion. If False, return CommandExecution handle.
+      lock_id: Unique lock identifier (SiLA: lockId).
+      lock_timeout: Lock timeout in seconds (optional; SiLA: lockTimeout).
+      wait: If True, block until completion. If False, return an execution
+          handle (CommandExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: CommandExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
     params: dict = {"lockId": lock_id, "PMSId": "PyLabRobot"}
     if lock_timeout is not None:
       params["lockTimeout"] = lock_timeout
-    if wait:
-      await self._sila.send_command("LockDevice", return_request_id=False, lock_id=lock_id, **params)
-      return None
-    else:
-      fut, request_id = await self._sila.send_command(
-        "LockDevice",
-        return_request_id=True,
-        lock_id=lock_id,
-        **params
-      )
-      return CommandExecution(
-        request_id=request_id,
-        command_name="LockDevice",
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command(
+      "LockDevice", wait, CommandExecution, lock_id=lock_id, **params
+    )
 
   async def unlock_device(self, wait: bool = True) -> Optional[CommandExecution]:
-    """Unlock the device.
+    """Unlock the device (SiLA: UnlockDevice).
 
     Args:
-      wait: If True, block until completion. If False, return CommandExecution handle.
+      wait: If True, block until completion. If False, return an execution
+          handle (CommandExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: CommandExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
     # Must provide the lockId that was used to lock it
     if self._sila._lock_id is None:
       raise RuntimeError("Device is not locked")
-    if wait:
-      await self._sila.send_command("UnlockDevice", return_request_id=False, lock_id=self._sila._lock_id)
-      return None
-    else:
-      fut, request_id = await self._sila.send_command(
-        "UnlockDevice",
-        return_request_id=True,
-        lock_id=self._sila._lock_id
-      )
-      return CommandExecution(
-        request_id=request_id,
-        command_name="UnlockDevice",
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command(
+      "UnlockDevice", wait, CommandExecution, lock_id=self._sila._lock_id
+    )
 
-  # Door control commands
+  # Door control commands (SiLA: OpenDoor, CloseDoor; thermocycler: lid)
   async def open_door(self, wait: bool = True) -> Optional[CommandExecution]:
-    """Open the drawer door.
+    """Open the door (thermocycler lid). SiLA: OpenDoor.
 
     Args:
-      wait: If True, block until completion. If False, return CommandExecution handle.
+      wait: If True, block until completion. If False, return an execution
+          handle (CommandExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: CommandExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
-    if wait:
-      await self._sila.send_command("OpenDoor", return_request_id=False)
-      return None
-    else:
-      fut, request_id = await self._sila.send_command(
-        "OpenDoor",
-        return_request_id=True
-      )
-      return CommandExecution(
-        request_id=request_id,
-        command_name="OpenDoor",
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command("OpenDoor", wait, CommandExecution)
 
   async def close_door(self, wait: bool = True) -> Optional[CommandExecution]:
-    """Close the drawer door.
+    """Close the door (thermocycler lid). SiLA: CloseDoor.
 
     Args:
-      wait: If True, block until completion. If False, return CommandExecution handle.
+      wait: If True, block until completion. If False, return an execution
+          handle (CommandExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: CommandExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
-    if wait:
-      await self._sila.send_command("CloseDoor", return_request_id=False)
-      return None
-    else:
-      fut, request_id = await self._sila.send_command(
-        "CloseDoor",
-        return_request_id=True
-      )
-      return CommandExecution(
-        request_id=request_id,
-        command_name="CloseDoor",
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command("CloseDoor", wait, CommandExecution)
 
 
   # Sensor commands TODO: We cleaned this up at the xml extraction level, clean the method up for temperature reporting
@@ -573,73 +596,44 @@ class ODTCBackend(ThermocyclerBackend):
     # For now, return the raw response - parsing can be added later
     return str(resp)  # type: ignore
 
-  # Method control commands
+  # Method control commands (SiLA: ExecuteMethod; method = runnable protocol)
   async def execute_method(
     self,
     method_name: str,
     priority: Optional[int] = None,
     wait: bool = True,
   ) -> Optional[MethodExecution]:
-    """Execute a method or premethod by name.
+    """Execute a method or premethod by name (SiLA: ExecuteMethod; methodName).
+
+    In ODTC/SiLA, a method is a runnable protocol (thermocycling program).
 
     Args:
-      method_name: Name of the method or premethod to execute.
-      priority: Priority (not used by ODTC, but part of SiLA spec).
-      wait: If True, block until completion and return None.
-          If False, return MethodExecution handle immediately.
+      method_name: Name of the method or premethod to execute (SiLA: methodName).
+      priority: Priority (SiLA spec; not used by ODTC).
+      wait: If True, block until completion. If False, return an execution
+          handle (MethodExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: MethodExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
     params: dict = {"methodName": method_name}
     if priority is not None:
       params["priority"] = priority
-
-    if wait:
-      # Blocking: await send_command normally
-      await self._sila.send_command("ExecuteMethod", return_request_id=False, **params)
-      return None
-    else:
-      # Use send_command with return_request_id=True to get Future and request_id
-      fut, request_id = await self._sila.send_command(
-        "ExecuteMethod",
-        return_request_id=True,
-        **params
-      )
-
-      return MethodExecution(
-        request_id=request_id,
-        command_name="ExecuteMethod",  # Will be set correctly by __post_init__
-        method_name=method_name,
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command(
+      "ExecuteMethod", wait, MethodExecution, method_name=method_name, **params
+    )
 
   async def stop_method(self, wait: bool = True) -> Optional[CommandExecution]:
-    """Stop currently running method.
+    """Stop the currently running method (SiLA: StopMethod).
 
     Args:
-      wait: If True, block until completion. If False, return CommandExecution handle.
+      wait: If True, block until completion. If False, return an execution
+          handle (CommandExecution).
 
     Returns:
-      If wait=True: None (blocks until complete)
-      If wait=False: CommandExecution handle (awaitable, has request_id)
+      If wait=True: None. If wait=False: execution handle (awaitable).
     """
-    if wait:
-      await self._sila.send_command("StopMethod", return_request_id=False)
-      return None
-    else:
-      fut, request_id = await self._sila.send_command(
-        "StopMethod",
-        return_request_id=True
-      )
-      return CommandExecution(
-        request_id=request_id,
-        command_name="StopMethod",
-        _future=fut,
-        backend=self
-      )
+    return await self._run_async_command("StopMethod", wait, CommandExecution)
 
   async def is_method_running(self) -> bool:
     """Check if a method is currently running.
@@ -682,6 +676,57 @@ class ODTCBackend(ThermocyclerBackend):
           )
       await asyncio.sleep(poll_interval)
 
+  async def wait_for_completion_by_time(
+    self,
+    request_id: int,
+    started_at: float,
+    estimated_remaining_time: Optional[float],
+    lifetime: float,
+    poll_interval: float = 5.0,
+    terminal_state: str = "idle",
+  ) -> None:
+    """Wait for async command completion using only wall-clock and GetStatus (resumable).
+
+    Does not require the in-memory Future. Use after restart: persist request_id,
+    started_at, estimated_remaining_time, lifetime from the handle, then call this
+    with a reconnected backend.
+
+    (a) Waits until time.time() >= started_at + estimated_remaining_time + buffer.
+    (b) Then polls GetStatus every poll_interval until state == terminal_state or
+        time.time() - started_at >= lifetime (then raises TimeoutError).
+
+    Args:
+      request_id: SiLA request ID (for logging; not used for correlation).
+      started_at: time.time() when the command was sent.
+      estimated_remaining_time: Device-estimated duration in seconds (or None).
+      lifetime: Max seconds to wait (e.g. from handle.lifetime).
+      poll_interval: Seconds between GetStatus calls.
+      terminal_state: Device state that indicates command finished (default "idle").
+
+    Raises:
+      TimeoutError: If lifetime exceeded before terminal state.
+    """
+    import time
+
+    buffer = POLLING_START_BUFFER
+    eta = estimated_remaining_time or 0.0
+    while True:
+      now = time.time()
+      elapsed = now - started_at
+      if elapsed >= lifetime:
+        raise TimeoutError(
+          f"Command (request_id={request_id}) did not complete within {lifetime}s"
+        )
+      # Don't start polling until estimated time + buffer has passed
+      remaining_wait = started_at + eta + buffer - now
+      if remaining_wait > 0:
+        await asyncio.sleep(min(remaining_wait, poll_interval))
+        continue
+      status = await self.get_status()
+      if status == terminal_state:
+        return
+      await asyncio.sleep(poll_interval)
+
   async def get_data_events(self, request_id: Optional[int] = None) -> Dict[int, List[Dict[str, Any]]]:
     """Get collected DataEvents.
 
@@ -714,23 +759,28 @@ class ODTCBackend(ThermocyclerBackend):
     # Parse MethodSet XML (it's escaped in the response)
     return parse_method_set(method_set_xml)
 
-  async def get_method_by_name(self, method_name: str) -> Optional[Union[ODTCMethod, ODTCPreMethod]]:
+  async def get_method(self, name: str) -> Optional[Union[ODTCMethod, ODTCPreMethod]]:
     """Get a method by name from the device (searches both methods and premethods).
 
+    In ODTC/SiLA, a method is a runnable protocol (thermocycling program).
+    SiLA command: ExecuteMethod; parameter: methodName.
+
     Args:
-      method_name: Name of the method to retrieve.
+      name: Method name to retrieve.
 
     Returns:
       ODTCMethod or ODTCPreMethod if found, None otherwise.
     """
     method_set = await self.get_method_set()
-    return get_method_by_name(method_set, method_name)
+    return get_method_by_name(method_set, name)
 
-  async def list_method_names(self) -> List[str]:
+  async def list_methods(self) -> List[str]:
     """List all method names (both methods and premethods) on the device.
 
+    In ODTC/SiLA, a method is a runnable protocol (thermocycling program).
+
     Returns:
-      List of method names.
+      List of method names (strings).
     """
     method_set = await self.get_method_set()
     return list_method_names(method_set)
@@ -1006,11 +1056,11 @@ class ODTCBackend(ThermocyclerBackend):
   # ============================================================================
 
   async def open_lid(self) -> None:
-    """Open thermocycler lid (maps to OpenDoor)."""
+    """Open the thermocycler lid (ODTC SiLA: OpenDoor)."""
     await self.open_door()
 
   async def close_lid(self) -> None:
-    """Close thermocycler lid (maps to CloseDoor)."""
+    """Close the thermocycler lid (ODTC SiLA: CloseDoor)."""
     await self.close_door()
 
   async def set_block_temperature(self, temperature: List[float]) -> None:
