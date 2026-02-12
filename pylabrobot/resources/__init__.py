@@ -20,6 +20,7 @@ from .container import Container
 from .coordinate import Coordinate
 from .corning import *
 from .deck import Deck
+from .diy import *
 from .eppendorf import *
 from .errors import ResourceNotFoundError
 from .greiner import *

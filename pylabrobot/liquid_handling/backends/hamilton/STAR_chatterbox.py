@@ -10,17 +10,24 @@ from pylabrobot.resources.well import Well
 class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
 
-  def __init__(self, num_channels: int = 8, core96_head_installed: bool = True):
+  def __init__(
+    self,
+    num_channels: int = 8,
+    core96_head_installed: bool = True,
+    iswap_installed: bool = True,
+  ):
     """Initialize a chatter box backend.
 
     Args:
       num_channels: Number of pipetting channels (default: 8)
       core96_head_installed: Whether the CoRe 96 head is installed (default: True)
+      iswap_installed: Whether the iSWAP robotic arm is installed (default: True)
     """
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
     self._core96_head_installed = core96_head_installed
+    self._iswap_installed = iswap_installed
 
   async def setup(
     self,
@@ -132,12 +139,13 @@ class STARChatterboxBackend(STARBackend):
     """
     # Calculate xl byte based on installed modules
     # Bit 0: (reserved)
-    # Bit 1: iSWAP (always True in this mock)
+    # Bit 1: iSWAP (based on __init__ parameter)
     # Bit 2: 96-head (based on __init__ parameter)
-    xl_value = 0b10  # iSWAP installed (bit 1)
+    xl_value = 0
+    if self._iswap_installed:
+      xl_value |= 0b10  # Add iSWAP (bit 1)
     if self._core96_head_installed:
       xl_value |= 0b100  # Add 96-head (bit 2)
-    # Result: xl = 6 (0b110) if 96-head installed, 2 (0b10) if not
 
     self._extended_conf = {
       "ka": 65537,
