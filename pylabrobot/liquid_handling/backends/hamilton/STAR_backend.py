@@ -1628,28 +1628,24 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     ttti = await self.get_or_assign_tip_type_index(tips.pop())
 
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
-
-    # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
-      max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      max_tip_length -= 2
+    tips = [op.tip for op in ops]
+    assert all(isinstance(tip, HamiltonTip) for tip in tips), "All tips must be HamiltonTip."
+    collar_heights = set((tip.collar_height) for tip in tips)
+    if len(collar_heights) > 1:
+      raise ValueError("Cannot mix tips with different collar heights.")
+    collar_height = collar_heights.pop()
 
     tip = ops[0].tip
     if not isinstance(tip, HamiltonTip):
       raise TypeError("Tip type must be HamiltonTip.")
 
     begin_tip_pick_up_process = (
-      round((max_z + max_total_tip_length) * 10)
+      round((max_z + collar_height) * 10)
       if begin_tip_pick_up_process is None
       else int(begin_tip_pick_up_process * 10)
     )
     end_tip_pick_up_process = (
-      round((max_z + max_tip_length) * 10)
-      if end_tip_pick_up_process is None
-      else round(end_tip_pick_up_process * 10)
+      round(max_z * 10) if end_tip_pick_up_process is None else round(end_tip_pick_up_process * 10)
     )
     minimum_traverse_height_at_beginning_of_a_command = (
       round(self._channel_traversal_height * 10)
@@ -1717,15 +1713,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         else round(end_tip_deposit_process * 10)
       )
     else:
-      max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-      max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
+      tips = [op.tip for op in ops]
+      assert all(isinstance(tip, HamiltonTip) for tip in tips), "All tips must be HamiltonTip."
+      collar_heights = set(tip.collar_height for tip in tips)
+      if len(collar_heights) > 1:
+        raise ValueError("Cannot mix tips with different collar heights.")
+      collar_height = collar_heights.pop()
+      fitting_depth = tips[0].fitting_depth
+
       begin_tip_deposit_process = (
-        round((max_z + max_total_tip_length) * 10)
+        round((max_z + collar_height) * 10)
         if begin_tip_deposit_process is None
         else round(begin_tip_deposit_process * 10)
       )
       end_tip_deposit_process = (
-        round((max_z + max_tip_length) * 10)
+        round((max_z + collar_height - fitting_depth) * 10)
         if end_tip_deposit_process is None
         else round(end_tip_deposit_process * 10)
       )
@@ -2987,26 +2989,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
 
-    tip_length = prototypical_tip.total_tip_length
-    fitting_depth = prototypical_tip.fitting_depth
-    tip_engage_height_from_tipspot = tip_length - fitting_depth
-
-    # Adjust tip engage height based on tip size
-    if prototypical_tip.tip_size == TipSize.LOW_VOLUME:
-      tip_engage_height_from_tipspot += 2
-    elif prototypical_tip.tip_size != TipSize.STANDARD_VOLUME:
-      tip_engage_height_from_tipspot -= 2
-
-    # Compute pickup Z
+    # Compute pickup position
     alignment_tipspot = pickup.resource.get_item(experimental_alignment_tipspot_identifier)
-    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
-    z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
-
-    # Compute full position (used for x/y)
     pickup_position = (
       alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
     )
-    pickup_position.z = round(z_pickup_position, 2)
 
     self._check_96_position_legal(pickup_position, skip_z=True)
 
@@ -3054,12 +3041,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
       position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
-      tip_rack = tip_spot_a1.parent
-      assert tip_rack is not None
-      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
-      # This should be the case for all normal hamilton tip carriers + racks
-      # In the future, we might want to make this more flexible
-      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
     else:
       position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
