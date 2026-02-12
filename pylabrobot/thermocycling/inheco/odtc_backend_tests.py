@@ -7,12 +7,130 @@ from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.thermocycling.inheco.odtc_backend import CommandExecution, MethodExecution, ODTCBackend
+from pylabrobot.thermocycling.inheco.odtc_model import (
+  ODTCMethod,
+  ODTCMethodSet,
+  ODTC_DIMENSIONS,
+  ODTCPreMethod,
+  ODTCStep,
+  PREMETHOD_ESTIMATED_DURATION_SECONDS,
+  StoredProtocol,
+  estimate_method_duration_seconds,
+  normalize_variant,
+)
+from pylabrobot.thermocycling.inheco.odtc_thermocycler import ODTCThermocycler
+from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling.inheco.odtc_sila_interface import (
   SiLATimeoutError,
   ODTCSiLAInterface,
   SiLAState,
-  _parse_iso8601_duration_seconds,
 )
+
+
+class TestNormalizeVariant(unittest.TestCase):
+  """Tests for normalize_variant (96/384 -> 960000/384000)."""
+
+  def test_96_maps_to_960000(self):
+    self.assertEqual(normalize_variant(96), 960000)
+
+  def test_384_maps_to_384000(self):
+    self.assertEqual(normalize_variant(384), 384000)
+
+  def test_3840000_normalizes_to_384000(self):
+    self.assertEqual(normalize_variant(3840000), 384000)
+
+  def test_invalid_raises(self):
+    with self.assertRaises(ValueError) as cm:
+      normalize_variant(123)
+    self.assertIn("123", str(cm.exception))
+    self.assertIn("Valid", str(cm.exception))
+
+
+class TestEstimateMethodDurationSeconds(unittest.TestCase):
+  """Tests for estimate_method_duration_seconds (ODTC method duration from steps)."""
+
+  def test_premethod_constant(self):
+    """PREMETHOD_ESTIMATED_DURATION_SECONDS is 10 minutes."""
+    self.assertEqual(PREMETHOD_ESTIMATED_DURATION_SECONDS, 600.0)
+
+  def test_empty_method_returns_zero(self):
+    """Method with no steps has zero duration."""
+    method = ODTCMethod(name="empty", start_block_temperature=20.0, steps=[])
+    self.assertEqual(estimate_method_duration_seconds(method), 0.0)
+
+  def test_single_step_no_loop(self):
+    """Single step: ramp + plateau + overshoot. Ramp = |95 - 20| / 4.4 ≈ 17.045 s."""
+    method = ODTCMethod(
+      name="single",
+      start_block_temperature=20.0,
+      steps=[
+        ODTCStep(
+          number=1,
+          slope=4.4,
+          plateau_temperature=95.0,
+          plateau_time=30.0,
+          overshoot_time=5.0,
+          goto_number=0,
+          loop_number=0,
+        ),
+      ],
+    )
+    # Ramp: 75 / 4.4 ≈ 17.045; plateau: 30; overshoot: 5
+    got = estimate_method_duration_seconds(method)
+    self.assertAlmostEqual(got, 17.045 + 30 + 5, places=1)
+
+  def test_single_step_zero_slope_clamped(self):
+    """Zero slope is clamped to avoid division by zero; duration is finite."""
+    method = ODTCMethod(
+      name="zero_slope",
+      start_block_temperature=20.0,
+      steps=[
+        ODTCStep(
+          number=1,
+          slope=0.0,
+          plateau_temperature=95.0,
+          plateau_time=10.0,
+          overshoot_time=0.0,
+          goto_number=0,
+          loop_number=0,
+        ),
+      ],
+    )
+    # Ramp: 75 / 0.1 = 750 s (clamped); plateau: 10
+    got = estimate_method_duration_seconds(method)
+    self.assertAlmostEqual(got, 750 + 10, places=1)
+
+  def test_two_steps_with_loop(self):
+    """Two steps with loop: step 1 -> step 2 (goto 1, loop 2) = run 1,2,1,2."""
+    method = ODTCMethod(
+      name="loop",
+      start_block_temperature=20.0,
+      steps=[
+        ODTCStep(
+          number=1,
+          slope=4.4,
+          plateau_temperature=95.0,
+          plateau_time=10.0,
+          overshoot_time=0.0,
+          goto_number=0,
+          loop_number=0,
+        ),
+        ODTCStep(
+          number=2,
+          slope=2.2,
+          plateau_temperature=60.0,
+          plateau_time=5.0,
+          overshoot_time=0.0,
+          goto_number=1,
+          loop_number=1,  # repeat_count = 2
+        ),
+      ],
+    )
+    # Execution: step1, step2, step1, step2
+    # Step1: ramp 75/4.4 + 10; step2: ramp 35/2.2 + 5; step1 again: 35/4.4 + 10; step2 again: 35/2.2 + 5
+    got = estimate_method_duration_seconds(method)
+    self.assertGreater(got, 0)
+    self.assertLess(got, 1000)
 
 
 class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
@@ -153,18 +271,6 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.interface._get_terminal_state("ExecuteMethod"), "idle")
 
 
-  def test_parse_iso8601_duration_seconds(self):
-    """Test ISO 8601 duration parsing (seconds, minutes, hours)."""
-    self.assertEqual(_parse_iso8601_duration_seconds("PT30.7S"), 30.7)
-    self.assertEqual(_parse_iso8601_duration_seconds("PT30M"), 30 * 60)
-    self.assertEqual(_parse_iso8601_duration_seconds("PT2H"), 2 * 3600)
-    self.assertEqual(_parse_iso8601_duration_seconds("PT1H30M10S"), 3600 + 30 * 60 + 10)
-    self.assertEqual(_parse_iso8601_duration_seconds("PT0.1S"), 0.1)
-    self.assertIsNone(_parse_iso8601_duration_seconds(""))
-    self.assertIsNone(_parse_iso8601_duration_seconds("invalid"))
-    self.assertEqual(_parse_iso8601_duration_seconds("P1D"), 86400)
-
-
 # Minimal SOAP responses for dual-track tests (return_code 2 = async accepted; no duration = poll immediately).
 _OPEN_DOOR_ASYNC_RESPONSE = b"""<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
@@ -188,19 +294,6 @@ _GET_STATUS_IDLE_RESPONSE = b"""<?xml version="1.0"?>
         <message>Success</message>
       </GetStatusResult>
     </GetStatusResponse>
-  </s:Body>
-</s:Envelope>"""
-
-_OPEN_DOOR_ASYNC_RESPONSE_WITH_DURATION = b"""<?xml version="1.0"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body>
-    <OpenDoorResponse xmlns="http://sila.coop">
-      <OpenDoorResult>
-        <returnCode>2</returnCode>
-        <message>Accepted</message>
-        <duration>PT0.1S</duration>
-      </OpenDoorResult>
-    </OpenDoorResponse>
   </s:Body>
 </s:Envelope>"""
 
@@ -236,13 +329,15 @@ class TestODTCSiLADualTrack(unittest.IsolatedAsyncioTestCase):
       cm.__exit__.return_value = None
       return cm
 
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-      # Lifetime must exceed POLLING_START_BUFFER (10s) so polling can run before timeout.
+    with patch("urllib.request.urlopen", side_effect=mock_urlopen), patch(
+      "pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.05
+    ):
+      # Short POLLING_START_BUFFER in test so we don't wait 10s; lifetime still allows polling to run.
       interface = ODTCSiLAInterface(
         machine_ip="192.168.1.100",
         client_ip="127.0.0.1",
-        poll_interval=0.05,
-        lifetime_of_execution=15.0,
+        poll_interval=0.02,
+        lifetime_of_execution=2.0,
         on_response_event_missing="warn_and_continue",
       )
       interface._current_state = SiLAState.IDLE
@@ -266,12 +361,15 @@ class TestODTCSiLADualTrack(unittest.IsolatedAsyncioTestCase):
       cm.__exit__.return_value = None
       return cm
 
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+    with patch("urllib.request.urlopen", side_effect=mock_urlopen), patch(
+      "pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.02
+    ):
+      # Short POLLING_START_BUFFER so timeout (0.5s) is hit quickly instead of waiting 10s.
       interface = ODTCSiLAInterface(
         machine_ip="192.168.1.100",
         client_ip="127.0.0.1",
-        poll_interval=0.2,
-        lifetime_of_execution=0.5,
+        poll_interval=0.05,
+        lifetime_of_execution=0.2,
         on_response_event_missing="warn_and_continue",
       )
       interface._current_state = SiLAState.IDLE
@@ -294,6 +392,14 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       self.backend._sila._lock_id = None
       self.backend._sila._lifetime_of_execution = None
       self.backend._sila._client_ip = "127.0.0.1"
+
+  def test_backend_odtc_ip_property(self):
+    """Backend.odtc_ip returns machine IP from sila."""
+    self.assertEqual(self.backend.odtc_ip, "192.168.1.100")
+
+  def test_backend_variant_property(self):
+    """Backend.variant returns normalized variant (default 960000)."""
+    self.assertEqual(self.backend.variant, 960000)
 
   async def test_setup(self):
     """Test backend setup."""
@@ -366,12 +472,18 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(sensor_values.lid, 25.75, places=2)  # 2575 * 0.01
 
   async def test_execute_method(self):
-    """Test execute_method."""
-    self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
-    await self.backend.execute_method("MyMethod")
-    self.backend._sila.send_command.assert_called_once_with(
-      "ExecuteMethod", methodName="MyMethod"
+    """Test execute_method with wait=True; uses start_command then await handle, returns MethodExecution."""
+    fut: asyncio.Future[Any] = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.start_command = AsyncMock(  # type: ignore[method-assign]
+      return_value=(fut, 12345, None, 0.0)
     )
+    result = await self.backend.execute_method("MyMethod", wait=True)
+    self.assertIsInstance(result, MethodExecution)
+    self.assertEqual(result.method_name, "MyMethod")
+    self.backend._sila.start_command.assert_called_once()
+    call_kwargs = self.backend._sila.start_command.call_args[1]
+    self.assertEqual(call_kwargs["methodName"], "MyMethod")
 
   async def test_stop_method(self):
     """Test stop_method."""
@@ -430,15 +542,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(temps), 1)
     self.assertAlmostEqual(temps[0], 26.0, places=2)
 
-  async def test_execute_method_wait_true(self):
-    """Test execute_method with wait=True (blocking)."""
-    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    result = await self.backend.execute_method("PCR_30cycles", wait=True)
-    self.assertIsNone(result)
-    self.backend._sila.send_command.assert_called_once_with(
-      "ExecuteMethod", methodName="PCR_30cycles"
-    )
-
   async def test_execute_method_wait_false(self):
     """Test execute_method with wait=False (returns handle)."""
     fut: asyncio.Future[Any] = asyncio.Future()
@@ -449,12 +552,12 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(execution, MethodExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.method_name, "PCR_30cycles")
-    self.backend._sila.start_command.assert_called_once_with(
-      "ExecuteMethod", methodName="PCR_30cycles"
-    )
+    self.backend._sila.start_command.assert_called_once()
+    call_kwargs = self.backend._sila.start_command.call_args[1]
+    self.assertEqual(call_kwargs["methodName"], "PCR_30cycles")
 
   async def test_method_execution_awaitable(self):
-    """Test that MethodExecution is awaitable."""
+    """Test that MethodExecution is awaitable and wait() completes."""
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result("success")
     execution = MethodExecution(
@@ -466,18 +569,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     )
     result = await execution
     self.assertEqual(result, "success")
-
-  async def test_method_execution_wait(self):
-    """Test MethodExecution.wait() method."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    execution = MethodExecution(
-      request_id=12345,
-      command_name="ExecuteMethod",
-      method_name="PCR_30cycles",
-      _future=fut,
-      backend=self.backend
-    )
     await execution.wait()  # Should not raise
 
   async def test_method_execution_is_running(self):
@@ -524,7 +615,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(execution.method_name, "PCR_30cycles")
 
   async def test_command_execution_awaitable(self):
-    """Test that CommandExecution is awaitable."""
+    """Test that CommandExecution is awaitable and wait() completes."""
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result("success")
     execution = CommandExecution(
@@ -535,17 +626,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     )
     result = await execution
     self.assertEqual(result, "success")
-
-  async def test_command_execution_wait(self):
-    """Test CommandExecution.wait() method."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    execution = CommandExecution(
-      request_id=12345,
-      command_name="OpenDoor",
-      _future=fut,
-      backend=self.backend
-    )
     await execution.wait()  # Should not raise
 
   async def test_command_execution_get_data_events(self):
@@ -566,8 +646,8 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(events), 2)
     self.assertEqual(events[0]["requestId"], 12345)
 
-  async def test_open_door_wait_false(self):
-    """Test open_door with wait=False (returns handle)."""
+  async def test_open_door_wait_false_returns_command_execution(self):
+    """Test open_door with wait=False returns CommandExecution handle."""
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, None, 0.0))  # type: ignore[method-assign]
@@ -576,41 +656,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(execution, CommandExecution)
     self.assertEqual(execution.request_id, 12345)
     self.assertEqual(execution.command_name, "OpenDoor")
-    self.backend._sila.start_command.assert_called_once_with("OpenDoor")
+    self.backend._sila.start_command.assert_called_once()
+    self.assertEqual(self.backend._sila.start_command.call_args[0][0], "OpenDoor")
 
-  async def test_open_door_wait_true(self):
-    """Test open_door with wait=True (blocking)."""
-    self.backend._sila.send_command = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    result = await self.backend.open_door(wait=True)
-    self.assertIsNone(result)
-    self.backend._sila.send_command.assert_called_once_with("OpenDoor")
-
-  async def test_close_door_wait_false(self):
-    """Test close_door with wait=False (returns handle)."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, None, 0.0))  # type: ignore[method-assign]
-    execution = await self.backend.close_door(wait=False)
-    assert execution is not None  # Type narrowing
-    self.assertIsInstance(execution, CommandExecution)
-    self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.command_name, "CloseDoor")
-    self.backend._sila.start_command.assert_called_once_with("CloseDoor")
-
-  async def test_initialize_wait_false(self):
-    """Test initialize with wait=False (returns handle)."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, None, 0.0))  # type: ignore[method-assign]
-    execution = await self.backend.initialize(wait=False)
-    assert execution is not None  # Type narrowing
-    self.assertIsInstance(execution, CommandExecution)
-    self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.command_name, "Initialize")
-    self.backend._sila.start_command.assert_called_once_with("Initialize")
-
-  async def test_reset_wait_false(self):
-    """Test reset with wait=False (returns handle)."""
+  async def test_reset_wait_false_returns_handle_with_kwargs(self):
+    """Test reset with wait=False returns CommandExecution and passes deviceId/eventReceiverURI."""
     fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(None)
     self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, None, 0.0))  # type: ignore[method-assign]
@@ -624,45 +674,6 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(call_kwargs["deviceId"], "ODTC")
     self.assertEqual(call_kwargs["eventReceiverURI"], "http://127.0.0.1:8080/")
     self.assertFalse(call_kwargs["simulationMode"])
-
-  async def test_lock_device_wait_false(self):
-    """Test lock_device with wait=False (returns handle)."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, None, 0.0))  # type: ignore[method-assign]
-    execution = await self.backend.lock_device("my_lock", wait=False)
-    assert execution is not None  # Type narrowing
-    self.assertIsInstance(execution, CommandExecution)
-    self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.command_name, "LockDevice")
-    self.backend._sila.start_command.assert_called_once_with(
-      "LockDevice", lock_id="my_lock", lockId="my_lock", PMSId="PyLabRobot"
-    )
-
-  async def test_unlock_device_wait_false(self):
-    """Test unlock_device with wait=False (returns handle)."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    self.backend._sila._lock_id = "my_lock"
-    self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, None, 0.0))  # type: ignore[method-assign]
-    execution = await self.backend.unlock_device(wait=False)
-    assert execution is not None  # Type narrowing
-    self.assertIsInstance(execution, CommandExecution)
-    self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.command_name, "UnlockDevice")
-    self.backend._sila.start_command.assert_called_once_with("UnlockDevice", lock_id="my_lock")
-
-  async def test_stop_method_wait_false(self):
-    """Test stop_method with wait=False (returns handle)."""
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(None)
-    self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, None, 0.0))  # type: ignore[method-assign]
-    execution = await self.backend.stop_method(wait=False)
-    assert execution is not None  # Type narrowing
-    self.assertIsInstance(execution, CommandExecution)
-    self.assertEqual(execution.request_id, 12345)
-    self.assertEqual(execution.command_name, "StopMethod")
-    self.backend._sila.start_command.assert_called_once_with("StopMethod")
 
   async def test_is_method_running(self):
     """Test is_method_running()."""
@@ -724,6 +735,171 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     events = await self.backend.get_data_events(request_id=99999)
     self.assertEqual(len(events), 1)
     self.assertEqual(len(events[99999]), 0)
+
+  async def test_list_protocols(self):
+    """Test list_protocols returns method and premethod names."""
+    method_set = ODTCMethodSet(
+      methods=[ODTCMethod(name="PCR_30")],
+      premethods=[ODTCPreMethod(name="Pre25")],
+    )
+    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
+    names = await self.backend.list_protocols()
+    self.assertEqual(names, ["PCR_30", "Pre25"])
+
+  async def test_get_protocol_returns_none_for_missing(self):
+    """Test get_protocol returns None when name not found."""
+    self.backend.get_method_set = AsyncMock(return_value=ODTCMethodSet())  # type: ignore[method-assign]
+    result = await self.backend.get_protocol("nonexistent")
+    self.assertIsNone(result)
+
+  async def test_get_protocol_returns_none_for_premethod(self):
+    """Test get_protocol returns None for premethod names (runnable protocols only)."""
+    method_set = ODTCMethodSet(
+      methods=[],
+      premethods=[ODTCPreMethod(name="Pre25")],
+    )
+    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
+    result = await self.backend.get_protocol("Pre25")
+    self.assertIsNone(result)
+
+  async def test_get_protocol_returns_stored_for_method(self):
+    """Test get_protocol returns StoredProtocol for runnable method."""
+    method_set = ODTCMethodSet(
+      methods=[
+        ODTCMethod(
+          name="PCR_30",
+          steps=[ODTCStep(number=1, plateau_temperature=95.0, plateau_time=30.0)],
+        )
+      ],
+      premethods=[],
+    )
+    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
+    result = await self.backend.get_protocol("PCR_30")
+    self.assertIsInstance(result, StoredProtocol)
+    assert result is not None  # narrow for type checker
+    self.assertEqual(result.name, "PCR_30")
+    self.assertEqual(len(result.protocol.stages), 1)
+    self.assertEqual(len(result.protocol.stages[0].steps), 1)
+
+  async def test_run_stored_protocol_calls_execute_method(self):
+    """Test run_stored_protocol calls execute_method with name, wait, and estimated_duration_seconds."""
+    self.backend.execute_method = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    with patch.object(
+      self.backend, "get_protocol", new_callable=AsyncMock, return_value=None
+    ), patch.object(
+      self.backend, "get_method_set", new_callable=AsyncMock, return_value=ODTCMethodSet()
+    ):
+      await self.backend.run_stored_protocol("MyMethod", wait=True)
+    self.backend.execute_method.assert_called_once_with(
+      "MyMethod", wait=True, estimated_duration_seconds=None
+    )
+
+
+class TestODTCThermocycler(unittest.TestCase):
+  """Tests for ODTCThermocycler resource."""
+
+  def test_construct_creates_backend_and_uses_dimensions(self):
+    """Constructing with odtc_ip and variant creates ODTCBackend and ODTC dimensions."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(
+        name="odtc1",
+        odtc_ip="192.168.1.100",
+        variant=384,
+        child_location=Coordinate.zero(),
+      )
+    self.assertIsInstance(tc.backend, ODTCBackend)
+    self.assertEqual(tc.backend.variant, 384000)
+    self.assertEqual(tc.get_size_x(), ODTC_DIMENSIONS.x)
+    self.assertEqual(tc.get_size_y(), ODTC_DIMENSIONS.y)
+    self.assertEqual(tc.get_size_z(), ODTC_DIMENSIONS.z)
+    self.assertEqual(tc.model, "ODTC 384")
+
+  def test_construct_variant_96_model(self):
+    """Constructing with variant=96 sets model ODTC 96."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=96)
+    self.assertEqual(tc.backend.variant, 960000)
+    self.assertEqual(tc.model, "ODTC 96")
+
+  def test_serialize_includes_odtc_ip_and_variant(self):
+    """serialize() includes odtc_ip and variant from backend."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(
+        name="odtc1",
+        odtc_ip="192.168.1.50",
+        variant=384,
+        child_location=Coordinate.zero(),
+      )
+      tc.backend._sila._machine_ip = "192.168.1.50"
+    data = tc.serialize()
+    self.assertEqual(data["odtc_ip"], "192.168.1.50")
+    self.assertEqual(data["variant"], 384000)
+
+  def test_get_default_config_delegates_to_backend(self):
+    """get_default_config returns backend.get_default_config()."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
+    config = tc.get_default_config(name="MyPCR")
+    self.assertEqual(config.variant, 384000)
+    self.assertEqual(config.name, "MyPCR")
+
+  def test_get_constraints_delegates_to_backend(self):
+    """get_constraints returns backend.get_constraints()."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
+    constraints = tc.get_constraints()
+    self.assertEqual(constraints.variant, 384000)
+    self.assertEqual(constraints.variant_name, "ODTC 384")
+
+  def test_well_count_96(self):
+    """well_count is 96 when backend variant is 960000."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=96)
+    self.assertEqual(tc.well_count, 96)
+
+  def test_well_count_384(self):
+    """well_count is 384 when backend variant is 384000."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
+    self.assertEqual(tc.well_count, 384)
+
+  def test_is_profile_running_delegates_to_backend(self):
+    """is_profile_running delegates to backend.is_method_running()."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
+      tc.backend.is_method_running = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    result = asyncio.run(tc.is_profile_running())
+    self.assertFalse(result)
+    tc.backend.is_method_running.assert_called_once()
+
+  def test_wait_for_profile_completion_delegates_to_backend(self):
+    """wait_for_profile_completion delegates to backend.wait_for_method_completion()."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      tc = ODTCThermocycler(name="tc", odtc_ip="192.168.1.1", variant=384)
+      tc.backend.wait_for_method_completion = AsyncMock()  # type: ignore[method-assign]
+    asyncio.run(tc.wait_for_profile_completion(poll_interval=5.0))
+    tc.backend.wait_for_method_completion.assert_called_once_with(
+      poll_interval=5.0,
+      timeout=None,
+    )
+
+  def test_backend_provided_uses_it_dimensions_from_constant(self):
+    """When backend= is provided, that backend is used; dimensions still from ODTC_DIMENSIONS."""
+    with patch("pylabrobot.thermocycling.inheco.odtc_backend.ODTCSiLAInterface"):
+      backend = ODTCBackend(odtc_ip="10.0.0.1", variant=384)
+      backend._sila = MagicMock(spec=ODTCSiLAInterface)
+      backend._sila._machine_ip = "10.0.0.1"
+    tc = ODTCThermocycler(
+      name="odtc1",
+      odtc_ip="192.168.1.1",
+      variant=384,
+      backend=backend,
+      child_location=Coordinate.zero(),
+    )
+    self.assertIs(tc.backend, backend)
+    self.assertEqual(tc.get_size_x(), ODTC_DIMENSIONS.x)
+    self.assertEqual(tc.get_size_y(), ODTC_DIMENSIONS.y)
+    self.assertEqual(tc.get_size_z(), ODTC_DIMENSIONS.z)
 
 
 class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):

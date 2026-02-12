@@ -1,8 +1,9 @@
 """
-Schema-driven XML serialization for ODTC MethodSet.
+ODTC model: domain types, XML serialization, and Protocol conversion.
 
-Uses dataclass field metadata to define XML mapping, enabling automatic
-bidirectional conversion between Python objects and XML.
+Defines ODTC dataclasses (ODTCMethod, ODTCPreMethod, ODTCConfig, etc.),
+schema-driven XML serialization for MethodSet, and conversion between
+PyLabRobot Protocol and ODTC method representation.
 """
 
 from __future__ import annotations
@@ -68,6 +69,21 @@ def resolve_protocol_name(name: Optional[str]) -> str:
 
 
 @dataclass(frozen=True)
+class ODTCDimensions:
+  """ODTC footprint dimensions (mm). Single source of truth for resource sizing."""
+
+  x: float
+  y: float
+  z: float
+
+
+ODTC_DIMENSIONS = ODTCDimensions(x=147.0, y=298.0, z=130.0)
+
+# PreMethod estimated duration (10 min) when DynamicPreMethodDuration is off (ODTC Firmware doc).
+PREMETHOD_ESTIMATED_DURATION_SECONDS: float = 600.0
+
+
+@dataclass(frozen=True)
 class ODTCHardwareConstraints:
   """Hardware limits for ODTC variants - immutable reference data.
 
@@ -128,6 +144,35 @@ def get_constraints(variant: int) -> ODTCHardwareConstraints:
   if variant not in _CONSTRAINTS_MAP:
     raise ValueError(f"Unknown variant {variant}. Valid: {list(_CONSTRAINTS_MAP.keys())}")
   return _CONSTRAINTS_MAP[variant]
+
+
+_VALID_VARIANTS = (96, 384, 960000, 384000, 3840000)
+
+
+def normalize_variant(variant: int) -> int:
+  """Normalize variant to ODTC device code.
+
+  Accepts well count (96, 384) or device codes (960000, 384000, 3840000).
+  Maps 96 -> 960000, 384 -> 384000; passes through 960000, 384000, 3840000 unchanged.
+
+  Args:
+    variant: Well count (96, 384) or ODTC variant code (960000, 384000, 3840000).
+
+  Returns:
+    ODTC variant code: 960000 or 384000.
+
+  Raises:
+    ValueError: If variant is not one of 96, 384, 960000, 384000, 3840000.
+  """
+  if variant == 96:
+    return 960000
+  if variant in (384, 3840000):
+    return 384000
+  if variant in (960000, 384000):
+    return variant
+  raise ValueError(
+    f"Unknown variant {variant}. Valid: {list(_VALID_VARIANTS)}"
+  )
 
 
 # =============================================================================
@@ -423,6 +468,19 @@ class ODTCConfig:
       raise ValueError("ODTCConfig validation failed:\n  - " + "\n  - ".join(errors))
 
     return errors
+
+
+@dataclass
+class StoredProtocol:
+  """A protocol stored on the device, with instrument config for running it.
+
+  Returned by backend get_protocol(name). Use stored.protocol and stored.config
+  to inspect or run via run_protocol(stored.protocol, block_max_volume, config=stored.config).
+  """
+
+  name: str
+  protocol: "Protocol"
+  config: ODTCConfig
 
 
 # =============================================================================
@@ -1002,6 +1060,67 @@ def _analyze_loop_structure(
     if step.goto_number > 0:
       loops.append((step.goto_number, step.number, step.loop_number + 1))
   return sorted(loops, key=lambda x: x[1])  # Sort by end position
+
+
+def _expand_step_sequence(
+  steps: List[ODTCStep],
+  loops: List[Tuple[int, int, int]],
+) -> List[int]:
+  """Return step numbers (1-based) in execution order with loops expanded."""
+  if not steps:
+    return []
+  steps_by_num = {s.number: s for s in steps}
+  max_step = max(s.number for s in steps)
+  loop_by_end = {end: (start, count) for start, end, count in loops}
+
+  expanded: List[int] = []
+  i = 1
+  while i <= max_step:
+    if i not in steps_by_num:
+      i += 1
+      continue
+    expanded.append(i)
+    if i in loop_by_end:
+      start, count = loop_by_end[i]
+      for _ in range(count - 1):
+        for j in range(start, i + 1):
+          if j in steps_by_num:
+            expanded.append(j)
+    i += 1
+  return expanded
+
+
+def estimate_method_duration_seconds(method: ODTCMethod) -> float:
+  """Estimate total method duration from steps (ramp + plateau + overshoot, with loops).
+
+  Per ODTC Firmware Command Set: duration is slope time + overshoot time + plateau
+  time per step in consideration of the loops. Ramp time = |delta T| / slope;
+  slope is clamped to avoid division by zero.
+
+  Args:
+    method: ODTCMethod with steps and start_block_temperature.
+
+  Returns:
+    Estimated duration in seconds.
+  """
+  if not method.steps:
+    return 0.0
+  loops = _analyze_loop_structure(method.steps)
+  step_nums = _expand_step_sequence(method.steps, loops)
+  steps_by_num = {s.number: s for s in method.steps}
+
+  total = 0.0
+  prev_temp = method.start_block_temperature
+  min_slope = 0.1  # Avoid division by zero
+
+  for step_num in step_nums:
+    step = steps_by_num[step_num]
+    slope = max(abs(step.slope), min_slope)
+    ramp_time = abs(step.plateau_temperature - prev_temp) / slope
+    total += ramp_time + step.plateau_time + step.overshoot_time
+    prev_temp = step.plateau_temperature
+
+  return total
 
 
 def odtc_method_to_protocol(

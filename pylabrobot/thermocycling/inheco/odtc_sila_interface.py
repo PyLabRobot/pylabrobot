@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -158,41 +157,6 @@ DEFAULT_LIFETIME_OF_EXECUTION: float = 10800.0
 POLLING_START_BUFFER: float = 10.0
 
 
-def _parse_iso8601_duration_seconds(duration_str: str) -> Optional[float]:
-  """Parse ISO 8601 duration string to total seconds (supports D, H, M, S).
-
-  Examples: PT30.7S, PT30M, PT2H, PT1H30M10S, P1DT2H30M10.5S.
-  H, M, S are only parsed in the time part (after T) so P1M (month) is not treated as minutes.
-  Returns None if parsing fails.
-  """
-  if not isinstance(duration_str, str) or not duration_str.strip():
-    return None
-  total = 0.0
-  # Days: P1D
-  d_match = re.search(r"(\d+(?:\.\d+)?)D", duration_str, re.IGNORECASE)
-  if d_match:
-    total += float(d_match.group(1)) * 86400
-  # Time part (after T): H, M, S
-  time_part = re.search(r"T(.+)$", duration_str)
-  if time_part:
-    t = time_part.group(1)
-    h_match = re.search(r"(\d+(?:\.\d+)?)H", t, re.IGNORECASE)
-    if h_match:
-      total += float(h_match.group(1)) * 3600
-    m_match = re.search(r"(\d+(?:\.\d+)?)M", t, re.IGNORECASE)
-    if m_match:
-      total += float(m_match.group(1)) * 60
-    s_match = re.search(r"(\d+(?:\.\d+)?)S", t, re.IGNORECASE)
-    if s_match:
-      total += float(s_match.group(1))
-  else:
-    # No T: e.g. PT30.7S might be written as P30.7S in some variants; treat S only
-    s_match = re.search(r"(\d+(?:\.\d+)?)S", duration_str, re.IGNORECASE)
-    if s_match:
-      total += float(s_match.group(1))
-  return total if total > 0 else None
-
-
 @dataclass(frozen=True)
 class PendingCommand:
   """Tracks a pending async command."""
@@ -201,7 +165,7 @@ class PendingCommand:
   request_id: int
   fut: asyncio.Future[Any]
   started_at: float
-  estimated_remaining_time: Optional[float] = None  # Seconds from device duration (ISO 8601)
+  estimated_remaining_time: Optional[float] = None  # Caller-provided estimate (seconds)
   lock_id: Optional[str] = None  # LockId sent with LockDevice command (for tracking)
 
 
@@ -743,6 +707,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     if self._closed:
       raise RuntimeError("Interface is closed")
 
+    # Caller-provided estimate; must not be sent to device.
+    estimated_duration_seconds: Optional[float] = kwargs.pop("estimated_duration_seconds", None)
+
     if command != "GetStatus":
       self._validate_lock_id(lock_id)
 
@@ -819,11 +786,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     if return_code == 2:
       fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
-      result = decoded.get(f"{command}Response", {}).get(f"{command}Result", {})
-      duration_str = result.get("duration")
-      estimated_remaining_time: Optional[float] = None
-      if duration_str:
-        estimated_remaining_time = _parse_iso8601_duration_seconds(str(duration_str))
+      estimated_remaining_time: Optional[float] = estimated_duration_seconds
 
       pending_lock_id = None
       if command == "LockDevice" and "lockId" in params:
@@ -957,7 +920,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     Args:
       command: Command name (must be an async command).
       lock_id: LockId (defaults to None, validated if device is locked).
-      **kwargs: Additional command parameters.
+      **kwargs: Additional command parameters. May include estimated_duration_seconds
+        (optional float, seconds); it is used as estimated_remaining_time on the handle
+        and is not sent to the device.
 
     Returns:
       (future, request_id, estimated_remaining_time, started_at) tuple.
