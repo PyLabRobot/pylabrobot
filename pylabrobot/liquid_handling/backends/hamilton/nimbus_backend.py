@@ -1250,6 +1250,20 @@ class NimbusBackend(HamiltonTCPBackend):
     """Stop the backend and close connection."""
     await HamiltonTCPBackend.stop(self)
 
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Request tip presence on each channel.
+
+    Returns:
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
+    """
+    if self._pipette_address is None:
+      raise RuntimeError("Pipette address not discovered. Call setup() first.")
+    tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+    assert tip_status is not None, "IsTipPresent command returned None"
+    tip_present = tip_status.get("tip_present", [])
+    return [bool(v) for v in tip_present]
+
   def _build_waste_position_params(
     self,
     use_channels: List[int],
