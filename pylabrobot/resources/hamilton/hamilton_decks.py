@@ -19,12 +19,12 @@ logger = logging.getLogger("pylabrobot")
 _RAILS_WIDTH = 22.5  # space between rails (mm)
 
 STARLET_NUM_RAILS = 32
-STARLET_SIZE_X = 1360
+STARLET_SIZE_X = 1005
 STARLET_SIZE_Y = 653.5
 STARLET_SIZE_Z = 900
 
 STAR_NUM_RAILS = 56
-STAR_SIZE_X = 1900
+STAR_SIZE_X = 1545
 STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
 
@@ -170,7 +170,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     def should_check_collision(res: Resource) -> bool:
       """Determine if collision detection should be performed for this resource."""
-      if isinstance(res, HamiltonCoreGrippers):
+      if isinstance(res, (HamiltonCoreGrippers, Trash)):
         return False
       return True
 
@@ -402,8 +402,8 @@ def hamilton_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
     size_x=45,  # from venus
     size_y=45,  # from venus
     size_z=24,  # from venus
-    back_channel_y_center=0,
-    front_channel_y_center=-26,
+    back_channel_y_center=26 + 9.5,
+    front_channel_y_center=0 + 9.5,
     model=hamilton_core_gripper_1000ul_at_waste.__name__,
   )
 
@@ -419,8 +419,8 @@ def hamilton_core_gripper_1000ul_5ml_on_waste() -> HamiltonCoreGrippers:
     size_x=39,  # from venus
     size_y=61,  # from venus
     size_z=24,  # from venus
-    back_channel_y_center=0,
-    front_channel_y_center=-18,
+    back_channel_y_center=18 + 21.5,
+    front_channel_y_center=0 + 21.5,
     model=hamilton_core_gripper_1000ul_5ml_on_waste.__name__,
   )
 
@@ -437,6 +437,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     name="deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
+    with_waste_block: bool = True,
     with_trash: bool = True,
     with_trash96: bool = True,
     with_teaching_rack: bool = True,
@@ -444,7 +445,10 @@ class HamiltonSTARDeck(HamiltonDeck):
       Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
     ] = "1000uL-5mL-on-waste",
   ) -> None:
-    """Create a new STAR(let) deck of the given size."""
+    """Create a new STAR(let) deck of the given size.
+
+    `with_trash` and `with_teaching_rack` require `with_waste_block` to be true.
+    """
 
     super().__init__(
       num_rails=num_rails,
@@ -456,17 +460,6 @@ class HamiltonSTARDeck(HamiltonDeck):
       origin=origin,
     )
 
-    # assign trash area
-    if with_trash:
-      trash_x = (
-        size_x - 560
-      )  # only tested on STARLet, assume STAR is same distance from right max..
-
-      self.assign_child_resource(
-        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
-        location=Coordinate(x=trash_x, y=190.6, z=137.1),
-      )  # z I am not sure about
-
     self._trash96: Optional[Trash] = None
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
@@ -476,60 +469,78 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=216.4),
       )
 
-    if with_teaching_rack:
+    if with_waste_block:
       waste_block = Resource(name="waste_block", size_x=30, size_y=445.2, size_z=100)
-      tip_spots = [
-        TipSpot(
-          name=f"tip_spot_{i}",
-          size_x=9.0,
-          size_y=9.0,
-          size_z=0,
-          make_tip=hamilton_tip_300uL_filter,
-        )
-        for i in range(8)
-      ]
-      for i, ts in enumerate(tip_spots):
-        ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=23.1)  # A1 == index 0, topmost tip
-
-      teaching_tip_rack = TipRack(
-        name="teaching_tip_rack",
-        size_x=9,
-        size_y=9 * 8,
-        size_z=50.4,
-        ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("ABCDEFGH")},
-        with_tips=True,
-        model="hamilton_teaching_tip_rack",
-      )
-      waste_block.assign_child_resource(teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0))
       self.assign_child_resource(
         waste_block,
         location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=115.0, z=100),
       )
 
-    if core_grippers is not None and not with_teaching_rack:
-      raise ValueError(
-        "core_grippers can only be added when with_teaching_rack is True, "
-        "as they are attached to the waste block."
-      )
+      # assign trash area, positioned 25mm to the right of the waste block
+      # only run if the waste block is actually assigned.
+      if with_trash:
+        if with_waste_block:
+          waste_block_x = self.get_resource("waste_block").get_location_wrt(self).x
+        else:
+          # Fallback: anchor to the rightmost rail when no waste block is present.
+          waste_block_x = self.rails_to_location(self.num_rails - 1).x
+
+        trash_x = waste_block_x + 25
+
+        self.assign_child_resource(
+          resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+          location=Coordinate(x=trash_x, y=190.6, z=137.1),
+        )
+
+      if with_teaching_rack:
+        tip_spots = [
+          TipSpot(
+            name=f"tip_spot_{i}",
+            size_x=9.0,
+            size_y=9.0,
+            size_z=0,
+            make_tip=hamilton_tip_300uL_filter,
+          )
+          for i in range(8)
+        ]
+        for i, ts in enumerate(tip_spots):
+          ts.location = Coordinate(x=0, y=7 * 9 - 9 * i, z=23.1)  # A1 == index 0, topmost tip
+
+        teaching_tip_rack = TipRack(
+          name="teaching_tip_rack",
+          size_x=9,
+          size_y=9 * 8,
+          size_z=50.4,
+          ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("ABCDEFGH")},
+          with_tips=True,
+          model="hamilton_teaching_tip_rack",
+        )
+        waste_block.assign_child_resource(
+          teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
+        )
+    else:
+      if with_trash:
+        raise RuntimeError("Trash area cannot be created when no waste block is present.")
+      if with_teaching_rack:
+        raise RuntimeError("Teaching rack cannot be created when no waste block is present.")
 
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_at_waste(),
-        location=Coordinate(x=x, y=105.550, z=205) - waste_block.location,
-        # ignore_collision=True,
+        location=Coordinate(x=x, y=105.550 - 26 - 9.5, z=205) - waste_block.location,
       )
     elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
       x = 1337.5 if num_rails == STAR_NUM_RAILS else 797.5
       waste_block.assign_child_resource(
         hamilton_core_gripper_1000ul_5ml_on_waste(),
-        location=Coordinate(x=x, y=125, z=205) - waste_block.location,
-        # ignore_collision=True,
+        location=Coordinate(x=x, y=125 - 18 - 21.5, z=205) - waste_block.location,
       )
 
   def serialize(self) -> dict:
     return {
       **super().serialize(),
+      "with_waste_block": False,  # data encoded as child. (not very pretty to have this key though...)
       "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
       "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }

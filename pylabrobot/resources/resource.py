@@ -75,6 +75,8 @@ class Resource:
     category: The category of the resource, e.g. `tips`, `plate_carrier`, etc.
     model: The model of the resource (optional).
     barcode: The barcode of the resource (optional).
+    preferred_pickup_location: The location where the center of the gripper should be when picking
+      up this resource, relative to the resource's origin (optional).
   """
 
   def __init__(
@@ -87,6 +89,7 @@ class Resource:
     category: Optional[str] = None,
     model: Optional[str] = None,
     barcode: Optional[Barcode] = None,
+    preferred_pickup_location: Optional[Coordinate] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -97,6 +100,7 @@ class Resource:
     self.category = category
     self.model = model
     self.barcode = barcode
+    self.preferred_pickup_location = preferred_pickup_location
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
@@ -132,6 +136,7 @@ class Resource:
       "category": self.category,
       "model": self.model,
       "barcode": self.barcode.serialize() if self.barcode is not None else None,
+      "preferred_pickup_location": serialize(self.preferred_pickup_location),
       "children": [child.serialize() for child in self.children],
       "parent_name": self.parent.name if self.parent is not None else None,
     }
@@ -250,7 +255,7 @@ class Resource:
     """
 
     if self.location is None:
-      raise NoLocationError(f"Resource {self.name} has no location.")
+      raise NoLocationError(f"Resource '{self.name}' has no location.")
 
     rotated_anchor = Coordinate(
       *matrix_vector_multiply_3x3(
@@ -749,10 +754,13 @@ class Resource:
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
     barcode = data_copy.pop("barcode", None)
+    preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
       resource.barcode = Barcode.deserialize(barcode)
+    if preferred_pickup_location is not None:
+      resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
@@ -941,6 +949,9 @@ class Resource:
     # Baseline validity checks for attaching `resource` under `self`
     # (delegated to `_check_assignment` to stay consistent as rules evolve).
     self._check_assignment(resource=resource, reassign=reassign)
+
+    # Tree-wide invariants enforced at the root (e.g., global naming constraints).
+    # self.get_root()._check_naming_conflicts(resource=resource)
 
     # Subclasses can add stricter “drop rules” here.
     # Examples:

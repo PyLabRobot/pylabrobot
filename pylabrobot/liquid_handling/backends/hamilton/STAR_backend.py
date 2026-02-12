@@ -1193,6 +1193,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
+    self._channel_minimum_y_spacing: float = 9.0
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
     self._channel_traversal_height: float = 245.0
@@ -1205,6 +1206,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
     self._setup_done = False
+
+  @property
+  def num_arms(self) -> int:
+    return 1 if self.iswap_installed else 0
+
+  @property
+  def head96_installed(self) -> Optional[bool]:
+    return self.core96_head_installed
 
   @property
   def unsafe(self) -> "UnSafe":
@@ -1470,6 +1479,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     async def set_up_pip():
       if (not initialized or any(tip_presences)) and not skip_pip:
         await self.initialize_pip()
+      self._channel_minimum_y_spacing = (
+        9.0  # TODO: identify from machine directly to override default
+      )
 
     async def set_up_autoload():
       if self.autoload_installed and not skip_autoload:
@@ -1535,6 +1547,30 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # ============== LiquidHandlerBackend methods ==============
 
+  # # # # Single-Channel Pipette Commands # # # #
+
+  # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
+
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
+    """Request the minimum Y spacing for a given channel.
+    Args:
+      channel_idx: the channel index to query. (0-indexed)
+    Returns:
+      The minimum Y spacing in mm.
+    """
+
+    if not 0 <= channel_idx <= self.num_channels - 1:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, " f"got {channel_idx}."
+      )
+
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx),
+      command="VY",
+      fmt="yc### (n)",
+    )
+    return self.y_drive_increment_to_mm(resp["yc"][1])
+
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Check if a position is reachable by a channel (center-based)."""
     if not (0 <= channel_idx < self.num_channels):
@@ -1567,6 +1603,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
+
+  # # # ACTION Commands # # #
 
   async def pick_up_tips(
     self,
@@ -4146,8 +4184,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     center = location + resource.centers()[0] + offset
     y_width_to_gripper_bump = resource.get_absolute_size_y() - gripper_y_margin * 2
-    assert 9 <= y_width_to_gripper_bump <= round(resource.get_absolute_size_y()), (
-      f"width between channels must be between 9 and {resource.get_absolute_size_y()} mm"
+    assert (
+      self._channel_minimum_y_spacing
+      <= y_width_to_gripper_bump
+      <= round(resource.get_absolute_size_y())
+    ), (
+      f"width between channels must be between {self._channel_minimum_y_spacing} and "
+      f"{resource.get_absolute_size_y()} mm"
       " (i.e. the minimal distance between channels and the max y size of the resource"
     )
 
@@ -6614,6 +6657,63 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     response = await self.send_command(module="H0", command="QW", fmt="qw#")
     return bool(response.get("qw", 0) == 1)  # type?
 
+  async def head96_dispensing_drive_and_squeezer_driver_initialize(
+    self,
+    squeezer_speed: float = 15.0,  # mm/sec
+    squeezer_acceleration: float = 62.0,  # mm/sec**2,
+    squeezer_current_limit: int = 15,
+    dispensing_drive_current_limit: int = 7,
+  ):
+    """Initialize 96-head's dispensing drive AND squeezer drive
+
+    This command...
+      - drops any tips that might be on the channel (in place, without moving to trash!)
+      - moves the dispense drive to volume position 215.92 uL
+        (after tip pickup it will be at 218.19 uL)
+
+    Args:
+      squeezer_speed: Speed of the movement (mm/sec). Default is 15.0 mm/sec.
+      squeezer_acceleration: Acceleration of the movement (mm/sec**2). Default is 62.0 mm/sec**2.
+      squeezer_current_limit: Current limit for the squeezer drive (1-15). Default is 15.
+      dispensing_drive_current_limit: Current limit for the dispensing drive (1-15). Default is 7.
+    """
+
+    if not (0.01 <= squeezer_speed <= 16.69):
+      raise ValueError(
+        f"96-head squeezer drive speed must be between 0.01 and 16.69 mm/sec, is {squeezer_speed}"
+      )
+    if not (1.04 <= squeezer_acceleration <= 62.6):
+      raise ValueError(
+        "96-head squeezer drive acceleration must be between 1.04 and "
+        f"62.6 mm/sec**2, is {squeezer_acceleration}"
+      )
+    if not (1 <= squeezer_current_limit <= 15):
+      raise ValueError(
+        "96-head squeezer drive current limit must be between 1 and 15, "
+        f"is {squeezer_current_limit}"
+      )
+    if not (1 <= dispensing_drive_current_limit <= 15):
+      raise ValueError(
+        "96-head dispensing drive current limit must be between 1 and 15, "
+        f"is {dispensing_drive_current_limit}"
+      )
+
+    squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
+    squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
+      squeezer_acceleration
+    )
+
+    resp = await self.send_command(
+      module="H0",
+      command="PI",
+      sv=f"{squeezer_speed_increment:05}",
+      sr=f"{squeezer_acceleration_increment:06}",
+      sw=f"{squeezer_current_limit:02}",
+      dw=f"{dispensing_drive_current_limit:02}",
+    )
+
+    return resp
+
   # -------------- 3.10.2 96-Head Movements --------------
 
   # Conversion factors for 96-Head (mm per increment)
@@ -6978,6 +7078,34 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     )
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
+
+  # # # Granular commands # # #
+
+  async def head96_dispensing_drive_move_to_home_volume(
+    self,
+  ):
+    """Move the 96-head dispensing drive into its home position (vol=0.0 uL).
+
+    .. warning::
+      This firmware command is known to be broken: the 96-head dispensing drive cannot reach
+      vol=0.0 uL, which typically raises
+      ``STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted
+      area')}``.
+    """
+
+    logger.warning(
+      "head96_dispensing_drive_move_to_home_volume is a known broken firmware command: "
+      "the 96-head dispensing drive cannot reach vol=0.0 uL and will likely raise "
+      "STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted "
+      "area')}. Attempting to send the command anyway."
+    )
+
+    return await self.send_command(
+      module="H0",
+      command="DL",
+    )
+
+  # # # "Atomic" liquid handling commands # # #
 
   @need_iswap_parked
   @_requires_head96
@@ -7596,6 +7724,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command*10):04}",
     )
 
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = 0
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP = 1244.59
+
   @_requires_head96
   async def head96_dispensing_drive_move_to_position(
     self,
@@ -7615,7 +7746,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       current_protection_limiter: Current protection limiter (0-15), default 15
     """
 
-    if not (0 <= position <= 1244.59):
+    if not (
+      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
+      <= position
+      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
+    ):
       raise ValueError("position must be between 0 and 1244.59")
     if not (0.1 <= speed <= 1063.75):
       raise ValueError("speed must be between 0.1 and 1063.75")
@@ -9850,8 +9985,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channel_idx_plus_one_y_pos = 6
       # Insight: STAR machines appear to lose connection to a channel below y-position=6 mm
 
-    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - 9
-    max_safe_lower_y_pos = channel_idx_plus_one_y_pos + 9 if channel_idx_plus_one_y_pos != 0 else 6
+    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - self._channel_minimum_y_spacing
+    max_safe_lower_y_pos = (
+      channel_idx_plus_one_y_pos + self._channel_minimum_y_spacing
+      if channel_idx_plus_one_y_pos != 0
+      else 6
+    )
 
     # Enable safe start and end positions
     if start_pos_search:
@@ -9932,7 +10071,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       else:  # next channel
         adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
 
-      max_safe_y_mov_dist_post_detection = detected_material_y_pos - adjacent_y_pos - 9.0
+      max_safe_y_mov_dist_post_detection = (
+        detected_material_y_pos - adjacent_y_pos - self._channel_minimum_y_spacing
+      )
       move_target = detected_material_y_pos - min(
         post_detection_dist, max_safe_y_mov_dist_post_detection
       )
@@ -9943,7 +10084,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       else:  #  previous channel
         adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
 
-      max_safe_y_mov_dist_post_detection = adjacent_y_pos - detected_material_y_pos - 9.0
+      max_safe_y_mov_dist_post_detection = (
+        adjacent_y_pos - detected_material_y_pos - self._channel_minimum_y_spacing
+      )
       move_target = detected_material_y_pos + min(
         post_detection_dist, max_safe_y_mov_dist_post_detection
       )
@@ -10828,7 +10971,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     elif 5.8 <= y_positions[-1] < 6:
       y_positions[-1] = 6.0
 
-    min_diff = 9.0
+    min_diff = self._channel_minimum_y_spacing
     for i in range(len(y_positions) - 2, -1, -1):
       if y_positions[i] - y_positions[i + 1] < min_diff:
         y_positions[i] = y_positions[i + 1] + min_diff
@@ -10867,17 +11010,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       use_channels = list(ys.keys())
       back_channel = min(use_channels)
       for channel_idx in range(back_channel, 0, -1):
-        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < 9:
-          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + 9
+        if (
+          channel_locations[channel_idx - 1] - channel_locations[channel_idx]
+        ) < self._channel_minimum_y_spacing:
+          channel_locations[channel_idx - 1] = (
+            channel_locations[channel_idx] + self._channel_minimum_y_spacing
+          )
 
       # Similarly for the channels to the front of `front_channel`, make sure they are all
-      # spaced >=9mm apart. This time, we iterate from back (closest to `front_channel`)
-      # to the front (lh.backend.num_channels - 1), and put each channel >=9mm before the
-      # one behind it.
+      # spaced >= channel_minimum_y_spacing (usually 9mm) apart. This time, we iterate from
+      # back (closest to `front_channel`) to the front (lh.backend.num_channels - 1), and
+      # put each channel >= channel_minimum_y_spacing before the one behind it.
       front_channel = max(use_channels)
       for channel_idx in range(front_channel, self.num_channels - 1):
-        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < 9:
-          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - 9
+        if (
+          channel_locations[channel_idx] - channel_locations[channel_idx + 1]
+        ) < self._channel_minimum_y_spacing:
+          channel_locations[channel_idx + 1] = (
+            channel_locations[channel_idx] - self._channel_minimum_y_spacing
+          )
 
     # Quick checks before movement.
     if channel_locations[0] > 650:
