@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from pylabrobot.serializer import compact, deserialize, serialize
+from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
@@ -717,7 +717,7 @@ class Resource:
       >>> deck.save("my_layout.json")
     """
 
-    serialized = compact(self.serialize())
+    serialized = self.serialize()
     with open(fn, "w", encoding="utf-8") as f:
       json.dump(serialized, f, indent=indent)
 
