@@ -13,7 +13,7 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, fields
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
 
 if TYPE_CHECKING:
   from pylabrobot.thermocycling.standard import Protocol
@@ -513,7 +513,7 @@ class StoredProtocol:
   config: ODTCConfig
 
   def __str__(self) -> str:
-    """Human-readable summary: name, stage/step counts, optional config (variant, lid temp)."""
+    """Human-readable summary: name, stage/step counts, steps, optional config (variant, lid temp)."""
     lines: List[str] = [f"StoredProtocol(name={self.name!r})"]
     stages = self.protocol.stages
     if not stages:
@@ -529,6 +529,14 @@ class StoredProtocol:
         lines.append(
           f"    stage {i + 1}: {stage.repeats} repeat(s), {step_count} step(s){first_temp}"
         )
+        # Step-by-step instruction set
+        for j, step in enumerate(stage.steps):
+          temps = step.temperature
+          t_str = f"{temps[0]:.1f}°C" if temps else "—"
+          hold = step.hold_seconds
+          hold_str = f"{hold:.1f}s" if hold != float("inf") else "∞"
+          rate_str = f" @ {step.rate:.1f}°C/s" if step.rate is not None else ""
+          lines.append(f"      step {j + 1}: {t_str} hold {hold_str}{rate_str}")
     c = self.config
     if c.variant is not None or c.lid_temperature is not None:
       variant_str = f"variant={c.variant}" if c.variant is not None else ""
@@ -886,6 +894,44 @@ def list_method_names(method_set: ODTCMethodSet) -> List[str]:
   method_names = [m.name for m in method_set.methods]
   premethod_names = [pm.name for pm in method_set.premethods]
   return method_names + premethod_names
+
+
+class ProtocolList:
+  """Result of list_protocols(): methods and premethods with nice __str__ and backward-compat .all / iteration."""
+
+  def __init__(self, methods: List[str], premethods: List[str]) -> None:
+    self.methods = list(methods)
+    self.premethods = list(premethods)
+
+  @property
+  def all(self) -> List[str]:
+    """Flat list of all protocol names (methods then premethods), for backward compatibility."""
+    return self.methods + self.premethods
+
+  def __iter__(self) -> Iterator[str]:
+    yield from self.all
+
+  def __str__(self) -> str:
+    lines: List[str] = ["Methods (runnable protocols):"]
+    if self.methods:
+      for name in self.methods:
+        lines.append(f"  - {name}")
+    else:
+      lines.append("  (none)")
+    lines.append("PreMethods (setup-only, e.g. set temperature):")
+    if self.premethods:
+      for name in self.premethods:
+        lines.append(f"  - {name}")
+    else:
+      lines.append("  (none)")
+    return "\n".join(lines)
+
+  def __eq__(self, other: object) -> bool:
+    if isinstance(other, list):
+      return self.all == other
+    if isinstance(other, ProtocolList):
+      return self.methods == other.methods and self.premethods == other.premethods
+    return NotImplemented
 
 
 # =============================================================================

@@ -819,8 +819,8 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     methods, premethods = await self.backend.list_methods()
     self.assertEqual(methods, ["PCR_30", "PCR_35"])
     self.assertEqual(premethods, ["Pre25", "Pre37"])
-    all_names = await self.backend.list_protocols()
-    self.assertEqual(methods + premethods, all_names)
+    protocol_list = await self.backend.list_protocols()
+    self.assertEqual(methods + premethods, protocol_list.all)
 
   async def test_get_protocol_returns_none_for_missing(self):
     """Test get_protocol returns None when name not found."""

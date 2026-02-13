@@ -24,12 +24,12 @@ from .odtc_model import (
   PREMETHOD_ESTIMATED_DURATION_SECONDS,
   ODTCSensorValues,
   ODTCHardwareConstraints,
+  ProtocolList,
   StoredProtocol,
   estimate_method_duration_seconds,
   generate_odtc_timestamp,
   get_constraints,
   get_method_by_name,
-  list_method_names,
   list_method_names_only,
   list_premethod_names,
   method_set_to_xml,
@@ -722,7 +722,9 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       If wait=True: None. If wait=False: execution handle (awaitable).
     """
-    return await self._run_async_command("OpenDoor", wait, CommandExecution)
+    return await self._run_async_command(
+      "OpenDoor", wait, CommandExecution, estimated_duration_seconds=60.0
+    )
 
   async def close_door(self, wait: bool = True) -> Optional[CommandExecution]:
     """Close the door (thermocycler lid). SiLA: CloseDoor.
@@ -734,7 +736,9 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       If wait=True: None. If wait=False: execution handle (awaitable).
     """
-    return await self._run_async_command("CloseDoor", wait, CommandExecution)
+    return await self._run_async_command(
+      "CloseDoor", wait, CommandExecution, estimated_duration_seconds=60.0
+    )
 
 
   # Sensor commands TODO: We cleaned this up at the xml extraction level, clean the method up for temperature reporting
@@ -1017,14 +1021,19 @@ class ODTCBackend(ThermocyclerBackend):
     protocol, config = odtc_method_to_protocol(resolved)
     return StoredProtocol(name=name, protocol=protocol, config=config)
 
-  async def list_protocols(self) -> List[str]:
-    """List all protocol names (both methods and premethods) on the device.
+  async def list_protocols(self) -> ProtocolList:
+    """List all protocol names (methods and premethods) on the device.
 
     Returns:
-      List of protocol names (strings).
+      ProtocolList with .methods, .premethods, .all (flat list), and a __str__
+      that prints Methods and PreMethods in clear sections. Iteration yields
+      all names (methods then premethods).
     """
     method_set = await self.get_method_set()
-    return list_method_names(method_set)
+    return ProtocolList(
+      methods=list_method_names_only(method_set),
+      premethods=list_premethod_names(method_set),
+    )
 
   async def list_methods(self) -> Tuple[List[str], List[str]]:
     """List method names and premethod names separately.
