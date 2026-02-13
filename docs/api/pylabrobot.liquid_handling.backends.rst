@@ -40,7 +40,6 @@ Net backends can be used to communicate with servers that manage liquid handling
   :nosignatures:
   :recursive:
 
-    backends.http.HTTPBackend
     backends.websocket.WebSocketBackend
 
 
