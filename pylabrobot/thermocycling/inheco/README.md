@@ -319,11 +319,11 @@ methods, premethods = await tc.backend.list_methods()
 ### Get Runnable Protocol by Name
 
 ```python
-# Get a runnable protocol by name (returns StoredProtocol or None for premethods)
-stored = await tc.backend.get_protocol("PCR_30cycles")
-if stored:
-    print(f"Protocol: {stored.name}")
-    # stored.protocol: Protocol; stored.config: ODTCConfig
+# Get a runnable protocol by name (returns ODTCProtocol or None for premethods)
+odtc = await tc.backend.get_protocol("PCR_30cycles")
+if odtc:
+    print(f"Protocol: {odtc.name}")
+    # odtc is ODTCProtocol (subclasses Protocol); use odtc_protocol_to_protocol(odtc) for (Protocol, ODTCProtocol)
 ```
 
 ### Get Full MethodSet (Advanced)
@@ -343,18 +343,17 @@ for premethod in method_set.premethods:
 ### Inspect Stored Protocol
 
 ```python
-# Get runnable protocol from device (StoredProtocol has protocol + config)
-stored = await tc.backend.get_protocol("PCR_30cycles")
-if stored:
-    print(stored)  # Human-readable summary (name, stages, steps, config)
-    # stored.protocol: Generic PyLabRobot Protocol (stages, steps, temperatures, times)
-    # stored.config: ODTCConfig preserving all ODTC-specific parameters
-    await tc.run_protocol(stored.protocol, block_max_volume=50.0, config=stored.config)
+# Get runnable protocol from device (ODTCProtocol subclasses Protocol; has name, stages, steps, config fields)
+odtc = await tc.backend.get_protocol("PCR_30cycles")
+if odtc:
+    protocol, _ = odtc_protocol_to_protocol(odtc)  # from odtc_model
+    print(odtc)  # Human-readable summary (name, stages, steps, config fields)
+    await tc.run_protocol(odtc, block_max_volume=50.0)  # backend accepts ODTCProtocol
 ```
 
 ### Display and logging
 
-- **StoredProtocol** and **ODTCSensorValues**: `print(stored)` and `print(await tc.backend.read_temperatures())` show labeled summaries. ODTCSensorValues `__str__` is multi-line for display; use `format_compact()` for single-line logs.
+- **ODTCProtocol** and **ODTCSensorValues**: `print(odtc)` and `print(await tc.backend.read_temperatures())` show labeled summaries. ODTCSensorValues `__str__` is multi-line for display; use `format_compact()` for single-line logs.
 - **Wait messages**: When you `await handle`, `handle.wait()`, or `handle.wait_resumable()`, the message logged at INFO is multi-line (command, duration, remaining time) for clear console/notebook display.
 
 ## Running Protocols (reference)

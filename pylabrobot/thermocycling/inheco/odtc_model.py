@@ -8,15 +8,18 @@ PyLabRobot Protocol and ODTC method representation.
 
 from __future__ import annotations
 
+import html
 import logging
 from datetime import datetime
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, fields
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Literal, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+
+from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 if TYPE_CHECKING:
-  from pylabrobot.thermocycling.standard import Protocol
+  pass  # Protocol used at runtime for ODTCProtocol base
 
 logger = logging.getLogger(__name__)
 
@@ -303,11 +306,11 @@ class ODTCMethod:
 
 @dataclass
 class ODTCMethodSet:
-  """Container for all methods and premethods."""
+  """Container for all methods and premethods (in-memory as ODTCProtocol)."""
 
-  delete_all_methods: bool = xml_field(tag="DeleteAllMethods", default=False)
-  premethods: List[ODTCPreMethod] = xml_child_list(tag="PreMethod")
-  methods: List[ODTCMethod] = xml_child_list(tag="Method")
+  delete_all_methods: bool = False
+  premethods: List[ODTCProtocol] = field(default_factory=list)
+  methods: List[ODTCProtocol] = field(default_factory=list)
 
 
 @dataclass
@@ -357,6 +360,91 @@ class ODTCSensorValues:
     if self.timestamp:
       return f"ODTCSensorValues({self.timestamp})  {line}"
     return f"ODTCSensorValues  {line}"
+
+
+# =============================================================================
+# DataEvent Snapshots (SiLA DataEvent payload parsing)
+# =============================================================================
+
+
+@dataclass
+class ODTCDataEventSnapshot:
+  """Parsed snapshot from one DataEvent (elapsed time and temperatures)."""
+
+  elapsed_s: float
+  target_temp_c: Optional[float] = None
+  current_temp_c: Optional[float] = None
+  lid_temp_c: Optional[float] = None
+
+
+def _parse_data_event_series_value(series_elem: Any) -> Optional[float]:
+  """Extract last integerValue from a dataSeries element as float."""
+  values = series_elem.findall(".//integerValue")
+  if not values:
+    return None
+  text = values[-1].text
+  if text is None:
+    return None
+  try:
+    return float(text)
+  except ValueError:
+    return None
+
+
+def parse_data_event_payload(payload: Dict[str, Any]) -> Optional[ODTCDataEventSnapshot]:
+  """Parse a single DataEvent payload into an ODTCDataEventSnapshot.
+
+  Input: dict with 'requestId' and 'dataValue' (string of XML, possibly
+  double-escaped). Extracts Elapsed time (ms), Target temperature, Current
+  temperature, LID temperature (1/100°C -> °C). Returns None on parse error.
+  """
+  if not isinstance(payload, dict):
+    return None
+  data_value = payload.get("dataValue")
+  if not data_value or not isinstance(data_value, str):
+    return None
+  try:
+    outer = ET.fromstring(data_value)
+  except ET.ParseError:
+    return None
+  any_data = outer.find(".//{*}AnyData") or outer.find(".//AnyData")
+  if any_data is None or any_data.text is None:
+    return None
+  inner_xml = any_data.text.strip()
+  if not inner_xml:
+    return None
+  if "&lt;" in inner_xml or "&gt;" in inner_xml:
+    inner_xml = html.unescape(inner_xml)
+  try:
+    inner = ET.fromstring(inner_xml)
+  except ET.ParseError:
+    return None
+  elapsed_s = 0.0
+  target_temp_c: Optional[float] = None
+  current_temp_c: Optional[float] = None
+  lid_temp_c: Optional[float] = None
+  for elem in inner.iter():
+    if not elem.tag.endswith("dataSeries"):
+      continue
+    name_id = elem.get("nameId")
+    unit = elem.get("unit") or ""
+    raw = _parse_data_event_series_value(elem)
+    if raw is None:
+      continue
+    if name_id == "Elapsed time" and unit == "ms":
+      elapsed_s = raw / 1000.0
+    elif name_id == "Target temperature" and unit == "1/100°C":
+      target_temp_c = raw / 100.0
+    elif name_id == "Current temperature" and unit == "1/100°C":
+      current_temp_c = raw / 100.0
+    elif name_id == "LID temperature" and unit == "1/100°C":
+      lid_temp_c = raw / 100.0
+  return ODTCDataEventSnapshot(
+    elapsed_s=elapsed_s,
+    target_temp_c=target_temp_c,
+    current_temp_c=current_temp_c,
+    lid_temp_c=lid_temp_c,
+  )
 
 
 # =============================================================================
@@ -498,6 +586,160 @@ class ODTCConfig:
       raise ValueError("ODTCConfig validation failed:\n  - " + "\n  - ".join(errors))
 
     return errors
+
+
+# =============================================================================
+# ODTCProtocol (protocol + config; subclasses Protocol for resource API)
+# =============================================================================
+
+
+@dataclass
+class ODTCProtocol(Protocol):
+  """ODTC runnable unit: protocol + config (method or premethod).
+
+  Subclasses Protocol so Thermocycler.run_protocol(protocol, ...) accepts
+  ODTCProtocol. For kind='method', stages is the cycle; for kind='premethod',
+  pass stages=[] (premethods run by name only).
+  """
+
+  kind: Literal["method", "premethod"] = "method"
+  name: str = ""
+  creator: Optional[str] = None
+  description: Optional[str] = None
+  datetime: Optional[str] = None
+  target_block_temperature: float = 0.0
+  target_lid_temperature: float = 0.0
+  variant: int = 960000
+  plate_type: int = 0
+  fluid_quantity: int = 0
+  post_heating: bool = False
+  start_block_temperature: float = 0.0
+  start_lid_temperature: float = 0.0
+  steps: List[ODTCStep] = field(default_factory=list)
+  pid_set: List[ODTCPID] = field(default_factory=lambda: [ODTCPID(number=1)])
+  step_settings: Dict[int, ODTCStepSettings] = field(default_factory=dict)
+  default_heating_slope: float = 4.4
+  default_cooling_slope: float = 2.2
+
+
+def _odtc_method_to_odtc_protocol(method: ODTCMethod) -> ODTCProtocol:
+  """Build ODTCProtocol from ODTCMethod (for methods loaded from device)."""
+  protocol, config = odtc_method_to_protocol(method)
+  return ODTCProtocol(
+    stages=protocol.stages,
+    kind="method",
+    name=method.name,
+    creator=method.creator,
+    description=method.description,
+    datetime=method.datetime,
+    variant=method.variant,
+    plate_type=method.plate_type,
+    fluid_quantity=method.fluid_quantity,
+    post_heating=method.post_heating,
+    start_block_temperature=method.start_block_temperature,
+    start_lid_temperature=method.start_lid_temperature,
+    steps=list(method.steps),
+    pid_set=list(method.pid_set) if method.pid_set else [ODTCPID(number=1)],
+    step_settings=dict(config.step_settings),
+    default_heating_slope=config.default_heating_slope,
+    default_cooling_slope=config.default_cooling_slope,
+  )
+
+
+def _odtc_premethod_to_odtc_protocol(premethod: ODTCPreMethod) -> ODTCProtocol:
+  """Build ODTCProtocol from ODTCPreMethod (for premethods loaded from device)."""
+  return ODTCProtocol(
+    stages=[],
+    kind="premethod",
+    name=premethod.name,
+    creator=premethod.creator,
+    description=premethod.description,
+    datetime=premethod.datetime,
+    target_block_temperature=premethod.target_block_temperature,
+    target_lid_temperature=premethod.target_lid_temperature,
+  )
+
+
+def _odtc_protocol_to_method(odtc: ODTCProtocol) -> ODTCMethod:
+  """Build ODTCMethod from ODTCProtocol (kind must be 'method')."""
+  if odtc.kind != "method":
+    raise ValueError("ODTCProtocol must have kind='method' to convert to ODTCMethod")
+  return ODTCMethod(
+    name=odtc.name,
+    variant=odtc.variant,
+    plate_type=odtc.plate_type,
+    fluid_quantity=odtc.fluid_quantity,
+    post_heating=odtc.post_heating,
+    start_block_temperature=odtc.start_block_temperature,
+    start_lid_temperature=odtc.start_lid_temperature,
+    steps=list(odtc.steps),
+    pid_set=list(odtc.pid_set) if odtc.pid_set else [ODTCPID(number=1)],
+    creator=odtc.creator,
+    description=odtc.description,
+    datetime=odtc.datetime,
+  )
+
+
+def _odtc_protocol_to_premethod(odtc: ODTCProtocol) -> ODTCPreMethod:
+  """Build ODTCPreMethod from ODTCProtocol (kind must be 'premethod')."""
+  if odtc.kind != "premethod":
+    raise ValueError("ODTCProtocol must have kind='premethod' to convert to ODTCPreMethod")
+  return ODTCPreMethod(
+    name=odtc.name,
+    target_block_temperature=odtc.target_block_temperature,
+    target_lid_temperature=odtc.target_lid_temperature,
+    creator=odtc.creator,
+    description=odtc.description,
+    datetime=odtc.datetime,
+  )
+
+
+def protocol_to_odtc_protocol(
+  protocol: "Protocol",
+  config: Optional[ODTCConfig] = None,
+) -> ODTCProtocol:
+  """Convert a standard Protocol to ODTCProtocol (kind='method').
+
+  Args:
+    protocol: Standard Protocol with stages and steps.
+    config: Optional ODTC config; if None, defaults are used.
+
+  Returns:
+    ODTCProtocol ready for upload or run.
+  """
+  method = protocol_to_odtc_method(protocol, config)
+  return _odtc_method_to_odtc_protocol(method)
+
+
+def odtc_protocol_to_protocol(odtc: ODTCProtocol) -> Tuple["Protocol", ODTCProtocol]:
+  """Convert ODTCProtocol to Protocol view and return (protocol, odtc).
+
+  For kind='method', builds Protocol from steps; for kind='premethod',
+  returns Protocol(stages=[]) since premethods have no cycle.
+
+  Returns:
+    Tuple of (Protocol, ODTCProtocol). The ODTCProtocol is the same object
+    for convenience (e.g. config fields).
+  """
+  if odtc.kind == "method":
+    method = _odtc_protocol_to_method(odtc)
+    protocol, _ = odtc_method_to_protocol(method)
+    return (protocol, odtc)
+  return (Protocol(stages=[]), odtc)
+
+
+def estimate_odtc_protocol_duration_seconds(odtc: ODTCProtocol) -> float:
+  """Estimate total run duration for an ODTCProtocol.
+
+  Premethods use PREMETHOD_ESTIMATED_DURATION_SECONDS; methods use
+  step/loop-based estimation.
+
+  Returns:
+    Estimated duration in seconds.
+  """
+  if odtc.kind == "premethod":
+    return PREMETHOD_ESTIMATED_DURATION_SECONDS
+  return estimate_method_duration_seconds(_odtc_protocol_to_method(odtc))
 
 
 @dataclass
@@ -771,17 +1013,27 @@ def _method_to_xml(method: ODTCMethod, parent: ET.Element) -> ET.Element:
 
 
 def parse_method_set_from_root(root: ET.Element) -> ODTCMethodSet:
-  """Parse a MethodSet from an XML root element."""
+  """Parse a MethodSet from an XML root element.
+
+  Parses Method/PreMethod into ODTCMethod/ODTCPreMethod, then converts
+  each to ODTCProtocol for the in-memory set.
+  """
   delete_elem = root.find("DeleteAllMethods")
   delete_all = False
   if delete_elem is not None and delete_elem.text:
     delete_all = delete_elem.text.lower() == "true"
-  premethods = [from_xml(pm, ODTCPreMethod) for pm in root.findall("PreMethod")]
-  methods = [_parse_method(m) for m in root.findall("Method")]
+  premethod_protos = [
+    _odtc_premethod_to_odtc_protocol(from_xml(pm, ODTCPreMethod))
+    for pm in root.findall("PreMethod")
+  ]
+  method_protos = [
+    _odtc_method_to_odtc_protocol(_parse_method(m))
+    for m in root.findall("Method")
+  ]
   return ODTCMethodSet(
     delete_all_methods=delete_all,
-    premethods=premethods,
-    methods=methods,
+    premethods=premethod_protos,
+    methods=method_protos,
   )
 
 
@@ -798,19 +1050,22 @@ def parse_method_set_file(filepath: str) -> ODTCMethodSet:
 
 
 def method_set_to_xml(method_set: ODTCMethodSet) -> str:
-  """Serialize a MethodSet to XML string."""
+  """Serialize a MethodSet to XML string.
+
+  Converts each ODTCProtocol to ODTCMethod/ODTCPreMethod for serialization.
+  """
   root = ET.Element("MethodSet")
 
   # Add DeleteAllMethods
   ET.SubElement(root, "DeleteAllMethods").text = "true" if method_set.delete_all_methods else "false"
 
   # Add PreMethods
-  for pm in method_set.premethods:
-    to_xml(pm, "PreMethod", root)
+  for odtc in method_set.premethods:
+    to_xml(_odtc_protocol_to_premethod(odtc), "PreMethod", root)
 
   # Add Methods (with special PIDSet handling)
-  for m in method_set.methods:
-    _method_to_xml(m, root)
+  for odtc in method_set.methods:
+    _method_to_xml(_odtc_protocol_to_method(odtc), root)
 
   return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
@@ -828,34 +1083,30 @@ def parse_sensor_values(xml_str: str) -> ODTCSensorValues:
 
 
 
-def get_premethod_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCPreMethod]:
-  """Find a premethod by name."""
+def get_premethod_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCProtocol]:
+  """Find a premethod by name (returns ODTCProtocol)."""
   return next((pm for pm in method_set.premethods if pm.name == name), None)
 
 
-# Keep the method-only version as internal helper
-def _get_method_only_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCMethod]:
+def _get_method_only_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCProtocol]:
   """Find a method by name (methods only, not premethods)."""
   return next((m for m in method_set.methods if m.name == name), None)
 
 
-def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[Union[ODTCMethod, ODTCPreMethod]]:
-  """Find a method by name, searching both methods and premethods.
-  
+def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCProtocol]:
+  """Find a method or premethod by name.
+
   Args:
     method_set: ODTCMethodSet to search.
     name: Method name to find.
-    
+
   Returns:
-    ODTCMethod or ODTCPreMethod if found, None otherwise.
+    ODTCProtocol if found (method or premethod), None otherwise.
   """
-  # Search methods first, then premethods
-  method = _get_method_only_by_name(method_set, name)
-  if method is not None:
-    return method
-  premethod = get_premethod_by_name(method_set, name)
-  if premethod is not None:
-    return premethod
+  m = _get_method_only_by_name(method_set, name)
+  if m is not None:
+    return m
+  return get_premethod_by_name(method_set, name)
   return None
 
 

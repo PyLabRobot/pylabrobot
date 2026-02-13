@@ -97,6 +97,7 @@ class Thermocycler(ResourceHolder, Machine):
 
     Args:
       protocol: Protocol object containing stages with steps and repeats.
+        Backends may accept subclasses (e.g. ODTCProtocol).
       block_max_volume: Maximum block volume (µL) for safety.
       **backend_kwargs: Backend-specific options (e.g. ODTC accepts
         config=ODTCConfig).
@@ -106,14 +107,15 @@ class Thermocycler(ResourceHolder, Machine):
       return a handle. To block until done: await handle.wait() or
       wait_for_profile_completion().
     """
-    num_zones = len(protocol.stages[0].steps[0].temperature)
-    for stage in protocol.stages:
-      for i, step in enumerate(stage.steps):
-        if len(step.temperature) != num_zones:
-          raise ValueError(
-            f"All steps must have the same number of temperatures. "
-            f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
-          )
+    if protocol.stages:
+      num_zones = len(protocol.stages[0].steps[0].temperature)
+      for stage in protocol.stages:
+        for i, step in enumerate(stage.steps):
+          if len(step.temperature) != num_zones:
+            raise ValueError(
+              f"All steps must have the same number of temperatures. "
+              f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
+            )
 
     return await self.backend.run_protocol(
       protocol, block_max_volume, **backend_kwargs

@@ -27,7 +27,7 @@ stored-by-name (ODTC only).
 """
 
 from .odtc_backend import CommandExecution, MethodExecution, ODTCBackend
-from .odtc_model import ODTC_DIMENSIONS, ProtocolList, StoredProtocol, normalize_variant
+from .odtc_model import ODTC_DIMENSIONS, ODTCProtocol, ProtocolList, normalize_variant
 from .odtc_thermocycler import ODTCThermocycler
 
 __all__ = [
@@ -35,8 +35,8 @@ __all__ = [
   "MethodExecution",
   "ODTCBackend",
   "ODTC_DIMENSIONS",
+  "ODTCProtocol",
   "ODTCThermocycler",
   "ProtocolList",
-  "StoredProtocol",
   "normalize_variant",
 ]

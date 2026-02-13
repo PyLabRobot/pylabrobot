@@ -11,12 +11,15 @@ from pylabrobot.thermocycling.inheco.odtc_model import (
   ODTCMethod,
   ODTCMethodSet,
   ODTC_DIMENSIONS,
+  ODTCProtocol,
   ODTCPreMethod,
   ODTCStep,
   PREMETHOD_ESTIMATED_DURATION_SECONDS,
-  StoredProtocol,
+  _odtc_method_to_odtc_protocol,
+  _odtc_premethod_to_odtc_protocol,
   estimate_method_duration_seconds,
   normalize_variant,
+  odtc_protocol_to_protocol,
 )
 from pylabrobot.thermocycling.inheco.odtc_thermocycler import ODTCThermocycler
 from pylabrobot.resources import Coordinate
@@ -802,8 +805,8 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_list_protocols(self):
     """Test list_protocols returns method and premethod names."""
     method_set = ODTCMethodSet(
-      methods=[ODTCMethod(name="PCR_30")],
-      premethods=[ODTCPreMethod(name="Pre25")],
+      methods=[_odtc_method_to_odtc_protocol(ODTCMethod(name="PCR_30"))],
+      premethods=[_odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre25"))],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     names = await self.backend.list_protocols()
@@ -812,8 +815,14 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_list_methods(self):
     """Test list_methods returns (method_names, premethod_names) and matches list_protocols."""
     method_set = ODTCMethodSet(
-      methods=[ODTCMethod(name="PCR_30"), ODTCMethod(name="PCR_35")],
-      premethods=[ODTCPreMethod(name="Pre25"), ODTCPreMethod(name="Pre37")],
+      methods=[
+        _odtc_method_to_odtc_protocol(ODTCMethod(name="PCR_30")),
+        _odtc_method_to_odtc_protocol(ODTCMethod(name="PCR_35")),
+      ],
+      premethods=[
+        _odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre25")),
+        _odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre37")),
+      ],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     methods, premethods = await self.backend.list_methods()
@@ -832,30 +841,33 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test get_protocol returns None for premethod names (runnable protocols only)."""
     method_set = ODTCMethodSet(
       methods=[],
-      premethods=[ODTCPreMethod(name="Pre25")],
+      premethods=[_odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre25"))],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     result = await self.backend.get_protocol("Pre25")
     self.assertIsNone(result)
 
   async def test_get_protocol_returns_stored_for_method(self):
-    """Test get_protocol returns StoredProtocol for runnable method."""
+    """Test get_protocol returns ODTCProtocol for runnable method."""
     method_set = ODTCMethodSet(
       methods=[
-        ODTCMethod(
-          name="PCR_30",
-          steps=[ODTCStep(number=1, plateau_temperature=95.0, plateau_time=30.0)],
+        _odtc_method_to_odtc_protocol(
+          ODTCMethod(
+            name="PCR_30",
+            steps=[ODTCStep(number=1, plateau_temperature=95.0, plateau_time=30.0)],
+          )
         )
       ],
       premethods=[],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     result = await self.backend.get_protocol("PCR_30")
-    self.assertIsInstance(result, StoredProtocol)
+    self.assertIsInstance(result, ODTCProtocol)
     assert result is not None  # narrow for type checker
     self.assertEqual(result.name, "PCR_30")
-    self.assertEqual(len(result.protocol.stages), 1)
-    self.assertEqual(len(result.protocol.stages[0].steps), 1)
+    protocol, _ = odtc_protocol_to_protocol(result)
+    self.assertEqual(len(protocol.stages), 1)
+    self.assertEqual(len(protocol.stages[0].steps), 1)
 
   async def test_run_stored_protocol_calls_execute_method(self):
     """Test run_stored_protocol calls execute_method with name, wait, and estimated_duration_seconds."""

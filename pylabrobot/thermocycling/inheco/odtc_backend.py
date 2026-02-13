@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional, Tuple, Union
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
-from .odtc_data_events import ODTCDataEventSnapshot, parse_data_event_payload
 from .odtc_sila_interface import (
   DEFAULT_LIFETIME_OF_EXECUTION,
   ODTCSiLAInterface,
@@ -18,16 +18,15 @@ from .odtc_sila_interface import (
   SiLAState,
 )
 from .odtc_model import (
-  ODTCMethod,
   ODTCConfig,
   ODTCMethodSet,
-  ODTCPreMethod,
-  PREMETHOD_ESTIMATED_DURATION_SECONDS,
+  ODTCDataEventSnapshot,
+  ODTCProtocol,
   ODTCSensorValues,
   ODTCHardwareConstraints,
   ProtocolList,
-  StoredProtocol,
-  estimate_method_duration_seconds,
+  PREMETHOD_ESTIMATED_DURATION_SECONDS,
+  estimate_odtc_protocol_duration_seconds,
   generate_odtc_timestamp,
   get_constraints,
   get_method_by_name,
@@ -35,16 +34,166 @@ from .odtc_model import (
   list_premethod_names,
   method_set_to_xml,
   normalize_variant,
-  odtc_method_to_protocol,
+  odtc_protocol_to_protocol,
+  parse_data_event_payload,
   parse_method_set,
   parse_method_set_file,
   parse_sensor_values,
-  protocol_to_odtc_method,
+  protocol_to_odtc_protocol,
   resolve_protocol_name,
 )
 
 # Buffer (seconds) added to estimated duration for timeout cap (fail faster than full lifetime).
 LIFETIME_BUFFER_SECONDS: float = 60.0
+
+
+# =============================================================================
+# SiLA Response Normalization (single abstraction for dict or ET responses)
+# =============================================================================
+
+
+class _NormalizedSiLAResponse:
+  """Normalized result of a SiLA command (sync dict or async ElementTree).
+
+  Used only by ODTCBackend. Build via from_raw(); then get_value() for
+  dict-path extraction or get_parameter_string() for Parameter/String.
+  """
+
+  def __init__(
+    self,
+    command_name: str,
+    _dict: Optional[Dict[str, Any]] = None,
+    _et_root: Optional[ET.Element] = None,
+  ) -> None:
+    self._command_name = command_name
+    self._dict = _dict
+    self._et_root = _et_root
+    if _dict is not None and _et_root is not None:
+      raise ValueError("_NormalizedSiLAResponse: provide _dict or _et_root, not both")
+    if _dict is None and _et_root is None:
+      raise ValueError("_NormalizedSiLAResponse: provide _dict or _et_root")
+
+  @classmethod
+  def from_raw(
+    cls,
+    raw: Union[Dict[str, Any], ET.Element, None],
+    command_name: str,
+  ) -> "_NormalizedSiLAResponse":
+    """Build from send_command return value (dict for sync, ET root for async)."""
+    if raw is None:
+      return cls(command_name=command_name, _dict={})
+    if isinstance(raw, dict):
+      return cls(command_name=command_name, _dict=raw)
+    return cls(command_name=command_name, _et_root=raw)
+
+  def get_value(self, *path: str, required: bool = True) -> Any:
+    """Get nested value from dict response by key path. Only for dict (sync) responses."""
+    if self._dict is None:
+      raise ValueError(
+        f"{self._command_name}: get_value() only supported for dict (sync) responses"
+      )
+    value: Any = self._dict
+    path_list = list(path)
+    for key in path_list:
+      if not isinstance(value, dict):
+        if required:
+          raise ValueError(
+            f"{self._command_name}: Expected dict at path {path_list}, got {type(value).__name__}"
+          )
+        return None
+      value = value.get(key, {})
+
+    if value is None or (isinstance(value, dict) and not value and required):
+      if required:
+        raise ValueError(
+          f"{self._command_name}: Could not find value at path {path_list}. Response: {self._dict}"
+        )
+      return None
+    return value
+
+  def get_parameter_string(
+    self,
+    name: str,
+    allow_root_fallback: bool = False,
+  ) -> str:
+    """Get Parameter[@name=name]/String value (dict or ET response)."""
+    if self._dict is not None:
+      response_data_path: List[str] = [
+        f"{self._command_name}Response",
+        "ResponseData",
+      ]
+      response_data = self._get_dict_path(response_data_path, required=True)
+      param = response_data.get("Parameter")
+      if isinstance(param, list):
+        found = next((p for p in param if p.get("name") == name), None)
+      elif isinstance(param, dict):
+        found = param if param.get("name") == name else None
+      else:
+        found = None
+      if found is None:
+        raise ValueError(
+          f"Parameter '{name}' not found in {self._command_name} response"
+        )
+      value = found.get("String")
+      if value is None:
+        raise ValueError(f"String element not found in {name} parameter")
+      return str(value)
+
+    resp = self._et_root
+    if resp is None:
+      raise ValueError(f"Empty response from {self._command_name}")
+
+    param = None
+    if resp.tag == "Parameter" and resp.get("name") == name:
+      param = resp
+    else:
+      param = resp.find(f".//Parameter[@name='{name}']")
+
+    if param is None and allow_root_fallback:
+      param = resp if resp.tag == "Parameter" else resp.find(".//Parameter")
+
+    if param is None:
+      xml_str = ET.tostring(resp, encoding="unicode")
+      raise ValueError(
+        f"Parameter '{name}' not found in {self._command_name} response. "
+        f"Root element tag: {resp.tag}\nFull XML response:\n{xml_str}"
+      )
+
+    string_elem = param.find("String")
+    if string_elem is None or string_elem.text is None:
+      raise ValueError(
+        f"String element not found in {self._command_name} Parameter response"
+      )
+    return str(string_elem.text)
+
+  def _get_dict_path(self, path: List[str], required: bool = True) -> Any:
+    """Internal: traverse dict by path."""
+    if self._dict is None:
+      if required:
+        raise ValueError(f"{self._command_name}: response is not dict")
+      return None
+    value: Any = self._dict
+    for key in path:
+      if not isinstance(value, dict):
+        if required:
+          raise ValueError(
+            f"{self._command_name}: Expected dict at path {path}, got {type(value).__name__}"
+          )
+        return None
+      value = value.get(key, {})
+    if value is None or (isinstance(value, dict) and not value and required):
+      if required:
+        raise ValueError(f"{self._command_name}: Could not find value at path {path}")
+      return None
+    return value
+
+  def raw(self) -> Union[Dict[str, Any], ET.Element]:
+    """Return the underlying dict or ET root (e.g. for GetLastData)."""
+    if self._dict is not None:
+      return self._dict
+    if self._et_root is not None:
+      return self._et_root
+    return {}
 
 
 class ProtocolProgress(NamedTuple):
@@ -578,143 +727,18 @@ class ODTCBackend(ThermocyclerBackend):
     )
 
   # ============================================================================
-  # Response Parsing Utilities
+  # Request + normalized response
   # ============================================================================
 
-  def _extract_dict_path(
-    self, resp: dict, path: List[str], command_name: str, required: bool = True
-  ) -> Any:
-    """Extract nested value from dict response using path.
+  async def _request(self, command: str, **kwargs: Any) -> _NormalizedSiLAResponse:
+    """Send command and return normalized response (dict or ET wrapped)."""
+    raw = await self._sila.send_command(command, **kwargs)
+    return _NormalizedSiLAResponse.from_raw(raw, command)
 
-    Args:
-      resp: Response dict from send_command (SOAP-decoded).
-      path: List of keys to traverse (e.g., ["GetStatusResponse", "state"]).
-      command_name: Command name for error messages.
-      required: If True, raise ValueError if path not found.
-
-    Returns:
-      Extracted value, or None if not required and not found.
-
-    Raises:
-      ValueError: If required=True and path not found or invalid structure.
-    """
-    value = resp
-    for key in path:
-      if not isinstance(value, dict):
-        if required:
-          raise ValueError(
-            f"{command_name}: Expected dict at path {path}, got {type(value).__name__}"
-          )
-        return None
-      value = value.get(key, {})
-
-    if value is None or (isinstance(value, dict) and not value and required):
-      if required:
-        raise ValueError(
-          f"{command_name}: Could not find value at path {path}. Response: {resp}"
-        )
-      return None
-    self.logger.debug(f"{command_name} extracted value at path {path}: {value!r}")
-    return value
-
-  def _extract_xml_parameter(
-    self, resp: Any, param_name: str, command_name: str, allow_root_fallback: bool = False
-  ) -> str:
-    """Extract parameter value from ElementTree XML response.
-
-    Args:
-      resp: ElementTree root from send_command.
-      param_name: Name of parameter to extract (matches 'name' attribute on Parameter element).
-      command_name: Command name for error messages.
-      allow_root_fallback: If True, fall back to root-based behavior when parameter
-        with matching name is not found. If False, raise error if parameter not found.
-
-    Returns:
-      Parameter text value.
-
-    Raises:
-      ValueError: If response is None or parameter not found.
-    """
-    if resp is None:
-      raise ValueError(f"Empty response from {command_name}")
-
-    import xml.etree.ElementTree as ET
-
-    # First, try strict matching by name attribute
-    # Look for Parameter[@name='param_name'] in ResponseData or anywhere in tree
-    param = None
-    if resp.tag == "Parameter" and resp.get("name") == param_name:
-      param = resp
-    else:
-      # Search for Parameter with matching name attribute
-      param = resp.find(f".//Parameter[@name='{param_name}']")
-
-    # Fallback: if not found and fallback allowed, use root-based behavior
-    # (for cases where temperature data is in root without name attribute)
-    if param is None and allow_root_fallback:
-      # Either root is Parameter, or find first Parameter in ResponseData
-      param = resp if resp.tag == "Parameter" else resp.find(".//Parameter")
-
-    if param is None:
-      # Include full XML structure in error for debugging
-      xml_str = ET.tostring(resp, encoding='unicode')
-      raise ValueError(
-        f"Parameter '{param_name}' not found in {command_name} response. "
-        f"Root element tag: {resp.tag}\n"
-        f"Full XML response:\n{xml_str}"
-      )
-
-    # Extract String element from Parameter (contains escaped XML)
-    string_elem = param.find("String")
-    if string_elem is None or string_elem.text is None:
-      raise ValueError(f"String element not found in {command_name} Parameter response")
-
-    return str(string_elem.text)
-
-  def _get_parameter_string_from_response(
-    self,
-    resp: Any,
-    param_name: str,
-    command_name: str,
-    response_data_path: Optional[List[str]] = None,
-    allow_root_fallback: bool = False,
-  ) -> str:
-    """Get a parameter's String value from a command response (dict or ElementTree).
-
-    Handles both synchronous (dict) and asynchronous (ElementTree) response shapes.
-    For dict responses, response_data_path must be the path to ResponseData
-    (e.g. ["ReadActualTemperatureResponse", "ResponseData"]).
-    """
-    if isinstance(resp, dict):
-      if not response_data_path:
-        raise ValueError(
-          f"{command_name}: response_data_path required when response is dict"
-        )
-      response_data = self._extract_dict_path(
-        resp, response_data_path, command_name
-      )
-      param = response_data.get("Parameter")
-      if isinstance(param, list):
-        sensor_param = next(
-          (p for p in param if p.get("name") == param_name), None
-        )
-      elif isinstance(param, dict):
-        sensor_param = param if param.get("name") == param_name else None
-      else:
-        sensor_param = None
-      if sensor_param is None:
-        raise ValueError(
-          f"Parameter '{param_name}' not found in {command_name} response"
-        )
-      value = sensor_param.get("String")
-      if value is None:
-        raise ValueError(
-          f"String element not found in {param_name} parameter"
-        )
-      return str(value)
-    return self._extract_xml_parameter(
-      resp, param_name, command_name, allow_root_fallback=allow_root_fallback
-    )
+  async def _get_method_set_xml(self) -> str:
+    """Get MethodsXML parameter string from GetParameters response."""
+    resp = await self._request("GetParameters")
+    return resp.get_parameter_string("MethodsXML")
 
   # ============================================================================
   # Basic ODTC Commands
@@ -729,11 +753,8 @@ class ODTCBackend(ThermocyclerBackend):
     Raises:
       ValueError: If response format is unexpected and state cannot be extracted.
     """
-    resp = await self._sila.send_command("GetStatus")
-    # GetStatus is synchronous - resp is a dict from soap_decode
-    # ODTC standard structure: {"GetStatusResponse": {"state": "idle", ...}}
-    resp_dict = cast(Dict[str, Any], resp)
-    state = self._extract_dict_path(resp_dict, ["GetStatusResponse", "state"], "GetStatus")
+    resp = await self._request("GetStatus")
+    state = resp.get_value("GetStatusResponse", "state")
     return str(state)
 
   async def initialize(self, wait: bool = True) -> Optional[CommandExecution]:
@@ -792,13 +813,10 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       Device identification dictionary.
     """
-    resp = await self._sila.send_command("GetDeviceIdentification")
-    # GetDeviceIdentification is synchronous - resp is a dict from soap_decode
-    resp_dict = cast(Dict[str, Any], resp)
-    result = self._extract_dict_path(
-      resp_dict,
-      ["GetDeviceIdentificationResponse", "GetDeviceIdentificationResult"],
-      "GetDeviceIdentification",
+    resp = await self._request("GetDeviceIdentification")
+    result = resp.get_value(
+      "GetDeviceIdentificationResponse",
+      "GetDeviceIdentificationResult",
       required=False,
     )
     return result if isinstance(result, dict) else {}
@@ -875,18 +893,8 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       ODTCSensorValues with temperatures in °C.
     """
-    resp = await self._sila.send_command("ReadActualTemperature")
-    self.logger.debug(
-      "ReadActualTemperature response type: %s",
-      type(resp).__name__,
-    )
-    sensor_xml = self._get_parameter_string_from_response(
-      resp,
-      "SensorValues",
-      "ReadActualTemperature",
-      response_data_path=["ReadActualTemperatureResponse", "ResponseData"],
-      allow_root_fallback=True,
-    )
+    resp = await self._request("ReadActualTemperature")
+    sensor_xml = resp.get_parameter_string("SensorValues", allow_root_fallback=True)
     sensor_values = parse_sensor_values(sensor_xml)
     self.logger.debug("ReadActualTemperature: %s", sensor_values.format_compact())
     return sensor_values
@@ -897,10 +905,8 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       CSV string with temperature trace data.
     """
-    resp = await self._sila.send_command("GetLastData")
-    # Response contains CSV data in SiLA Data Capture format
-    # For now, return the raw response - parsing can be added later
-    return str(resp)  # type: ignore
+    resp = await self._request("GetLastData")
+    return str(resp.raw())
 
   # Method control commands (SiLA: ExecuteMethod; method = runnable protocol)
   async def execute_method(
@@ -1126,33 +1132,29 @@ class ODTCBackend(ThermocyclerBackend):
     Raises:
       ValueError: If response is empty or MethodsXML parameter not found.
     """
-    resp = await self._sila.send_command("GetParameters")
-    # Extract MethodsXML parameter
-    method_set_xml = self._extract_xml_parameter(resp, "MethodsXML", "GetParameters")
-    # Parse MethodSet XML (it's escaped in the response)
+    method_set_xml = await self._get_method_set_xml()
     return parse_method_set(method_set_xml)
 
-  async def get_protocol(self, name: str) -> Optional[StoredProtocol]:
+  async def get_protocol(self, name: str) -> Optional[ODTCProtocol]:
     """Get a stored protocol by name (runnable methods only; premethods return None).
 
-    Resolves the stored method by name. If it is a runnable method (ODTCMethod),
-    converts it to Protocol + config and returns StoredProtocol. If it is a
-    premethod (ODTCPreMethod) or not found, returns None.
+    Resolves the stored method by name. If it is a runnable method (ODTCProtocol
+    with kind='method'), returns that ODTCProtocol. If it is a premethod or not
+    found, returns None.
 
     Args:
       name: Protocol name to retrieve.
 
     Returns:
-      StoredProtocol(name, protocol, config) if a runnable method exists, None otherwise.
+      ODTCProtocol if a runnable method exists, None otherwise.
     """
     method_set = await self.get_method_set()
     resolved = get_method_by_name(method_set, name)
     if resolved is None:
       return None
-    if isinstance(resolved, ODTCPreMethod):
+    if resolved.kind == "premethod":
       return None
-    protocol, config = odtc_method_to_protocol(resolved)
-    return StoredProtocol(name=name, protocol=protocol, config=config)
+    return resolved
 
   async def list_protocols(self) -> ProtocolList:
     """List all protocol names (methods and premethods) on the device.
@@ -1197,9 +1199,56 @@ class ODTCBackend(ThermocyclerBackend):
     """
     return get_constraints(self._variant)
 
+  async def _upload_odtc_protocol(
+    self,
+    odtc: ODTCProtocol,
+    allow_overwrite: bool = False,
+    execute: bool = False,
+    wait: bool = True,
+    debug_xml: bool = False,
+    xml_output_path: Optional[str] = None,
+  ) -> Optional[MethodExecution]:
+    """Upload a single ODTCProtocol (method or premethod) and optionally execute.
+
+    Internal single entrypoint: builds one-item ODTCMethodSet and calls
+    upload_method_set, then execute_method if execute=True.
+
+    Returns:
+      MethodExecution if execute=True and wait=False; None otherwise.
+    """
+    resolved_name = resolve_protocol_name(odtc.name)
+    is_scratch = not odtc.name or odtc.name == ""
+    resolved_datetime = odtc.datetime or generate_odtc_timestamp()
+
+    if is_scratch and allow_overwrite is False:
+      allow_overwrite = True
+      if not odtc.name:
+        self.logger.warning(
+          "ODTCProtocol name resolved to scratch name '%s'. "
+          "Auto-enabling allow_overwrite=True.",
+          resolved_name,
+        )
+
+    odtc_copy = replace(odtc, name=resolved_name, datetime=resolved_datetime)
+    if odtc.kind == "method":
+      method_set = ODTCMethodSet(methods=[odtc_copy], premethods=[])
+    else:
+      method_set = ODTCMethodSet(methods=[], premethods=[odtc_copy])
+
+    await self.upload_method_set(
+      method_set,
+      allow_overwrite=allow_overwrite,
+      debug_xml=debug_xml,
+      xml_output_path=xml_output_path,
+    )
+
+    if execute:
+      return await self.execute_method(resolved_name, wait=wait)
+    return None
+
   async def upload_protocol(
     self,
-    protocol: Protocol,
+    protocol: Union[Protocol, ODTCProtocol],
     name: Optional[str] = None,
     config: Optional[ODTCConfig] = None,
     block_max_volume: Optional[float] = None,
@@ -1207,13 +1256,14 @@ class ODTCBackend(ThermocyclerBackend):
     debug_xml: bool = False,
     xml_output_path: Optional[str] = None,
   ) -> str:
-    """Upload a Protocol to the device.
+    """Upload a Protocol or ODTCProtocol to the device.
 
     Args:
-      protocol: PyLabRobot Protocol to upload.
+      protocol: PyLabRobot Protocol or ODTCProtocol to upload.
       name: Method name. If None, uses scratch name "plr_currentProtocol".
-      config: Optional ODTCConfig. If None, uses variant-aware defaults; if
-        block_max_volume is provided and in 0–100 µL, sets fluid_quantity from it.
+      config: Optional ODTCConfig (used only when protocol is Protocol). If None,
+        uses variant-aware defaults; if block_max_volume is provided and in 0–100 µL,
+        sets fluid_quantity from it.
       block_max_volume: Optional volume in µL. If provided and config is None,
         used to set fluid_quantity. If config is provided, validates volume
         matches fluid_quantity.
@@ -1228,29 +1278,31 @@ class ODTCBackend(ThermocyclerBackend):
       ValueError: If allow_overwrite=False and method name already exists.
       ValueError: If block_max_volume > 100 µL.
     """
-    if config is None:
-      if block_max_volume is not None and block_max_volume > 0 and block_max_volume <= 100:
-        fluid_quantity = _volume_to_fluid_quantity(block_max_volume)
-        config = self.get_default_config(fluid_quantity=fluid_quantity)
-      else:
-        config = self.get_default_config()
-    elif block_max_volume is not None and block_max_volume > 0:
-      _validate_volume_fluid_quantity(
-        block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
-      )
+    if isinstance(protocol, ODTCProtocol):
+      odtc = replace(protocol, name=name or protocol.name) if name is not None else protocol
+    else:
+      if config is None:
+        if block_max_volume is not None and block_max_volume > 0 and block_max_volume <= 100:
+          fluid_quantity = _volume_to_fluid_quantity(block_max_volume)
+          config = self.get_default_config(fluid_quantity=fluid_quantity)
+        else:
+          config = self.get_default_config()
+      elif block_max_volume is not None and block_max_volume > 0:
+        _validate_volume_fluid_quantity(
+          block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
+        )
+      if name is not None:
+        config = replace(config, name=name)
+      odtc = protocol_to_odtc_protocol(protocol, config=config)
 
-    if name is not None:
-      config = replace(config, name=name)
-
-    method = protocol_to_odtc_method(protocol, config=config)
-    await self.upload_method(
-      method,
+    await self._upload_odtc_protocol(
+      odtc,
       allow_overwrite=allow_overwrite,
       execute=False,
       debug_xml=debug_xml,
       xml_output_path=xml_output_path,
     )
-    return resolve_protocol_name(method.name)
+    return resolve_protocol_name(odtc.name)
 
   async def run_stored_protocol(self, name: str, wait: bool = False, **kwargs) -> MethodExecution:
     """Execute a stored protocol by name (single SiLA ExecuteMethod call).
@@ -1267,21 +1319,15 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       MethodExecution handle (completed if wait=True).
     """
-    eta: Optional[float] = None
-    stored = await self.get_protocol(name)
-    if stored is not None:
-      method = protocol_to_odtc_method(stored.protocol, config=stored.config)
-      eta = estimate_method_duration_seconds(method)
-    else:
-      method_set = await self.get_method_set()
-      resolved = get_method_by_name(method_set, name)
-      if isinstance(resolved, ODTCPreMethod):
-        eta = PREMETHOD_ESTIMATED_DURATION_SECONDS
+    method_set = await self.get_method_set()
+    resolved = get_method_by_name(method_set, name)
+    eta = estimate_odtc_protocol_duration_seconds(resolved) if resolved else None
+    protocol_view = odtc_protocol_to_protocol(resolved)[0] if resolved else None
     return await self.execute_method(
       name,
       wait=wait,
       estimated_duration_seconds=eta,
-      protocol=stored.protocol if stored is not None else None,
+      protocol=protocol_view,
     )
 
   async def upload_method_set(
@@ -1316,14 +1362,14 @@ class ODTCBackend(ThermocyclerBackend):
       for method in method_set.methods:
         existing_method = get_method_by_name(existing_method_set, method.name)
         if existing_method is not None:
-          method_type = "PreMethod" if isinstance(existing_method, ODTCPreMethod) else "Method"
+          method_type = "PreMethod" if existing_method.kind == "premethod" else "Method"
           conflicts.append(f"Method '{method.name}' already exists as {method_type}")
 
       # Check all premethod names (unified search)
       for premethod in method_set.premethods:
         existing_method = get_method_by_name(existing_method_set, premethod.name)
         if existing_method is not None:
-          method_type = "PreMethod" if isinstance(existing_method, ODTCPreMethod) else "Method"
+          method_type = "PreMethod" if existing_method.kind == "premethod" else "Method"
           conflicts.append(f"Method '{premethod.name}' already exists as {method_type}")
 
       if conflicts:
@@ -1373,150 +1419,6 @@ class ODTCBackend(ThermocyclerBackend):
 
     await self._sila.send_command("SetParameters", paramsXML=params_xml)
 
-  async def upload_method(
-    self,
-    method: ODTCMethod,
-    allow_overwrite: bool = False,
-    execute: bool = False,
-    wait: bool = True,
-    debug_xml: bool = False,
-    xml_output_path: Optional[str] = None,
-  ) -> Optional[MethodExecution]:
-    """Upload a single method to the device.
-
-    Convenience wrapper that wraps method in MethodSet and uploads.
-
-    Args:
-      method: ODTCMethod to upload.
-      allow_overwrite: If False, raise ValueError if method name already exists
-        on the device. If True, allow overwriting existing method/premethod.
-        If method name resolves to scratch name and this is not explicitly False,
-        it will be set to True automatically.
-      execute: If True, execute the method after uploading. If False, only upload.
-      wait: If execute=True and wait=True, block until method completes.
-        If execute=True and wait=False, return MethodExecution handle.
-      debug_xml: If True, log the generated XML to the logger at DEBUG level.
-        Passed through to upload_method_set.
-      xml_output_path: Optional file path to save the generated MethodSet XML.
-        Passed through to upload_method_set.
-
-    Returns:
-      If execute=False: None
-      If execute=True and wait=True: None (blocks until complete)
-      If execute=True and wait=False: MethodExecution handle (awaitable, has request_id)
-
-    Raises:
-      ValueError: If allow_overwrite=False and method name already exists
-        on the device (checking both methods and premethods for conflicts).
-    """
-    # Resolve name (use scratch name if None/empty)
-    resolved_name = resolve_protocol_name(method.name)
-    # Check if we're using a scratch name (original name was None/empty)
-    is_scratch_name = not method.name or method.name == ""
-
-    # Generate timestamp if not already set
-    resolved_datetime = method.datetime if method.datetime else generate_odtc_timestamp()
-
-    # Auto-overwrite for scratch names unless explicitly disabled
-    if is_scratch_name and allow_overwrite is False:
-      # Check if user explicitly passed False (vs default)
-      # Since we can't distinguish, we'll auto-overwrite for scratch names
-      # but log a warning if they explicitly set False
-      allow_overwrite = True
-      if not method.name:  # Only warn if name was actually None/empty (not just resolved)
-        self.logger.warning(
-          f"Method name resolved to scratch name '{resolved_name}'. "
-          "Auto-enabling allow_overwrite=True for scratch methods."
-        )
-
-    # Create method copy with resolved name and timestamp
-    method_copy = ODTCMethod(
-      name=resolved_name,
-      variant=method.variant,
-      plate_type=method.plate_type,
-      fluid_quantity=method.fluid_quantity,
-      post_heating=method.post_heating,
-      start_block_temperature=method.start_block_temperature,
-      start_lid_temperature=method.start_lid_temperature,
-      steps=method.steps,
-      pid_set=method.pid_set,
-      creator=method.creator,
-      description=method.description,
-      datetime=resolved_datetime,
-    )
-
-    method_set = ODTCMethodSet(methods=[method_copy], premethods=[])
-    await self.upload_method_set(
-      method_set,
-      allow_overwrite=allow_overwrite,
-      debug_xml=debug_xml,
-      xml_output_path=xml_output_path,
-    )
-
-    if execute:
-      return await self.execute_method(resolved_name, wait=wait)
-    return None
-
-  async def upload_premethod(
-    self,
-    premethod: ODTCPreMethod,
-    allow_overwrite: bool = False,
-    debug_xml: bool = False,
-    xml_output_path: Optional[str] = None,
-  ) -> None:
-    """Upload a single premethod to the device.
-
-    Convenience wrapper that wraps premethod in MethodSet and uploads.
-
-    Args:
-      premethod: ODTCPreMethod to upload.
-      allow_overwrite: If False, raise ValueError if premethod name already exists
-        on the device. If True, allow overwriting existing method/premethod.
-        If premethod name resolves to scratch name and this is not explicitly False,
-        it will be set to True automatically.
-
-    Raises:
-      ValueError: If allow_overwrite=False and premethod name already exists
-        on the device (checking both methods and premethods for conflicts).
-    """
-    # Resolve name (use scratch name if None/empty)
-    resolved_name = resolve_protocol_name(premethod.name)
-    # Check if we're using a scratch name (original name was None/empty)
-    is_scratch_name = not premethod.name or premethod.name == ""
-
-    # Generate timestamp if not already set
-    resolved_datetime = premethod.datetime if premethod.datetime else generate_odtc_timestamp()
-
-    # Auto-overwrite for scratch names unless explicitly disabled
-    if is_scratch_name and allow_overwrite is False:
-      # Check if user explicitly passed False (vs default)
-      # Since we can't distinguish, we'll auto-overwrite for scratch names
-      # but log a warning if they explicitly set False
-      allow_overwrite = True
-      if not premethod.name:  # Only warn if name was actually None/empty (not just resolved)
-        self.logger.warning(
-          f"PreMethod name resolved to scratch name '{resolved_name}'. "
-          "Auto-enabling allow_overwrite=True for scratch premethods."
-        )
-
-    # Create premethod copy with resolved name and timestamp
-    premethod_copy = ODTCPreMethod(
-      name=resolved_name,
-      target_block_temperature=premethod.target_block_temperature,
-      target_lid_temperature=premethod.target_lid_temperature,
-      creator=premethod.creator,
-      description=premethod.description,
-      datetime=resolved_datetime,
-    )
-
-    method_set = ODTCMethodSet(methods=[], premethods=[premethod_copy])
-    await self.upload_method_set(
-      method_set,
-      allow_overwrite=allow_overwrite,
-      debug_xml=debug_xml,
-      xml_output_path=xml_output_path,
-    )
-
   async def upload_method_set_from_file(
     self,
     filepath: str,
@@ -1542,11 +1444,7 @@ class ODTCBackend(ThermocyclerBackend):
     Args:
       filepath: Path to save MethodSet XML file.
     """
-    resp = await self._sila.send_command("GetParameters")
-    # Extract MethodsXML parameter
-    method_set_xml = self._extract_xml_parameter(resp, "MethodsXML", "GetParameters")
-    # XML is escaped in the response, so we get it as-is
-    # Write to file
+    method_set_xml = await self._get_method_set_xml()
     with open(filepath, "w", encoding="utf-8") as f:
       f.write(method_set_xml)
 
@@ -1597,14 +1495,16 @@ class ODTCBackend(ThermocyclerBackend):
       target_lid_temp = constraints.max_lid_temp
 
     resolved_name = resolve_protocol_name(None)
-    premethod = ODTCPreMethod(
+    odtc = ODTCProtocol(
+      stages=[],
+      kind="premethod",
       name=resolved_name,
       target_block_temperature=block_temp,
       target_lid_temperature=target_lid_temp,
       datetime=generate_odtc_timestamp(),
     )
-    await self.upload_premethod(
-      premethod,
+    await self._upload_odtc_protocol(
+      odtc,
       allow_overwrite=True,
       debug_xml=debug_xml,
       xml_output_path=xml_output_path,
@@ -1644,53 +1544,60 @@ class ODTCBackend(ThermocyclerBackend):
 
   async def run_protocol(
     self,
-    protocol: Protocol,
+    protocol: Union[Protocol, ODTCProtocol],
     block_max_volume: float,
     **kwargs: Any,
   ) -> MethodExecution:
-    """Execute thermocycler protocol (convert, upload, execute).
+    """Execute thermocycler protocol (convert if needed, upload, execute).
 
-    Converts Protocol to ODTCMethod, uploads it, then executes by name.
-    Always returns immediately with a MethodExecution handle; to block until
-    completion, await handle.wait() or use wait_for_profile_completion().
-    Config is derived from block_max_volume and backend variant if not provided.
+    Accepts Protocol or ODTCProtocol. Converts Protocol to ODTCProtocol when
+    needed, uploads, then executes by name. Always returns immediately with a
+    MethodExecution handle; to block until completion, await handle.wait() or
+    use wait_for_profile_completion(). Config is derived from block_max_volume
+    and backend variant when protocol is Protocol and config is not provided.
 
     Args:
-      protocol: Protocol to execute.
+      protocol: Protocol or ODTCProtocol to execute.
       block_max_volume: Maximum block volume (µL) for safety; used to set
-        fluid_quantity when config is None.
+        fluid_quantity when protocol is Protocol and config is None.
       **kwargs: Backend-specific options. ODTC accepts ``config`` (ODTCConfig,
-        optional); if omitted, built from block_max_volume and variant.
+        optional); used only when protocol is Protocol.
 
     Returns:
       MethodExecution handle. Caller can await handle.wait() or
       wait_for_profile_completion() to block until done.
     """
-    config = kwargs.pop("config", None)
-    if config is None:
-      if block_max_volume > 0 and block_max_volume <= 100:
-        fluid_quantity = _volume_to_fluid_quantity(block_max_volume)
-        config = self.get_default_config(fluid_quantity=fluid_quantity)
-      else:
-        config = self.get_default_config()
-      if block_max_volume > 0 and block_max_volume <= 100:
-        _validate_volume_fluid_quantity(
-          block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
-        )
+    if isinstance(protocol, ODTCProtocol):
+      odtc = protocol
+      if odtc.kind != "method":
+        raise ValueError("run_protocol requires a method (ODTCProtocol with kind='method')")
     else:
-      if block_max_volume > 0:
-        _validate_volume_fluid_quantity(
-          block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
-        )
+      config = kwargs.pop("config", None)
+      if config is None:
+        if block_max_volume > 0 and block_max_volume <= 100:
+          fluid_quantity = _volume_to_fluid_quantity(block_max_volume)
+          config = self.get_default_config(fluid_quantity=fluid_quantity)
+        else:
+          config = self.get_default_config()
+        if block_max_volume > 0 and block_max_volume <= 100:
+          _validate_volume_fluid_quantity(
+            block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
+          )
+      else:
+        if block_max_volume > 0:
+          _validate_volume_fluid_quantity(
+            block_max_volume, config.fluid_quantity, is_premethod=False, logger=self.logger
+          )
+      odtc = protocol_to_odtc_protocol(protocol, config=config)
 
-    method = protocol_to_odtc_method(protocol, config=config)
-    await self.upload_method(method, allow_overwrite=True, execute=False)
-    resolved_name = resolve_protocol_name(method.name)
-    eta = estimate_method_duration_seconds(method)
+    await self._upload_odtc_protocol(odtc, allow_overwrite=True, execute=False)
+    resolved_name = resolve_protocol_name(odtc.name)
+    eta = estimate_odtc_protocol_duration_seconds(odtc)
     handle = await self.execute_method(
       resolved_name, wait=False, estimated_duration_seconds=eta
     )
-    self._protocol_by_request_id[handle.request_id] = protocol
+    protocol_view = odtc_protocol_to_protocol(odtc)[0]
+    self._protocol_by_request_id[handle.request_id] = protocol_view
     return handle
 
   async def get_block_current_temperature(self) -> List[float]:
