@@ -6,6 +6,3 @@ from .hamilton.vantage_backend import Vantage, VantageBackend
 from .opentrons_backend import OpentronsOT2Backend
 from .serializing_backend import SerializingBackend
 from .tecan.EVO_backend import EVO, EVOBackend
-
-# many rely on this
-from .websocket import WebSocketBackend
