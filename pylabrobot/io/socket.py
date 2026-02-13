@@ -99,16 +99,6 @@ class Socket(IOBase):
       "write_timeout": self._write_timeout,
     }
 
-  @classmethod
-  def deserialize(cls, data: dict) -> "Socket":
-    return cls(
-      human_readable_device_name=data["human_readable_device_name"],
-      host=data["host"],
-      port=data["port"],
-      read_timeout=data.get("read_timeout", 30),
-      write_timeout=data.get("write_timeout", 30),
-    )
-
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
     """Wrapper around StreamWriter.write with lock and io logging.
     Does not retry on timeouts.

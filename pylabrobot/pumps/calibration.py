@@ -102,13 +102,6 @@ class PumpCalibration(SerializableMixin):
     }
 
   @classmethod
-  def deserialize(cls, data: dict) -> PumpCalibration:
-    return cls(
-      calibration=data["calibration"],
-      calibration_mode=data.get("calibration_mode", "duration"),
-    )
-
-  @classmethod
   def load_from_json(
     cls,
     file_path: str,
