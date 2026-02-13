@@ -30,6 +30,7 @@ class InfiniteScanConfig:
   """Scan configuration for Infinite plate readers."""
 
   flashes: int = 25
+  default_focal_height_mm: float = 20.0
   counts_per_mm_x: float = 1_000
   counts_per_mm_y: float = 1_000
   counts_per_mm_z: float = 1_000
@@ -703,7 +704,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
-    focal_height: float,
+    focal_height: Optional[float] = None,
   ) -> List[Dict]:
     """Queue and execute a fluorescence scan."""
 
@@ -711,6 +712,15 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       raise ValueError("Excitation wavelength must be between 230 nm and 850 nm.")
     if not 230 <= emission_wavelength <= 850:
       raise ValueError("Emission wavelength must be between 230 nm and 850 nm.")
+    if focal_height is None:
+      focal_height = self.config.default_focal_height_mm
+    elif not math.isclose(focal_height, self.config.default_focal_height_mm):
+      logger.warning(
+        "Fluorescence focal height manually set to %.3f mm (default is %.3f mm); "
+        "changing it manually may cause physical collision.",
+        focal_height,
+        self.config.default_focal_height_mm,
+      )
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for fluorescence scans.")
 
@@ -789,10 +799,19 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self,
     plate: Plate,
     wells: List[Well],
-    focal_height: float,
+    focal_height: Optional[float] = None,
   ) -> List[Dict]:
     """Queue and execute a luminescence scan."""
 
+    if focal_height is None:
+      focal_height = self.config.default_focal_height_mm
+    elif not math.isclose(focal_height, self.config.default_focal_height_mm):
+      logger.warning(
+        "Luminescence focal height manually set to %.3f mm (default is %.3f mm); "
+        "changing it manually may cause physical collision.",
+        focal_height,
+        self.config.default_focal_height_mm,
+      )
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for luminescence scans.")
 

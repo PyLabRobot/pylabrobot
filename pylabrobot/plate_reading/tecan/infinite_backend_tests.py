@@ -764,7 +764,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
       with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
         await self.backend.read_fluorescence(
-          self.plate, [], excitation_wavelength=485, emission_wavelength=520, focal_height=20.0
+          self.plate, [], excitation_wavelength=485, emission_wavelength=520
         )
 
     # Fluorescence config is sent twice (UI behavior)
@@ -880,3 +880,20 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
         call(self._frame("ABSOLUTE MTP,IN")),
       ]
     )
+
+  async def test_read_luminescence_defaults_focal_height_to_20mm(self):
+    """Test that read_luminescence defaults focal height to 20 mm."""
+    self.backend._ready = True
+
+    async def mock_await(decoder, row_count, mode):
+      cal_blob = bytes(14)
+      decoder.feed_bin(10, cal_blob)
+      for _ in range(row_count):
+        data_len, data_blob = _lum_data_blob(0, 1000)
+        decoder.feed_bin(data_len, data_blob)
+
+    with patch.object(self.backend, "_await_measurements", side_effect=mock_await):
+      with patch.object(self.backend, "_await_scan_terminal", new_callable=AsyncMock):
+        await self.backend.read_luminescence(self.plate, [])
+
+    self.mock_usb.write.assert_any_call(self._frame("POSITION LUM,Z=20000"))
