@@ -192,4 +192,3 @@ class HeraeusCytomatBackend(IncubatorBackend):
       **super().serialize(),
       "port": self.io.port,
     }
-

@@ -343,7 +343,6 @@ class Serial(IOBase):
     }
 
 
-
 class SerialValidator(Serial):
   def __init__(
     self,

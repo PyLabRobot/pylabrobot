@@ -131,4 +131,3 @@ class SCILABackend(MachineBackend):
       "scila_ip": self._sila_interface.machine_ip,
       "client_ip": self._sila_interface.client_ip,
     }
-
