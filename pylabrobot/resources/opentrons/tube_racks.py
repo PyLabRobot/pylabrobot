@@ -7,7 +7,7 @@ from pylabrobot.resources.utils import create_ordered_items_2d
 
 def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack:
   """
-  OpenTrons 24 well rack with the shorter stand
+  OpenTrons 24 well rack with the shorter stand; 30mm shorter than default stand.
   3D print available here: https://www.thingiverse.com/thing:3405002
   Spec sheet (json):
   https://raw.githubusercontent.com/Opentrons/opentrons/edge/shared-data/labware/definitions/2/opentrons_24_tuberack_nest_1.5ml_screwcap/1.json
