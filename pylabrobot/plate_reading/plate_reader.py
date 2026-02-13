@@ -88,7 +88,7 @@ class PlateReader(ResourceHolder, Machine):
     """Read the luminescence from the plate reader.
 
     Args:
-      focal_height: The focal height to read the luminescence at, in micrometers.
+      focal_height: The focal height to read the luminescence at, in millimeters.
       use_new_return_type: Whether to return the new return type, which is a list of dictionaries.
 
     Returns:
@@ -165,7 +165,7 @@ class PlateReader(ResourceHolder, Machine):
     Args:
       excitation_wavelength: The excitation wavelength to read the fluorescence at, in nanometers.
       emission_wavelength: The emission wavelength to read the fluorescence at, in nanometers.
-      focal_height: The focal height to read the fluorescence at, in micrometers.
+      focal_height: The focal height to read the fluorescence at, in millimeters.
       use_new_return_type: Whether to return the new return type, which is a list of dictionaries.
 
     Returns:
