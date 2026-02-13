@@ -10,12 +10,22 @@ Example:
   ...     print(d.host, d.port, d.name)
 """
 
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 import socket
-from typing import List
+from typing import TYPE_CHECKING, List
 
-from zeroconf import ServiceBrowser, Zeroconf
+try:
+  from zeroconf import ServiceBrowser, Zeroconf
+
+  HAS_ZEROCONF = True
+except ImportError:
+  HAS_ZEROCONF = False
+
+if TYPE_CHECKING:
+  from zeroconf import Zeroconf
 
 
 @dataclasses.dataclass(frozen=True)
@@ -43,6 +53,9 @@ async def discover(timeout: float = 5.0) -> List[SiLADevice]:
     List of discovered devices.
 
   """
+
+  if not HAS_ZEROCONF:
+    raise ImportError("zeroconf is required for SiLA discovery: pip install zeroconf")
 
   devices: List[SiLADevice] = []
 
