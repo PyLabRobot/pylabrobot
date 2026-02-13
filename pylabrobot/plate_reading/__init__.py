@@ -48,3 +48,4 @@ from .standard import (
   ImagingResult,
   Objective,
 )
+from .tecan import InfiniteScanConfig, TecanInfinite200ProBackend
