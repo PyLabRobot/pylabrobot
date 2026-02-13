@@ -74,4 +74,3 @@ def test_deserialize_calls_custom_deserialize_method():
   result = deserialize(data)
   assert isinstance(result, TipSpot)
   assert result.name == "A1"
-
