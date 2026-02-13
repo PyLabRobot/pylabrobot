@@ -525,7 +525,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self._setup_lock: Optional[asyncio.Lock] = None
     self._ready = False
     self._read_chunk_size = 512
-    self._max_read_iterations = 200
+    self._max_row_wait_s = 300.0
     self._mode_capabilities: Dict[str, Dict[str, str]] = {}
     self._pending_bin_events: List[Tuple[int, bytes]] = []
     self._parser = _StreamParser(allow_bare_ascii=True)
@@ -839,19 +839,25 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self, decoder: "_MeasurementDecoder", row_count: int, mode: str
   ) -> None:
     target = decoder.count + row_count
+    start_count = decoder.count
     if self._pending_bin_events:
       for payload_len, blob in self._pending_bin_events:
         decoder.feed_bin(payload_len, blob)
       self._pending_bin_events.clear()
-    iterations = 0
-    while decoder.count < target and iterations < self._max_read_iterations:
+    start = time.monotonic()
+    reads = 0
+    while decoder.count < target and (time.monotonic() - start) < self._max_row_wait_s:
       chunk = await self._read_packet(self._read_chunk_size)
       if not chunk:
         raise RuntimeError(f"{mode} read returned empty chunk; transport may not support reads.")
       decoder.feed(chunk)
-      iterations += 1
+      reads += 1
     if decoder.count < target:
-      raise RuntimeError(f"Timed out while parsing {mode.lower()} results.")
+      got = decoder.count - start_count
+      raise RuntimeError(
+        f"Timed out while parsing {mode.lower()} results "
+        f"(decoded {got}/{row_count} measurements in {time.monotonic() - start:.1f}s, {reads} reads)."
+      )
 
   async def _await_scan_terminal(self, saw_terminal: bool) -> None:
     if saw_terminal:
