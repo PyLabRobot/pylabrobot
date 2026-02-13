@@ -20,8 +20,9 @@ visualizer = ["websockets==15.0.1"]
 opentrons = ["opentrons-http-api-client"]
 inheco = ["hid==1.0.8"]
 agrow = ["pymodbus==3.6.8"]
+gui = ["flask[async]==3.1.2"]
 dev = [
-  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,inheco,agrow]",
+  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,inheco,agrow,gui]",
   "pytest==8.4.2",
   "pytest-timeout==2.4.0",
   "mypy==1.18.2",
