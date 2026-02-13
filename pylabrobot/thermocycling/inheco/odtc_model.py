@@ -328,6 +328,36 @@ class ODTCSensorValues:
   heatsink: float = xml_field(tag="Heatsink", scale=0.01, default=0.0)
   heatsink_tec: float = xml_field(tag="Heatsink_TEC", scale=0.01, default=0.0)
 
+  def __str__(self) -> str:
+    """Human-readable labeled temperatures in °C (multi-line for display/notebooks)."""
+    lines = [
+      "ODTCSensorValues:",
+      f"  Mount={self.mount:.1f}°C  Mount_Monitor={self.mount_monitor:.1f}°C",
+      f"  Lid={self.lid:.1f}°C  Lid_Monitor={self.lid_monitor:.1f}°C",
+      f"  Ambient={self.ambient:.1f}°C  PCB={self.pcb:.1f}°C",
+      f"  Heatsink={self.heatsink:.1f}°C  Heatsink_TEC={self.heatsink_tec:.1f}°C",
+    ]
+    if self.timestamp:
+      lines.insert(1, f"  timestamp={self.timestamp}")
+    return "\n".join(lines)
+
+  def format_compact(self) -> str:
+    """Single-line format for logs and parsing (one reading per log line)."""
+    parts = [
+      f"Mount={self.mount:.1f}°C",
+      f"Lid={self.lid:.1f}°C",
+      f"Ambient={self.ambient:.1f}°C",
+      f"Mount_Monitor={self.mount_monitor:.1f}°C",
+      f"Lid_Monitor={self.lid_monitor:.1f}°C",
+      f"PCB={self.pcb:.1f}°C",
+      f"Heatsink={self.heatsink:.1f}°C",
+      f"Heatsink_TEC={self.heatsink_tec:.1f}°C",
+    ]
+    line = "  ".join(parts)
+    if self.timestamp:
+      return f"ODTCSensorValues({self.timestamp})  {line}"
+    return f"ODTCSensorValues  {line}"
+
 
 # =============================================================================
 # Protocol Conversion Config Classes
@@ -481,6 +511,32 @@ class StoredProtocol:
   name: str
   protocol: "Protocol"
   config: ODTCConfig
+
+  def __str__(self) -> str:
+    """Human-readable summary: name, stage/step counts, optional config (variant, lid temp)."""
+    lines: List[str] = [f"StoredProtocol(name={self.name!r})"]
+    stages = self.protocol.stages
+    if not stages:
+      lines.append("  protocol: 0 stages")
+    else:
+      lines.append(f"  protocol: {len(stages)} stage(s)")
+      for i, stage in enumerate(stages):
+        step_count = len(stage.steps)
+        first_temp = ""
+        if stage.steps:
+          temps = stage.steps[0].temperature
+          first_temp = f", first step temp={temps[0]:.1f}°C" if temps else ""
+        lines.append(
+          f"    stage {i + 1}: {stage.repeats} repeat(s), {step_count} step(s){first_temp}"
+        )
+    c = self.config
+    if c.variant is not None or c.lid_temperature is not None:
+      variant_str = f"variant={c.variant}" if c.variant is not None else ""
+      lid_str = f"lid_temperature={c.lid_temperature}°C" if c.lid_temperature is not None else ""
+      config_parts = [x for x in (variant_str, lid_str) if x]
+      if config_parts:
+        lines.append("  config: " + ", ".join(config_parts))
+    return "\n".join(lines)
 
 
 # =============================================================================
@@ -815,7 +871,7 @@ def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[Union[O
   return None
 
 
-def _list_method_names_only(method_set: ODTCMethodSet) -> List[str]:
+def list_method_names_only(method_set: ODTCMethodSet) -> List[str]:
   """Get all method names (methods only, not premethods)."""
   return [m.name for m in method_set.methods]
 

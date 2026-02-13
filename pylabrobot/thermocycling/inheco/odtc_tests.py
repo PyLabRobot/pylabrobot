@@ -1,4 +1,4 @@
-"""Tests for ODTC backend and SiLA interface."""
+"""Tests for ODTC: backend, thermocycler resource, SiLA interface, and model utilities."""
 
 import asyncio
 import unittest
@@ -402,15 +402,77 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.variant, 960000)
 
   async def test_setup(self):
-    """Test backend setup."""
+    """Test backend setup (full path)."""
     self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
     self.backend._sila._client_ip = "192.168.1.1"  # type: ignore[attr-defined]
-    # Mock the read-only property by setting it on the mock object
-    setattr(self.backend._sila, 'bound_port', 8080)  # type: ignore[misc]
+    setattr(self.backend._sila, "bound_port", 8080)  # type: ignore[misc]
     self.backend.reset = AsyncMock()  # type: ignore[method-assign]
     self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
     await self.backend.setup()
     self.backend._sila.setup.assert_called_once()
+    self.backend.reset.assert_called_once()
+    call_kwargs = self.backend.reset.call_args[1]
+    self.assertFalse(call_kwargs.get("simulation_mode", False))
+
+  async def test_setup_full_false_only_sila_setup(self):
+    """Test setup(full=False) only calls _sila.setup(), not reset or initialize."""
+    self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
+    self.backend.reset = AsyncMock()  # type: ignore[method-assign]
+    self.backend.get_status = AsyncMock()  # type: ignore[method-assign]
+    await self.backend.setup(full=False)
+    self.backend._sila.setup.assert_called_once()
+    self.backend.reset.assert_not_called()
+    self.backend.get_status.assert_not_called()
+
+  async def test_setup_simulation_mode_passed_to_reset(self):
+    """Test setup(simulation_mode=True) passes simulation_mode to reset."""
+    self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
+    self.backend.reset = AsyncMock()  # type: ignore[method-assign]
+    self.backend.get_status = AsyncMock(return_value="idle")  # type: ignore[method-assign]
+    await self.backend.setup(simulation_mode=True)
+    self.backend.reset.assert_called_once()
+    self.assertTrue(self.backend.reset.call_args[1]["simulation_mode"])
+
+  async def test_reset_sets_simulation_mode(self):
+    """Test reset(simulation_mode=X) updates backend.simulation_mode."""
+    fut: asyncio.Future[Any] = asyncio.Future()
+    fut.set_result(None)
+    self.backend._sila.start_command = AsyncMock(return_value=(fut, 1, None, 0.0))  # type: ignore[method-assign]
+    self.assertFalse(self.backend.simulation_mode)
+    await self.backend.reset(simulation_mode=True)
+    self.assertTrue(self.backend.simulation_mode)
+    await self.backend.reset(simulation_mode=False)
+    self.assertFalse(self.backend.simulation_mode)
+
+  async def test_setup_retries_with_backoff(self):
+    """Test setup(full=True, max_attempts=3) retries on failure with backoff."""
+    self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
+    self.backend.reset = AsyncMock()  # type: ignore[method-assign]
+    call_count = 0
+
+    async def mock_get_status():
+      nonlocal call_count
+      call_count += 1
+      if call_count < 3:
+        raise RuntimeError("transient")
+      return "idle"
+
+    self.backend.get_status = AsyncMock(side_effect=mock_get_status)  # type: ignore[method-assign]
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+      await self.backend.setup(full=True, max_attempts=3)
+    self.assertEqual(call_count, 3)
+    # Full path runs 3 times (fail twice, succeed on third)
+    self.assertEqual(self.backend._sila.setup.call_count, 3)
+    self.assertEqual(self.backend.reset.call_count, 3)
+
+  async def test_setup_raises_when_all_attempts_fail(self):
+    """Test setup(full=True, max_attempts=2) raises when all attempts fail."""
+    self.backend._sila.setup = AsyncMock()  # type: ignore[method-assign]
+    self.backend.reset = AsyncMock()  # type: ignore[method-assign]
+    self.backend.get_status = AsyncMock(side_effect=RuntimeError("fail"))  # type: ignore[method-assign]
+    with patch("asyncio.sleep", new_callable=AsyncMock), self.assertRaises(RuntimeError) as cm:
+      await self.backend.setup(full=True, max_attempts=2)
+    self.assertIn("fail", str(cm.exception))
 
   async def test_stop(self):
     """Test backend stop."""
@@ -674,6 +736,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(call_kwargs["deviceId"], "ODTC")
     self.assertEqual(call_kwargs["eventReceiverURI"], "http://127.0.0.1:8080/")
     self.assertFalse(call_kwargs["simulationMode"])
+    self.assertFalse(self.backend.simulation_mode)
 
   async def test_is_method_running(self):
     """Test is_method_running()."""
@@ -745,6 +808,19 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     names = await self.backend.list_protocols()
     self.assertEqual(names, ["PCR_30", "Pre25"])
+
+  async def test_list_methods(self):
+    """Test list_methods returns (method_names, premethod_names) and matches list_protocols."""
+    method_set = ODTCMethodSet(
+      methods=[ODTCMethod(name="PCR_30"), ODTCMethod(name="PCR_35")],
+      premethods=[ODTCPreMethod(name="Pre25"), ODTCPreMethod(name="Pre37")],
+    )
+    self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
+    methods, premethods = await self.backend.list_methods()
+    self.assertEqual(methods, ["PCR_30", "PCR_35"])
+    self.assertEqual(premethods, ["Pre25", "Pre37"])
+    all_names = await self.backend.list_protocols()
+    self.assertEqual(methods + premethods, all_names)
 
   async def test_get_protocol_returns_none_for_missing(self):
     """Test get_protocol returns None when name not found."""

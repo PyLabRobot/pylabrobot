@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, replace
-from typing import Any, Dict, List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
@@ -30,6 +30,8 @@ from .odtc_model import (
   get_constraints,
   get_method_by_name,
   list_method_names,
+  list_method_names_only,
+  list_premethod_names,
   method_set_to_xml,
   normalize_variant,
   odtc_method_to_protocol,
@@ -158,8 +160,9 @@ class CommandExecution:
   def _log_wait_info(self) -> None:
     """Log command/method name, duration (lifetime), and remaining time (computed at call time).
 
-    Includes a timestamp so log history gives a clear sense of when each wait
-    was logged and what remaining time was at that moment, without re-querying.
+    Multi-line format for clear display in console/notebook. Includes a timestamp
+    so log history gives a clear sense of when each wait was logged and what
+    remaining time was at that moment, without re-querying.
     """
     import time
 
@@ -176,10 +179,14 @@ class CommandExecution:
     remaining = max(0.0, lifetime - elapsed) if lifetime is not None else None
 
     ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
-    msg = f"[{ts}] Waiting for {name}, duration (timeout)={lifetime}s"
+    lines = [
+      f"[{ts}] Waiting for command",
+      f"  Command: {name}",
+      f"  Duration (timeout): {lifetime}s",
+    ]
     if remaining is not None:
-      msg += f", remaining={remaining:.0f}s"
-    self.backend.logger.info(msg)
+      lines.append(f"  Remaining: {remaining:.0f}s")
+    self.backend.logger.info("\n".join(lines))
 
   async def wait(self) -> None:
     """Wait for command completion.
@@ -296,6 +303,7 @@ class ODTCBackend(ThermocyclerBackend):
     super().__init__()
     self._variant = normalize_variant(variant)
     self._current_execution: Optional[MethodExecution] = None
+    self._simulation_mode: bool = False
     self._sila = ODTCSiLAInterface(
       machine_ip=odtc_ip,
       client_ip=client_ip,
@@ -321,38 +329,84 @@ class ODTCBackend(ThermocyclerBackend):
     """Current method execution handle (set when a method is started with wait=False or wait=True)."""
     return self._current_execution
 
+  @property
+  def simulation_mode(self) -> bool:
+    """Whether the device is in simulation mode (from the last reset() call).
+
+    Reflects the last simulation_mode passed to reset(); valid once that Reset
+    has completed (or immediately if wait=True). Use this to check state without
+    calling reset again.
+    """
+    return self._simulation_mode
+
   def _clear_current_execution_if(self, handle: MethodExecution) -> None:
     """Clear _current_execution only if it still refers to the given handle."""
     if self._current_execution is handle:
       self._current_execution = None
 
-  async def setup(self) -> None:
-    """Prepare the ODTC connection and bring the device to idle.
+  async def setup(
+    self,
+    full: bool = True,
+    simulation_mode: bool = False,
+    max_attempts: int = 3,
+    retry_backoff_base_seconds: float = 1.0,
+  ) -> None:
+    """Prepare the ODTC connection.
 
-    Performs the full SiLA connection lifecycle:
-    1. Sets up the HTTP event receiver server
-    2. Calls Reset to move from startup -> standby and register event receiver
-    3. Waits for Reset to complete and checks state
-    4. Calls Initialize (SiLA command) to move from standby -> idle
-    5. Verifies device is in idle state after Initialize
+    When full=True (default): full SiLA lifecycle (event receiver, Reset,
+    Initialize, verify idle), with optional retry and exponential backoff.
+    When full=False: only start the event receiver (reconnect without reset);
+    use after session loss so a running method is not aborted; then use
+    wait_for_completion_by_time() or a persisted handle's wait_resumable().
 
-    This is lifecycle/connection setup; initialize() is the SiLA command that
-    moves standby -> idle (called by setup() when needed).
+    Args:
+      full: If True, run full lifecycle (event receiver + Reset + Initialize).
+        If False, only start event receiver; do not call Reset or Initialize.
+      simulation_mode: Used only when full=True; passed to reset(). When True,
+        device runs in SiLA simulation mode (commands return immediately with
+        estimated duration; valid until next Reset).
+      max_attempts: When full=True, number of attempts for the full path
+        (default 3). On failure, retry with exponential backoff.
+      retry_backoff_base_seconds: Base delay in seconds for backoff; delay
+        before attempt i (i > 0) is retry_backoff_base_seconds * (2 ** (i - 1)).
     """
-    # Step 1: Set up the HTTP event receiver server
+    if not full:
+      await self._sila.setup()
+      return
+
+    last_error: Optional[Exception] = None
+    for attempt in range(max_attempts):
+      try:
+        await self._setup_full_path(simulation_mode)
+        return
+      except Exception as e:  # noqa: BLE001
+        last_error = e
+        if attempt < max_attempts - 1:
+          wait_time = retry_backoff_base_seconds * (2 ** attempt)
+          self.logger.warning(
+            "Setup attempt %s/%s failed: %s. Retrying in %.1fs.",
+            attempt + 1,
+            max_attempts,
+            e,
+            wait_time,
+          )
+          await asyncio.sleep(wait_time)
+        else:
+          raise last_error from e
+    if last_error is not None:
+      raise last_error from last_error
+
+  async def _setup_full_path(self, simulation_mode: bool) -> None:
+    """Run the full connection path: event receiver, Reset, Initialize, verify idle."""
     await self._sila.setup()
 
-    # Step 2: Reset (startup -> standby) - registers event receiver URI
-    # Reset is async, so we wait for it to complete
     event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
     await self.reset(
       device_id="ODTC",
       event_receiver_uri=event_receiver_uri,
-      simulation_mode=False,
+      simulation_mode=simulation_mode,
     )
 
-    # Step 3: Check state after Reset completes
-    # GetStatus is synchronous and will update our internal state tracking
     status = await self.get_status()
     self.logger.info(f"GetStatus returned raw state: {status!r} (type: {type(status).__name__})")
 
@@ -360,7 +414,6 @@ class ODTCBackend(ThermocyclerBackend):
       self.logger.info("Device is in standby state, calling Initialize...")
       await self.initialize()
 
-      # Step 4: Verify device is in idle state after Initialize
       status_after_init = await self.get_status()
 
       if status_after_init == SiLAState.IDLE.value:
@@ -371,7 +424,6 @@ class ODTCBackend(ThermocyclerBackend):
           f"but got {status_after_init!r}."
         )
     elif status == SiLAState.IDLE.value:
-      # Already in idle, nothing to do
       self.logger.info("Device already in idle state after Reset")
     else:
       raise RuntimeError(
@@ -580,6 +632,10 @@ class ODTCBackend(ThermocyclerBackend):
   ) -> Optional[CommandExecution]:
     """Reset the device (SiLA command: startup -> standby, register event receiver).
 
+    The simulation_mode attribute on this backend is updated to the value passed
+    here; it reflects the last reset() call and is valid once that Reset has
+    completed (or immediately if wait=True).
+
     Args:
       device_id: Device identifier (SiLA: deviceId).
       event_receiver_uri: Event receiver URI (SiLA: eventReceiverURI; auto-detected if None).
@@ -590,6 +646,7 @@ class ODTCBackend(ThermocyclerBackend):
     Returns:
       If wait=True: None. If wait=False: execution handle (awaitable).
     """
+    self._simulation_mode = simulation_mode
     if event_receiver_uri is None:
       event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
     return await self._run_async_command(
@@ -737,7 +794,9 @@ class ODTCBackend(ThermocyclerBackend):
       )
 
     # Parse the XML string (it's escaped in the response)
-    return parse_sensor_values(sensor_xml)
+    sensor_values = parse_sensor_values(sensor_xml)
+    self.logger.debug("ReadActualTemperature: %s", sensor_values.format_compact())
+    return sensor_values
 
   async def get_last_data(self) -> str:
     """Get temperature trace of last executed method (CSV format).
@@ -966,6 +1025,16 @@ class ODTCBackend(ThermocyclerBackend):
     """
     method_set = await self.get_method_set()
     return list_method_names(method_set)
+
+  async def list_methods(self) -> Tuple[List[str], List[str]]:
+    """List method names and premethod names separately.
+
+    Returns:
+      Tuple of (method_names, premethod_names). Methods are runnable protocols;
+      premethods are setup-only (e.g. set block/lid temperature).
+    """
+    method_set = await self.get_method_set()
+    return (list_method_names_only(method_set), list_premethod_names(method_set))
 
   def get_default_config(self, **kwargs) -> ODTCConfig:
     """Get a default ODTCConfig with variant set to this backend's variant.

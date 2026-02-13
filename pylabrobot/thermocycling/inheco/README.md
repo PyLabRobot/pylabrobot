@@ -4,7 +4,7 @@
 
 Interface for Inheco ODTC thermocyclers via SiLA (SOAP over HTTP). Supports asynchronous method execution (blocking and non-blocking), round-trip protocol conversion (ODTC XML ↔ PyLabRobot `Protocol` with lossless ODTC parameters), parallel commands (e.g. read temperatures during run), and DataEvent collection.
 
-**New users:** Start with **Connection and Setup**, then **Recommended Workflows** (run by name, round-trip for thermal performance, set block/lid temp). Use **Running Commands** and **Getting Protocols** for async handles and device introspection; **XML to Protocol + Config** for conversion detail.
+**New users:** Start with **Connection and Setup**, then **Recommended Workflows** (run by name, round-trip for thermal performance, set block/lid temp). A step-by-step tutorial notebook is in **`dev/odtc_tutorial.ipynb`**. Use **Running Commands** and **Getting Protocols** for async handles and device introspection; **XML to Protocol + Config** for conversion detail.
 
 ## Architecture
 
@@ -36,10 +36,7 @@ Understanding the distinction between **Protocol** and **Method** is crucial for
   - Used to reference methods when executing: `await tc.run_protocol(method_name="PCR_30cycles")`
   - Can be a Method or PreMethod name (both are stored on the device)
 
-### Key API
-
-- **Resource:** `tc.run_protocol(protocol, block_max_volume)` — in-memory (upload + execute); `tc.run_stored_protocol(name)` — by name (ODTC only).
-- **Backend:** `tc.backend.list_protocols()`, `get_protocol(name)` (runnable methods only; premethods → `None`), `upload_protocol(...)`, `set_block_temperature(...)` (PreMethod), `get_default_config()`, `get_constraints()`, `execute_method(method_name)` (low-level).
+**API:** Resource: `tc.run_protocol(protocol, block_max_volume)` or `tc.run_stored_protocol(name)`. Backend: `tc.backend.list_protocols()`, `get_protocol(name)` (runnable only; premethods → `None`), `upload_protocol(...)`, `set_block_temperature(...)`, `get_default_config()`, `execute_method(method_name)`.
 
 ## Connection and Setup
 
@@ -70,6 +67,16 @@ await tc.setup()
 ```
 
 **Estimated duration:** The device does not return duration in the async response. We compute it: PreMethod = 10 min; Method = from steps (ramp + plateau + overshoot, with loops). This estimate is used for `handle.estimated_remaining_time`, when to start polling, and a tighter timeout cap.
+
+**Setup options:** `setup(full=True, simulation_mode=False, max_attempts=3, retry_backoff_base_seconds=1.0)`. When `full=True` (default), the full path runs up to `max_attempts` times with exponential backoff on failure (e.g. flaky network). Use `max_attempts=1` to disable retry. Use `full=False` to only start the event receiver without resetting the device (see **Reconnecting after session loss** below).
+
+### Simulation mode
+
+Enter simulation mode: `await tc.backend.reset(simulation_mode=True)`. Exit: `await tc.backend.reset(simulation_mode=False)`. In simulation mode, commands return immediately with estimated duration; valid until the next Reset. Check state without resetting: `tc.backend.simulation_mode` reflects the last `reset(simulation_mode=...)` call. To bring the device up in simulation: `await tc.setup(simulation_mode=True)` (full path with simulation enabled).
+
+### Reconnecting after session loss
+
+If the session or connection was lost while a method is running, you can reconnect without aborting the method. Create a new backend (or thermocycler), then call `await tc.backend.setup(full=False)` to only start the event receiver—do **not** call full setup (that would Reset and abort the method). Then use `wait_for_completion_by_time(...)` or a persisted handle's `wait_resumable()` to wait for the in-flight method to complete. After the method is done, call `setup(full=True)` if you need a full session for subsequent commands.
 
 ### Cleanup
 
@@ -162,8 +169,8 @@ Most ODTC commands are asynchronous and support both blocking and non-blocking e
 
 ```python
 # Block until command completes
-await tc.open_door()  # Returns None when complete
-await tc.close_door()
+await tc.open_lid()  # Returns None when complete
+await tc.close_lid()
 await tc.initialize()
 await tc.reset()
 ```
@@ -172,7 +179,7 @@ await tc.reset()
 
 ```python
 # Start command and get execution handle
-door_opening = await tc.open_door(wait=False)
+door_opening = await tc.open_lid(wait=False)
 # Returns CommandExecution handle immediately
 
 # Do other work while command runs
@@ -192,7 +199,7 @@ await door_opening.wait()  # Explicit wait method
 
 ```python
 # Non-blocking door operation
-door_opening = await tc.open_door(wait=False)
+door_opening = await tc.open_lid(wait=False)
 
 # Get DataEvents for this execution
 events = await door_opening.get_data_events()
@@ -205,7 +212,7 @@ await door_opening
 
 - **Blocking:** `await tc.run_stored_protocol("PCR_30cycles")` or `await tc.run_protocol(protocol, block_max_volume=50.0)` (upload + execute).
 - **Non-blocking:** `execution = await tc.run_stored_protocol("PCR_30cycles", wait=False)`; then `await execution` or `await execution.wait()` or `await tc.wait_for_method_completion()`.
-- While a method runs you can call `read_temperatures()`, `open_door(wait=False)`, etc. (parallel where allowed).
+- While a method runs you can call `read_temperatures()`, `open_lid(wait=False)`, etc. (parallel where allowed).
 
 #### MethodExecution Handle
 
@@ -259,9 +266,9 @@ execution = await tc.run_stored_protocol("PCR_30cycles", wait=False)
 
 # These can run in parallel:
 temps = await tc.read_temperatures()
-door_opening = await tc.open_door(wait=False)
+door_opening = await tc.open_lid(wait=False)
 
-# Wait for door to complete
+# Wait for lid to complete
 await door_opening
 
 # These will queue/wait:
@@ -278,8 +285,8 @@ method2 = await tc.run_protocol(method_name="PCR_40cycles", wait=False)  # Waits
 
 ```python
 # CommandExecution example
-door_opening = await tc.open_door(wait=False)
-await door_opening  # Wait for door to open
+door_opening = await tc.open_lid(wait=False)
+await door_opening  # Wait for lid to open
 
 # MethodExecution example (has additional features)
 method_exec = await tc.run_stored_protocol("PCR_30cycles", wait=False)
@@ -299,6 +306,14 @@ protocol_names = await tc.backend.list_protocols()
 
 for name in protocol_names:
     print(f"Protocol: {name}")
+```
+
+### List Methods and PreMethods Separately
+
+```python
+# Returns (method_names, premethod_names); methods are runnable, premethods are setup-only
+methods, premethods = await tc.backend.list_methods()
+# methods + premethods equals list_protocols()
 ```
 
 ### Get Runnable Protocol by Name
@@ -331,10 +346,16 @@ for premethod in method_set.premethods:
 # Get runnable protocol from device (StoredProtocol has protocol + config)
 stored = await tc.backend.get_protocol("PCR_30cycles")
 if stored:
+    print(stored)  # Human-readable summary (name, stages, steps, config)
     # stored.protocol: Generic PyLabRobot Protocol (stages, steps, temperatures, times)
     # stored.config: ODTCConfig preserving all ODTC-specific parameters
     await tc.run_protocol(stored.protocol, block_max_volume=50.0, config=stored.config)
 ```
+
+### Display and logging
+
+- **StoredProtocol** and **ODTCSensorValues**: `print(stored)` and `print(await tc.backend.read_temperatures())` show labeled summaries. ODTCSensorValues `__str__` is multi-line for display; use `format_compact()` for single-line logs.
+- **Wait messages**: When you `await handle`, `handle.wait()`, or `handle.wait_resumable()`, the message logged at INFO is multi-line (command, duration, remaining time) for clear console/notebook display.
 
 ## Running Protocols (reference)
 
