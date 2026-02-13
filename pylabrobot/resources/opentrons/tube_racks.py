@@ -1,4 +1,3 @@
-from typing import cast
 from pylabrobot.resources.tube_rack import TubeRack
 from pylabrobot.resources.opentrons.load import load_ot_tube_rack
 from pylabrobot.resources.tube import Tube
