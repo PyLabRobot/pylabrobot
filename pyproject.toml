@@ -21,6 +21,7 @@ opentrons = ["opentrons-http-api-client"]
 server = ["flask[async]==3.1.2"]
 inheco = ["hid==1.0.8"]
 agrow = ["pymodbus==3.6.8"]
+sila = ["zeroconf>=0.131.0"]
 dev = [
   "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,server,inheco,agrow]",
   "pytest==8.4.2",
