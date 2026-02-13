@@ -1,6 +1,6 @@
+from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tube_rack import TubeRack
 from pylabrobot.resources.opentrons.load import load_ot_tube_rack
-from pylabrobot.resources.tube import Tube
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
@@ -12,37 +12,41 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
   https://raw.githubusercontent.com/Opentrons/opentrons/edge/shared-data/labware/definitions/2/opentrons_24_tuberack_nest_1.5ml_screwcap/1.json
   """
 
-  INNER_WELL_WIDTH  = 9.2 # measured
-  INNER_WELL_LENGTH = 9.2 # measured
-  WELL_DEPTH        = 37.40 # measured
-  TUBE_MAX_VOL      = 1750  # µL  (generic 1.75 mL snap-cap)
+  WELL_DIAMETER = 9.2   # measured (circular -> inscribed square sizing is used elsewhere; see below)
+  WELL_DEPTH = 37.40    # measured
 
-  tube_kwargs = {
-    "size_x": INNER_WELL_WIDTH,
-    "size_y": INNER_WELL_LENGTH,
-    "size_z": WELL_DEPTH,
-    "max_volume": TUBE_MAX_VOL,
-    "material_z_thickness": 0.80
-  }
+  # PLR's OT loader converts circular diameter to a square footprint using diameter / sqrt(2).
+  # Your earlier code already used inner well width/length of 9.2; if 9.2 is the *square* size,
+  # keep it. If 9.2 is the *diameter*, convert like load_ot_tube_rack does.
+  #
+  # If 9.2 is "inner square width", use:
+  well_size_x = well_size_y = WELL_DIAMETER
+  #
+  # If instead 9.2 is a measured *diameter*, use this:
+  # import math
+  # well_size_x = well_size_y = round(WELL_DIAMETER / math.sqrt(2), 3)
 
   return TubeRack(
     name=name,
-    size_x=127.75, # spec
-    size_y=85.50, # spec
-    size_z=48.5, # measured. This is on the short 3D printed rack and not in the sheet
+    size_x=127.75,  # spec
+    size_y=85.50,   # spec
+    size_z=48.5,    # measured (short stand)
     model=opentrons_24_tuberack_generic_1point5ml_snapcap_short.__name__,
     ordered_items=create_ordered_items_2d(
-        Tube,
-        num_items_x=6,
-        num_items_y=4,
-        dx=13.5, # measured
-        dy=13.5, # measured
-        dz=12, # measured
-        item_dx=19.89, # spec
-        item_dy=19.28, # spec
-        **tube_kwargs,
+      ResourceHolder,
+      num_items_x=6,
+      num_items_y=4,
+      dx=13.5,      # measured
+      dy=13.5,      # measured
+      dz=12,        # measured
+      item_dx=19.89,  # spec
+      item_dy=19.28,  # spec
+      size_x=well_size_x,
+      size_y=well_size_y,
+      size_z=WELL_DEPTH,
     ),
   )
+
 
 def opentrons_10_tuberack_falcon_4x50ml_6x15ml_conical(name: str) -> TubeRack:
   return load_ot_tube_rack(
