@@ -114,7 +114,10 @@ class Serial(IOBase):
     """
 
     if not HAS_SERIAL:
-      raise RuntimeError(f"pyserial not installed. Import error: {_SERIAL_IMPORT_ERROR}")
+      raise RuntimeError(
+        "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+        f"Import error: {_SERIAL_IMPORT_ERROR}"
+      )
 
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)

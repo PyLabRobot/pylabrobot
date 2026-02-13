@@ -47,8 +47,8 @@ class HID(IOBase):
     """
     if not USE_HID:
       raise RuntimeError(
-        "This backend requires the `hid` package to be installed."
-        f" Import error: {_HID_IMPORT_ERROR}"
+        "hid is not installed. Install with: pip install pylabrobot[hid]. "
+        f"Import error: {_HID_IMPORT_ERROR}"
       )
 
     # --- 1. Enumerate all HID devices ---

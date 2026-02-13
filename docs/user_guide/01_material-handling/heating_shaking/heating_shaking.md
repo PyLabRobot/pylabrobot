@@ -1,5 +1,15 @@
 # Heater Shakers
 
+## Installation
+
+Most heater-shakers use a serial connection:
+
+```bash
+pip install pylabrobot[serial]
+```
+
+For Inheco devices in HID mode, install `pip install pylabrobot[hid]` instead.
+
 Heater-shakers are a hybrid of {class}`~pylabrobot.temperature_controllers.temperature_controller.TemperatureController` and {class}`~pylabrobot.shakers.shaker.Shaker`. They are used to control the temperature of a sample while shaking it.
 
 PyLabRobot supports the following heater shakers:

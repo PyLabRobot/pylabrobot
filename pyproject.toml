@@ -12,17 +12,18 @@ dynamic = ["version"]
 dependencies = ["typing_extensions==4.15.0"]
 
 [project.optional-dependencies]
-fw = ["pyserial==3.5", "pyusb==1.3.1", "libusb-package==1.0.26.1"]
+serial = ["pyserial==3.5"]
+usb = ["pyusb==1.3.1", "libusb-package==1.0.26.1"]
+ftdi = ["pylibftdi==0.23.0", "pyusb==1.3.1"]
+hid = ["hid==1.0.8"]
+modbus = ["pymodbus==3.6.8"]
 http = ["requests==2.32.5", "types-requests==2.32.4.20250913"]
-plate_reading = ["pylibftdi==0.23.0"]
 websockets = ["websockets==15.0.1"]
 visualizer = ["websockets==15.0.1"]
 opentrons = ["opentrons-http-api-client"]
 server = ["flask[async]==3.1.2"]
-inheco = ["hid==1.0.8"]
-agrow = ["pymodbus==3.6.8"]
 dev = [
-  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,server,inheco,agrow]",
+  "PyLabRobot[serial,usb,ftdi,hid,modbus,http,websockets,visualizer,opentrons,server]",
   "pytest==8.4.2",
   "pytest-timeout==2.4.0",
   "mypy==1.18.2",
@@ -71,23 +72,23 @@ python = ">=3.9"
 [tool.pixi.pypi-dependencies]
 pylabrobot = { path = ".", editable = true }
 
-[tool.pixi.feature.fw.dependencies]
+[tool.pixi.feature.usb.dependencies]
 libusb = "*"
 
-[tool.pixi.feature.fw.pypi-dependencies]
-pylabrobot = { path = ".", editable = true, extras = ["fw"] }
+[tool.pixi.feature.usb.pypi-dependencies]
+pylabrobot = { path = ".", editable = true, extras = ["usb"] }
 
-[tool.pixi.feature.plate-reading.dependencies]
+[tool.pixi.feature.ftdi.dependencies]
 libftdi = "*"
 
-[tool.pixi.feature.plate-reading.pypi-dependencies]
-pylabrobot = { path = ".", editable = true, extras = ["plate_reading"] }
+[tool.pixi.feature.ftdi.pypi-dependencies]
+pylabrobot = { path = ".", editable = true, extras = ["ftdi"] }
 
-[tool.pixi.feature.inheco.dependencies]
+[tool.pixi.feature.hid.dependencies]
 libhidapi = "*"
 
-[tool.pixi.feature.inheco.pypi-dependencies]
-pylabrobot = { path = ".", editable = true, extras = ["inheco"] }
+[tool.pixi.feature.hid.pypi-dependencies]
+pylabrobot = { path = ".", editable = true, extras = ["hid"] }
 
 [tool.pixi.feature.dev.dependencies]
 libusb = "*"
@@ -106,7 +107,7 @@ typecheck = "python -m mypy pylabrobot --check-untyped-defs"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
-fw = { features = ["fw"], solve-group = "fw" }
-plate-reading = { features = ["plate-reading"], solve-group = "plate-reading" }
-inheco = { features = ["inheco"], solve-group = "inheco" }
+usb = { features = ["usb"], solve-group = "usb" }
+ftdi = { features = ["ftdi"], solve-group = "ftdi" }
+hid = { features = ["hid"], solve-group = "hid" }
 dev = { features = ["dev"], solve-group = "dev" }

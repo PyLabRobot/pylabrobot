@@ -62,10 +62,16 @@ class FTDI(IOBase):
   ):
     if not HAS_PYLIBFTDI:
       global _FTDI_ERROR
-      raise RuntimeError(f"pylibftdi not installed. Import error: {_FTDI_ERROR}")
+      raise RuntimeError(
+        "pylibftdi is not installed. Install with: pip install pylabrobot[ftdi]. "
+        f"Import error: {_FTDI_ERROR}"
+      )
     if not HAS_PYUSB:
       global _PYUSB_ERROR
-      raise RuntimeError(f"pyusb not installed. Import error: {_PYUSB_ERROR}")
+      raise RuntimeError(
+        "pyusb is not installed. Install with: pip install pylabrobot[ftdi]. "
+        f"Import error: {_PYUSB_ERROR}"
+      )
 
     self._device_id = device_id
     self._vid = vid

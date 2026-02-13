@@ -1,5 +1,11 @@
 # Cole Parmer Masterflex
 
+## Installation
+
+```bash
+pip install pylabrobot[serial]
+```
+
 PyLabRobot supports the following pumps:
 
 - {ref}`Cole Parmer Masterflex <masterflex>`
