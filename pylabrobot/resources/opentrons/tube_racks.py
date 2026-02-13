@@ -1,6 +1,6 @@
+from pylabrobot.resources.opentrons.load import load_ot_tube_rack
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tube_rack import TubeRack
-from pylabrobot.resources.opentrons.load import load_ot_tube_rack
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
@@ -12,8 +12,8 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
   https://raw.githubusercontent.com/Opentrons/opentrons/edge/shared-data/labware/definitions/2/opentrons_24_tuberack_nest_1.5ml_screwcap/1.json
   """
 
-  WELL_DIAMETER = 9.2   # measured (circular -> inscribed square sizing is used elsewhere; see below)
-  WELL_DEPTH = 37.40    # measured
+  WELL_DIAMETER = 9.2  # measured (circular -> inscribed square sizing is used elsewhere; see below)
+  WELL_DEPTH = 37.40  # measured
 
   # PLR's OT loader converts circular diameter to a square footprint using diameter / sqrt(2).
   # Your earlier code already used inner well width/length of 9.2; if 9.2 is the *square* size,
@@ -29,16 +29,16 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
   return TubeRack(
     name=name,
     size_x=127.75,  # spec
-    size_y=85.50,   # spec
-    size_z=48.5,    # measured (short stand)
+    size_y=85.50,  # spec
+    size_z=48.5,  # measured (short stand)
     model=opentrons_24_tuberack_generic_1point5ml_snapcap_short.__name__,
     ordered_items=create_ordered_items_2d(
       ResourceHolder,
       num_items_x=6,
       num_items_y=4,
-      dx=13.5,      # measured
-      dy=13.5,      # measured
-      dz=12,        # measured
+      dx=13.5,  # measured
+      dy=13.5,  # measured
+      dz=12,  # measured
       item_dx=19.89,  # spec
       item_dy=19.28,  # spec
       size_x=well_size_x,
