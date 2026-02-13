@@ -867,7 +867,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     ):
       await self.backend.run_stored_protocol("MyMethod", wait=True)
     self.backend.execute_method.assert_called_once_with(
-      "MyMethod", wait=True, estimated_duration_seconds=None
+      "MyMethod", wait=True, estimated_duration_seconds=None, protocol=None
     )
 
 

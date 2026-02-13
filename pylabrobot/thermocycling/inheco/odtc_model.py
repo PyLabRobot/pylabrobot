@@ -770,51 +770,31 @@ def _method_to_xml(method: ODTCMethod, parent: ET.Element) -> ET.Element:
 # =============================================================================
 
 
-def parse_method_set(xml_str: str) -> ODTCMethodSet:
-  """Parse a MethodSet XML string."""
-  root = ET.fromstring(xml_str)
-
-  # Parse DeleteAllMethods
+def parse_method_set_from_root(root: ET.Element) -> ODTCMethodSet:
+  """Parse a MethodSet from an XML root element."""
   delete_elem = root.find("DeleteAllMethods")
   delete_all = False
   if delete_elem is not None and delete_elem.text:
     delete_all = delete_elem.text.lower() == "true"
-
-  # Parse PreMethods
   premethods = [from_xml(pm, ODTCPreMethod) for pm in root.findall("PreMethod")]
-
-  # Parse Methods (with special PIDSet handling)
   methods = [_parse_method(m) for m in root.findall("Method")]
-
   return ODTCMethodSet(
     delete_all_methods=delete_all,
     premethods=premethods,
     methods=methods,
   )
+
+
+def parse_method_set(xml_str: str) -> ODTCMethodSet:
+  """Parse a MethodSet XML string."""
+  root = ET.fromstring(xml_str)
+  return parse_method_set_from_root(root)
 
 
 def parse_method_set_file(filepath: str) -> ODTCMethodSet:
   """Parse a MethodSet XML file."""
   tree = ET.parse(filepath)
-  root = tree.getroot()
-
-  # Parse DeleteAllMethods
-  delete_elem = root.find("DeleteAllMethods")
-  delete_all = False
-  if delete_elem is not None and delete_elem.text:
-    delete_all = delete_elem.text.lower() == "true"
-
-  # Parse PreMethods
-  premethods = [from_xml(pm, ODTCPreMethod) for pm in root.findall("PreMethod")]
-
-  # Parse Methods (with special PIDSet handling)
-  methods = [_parse_method(m) for m in root.findall("Method")]
-
-  return ODTCMethodSet(
-    delete_all_methods=delete_all,
-    premethods=premethods,
-    methods=methods,
-  )
+  return parse_method_set_from_root(tree.getroot())
 
 
 def method_set_to_xml(method_set: ODTCMethodSet) -> str:
