@@ -62,10 +62,6 @@ class Rotation:
   def __add__(self, other) -> "Rotation":
     return Rotation(x=self.x + other.x, y=self.y + other.y, z=self.z + other.z)
 
-  @staticmethod
-  def deserialize(data) -> "Rotation":
-    return Rotation(data.get("x", 0), data.get("y", 0), data.get("z", 0))
-
   def __repr__(self) -> str:
     return self.__str__()
 

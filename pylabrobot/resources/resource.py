@@ -757,9 +757,9 @@ class Resource:
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
     if rotation is not None:
-      resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
+      resource.rotation = deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
-      resource.barcode = Barcode.deserialize(barcode)
+      resource.barcode = Barcode(**barcode)
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
 

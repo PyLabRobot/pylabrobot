@@ -150,5 +150,3 @@ def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
   if isinstance(data, object):
     return data
   raise TypeError(f"Cannot deserialize {data} of type {type(data)}")
-
-

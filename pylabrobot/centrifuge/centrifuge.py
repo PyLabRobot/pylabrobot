@@ -134,7 +134,6 @@ class Centrifuge(Machine, Resource):
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    backend = CentrifugeBackend.deserialize(data["backend"])
     buckets_data = data.get("buckets")
     buckets = (
       tuple(ResourceHolder.deserialize(bucket) for bucket in buckets_data) if buckets_data else None
@@ -143,13 +142,13 @@ class Centrifuge(Machine, Resource):
       assert len(buckets) == 2
     rotation_data = data.get("rotation")
     return cls(
-      backend=backend,
+      backend=CentrifugeBackend.deserialize(data["backend"]),
       name=data["name"],
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
-      rotation=Rotation.deserialize(rotation_data) if rotation_data else None,
-      category=data.get("category", "centrifuge"),
+      rotation=deserialize(rotation_data) if rotation_data else None,
+      category=data.get("category"),
       model=data.get("model"),
       buckets=buckets,
     )
@@ -235,6 +234,7 @@ class Loader(Machine, ResourceHolder):
   def deserialize(cls, data: dict, allow_marshal: bool = False):
     resource_data = data.get("resource", {})
     machine_data = data.get("machine", {})
+    rotation_data = resource_data.get("rotation")
     return cls(
       backend=LoaderBackend.deserialize(machine_data["backend"]),
       centrifuge=Centrifuge.deserialize(data["centrifuge"]),
@@ -243,9 +243,7 @@ class Loader(Machine, ResourceHolder):
       size_y=resource_data["size_y"],
       size_z=resource_data["size_z"],
       child_location=deserialize(resource_data["child_location"]),
-      rotation=deserialize(resource_data.get("rotation"))
-      if resource_data.get("rotation")
-      else None,
-      category=resource_data.get("category", "loader"),
+      rotation=deserialize(rotation_data) if rotation_data else None,
+      category=resource_data.get("category"),
       model=resource_data.get("model"),
     )
