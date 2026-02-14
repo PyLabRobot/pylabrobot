@@ -399,10 +399,7 @@ class CommandExecution:
     ]
     if remaining is not None:
       lines.append(f"  Remaining: {remaining:.0f}s")
-    msg = "\n".join(lines)
-    self.backend.logger.info("%s", msg)
-    # Also print so visible in notebooks/consoles without logging config
-    print(msg)
+    self.backend.logger.info("\n".join(lines))
 
   async def _is_done(self) -> bool:
     """True when the command has completed (Future resolved). Used by progress loop."""
@@ -1748,17 +1745,19 @@ class ODTCBackend(ThermocyclerBackend):
       except Exception:  # noqa: S110
         pass
     else:
-      msg = (
-        f"ODTC progress: elapsed {progress.elapsed_s:.0f}s, "
-        f"block {progress.current_temp_c or 0.0:.1f}°C (target {progress.target_temp_c or 0.0:.1f}°C), "
-        f"lid {progress.lid_temp_c or 0.0:.1f}°C, "
-        f"step {progress.current_step_index + 1}/{progress.total_step_count}, "
-        f"cycle {progress.current_cycle_index + 1}/{progress.total_cycle_count}, "
-        f"hold remaining ~{progress.remaining_hold_s:.0f}s"
+      self.logger.info(
+        "ODTC progress: elapsed %.0fs, block %.1f°C (target %.1f°C), lid %.1f°C, "
+        "step %d/%d, cycle %d/%d, hold remaining ~%.0fs",
+        progress.elapsed_s,
+        progress.current_temp_c or 0.0,
+        progress.target_temp_c or 0.0,
+        progress.lid_temp_c or 0.0,
+        progress.current_step_index + 1,
+        progress.total_step_count,
+        progress.current_cycle_index + 1,
+        progress.total_cycle_count,
+        progress.remaining_hold_s,
       )
-      self.logger.info("%s", msg)
-      # Also print so progress is visible in notebooks/consoles without logging config
-      print(msg)
 
   async def _run_progress_loop_until(
     self,
