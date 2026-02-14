@@ -92,9 +92,10 @@ def verbose(make_verbose: bool, level: int = logging.INFO) -> None:
       if handler.stream in (sys.stdout, sys.stderr):
         logger.removeHandler(handler)
   if make_verbose:
-    logger.setLevel(level)
+    effective_level = min(logger.level, level) if logger.level != logging.NOTSET else level
+    logger.setLevel(effective_level)
     handler = logging.StreamHandler()
-    handler.setLevel(level)
+    handler.setLevel(effective_level)
     handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
 

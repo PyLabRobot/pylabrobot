@@ -18,11 +18,12 @@ plate_reading = ["pylibftdi==0.23.0"]
 websockets = ["websockets==15.0.1"]
 visualizer = ["websockets==15.0.1"]
 opentrons = ["opentrons-http-api-client"]
-server = ["flask[async]==3.1.2"]
 inheco = ["hid==1.0.8"]
 agrow = ["pymodbus==3.6.8"]
+sila = ["zeroconf>=0.131.0"]
+gui = ["flask[async]==3.1.2"]
 dev = [
-  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,server,inheco,agrow]",
+  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,inheco,agrow,gui,sila]",
   "pytest==8.4.2",
   "pytest-timeout==2.4.0",
   "mypy==1.18.2",
@@ -38,7 +39,6 @@ dev = [
 all = ["PyLabRobot[dev]"]
 
 [project.scripts]
-lh-server = "pylabrobot.server.liquid_handling_server:main"
 plr-gui = "pylabrobot.gui.gui:main"
 
 [project.urls]
