@@ -46,7 +46,7 @@ class TestDecodeNbnsName(unittest.TestCase):
   def _make_nbstat_response(self, name: str) -> bytes:
     """Build a minimal NBSTAT response with one name entry."""
     # Transaction header (12 bytes)
-    header = b"\x80\x01" + b"\x84\x00" + b"\x00\x00" + b"\x00\x01" + b"\x00\x00" + b"\x00\x00"
+    header = b"\x00\x01" + b"\x84\x00" + b"\x00\x00" + b"\x00\x01" + b"\x00\x00" + b"\x00\x00"
     # Answer name section (skip to type marker)
     answer_name = b"\x20" + b"CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + b"\x00"
     type_class = b"\x00\x21\x00\x01"  # NBSTAT, IN
@@ -95,7 +95,7 @@ class TestParseDeviceIdentification(unittest.TestCase):
   </soap:Body>
 </soap:Envelope>"""
     result = _parse_device_identification("169.254.1.1", 8080, xml)
-    self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(result.host, "169.254.1.1")
     self.assertEqual(result.port, 8080)
     self.assertEqual(result.name, "ODTC_1A3C93")
@@ -112,7 +112,7 @@ class TestParseDeviceIdentification(unittest.TestCase):
   </soap:Body>
 </soap:Envelope>"""
     result = _parse_device_identification("10.0.0.1", 8080, xml)
-    self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(result.name, "MyDevice")
     self.assertIsNone(result.serial_number)
     self.assertIsNone(result.firmware_version)
