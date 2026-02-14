@@ -1138,9 +1138,8 @@ class ODTCBackend(ThermocyclerBackend):
   async def get_protocol(self, name: str) -> Optional[ODTCProtocol]:
     """Get a stored protocol by name (runnable methods only; premethods return None).
 
-    Resolves the stored method by name. If it is a runnable method (ODTCProtocol
-    with kind='method'), returns that ODTCProtocol. If it is a premethod or not
-    found, returns None.
+    Returns ODTCProtocol if a runnable method exists. Nested-loop validation
+    runs only when converting to Protocol view (e.g. odtc_protocol_to_protocol).
 
     Args:
       name: Protocol name to retrieve.
@@ -1150,9 +1149,7 @@ class ODTCBackend(ThermocyclerBackend):
     """
     method_set = await self.get_method_set()
     resolved = get_method_by_name(method_set, name)
-    if resolved is None:
-      return None
-    if resolved.kind == "premethod":
+    if resolved is None or resolved.kind == "premethod":
       return None
     return resolved
 
@@ -1358,19 +1355,20 @@ class ODTCBackend(ThermocyclerBackend):
       existing_method_set = await self.get_method_set()
       conflicts = []
 
+      def _existing_item_type(existing: ODTCProtocol) -> str:
+        return "PreMethod" if existing.kind == "premethod" else "Method"
+
       # Check all method names (unified search)
       for method in method_set.methods:
         existing_method = get_method_by_name(existing_method_set, method.name)
         if existing_method is not None:
-          method_type = "PreMethod" if existing_method.kind == "premethod" else "Method"
-          conflicts.append(f"Method '{method.name}' already exists as {method_type}")
+          conflicts.append(f"Method '{method.name}' already exists as {_existing_item_type(existing_method)}")
 
       # Check all premethod names (unified search)
       for premethod in method_set.premethods:
         existing_method = get_method_by_name(existing_method_set, premethod.name)
         if existing_method is not None:
-          method_type = "PreMethod" if existing_method.kind == "premethod" else "Method"
-          conflicts.append(f"Method '{premethod.name}' already exists as {method_type}")
+          conflicts.append(f"Method '{premethod.name}' already exists as {_existing_item_type(existing_method)}")
 
       if conflicts:
         conflict_msg = "\n".join(f"  - {c}" for c in conflicts)

@@ -8,18 +8,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.thermocycling.inheco.odtc_backend import CommandExecution, MethodExecution, ODTCBackend
 from pylabrobot.thermocycling.inheco.odtc_model import (
-  ODTCMethod,
   ODTCMethodSet,
   ODTC_DIMENSIONS,
   ODTCProtocol,
-  ODTCPreMethod,
+  ODTCStage,
   ODTCStep,
   PREMETHOD_ESTIMATED_DURATION_SECONDS,
-  _odtc_method_to_odtc_protocol,
-  _odtc_premethod_to_odtc_protocol,
   estimate_method_duration_seconds,
+  method_set_to_xml,
   normalize_variant,
   odtc_protocol_to_protocol,
+  parse_method_set,
 )
 from pylabrobot.thermocycling.inheco.odtc_thermocycler import ODTCThermocycler
 from pylabrobot.resources import Coordinate
@@ -58,12 +57,13 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
 
   def test_empty_method_returns_zero(self):
     """Method with no steps has zero duration."""
-    method = ODTCMethod(name="empty", start_block_temperature=20.0, steps=[])
-    self.assertEqual(estimate_method_duration_seconds(method), 0.0)
+    odtc = ODTCProtocol(kind="method", name="empty", start_block_temperature=20.0, steps=[], stages=[])
+    self.assertEqual(estimate_method_duration_seconds(odtc), 0.0)
 
   def test_single_step_no_loop(self):
     """Single step: ramp + plateau + overshoot. Ramp = |95 - 20| / 4.4 ≈ 17.045 s."""
-    method = ODTCMethod(
+    odtc = ODTCProtocol(
+      kind="method",
       name="single",
       start_block_temperature=20.0,
       steps=[
@@ -77,14 +77,16 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
           loop_number=0,
         ),
       ],
+      stages=[],
     )
     # Ramp: 75 / 4.4 ≈ 17.045; plateau: 30; overshoot: 5
-    got = estimate_method_duration_seconds(method)
+    got = estimate_method_duration_seconds(odtc)
     self.assertAlmostEqual(got, 17.045 + 30 + 5, places=1)
 
   def test_single_step_zero_slope_clamped(self):
     """Zero slope is clamped to avoid division by zero; duration is finite."""
-    method = ODTCMethod(
+    odtc = ODTCProtocol(
+      kind="method",
       name="zero_slope",
       start_block_temperature=20.0,
       steps=[
@@ -98,14 +100,16 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
           loop_number=0,
         ),
       ],
+      stages=[],
     )
     # Ramp: 75 / 0.1 = 750 s (clamped); plateau: 10
-    got = estimate_method_duration_seconds(method)
+    got = estimate_method_duration_seconds(odtc)
     self.assertAlmostEqual(got, 750 + 10, places=1)
 
   def test_two_steps_with_loop(self):
     """Two steps with loop: step 1 -> step 2 (goto 1, loop 2) = run 1,2,1,2."""
-    method = ODTCMethod(
+    odtc = ODTCProtocol(
+      kind="method",
       name="loop",
       start_block_temperature=20.0,
       steps=[
@@ -128,10 +132,10 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
           loop_number=1,  # repeat_count = 2
         ),
       ],
+      stages=[],
     )
     # Execution: step1, step2, step1, step2
-    # Step1: ramp 75/4.4 + 10; step2: ramp 35/2.2 + 5; step1 again: 35/4.4 + 10; step2 again: 35/2.2 + 5
-    got = estimate_method_duration_seconds(method)
+    got = estimate_method_duration_seconds(odtc)
     self.assertGreater(got, 0)
     self.assertLess(got, 1000)
 
@@ -805,23 +809,23 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_list_protocols(self):
     """Test list_protocols returns method and premethod names."""
     method_set = ODTCMethodSet(
-      methods=[_odtc_method_to_odtc_protocol(ODTCMethod(name="PCR_30"))],
-      premethods=[_odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre25"))],
+      methods=[ODTCProtocol(kind="method", name="PCR_30", stages=[])],
+      premethods=[ODTCProtocol(kind="premethod", name="Pre25", stages=[])],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     names = await self.backend.list_protocols()
-    self.assertEqual(names, ["PCR_30", "Pre25"])
+    self.assertEqual(names.all, ["PCR_30", "Pre25"])
 
   async def test_list_methods(self):
     """Test list_methods returns (method_names, premethod_names) and matches list_protocols."""
     method_set = ODTCMethodSet(
       methods=[
-        _odtc_method_to_odtc_protocol(ODTCMethod(name="PCR_30")),
-        _odtc_method_to_odtc_protocol(ODTCMethod(name="PCR_35")),
+        ODTCProtocol(kind="method", name="PCR_30", stages=[]),
+        ODTCProtocol(kind="method", name="PCR_35", stages=[]),
       ],
       premethods=[
-        _odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre25")),
-        _odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre37")),
+        ODTCProtocol(kind="premethod", name="Pre25", stages=[]),
+        ODTCProtocol(kind="premethod", name="Pre37", stages=[]),
       ],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
@@ -841,7 +845,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test get_protocol returns None for premethod names (runnable protocols only)."""
     method_set = ODTCMethodSet(
       methods=[],
-      premethods=[_odtc_premethod_to_odtc_protocol(ODTCPreMethod(name="Pre25"))],
+      premethods=[ODTCProtocol(kind="premethod", name="Pre25", stages=[])],
     )
     self.backend.get_method_set = AsyncMock(return_value=method_set)  # type: ignore[method-assign]
     result = await self.backend.get_protocol("Pre25")
@@ -851,11 +855,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     """Test get_protocol returns ODTCProtocol for runnable method."""
     method_set = ODTCMethodSet(
       methods=[
-        _odtc_method_to_odtc_protocol(
-          ODTCMethod(
-            name="PCR_30",
-            steps=[ODTCStep(number=1, plateau_temperature=95.0, plateau_time=30.0)],
-          )
+        ODTCProtocol(
+          kind="method",
+          name="PCR_30",
+          steps=[ODTCStep(number=1, plateau_temperature=95.0, plateau_time=30.0)],
+          stages=[],
         )
       ],
       premethods=[],
@@ -1045,6 +1049,125 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
 
     # Should still only have 2 events (the one with None request_id wasn't stored)
     self.assertEqual(len(data_events_by_request_id[12345]), 2)
+
+
+def _minimal_method_xml_with_nested_loops() -> str:
+  """Method XML: 5 steps, inner loop 2-4 x 5, outer loop 1-5 x 30 (LoopNumber = actual count)."""
+  return """<?xml version="1.0" encoding="utf-8"?>
+<MethodSet>
+  <DeleteAllMethods>false</DeleteAllMethods>
+  <Method methodName="NestedLoops" creator="test" dateTime="2025-01-01T00:00:00">
+    <Variant>960000</Variant>
+    <PlateType>0</PlateType>
+    <FluidQuantity>0</FluidQuantity>
+    <PostHeating>false</PostHeating>
+    <StartBlockTemperature>25</StartBlockTemperature>
+    <StartLidTemperature>110</StartLidTemperature>
+    <Step><Number>1</Number><Slope>4.4</Slope><PlateauTemperature>95</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>0</GotoNumber><LoopNumber>0</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <Step><Number>2</Number><Slope>2.2</Slope><PlateauTemperature>55</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>0</GotoNumber><LoopNumber>0</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <Step><Number>3</Number><Slope>4.4</Slope><PlateauTemperature>72</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>0</GotoNumber><LoopNumber>0</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <Step><Number>4</Number><Slope>4.4</Slope><PlateauTemperature>95</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>2</GotoNumber><LoopNumber>5</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <Step><Number>5</Number><Slope>2.2</Slope><PlateauTemperature>50</PlateauTemperature><PlateauTime>20</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>1</GotoNumber><LoopNumber>30</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <PIDSet><PID number="1"><PHeating>60</PHeating><PCooling>80</PCooling><IHeating>250</IHeating><ICooling>100</ICooling><DHeating>10</DHeating><DCooling>10</DCooling><PLid>100</PLid><ILid>70</ILid></PID></PIDSet>
+  </Method>
+</MethodSet>"""
+
+
+def _minimal_method_xml_flat_loop() -> str:
+  """Method XML: 2 steps, single loop 1-2 x 3 (flat, no nesting)."""
+  return """<?xml version="1.0" encoding="utf-8"?>
+<MethodSet>
+  <DeleteAllMethods>false</DeleteAllMethods>
+  <Method methodName="FlatLoop" creator="test" dateTime="2025-01-01T00:00:00">
+    <Variant>960000</Variant>
+    <PlateType>0</PlateType>
+    <FluidQuantity>0</FluidQuantity>
+    <PostHeating>false</PostHeating>
+    <StartBlockTemperature>25</StartBlockTemperature>
+    <StartLidTemperature>110</StartLidTemperature>
+    <Step><Number>1</Number><Slope>4.4</Slope><PlateauTemperature>95</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>0</GotoNumber><LoopNumber>0</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <Step><Number>2</Number><Slope>2.2</Slope><PlateauTemperature>55</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>1</GotoNumber><LoopNumber>3</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <PIDSet><PID number="1"><PHeating>60</PHeating><PCooling>80</PCooling><IHeating>250</IHeating><ICooling>100</ICooling><DHeating>10</DHeating><DCooling>10</DCooling><PLid>100</PLid><ILid>70</ILid></PID></PIDSet>
+  </Method>
+</MethodSet>"""
+
+
+class TestODTCStageAndRoundTrip(unittest.TestCase):
+  """Tests for ODTCStage tree, nested loops, and round-trip (steps and stages)."""
+
+  def test_parse_nested_loops_produces_odtc_stage_tree(self):
+    """Parse Method XML with nested loops; odtc_protocol_to_protocol returns Protocol with ODTCStage tree."""
+    method_set = parse_method_set(_minimal_method_xml_with_nested_loops())
+    self.assertEqual(len(method_set.methods), 1)
+    odtc = method_set.methods[0]
+    protocol, _ = odtc_protocol_to_protocol(odtc)
+    stages = protocol.stages
+    self.assertGreater(len(stages), 0)
+    # Top level: we expect at least one ODTCStage with inner_stages (outer 1-5, inner 2-4)
+    outer = next((s for s in stages if isinstance(s, ODTCStage) and s.inner_stages), None)
+    self.assertIsNotNone(outer, "Expected at least one ODTCStage with inner_stages")
+    assert outer is not None  # narrow for type checker
+    self.assertEqual(outer.repeats, 30)
+    assert outer.inner_stages is not None  # we selected for inner_stages above
+    self.assertEqual(len(outer.inner_stages), 1)
+    self.assertEqual(outer.inner_stages[0].repeats, 5)
+
+  def test_round_trip_via_steps_preserves_structure(self):
+    """Serialize ODTCProtocol (from parsed XML) back to XML and re-parse; structure preserved."""
+    method_set = parse_method_set(_minimal_method_xml_with_nested_loops())
+    odtc = method_set.methods[0]
+    xml_out = method_set_to_xml(ODTCMethodSet(delete_all_methods=False, premethods=[], methods=[odtc]))
+    method_set2 = parse_method_set(xml_out)
+    self.assertEqual(len(method_set2.methods), 1)
+    odtc2 = method_set2.methods[0]
+    self.assertEqual(len(odtc2.steps), len(odtc.steps))
+    for i, (a, b) in enumerate(zip(odtc.steps, odtc2.steps)):
+      self.assertEqual(a.number, b.number, f"step {i} number")
+      self.assertEqual(a.goto_number, b.goto_number, f"step {i} goto_number")
+      self.assertEqual(a.loop_number, b.loop_number, f"step {i} loop_number")
+
+  def test_round_trip_via_stages_serializes_and_reparses(self):
+    """Build ODTCProtocol from ODTCStage tree only (no .steps); serialize uses _odtc_stages_to_steps; re-parse matches."""
+    # Build tree with ODTCStep (ODTC-native, lossless): outer 1 and 5, inner 2-4 x 5; outer repeats=30
+    step1 = ODTCStep(slope=4.4, plateau_temperature=95.0, plateau_time=10.0)
+    step2 = ODTCStep(slope=2.2, plateau_temperature=55.0, plateau_time=10.0)
+    step3 = ODTCStep(slope=4.4, plateau_temperature=72.0, plateau_time=10.0)
+    step4 = ODTCStep(slope=4.4, plateau_temperature=95.0, plateau_time=10.0)
+    step5 = ODTCStep(slope=2.2, plateau_temperature=50.0, plateau_time=20.0)
+    inner = ODTCStage(steps=[step2, step3, step4], repeats=5, inner_stages=None)
+    outer = ODTCStage(steps=[step1, step5], repeats=30, inner_stages=[inner])
+    odtc = ODTCProtocol(
+      kind="method",
+      name="FromStages",
+      variant=960000,
+      start_block_temperature=25.0,
+      start_lid_temperature=110.0,
+      steps=[],  # No steps; serialization will use stages
+      stages=[outer],
+    )
+    xml_str = method_set_to_xml(ODTCMethodSet(delete_all_methods=False, premethods=[], methods=[odtc]))
+    method_set = parse_method_set(xml_str)
+    self.assertEqual(len(method_set.methods), 1)
+    reparsed = method_set.methods[0]
+    self.assertEqual(len(reparsed.steps), 5)
+    # Check loop structure: step 4 goto 2 loop 5, step 5 goto 1 loop 30
+    by_num = {s.number: s for s in reparsed.steps}
+    self.assertEqual(by_num[4].goto_number, 2)
+    self.assertEqual(by_num[4].loop_number, 5)
+    self.assertEqual(by_num[5].goto_number, 1)
+    self.assertEqual(by_num[5].loop_number, 30)
+
+  def test_flat_method_produces_flat_stage_list(self):
+    """Flat method (single loop 1-2 x 3) produces flat list of stages (regression)."""
+    method_set = parse_method_set(_minimal_method_xml_flat_loop())
+    odtc = method_set.methods[0]
+    protocol, _ = odtc_protocol_to_protocol(odtc)
+    stages = protocol.stages
+    self.assertEqual(len(stages), 1)
+    self.assertEqual(len(stages[0].steps), 2)
+    self.assertEqual(stages[0].repeats, 3)
+    if isinstance(stages[0], ODTCStage):
+      self.assertFalse(stages[0].inner_stages)
 
 
 if __name__ == "__main__":

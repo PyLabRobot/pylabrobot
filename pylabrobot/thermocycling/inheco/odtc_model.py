@@ -1,9 +1,10 @@
 """
 ODTC model: domain types, XML serialization, and Protocol conversion.
 
-Defines ODTC dataclasses (ODTCMethod, ODTCPreMethod, ODTCConfig, etc.),
-schema-driven XML serialization for MethodSet, and conversion between
-PyLabRobot Protocol and ODTC method representation.
+Defines ODTC dataclasses (ODTCProtocol, ODTCConfig, etc.), schema-driven
+XML serialization for MethodSet, and conversion between PyLabRobot Protocol
+and ODTC representation. Methods and premethods are consolidated as ODTCProtocol
+(kind='method' | 'premethod').
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import html
 import logging
 from datetime import datetime
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Literal, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
 
@@ -231,9 +232,13 @@ def xml_child_list(tag: Optional[str] = None) -> Any:
 
 
 @dataclass
-class ODTCStep:
-  """A single step in an ODTC method."""
+class ODTCStep(Step):
+  """A single step in an ODTC method. Subclasses Step; ODTC params are canonical."""
 
+  # Step requires temperature, hold_seconds, rate; we give defaults and sync from ODTC in __post_init__
+  temperature: List[float] = field(default_factory=lambda: [0.0])
+  hold_seconds: float = 0.0
+  rate: Optional[float] = None
   number: int = xml_field(tag="Number", default=0)
   slope: float = xml_field(tag="Slope", default=0.0)
   plateau_temperature: float = xml_field(tag="PlateauTemperature", default=0.0)
@@ -246,6 +251,37 @@ class ODTCStep:
   loop_number: int = xml_field(tag="LoopNumber", default=0)
   pid_number: int = xml_field(tag="PIDNumber", default=1)
   lid_temp: float = xml_field(tag="LidTemp", default=110.0)
+
+  def __post_init__(self) -> None:
+    # Keep Step interface in sync with ODTC canonical params
+    self.temperature = [self.plateau_temperature]
+    self.hold_seconds = self.plateau_time
+    self.rate = self.slope
+
+  @classmethod
+  def from_step(
+    cls,
+    step: Step,
+    number: int = 0,
+    goto_number: int = 0,
+    loop_number: int = 0,
+  ) -> "ODTCStep":
+    """Build ODTCStep from a generic Step (e.g. when serializing plain Stage); uses ODTC defaults for overshoot/lid/pid."""
+    temp = step.temperature[0] if step.temperature else 25.0
+    return cls(
+      number=number,
+      slope=step.rate if step.rate is not None else 0.1,
+      plateau_temperature=temp,
+      plateau_time=step.hold_seconds,
+      overshoot_slope1=0.1,
+      overshoot_temperature=0.0,
+      overshoot_time=0.0,
+      overshoot_slope2=0.1,
+      goto_number=goto_number,
+      loop_number=loop_number,
+      pid_number=1,
+      lid_temp=110.0,
+    )
 
 
 @dataclass
@@ -264,49 +300,8 @@ class ODTCPID:
 
 
 @dataclass
-class ODTCPreMethod:
-  """ODTC PreMethod for initial temperature conditioning."""
-
-  name: str = xml_attr(tag="methodName", default="")
-  target_block_temperature: float = xml_field(tag="TargetBlockTemperature", default=0.0)
-  target_lid_temperature: float = xml_field(tag="TargetLidTemp", default=0.0)
-  creator: Optional[str] = xml_attr(tag="creator", default=None)
-  description: Optional[str] = xml_attr(tag="description", default=None)
-  datetime: Optional[str] = xml_attr(tag="dateTime", default=None)
-
-
-@dataclass
-class ODTCMethod:
-  """Full ODTC Method with thermal cycling parameters."""
-
-  name: str = xml_attr(tag="methodName", default="")
-  variant: int = xml_field(tag="Variant", default=960000)
-  plate_type: int = xml_field(tag="PlateType", default=0)
-  fluid_quantity: int = xml_field(tag="FluidQuantity", default=0)
-  post_heating: bool = xml_field(tag="PostHeating", default=False)
-  start_block_temperature: float = xml_field(tag="StartBlockTemperature", default=0.0)
-  start_lid_temperature: float = xml_field(tag="StartLidTemperature", default=0.0)
-  steps: List[ODTCStep] = xml_child_list(tag="Step")
-  pid_set: List[ODTCPID] = xml_child_list(tag="PID")
-  creator: Optional[str] = xml_attr(tag="creator", default=None)
-  description: Optional[str] = xml_attr(tag="description", default=None)
-  datetime: Optional[str] = xml_attr(tag="dateTime", default=None)
-
-  def get_loop_structure(self) -> List[tuple]:
-    """
-    Analyze loop structure and return list of (loop_start_step, loop_end_step, repeat_count).
-    Step numbers are 1-indexed as in the XML.
-    """
-    loops = []
-    for step in self.steps:
-      if step.goto_number > 0 and step.loop_number > 0:
-        loops.append((step.goto_number, step.number, step.loop_number + 1))
-    return loops
-
-
-@dataclass
 class ODTCMethodSet:
-  """Container for all methods and premethods (in-memory as ODTCProtocol)."""
+  """Container for all methods and premethods as ODTCProtocol (kind='method' | 'premethod')."""
 
   delete_all_methods: bool = False
   premethods: List[ODTCProtocol] = field(default_factory=list)
@@ -454,10 +449,10 @@ def parse_data_event_payload(payload: Dict[str, Any]) -> Optional[ODTCDataEventS
 
 @dataclass
 class ODTCStepSettings:
-  """Per-step ODTC parameters for Protocol to ODTCMethod conversion.
+  """Per-step ODTC parameters for Protocol to ODTCProtocol conversion.
 
-  When converting ODTCMethod to Protocol, these capture the original values.
-  When converting Protocol to ODTCMethod, these override defaults.
+  When converting ODTCProtocol to Protocol, these capture the original values.
+  When converting Protocol to ODTCProtocol, these override defaults.
   """
 
   slope: Optional[float] = None
@@ -475,7 +470,7 @@ class ODTCConfig:
 
   This class serves two purposes:
     1. When creating new protocols: Specify ODTC-specific parameters
-    2. When extracting from ODTCMethod: Captures all params for lossless round-trip
+    2. When extracting from ODTCProtocol: Captures all params for lossless round-trip
 
   Validation is performed on construction by default. Set _validate=False to skip
   validation (useful when reading data from a trusted source like the device).
@@ -589,6 +584,24 @@ class ODTCConfig:
 
 
 # =============================================================================
+# ODTCStage (Stage with optional nested inner_stages for loop tree)
+# =============================================================================
+
+
+@dataclass
+class ODTCStage(Stage):
+  """Stage with optional inner_stages for nested loops.
+
+  Execution: steps and inner_stages are interleaved (steps[0], inner_stages[0],
+  steps[1], inner_stages[1], ...); then the whole block repeats `repeats` times.
+  So for outer 1-5 with inner 2-4: steps=[step1, step5], inner_stages=[ODTCStage(2-4, 5)].
+  At runtime steps are ODTCStep; we cast to List[Step] at construction so Stage.steps stays List[Step].
+  """
+
+  inner_stages: Optional[List["ODTCStage"]] = None
+
+
+# =============================================================================
 # ODTCProtocol (protocol + config; subclasses Protocol for resource API)
 # =============================================================================
 
@@ -622,78 +635,6 @@ class ODTCProtocol(Protocol):
   default_cooling_slope: float = 2.2
 
 
-def _odtc_method_to_odtc_protocol(method: ODTCMethod) -> ODTCProtocol:
-  """Build ODTCProtocol from ODTCMethod (for methods loaded from device)."""
-  protocol, config = odtc_method_to_protocol(method)
-  return ODTCProtocol(
-    stages=protocol.stages,
-    kind="method",
-    name=method.name,
-    creator=method.creator,
-    description=method.description,
-    datetime=method.datetime,
-    variant=method.variant,
-    plate_type=method.plate_type,
-    fluid_quantity=method.fluid_quantity,
-    post_heating=method.post_heating,
-    start_block_temperature=method.start_block_temperature,
-    start_lid_temperature=method.start_lid_temperature,
-    steps=list(method.steps),
-    pid_set=list(method.pid_set) if method.pid_set else [ODTCPID(number=1)],
-    step_settings=dict(config.step_settings),
-    default_heating_slope=config.default_heating_slope,
-    default_cooling_slope=config.default_cooling_slope,
-  )
-
-
-def _odtc_premethod_to_odtc_protocol(premethod: ODTCPreMethod) -> ODTCProtocol:
-  """Build ODTCProtocol from ODTCPreMethod (for premethods loaded from device)."""
-  return ODTCProtocol(
-    stages=[],
-    kind="premethod",
-    name=premethod.name,
-    creator=premethod.creator,
-    description=premethod.description,
-    datetime=premethod.datetime,
-    target_block_temperature=premethod.target_block_temperature,
-    target_lid_temperature=premethod.target_lid_temperature,
-  )
-
-
-def _odtc_protocol_to_method(odtc: ODTCProtocol) -> ODTCMethod:
-  """Build ODTCMethod from ODTCProtocol (kind must be 'method')."""
-  if odtc.kind != "method":
-    raise ValueError("ODTCProtocol must have kind='method' to convert to ODTCMethod")
-  return ODTCMethod(
-    name=odtc.name,
-    variant=odtc.variant,
-    plate_type=odtc.plate_type,
-    fluid_quantity=odtc.fluid_quantity,
-    post_heating=odtc.post_heating,
-    start_block_temperature=odtc.start_block_temperature,
-    start_lid_temperature=odtc.start_lid_temperature,
-    steps=list(odtc.steps),
-    pid_set=list(odtc.pid_set) if odtc.pid_set else [ODTCPID(number=1)],
-    creator=odtc.creator,
-    description=odtc.description,
-    datetime=odtc.datetime,
-  )
-
-
-def _odtc_protocol_to_premethod(odtc: ODTCProtocol) -> ODTCPreMethod:
-  """Build ODTCPreMethod from ODTCProtocol (kind must be 'premethod')."""
-  if odtc.kind != "premethod":
-    raise ValueError("ODTCProtocol must have kind='premethod' to convert to ODTCPreMethod")
-  return ODTCPreMethod(
-    name=odtc.name,
-    target_block_temperature=odtc.target_block_temperature,
-    target_lid_temperature=odtc.target_lid_temperature,
-    creator=odtc.creator,
-    description=odtc.description,
-    datetime=odtc.datetime,
-  )
-
-
 def protocol_to_odtc_protocol(
   protocol: "Protocol",
   config: Optional[ODTCConfig] = None,
@@ -705,10 +646,100 @@ def protocol_to_odtc_protocol(
     config: Optional ODTC config; if None, defaults are used.
 
   Returns:
-    ODTCProtocol ready for upload or run.
+    ODTCProtocol (kind='method') ready for upload or run. Steps are authoritative;
+    stages=[] so the stage view is derived via odtc_method_to_protocol(odtc) when needed.
   """
-  method = protocol_to_odtc_method(protocol, config)
-  return _odtc_method_to_odtc_protocol(method)
+  if config is None:
+    config = ODTCConfig()
+
+  odtc_steps: List[ODTCStep] = []
+  step_number = 1
+
+  # Track previous temperature for slope calculation
+  # Start from room temperature - first step needs to ramp from ambient
+  prev_temp = 25.0
+
+  for stage_idx, stage in enumerate(protocol.stages):
+    stage_start_step = step_number
+
+    for step_idx, step in enumerate(stage.steps):
+      # Get the target temperature (use first zone for ODTC single-zone)
+      target_temp = step.temperature[0] if step.temperature else 25.0
+
+      # Calculate slope
+      slope = _calculate_slope(prev_temp, target_temp, step.rate, config)
+
+      # Get step settings overrides if any
+      # Use global step index (across all stages)
+      global_step_idx = step_number - 1
+      step_setting = config.step_settings.get(global_step_idx, ODTCStepSettings())
+
+      # Create ODTC step with defaults or overrides
+      odtc_step = ODTCStep(
+        number=step_number,
+        slope=step_setting.slope if step_setting.slope is not None else slope,
+        plateau_temperature=target_temp,
+        plateau_time=step.hold_seconds,
+        overshoot_slope1=(
+          step_setting.overshoot_slope1 if step_setting.overshoot_slope1 is not None else 0.1
+        ),
+        overshoot_temperature=(
+          step_setting.overshoot_temperature if step_setting.overshoot_temperature is not None else 0.0
+        ),
+        overshoot_time=(
+          step_setting.overshoot_time if step_setting.overshoot_time is not None else 0.0
+        ),
+        overshoot_slope2=(
+          step_setting.overshoot_slope2 if step_setting.overshoot_slope2 is not None else 0.1
+        ),
+        goto_number=0,  # Will be set below for loops
+        loop_number=0,  # Will be set below for loops
+        pid_number=step_setting.pid_number if step_setting.pid_number is not None else 1,
+        lid_temp=(
+          step_setting.lid_temp if step_setting.lid_temp is not None else config.lid_temperature
+        ),
+      )
+
+      odtc_steps.append(odtc_step)
+      prev_temp = target_temp
+      step_number += 1
+
+    # If stage has repeats > 1, add loop on the last step of the stage
+    if stage.repeats > 1 and odtc_steps:
+      last_step = odtc_steps[-1]
+      last_step.goto_number = stage_start_step
+      last_step.loop_number = stage.repeats  # LoopNumber = actual repeat count (per loaded_set.xml)
+
+  # Determine start temperatures
+  start_block_temp = protocol.stages[0].steps[0].temperature[0] if protocol.stages else 25.0
+  start_lid_temp = (
+    config.start_lid_temperature
+    if config.start_lid_temperature is not None
+    else config.lid_temperature
+  )
+
+  # Resolve method name (use scratch name if not provided)
+  resolved_name = resolve_protocol_name(config.name)
+
+  # Generate timestamp if not already set
+  resolved_datetime = config.datetime if config.datetime else generate_odtc_timestamp()
+
+  return ODTCProtocol(
+    kind="method",
+    name=resolved_name,
+    variant=config.variant,
+    plate_type=config.plate_type,
+    fluid_quantity=config.fluid_quantity,
+    post_heating=config.post_heating,
+    start_block_temperature=start_block_temp,
+    start_lid_temperature=start_lid_temp,
+    steps=odtc_steps,
+    pid_set=list(config.pid_set),
+    creator=config.creator,
+    description=config.description,
+    datetime=resolved_datetime,
+    stages=[],  # Steps are authoritative; stage view via odtc_method_to_protocol(odtc)
+  )
 
 
 def odtc_protocol_to_protocol(odtc: ODTCProtocol) -> Tuple["Protocol", ODTCProtocol]:
@@ -722,8 +753,7 @@ def odtc_protocol_to_protocol(odtc: ODTCProtocol) -> Tuple["Protocol", ODTCProto
     for convenience (e.g. config fields).
   """
   if odtc.kind == "method":
-    method = _odtc_protocol_to_method(odtc)
-    protocol, _ = odtc_method_to_protocol(method)
+    protocol, _ = odtc_method_to_protocol(odtc)
     return (protocol, odtc)
   return (Protocol(stages=[]), odtc)
 
@@ -739,7 +769,7 @@ def estimate_odtc_protocol_duration_seconds(odtc: ODTCProtocol) -> float:
   """
   if odtc.kind == "premethod":
     return PREMETHOD_ESTIMATED_DURATION_SECONDS
-  return estimate_method_duration_seconds(_odtc_protocol_to_method(odtc))
+  return estimate_method_duration_seconds(odtc)
 
 
 @dataclass
@@ -870,8 +900,13 @@ def from_xml(elem: ET.Element, cls: Type[T]) -> T:
   # Use get_type_hints to resolve string annotations to actual types
   type_hints = get_type_hints(cls)
 
+  # For ODTCStep, only read ODTC XML tags (not Step's temperature/hold_seconds/rate)
+  step_field_names = {"temperature", "hold_seconds", "rate"} if cls is ODTCStep else set()
+
   # Type narrowing: we've verified cls is a dataclass, so fields() is safe
   for f in fields(cls):  # type: ignore[arg-type]
+    if f.name in step_field_names:
+      continue
     meta = _get_xml_meta(f)
     tag = _get_tag(f, meta)
     field_type = type_hints.get(f.name, f.type)
@@ -905,6 +940,11 @@ def from_xml(elem: ET.Element, cls: Type[T]) -> T:
       else:
         kwargs[f.name] = []
 
+  if cls is ODTCStep:
+    kwargs["temperature"] = [kwargs.get("plateau_temperature", 0.0)]
+    kwargs["hold_seconds"] = kwargs.get("plateau_time", 0.0)
+    kwargs["rate"] = kwargs.get("slope", 0.0)
+
   return cls(**kwargs)
 
 
@@ -927,7 +967,12 @@ def to_xml(obj: Any, tag_name: Optional[str] = None, parent: Optional[ET.Element
   else:
     elem = ET.Element(tag_name)
 
+  # For ODTCStep, only serialize ODTC fields (not Step's temperature/hold_seconds/rate)
+  skip_fields = {"temperature", "hold_seconds", "rate"} if type(obj) is ODTCStep else set()
+
   for f in fields(type(obj)):
+    if f.name in skip_fields:
+      continue
     meta = _get_xml_meta(f)
     tag = _get_tag(f, meta)
     value = getattr(obj, f.name)
@@ -952,58 +997,151 @@ def to_xml(obj: Any, tag_name: Optional[str] = None, parent: Optional[ET.Element
 
 
 # =============================================================================
-# MethodSet-specific parsing (handles PIDSet wrapper)
+# MethodSet-specific parsing: XML <-> ODTCProtocol (no ODTCMethod/ODTCPreMethod)
 # =============================================================================
 
 
-def _parse_method(elem: ET.Element) -> ODTCMethod:
-  """Parse a Method element, handling the PIDSet wrapper for PID elements."""
-  # First parse the basic fields
-  method = from_xml(elem, ODTCMethod)
+def _read_opt_attr(elem: ET.Element, key: str, default: Optional[str] = None) -> Optional[str]:
+  """Read optional attribute from element."""
+  return elem.attrib.get(key, default)
 
-  # Handle PIDSet wrapper specially
+
+def _read_opt_elem(
+  elem: ET.Element, tag: str, default: Any = None, parse_float: bool = False
+) -> Any:
+  """Read optional child element text. If parse_float, return float; else str or default."""
+  child = elem.find(tag)
+  if child is None or child.text is None:
+    return default
+  text = child.text.strip()
+  if not text:
+    return default
+  if parse_float:
+    return float(text)
+  return text
+
+
+def _parse_method_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
+  """Parse a <Method> element into ODTCProtocol (kind='method', stages=[]). No nested-loop validation."""
+  name = _read_opt_attr(elem, "methodName") or ""
+  creator = _read_opt_attr(elem, "creator")
+  description = _read_opt_attr(elem, "description")
+  datetime_ = _read_opt_attr(elem, "dateTime")
+  variant = int(float(_read_opt_elem(elem, "Variant") or 960000))
+  plate_type = int(float(_read_opt_elem(elem, "PlateType") or 0))
+  fluid_quantity = int(float(_read_opt_elem(elem, "FluidQuantity") or 0))
+  post_heating = (_read_opt_elem(elem, "PostHeating") or "false").lower() == "true"
+  start_block_temperature = float(_read_opt_elem(elem, "StartBlockTemperature") or 0.0)
+  start_lid_temperature = float(_read_opt_elem(elem, "StartLidTemperature") or 0.0)
+  steps = [from_xml(step_elem, ODTCStep) for step_elem in elem.findall("Step")]
+  pid_set: List[ODTCPID] = []
   pid_set_elem = elem.find("PIDSet")
   if pid_set_elem is not None:
-    pids = []
-    for pid_elem in pid_set_elem.findall("PID"):
-      pids.append(from_xml(pid_elem, ODTCPID))
-    method.pid_set = pids
+    pid_set = [from_xml(pid_elem, ODTCPID) for pid_elem in pid_set_elem.findall("PID")]
+  if not pid_set:
+    pid_set = [ODTCPID(number=1)]
+  return ODTCProtocol(
+    kind="method",
+    name=name,
+    creator=creator,
+    description=description,
+    datetime=datetime_,
+    variant=variant,
+    plate_type=plate_type,
+    fluid_quantity=fluid_quantity,
+    post_heating=post_heating,
+    start_block_temperature=start_block_temperature,
+    start_lid_temperature=start_lid_temperature,
+    steps=steps,
+    pid_set=pid_set,
+    stages=[],  # Not built on parse; built on demand in odtc_protocol_to_protocol
+  )
 
-  return method
+
+def _parse_premethod_element_to_odtc_protocol(elem: ET.Element) -> ODTCProtocol:
+  """Parse a <PreMethod> element into ODTCProtocol (kind='premethod')."""
+  name = _read_opt_attr(elem, "methodName") or ""
+  creator = _read_opt_attr(elem, "creator")
+  description = _read_opt_attr(elem, "description")
+  datetime_ = _read_opt_attr(elem, "dateTime")
+  target_block_temperature = float(_read_opt_elem(elem, "TargetBlockTemperature") or 0.0)
+  target_lid_temperature = float(_read_opt_elem(elem, "TargetLidTemp") or 0.0)
+  return ODTCProtocol(
+    kind="premethod",
+    name=name,
+    creator=creator,
+    description=description,
+    datetime=datetime_,
+    target_block_temperature=target_block_temperature,
+    target_lid_temperature=target_lid_temperature,
+    stages=[],
+  )
 
 
-def _method_to_xml(method: ODTCMethod, parent: ET.Element) -> ET.Element:
-  """Serialize a Method to XML, handling the PIDSet wrapper."""
+def _get_steps_for_serialization(odtc: ODTCProtocol) -> List[ODTCStep]:
+  """Return canonical ODTCStep list for serializing an ODTCProtocol (kind='method').
+
+  Uses odtc.steps when present; otherwise builds from odtc.stages via _odtc_stages_to_steps.
+  """
+  if odtc.steps:
+    return odtc.steps
+  if odtc.stages:
+    stages_as_odtc = []
+    for s in odtc.stages:
+      if isinstance(s, ODTCStage):
+        stages_as_odtc.append(s)
+      else:
+        steps_odtc = [
+          st if isinstance(st, ODTCStep) else ODTCStep.from_step(st)
+          for st in s.steps
+        ]
+        stages_as_odtc.append(ODTCStage(steps=cast(List[Step], steps_odtc), repeats=s.repeats, inner_stages=None))
+    return _odtc_stages_to_steps(stages_as_odtc)
+  return []
+
+
+def _odtc_protocol_to_method_xml(odtc: ODTCProtocol, parent: ET.Element) -> ET.Element:
+  """Serialize ODTCProtocol (kind='method') to <Method> XML."""
+  if odtc.kind != "method":
+    raise ValueError("ODTCProtocol must have kind='method' to serialize as Method")
+  steps_to_serialize = _get_steps_for_serialization(odtc)
   elem = ET.SubElement(parent, "Method")
-
-  # Set attributes
-  elem.set("methodName", method.name)
-  if method.creator:
-    elem.set("creator", method.creator)
-  if method.description:
-    elem.set("description", method.description)
-  if method.datetime:
-    elem.set("dateTime", method.datetime)
-
-  # Add child elements
-  ET.SubElement(elem, "Variant").text = str(method.variant)
-  ET.SubElement(elem, "PlateType").text = str(method.plate_type)
-  ET.SubElement(elem, "FluidQuantity").text = str(method.fluid_quantity)
-  ET.SubElement(elem, "PostHeating").text = "true" if method.post_heating else "false"
-  # Use _format_value to ensure integers are formatted without .0
-  ET.SubElement(elem, "StartBlockTemperature").text = _format_value(method.start_block_temperature)
-  ET.SubElement(elem, "StartLidTemperature").text = _format_value(method.start_lid_temperature)
-
-  # Add steps
-  for step in method.steps:
+  elem.set("methodName", odtc.name)
+  if odtc.creator:
+    elem.set("creator", odtc.creator)
+  if odtc.description:
+    elem.set("description", odtc.description)
+  if odtc.datetime:
+    elem.set("dateTime", odtc.datetime)
+  ET.SubElement(elem, "Variant").text = str(odtc.variant)
+  ET.SubElement(elem, "PlateType").text = str(odtc.plate_type)
+  ET.SubElement(elem, "FluidQuantity").text = str(odtc.fluid_quantity)
+  ET.SubElement(elem, "PostHeating").text = "true" if odtc.post_heating else "false"
+  ET.SubElement(elem, "StartBlockTemperature").text = _format_value(odtc.start_block_temperature)
+  ET.SubElement(elem, "StartLidTemperature").text = _format_value(odtc.start_lid_temperature)
+  for step in steps_to_serialize:
     to_xml(step, "Step", elem)
-
-  # Add PIDSet wrapper if there are PIDs
-  if method.pid_set:
+  if odtc.pid_set:
     pid_set_elem = ET.SubElement(elem, "PIDSet")
-    for pid in method.pid_set:
+    for pid in odtc.pid_set:
       to_xml(pid, "PID", pid_set_elem)
+  return elem
 
+
+def _odtc_protocol_to_premethod_xml(odtc: ODTCProtocol, parent: ET.Element) -> ET.Element:
+  """Serialize ODTCProtocol (kind='premethod') to <PreMethod> XML."""
+  if odtc.kind != "premethod":
+    raise ValueError("ODTCProtocol must have kind='premethod' to serialize as PreMethod")
+  elem = ET.SubElement(parent, "PreMethod")
+  elem.set("methodName", odtc.name)
+  if odtc.creator:
+    elem.set("creator", odtc.creator)
+  if odtc.description:
+    elem.set("description", odtc.description)
+  if odtc.datetime:
+    elem.set("dateTime", odtc.datetime)
+  ET.SubElement(elem, "TargetBlockTemperature").text = _format_value(odtc.target_block_temperature)
+  ET.SubElement(elem, "TargetLidTemp").text = _format_value(odtc.target_lid_temperature)
   return elem
 
 
@@ -1013,27 +1151,21 @@ def _method_to_xml(method: ODTCMethod, parent: ET.Element) -> ET.Element:
 
 
 def parse_method_set_from_root(root: ET.Element) -> ODTCMethodSet:
-  """Parse a MethodSet from an XML root element.
+  """Parse a MethodSet from an XML root element into ODTCProtocol only.
 
-  Parses Method/PreMethod into ODTCMethod/ODTCPreMethod, then converts
-  each to ODTCProtocol for the in-memory set.
+  Methods and premethods are parsed directly to ODTCProtocol (stages=[] for
+  methods so list_protocols does not trigger nested-loop validation).
   """
   delete_elem = root.find("DeleteAllMethods")
   delete_all = False
   if delete_elem is not None and delete_elem.text:
     delete_all = delete_elem.text.lower() == "true"
-  premethod_protos = [
-    _odtc_premethod_to_odtc_protocol(from_xml(pm, ODTCPreMethod))
-    for pm in root.findall("PreMethod")
-  ]
-  method_protos = [
-    _odtc_method_to_odtc_protocol(_parse_method(m))
-    for m in root.findall("Method")
-  ]
+  premethods = [_parse_premethod_element_to_odtc_protocol(pm) for pm in root.findall("PreMethod")]
+  methods = [_parse_method_element_to_odtc_protocol(m) for m in root.findall("Method")]
   return ODTCMethodSet(
     delete_all_methods=delete_all,
-    premethods=premethod_protos,
-    methods=method_protos,
+    premethods=premethods,
+    methods=methods,
   )
 
 
@@ -1050,23 +1182,13 @@ def parse_method_set_file(filepath: str) -> ODTCMethodSet:
 
 
 def method_set_to_xml(method_set: ODTCMethodSet) -> str:
-  """Serialize a MethodSet to XML string.
-
-  Converts each ODTCProtocol to ODTCMethod/ODTCPreMethod for serialization.
-  """
+  """Serialize a MethodSet to XML string (ODTCProtocol -> Method/PreMethod elements)."""
   root = ET.Element("MethodSet")
-
-  # Add DeleteAllMethods
   ET.SubElement(root, "DeleteAllMethods").text = "true" if method_set.delete_all_methods else "false"
-
-  # Add PreMethods
-  for odtc in method_set.premethods:
-    to_xml(_odtc_protocol_to_premethod(odtc), "PreMethod", root)
-
-  # Add Methods (with special PIDSet handling)
-  for odtc in method_set.methods:
-    _method_to_xml(_odtc_protocol_to_method(odtc), root)
-
+  for pm in method_set.premethods:
+    _odtc_protocol_to_premethod_xml(pm, root)
+  for m in method_set.methods:
+    _odtc_protocol_to_method_xml(m, root)
   return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
 
@@ -1084,7 +1206,7 @@ def parse_sensor_values(xml_str: str) -> ODTCSensorValues:
 
 
 def get_premethod_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCProtocol]:
-  """Find a premethod by name (returns ODTCProtocol)."""
+  """Find a premethod by name."""
   return next((pm for pm in method_set.premethods if pm.name == name), None)
 
 
@@ -1094,20 +1216,11 @@ def _get_method_only_by_name(method_set: ODTCMethodSet, name: str) -> Optional[O
 
 
 def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCProtocol]:
-  """Find a method or premethod by name.
-
-  Args:
-    method_set: ODTCMethodSet to search.
-    name: Method name to find.
-
-  Returns:
-    ODTCProtocol if found (method or premethod), None otherwise.
-  """
+  """Find a method or premethod by name. Returns ODTCProtocol or None."""
   m = _get_method_only_by_name(method_set, name)
   if m is not None:
     return m
   return get_premethod_by_name(method_set, name)
-  return None
 
 
 def list_method_names_only(method_set: ODTCMethodSet) -> List[str]:
@@ -1227,155 +1340,6 @@ def _calculate_slope(
   return default_slope
 
 
-def protocol_to_odtc_method(
-  protocol: "Protocol",
-  config: Optional[ODTCConfig] = None,
-) -> ODTCMethod:
-  """Convert a standard Protocol to an ODTCMethod.
-
-  Args:
-    protocol: Standard Protocol object with stages and steps.
-    config: Optional ODTC config for device-specific parameters.
-      If None, defaults are used.
-
-  Returns:
-    ODTCMethod ready for upload to ODTC device.
-
-  Note:
-    This function handles sequential stages with repeats. Each stage with
-    repeats > 1 is converted to an ODTC loop using GotoNumber/LoopNumber.
-  """
-  if config is None:
-    config = ODTCConfig()
-
-  odtc_steps: List[ODTCStep] = []
-  step_number = 1
-
-  # Track previous temperature for slope calculation
-  # Start from room temperature - first step needs to ramp from ambient
-  prev_temp = 25.0
-
-  for stage_idx, stage in enumerate(protocol.stages):
-    stage_start_step = step_number
-
-    for step_idx, step in enumerate(stage.steps):
-      # Get the target temperature (use first zone for ODTC single-zone)
-      target_temp = step.temperature[0] if step.temperature else 25.0
-
-      # Calculate slope
-      slope = _calculate_slope(prev_temp, target_temp, step.rate, config)
-
-      # Get step settings overrides if any
-      # Use global step index (across all stages)
-      global_step_idx = step_number - 1
-      step_setting = config.step_settings.get(global_step_idx, ODTCStepSettings())
-
-      # Create ODTC step with defaults or overrides
-      odtc_step = ODTCStep(
-        number=step_number,
-        slope=step_setting.slope if step_setting.slope is not None else slope,
-        plateau_temperature=target_temp,
-        plateau_time=step.hold_seconds,
-        overshoot_slope1=(
-          step_setting.overshoot_slope1 if step_setting.overshoot_slope1 is not None else 0.1
-        ),
-        overshoot_temperature=(
-          step_setting.overshoot_temperature if step_setting.overshoot_temperature is not None else 0.0
-        ),
-        overshoot_time=(
-          step_setting.overshoot_time if step_setting.overshoot_time is not None else 0.0
-        ),
-        overshoot_slope2=(
-          step_setting.overshoot_slope2 if step_setting.overshoot_slope2 is not None else 0.1
-        ),
-        goto_number=0,  # Will be set below for loops
-        loop_number=0,  # Will be set below for loops
-        pid_number=step_setting.pid_number if step_setting.pid_number is not None else 1,
-        lid_temp=(
-          step_setting.lid_temp if step_setting.lid_temp is not None else config.lid_temperature
-        ),
-      )
-
-      odtc_steps.append(odtc_step)
-      prev_temp = target_temp
-      step_number += 1
-
-    # If stage has repeats > 1, add loop on the last step of the stage
-    if stage.repeats > 1 and odtc_steps:
-      last_step = odtc_steps[-1]
-      last_step.goto_number = stage_start_step
-      last_step.loop_number = stage.repeats - 1  # ODTC uses 0-based loop count
-
-  # Determine start temperatures
-  start_block_temp = protocol.stages[0].steps[0].temperature[0] if protocol.stages else 25.0
-  start_lid_temp = (
-    config.start_lid_temperature
-    if config.start_lid_temperature is not None
-    else config.lid_temperature
-  )
-
-  # Resolve method name (use scratch name if not provided)
-  resolved_name = resolve_protocol_name(config.name)
-
-  # Generate timestamp if not already set
-  resolved_datetime = config.datetime if config.datetime else generate_odtc_timestamp()
-
-  return ODTCMethod(
-    name=resolved_name,
-    variant=config.variant,
-    plate_type=config.plate_type,
-    fluid_quantity=config.fluid_quantity,
-    post_heating=config.post_heating,
-    start_block_temperature=start_block_temp,
-    start_lid_temperature=start_lid_temp,
-    steps=odtc_steps,
-    pid_set=list(config.pid_set),  # Copy the list
-    creator=config.creator,
-    description=config.description,
-    datetime=resolved_datetime,
-  )
-
-
-def _validate_no_nested_loops(method: ODTCMethod) -> None:
-  """Validate that an ODTCMethod has no nested loops.
-
-  Args:
-    method: The ODTCMethod to validate.
-
-  Raises:
-    ValueError: If the method contains nested/overlapping loops.
-  """
-  loops = []
-  for step in method.steps:
-    if step.goto_number > 0:
-      # (start_step, end_step, repeat_count) - using 1-based step numbers
-      loops.append((step.goto_number, step.number, step.loop_number + 1))
-
-  # Check all pairs for nesting/overlap
-  for i, (start1, end1, _) in enumerate(loops):
-    for j, (start2, end2, _) in enumerate(loops):
-      if i >= j:
-        continue  # Only check each pair once
-
-      # Check for any kind of nesting or overlap:
-      # 1. Loop 2 fully contained in loop 1: start1 <= start2 AND end2 <= end1
-      #    (and they're not identical)
-      # 2. Loop 1 fully contained in loop 2: start2 <= start1 AND end1 <= end2
-      # 3. Partial overlap: start1 < start2 < end1 < end2
-      # 4. Partial overlap: start2 < start1 < end2 < end1
-
-      # For sequential loops, ranges don't overlap: end1 < start2 OR end2 < start1
-      ranges_overlap = not (end1 < start2 or end2 < start1)
-
-      # If ranges overlap and they're not identical, that's a problem
-      if ranges_overlap and not (start1 == start2 and end1 == end2):
-        raise ValueError(
-          f"ODTCMethod '{method.name}' contains nested loops "
-          f"(steps {start1}-{end1} and {start2}-{end2}) which cannot be "
-          "converted to Protocol. Use ODTCMethod directly."
-        )
-
-
 def _analyze_loop_structure(
   steps: List[ODTCStep],
 ) -> List[Tuple[int, int, int]]:
@@ -1391,8 +1355,155 @@ def _analyze_loop_structure(
   loops = []
   for step in steps:
     if step.goto_number > 0:
-      loops.append((step.goto_number, step.number, step.loop_number + 1))
+      # LoopNumber in XML is actual repeat count (per loaded_set.xml / firmware doc)
+      loops.append((step.goto_number, step.number, step.loop_number))
   return sorted(loops, key=lambda x: x[1])  # Sort by end position
+
+
+def _build_one_odtc_stage_for_range(
+  steps_by_num: Dict[int, ODTCStep],
+  loops: List[Tuple[int, int, int]],
+  start: int,
+  end: int,
+  repeats: int,
+) -> ODTCStage:
+  """Build one ODTCStage for step range [start, end] with repeats; recurse for inner loops."""
+  # Loops strictly inside (start, end): contained if start <= s and e <= end and (start,end) != (s,e)
+  inner_loops = [
+    (s, e, r) for (s, e, r) in loops
+    if start <= s and e <= end and (start, end) != (s, e)
+  ]
+  inner_loops_sorted = sorted(inner_loops, key=lambda x: x[0])
+
+  if not inner_loops_sorted:
+    # Flat: all steps in range are one stage (use ODTCStep directly)
+    stage_steps = [steps_by_num[n] for n in range(start, end + 1) if n in steps_by_num]
+    return ODTCStage(steps=cast(List[Step], stage_steps), repeats=repeats, inner_stages=None)
+
+  # Nested: partition range into step-only segments and inner loops; interleave steps and inner_stages
+  step_nums_in_range = set(range(start, end + 1))
+  for (is_, ie, _) in inner_loops_sorted:
+    for n in range(is_, ie + 1):
+      step_nums_in_range.discard(n)
+  sorted(step_nums_in_range)
+
+  # Groups: steps before first inner, between inners, after last inner
+  step_groups: List[List[int]] = []
+  pos = start
+  for (is_, ie, ir) in inner_loops_sorted:
+    group = [n for n in range(pos, is_) if n in steps_by_num]
+    if group:
+      step_groups.append(group)
+    pos = ie + 1
+  if pos <= end:
+    group = [n for n in range(pos, end + 1) if n in steps_by_num]
+    if group:
+      step_groups.append(group)
+
+  steps_list: List[ODTCStep] = []
+  inner_stages_list: List[ODTCStage] = []
+  for gi, (is_, ie, ir) in enumerate(inner_loops_sorted):
+    if gi < len(step_groups):
+      steps_list.extend(steps_by_num[n] for n in step_groups[gi])
+    inner_stages_list.append(_build_one_odtc_stage_for_range(steps_by_num, loops, is_, ie, ir))
+  if len(step_groups) > len(inner_loops_sorted):
+    steps_list.extend(steps_by_num[n] for n in step_groups[len(inner_loops_sorted)])
+  return ODTCStage(steps=cast(List[Step], steps_list), repeats=repeats, inner_stages=inner_stages_list)
+
+
+def _odtc_stage_to_steps_impl(
+  stage: "ODTCStage",
+  start_number: int,
+) -> Tuple[List[ODTCStep], int]:
+  """Convert one ODTCStage to ODTCSteps with step numbers; return (steps, next_number)."""
+  inner_stages = stage.inner_stages or []
+  out: List[ODTCStep] = []
+  num = start_number
+  first_step_num = start_number
+
+  for i, step in enumerate(stage.steps):
+    # stage.steps are ODTCStep (or Step when from plain Stage); copy and assign number
+    if isinstance(step, ODTCStep):
+      step_copy = replace(step, number=num)
+    else:
+      step_copy = ODTCStep.from_step(step, number=num)
+    out.append(step_copy)
+    num += 1
+    if i < len(inner_stages):
+      inner_steps, num = _odtc_stage_to_steps_impl(inner_stages[i], num)
+      out.extend(inner_steps)
+
+  if stage.repeats > 1 and out:
+    out[-1].goto_number = first_step_num
+    out[-1].loop_number = stage.repeats
+  return (out, num)
+
+
+def _odtc_stages_to_steps(stages: List["ODTCStage"]) -> List[ODTCStep]:
+  """Convert ODTCStage tree to flat List[ODTCStep] with correct step numbers and goto/loop."""
+  result: List[ODTCStep] = []
+  num = 1
+  for stage in stages:
+    steps, num = _odtc_stage_to_steps_impl(stage, num)
+    result.extend(steps)
+  return result
+
+
+def _build_odtc_stages_from_steps(steps: List[ODTCStep]) -> List[ODTCStage]:
+  """Build ODTCStage tree from ODTC steps (handles flat and nested loops).
+
+  Uses _analyze_loop_structure for (start, end, repeat_count). No loops -> one stage
+  with all steps, repeats=1. We only emit for top-level loops (loops not contained in
+  any other), so outer 1-5 x 30 with inner 2-4 x 5 produces one ODTCStage with inner_stages.
+  """
+  if not steps:
+    return []
+  steps_by_num = {s.number: s for s in steps}
+  loops = _analyze_loop_structure(steps)
+  max_step = max(s.number for s in steps)
+
+  if not loops:
+    flat = [steps_by_num[n] for n in range(1, max_step + 1) if n in steps_by_num]
+    return [
+      ODTCStage(steps=cast(List[Step], flat), repeats=1, inner_stages=None)
+    ]
+
+  def contains(outer: Tuple[int, int, int], inner: Tuple[int, int, int]) -> bool:
+    (s, e, _), (s2, e2, _) = outer, inner
+    return s <= s2 and e2 <= e and (s, e) != (s2, e2)
+
+  top_level = [L for L in loops if not any(contains(M, L) for M in loops if M != L)]
+  top_level.sort(key=lambda x: (x[0], x[1]))
+  step_nums_in_top_level = set()
+  for (s, e, _) in top_level:
+    for n in range(s, e + 1):
+      step_nums_in_top_level.add(n)
+
+  stages: List[ODTCStage] = []
+  i = 1
+  while i <= max_step:
+    if i not in steps_by_num:
+      i += 1
+      continue
+    if i not in step_nums_in_top_level:
+      # Flat run of steps not in any top-level loop (use ODTCStep directly)
+      flat_steps: List[ODTCStep] = []
+      while i <= max_step and i in steps_by_num and i not in step_nums_in_top_level:
+        flat_steps.append(steps_by_num[i])
+        i += 1
+      if flat_steps:
+        stages.append(ODTCStage(steps=cast(List[Step], flat_steps), repeats=1, inner_stages=None))
+      continue
+    # i is inside some top-level loop; find the loop that ends at the smallest end >= i
+    for (start, end, repeats) in top_level:
+      if start <= i <= end:
+        stages.append(_build_one_odtc_stage_for_range(steps_by_num, loops, start, end, repeats))
+        i = end + 1
+        break
+    else:
+      i += 1
+
+  return stages
 
 
 def _expand_step_sequence(
@@ -1423,28 +1534,27 @@ def _expand_step_sequence(
   return expanded
 
 
-def estimate_method_duration_seconds(method: ODTCMethod) -> float:
+def estimate_method_duration_seconds(odtc: ODTCProtocol) -> float:
   """Estimate total method duration from steps (ramp + plateau + overshoot, with loops).
 
   Per ODTC Firmware Command Set: duration is slope time + overshoot time + plateau
-  time per step in consideration of the loops. Ramp time = |delta T| / slope;
-  slope is clamped to avoid division by zero.
+  time per step in consideration of the loops.
 
   Args:
-    method: ODTCMethod with steps and start_block_temperature.
+    odtc: ODTCProtocol (kind='method') with steps and start_block_temperature.
 
   Returns:
     Estimated duration in seconds.
   """
-  if not method.steps:
+  if not odtc.steps:
     return 0.0
-  loops = _analyze_loop_structure(method.steps)
-  step_nums = _expand_step_sequence(method.steps, loops)
-  steps_by_num = {s.number: s for s in method.steps}
+  loops = _analyze_loop_structure(odtc.steps)
+  step_nums = _expand_step_sequence(odtc.steps, loops)
+  steps_by_num = {s.number: s for s in odtc.steps}
 
   total = 0.0
-  prev_temp = method.start_block_temperature
-  min_slope = 0.1  # Avoid division by zero
+  prev_temp = odtc.start_block_temperature
+  min_slope = 0.1
 
   for step_num in step_nums:
     step = steps_by_num[step_num]
@@ -1456,38 +1566,20 @@ def estimate_method_duration_seconds(method: ODTCMethod) -> float:
   return total
 
 
-def odtc_method_to_protocol(
-  method: ODTCMethod,
-) -> Tuple["Protocol", ODTCConfig]:
-  """Convert an ODTCMethod to a Protocol with companion config for lossless round-trip.
+def odtc_method_to_protocol(odtc: ODTCProtocol) -> Tuple["Protocol", ODTCConfig]:
+  """Convert an ODTCProtocol (kind='method') to a Protocol with companion config.
 
   Args:
-    method: The ODTCMethod to convert.
+    odtc: The ODTCProtocol to convert.
 
   Returns:
     Tuple of (Protocol, ODTCConfig) where the config captures
     all ODTC-specific parameters needed to reconstruct the original method.
-
-  Raises:
-    ValueError: If method contains nested loops that can't be expressed in Protocol.
-
-  Note:
-    For methods without nested loops, the conversion is lossless. The returned
-    config captures all ODTC-specific parameters (slopes, overshoot, PID, etc.)
-    so that protocol_to_odtc_method(protocol, config) produces an equivalent method.
   """
-  # Import here to avoid circular imports
-  from pylabrobot.thermocycling.standard import Protocol, Stage, Step
+  from pylabrobot.thermocycling.standard import Protocol
 
-  # Validate no nested loops
-  _validate_no_nested_loops(method)
-
-  # Analyze loop structure
-  loops = _analyze_loop_structure(method.steps)
-
-  # Build step settings for all ODTC-specific parameters
   step_settings: Dict[int, ODTCStepSettings] = {}
-  for i, step in enumerate(method.steps):
+  for i, step in enumerate(odtc.steps):
     step_settings[i] = ODTCStepSettings(
       slope=step.slope,
       overshoot_slope1=step.overshoot_slope1,
@@ -1498,77 +1590,21 @@ def odtc_method_to_protocol(
       pid_number=step.pid_number,
     )
 
-  # Build the config capturing all method-level parameters
   config = ODTCConfig(
-    name=method.name,
-    creator=method.creator,
-    description=method.description,
-    datetime=method.datetime,
-    fluid_quantity=method.fluid_quantity,
-    variant=method.variant,
-    plate_type=method.plate_type,
-    lid_temperature=method.start_lid_temperature,
-    start_lid_temperature=method.start_lid_temperature,
-    post_heating=method.post_heating,
-    pid_set=list(method.pid_set) if method.pid_set else [ODTCPID(number=1)],
+    name=odtc.name,
+    creator=odtc.creator,
+    description=odtc.description,
+    datetime=odtc.datetime,
+    fluid_quantity=odtc.fluid_quantity,
+    variant=odtc.variant,
+    plate_type=odtc.plate_type,
+    lid_temperature=odtc.start_lid_temperature,
+    start_lid_temperature=odtc.start_lid_temperature,
+    post_heating=odtc.post_heating,
+    pid_set=list(odtc.pid_set) if odtc.pid_set else [ODTCPID(number=1)],
     step_settings=step_settings,
-    _validate=False,  # Skip validation for data read from device
+    _validate=False,
   )
 
-  # Group steps into stages based on loop boundaries
-  # Create a map of which step ends a loop and what its repeat count is
-  loop_ends: Dict[int, int] = {}  # step_number -> repeat_count
-  loop_starts: Dict[int, int] = {}  # end_step_number -> start_step_number
-
-  for start, end, repeats in loops:
-    loop_ends[end] = repeats
-    loop_starts[end] = start
-
-  # Build stages
-  stages: List[Stage] = []
-  current_stage_steps: List[Step] = []
-  current_stage_start = 1  # 1-based step number where current stage starts
-
-  for i, odtc_step in enumerate(method.steps):
-    step_number = odtc_step.number  # 1-based
-
-    # Create Protocol Step
-    protocol_step = Step(
-      temperature=[odtc_step.plateau_temperature],
-      hold_seconds=odtc_step.plateau_time,
-      rate=odtc_step.slope,
-    )
-    current_stage_steps.append(protocol_step)
-
-    # Check if this step ends a loop
-    if step_number in loop_ends:
-      loop_start = loop_starts[step_number]
-      repeats = loop_ends[step_number]
-
-      # If the loop starts at the beginning of current stage, this is a repeating stage
-      if loop_start == current_stage_start:
-        # This entire stage repeats
-        stages.append(Stage(steps=current_stage_steps, repeats=repeats))
-        current_stage_steps = []
-        current_stage_start = step_number + 1
-      else:
-        # Loop doesn't start at stage beginning - need to split
-        # Steps before loop_start form a non-repeating stage
-        # Steps from loop_start to here form a repeating stage
-        pre_loop_count = loop_start - current_stage_start
-        if pre_loop_count > 0:
-          pre_loop_steps = current_stage_steps[:pre_loop_count]
-          stages.append(Stage(steps=pre_loop_steps, repeats=1))
-
-        loop_steps = current_stage_steps[pre_loop_count:]
-        stages.append(Stage(steps=loop_steps, repeats=repeats))
-
-        current_stage_steps = []
-        current_stage_start = step_number + 1
-
-  # Add any remaining steps as a final stage
-  if current_stage_steps:
-    stages.append(Stage(steps=current_stage_steps, repeats=1))
-
-  protocol = Protocol(stages=stages)
-  return protocol, config
+  stages = _build_odtc_stages_from_steps(odtc.steps)
+  return Protocol(stages=cast(List[Stage], stages)), config
