@@ -59,7 +59,7 @@ There's a multitude of other optional dependencies that you can install. Replace
 | `http` | requests | HTTP-based backends |
 | `websockets` | websockets | WebSocket backend |
 | `opentrons` | opentrons-http-api-client | Opentrons backend |
-| `server` | flask | PyLabRobot server |
+| `gui` | flask | PyLabRobot GUI |
 | `dev` | All of the above + testing/linting tools | Development |
 
 To install multiple dependencies, separate them with a comma:
