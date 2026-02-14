@@ -351,10 +351,8 @@ class CommandExecution:
   lifetime: Optional[float] = None  # max wait seconds (for resumable wait)
 
   def __await__(self):
-    """Make this awaitable like a Task."""
-    if not self._future.done():
-      self._log_wait_info()
-    return self._future.__await__()
+    """Make this awaitable; delegates to wait() so progress loop runs during await."""
+    return self.wait().__await__()
 
   @property
   def done(self) -> bool:
