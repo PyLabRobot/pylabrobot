@@ -30,20 +30,20 @@ For **methods** (kind='method'): **`.steps`** is the main representation—a fla
 ### Generic types (PyLabRobot)
 
 - **`Protocol`** — `stages: List[Stage]`; hardware-agnostic.
-- **`Stage`** — `steps: Sequence[Step]`, `repeats: int`.
+- **`Stage`** — `steps: List[Step]`, `repeats: int`.
 - **`Step`** — `temperature: List[float]`, `hold_seconds: float`, optional `rate`.
 
 Example: `Protocol(stages=[Stage(steps=[Step(temperature=[95.0], hold_seconds=30.0)], repeats=1)])`.
 
 ### Conversion
 
-- **Device → editable (Protocol + ODTCConfig):**  
+- **Device → editable (Protocol + ODTCConfig):**
   `get_protocol(name)` returns `Optional[ODTCProtocol]`. Use **`odtc_method_to_protocol(odtc)`** to get `(Protocol, ODTCConfig)` for modifying then re-uploading with the same thermal tuning.
 
-- **Protocol + ODTCConfig → ODTC (upload/run):**  
+- **Protocol + ODTCConfig → ODTC (upload/run):**
   Use **`protocol_to_odtc_protocol(protocol, config=config)`** to get an `ODTCProtocol` for upload or for passing to `run_protocol(odtc, block_max_volume)`.
 
-- **ODTCProtocol → Protocol view only:**  
+- **ODTCProtocol → Protocol view only:**
   Use **`odtc_protocol_to_protocol(odtc)`** to get `(Protocol, ODTCProtocol)` when you need a generic Protocol view (e.g. stage tree) without a separate ODTCConfig.
 
 ### Method name (string)
@@ -107,12 +107,13 @@ Use these patterns for the best balance of simplicity and thermal performance.
 **Use when:** The protocol (method) is already on the device. Single instrument call; no upload.
 
 ```python
-# List names: methods and premethods
-names = await tc.backend.list_protocols()  # e.g. ["PCR_30cycles", "my_pcr", ...]
+# List names: methods and premethods (ProtocolList with .methods, .premethods, .all)
+protocol_list = await tc.backend.list_protocols()
 
 # Run by name (blocking or non-blocking)
 await tc.run_stored_protocol("PCR_30cycles")
 # Or with handle: execution = await tc.run_stored_protocol("PCR_30cycles", wait=False); await execution
+# When awaiting a handle, progress is logged every progress_log_interval (default 150 s) for method runs.
 ```
 
 ### 2. Get → modify → upload with config → run (round-trip for thermal performance)
@@ -315,12 +316,12 @@ if await method_exec.is_running():
 ### List All Protocol Names (Recommended)
 
 ```python
-# List all protocol names (both Methods and PreMethods)
-protocol_names = await tc.backend.list_protocols()
-# Returns: ["PCR_30cycles", "my_pcr", "PRE25", "plr_currentProtocol", ...]
+# List all protocol names (ProtocolList: .methods, .premethods, .all, and iterable)
+protocol_list = await tc.backend.list_protocols()
 
-for name in protocol_names:
+for name in protocol_list:
     print(f"Protocol: {name}")
+# Or: protocol_list.all for flat list; protocol_list.methods / protocol_list.premethods for split
 ```
 
 ### List Methods and PreMethods Separately
@@ -328,7 +329,7 @@ for name in protocol_names:
 ```python
 # Returns (method_names, premethod_names); methods are runnable, premethods are setup-only
 methods, premethods = await tc.backend.list_methods()
-# methods + premethods equals list_protocols()
+# methods + premethods equals protocol_list.all (from list_protocols())
 ```
 
 ### Get Runnable Protocol by Name
@@ -531,24 +532,27 @@ odtc_restored = await tc.backend.get_protocol("PCR_30cycles_restored")
 # Content should match (XML formatting may differ)
 ```
 
-## DataEvent Collection
+## DataEvent Collection and Progress
 
-During method execution, the ODTC sends `DataEvent` messages containing experimental data. These are automatically collected:
+During method execution, the ODTC sends **DataEvent** messages; the backend stores them and derives progress (elapsed time, step/cycle, temperatures). When you **await** an execution handle (`await execution` or `await execution.wait()`), progress is reported every **progress_log_interval** (default 150 s) via log lines or **progress_callback**. Same behavior when using **wait_resumable()** (polling-based wait).
 
 ```python
 # Start method
 execution = await tc.run_stored_protocol("PCR_30cycles", wait=False)
 
-# Get DataEvents for this execution
+# Progress is logged every progress_log_interval (default 150 s) while you await
+await execution  # or await execution.wait()
+
+# Get DataEvents for this execution (raw payloads)
 events = await execution.get_data_events()
-# Returns: List of DataEvent objects
+# Returns: List of DataEvent payload dicts
 
 # Get all collected events (backend-level)
 all_events = await tc.backend.get_data_events()
 # Returns: {request_id1: [...], request_id2: [...]}
 ```
 
-**Note:** DataEvent parsing and progress tracking are planned for future implementation. Currently, raw event payloads are stored for later analysis.
+**Backend option:** `ODTCBackend(..., progress_log_interval=150.0, progress_callback=...)`. Set `progress_log_interval` to `None` or `0` to disable progress reporting during wait.
 
 ## Error Handling
 

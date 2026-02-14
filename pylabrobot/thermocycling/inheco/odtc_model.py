@@ -1200,7 +1200,7 @@ def get_method_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCPro
   return get_premethod_by_name(method_set, name)
 
 
-def list_method_names_only(method_set: ODTCMethodSet) -> List[str]:
+def list_method_names(method_set: ODTCMethodSet) -> List[str]:
   """Get all method names (methods only, not premethods)."""
   return [m.name for m in method_set.methods]
 
@@ -1208,13 +1208,6 @@ def list_method_names_only(method_set: ODTCMethodSet) -> List[str]:
 def list_premethod_names(method_set: ODTCMethodSet) -> List[str]:
   """Get all premethod names."""
   return [pm.name for pm in method_set.premethods]
-
-
-def list_method_names(method_set: ODTCMethodSet) -> List[str]:
-  """Get all method names (both methods and premethods)."""
-  method_names = [m.name for m in method_set.methods]
-  premethod_names = [pm.name for pm in method_set.premethods]
-  return method_names + premethod_names
 
 
 class ProtocolList:

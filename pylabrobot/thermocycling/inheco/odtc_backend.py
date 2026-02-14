@@ -6,7 +6,7 @@ import asyncio
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, List, Literal, NamedTuple, Optional, Tuple, Union
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
@@ -30,7 +30,7 @@ from .odtc_model import (
   generate_odtc_timestamp,
   get_constraints,
   get_method_by_name,
-  list_method_names_only,
+  list_method_names,
   list_premethod_names,
   method_set_to_xml,
   normalize_variant,
@@ -403,14 +403,39 @@ class CommandExecution:
       lines.append(f"  Remaining: {remaining:.0f}s")
     self.backend.logger.info("\n".join(lines))
 
+  async def _is_done(self) -> bool:
+    """True when the command has completed (Future resolved). Used by progress loop."""
+    return self._future.done()
+
   async def wait(self) -> None:
     """Wait for command completion.
 
     Equivalent to ``await self`` (the handle is awaitable via __await__).
+    When backend.progress_log_interval is set, reports progress (from latest DataEvent)
+    every progress_log_interval seconds until the command completes.
     """
     if not self._future.done():
       self._log_wait_info()
-    await self._future
+    interval = self.backend.progress_log_interval
+    if interval and interval > 0:
+      task = asyncio.create_task(
+        self.backend._run_progress_loop_until(
+          self.request_id,
+          interval,
+          self._is_done,
+          self.backend.progress_callback,
+        )
+      )
+      try:
+        await self._future
+      finally:
+        task.cancel()
+        try:
+          await task
+        except asyncio.CancelledError:
+          pass
+    else:
+      await self._future
 
   async def wait_resumable(self, poll_interval: float = 5.0) -> None:
     """Wait for completion using only GetStatus and handle timing (resumable after restart).
@@ -504,7 +529,7 @@ class ODTCBackend(ThermocyclerBackend):
     poll_interval: float = 5.0,
     lifetime_of_execution: Optional[float] = None,
     on_response_event_missing: Literal["warn_and_continue", "error"] = "warn_and_continue",
-    progress_log_interval: Optional[float] = 30.0,
+    progress_log_interval: Optional[float] = 150.0,
     progress_callback: Optional[Callable[..., None]] = None,
   ):
     """Initialize ODTC backend.
@@ -519,7 +544,7 @@ class ODTCBackend(ThermocyclerBackend):
       poll_interval: Seconds between GetStatus calls in the async completion polling fallback (SiLA2 subscribe_by_polling style). Default 5.0.
       lifetime_of_execution: Max seconds to wait for async command completion (SiLA2 deadline). If None, uses 3 hours. Protocol execution is always bounded.
       on_response_event_missing: When completion is detected via polling but ResponseEvent was not received: "warn_and_continue" (resolve with None, log warning) or "error" (set exception). Default "warn_and_continue".
-      progress_log_interval: Seconds between progress log lines during wait. None or 0 to disable. Default 30.0.
+      progress_log_interval: Seconds between progress log lines during wait. None or 0 to disable. Default 150.0 (2.5 min); suitable for protocols from minutes to 1–2+ hours.
       progress_callback: Optional callback(progress) called each progress_log_interval during wait.
     """
     super().__init__()
@@ -1056,7 +1081,6 @@ class ODTCBackend(ThermocyclerBackend):
 
     interval = progress_log_interval if progress_log_interval is not None else self.progress_log_interval
     callback = progress_callback if progress_callback is not None else self.progress_callback
-    last_progress_log = 0.0
     buffer = POLLING_START_BUFFER
     eta = estimated_remaining_time or 0.0
     while True:
@@ -1071,40 +1095,32 @@ class ODTCBackend(ThermocyclerBackend):
       if remaining_wait > 0:
         await asyncio.sleep(min(remaining_wait, poll_interval))
         continue
-      # Progress reporting: fetch events, parse latest, log and/or callback
-      if interval and interval > 0 and now - last_progress_log >= interval:
-        last_progress_log = now
-        events_dict = await self.get_data_events(request_id)
-        events = events_dict.get(request_id, [])
-        if events:
-          snapshot = parse_data_event_payload(events[-1])
-          if snapshot is not None:
-            self._last_snapshot_by_request_id[request_id] = snapshot
-        progress = await self._get_progress(request_id)
-        if progress is not None:
-          if callback is not None:
-            try:
-              callback(progress)
-            except Exception:  # noqa: S110
-              pass
-          else:
-            self.logger.info(
-              "ODTC progress: elapsed %.0fs, block %.1f°C (target %.1f°C), lid %.1f°C, "
-              "step %d/%d, cycle %d/%d, hold remaining ~%.0fs",
-              progress.elapsed_s,
-              progress.current_temp_c or 0.0,
-              progress.target_temp_c or 0.0,
-              progress.lid_temp_c or 0.0,
-              progress.current_step_index + 1,
-              progress.total_step_count,
-              progress.current_cycle_index + 1,
-              progress.total_cycle_count,
-              progress.remaining_hold_s,
+      # From here: poll until terminal_state or timeout; progress via same loop as wait()
+      async def _is_done() -> bool:
+        status = await self.get_status()
+        return status == terminal_state or (time.time() - started_at) >= lifetime
+      progress_task: Optional[asyncio.Task[None]] = None
+      if interval and interval > 0:
+        progress_task = asyncio.create_task(
+          self._run_progress_loop_until(request_id, interval, _is_done, callback)
+        )
+      try:
+        while True:
+          status = await self.get_status()
+          if status == terminal_state:
+            return
+          if (time.time() - started_at) >= lifetime:
+            raise TimeoutError(
+              f"Command (request_id={request_id}) did not complete within {lifetime}s"
             )
-      status = await self.get_status()
-      if status == terminal_state:
-        return
-      await asyncio.sleep(poll_interval)
+          await asyncio.sleep(poll_interval)
+      finally:
+        if progress_task is not None:
+          progress_task.cancel()
+          try:
+            await progress_task
+          except asyncio.CancelledError:
+            pass
 
   async def get_data_events(self, request_id: Optional[int] = None) -> Dict[int, List[Dict[str, Any]]]:
     """Get collected DataEvents.
@@ -1163,7 +1179,7 @@ class ODTCBackend(ThermocyclerBackend):
     """
     method_set = await self.get_method_set()
     return ProtocolList(
-      methods=list_method_names_only(method_set),
+      methods=list_method_names(method_set),
       premethods=list_premethod_names(method_set),
     )
 
@@ -1175,7 +1191,7 @@ class ODTCBackend(ThermocyclerBackend):
       premethods are setup-only (e.g. set block/lid temperature).
     """
     method_set = await self.get_method_set()
-    return (list_method_names_only(method_set), list_premethod_names(method_set))
+    return (list_method_names(method_set), list_premethod_names(method_set))
 
   def get_default_config(self, **kwargs) -> ODTCConfig:
     """Get a default ODTCConfig with variant set to this backend's variant.
@@ -1692,6 +1708,64 @@ class ODTCBackend(ThermocyclerBackend):
       return BlockStatus.HOLDING_AT_TARGET
     except Exception:
       return BlockStatus.IDLE
+
+  async def _report_progress_once(
+    self,
+    request_id: int,
+    callback: Optional[Callable[..., None]] = None,
+  ) -> None:
+    """Fetch latest DataEvent for request_id, update snapshot, and log or invoke progress_callback.
+
+    Used by wait_for_completion_by_time and by CommandExecution.wait() (background task).
+    No-op if _get_progress returns None (e.g. non-method command).
+    callback: Override for this call; if None, uses self.progress_callback.
+    """
+    events_dict = await self.get_data_events(request_id)
+    events = events_dict.get(request_id, [])
+    if events:
+      snapshot = parse_data_event_payload(events[-1])
+      if snapshot is not None:
+        self._last_snapshot_by_request_id[request_id] = snapshot
+    progress = await self._get_progress(request_id)
+    if progress is None:
+      return
+    cb = callback if callback is not None else self.progress_callback
+    if cb is not None:
+      try:
+        cb(progress)
+      except Exception:  # noqa: S110
+        pass
+    else:
+      self.logger.info(
+        "ODTC progress: elapsed %.0fs, block %.1f°C (target %.1f°C), lid %.1f°C, "
+        "step %d/%d, cycle %d/%d, hold remaining ~%.0fs",
+        progress.elapsed_s,
+        progress.current_temp_c or 0.0,
+        progress.target_temp_c or 0.0,
+        progress.lid_temp_c or 0.0,
+        progress.current_step_index + 1,
+        progress.total_step_count,
+        progress.current_cycle_index + 1,
+        progress.total_cycle_count,
+        progress.remaining_hold_s,
+      )
+
+  async def _run_progress_loop_until(
+    self,
+    request_id: int,
+    interval: float,
+    done_async: Callable[[], Awaitable[bool]],
+    callback: Optional[Callable[..., None]] = None,
+  ) -> None:
+    """Run progress reporting every interval until done_async() returns True.
+
+    Single definition dispatched by both Future-based wait() and polling-based
+    wait_for_completion_by_time. Stops when done_async() returns True (e.g.
+    future.done() or status == terminal_state or timeout).
+    """
+    while not (await done_async()):
+      await self._report_progress_once(request_id, callback=callback)
+      await asyncio.sleep(interval)
 
   async def _get_progress(self, request_id: int) -> Optional[ODTCProgress]:
     """Get progress for a run: protocol position + temps from latest DataEvent. Returns None if no protocol."""
