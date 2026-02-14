@@ -19,7 +19,7 @@ Subpackages
     pylabrobot.only_fans
     pylabrobot.resources
     pylabrobot.scales
-    pylabrobot.sila
+    pylabrobot.io.sila
     pylabrobot.shaking
     pylabrobot.temperature_controlling
     pylabrobot.thermocycling
