@@ -634,6 +634,30 @@ class ODTCProtocol(Protocol):
   default_heating_slope: float = 4.4
   default_cooling_slope: float = 2.2
 
+  def __str__(self) -> str:
+    """Human-readable summary: name, kind, steps or target temps, key config."""
+    lines: List[str] = [f"ODTCProtocol(name={self.name!r}, kind={self.kind!r})"]
+    if self.kind == "premethod":
+      lines.append(f"  target_block_temperature={self.target_block_temperature:.1f}°C")
+      lines.append(f"  target_lid_temperature={self.target_lid_temperature:.1f}°C")
+    else:
+      steps = self.steps
+      if not steps:
+        lines.append("  0 steps")
+      else:
+        lines.append(f"  {len(steps)} step(s)")
+        for s in steps:
+          hold_str = f"{s.plateau_time:.1f}s" if s.plateau_time != float("inf") else "∞"
+          loop_str = f" goto={s.goto_number} loop={s.loop_number}" if s.goto_number or s.loop_number else ""
+          lines.append(
+            f"    step {s.number}: {s.plateau_temperature:.1f}°C hold {hold_str}{loop_str}"
+          )
+      lines.append(f"  start_block_temperature={self.start_block_temperature:.1f}°C")
+      lines.append(f"  start_lid_temperature={self.start_lid_temperature:.1f}°C")
+    if self.variant is not None:
+      lines.append(f"  variant={self.variant}")
+    return "\n".join(lines)
+
 
 def protocol_to_odtc_protocol(
   protocol: "Protocol",
@@ -770,53 +794,6 @@ def estimate_odtc_protocol_duration_seconds(odtc: ODTCProtocol) -> float:
   if odtc.kind == "premethod":
     return PREMETHOD_ESTIMATED_DURATION_SECONDS
   return estimate_method_duration_seconds(odtc)
-
-
-@dataclass
-class StoredProtocol:
-  """A protocol stored on the device, with instrument config for running it.
-
-  Returned by backend get_protocol(name). Use stored.protocol and stored.config
-  to inspect or run via run_protocol(stored.protocol, block_max_volume, config=stored.config).
-  """
-
-  name: str
-  protocol: "Protocol"
-  config: ODTCConfig
-
-  def __str__(self) -> str:
-    """Human-readable summary: name, stage/step counts, steps, optional config (variant, lid temp)."""
-    lines: List[str] = [f"StoredProtocol(name={self.name!r})"]
-    stages = self.protocol.stages
-    if not stages:
-      lines.append("  protocol: 0 stages")
-    else:
-      lines.append(f"  protocol: {len(stages)} stage(s)")
-      for i, stage in enumerate(stages):
-        step_count = len(stage.steps)
-        first_temp = ""
-        if stage.steps:
-          temps = stage.steps[0].temperature
-          first_temp = f", first step temp={temps[0]:.1f}°C" if temps else ""
-        lines.append(
-          f"    stage {i + 1}: {stage.repeats} repeat(s), {step_count} step(s){first_temp}"
-        )
-        # Step-by-step instruction set
-        for j, step in enumerate(stage.steps):
-          temps = step.temperature
-          t_str = f"{temps[0]:.1f}°C" if temps else "—"
-          hold = step.hold_seconds
-          hold_str = f"{hold:.1f}s" if hold != float("inf") else "∞"
-          rate_str = f" @ {step.rate:.1f}°C/s" if step.rate is not None else ""
-          lines.append(f"      step {j + 1}: {t_str} hold {hold_str}{rate_str}")
-    c = self.config
-    if c.variant is not None or c.lid_temperature is not None:
-      variant_str = f"variant={c.variant}" if c.variant is not None else ""
-      lid_str = f"lid_temperature={c.lid_temperature}°C" if c.lid_temperature is not None else ""
-      config_parts = [x for x in (variant_str, lid_str) if x]
-      if config_parts:
-        lines.append("  config: " + ", ".join(config_parts))
-    return "\n".join(lines)
 
 
 # =============================================================================
