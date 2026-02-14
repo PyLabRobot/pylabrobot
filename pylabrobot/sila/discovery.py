@@ -20,7 +20,7 @@ import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Optional
 
 try:
-  from zeroconf import ServiceBrowser, Zeroconf
+  from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
   HAS_ZEROCONF = True
 except ImportError:
@@ -54,10 +54,10 @@ class SiLADevice:
 
 def _get_link_local_interfaces() -> list[str]:
   """Return local IPs of all interfaces that have a 169.254.x.x address."""
-  result = []
+  result: list[str] = []
   try:
     for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-      ip = info[4][0]
+      ip = str(info[4][0])
       if ip.startswith("169.254."):
         result.append(ip)
   except socket.gaierror:
@@ -297,10 +297,10 @@ async def _discover_sila2(timeout: float = 5.0) -> list[SiLADevice]:
 
   devices: list[SiLADevice] = []
 
-  class _Listener:
+  class _Listener(ServiceListener):
     def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
       info = zc.get_service_info(type_, name)
-      if info and info.addresses:
+      if info and info.addresses and info.port is not None and info.server:
         host = socket.inet_ntoa(info.addresses[0])
         devices.append(SiLADevice(host=host, port=info.port, name=info.server, sila_version=2))
 
@@ -313,7 +313,8 @@ async def _discover_sila2(timeout: float = 5.0) -> list[SiLADevice]:
   loop = asyncio.get_running_loop()
   zc = await loop.run_in_executor(None, Zeroconf)
   try:
-    await loop.run_in_executor(None, ServiceBrowser, zc, SILA_MDNS_TYPE, _Listener())
+    listener = _Listener()
+    await loop.run_in_executor(None, lambda: ServiceBrowser(zc, SILA_MDNS_TYPE, listener))
     await asyncio.sleep(timeout)
   finally:
     await loop.run_in_executor(None, zc.close)

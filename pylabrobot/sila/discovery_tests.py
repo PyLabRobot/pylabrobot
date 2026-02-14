@@ -95,7 +95,7 @@ class TestParseDeviceIdentification(unittest.TestCase):
   </soap:Body>
 </soap:Envelope>"""
     result = _parse_device_identification("169.254.1.1", 8080, xml)
-    self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(result.host, "169.254.1.1")
     self.assertEqual(result.port, 8080)
     self.assertEqual(result.name, "ODTC_1A3C93")
@@ -112,7 +112,7 @@ class TestParseDeviceIdentification(unittest.TestCase):
   </soap:Body>
 </soap:Envelope>"""
     result = _parse_device_identification("10.0.0.1", 8080, xml)
-    self.assertIsNotNone(result)
+    assert result is not None
     self.assertEqual(result.name, "MyDevice")
     self.assertIsNone(result.serial_number)
     self.assertIsNone(result.firmware_version)
