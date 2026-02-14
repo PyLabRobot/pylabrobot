@@ -4,7 +4,7 @@ from pylabrobot.resources import Plate, Lid
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 
-def pioreactor(name: str, lid: Optional[Lid] = None) -> Plate:
+def pioreactor_20ml(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Pioreactor 20mL Vessel: https://pioreactor.com/products/pioreactor-20ml
   Modeled as a 1x1 skirted plate
