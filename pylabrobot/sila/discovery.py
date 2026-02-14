@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import fcntl
+import logging
 import socket
 import struct
 import xml.etree.ElementTree as ET
@@ -29,6 +29,8 @@ except ImportError:
 if TYPE_CHECKING:
   from zeroconf import Zeroconf
 
+logger = logging.getLogger(__name__)
+
 
 @dataclasses.dataclass(frozen=True)
 class SiLADevice:
@@ -37,8 +39,8 @@ class SiLADevice:
   host: str
   port: int
   name: str
-  serial_number: str = ""
-  firmware_version: str = ""
+  serial_number: Optional[str] = None
+  firmware_version: Optional[str] = None
   sila_version: int = 2
 
   def __str__(self) -> str:
@@ -60,24 +62,6 @@ def _get_link_local_interfaces() -> List[str]:
         result.append(ip)
   except socket.gaierror:
     pass
-
-  if not result:
-    # Fallback: scan common interface names on Linux/macOS
-    import array
-
-    try:
-      sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-      # Use SIOCGIFCONF to list interfaces
-      max_bytes = 4096
-      buf = array.array("B", b"\0" * max_bytes)
-      retval = fcntl.ioctl(
-        sock.fileno(),
-        0x8912 if hasattr(fcntl, "SIOCGIFCONF") else 0xC0786924,  # Linux / macOS
-        struct.pack("iL", max_bytes, buf.buffer_info()[0]),
-      )
-      sock.close()
-    except (OSError, struct.error):
-      pass
 
   return result
 
@@ -101,6 +85,9 @@ _NBNS_WILDCARD_QUERY = (
   b"\x00\x01"  # Class: IN
 )
 
+# Raw SOAP envelope for SiLA 1 GetDeviceIdentification.  We build the HTTP request manually
+# rather than pulling in an HTTP library, since this runs on a controlled lab network against
+# known SiLA 1 endpoints that speak HTTP/1.1.
 _SILA1_ID_SOAP = """\
 <?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
@@ -145,13 +132,18 @@ async def _netbios_scan(interface: str, timeout: float = 3.0) -> dict[str, str]:
   sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
   sock.bind((interface, 0))
+  # Use a short blocking timeout so recvfrom in the executor thread returns
+  # promptly rather than blocking forever, while still allowing the asyncio
+  # wait_for to enforce the overall deadline.
   sock.settimeout(0.5)
 
-  # Link-local /16 broadcast
+  # Link-local is always a /16 subnet (169.254.0.0/16), so broadcast to x.x.255.255.
   parts = interface.split(".")
   broadcast = f"{parts[0]}.{parts[1]}.255.255"
 
-  sock.sendto(_NBNS_WILDCARD_QUERY, (broadcast, 137))
+  # Use run_in_executor for sendto/recvfrom since the async loop equivalents
+  # (loop.sock_sendto / loop.sock_recvfrom) require Python 3.11+.
+  await loop.run_in_executor(None, lambda: sock.sendto(_NBNS_WILDCARD_QUERY, (broadcast, 137)))
 
   deadline = loop.time() + timeout
   while loop.time() < deadline:
@@ -160,7 +152,7 @@ async def _netbios_scan(interface: str, timeout: float = 3.0) -> dict[str, str]:
         loop.run_in_executor(None, lambda: sock.recvfrom(65535)),
         timeout=max(0.1, deadline - loop.time()),
       )
-    except (asyncio.TimeoutError, socket.timeout):
+    except (asyncio.TimeoutError, socket.timeout, OSError):
       continue
 
     if addr == interface:
@@ -182,8 +174,8 @@ def _parse_device_identification(host: str, port: int, xml_bytes: bytes) -> Opti
     return None
 
   name = ""
-  serial = ""
-  firmware = ""
+  serial: Optional[str] = None
+  firmware: Optional[str] = None
   for elem in root.iter():
     tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
     if tag == "DeviceName" and elem.text:
@@ -298,6 +290,7 @@ SILA_MDNS_TYPE = "_sila._tcp.local."
 
 async def _discover_sila2(timeout: float = 5.0) -> List[SiLADevice]:
   if not HAS_ZEROCONF:
+    logger.warning("zeroconf not installed, skipping SiLA 2 discovery")
     return []
 
   devices: List[SiLADevice] = []

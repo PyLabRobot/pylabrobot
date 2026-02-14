@@ -23,7 +23,7 @@ inheco = ["hid==1.0.8"]
 agrow = ["pymodbus==3.6.8"]
 sila = ["zeroconf>=0.131.0"]
 dev = [
-  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,server,inheco,agrow]",
+  "PyLabRobot[fw,http,plate_reading,websockets,visualizer,opentrons,server,inheco,agrow,sila]",
   "pytest==8.4.2",
   "pytest-timeout==2.4.0",
   "mypy==1.18.2",
