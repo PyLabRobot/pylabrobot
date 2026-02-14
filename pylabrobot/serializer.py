@@ -143,6 +143,8 @@ def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
         return types.CellType(deserialize(data["contents"], allow_marshal=allow_marshal))
       klass = get_plr_class_from_string(klass_type)
       params = {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
+      if "deserialize" in klass.__dict__:
+        return klass.deserialize(params)
       return klass(**params)
     return {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
   if isinstance(data, object):

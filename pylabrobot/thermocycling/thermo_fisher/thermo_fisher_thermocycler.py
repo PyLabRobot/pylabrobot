@@ -4,6 +4,7 @@ import hmac
 import logging
 import re
 import ssl
+import warnings
 import xml.etree.ElementTree as ET
 from abc import ABCMeta
 from base64 import b64decode
@@ -229,8 +230,11 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
       ssl_context.check_hostname = False
       ssl_context.verify_mode = ssl.CERT_NONE
-      ssl_context.minimum_version = ssl.TLSVersion.TLSv1
-      ssl_context.maximum_version = ssl.TLSVersion.TLSv1
+      # TLSv1 is required for legacy ThermoFisher hardware - silence deprecation warning
+      with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="ssl.TLSVersion.TLSv1 is deprecated")
+        ssl_context.minimum_version = ssl.TLSVersion.TLSv1
+        ssl_context.maximum_version = ssl.TLSVersion.TLSv1
       try:
         # This is required for some legacy devices that use older ciphers or protocols
         # that are disabled by default in newer OpenSSL versions.
