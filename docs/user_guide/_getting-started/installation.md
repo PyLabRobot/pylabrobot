@@ -2,7 +2,7 @@
 
 These instructions describe how to install PyLabRobot.
 
-Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons and Tecans, see {ref}`below <using-the-firmware-interface>`.
+Note that there are additional installation steps for using the USB interface to Hamiltons and Tecans, see {ref}`below <using-the-usb-interface>`.
 
 ## Installing PyLabRobot
 
@@ -49,22 +49,23 @@ pip install "pylabrobot[testing]"
 
 There's a multitude of other optional dependencies that you can install. Replace `[docs]` with one of the following items to install the desired dependencies.
 
-- `fw`: Needed for firmware control over Hamilton robots.
-- `http`: Needed for the HTTP backend.
-- `websockets`: Needed for the WebSocket backend.
-- `simulation`: Needed for the simulation backend.
-- `opentrons`: Needed for the Opentrons backend.
-- `server`: Needed for LH server, an HTTP front end to LH.
-- `agrow`: Needed for the AgrowPumpArray backend.
-- `plate_reading`: Needed to interact with the CLARIO Star plate reader.
-- `inheco`: Needed for the Inheco backend.
-- `dev`: Everything you need for development.
-- `all`: Everything. May not be available on all platforms.
+| Group | Packages | When you need it |
+|-------|----------|-----------------|
+| `serial` | pyserial | Serial devices: BioShake, Cytomat, Inheco (serial mode), Hamilton Tilt Module, Cole Parmer Masterflex, A4S Sealer, XPeel Peeler |
+| `usb` | pyusb, libusb-package | USB devices: Hamilton STAR/STARlet, Tecan EVO (firmware) |
+| `ftdi` | pylibftdi, pyusb | FTDI devices: BioTek Synergy H1 plate reader |
+| `hid` | hid | HID devices: Inheco Incubator/Shaker (HID mode) |
+| `modbus` | pymodbus | Modbus devices: Agrow Pump Array |
+| `http` | requests | HTTP-based backends |
+| `websockets` | websockets | WebSocket backend |
+| `opentrons` | opentrons-http-api-client | Opentrons backend |
+| `server` | flask | PyLabRobot server |
+| `dev` | All of the above + testing/linting tools | Development |
 
 To install multiple dependencies, separate them with a comma:
 
 ```bash
-pip install 'pylabrobot[fw,server]'
+pip install 'pylabrobot[serial,usb]'
 ```
 
 Or install all dependencies at once:
@@ -73,16 +74,16 @@ Or install all dependencies at once:
 pip install 'pylabrobot[all]'
 ```
 
-(using-the-firmware-interface)=
+(using-the-usb-interface)=
 
-## Using the firmware interface with Hamilton or Tecan robots
+## Using the USB interface with Hamilton or Tecan robots
 
 If you want to use the firmware version of the Hamilton or Tecan interfaces, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
 
-Reminder: when you are using the firmware version, make sure to install the firmware dependencies as follows:
+First, install the USB dependencies:
 
 ```bash
-pip install pylabrobot[fw]
+pip install pylabrobot[usb]
 ```
 
 ### On Linux
