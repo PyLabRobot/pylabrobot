@@ -1256,7 +1256,13 @@ class ODTCBackend(ThermocyclerBackend):
     )
 
     if execute:
-      return await self.execute_method(resolved_name, wait=wait)
+      eta = estimate_odtc_protocol_duration_seconds(odtc_copy)
+      handle = await self.execute_method(
+        resolved_name, wait=wait, estimated_duration_seconds=eta
+      )
+      protocol_view = odtc_protocol_to_protocol(odtc_copy)[0]
+      self._protocol_by_request_id[handle.request_id] = protocol_view
+      return handle
     return None
 
   async def upload_protocol(
@@ -1523,11 +1529,16 @@ class ODTCBackend(ThermocyclerBackend):
       debug_xml=debug_xml,
       xml_output_path=xml_output_path,
     )
-    return await self.execute_method(
+    handle = await self.execute_method(
       resolved_name,
       wait=wait,
       estimated_duration_seconds=PREMETHOD_ESTIMATED_DURATION_SECONDS,
     )
+    # Register protocol view so progress (DataEvent parsing) is reported every
+    # progress_log_interval while awaiting the handle (e.g. await mount_handle).
+    protocol_view = odtc_protocol_to_protocol(odtc)[0]
+    self._protocol_by_request_id[handle.request_id] = protocol_view
+    return handle
 
   async def set_lid_temperature(self, temperature: List[float]) -> None:
     """Set lid temperature.
