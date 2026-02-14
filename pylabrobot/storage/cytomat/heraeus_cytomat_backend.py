@@ -192,7 +192,3 @@ class HeraeusCytomatBackend(IncubatorBackend):
       **super().serialize(),
       "port": self.io.port,
     }
-
-  @classmethod
-  def deserialize(cls, data: dict):
-    return cls(port=data["port"])

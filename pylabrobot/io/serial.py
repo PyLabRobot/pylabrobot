@@ -342,20 +342,6 @@ class Serial(IOBase):
       "dsrdtr": self.dsrdtr,
     }
 
-  @classmethod
-  def deserialize(cls, data: dict) -> "Serial":
-    return cls(
-      port=data["port"],
-      baudrate=data["baudrate"],
-      bytesize=data["bytesize"],
-      parity=data["parity"],
-      stopbits=data["stopbits"],
-      write_timeout=data["write_timeout"],
-      timeout=data["timeout"],
-      rtscts=data["rtscts"],
-      dsrdtr=data["dsrdtr"],
-    )
-
 
 class SerialValidator(Serial):
   def __init__(

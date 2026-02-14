@@ -750,15 +750,16 @@ class Resource:
       "parent_name",
       "location",
     ]:  # delete meta keys
-      del data_copy[key]
-    children_data = data_copy.pop("children")
-    rotation = data_copy.pop("rotation")
+      data_copy.pop(key, None)
+    children_data = data_copy.pop("children", [])
+    rotation = data_copy.pop("rotation", None)
     barcode = data_copy.pop("barcode", None)
     preferred_pickup_location = data_copy.pop("preferred_pickup_location", None)
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
-    resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
+    if rotation is not None:
+      resource.rotation = deserialize(rotation)  # not pretty, should be done in init.
     if barcode is not None:
-      resource.barcode = Barcode.deserialize(barcode)
+      resource.barcode = Barcode(**barcode)
     if preferred_pickup_location is not None:
       resource.preferred_pickup_location = cast(Coordinate, deserialize(preferred_pickup_location))
 

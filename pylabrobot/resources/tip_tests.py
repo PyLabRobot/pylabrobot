@@ -61,4 +61,4 @@ class TipTests(unittest.TestCase):
       TipPickupMethod.OUT_OF_RACK,
       name="test_tip",
     )
-    self.assertEqual(HamiltonTip.deserialize(tip.serialize()), tip)
+    self.assertEqual(deserialize(tip.serialize()), tip)
