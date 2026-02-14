@@ -1,6 +1,6 @@
 """SiLA device discovery.
 
-Supports both SiLA 2 (mDNS) and SiLA 1 (NetBIOS + GetDeviceIdentification) protocols.
+Supports both SiLA 1 (NetBIOS + GetDeviceIdentification) and SiLA 2 (mDNS) protocols.
 
 Example:
   >>> from pylabrobot.sila.discovery import discover
@@ -80,42 +80,6 @@ def _get_link_local_interfaces() -> List[str]:
       pass
 
   return result
-
-
-# ---------------------------------------------------------------------------
-# SiLA 2 – mDNS
-# ---------------------------------------------------------------------------
-
-SILA_MDNS_TYPE = "_sila._tcp.local."
-
-
-async def _discover_sila2(timeout: float = 5.0) -> List[SiLADevice]:
-  if not HAS_ZEROCONF:
-    return []
-
-  devices: List[SiLADevice] = []
-
-  class _Listener:
-    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-      info = zc.get_service_info(type_, name)
-      if info and info.addresses:
-        host = socket.inet_ntoa(info.addresses[0])
-        devices.append(SiLADevice(host=host, port=info.port, name=info.server, sila_version=2))
-
-    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-      pass
-
-    def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-      pass
-
-  zc = Zeroconf()
-  try:
-    ServiceBrowser(zc, SILA_MDNS_TYPE, _Listener())
-    await asyncio.sleep(timeout)
-  finally:
-    zc.close()
-
-  return devices
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +290,42 @@ async def _discover_sila1(
 
 
 # ---------------------------------------------------------------------------
+# SiLA 2 – mDNS
+# ---------------------------------------------------------------------------
+
+SILA_MDNS_TYPE = "_sila._tcp.local."
+
+
+async def _discover_sila2(timeout: float = 5.0) -> List[SiLADevice]:
+  if not HAS_ZEROCONF:
+    return []
+
+  devices: List[SiLADevice] = []
+
+  class _Listener:
+    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+      info = zc.get_service_info(type_, name)
+      if info and info.addresses:
+        host = socket.inet_ntoa(info.addresses[0])
+        devices.append(SiLADevice(host=host, port=info.port, name=info.server, sila_version=2))
+
+    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+      pass
+
+    def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+      pass
+
+  zc = Zeroconf()
+  try:
+    ServiceBrowser(zc, SILA_MDNS_TYPE, _Listener())
+    await asyncio.sleep(timeout)
+  finally:
+    zc.close()
+
+  return devices
+
+
+# ---------------------------------------------------------------------------
 # Combined discovery
 # ---------------------------------------------------------------------------
 
@@ -336,7 +336,7 @@ async def discover(
 ) -> List[SiLADevice]:
   """Discover SiLA devices on the local network.
 
-  Runs SiLA 2 (mDNS) and SiLA 1 (NetBIOS + GetDeviceIdentification) probes in parallel.
+  Runs SiLA 1 (NetBIOS + GetDeviceIdentification) and SiLA 2 (mDNS) probes in parallel.
 
   For SiLA 1, the ``interface`` parameter specifies which local IP to send NetBIOS broadcasts
   from. If not provided, all link-local (169.254.x.x) interfaces are scanned automatically.
@@ -350,15 +350,13 @@ async def discover(
     List of discovered devices.
   """
 
-  coros: list = [_discover_sila2(timeout)]
-
   if interface:
     interfaces = [interface]
   else:
     interfaces = _get_link_local_interfaces()
 
-  for iface in interfaces:
-    coros.append(_discover_sila1(timeout=timeout, interface=iface))
+  coros: list = [_discover_sila1(timeout=timeout, interface=iface) for iface in interfaces]
+  coros.append(_discover_sila2(timeout))
 
   results = await asyncio.gather(*coros, return_exceptions=True)
 
