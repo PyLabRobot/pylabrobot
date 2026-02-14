@@ -30,20 +30,6 @@ Hardware
     backends.opentrons_backend.OpentronsOT2Backend
     backends.tecan.EVO_backend.EVOBackend
 
-Net
----
-
-Net backends can be used to communicate with servers that manage liquid handling devices.
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    backends.http.HTTPBackend
-    backends.websocket.WebSocketBackend
-
-
 Testing
 -------
 
