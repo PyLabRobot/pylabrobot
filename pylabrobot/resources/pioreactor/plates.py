@@ -1,8 +1,9 @@
 from typing import Optional
 
-from pylabrobot.resources import Plate, Lid
+from pylabrobot.resources import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
+from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
+
 
 def pioreactor_20ml(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -32,13 +33,13 @@ def pioreactor_20ml(name: str, lid: Optional[Lid] = None) -> Plate:
   # Distance from plate top to top of cavity
   # dz = OUTER_Z - WELL_DEPTH - MATERIAL_Z_THICKNESS
   # dz = 126.5-57 -1 =68.5 # tip crashes into bottom
-  dz = 76 # measured
+  dz = 76  # measured
 
   # Cylinder area for volume/height conversions
   cross_section_area = 3.14 * (WELL_DIAMETER / 2.0) ** 2
 
   well_kwargs = {
-    "size_x": WELL_DIAMETER,               # for CIRCLE, size_x == size_y == diameter
+    "size_x": WELL_DIAMETER,  # for CIRCLE, size_x == size_y == diameter
     "size_y": WELL_DIAMETER,
     "size_z": WELL_DEPTH,
     "bottom_type": WellBottomType.FLAT,
