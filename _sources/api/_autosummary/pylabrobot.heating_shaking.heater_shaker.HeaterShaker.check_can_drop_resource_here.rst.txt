@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.heater\_shaker.HeaterShaker.check\_can\_drop\_resource\_here
+========================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.heater_shaker
+
+.. automethod:: HeaterShaker.check_can_drop_resource_here

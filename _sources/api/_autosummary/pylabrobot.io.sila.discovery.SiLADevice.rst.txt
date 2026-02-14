@@ -1,0 +1,33 @@
+﻿pylabrobot.io.sila.discovery.SiLADevice
+=======================================
+
+.. currentmodule:: pylabrobot.io.sila.discovery
+
+.. autoclass:: SiLADevice
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SiLADevice.firmware_version
+      ~SiLADevice.serial_number
+      ~SiLADevice.sila_version
+      ~SiLADevice.host
+      ~SiLADevice.port
+      ~SiLADevice.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SiLADevice.__init__
+   
+   

@@ -1,0 +1,56 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": "# SiLA Device Discovery\n\n[SiLA](https://sila-standard.com/) is a communication standard used by many lab instruments. PyLabRobot can discover both SiLA 1 and SiLA 2 devices on the local network:\n\n- **SiLA 1** devices are found via NetBIOS broadcast + SOAP `GetDeviceIdentification`\n- **SiLA 2** devices advertise via mDNS (`_sila._tcp.local.`)"
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": "## Requirements\n\nSiLA 1 discovery works out of the box (no extra dependencies). SiLA 1 devices typically use link-local addresses (169.254.x.x).\n\nFor SiLA 2 discovery (mDNS):\n\n```bash\npip install zeroconf\n```\n\nYour computer must be on the same network (or VLAN) as the instruments you want to discover."
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Usage"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": "from pylabrobot.io.sila.discovery import discover\n\ndevices = await discover(timeout=5.0)\nprint(f\"Found {len(devices)} device(s)\")\nfor device in devices:\n  print(device)"
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": "`discover()` runs SiLA 1 (NetBIOS + SOAP) and SiLA 2 (mDNS) probes in parallel, listening for `timeout` seconds. It returns a list of `SiLADevice` objects:\n\n| Attribute          | Type            | Description                           |\n|--------------------|-----------------|---------------------------------------|\n| `host`             | `str`           | IP address (e.g. `192.168.1.42`)      |\n| `port`             | `int`           | Service port (e.g. `8080` or `8091`)  |\n| `name`             | `str`           | Device name                           |\n| `serial_number`    | `Optional[str]` | Serial number (SiLA 1 only, else `None`) |\n| `firmware_version` | `Optional[str]` | Firmware version (SiLA 1 only, else `None`) |\n| `sila_version`     | `int`           | `1` or `2`                            |"
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": "## Example: connecting to the first device found\n\nYou can use the discovered host and port directly when creating a backend:\n\n```python\nfrom pylabrobot.io.sila.discovery import discover\n\ndevices = await discover()\nassert len(devices) > 0, \"No SiLA devices found\"\ndevice = devices[0]\n\n# Pass device.host and device.port to your backend\nbackend = SomeBackend(host=device.host, port=device.port)\n```"
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": "## Command-line tool\n\nYou can also discover devices from the terminal:\n\n```bash\npython -m pylabrobot.io.sila.discovery\n```\n\nUse `-t` to change the timeout (default 5 seconds):\n\n```bash\npython -m pylabrobot.io.sila.discovery -t 10\n```\n\nFor SiLA 1 devices on a specific link-local interface:\n\n```bash\npython -m pylabrobot.io.sila.discovery --interface 169.254.183.87\n```\n\nOutput is tab-delimited, one device per line:\n\n```\n169.254.151.99\t8080\tODTC_1A3C93\tSiLA 1\tS/N:12345\n192.168.1.42\t8091\tImageXpress-Pico\tSiLA 2\n```"
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.10.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

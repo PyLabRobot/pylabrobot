@@ -1,0 +1,6 @@
+pylabrobot.utils.interpolation.interpolate\_1d
+==============================================
+
+.. currentmodule:: pylabrobot.utils.interpolation
+
+.. autofunction:: interpolate_1d

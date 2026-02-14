@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin\_backend.VSpinBackend.set\_configuration\_data
+==========================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. automethod:: VSpinBackend.set_configuration_data

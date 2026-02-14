@@ -1,0 +1,6 @@
+pylabrobot.resources.ItemizedResource.item\_dx
+==============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: ItemizedResource.item_dx

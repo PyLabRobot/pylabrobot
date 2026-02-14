@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin\_backend.VSpinBackend.stop
+======================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. automethod:: VSpinBackend.stop

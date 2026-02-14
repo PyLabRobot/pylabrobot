@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.heater\_shaker.HeaterShaker.get\_location\_wrt
+==========================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.heater_shaker
+
+.. automethod:: HeaterShaker.get_location_wrt

@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin\_backend.VSpinBackend.get\_home\_position
+=====================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin_backend
+
+.. automethod:: VSpinBackend.get_home_position
