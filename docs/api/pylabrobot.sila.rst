@@ -3,7 +3,7 @@
 pylabrobot.sila package
 =======================
 
-This package provides utilities for working with `SiLA 2 <https://sila-standard.com/>`_ instruments.
+This package provides utilities for working with `SiLA <https://sila-standard.com/>`_ instruments.
 
 Discovery
 ---------

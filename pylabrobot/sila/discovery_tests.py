@@ -46,7 +46,7 @@ class TestDecodeNbnsName(unittest.TestCase):
   def _make_nbstat_response(self, name: str) -> bytes:
     """Build a minimal NBSTAT response with one name entry."""
     # Transaction header (12 bytes)
-    header = b"\x80\x01" + b"\x84\x00" + b"\x00\x00" + b"\x00\x01" + b"\x00\x00" + b"\x00\x00"
+    header = b"\x00\x01" + b"\x84\x00" + b"\x00\x00" + b"\x00\x01" + b"\x00\x00" + b"\x00\x00"
     # Answer name section (skip to type marker)
     answer_name = b"\x20" + b"CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + b"\x00"
     type_class = b"\x00\x21\x00\x01"  # NBSTAT, IN

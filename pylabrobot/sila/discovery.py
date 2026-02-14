@@ -17,7 +17,7 @@ import logging
 import socket
 import struct
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 try:
   from zeroconf import ServiceBrowser, Zeroconf
@@ -52,7 +52,7 @@ class SiLADevice:
 # ---------------------------------------------------------------------------
 
 
-def _get_link_local_interfaces() -> List[str]:
+def _get_link_local_interfaces() -> list[str]:
   """Return local IPs of all interfaces that have a 169.254.x.x address."""
   result = []
   try:
@@ -72,7 +72,7 @@ def _get_link_local_interfaces() -> List[str]:
 
 # NetBIOS wildcard NBSTAT query: asks any host to report its name table.
 _NBNS_WILDCARD_QUERY = (
-  b"\x80\x01"  # Transaction ID
+  b"\x00\x01"  # Transaction ID
   b"\x00\x00"  # Flags: query
   b"\x00\x01"  # Questions: 1
   b"\x00\x00"  # Answer RRs
@@ -125,7 +125,7 @@ async def _netbios_scan(interface: str, timeout: float = 3.0) -> dict[str, str]:
 
   Returns a dict mapping IP -> NetBIOS name.
   """
-  loop = asyncio.get_event_loop()
+  loop = asyncio.get_running_loop()
   results: dict[str, str] = {}
 
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -216,14 +216,14 @@ async def _get_device_identification(
     f"\r\n"
   ).encode() + body
 
+  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   try:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(timeout)
     if interface:
       sock.bind((interface, 0))
     sock.setblocking(False)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await asyncio.wait_for(loop.sock_connect(sock, (host, port)), timeout=timeout)
     await asyncio.wait_for(loop.sock_sendall(sock, request), timeout=timeout)
 
@@ -236,7 +236,6 @@ async def _get_device_identification(
         resp += chunk
       except asyncio.TimeoutError:
         break
-    sock.close()
 
     # Extract XML from HTTP response
     text = resp.decode("utf-8", errors="replace")
@@ -251,6 +250,8 @@ async def _get_device_identification(
       return _parse_device_identification(host, port, xml_text.encode("utf-8"))
   except (OSError, asyncio.TimeoutError):
     pass
+  finally:
+    sock.close()
   return None
 
 
@@ -258,20 +259,21 @@ async def _discover_sila1(
   timeout: float = 5.0,
   interface: Optional[str] = None,
   port: int = 8080,
-) -> List[SiLADevice]:
+) -> list[SiLADevice]:
   """Discover SiLA 1 devices using NetBIOS broadcast + GetDeviceIdentification.
 
   1. Send a broadcast NetBIOS NBSTAT query to find live hosts on the link-local network.
   2. For each responder, query port 8080 with GetDeviceIdentification.
   """
   if not interface:
+    logger.debug("no interface provided for SiLA 1 discovery, skipping")
     return []
 
   hosts = await _netbios_scan(interface, timeout=min(timeout, 3.0))
   if not hosts:
     return []
 
-  devices: List[SiLADevice] = []
+  devices: list[SiLADevice] = []
   coros = [_get_device_identification(ip, port, interface=interface, timeout=3.0) for ip in hosts]
   results = await asyncio.gather(*coros, return_exceptions=True)
   for r in results:
@@ -288,12 +290,12 @@ async def _discover_sila1(
 SILA_MDNS_TYPE = "_sila._tcp.local."
 
 
-async def _discover_sila2(timeout: float = 5.0) -> List[SiLADevice]:
+async def _discover_sila2(timeout: float = 5.0) -> list[SiLADevice]:
   if not HAS_ZEROCONF:
     logger.warning("zeroconf not installed, skipping SiLA 2 discovery")
     return []
 
-  devices: List[SiLADevice] = []
+  devices: list[SiLADevice] = []
 
   class _Listener:
     def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
@@ -308,12 +310,13 @@ async def _discover_sila2(timeout: float = 5.0) -> List[SiLADevice]:
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
       pass
 
-  zc = Zeroconf()
+  loop = asyncio.get_running_loop()
+  zc = await loop.run_in_executor(None, Zeroconf)
   try:
-    ServiceBrowser(zc, SILA_MDNS_TYPE, _Listener())
+    await loop.run_in_executor(None, ServiceBrowser, zc, SILA_MDNS_TYPE, _Listener())
     await asyncio.sleep(timeout)
   finally:
-    zc.close()
+    await loop.run_in_executor(None, zc.close)
 
   return devices
 
@@ -326,7 +329,7 @@ async def _discover_sila2(timeout: float = 5.0) -> List[SiLADevice]:
 async def discover(
   timeout: float = 5.0,
   interface: Optional[str] = None,
-) -> List[SiLADevice]:
+) -> list[SiLADevice]:
   """Discover SiLA devices on the local network.
 
   Runs SiLA 1 (NetBIOS + GetDeviceIdentification) and SiLA 2 (mDNS) probes in parallel.
@@ -347,6 +350,8 @@ async def discover(
     interfaces = [interface]
   else:
     interfaces = _get_link_local_interfaces()
+    if not interfaces:
+      logger.debug("no link-local interfaces found, SiLA 1 discovery will be skipped")
 
   coros: list = [_discover_sila1(timeout=timeout, interface=iface) for iface in interfaces]
   coros.append(_discover_sila2(timeout))
@@ -354,7 +359,7 @@ async def discover(
   results = await asyncio.gather(*coros, return_exceptions=True)
 
   seen: set[tuple[str, int]] = set()
-  devices: List[SiLADevice] = []
+  devices: list[SiLADevice] = []
   for r in results:
     if isinstance(r, list):
       for d in r:
