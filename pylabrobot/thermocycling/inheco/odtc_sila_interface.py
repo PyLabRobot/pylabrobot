@@ -11,6 +11,7 @@ This module extends InhecoSiLAInterface to support ODTC-specific requirements:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import urllib.request
@@ -23,6 +24,8 @@ import xml.etree.ElementTree as ET
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
 from pylabrobot.storage.inheco.scila.soap import soap_decode, soap_encode, XSI
 
+from .odtc_model import ODTCProgress
+
 
 # -----------------------------------------------------------------------------
 # SiLA/ODTC exceptions (typed command and device errors)
@@ -30,43 +33,21 @@ from pylabrobot.storage.inheco.scila.soap import soap_decode, soap_encode, XSI
 
 
 class SiLAError(RuntimeError):
-  """Base exception for SiLA command and device errors."""
+  """Base exception for SiLA command and device errors. Use .code for return-code-specific handling (4=busy, 5=lock, 6=requestId, 9=state, 11=parameter, 1000+=device)."""
 
-  pass
-
-
-class SiLACommandRejected(SiLAError):
-  """Command rejected: device busy (return code 4) or not allowed in state (return code 9)."""
-
-  pass
-
-
-class SiLALockIdError(SiLAError):
-  """LockId mismatch (return code 5)."""
-
-  pass
-
-
-class SiLARequestIdError(SiLAError):
-  """Invalid or duplicate requestId (return code 6)."""
-
-  pass
-
-
-class SiLAParameterError(SiLAError):
-  """Invalid command parameter (return code 11)."""
-
-  pass
-
-
-class SiLADeviceError(SiLAError):
-  """Device-specific error (return codes 1000, 2000, 2001, 2007, etc.)."""
-
-  pass
+  def __init__(self, msg: str, code: Optional[int] = None) -> None:
+    super().__init__(msg)
+    self.code = code
 
 
 class SiLATimeoutError(SiLAError):
   """Command timed out: lifetime_of_execution exceeded or ResponseEvent not received."""
+
+  pass
+
+
+class FirstEventTimeout(SiLAError):
+  """No first event received within timeout (e.g. no DataEvent for ExecuteMethod)."""
 
   pass
 
@@ -150,10 +131,42 @@ class SiLAState(str, Enum):
   INERROR = "inError"  # Device returns "inError" (camelCase per SCILABackend comment)
 
 
+class FirstEventType(str, Enum):
+  """Event type to wait for before handing off an async command handle.
+
+  Per SiLA Device Control & Data Interface Spec and ODTC TD_SILA_FWCommandSet:
+  - DataEvent: transmission of data during async command execution (has requestId).
+    Used by ExecuteMethod (methods and premethods) per ODTC firmware.
+  - StatusEvent: unsolicited device state changes. Used by OpenDoor, CloseDoor,
+    Initialize, Reset, LockDevice, UnlockDevice, StopMethod (no DataEvent stream).
+  """
+
+  DATA_EVENT = "DataEvent"
+  STATUS_EVENT = "StatusEvent"
+
+
+# Command -> event type to wait for (first event before returning handle).
+# Verified against SiLA_Device_Control__Data__Interface_Specification_V1.2.01 and
+# TD_SILA_FWCommandSet (ODTC): only ExecuteMethod sends DataEvents; others use StatusEvent.
+COMMAND_FIRST_EVENT_TYPE: Dict[str, FirstEventType] = {
+  "ExecuteMethod": FirstEventType.DATA_EVENT,
+  "OpenDoor": FirstEventType.STATUS_EVENT,
+  "CloseDoor": FirstEventType.STATUS_EVENT,
+  "Initialize": FirstEventType.STATUS_EVENT,
+  "Reset": FirstEventType.STATUS_EVENT,
+  "LockDevice": FirstEventType.STATUS_EVENT,
+  "UnlockDevice": FirstEventType.STATUS_EVENT,
+  "StopMethod": FirstEventType.STATUS_EVENT,
+}
+
+
 # Default max wait for async command completion (3 hours). SiLA2-aligned: protocol execution always bounded.
 DEFAULT_LIFETIME_OF_EXECUTION: float = 10800.0
 
-# Buffer (seconds) added to estimated_remaining_time before starting polling loop.
+# Default timeout for waiting for first DataEvent (ExecuteMethod) and default lifetime/eta for status-driven commands.
+DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS: float = 60.0
+
+# Delay (seconds) after command start before starting GetStatus polling loop.
 POLLING_START_BUFFER: float = 10.0
 
 
@@ -165,7 +178,6 @@ class PendingCommand:
   request_id: int
   fut: asyncio.Future[Any]
   started_at: float
-  estimated_remaining_time: Optional[float] = None  # Caller-provided estimate (seconds)
   lock_id: Optional[str] = None  # LockId sent with LockDevice command (for tracking)
 
 
@@ -351,6 +363,10 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     # DataEvent storage by request_id
     self._data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
+    # Optional: when set, each received DataEvent payload is appended as one JSON line (for debugging / API discovery)
+    self.data_event_log_path: Optional[str] = None
+    # Estimated remaining time (s) per request_id; set by backend after first DataEvent so polling waits until eta+buffer.
+    self._estimated_remaining_by_request_id: Dict[int, float] = {}
 
   def _check_state_allowability(self, command: str) -> bool:
     """Check if command is allowed in current state.
@@ -428,6 +444,46 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     """Return the device state that indicates this async command has finished (for polling fallback)."""
     return self.ASYNC_COMMAND_TERMINAL_STATE.get(command, self._DEFAULT_TERMINAL_STATE)
 
+  def get_first_event_type_for_command(self, command: str) -> FirstEventType:
+    """Return which event type to wait for before handing off the handle (per SiLA/ODTC docs)."""
+    normalized = self._normalize_command_name(command)
+    return COMMAND_FIRST_EVENT_TYPE.get(normalized, FirstEventType.STATUS_EVENT)
+
+  async def wait_for_first_event(
+    self,
+    request_id: int,
+    event_type: FirstEventType,
+    timeout_seconds: float,
+  ) -> Optional[Dict[str, Any]]:
+    """Wait for the first event of the given type for this request_id, or raise on timeout.
+
+    For DATA_EVENT: polls _data_events_by_request_id until at least one event or timeout.
+    For STATUS_EVENT: returns None immediately (StatusEvent has no requestId per SiLA spec).
+
+    Args:
+      request_id: SiLA request ID of the command.
+      event_type: FirstEventType.DATA_EVENT or FirstEventType.STATUS_EVENT.
+      timeout_seconds: Max seconds to wait (DATA_EVENT only).
+
+    Returns:
+      First event payload dict (DATA_EVENT) or None (STATUS_EVENT).
+
+    Raises:
+      FirstEventTimeout: If no DataEvent received within timeout_seconds.
+    """
+    if event_type == FirstEventType.STATUS_EVENT:
+      return None
+    started_at = time.time()
+    while True:
+      events = self._data_events_by_request_id.get(request_id) or []
+      if events:
+        return events[0]
+      if time.time() - started_at >= timeout_seconds:
+        raise FirstEventTimeout(
+          f"No DataEvent received for request_id {request_id} within {timeout_seconds}s"
+        )
+      await asyncio.sleep(0.2)
+
   def _complete_pending(
     self,
     request_id: int,
@@ -459,6 +515,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
         self._logger.info("Device reset (unlocked)")
 
     self._pending_by_id.pop(request_id, None)
+    self._estimated_remaining_by_request_id.pop(request_id, None)
     self._active_request_ids.discard(request_id)
     normalized_cmd = self._normalize_command_name(pending.name)
     self._executing_commands.discard(normalized_cmd)
@@ -470,6 +527,19 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       pending.fut.set_exception(exception)
     else:
       pending.fut.set_result(result)
+
+  def set_estimated_remaining_time(self, request_id: int, eta_seconds: float) -> None:
+    """Set device-estimated remaining time for a pending command so polling waits until eta+buffer.
+
+    Call after receiving the first DataEvent (ExecuteMethod) or when eta is known.
+    The _poll_until_complete task will not start GetStatus polling until
+    time.time() >= started_at + eta_seconds + POLLING_START_BUFFER.
+
+    Args:
+      request_id: Pending command request_id.
+      eta_seconds: Estimated remaining duration in seconds (0 = only wait POLLING_START_BUFFER).
+    """
+    self._estimated_remaining_by_request_id[request_id] = max(0.0, eta_seconds)
 
   def _validate_lock_id(self, lock_id: Optional[str]) -> None:
     """Validate lockId parameter.
@@ -486,9 +556,10 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     # Device is locked - must provide matching lockId
     if lock_id != self._lock_id:
-      raise SiLALockIdError(
+      raise SiLAError(
         f"Device is locked with lockId '{self._lock_id}', "
-        f"but command provided lockId '{lock_id}'. Return code: 5"
+        f"but command provided lockId '{lock_id}'. Return code: 5",
+        code=5,
       )
 
   def _update_state_from_status(self, state_str: str) -> None:
@@ -537,22 +608,18 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       # Asynchronous command finished (success) - handled in ResponseEvent
       return
     elif return_code == 4:
-      # Device busy
-      raise SiLACommandRejected(f"Command {command_name} rejected: Device is busy (return code 4)")
+      raise SiLAError(f"Command {command_name} rejected: Device is busy (return code 4)", code=4)
     elif return_code == 5:
-      # LockId error
-      raise SiLALockIdError(f"Command {command_name} rejected: LockId mismatch (return code 5)")
+      raise SiLAError(f"Command {command_name} rejected: LockId mismatch (return code 5)", code=5)
     elif return_code == 6:
-      # RequestId error
-      raise SiLARequestIdError(f"Command {command_name} rejected: Invalid or duplicate requestId (return code 6)")
+      raise SiLAError(f"Command {command_name} rejected: Invalid or duplicate requestId (return code 6)", code=6)
     elif return_code == 9:
-      # Command not allowed in this state
-      raise SiLACommandRejected(
-        f"Command {command_name} not allowed in state {self._current_state.value} (return code 9)"
+      raise SiLAError(
+        f"Command {command_name} not allowed in state {self._current_state.value} (return code 9)",
+        code=9,
       )
     elif return_code == 11:
-      # Invalid parameter
-      raise SiLAParameterError(f"Command {command_name} rejected: Invalid parameter (return code 11): {message}")
+      raise SiLAError(f"Command {command_name} rejected: Invalid parameter (return code 11): {message}", code=11)
     elif return_code == 12:
       # Finished with warning
       self._logger.warning(f"Command {command_name} finished with warning (return code 12): {message}")
@@ -560,10 +627,10 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     elif return_code >= 1000:
       # Device-specific return code
       if return_code in self.DEVICE_ERROR_CODES:
-        # DeviceError - transition to InError
         self._current_state = SiLAState.INERROR
-        raise SiLADeviceError(
-          f"Command {command_name} failed with device error (return code {return_code}): {message}"
+        raise SiLAError(
+          f"Command {command_name} failed with device error (return code {return_code}): {message}",
+          code=return_code,
         )
       else:
         # Warning or recoverable error
@@ -663,6 +730,24 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           f"DataEvent received for requestId {request_id} "
           f"(total: {len(self._data_events_by_request_id[request_id])})"
         )
+        # One-line summary at DEBUG so default "waiting" shows only backend progress
+        # (every progress_log_interval, e.g. 150 s). Backend logs use correct target for premethods.
+        progress = ODTCProgress.from_data_event(data_event, None)
+        self._logger.debug(
+          "DataEvent requestId %s: elapsed %.0fs, block %.1f°C, target %.1f°C, lid %.1f°C",
+          request_id,
+          progress.elapsed_s,
+          progress.current_temp_c or 0.0,
+          progress.target_temp_c or 0.0,
+          progress.lid_temp_c or 0.0,
+        )
+
+        if self.data_event_log_path:
+          try:
+            with open(self.data_event_log_path, "a", encoding="utf-8") as f:
+              f.write(json.dumps(data_event, default=str) + "\n")
+          except OSError as e:
+            self._logger.warning("Failed to append DataEvent to %s: %s", self.data_event_log_path, e)
 
       return SOAP_RESPONSE_DataEventResponse.encode("utf-8")
 
@@ -698,8 +783,8 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     command: str,
     lock_id: Optional[str] = None,
     **kwargs: Any,
-  ) -> Any | tuple[asyncio.Future[Any], int, Optional[float], float]:
-    """Execute a SiLA command; return decoded dict (sync) or (fut, request_id, eta, started_at) (async).
+  ) -> Any | tuple[asyncio.Future[Any], int, float]:
+    """Execute a SiLA command; return decoded dict (sync) or (fut, request_id, started_at) (async).
 
     Internal helper used by send_command and start_command. Callers should use
     send_command (run and return result) or start_command (start and return handle).
@@ -707,15 +792,13 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     if self._closed:
       raise RuntimeError("Interface is closed")
 
-    # Caller-provided estimate; must not be sent to device.
-    estimated_duration_seconds: Optional[float] = kwargs.pop("estimated_duration_seconds", None)
-
     if command != "GetStatus":
       self._validate_lock_id(lock_id)
 
     if not self._check_state_allowability(command):
-      raise SiLACommandRejected(
-        f"Command {command} not allowed in state {self._current_state.value} (return code 9)"
+      raise SiLAError(
+        f"Command {command} not allowed in state {self._current_state.value} (return code 9)",
+        code=9,
       )
 
     if command not in self.SYNCHRONOUS_COMMANDS:
@@ -723,21 +806,23 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       if normalized_cmd in self.PARALLELISM_TABLE:
         async with self._parallelism_lock:
           if not self._check_parallelism(normalized_cmd):
-            raise SiLACommandRejected(
-              f"Command {command} cannot run in parallel with currently executing commands (return code 4)"
+            raise SiLAError(
+              f"Command {command} cannot run in parallel with currently executing commands (return code 4)",
+              code=4,
             )
       else:
         async with self._parallelism_lock:
           if self._executing_commands:
-            raise SiLACommandRejected(
-              f"Command {command} not in parallelism table and device is busy (return code 4)"
+            raise SiLAError(
+              f"Command {command} not in parallelism table and device is busy (return code 4)",
+              code=4,
             )
     else:
       normalized_cmd = self._normalize_command_name(command)
 
     request_id = self._make_request_id()
     if request_id in self._active_request_ids:
-      raise SiLARequestIdError(f"Duplicate requestId generated: {request_id} (return code 6)")
+      raise SiLAError(f"Duplicate requestId generated: {request_id} (return code 6)", code=6)
 
     params: Dict[str, Any] = {"requestId": request_id, **kwargs}
     if command != "GetStatus":
@@ -786,7 +871,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
 
     if return_code == 2:
       fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
-      estimated_remaining_time: Optional[float] = estimated_duration_seconds
 
       pending_lock_id = None
       if command == "LockDevice" and "lockId" in params:
@@ -798,7 +882,6 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
         request_id=request_id,
         fut=fut,
         started_at=started_at,
-        estimated_remaining_time=estimated_remaining_time,
         lock_id=pending_lock_id,
       )
 
@@ -820,8 +903,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           pending_ref = self._pending_by_id.get(request_id)
           if pending_ref is None or pending_ref.fut.done():
             break
+          eta = self._estimated_remaining_by_request_id.get(request_id) or 0.0
           remaining_wait = (
-            started_at + (estimated_remaining_time or 0) + POLLING_START_BUFFER - time.time()
+            started_at + eta + POLLING_START_BUFFER - time.time()
           )
           if remaining_wait > 0:
             await asyncio.sleep(min(remaining_wait, self._poll_interval))
@@ -870,7 +954,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           await asyncio.sleep(self._poll_interval)
 
       asyncio.create_task(_poll_until_complete())
-      return (fut, request_id, estimated_remaining_time, started_at)
+      return (fut, request_id, started_at)
 
     self._handle_return_code(return_code, message, command, request_id)
     raise SiLAError(f"Command {command} failed: {return_code} {message}")
@@ -909,8 +993,8 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     command: str,
     lock_id: Optional[str] = None,
     **kwargs: Any,
-  ) -> tuple[asyncio.Future[Any], int, Optional[float], float]:
-    """Start a SiLA command and return a handle (future + request_id, eta, started_at).
+  ) -> tuple[asyncio.Future[Any], int, float]:
+    """Start a SiLA command and return a handle (future, request_id, started_at).
 
     Use for async device commands (OpenDoor, CloseDoor, ExecuteMethod,
     Initialize, Reset, LockDevice, UnlockDevice, StopMethod) when you want
@@ -920,12 +1004,11 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     Args:
       command: Command name (must be an async command).
       lock_id: LockId (defaults to None, validated if device is locked).
-      **kwargs: Additional command parameters. May include estimated_duration_seconds
-        (optional float, seconds); it is used as estimated_remaining_time on the handle
-        and is not sent to the device.
+      **kwargs: Additional command parameters (e.g. methodName, deviceId). Not sent to
+        device: requestId (injected), lockId when applicable.
 
     Returns:
-      (future, request_id, estimated_remaining_time, started_at) tuple.
+      (future, request_id, started_at) tuple. ETA/lifetime come from the backend (event-driven).
       Await the future for the result or to propagate exceptions.
 
     Raises:

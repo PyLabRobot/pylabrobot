@@ -26,15 +26,21 @@ block_max_volume) for in-memory protocols; tc.run_stored_protocol("my_pcr") for
 stored-by-name (ODTC only).
 """
 
-from .odtc_backend import CommandExecution, MethodExecution, ODTCBackend
-from .odtc_model import ODTC_DIMENSIONS, ODTCProtocol, ProtocolList, normalize_variant
+from .odtc_backend import ODTCBackend, ODTCExecution
+from .odtc_model import ODTC_DIMENSIONS, ODTCProgress, ODTCProtocol, ProtocolList, normalize_variant
 from .odtc_thermocycler import ODTCThermocycler
+
+# Backward-compat aliases (single execution handle type)
+CommandExecution = ODTCExecution
+MethodExecution = ODTCExecution
 
 __all__ = [
   "CommandExecution",
   "MethodExecution",
   "ODTCBackend",
   "ODTC_DIMENSIONS",
+  "ODTCExecution",
+  "ODTCProgress",
   "ODTCProtocol",
   "ODTCThermocycler",
   "ProtocolList",

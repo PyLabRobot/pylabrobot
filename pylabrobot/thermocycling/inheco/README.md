@@ -2,57 +2,18 @@
 
 ## Overview
 
-Interface for Inheco ODTC thermocyclers via SiLA (SOAP over HTTP). Supports asynchronous method execution (blocking and non-blocking), round-trip protocol conversion (ODTC XML ↔ PyLabRobot `Protocol` with lossless ODTC parameters), parallel commands (e.g. read temperatures during run), and DataEvent collection.
+Interface for Inheco ODTC thermocyclers via SiLA (SOAP over HTTP). Asynchronous method execution (blocking and non-blocking), round-trip through **ODTC types** (ODTC XML ↔ ODTCProtocol / ODTCStep / ODTCStage), parallel commands (e.g. read temperatures during run), and **progress from DataEvents** via a single type: **ODTCProgress**.
 
-**New users:** Start with **Connection and Setup**, then **ODTC Model** (types and conversion), then **Recommended Workflows** (run by name, round-trip for thermal performance, set block/lid temp). A step-by-step tutorial notebook is in **`odtc_tutorial.ipynb`**. Use **Running Commands** and **Getting Protocols** for async handles; **ODTCProtocol and Protocol + ODTCConfig Conversion** for conversion detail.
+- **Primary API:** Run protocols by name: `run_stored_protocol(name)`. Protocol is already on the device; no editing.
+- **Secondary:** (1) **Edited ODTCProtocol** — get from device, change only **hold times and cycle count**; upload and run by name. Do not change temperature setpoints (overshoots are temperature- and ramp-specific). (2) **Protocol + ODTCConfig** — custom run: `protocol_to_odtc_protocol(protocol, config=get_default_config())`, then `run_protocol(odtc, block_max_volume)`.
 
-## Architecture
+**Architecture:** `ODTCSiLAInterface` (SiLA SOAP, state machine; stores raw DataEvent payloads) → `ODTCBackend` (method execution, protocol conversion; builds **ODTCProgress** from latest payload + protocol) → `ODTCThermocycler` (resource; preferred) or generic `Thermocycler` with `ODTCBackend`. Types in `odtc_model.py`.
 
-- **`ODTCSiLAInterface`** (`odtc_sila_interface.py`) — SiLA SOAP layer: `send_command` / `start_command`, parallelism rules, state machine (Startup → Standby → Idle → Busy), lockId, DataEvents.
-- **`ODTCBackend`** (`odtc_backend.py`) — Implements `ThermocyclerBackend`: method execution, protocol conversion, upload/download, status.
-- **`ODTCThermocycler`** (`odtc_thermocycler.py`) — Preferred resource: takes `odtc_ip`, `variant` (96/384 or 960000/384000), uses ODTC dimensions (147×298×130 mm). Alternative: generic `Thermocycler` with `ODTCBackend` for custom sizing.
-- **`odtc_model.py`** — MethodSet XML (de)serialization, `ODTCProtocol` ↔ `Protocol` conversion, `ODTCConfig` for ODTC-specific parameters.
+**Progress:** One type — **ODTCProgress**. Built from raw DataEvent payload + optional protocol via `ODTCProgress.from_data_event(payload, odtc)`. Provides elapsed_s, temperatures, step/cycle/hold (from protocol when registered), and **estimated_duration_s** / **remaining_duration_s** (we compute these; device does not send them). Use `get_progress_snapshot()`, `get_hold_time()`, `get_current_step_index()`, `get_current_cycle_index()`; callback: `ODTCBackend(..., progress_callback=...)` receives ODTCProgress.
 
-## ODTC Model: Types and Conversion
+**Tutorial:** `odtc_tutorial.ipynb`. Sections: **Setup** → **Workflows** → **Types and conversion** → **Commands** → **Device protocols** → **DataEvents and progress** → **Error handling** → **Best practices** → **Complete example**.
 
-The ODTC implementation is built around **ODTCProtocol**, **ODTCStage**, and **ODTCStep**, which extend PyLabRobot’s generic **Protocol**, **Stage**, and **Step**. The device stores protocols by a **method name** (string); conversion functions map between ODTC types and the generic types for editing and round-trip.
-
-### Core types
-
-| Type | Role |
-|------|------|
-| **`ODTCStep`** | Extends `Step`. Single temperature step with ODTC fields (slope, overshoot, plateau_time, goto_number, loop_number). |
-| **`ODTCStage`** | Extends `Stage`. Holds `steps: List[ODTCStep]` and optional `inner_stages` for nested loops. |
-| **`ODTCProtocol`** | Extends `Protocol`. One type for both **methods** (cycling) and **premethods** (hold block/lid temp), distinguished by `kind='method'` or `kind='premethod'`. |
-
-For **methods** (kind='method'): **`.steps`** is the main representation—a flat list of `ODTCStep` with step numbers and goto/loop. When built from a generic `Protocol` (e.g. `protocol_to_odtc_protocol`), we set `stages=[]`; the stage view is derived when needed via `odtc_protocol_to_protocol(odtc)` (which builds a `Protocol` with stages from the step list). Parsed XML with nested loops can produce an ODTCProtocol whose stage tree is built from steps for display or serialization.
-
-### Generic types (PyLabRobot)
-
-- **`Protocol`** — `stages: List[Stage]`; hardware-agnostic.
-- **`Stage`** — `steps: List[Step]`, `repeats: int`.
-- **`Step`** — `temperature: List[float]`, `hold_seconds: float`, optional `rate`.
-
-Example: `Protocol(stages=[Stage(steps=[Step(temperature=[95.0], hold_seconds=30.0)], repeats=1)])`.
-
-### Conversion
-
-- **Device → editable (Protocol + ODTCConfig):**
-  `get_protocol(name)` returns `Optional[ODTCProtocol]`. Use **`odtc_method_to_protocol(odtc)`** to get `(Protocol, ODTCConfig)` for modifying then re-uploading with the same thermal tuning.
-
-- **Protocol + ODTCConfig → ODTC (upload/run):**
-  Use **`protocol_to_odtc_protocol(protocol, config=config)`** to get an `ODTCProtocol` for upload or for passing to `run_protocol(odtc, block_max_volume)`.
-
-- **ODTCProtocol → Protocol view only:**
-  Use **`odtc_protocol_to_protocol(odtc)`** to get `(Protocol, ODTCProtocol)` when you need a generic Protocol view (e.g. stage tree) without a separate ODTCConfig.
-
-### Method name (string)
-
-The device identifies stored protocols by a **method name** (SiLA: `methodName`), e.g. `"PCR_30cycles"`, `"plr_currentProtocol"`. Use it with `run_stored_protocol(name)`, `get_protocol(name)`, and `list_protocols()`.
-
-**API:** `tc.run_protocol(protocol, block_max_volume)` or `tc.run_stored_protocol(name)`. Backend: `list_protocols()`, `get_protocol(name)` → `Optional[ODTCProtocol]` (runnable methods only; premethods → `None`), `upload_protocol(protocol, name=..., config=...)`, `set_block_temperature(...)`, `get_default_config()`, `execute_method(method_name)`.
-
-## Connection and Setup
+## Setup
 
 **Preferred: ODTCThermocycler** (owns dimensions and backend):
 
@@ -69,545 +30,206 @@ tc = ODTCThermocycler(
 await tc.setup()  # HTTP event receiver + Reset + Initialize → idle
 ```
 
-**Alternative:** Generic `Thermocycler` with `ODTCBackend` (e.g. custom dimensions):
+**Alternative:** Generic `Thermocycler` with `ODTCBackend(odtc_ip=..., variant=...)` for custom dimensions.
+
+**Duration:** Device does not return duration. We set **estimated_duration_s** (PreMethod = 10 min; Method = from protocol or device; fallback = effective lifetime). **remaining_duration_s** = max(0, estimated_duration_s - elapsed_s). Used for `handle.estimated_remaining_time` and progress.
+
+**Options:** `setup(full=True, simulation_mode=False, max_attempts=3, retry_backoff_base_seconds=1.0)`. Use `full=False` to only start the event receiver (e.g. **Reconnecting after session loss**).
+
+**Simulation:** `await tc.backend.reset(simulation_mode=True)`; exit with `simulation_mode=False`. Commands return immediately with estimated duration.
+
+**Reconnecting after session loss:** If the connection was lost while a method is running, create a new backend/thermocycler and call `await tc.backend.setup(full=False)` (do not full setup—that would Reset and abort). Use `wait_for_completion_by_time(...)` or a handle's `wait_resumable()` to wait; then `setup(full=True)` if needed for later commands.
+
+**Cleanup:** `await tc.stop()`.
+
+## Workflows
+
+### 1. Run stored protocol by name (primary)
+
+Protocol is already on the device; single call, no upload. Preferred usage.
+
+**PreMethod before protocol:** You must run a **preMethod** (set block/mount temperature) **before** running a protocol by name. The block and lid temperatures from `set_block_temperature(...)` must **match** the protocol’s initial temperatures (e.g. the method’s `start_block_temperature` and initial lid temp). Run `set_block_temperature` to reach those temps, wait for completion, then call `run_stored_protocol(name)`.
 
 ```python
-from pylabrobot.thermocycling.inheco import ODTCBackend
-from pylabrobot.thermocycling.thermocycler import Thermocycler
-
-backend = ODTCBackend(odtc_ip="192.168.1.100", variant=960000)
-tc = Thermocycler(name="odtc", size_x=147, size_y=298, size_z=130, backend=backend, child_location=Coordinate(0, 0, 0))
-await tc.setup()
-```
-
-**Estimated duration:** The device does not return duration in the async response. We compute it: PreMethod = 10 min; Method = from steps (ramp + plateau + overshoot, with loops). This estimate is used for `handle.estimated_remaining_time`, when to start polling, and a tighter timeout cap.
-
-**Setup options:** `setup(full=True, simulation_mode=False, max_attempts=3, retry_backoff_base_seconds=1.0)`. When `full=True` (default), the full path runs up to `max_attempts` times with exponential backoff on failure (e.g. flaky network). Use `max_attempts=1` to disable retry. Use `full=False` to only start the event receiver without resetting the device (see **Reconnecting after session loss** below).
-
-### Simulation mode
-
-Enter simulation mode: `await tc.backend.reset(simulation_mode=True)`. Exit: `await tc.backend.reset(simulation_mode=False)`. In simulation mode, commands return immediately with estimated duration; valid until the next Reset. Check state without resetting: `tc.backend.simulation_mode` reflects the last `reset(simulation_mode=...)` call. To bring the device up in simulation: `await tc.setup(simulation_mode=True)` (full path with simulation enabled).
-
-### Reconnecting after session loss
-
-If the session or connection was lost while a method is running, you can reconnect without aborting the method. Create a new backend (or thermocycler), then call `await tc.backend.setup(full=False)` to only start the event receiver—do **not** call full setup (that would Reset and abort the method). Then use `wait_for_completion_by_time(...)` or a persisted handle's `wait_resumable()` to wait for the in-flight method to complete. After the method is done, call `setup(full=True)` if you need a full session for subsequent commands.
-
-### Cleanup
-
-```python
-await tc.stop()  # Closes HTTP server and connections
-```
-
-## Recommended Workflows
-
-Use these patterns for the best balance of simplicity and thermal performance.
-
-### 1. Run stored protocol by name
-
-**Use when:** The protocol (method) is already on the device. Single instrument call; no upload.
-
-```python
-# List names: methods and premethods (ProtocolList with .methods, .premethods, .all)
 protocol_list = await tc.backend.list_protocols()
-
-# Run by name (blocking or non-blocking)
-await tc.run_stored_protocol("PCR_30cycles")
-# Or with handle: execution = await tc.run_stored_protocol("PCR_30cycles", wait=False); await execution
-# When awaiting a handle, progress is logged every progress_log_interval (default 150 s) for method runs.
+# Optional: get protocol to read initial temps for preMethod
+odtc = await tc.backend.get_protocol("PCR_30cycles")
+if odtc is not None:
+    # PreMethod: match block/lid to protocol initial temps; wait for completion then run
+    await tc.set_block_temperature(
+        [odtc.start_block_temperature],
+        lid_temperature=odtc.start_lid_temperature if odtc.start_lid_temperature else None,
+        wait=True,
+    )
+execution = await tc.run_stored_protocol("PCR_30cycles")  # returns handle (wait=False default)
+await execution  # block until done; or use wait=True to block on the call
 ```
 
-### 2. Get → modify → upload with config → run (round-trip for thermal performance)
+### 2. Edited ODTCProtocol (secondary)
 
-**Use when:** You want to change an existing device protocol (e.g. cycle count) while keeping equivalent thermal performance. Preserving `ODTCConfig` keeps overshoot and other ODTC parameters from the original.
+Get from device → modify **only hold times and cycle count** → upload → run. Preserves ODTC parameters (overshoot, slopes) because temperatures are unchanged.
+
+**Avoid modifying temperature parameters** (e.g. `plateau_temperature`) on device-derived protocols: overshoots are temperature-difference and ramp-speed specific, so the device’s tuning no longer matches and thermal performance can suffer.
 
 ```python
-from pylabrobot.thermocycling.inheco.odtc_model import odtc_method_to_protocol, protocol_to_odtc_protocol
-
-# Get runnable protocol from device (returns None for premethods)
 odtc = await tc.backend.get_protocol("PCR_30cycles")
 if odtc is None:
     raise ValueError("Protocol not found")
-protocol, config = odtc_method_to_protocol(odtc)
-
-# Modify only durations or cycle counts; keep temperatures unchanged
-# ODTCConfig is tuned for the original temperature setpoints—change temps and tuning may be wrong
-protocol.stages[0].repeats = 35  # Safe: cycle count
-# Do NOT change temperature setpoints when reusing config
-
-# Upload with same config so overshoot/ODTC params are preserved
-await tc.backend.upload_protocol(protocol, name="PCR_35cycles", config=config)
-
-# Run by name
+odtc.steps[1].plateau_time = 45.0   # hold time (s) — safe
+# odtc.steps[4].loop_number = 35    # cycle count (adjust step to match protocol) — safe
+# Do NOT change odtc.steps[i].plateau_temperature (overshoot/tuning is temperature-specific)
+await tc.backend.upload_protocol(odtc, name="PCR_35cycles")
 await tc.run_stored_protocol("PCR_35cycles")
 ```
 
-**Why:** New protocols created without a config use default overshoot parameters and can heat more slowly. Using `get_protocol` + `upload_protocol(..., config=config)` preserves the device’s thermal tuning.
+For cycle count, set `loop_number` on the step that defines the cycle (the one with `goto_number`). Alternatively use **Workflow 4** to edit in Protocol form (`stage.repeats`).
 
-**Important:** When reusing an ODTC-specific config, **preserve temperature setpoints** (plateau temperatures, lid, etc.). The config's overshoot and ramp parameters are calibrated for those temperatures. Only **durations** (hold times) and **cycle/repeat counts** are safe to change—they don't affect thermal tuning. Changing target temperatures while keeping the same config can give suboptimal or inconsistent thermal performance.
+### 3. Set block and lid temperature (preMethod)
 
-### 3. Set block and lid temperature (PreMethod equivalent)
-
-**Use when:** You want to hold the block (and lid) at a set temperature without running a full cycling method. ODTC implements this by uploading and running a PreMethod.
+Hold block (and lid) at a set temperature; ODTC runs a **PreMethod** (no direct SetBlockTemperature command). Run this **before** a protocol by name so block and lid match the protocol’s initial temperatures; then run the protocol. Default lid 110°C (96-well) or 115°C (384-well).
 
 ```python
-# Block to 95°C with default lid (110°C for 96-well, 115°C for 384-well)
-await tc.set_block_temperature([95.0])
-
-# Custom lid temperature
+# Returns handle by default (wait=False); await it to block
+await tc.set_block_temperature([95.0])  # or: h = await tc.set_block_temperature([95.0]); await h
 await tc.set_block_temperature([37.0], lid_temperature=110.0)
-
-# Non-blocking
-execution = await tc.set_block_temperature([95.0], lid_temperature=110.0, wait=False)
-await execution
+# Block on call: await tc.set_block_temperature([95.0], wait=True)
 ```
 
-ODTC has no direct SetBlockTemperature command; `set_block_temperature()` creates and runs a PreMethod internally. Estimated duration for this path is 10 minutes (see Connection and Setup).
+Estimated duration for this path is 10 minutes.
 
-## Running Commands
+### 4. Custom run (Protocol + generic ODTCConfig) (secondary)
 
-### Synchronous Commands
-
-Some commands are synchronous and return immediately:
-
-```python
-# Get device status
-status = await tc.get_status()  # Returns "idle", "busy", "standby", etc.
-
-# Get device identification
-device_info = await tc.get_device_identification()
-```
-
-### Asynchronous Commands
-
-Most ODTC commands are asynchronous and support both blocking and non-blocking execution:
-
-#### Blocking Execution (Default)
-
-```python
-# Block until command completes
-await tc.open_lid()  # Returns None when complete
-await tc.close_lid()
-await tc.initialize()
-await tc.reset()
-```
-
-#### Non-Blocking Execution with Handle
-
-```python
-# Start command and get execution handle
-door_opening = await tc.open_lid(wait=False)
-# Returns CommandExecution handle immediately
-
-# Do other work while command runs
-temps = await tc.read_temperatures()  # Can run in parallel if allowed
-
-# Wait for completion
-await door_opening  # Await the handle directly
-# OR
-await door_opening.wait()  # Explicit wait method
-```
-
-#### CommandExecution Handle
-
-- **`request_id`**, **`command_name`**, **`estimated_remaining_time`** (seconds; from our computed estimate when available)
-- **Awaitable** (`await handle`) and **`wait()`**
-- **`get_data_events()`** — DataEvents for this execution
-
-```python
-# Non-blocking door operation
-door_opening = await tc.open_lid(wait=False)
-
-# Get DataEvents for this execution
-events = await door_opening.get_data_events()
-
-# Wait for completion
-await door_opening
-```
-
-### Method Execution
-
-- **Blocking:** `await tc.run_stored_protocol("PCR_30cycles")` or `await tc.run_protocol(protocol, block_max_volume=50.0)` (upload + execute).
-- **Non-blocking:** `execution = await tc.run_stored_protocol("PCR_30cycles", wait=False)`; then `await execution` or `await execution.wait()` or `await tc.wait_for_method_completion()`.
-- While a method runs you can call `read_temperatures()`, `open_lid(wait=False)`, etc. (parallel where allowed).
-
-#### MethodExecution Handle
-
-Extends `CommandExecution` with **`method_name`**, **`is_running()`** (device busy state), **`stop()`** (StopMethod).
-
-```python
-execution = await tc.run_stored_protocol("PCR_30cycles", wait=False)
-
-# Check status
-if await execution.is_running():
-    print(f"Method {execution.method_name} still running (ID: {execution.request_id})")
-
-# Get DataEvents for this execution
-events = await execution.get_data_events()
-
-# Wait for completion
-await execution
-```
-
-### State Checking
-
-```python
-# Check if method is running
-is_running = await tc.is_method_running()  # Returns True if state is "busy"
-
-# Wait for method completion with polling
-await tc.wait_for_method_completion(
-    poll_interval=5.0,  # Check every 5 seconds
-    timeout=3600.0      # Timeout after 1 hour
-)
-```
-
-### Temperature Control
-
-See **Recommended Workflows → Set block and lid temperature** for the main usage. Summary: `await tc.set_block_temperature([temp])` or with `lid_temperature=..., wait=False`. ODTC implements this via a PreMethod (no direct SetBlockTemperature command); default lid is 110°C (96-well) or 115°C (384-well).
-
-### Parallel Operations
-
-Per ODTC SiLA spec, certain commands can run in parallel with `ExecuteMethod`:
-
-- ✅ `ReadActualTemperature` - Read temperatures during execution
-- ✅ `OpenDoor` / `CloseDoor` - Door operations
-- ✅ `StopMethod` - Stop current method
-- ❌ `SetParameters` / `GetParameters` - Sequential
-- ❌ `GetLastData` - Sequential
-- ❌ Another `ExecuteMethod` - Only one method at a time
-
-```python
-# Start method
-execution = await tc.run_stored_protocol("PCR_30cycles", wait=False)
-
-# These can run in parallel:
-temps = await tc.read_temperatures()
-door_opening = await tc.open_lid(wait=False)
-
-# Wait for lid to complete
-await door_opening
-
-# These will queue/wait:
-method2 = await tc.run_stored_protocol("PCR_40cycles", wait=False)  # Waits for method1
-```
-
-### CommandExecution vs MethodExecution
-
-- **`CommandExecution`**: Base class for all async commands (door operations, initialize, reset, etc.)
-- **`MethodExecution`**: Subclass of `CommandExecution` for method execution with additional features:
-  - `is_running()`: Checks if device is in "busy" state
-  - `stop()`: Stops the currently running method
-  - `method_name`: More semantic than `command_name` for methods
-
-```python
-# CommandExecution example
-door_opening = await tc.open_lid(wait=False)
-await door_opening  # Wait for lid to open
-
-# MethodExecution example (has additional features)
-method_exec = await tc.run_stored_protocol("PCR_30cycles", wait=False)
-if await method_exec.is_running():
-    print(f"Method {method_exec.method_name} is running")
-    await method_exec.stop()  # Stop the method
-```
-
-## Getting Protocols from Device
-
-### List All Protocol Names (Recommended)
-
-```python
-# List all protocol names (ProtocolList: .methods, .premethods, .all, and iterable)
-protocol_list = await tc.backend.list_protocols()
-
-for name in protocol_list:
-    print(f"Protocol: {name}")
-# Or: protocol_list.all for flat list; protocol_list.methods / protocol_list.premethods for split
-```
-
-### List Methods and PreMethods Separately
-
-```python
-# Returns (method_names, premethod_names); methods are runnable, premethods are setup-only
-methods, premethods = await tc.backend.list_methods()
-# methods + premethods equals protocol_list.all (from list_protocols())
-```
-
-### Get Runnable Protocol by Name
-
-```python
-# get_protocol(name) returns Optional[ODTCProtocol] (None for premethods or missing name)
-odtc = await tc.backend.get_protocol("PCR_30cycles")
-if odtc is not None:
-    print(f"Method: {odtc.name}, steps: {len(odtc.steps)}")
-    # To edit and re-upload: protocol, config = odtc_method_to_protocol(odtc)
-    # To get Protocol view only: protocol, _ = odtc_protocol_to_protocol(odtc)
-```
-
-### Get Full MethodSet (Advanced)
-
-```python
-# Download all methods and premethods from device
-method_set = await tc.backend.get_method_set()  # Returns ODTCMethodSet
-
-# Access methods
-for method in method_set.methods:
-    print(f"Method: {method.name}, Steps: {len(method.steps)}")
-
-for premethod in method_set.premethods:
-    print(f"PreMethod: {premethod.name}")
-```
-
-### Inspect Stored Protocol
-
-```python
-from pylabrobot.thermocycling.inheco.odtc_model import odtc_protocol_to_protocol
-
-odtc = await tc.backend.get_protocol("PCR_30cycles")
-if odtc is not None:
-    protocol, _ = odtc_protocol_to_protocol(odtc)  # Protocol view (stages derived from steps)
-    print(odtc)  # Human-readable summary (name, steps, method-level fields)
-    await tc.run_protocol(odtc, block_max_volume=50.0)  # backend accepts ODTCProtocol
-```
-
-### Display and logging
-
-- **ODTCProtocol** and **ODTCSensorValues**: `print(odtc)` and `print(await tc.backend.read_temperatures())` show labeled summaries. ODTCSensorValues `__str__` is multi-line for display; use `format_compact()` for single-line logs.
-- **Wait messages**: When you `await handle`, `handle.wait()`, or `handle.wait_resumable()`, the message logged at INFO is multi-line (command, duration, remaining time) for clear console/notebook display.
-
-## Running Protocols (reference)
-
-- **By name:** See **Recommended Workflows → Run stored protocol by name**. `await tc.run_stored_protocol(name)` or `wait=False` for a handle.
-- **Round-trip (modify with thermal performance):** See **Recommended Workflows → Get → modify → upload with config → run**.
-- **Block + lid temp:** See **Recommended Workflows → Set block and lid temperature**.
-- **In-memory (new protocol):** `await tc.run_protocol(protocol, block_max_volume=50.0)` (upload + execute). New protocols use default overshoot; for best thermal performance, prefer round-trip from an existing device protocol.
-- **From XML file:** `method_set = parse_method_set_file("my_methods.xml")` (from `odtc_model`), then `await tc.backend.upload_method_set(method_set)` and `await tc.run_stored_protocol("PCR_30cycles")`.
-
-## ODTCProtocol and Protocol + ODTCConfig Conversion
-
-### Lossless Round-Trip
-
-Conversion between ODTC (device/XML) and PyLabRobot's generic `Protocol` is **lossless** when you keep the `ODTCConfig` returned by `odtc_method_to_protocol(odtc)`. The config preserves method-level and per-step ODTC parameters (overshoot, slopes, PID, etc.).
-
-### How It Works
-
-#### 1. ODTCProtocol → Protocol + ODTCConfig
-
-```python
-from pylabrobot.thermocycling.inheco.odtc_model import odtc_method_to_protocol
-
-# get_protocol(name) returns Optional[ODTCProtocol]; then convert for editing
-odtc = await tc.backend.get_protocol("PCR_30cycles")
-if odtc is None:
-    raise ValueError("Protocol not found")
-protocol, config = odtc_method_to_protocol(odtc)
-```
-
-**What gets preserved in `ODTCConfig`:**
-
-- **Method-level parameters:**
-  - `name`, `creator`, `description`, `datetime`
-  - `fluid_quantity`, `variant`, `plate_type`
-  - `lid_temperature`, `start_lid_temperature`
-  - `post_heating`
-  - `pid_set` (PID controller parameters)
-
-- **Per-step parameters** (stored in `config.step_settings[step_index]`):
-  - `slope` - Temperature ramp rate (°C/s)
-  - `overshoot_slope1` - First overshoot ramp rate
-  - `overshoot_temperature` - Overshoot target temperature
-  - `overshoot_time` - Overshoot hold time
-  - `overshoot_slope2` - Second overshoot ramp rate
-  - `lid_temp` - Lid temperature for this step
-  - `pid_number` - PID controller to use
-
-**What goes into `Protocol`:**
-
-- Temperature targets (from `plateau_temperature`)
-- Hold times (from `plateau_time`)
-- Stage structure (from loop analysis)
-- Repeat counts (from `loop_number`)
-
-#### 2. Protocol + ODTCConfig → ODTCProtocol
+When you have a generic **Protocol** (e.g. from a builder): attach a generic **ODTCConfig** (e.g. `get_default_config()`), convert to ODTCProtocol, run. New protocols use default overshoot; for best thermal performance prefer running stored protocols by name (Workflow 1) or edited ODTCProtocol with only non-temperature changes (Workflow 2).
 
 ```python
 from pylabrobot.thermocycling.inheco.odtc_model import protocol_to_odtc_protocol
+from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
-# Convert back to ODTC (lossless if config preserved)
+config = tc.backend.get_default_config(block_max_volume=50.0)
+protocol = Protocol(stages=[Stage(steps=[Step(temperature=[95.0], hold_seconds=30.0)], repeats=30)])
 odtc = protocol_to_odtc_protocol(protocol, config=config)
-# Then: await tc.backend.upload_protocol(protocol, name="...", config=config)
+await tc.run_protocol(odtc, block_max_volume=50.0)
 ```
 
-The conversion uses:
-- `Protocol` for temperature/time and stage structure
-- `ODTCConfig.step_settings` for per-step overtemp parameters
-- `ODTCConfig` for method-level parameters
+### 5. From XML file
 
-### Overtemp/Overshoot Parameter Preservation
+`method_set = parse_method_set_file("my_methods.xml")` (from `odtc_model`), then `await tc.backend.upload_method_set(method_set)` and `await tc.run_stored_protocol("PCR_30cycles")`.
 
-**Overtemp parameters** (overshoot settings) are ODTC-specific features that allow temperature overshooting for faster heating and improved thermal performance:
+## Types and conversion
 
-- **`overshoot_temperature`**: Target temperature to overshoot to
-- **`overshoot_time`**: How long to hold at overshoot temperature
-- **`overshoot_slope1`**: Ramp rate to overshoot temperature
-- **`overshoot_slope2`**: Ramp rate back to target temperature
+### ODTC types
 
-These parameters are **not part of the generic Protocol** (which only has target temperature and hold time), so they are preserved in `ODTCConfig.step_settings`.
+| Type | Role |
+|------|------|
+| **ODTCStep** | Single temperature step: `plateau_temperature`, `plateau_time`, `slope`, overshoot, `goto_number`, `loop_number`. |
+| **ODTCStage** | `steps: List[ODTCStep]`, optional `inner_stages`. |
+| **ODTCProtocol** | **Methods** (cycling) and **premethods** (hold block/lid); `kind='method'` or `'premethod'`. For methods, **`.steps`** is the main representation (flat list with goto/loop). |
+| **ODTCProgress** | Single progress type: built from raw DataEvent payload + optional protocol via `ODTCProgress.from_data_event(payload, odtc)`. Elapsed, temps, step/cycle/hold (when protocol registered), **estimated_duration_s** and **remaining_duration_s** (we compute; device does not send). Returned by `get_progress_snapshot()` and passed to **progress_callback**. |
 
-**Why preservation matters:**
+When editing a device-derived ODTCProtocol (secondary usage), change only **hold times** (`plateau_time`) and **cycle count** (`loop_number`). Avoid changing temperature setpoints: overshoots are temperature-difference and ramp-speed specific.
 
-When converting existing ODTC XML protocols to PyLabRobot `Protocol` format, **preserving overshoot parameters is critical for maintaining equivalent thermal performance**. Without these parameters, the converted protocol may have different heating characteristics, potentially affecting PCR efficiency or other temperature-sensitive reactions.
+### Protocol + ODTCConfig (custom runs only)
 
-**Current behavior:**
-- ✅ **Preserved from XML**: When converting ODTC XML → Protocol+Config, all overshoot parameters are captured in `ODTCConfig.step_settings`
-- ✅ **Restored to XML**: When converting Protocol+Config → ODTC XML, overshoot parameters are restored from `ODTCConfig.step_settings`
-- ⚠️ **Not generated**: When creating new protocols in PyLabRobot, overshoot parameters default to minimal values (0.0 for temperature/time, 0.1 for slopes)
+Use when you have a **Protocol** and want to run it on ODTC. **`odtc_method_to_protocol(odtc)`** returns `(Protocol, ODTCConfig)`; **`protocol_to_odtc_protocol(protocol, config=config)`** converts back. Conversion is **lossless** when you keep the same `ODTCConfig`.
 
-**Future work:**
-- 🔮 **Automatic derivation**: Future enhancements will automatically derive optimal overshoot parameters for PyLabRobot-created protocols based on:
-  - Temperature transitions (large jumps benefit more from overshoot)
-  - Hardware constraints (variant-specific limits)
-  - Thermal characteristics (fluid quantity, plate type)
-- 🔮 **Performance optimization**: This will enable PyLabRobot-created protocols to achieve equivalent or improved thermal performance compared to manually-tuned ODTC protocols
+**What ODTCConfig preserves:** Method-level: `name`, `fluid_quantity`, `variant`, `lid_temperature`, `post_heating`, `pid_set`, etc. Per-step (`config.step_settings[step_index]`): `slope`, overshoot (`overshoot_temperature`, `overshoot_time`, `overshoot_slope1`/`overshoot_slope2`), `lid_temp`, `pid_number`. **Protocol** holds temperatures, hold times, stage structure, repeat counts.
 
-**Example of preservation:**
+**Overshoot:** ODTC-specific; not in generic Protocol. Overshoots are **temperature-difference and ramp-speed specific** — tuning is valid for the setpoints it was designed for. Preserved in `ODTCConfig.step_settings`. When editing device-derived protocols, avoid changing temperatures; when building new protocols (Protocol + generic config), default overshoot applies.
 
-```python
-# When converting ODTCProtocol → Protocol + ODTCConfig
-odtc = await tc.backend.get_protocol("PCR_30cycles")
-if odtc is None:
-    raise ValueError("Protocol not found")
-protocol, config = odtc_method_to_protocol(odtc)
+**Conversion summary:** Device → ODTCProtocol: `get_protocol(name)`. ODTCProtocol → Protocol view: `odtc_protocol_to_protocol(odtc)` or `odtc_method_to_protocol(odtc)` for editing then `protocol_to_odtc_protocol(protocol, config=config)` and upload. Protocol + ODTCConfig → ODTCProtocol: `protocol_to_odtc_protocol(protocol, config=config)`.
 
-# Overtemp params stored per step (preserved from original XML)
-step_0_overtemp = config.step_settings[0]
-print(step_0_overtemp.overshoot_temperature)  # e.g., 100.0 (from original XML)
-print(step_0_overtemp.overshoot_time)         # e.g., 5.0 (from original XML)
+**Method name:** Device identifies protocols by string (e.g. `"PCR_30cycles"`, `"plr_currentProtocol"`). Use with `run_stored_protocol(name)`, `get_protocol(name)`, `list_protocols()`.
 
-# When converting back Protocol + ODTCConfig → ODTCProtocol
-odtc_restored = protocol_to_odtc_protocol(protocol, config=config)
-assert odtc_restored.steps[0].overshoot_temperature == 100.0
-```
+**API:** `tc.run_stored_protocol(name)`, `tc.run_protocol(odtc, block_max_volume)` (ODTCProtocol or Protocol). Backend: `list_protocols()`, `get_protocol(name)` → `Optional[ODTCProtocol]`, `upload_protocol(protocol_or_odtc, name=..., config=...)` (config only when protocol is `Protocol`), `set_block_temperature(...)`, `get_default_config()`, `execute_method(method_name)`.
 
-**Important:** Always preserve the `ODTCConfig` when modifying protocols converted from ODTC XML to maintain equivalent thermal performance. If you create a new protocol without a config, overshoot parameters will use defaults which may result in slower heating.
+## Commands and execution
 
-### Example: Round-Trip Conversion
+**Default: async.** Execution commands (**run_stored_protocol**, **set_block_temperature**, **run_protocol**) default to **wait=False**: they return an execution handle (async). Pass **wait=True** to block until completion. So all such commands are async unless you specify otherwise.
+
+**Synchronous** (no wait parameter; complete before returning): **setup()**, **get_status()**, **get_device_identification()**, **read_temperatures()**, **list_protocols()**, **get_protocol()**, and other informational calls.
+
+**Lid/door:** **open_lid** and **close_lid** default to **wait=True** (block); pass **wait=False** to get a handle.
+
+**Example:**
 
 ```python
-from pylabrobot.thermocycling.inheco.odtc_model import odtc_method_to_protocol, protocol_to_odtc_protocol
-
-# 1. Get ODTCProtocol from device; convert to Protocol + ODTCConfig for editing
-odtc = await tc.backend.get_protocol("PCR_30cycles")
-if odtc is None:
-    raise ValueError("Protocol not found")
-protocol, config = odtc_method_to_protocol(odtc)
-
-# 2. Modify protocol (durations, repeats; keep temperatures when reusing config)
-protocol.stages[0].repeats = 35
-
-# 3. Upload (backend calls protocol_to_odtc_protocol internally; config preserves ODTC params)
-await tc.backend.upload_protocol(protocol, name="PCR_35cycles", config=config)
-
-# 4. Execute
-await tc.run_stored_protocol("PCR_35cycles")
-```
-
-### Round-Trip from Device XML
-
-```python
-from pylabrobot.thermocycling.inheco.odtc_model import odtc_method_to_protocol
-
-# Full round-trip: Device → ODTCProtocol → Protocol+ODTCConfig → upload → Device
-
-# 1. Get from device
-odtc = await tc.backend.get_protocol("PCR_30cycles")
-if odtc is None:
-    raise ValueError("Protocol not found")
-protocol, config = odtc_method_to_protocol(odtc)
-
-# 2. Upload back (preserves all ODTC-specific params via config)
-await tc.backend.upload_protocol(protocol, name="PCR_30cycles_restored", config=config)
-
-# 3. Verify round-trip
-odtc_restored = await tc.backend.get_protocol("PCR_30cycles_restored")
-# Content should match (XML formatting may differ)
-```
-
-## DataEvent Collection and Progress
-
-During method execution, the ODTC sends **DataEvent** messages; the backend stores them and derives progress (elapsed time, step/cycle, temperatures). When you **await** an execution handle (`await execution` or `await execution.wait()`), progress is reported every **progress_log_interval** (default 150 s) via log lines or **progress_callback**. Same behavior when using **wait_resumable()** (polling-based wait).
-
-```python
-# Start method
-execution = await tc.run_stored_protocol("PCR_30cycles", wait=False)
-
-# Progress is logged every progress_log_interval (default 150 s) while you await
-await execution  # or await execution.wait()
-
-# Get DataEvents for this execution (raw payloads)
+# run_stored_protocol and set_block_temperature default to wait=False → handle
+execution = await tc.run_stored_protocol("PCR_30cycles")
+temps = await tc.read_temperatures()  # parallel where allowed
+if await execution.is_running():
+    print(f"Method {execution.method_name} still running")
 events = await execution.get_data_events()
-# Returns: List of DataEvent payload dicts
+await execution  # block until done
 
-# Get all collected events (backend-level)
-all_events = await tc.backend.get_data_events()
-# Returns: {request_id1: [...], request_id2: [...]}
+# To block on start: execution = await tc.run_stored_protocol("PCR_30cycles", wait=True)
+# Lid: door_opening = await tc.open_lid(wait=False); await door_opening
 ```
 
-**Backend option:** `ODTCBackend(..., progress_log_interval=150.0, progress_callback=...)`. Set `progress_log_interval` to `None` or `0` to disable progress reporting during wait.
+**State:** `await tc.is_profile_running()`. `await tc.wait_for_profile_completion(poll_interval=5.0, timeout=3600.0)`.
 
-## Error Handling
+**Temperature:** `await tc.set_block_temperature([temp])` or with `lid_temperature=...`; returns handle by default (wait=False). Implemented via PreMethod (no direct SetBlockTemperature).
 
-The implementation handles SiLA return codes and state transitions:
+**Parallel with ExecuteMethod:** ✅ ReadActualTemperature, OpenDoor/CloseDoor, StopMethod. ❌ SetParameters/GetParameters, GetLastData, another ExecuteMethod.
 
-- **Return code 1**: Synchronous success (GetStatus, GetDeviceIdentification)
-- **Return code 2**: Asynchronous command accepted (ExecuteMethod, OpenDoor, etc.)
-- **Return code 3**: Asynchronous command completed successfully (in ResponseEvent)
-- **Return code 4**: Device busy (command rejected due to parallelism)
-- **Return code 5**: LockId mismatch
-- **Return code 6**: Invalid/duplicate requestId
-- **Return code 9**: Command not allowed in current state
+**Waiting:** Await a handle (`await execution`) or use `wait=True`. Backend polls latest DataEvent at **progress_log_interval** (default 150 s), builds **ODTCProgress**, and logs it (and/or calls **progress_callback** with ODTCProgress).
 
-State transitions are tracked automatically:
-- `startup` → `standby` (via Reset)
-- `standby` → `idle` (via Initialize)
-- `idle` → `busy` (when async command starts)
-- `busy` → `idle` (when all commands complete)
+**Execution handle (ODTCExecution):** `request_id`, `command_name`, `estimated_remaining_time` (our estimate when protocol known; else effective lifetime); awaitable, `wait()`, `get_data_events()`. ExecuteMethod: `method_name`, `is_running()`, `stop()`.
 
-## Best Practices
+## Device protocols
 
-1. **Always call `setup()`** before using the device
-2. **Use `wait=False`** for long-running methods to enable parallel operations
-3. **Check state** with `is_method_running()` before starting new methods
-4. **Preserve `ODTCConfig`** when converting protocols to maintain ODTC-specific parameters (especially overshoot parameters for equivalent thermal performance)
-5. **Handle timeouts** when waiting for method completion
-6. **Clean up** with `stop()` when done
+**List:** `protocol_list = await tc.backend.list_protocols()` (ProtocolList: `.methods`, `.premethods`, `.all`). Or `methods, premethods = await tc.backend.list_methods()`.
 
-### Protocol Conversion Best Practices
+**Get by name:** `odtc = await tc.backend.get_protocol("PCR_30cycles")` → `Optional[ODTCProtocol]` (None for premethods or missing). Then modify and upload (Workflow 2) or `print(odtc)` and run by name.
 
-- **When converting from ODTC XML**: Always preserve the returned `ODTCConfig` alongside the `Protocol` to maintain overshoot parameters and ensure equivalent thermal performance
-- **When modifying converted protocols**: Keep the original `ODTCConfig` and only modify the `Protocol` structure (temperatures, times, repeats)
-- **When creating new protocols**: Be aware that overshoot parameters will use defaults until automatic derivation is implemented (future work)
+**Full MethodSet (advanced):** `method_set = await tc.backend.get_method_set()` → ODTCMethodSet; iterate `method_set.methods` and `method_set.premethods`.
 
-## Complete Example
+**Display:** `print(odtc)` and `print(await tc.backend.read_temperatures())` show labeled summaries. When you await a handle, INFO logs multi-line command/duration/remaining.
+
+## DataEvents and progress
+
+During method execution the device sends **DataEvent** messages (raw payloads). We store them and turn the latest into **ODTCProgress** in one place: **`ODTCProgress.from_data_event(payload, odtc)`**. The device sends **elapsed time and temperatures** (block/lid) only; it does **not** send step/cycle/hold or estimated/remaining duration — we derive those from the protocol when it is registered.
+
+**ODTCProgress** (single type): `elapsed_s`, `current_temp_c`, `target_temp_c`, `lid_temp_c`; when protocol is registered: `current_step_index`, `total_step_count`, `current_cycle_index`, `total_cycle_count`, `remaining_hold_s`, **`estimated_duration_s`** (protocol total), **`remaining_duration_s`** = max(0, estimated_duration_s - elapsed_s). Use **`get_progress_snapshot()`** → ODTCProgress; **`get_hold_time()`**, **`get_current_step_index()`**, **`get_current_cycle_index()`** read from the same snapshot. **`progress_callback`** (if set) receives ODTCProgress every **progress_log_interval** (default 150 s). Set `progress_log_interval` to `None` or `0` to disable logging/callback.
+
+**Logging:** When you await a handle, the backend logs progress (e.g. `progress.format_progress_log_message()`) every progress_log_interval. Configure `pylabrobot.thermocycling.inheco` (and optionally `pylabrobot.storage.inheco`) for level. Optional raw DataEvent JSONL: **`tc.backend.data_event_log_path`** = file path.
+
+**ExecuteMethod:** Backend waits for the first DataEvent (up to `first_event_timeout_seconds`, default 60 s) to set handle lifetime/ETA from our estimated duration. Completion is via ResponseEvent or GetStatus polling.
+
+## Error handling
+
+**Return codes:** 1 = sync success; 2 = async accepted; 3 = async completed (ResponseEvent); 4 = device busy; 5 = LockId mismatch; 6 = invalid/duplicate requestId; 9 = command not allowed in current state.
+
+**State transitions:** `startup` → `standby` (Reset) → `idle` (Initialize) → `busy` (async command) → `idle` (completion).
+
+## Best practices
+
+1. **Always call `setup()`** before using the device.
+2. **Async by default:** run_stored_protocol and set_block_temperature default to wait=False (return handle); use wait=True to block when you need to wait before continuing.
+3. **Check state** with `is_profile_running()` before starting new methods.
+4. **Prefer running stored protocols by name** (primary). **Run a preMethod first:** use `set_block_temperature(...)` so block and lid match the protocol’s initial temperatures (`start_block_temperature`, `start_lid_temperature`), then run the protocol. Secondary: edited ODTCProtocol (change only hold times and cycle count; **avoid changing temperatures** — overshoots are temperature- and ramp-specific) or Protocol + generic config for custom runs. When using Protocol + device-derived config, preserve the `ODTCConfig` from `odtc_method_to_protocol(odtc)`. New protocols (generic Protocol) use `get_default_config()`; overshoot defaults until automatic derivation (future work).
+5. **Handle timeouts** when waiting for method completion.
+6. **Clean up** with `stop()` when done.
+
+## Complete example
 
 ```python
 from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling.inheco import ODTCThermocycler
-from pylabrobot.thermocycling.inheco.odtc_model import odtc_method_to_protocol
+from pylabrobot.thermocycling.inheco.odtc_model import protocol_to_odtc_protocol
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
 tc = ODTCThermocycler(name="odtc", odtc_ip="192.168.1.100", variant=96, child_location=Coordinate(0, 0, 0))
 await tc.setup()
 
-# Get ODTCProtocol from device; convert to Protocol + ODTCConfig; modify; upload; run
+# Run modified ODTCProtocol without saving a new template (run_protocol uploads to scratch, runs, no overwrite of stored methods)
 odtc = await tc.backend.get_protocol("PCR_30cycles")
 if odtc is not None:
-    protocol, config = odtc_method_to_protocol(odtc)
-    protocol.stages[0].repeats = 35
-    await tc.backend.upload_protocol(protocol, name="PCR_35cycles", config=config)
-    execution = await tc.run_stored_protocol("PCR_35cycles", wait=False)
+    odtc.steps[1].plateau_time = 45.0
+    execution = await tc.run_protocol(odtc, block_max_volume=50.0)
     await execution
 
-# New protocol (generic Protocol) and run (backend converts via protocol_to_odtc_protocol)
+# Custom run: Protocol + ODTCConfig
+config = tc.backend.get_default_config(block_max_volume=50.0)
 protocol = Protocol(stages=[
     Stage(steps=[
         Step(temperature=[95.0], hold_seconds=30.0),
@@ -615,7 +237,8 @@ protocol = Protocol(stages=[
         Step(temperature=[72.0], hold_seconds=60.0),
     ], repeats=30)
 ])
-await tc.run_protocol(protocol, block_max_volume=50.0)
+odtc = protocol_to_odtc_protocol(protocol, config=config)
+await tc.run_protocol(odtc, block_max_volume=50.0)
 
 await tc.set_block_temperature([37.0])
 await tc.stop()

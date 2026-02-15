@@ -99,6 +99,15 @@ class ODTCThermocycler(Thermocycler):
     """
     return await self.backend.is_method_running()
 
+  async def get_progress_snapshot(self):
+    """Get progress from the latest DataEvent (elapsed, temperatures, step/cycle/hold). Returns None if no run active.
+
+    Returns Optional[ODTCProgress]. Use tc.backend.get_progress_snapshot(); see ODTCProgress
+    for attributes (elapsed_s, current_temp_c, target_temp_c, lid_temp_c, step/cycle/hold)
+    and format_progress_log_message().
+    """
+    return await self.backend.get_progress_snapshot()
+
   async def wait_for_profile_completion(
     self,
     poll_interval: float = 60.0,

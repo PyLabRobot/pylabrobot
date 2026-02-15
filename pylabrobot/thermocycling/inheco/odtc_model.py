@@ -180,6 +180,77 @@ def normalize_variant(variant: int) -> int:
 
 
 # =============================================================================
+# Volume / fluid quantity (ODTC domain rule: µL -> fluid_quantity code)
+# =============================================================================
+
+
+def volume_to_fluid_quantity(volume_ul: float) -> int:
+  """Map volume in µL to ODTC fluid_quantity code.
+
+  Args:
+    volume_ul: Volume in microliters.
+
+  Returns:
+    fluid_quantity code: 0 (10-29ul), 1 (30-74ul), or 2 (75-100ul).
+
+  Raises:
+    ValueError: If volume > 100 µL.
+  """
+  if volume_ul > 100:
+    raise ValueError(
+      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. "
+      "Please use a volume between 0-100 µL."
+    )
+  if volume_ul <= 29:
+    return 0  # 10-29ul
+  if volume_ul <= 74:
+    return 1  # 30-74ul
+  return 2  # 75-100ul
+
+
+def validate_volume_fluid_quantity(
+  volume_ul: float,
+  fluid_quantity: int,
+  is_premethod: bool = False,
+  logger: Optional[logging.Logger] = None,
+) -> None:
+  """Validate that volume matches fluid_quantity and warn if mismatch.
+
+  Args:
+    volume_ul: Volume in microliters.
+    fluid_quantity: ODTC fluid_quantity code (0, 1, or 2).
+    is_premethod: If True, suppress warnings for volume=0 (premethods don't need volume).
+    logger: Logger for warnings (uses module logger if None).
+  """
+  log = logger if logger is not None else logging.getLogger(__name__)
+  if volume_ul <= 0:
+    if not is_premethod:
+      log.warning(
+        "block_max_volume=%s µL is invalid. Using default fluid_quantity=1 (30-74ul). "
+        "Please provide a valid volume for accurate thermal calibration.",
+        volume_ul,
+      )
+    return
+  if volume_ul > 100:
+    raise ValueError(
+      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. "
+      "Please use a volume between 0-100 µL."
+    )
+  expected = volume_to_fluid_quantity(volume_ul)
+  if fluid_quantity != expected:
+    volume_ranges = {0: "10-29 µL", 1: "30-74 µL", 2: "75-100 µL"}
+    log.warning(
+      "Volume mismatch: block_max_volume=%s µL suggests fluid_quantity=%s (%s), "
+      "but config has fluid_quantity=%s (%s). This may affect thermal calibration accuracy.",
+      volume_ul,
+      expected,
+      volume_ranges[expected],
+      fluid_quantity,
+      volume_ranges.get(fluid_quantity, "unknown"),
+    )
+
+
+# =============================================================================
 # XML Field Metadata
 # =============================================================================
 
@@ -358,18 +429,8 @@ class ODTCSensorValues:
 
 
 # =============================================================================
-# DataEvent Snapshots (SiLA DataEvent payload parsing)
+# DataEvent payload parsing (private; used only inside ODTCProgress.from_data_event)
 # =============================================================================
-
-
-@dataclass
-class ODTCDataEventSnapshot:
-  """Parsed snapshot from one DataEvent (elapsed time and temperatures)."""
-
-  elapsed_s: float
-  target_temp_c: Optional[float] = None
-  current_temp_c: Optional[float] = None
-  lid_temp_c: Optional[float] = None
 
 
 def _parse_data_event_series_value(series_elem: Any) -> Optional[float]:
@@ -386,12 +447,14 @@ def _parse_data_event_series_value(series_elem: Any) -> Optional[float]:
     return None
 
 
-def parse_data_event_payload(payload: Dict[str, Any]) -> Optional[ODTCDataEventSnapshot]:
-  """Parse a single DataEvent payload into an ODTCDataEventSnapshot.
+def _parse_data_event_payload(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+  """Parse a single DataEvent payload into a dict (elapsed_s, temps, etc.).
 
-  Input: dict with 'requestId' and 'dataValue' (string of XML, possibly
-  double-escaped). Extracts Elapsed time (ms), Target temperature, Current
-  temperature, LID temperature (1/100°C -> °C). Returns None on parse error.
+  Used only inside ODTCProgress.from_data_event. Input: dict with 'dataValue'
+  (string of XML, possibly double-escaped). Returns dict with keys:
+  elapsed_s, target_temp_c, current_temp_c, lid_temp_c, current_step_index,
+  total_step_count, current_cycle_index, total_cycle_count, remaining_hold_s.
+  Returns None on parse error.
   """
   if not isinstance(payload, dict):
     return None
@@ -418,6 +481,11 @@ def parse_data_event_payload(payload: Dict[str, Any]) -> Optional[ODTCDataEventS
   target_temp_c: Optional[float] = None
   current_temp_c: Optional[float] = None
   lid_temp_c: Optional[float] = None
+  current_step_index: Optional[int] = None
+  total_step_count: Optional[int] = None
+  current_cycle_index: Optional[int] = None
+  total_cycle_count: Optional[int] = None
+  remaining_hold_s: Optional[float] = None
   for elem in inner.iter():
     if not elem.tag.endswith("dataSeries"):
       continue
@@ -434,12 +502,37 @@ def parse_data_event_payload(payload: Dict[str, Any]) -> Optional[ODTCDataEventS
       current_temp_c = raw / 100.0
     elif name_id == "LID temperature" and unit == "1/100°C":
       lid_temp_c = raw / 100.0
-  return ODTCDataEventSnapshot(
-    elapsed_s=elapsed_s,
-    target_temp_c=target_temp_c,
-    current_temp_c=current_temp_c,
-    lid_temp_c=lid_temp_c,
-  )
+    elif name_id == "Step":
+      current_step_index = max(0, int(raw) - 1)
+    elif name_id == "Total steps":
+      total_step_count = max(0, int(raw))
+    elif name_id == "Cycle":
+      current_cycle_index = max(0, int(raw) - 1)
+    elif name_id == "Total cycles":
+      total_cycle_count = max(0, int(raw))
+    elif name_id == "Hold remaining" or name_id == "Remaining hold":
+      remaining_hold_s = raw / 1000.0 if unit == "ms" else float(raw)
+  if current_step_index is None:
+    for elem in inner.iter():
+      if elem.tag.endswith("experimentStep"):
+        seq = elem.get("sequence")
+        if seq is not None:
+          try:
+            current_step_index = max(0, int(seq) - 1)
+          except ValueError:
+            pass
+        break
+  return {
+    "elapsed_s": elapsed_s,
+    "target_temp_c": target_temp_c,
+    "current_temp_c": current_temp_c,
+    "lid_temp_c": lid_temp_c,
+    "current_step_index": current_step_index,
+    "total_step_count": total_step_count,
+    "current_cycle_index": current_cycle_index,
+    "total_cycle_count": total_cycle_count,
+    "remaining_hold_s": remaining_hold_s,
+  }
 
 
 # =============================================================================
@@ -786,7 +879,8 @@ def estimate_odtc_protocol_duration_seconds(odtc: ODTCProtocol) -> float:
   """Estimate total run duration for an ODTCProtocol.
 
   Premethods use PREMETHOD_ESTIMATED_DURATION_SECONDS; methods use
-  step/loop-based estimation.
+  step/loop-based estimation. For estimation/tooling only; the ODTC backend
+  does not use this for handle lifetime/eta (event-driven).
 
   Returns:
     Estimated duration in seconds.
@@ -1504,11 +1598,43 @@ def _expand_step_sequence(
   return expanded
 
 
+def odtc_expanded_step_count(odtc: ODTCProtocol) -> int:
+  """Return total step count in execution order (loops expanded). Used for progress display when device does not send it."""
+  if not odtc.steps:
+    return 0
+  loops = _analyze_loop_structure(odtc.steps)
+  return len(_expand_step_sequence(odtc.steps, loops))
+
+
+def odtc_cycle_count(odtc: ODTCProtocol) -> int:
+  """Return cycle count from ODTC loop structure (main/top-level loop repeat count). Used for progress when device does not send it."""
+  if not odtc.steps:
+    return 0
+  loops = _analyze_loop_structure(odtc.steps)
+  if not loops:
+    return 1
+  # Top-level loop(s): not contained in any other; take the outermost (largest span) as main cycle count.
+  top_level = [
+    (start, end, count)
+    for (start, end, count) in loops
+    if not any(
+      (s, e, _) != (start, end, count) and s <= start and end <= e
+      for (s, e, _) in loops
+    )
+  ]
+  if not top_level:
+    return 0
+  # Single top-level loop (typical PCR) -> its repeat count; else outermost span's repeat count.
+  main = max(top_level, key=lambda x: x[1] - x[0])
+  return main[2]
+
+
 def estimate_method_duration_seconds(odtc: ODTCProtocol) -> float:
   """Estimate total method duration from steps (ramp + plateau + overshoot, with loops).
 
   Per ODTC Firmware Command Set: duration is slope time + overshoot time + plateau
-  time per step in consideration of the loops.
+  time per step in consideration of the loops. For estimation/tooling only; the ODTC
+  backend does not use this for handle lifetime/eta (event-driven).
 
   Args:
     odtc: ODTCProtocol (kind='method') with steps and start_block_temperature.
@@ -1534,6 +1660,241 @@ def estimate_method_duration_seconds(odtc: ODTCProtocol) -> float:
     prev_temp = step.plateau_temperature
 
   return total
+
+
+# =============================================================================
+# Protocol position from elapsed time (private; used only inside ODTCProgress.from_data_event)
+# =============================================================================
+
+
+def _build_protocol_timeline(odtc: ODTCProtocol) -> List[Tuple[float, float, int, int, float, float]]:
+  """Build timeline segments for an ODTCProtocol (method or premethod).
+
+  Returns a list of (t_start, t_end, step_index, cycle_index, setpoint_c, plateau_end_t).
+  step_index is 0-based within cycle; cycle_index is 0-based.
+  plateau_end_t is the time at which the plateau (hold) ends for remaining_hold_s.
+  """
+  if odtc.kind == "premethod":
+    duration = PREMETHOD_ESTIMATED_DURATION_SECONDS
+    setpoint = odtc.target_block_temperature
+    return [(0.0, duration, 0, 0, setpoint, duration)]
+
+  if not odtc.steps:
+    return []
+
+  loops = _analyze_loop_structure(odtc.steps)
+  step_nums = _expand_step_sequence(odtc.steps, loops)
+  steps_by_num = {s.number: s for s in odtc.steps}
+  total_expanded = len(step_nums)
+  total_cycles = odtc_cycle_count(odtc)
+  steps_per_cycle = total_expanded // total_cycles if total_cycles > 0 else max(1, total_expanded)
+
+  segments: List[Tuple[float, float, int, int, float, float]] = []
+  t = 0.0
+  prev_temp = odtc.start_block_temperature
+  min_slope = 0.1
+
+  for flat_index, step_num in enumerate(step_nums):
+    step = steps_by_num[step_num]
+    slope = max(abs(step.slope), min_slope)
+    ramp_time = abs(step.plateau_temperature - prev_temp) / slope
+    plateau_end_t = t + ramp_time + step.plateau_time
+    segment_end = t + ramp_time + step.plateau_time + step.overshoot_time
+
+    cycle_index = flat_index // steps_per_cycle
+    step_index = flat_index % steps_per_cycle
+    setpoint = step.plateau_temperature
+
+    segments.append((t, segment_end, step_index, cycle_index, setpoint, plateau_end_t))
+    t = segment_end
+    prev_temp = step.plateau_temperature
+
+  return segments
+
+
+def _protocol_position_from_elapsed(odtc: ODTCProtocol, elapsed_s: float) -> Dict[str, Any]:
+  """Compute protocol position (step, cycle, setpoint, remaining hold) from elapsed time.
+
+  Used only inside ODTCProgress.from_data_event. Returns dict with keys:
+  step_index, cycle_index, setpoint_c, remaining_hold_s, total_steps, total_cycles.
+  """
+  if elapsed_s < 0:
+    elapsed_s = 0.0
+
+  segments = _build_protocol_timeline(odtc)
+  if not segments:
+    total_steps = odtc_expanded_step_count(odtc) if odtc.steps else 0
+    total_cycles = odtc_cycle_count(odtc) if odtc.steps else 1
+    return {
+      "step_index": 0,
+      "cycle_index": 0,
+      "setpoint_c": odtc.start_block_temperature if hasattr(odtc, "start_block_temperature") else None,
+      "remaining_hold_s": 0.0,
+      "total_steps": total_steps,
+      "total_cycles": total_cycles,
+    }
+
+  if odtc.kind == "method" and odtc.steps:
+    total_expanded = len(_expand_step_sequence(odtc.steps, _analyze_loop_structure(odtc.steps)))
+    total_cycles = odtc_cycle_count(odtc)
+    steps_per_cycle = total_expanded // total_cycles if total_cycles > 0 else total_expanded
+  else:
+    steps_per_cycle = 1
+    total_cycles = 1
+
+  for (t_start, t_end, step_index, cycle_index, setpoint_c, plateau_end_t) in segments:
+    if elapsed_s <= t_end:
+      remaining = max(0.0, plateau_end_t - elapsed_s)
+      return {
+        "step_index": step_index,
+        "cycle_index": cycle_index,
+        "setpoint_c": setpoint_c,
+        "remaining_hold_s": remaining,
+        "total_steps": steps_per_cycle,
+        "total_cycles": total_cycles,
+      }
+
+  (_, _, step_index, cycle_index, setpoint_c, _) = segments[-1]
+  return {
+    "step_index": step_index,
+    "cycle_index": cycle_index,
+    "setpoint_c": setpoint_c,
+    "remaining_hold_s": 0.0,
+    "total_steps": steps_per_cycle,
+    "total_cycles": total_cycles,
+  }
+
+
+# =============================================================================
+# ODTCProgress (raw DataEvent payload + optional protocol -> progress for interface)
+# =============================================================================
+
+
+@dataclass
+class ODTCProgress:
+  """Progress for a run: built from raw DataEvent payload and optional ODTCProtocol.
+
+  Single type for all progress/duration. Event-derived: elapsed_s, temps (from
+  parsing payload). Protocol-derived: step/cycle/setpoint/hold (from timeline lookup).
+  estimated_duration_s is our protocol-based total; remaining_duration_s is always
+  max(0, estimated_duration_s - elapsed_s). Device never sends estimated or remaining duration.
+  Returned from get_progress_snapshot and passed to the progress callback.
+  str(progress) or format_progress_log_message() gives the standard progress line (same as logged every progress_log_interval).
+  """
+
+  elapsed_s: float
+  target_temp_c: Optional[float] = None
+  current_temp_c: Optional[float] = None
+  lid_temp_c: Optional[float] = None
+  current_step_index: int = 0
+  total_step_count: int = 0
+  current_cycle_index: int = 0
+  total_cycle_count: int = 0
+  remaining_hold_s: float = 0.0
+  estimated_duration_s: Optional[float] = None
+  remaining_duration_s: Optional[float] = None
+
+  @classmethod
+  def from_data_event(
+    cls,
+    payload: Optional[Dict[str, Any]],
+    odtc: Optional[ODTCProtocol] = None,
+  ) -> "ODTCProgress":
+    """Build ODTCProgress from raw DataEvent payload and optional protocol.
+
+    payload: Raw DataEvent dict (or None for no events yet). Parsed via _parse_data_event_payload.
+    odtc: When not None, position (step/cycle/setpoint/hold) and estimated/remaining duration
+      are computed from protocol; remaining_duration_s = max(0, estimated_duration_s - elapsed_s).
+    """
+    parsed = _parse_data_event_payload(payload) if payload is not None else None
+    if parsed is None:
+      elapsed_s = 0.0
+      target_temp_c: Optional[float] = None
+      current_temp_c: Optional[float] = None
+      lid_temp_c: Optional[float] = None
+      step_idx = 0
+      step_count = 0
+      cycle_idx = 0
+      cycle_count = 0
+      hold_s = 0.0
+    else:
+      elapsed_s = parsed["elapsed_s"]
+      target_temp_c = parsed.get("target_temp_c")
+      current_temp_c = parsed.get("current_temp_c")
+      lid_temp_c = parsed.get("lid_temp_c")
+      step_idx = parsed["current_step_index"] if parsed.get("current_step_index") is not None else 0
+      step_count = parsed["total_step_count"] if parsed.get("total_step_count") is not None else 0
+      cycle_idx = parsed["current_cycle_index"] if parsed.get("current_cycle_index") is not None else 0
+      cycle_count = parsed["total_cycle_count"] if parsed.get("total_cycle_count") is not None else 0
+      hold_s = parsed["remaining_hold_s"] if parsed.get("remaining_hold_s") is not None else 0.0
+
+    if odtc is None:
+      est_s: Optional[float] = None
+      rem_s = 0.0
+      return cls(
+        elapsed_s=elapsed_s,
+        target_temp_c=target_temp_c,
+        current_temp_c=current_temp_c,
+        lid_temp_c=lid_temp_c,
+        current_step_index=step_idx,
+        total_step_count=step_count,
+        current_cycle_index=cycle_idx,
+        total_cycle_count=cycle_count,
+        remaining_hold_s=hold_s,
+        estimated_duration_s=est_s,
+        remaining_duration_s=rem_s,
+      )
+
+    position = _protocol_position_from_elapsed(odtc, elapsed_s)
+    target = target_temp_c
+    if odtc.kind == "premethod":
+      target = odtc.target_block_temperature
+    elif position.get("setpoint_c") is not None and target is None:
+      target = position["setpoint_c"]
+
+    if odtc.kind == "premethod":
+      est_s = PREMETHOD_ESTIMATED_DURATION_SECONDS
+    else:
+      est_s = estimate_odtc_protocol_duration_seconds(odtc)
+    rem_s = max(0.0, est_s - elapsed_s)
+
+    return cls(
+      elapsed_s=elapsed_s,
+      target_temp_c=target,
+      current_temp_c=current_temp_c,
+      lid_temp_c=lid_temp_c,
+      current_step_index=position["step_index"],
+      total_step_count=position.get("total_steps") or 0,
+      current_cycle_index=position["cycle_index"],
+      total_cycle_count=position.get("total_cycles") or 0,
+      remaining_hold_s=position.get("remaining_hold_s") or 0.0,
+      estimated_duration_s=est_s,
+      remaining_duration_s=rem_s,
+    )
+
+  def format_progress_log_message(self) -> str:
+    """Return the progress log message (elapsed, step/cycle/setpoint when present, temps)."""
+    step_total = self.total_step_count
+    cycle_total = self.total_cycle_count
+    step_idx = self.current_step_index
+    cycle_idx = self.current_cycle_index
+    setpoint = self.target_temp_c if self.target_temp_c is not None else 0.0
+    block = self.current_temp_c or 0.0
+    lid = self.lid_temp_c or 0.0
+    if step_total and cycle_total:
+      return (
+        f"ODTC progress: elapsed {self.elapsed_s:.0f}s, step {step_idx + 1}/{step_total}, "
+        f"cycle {cycle_idx + 1}/{cycle_total}, setpoint {setpoint:.1f}°C, "
+        f"block {block:.1f}°C, lid {lid:.1f}°C"
+      )
+    return (
+      f"ODTC progress: elapsed {self.elapsed_s:.0f}s, block {block:.1f}°C "
+      f"(target {setpoint:.1f}°C), lid {lid:.1f}°C"
+    )
+
+  def __str__(self) -> str:
+    """Same as format_progress_log_message(); use for consistent printing and progress reporting."""
+    return self.format_progress_log_message()
 
 
 def odtc_method_to_protocol(odtc: ODTCProtocol) -> Tuple["Protocol", ODTCConfig]:
