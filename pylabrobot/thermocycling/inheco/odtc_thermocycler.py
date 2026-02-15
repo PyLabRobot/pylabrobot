@@ -8,7 +8,7 @@ from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.thermocycling.thermocycler import Thermocycler
 
 from .odtc_backend import ODTCBackend
-from .odtc_model import ODTCConfig, ODTCHardwareConstraints, ODTC_DIMENSIONS
+from .odtc_model import ODTC_DIMENSIONS, ODTCConfig, ODTCHardwareConstraints
 
 
 def _model_from_variant(variant: int) -> str:

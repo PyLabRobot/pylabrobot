@@ -11,11 +11,27 @@ from __future__ import annotations
 
 import html
 import logging
-from datetime import datetime
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, fields, replace
+from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Literal, Optional, Tuple, Type, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  Dict,
+  Iterator,
+  List,
+  Literal,
+  Optional,
+  Tuple,
+  Type,
+  TypeVar,
+  Union,
+  cast,
+  get_args,
+  get_origin,
+  get_type_hints,
+)
 
 from pylabrobot.thermocycling.standard import Protocol, Stage, Step
 
@@ -174,9 +190,7 @@ def normalize_variant(variant: int) -> int:
     return 384000
   if variant in (960000, 384000):
     return variant
-  raise ValueError(
-    f"Unknown variant {variant}. Valid: {list(_VALID_VARIANTS)}"
-  )
+  raise ValueError(f"Unknown variant {variant}. Valid: {list(_VALID_VARIANTS)}")
 
 
 # =============================================================================
@@ -741,7 +755,9 @@ class ODTCProtocol(Protocol):
         lines.append(f"  {len(steps)} step(s)")
         for s in steps:
           hold_str = f"{s.plateau_time:.1f}s" if s.plateau_time != float("inf") else "∞"
-          loop_str = f" goto={s.goto_number} loop={s.loop_number}" if s.goto_number or s.loop_number else ""
+          loop_str = (
+            f" goto={s.goto_number} loop={s.loop_number}" if s.goto_number or s.loop_number else ""
+          )
           lines.append(
             f"    step {s.number}: {s.plateau_temperature:.1f}°C hold {hold_str}{loop_str}"
           )
@@ -801,7 +817,9 @@ def protocol_to_odtc_protocol(
           step_setting.overshoot_slope1 if step_setting.overshoot_slope1 is not None else 0.1
         ),
         overshoot_temperature=(
-          step_setting.overshoot_temperature if step_setting.overshoot_temperature is not None else 0.0
+          step_setting.overshoot_temperature
+          if step_setting.overshoot_temperature is not None
+          else 0.0
         ),
         overshoot_time=(
           step_setting.overshoot_time if step_setting.overshoot_time is not None else 0.0
@@ -1019,7 +1037,9 @@ def from_xml(elem: ET.Element, cls: Type[T]) -> T:
   return cls(**kwargs)
 
 
-def to_xml(obj: Any, tag_name: Optional[str] = None, parent: Optional[ET.Element] = None) -> ET.Element:
+def to_xml(
+  obj: Any, tag_name: Optional[str] = None, parent: Optional[ET.Element] = None
+) -> ET.Element:
   """
   Serialize a dataclass instance to an XML element.
 
@@ -1162,11 +1182,10 @@ def _get_steps_for_serialization(odtc: ODTCProtocol) -> List[ODTCStep]:
       if isinstance(s, ODTCStage):
         stages_as_odtc.append(s)
       else:
-        steps_odtc = [
-          st if isinstance(st, ODTCStep) else ODTCStep.from_step(st)
-          for st in s.steps
-        ]
-        stages_as_odtc.append(ODTCStage(steps=cast(List[Step], steps_odtc), repeats=s.repeats, inner_stages=None))
+        steps_odtc = [st if isinstance(st, ODTCStep) else ODTCStep.from_step(st) for st in s.steps]
+        stages_as_odtc.append(
+          ODTCStage(steps=cast(List[Step], steps_odtc), repeats=s.repeats, inner_stages=None)
+        )
     return _odtc_stages_to_steps(stages_as_odtc)
   return []
 
@@ -1255,7 +1274,9 @@ def parse_method_set_file(filepath: str) -> ODTCMethodSet:
 def method_set_to_xml(method_set: ODTCMethodSet) -> str:
   """Serialize a MethodSet to XML string (ODTCProtocol -> Method/PreMethod elements)."""
   root = ET.Element("MethodSet")
-  ET.SubElement(root, "DeleteAllMethods").text = "true" if method_set.delete_all_methods else "false"
+  ET.SubElement(root, "DeleteAllMethods").text = (
+    "true" if method_set.delete_all_methods else "false"
+  )
   for pm in method_set.premethods:
     _odtc_protocol_to_premethod_xml(pm, root)
   for m in method_set.methods:
@@ -1272,8 +1293,6 @@ def parse_sensor_values(xml_str: str) -> ODTCSensorValues:
 # =============================================================================
 # Method Lookup Helpers
 # =============================================================================
-
-
 
 
 def get_premethod_by_name(method_set: ODTCMethodSet, name: str) -> Optional[ODTCProtocol]:
@@ -1434,8 +1453,7 @@ def _build_one_odtc_stage_for_range(
   """Build one ODTCStage for step range [start, end] with repeats; recurse for inner loops."""
   # Loops strictly inside (start, end): contained if start <= s and e <= end and (start,end) != (s,e)
   inner_loops = [
-    (s, e, r) for (s, e, r) in loops
-    if start <= s and e <= end and (start, end) != (s, e)
+    (s, e, r) for (s, e, r) in loops if start <= s and e <= end and (start, end) != (s, e)
   ]
   inner_loops_sorted = sorted(inner_loops, key=lambda x: x[0])
 
@@ -1446,7 +1464,7 @@ def _build_one_odtc_stage_for_range(
 
   # Nested: partition range into step-only segments and inner loops; interleave steps and inner_stages
   step_nums_in_range = set(range(start, end + 1))
-  for (is_, ie, _) in inner_loops_sorted:
+  for is_, ie, _ in inner_loops_sorted:
     for n in range(is_, ie + 1):
       step_nums_in_range.discard(n)
   sorted(step_nums_in_range)
@@ -1454,7 +1472,7 @@ def _build_one_odtc_stage_for_range(
   # Groups: steps before first inner, between inners, after last inner
   step_groups: List[List[int]] = []
   pos = start
-  for (is_, ie, ir) in inner_loops_sorted:
+  for is_, ie, ir in inner_loops_sorted:
     group = [n for n in range(pos, is_) if n in steps_by_num]
     if group:
       step_groups.append(group)
@@ -1472,7 +1490,9 @@ def _build_one_odtc_stage_for_range(
     inner_stages_list.append(_build_one_odtc_stage_for_range(steps_by_num, loops, is_, ie, ir))
   if len(step_groups) > len(inner_loops_sorted):
     steps_list.extend(steps_by_num[n] for n in step_groups[len(inner_loops_sorted)])
-  return ODTCStage(steps=cast(List[Step], steps_list), repeats=repeats, inner_stages=inner_stages_list)
+  return ODTCStage(
+    steps=cast(List[Step], steps_list), repeats=repeats, inner_stages=inner_stages_list
+  )
 
 
 def _odtc_stage_to_steps_impl(
@@ -1528,9 +1548,7 @@ def _build_odtc_stages_from_steps(steps: List[ODTCStep]) -> List[ODTCStage]:
 
   if not loops:
     flat = [steps_by_num[n] for n in range(1, max_step + 1) if n in steps_by_num]
-    return [
-      ODTCStage(steps=cast(List[Step], flat), repeats=1, inner_stages=None)
-    ]
+    return [ODTCStage(steps=cast(List[Step], flat), repeats=1, inner_stages=None)]
 
   def contains(outer: Tuple[int, int, int], inner: Tuple[int, int, int]) -> bool:
     (s, e, _), (s2, e2, _) = outer, inner
@@ -1539,7 +1557,7 @@ def _build_odtc_stages_from_steps(steps: List[ODTCStep]) -> List[ODTCStage]:
   top_level = [L for L in loops if not any(contains(M, L) for M in loops if M != L)]
   top_level.sort(key=lambda x: (x[0], x[1]))
   step_nums_in_top_level = set()
-  for (s, e, _) in top_level:
+  for s, e, _ in top_level:
     for n in range(s, e + 1):
       step_nums_in_top_level.add(n)
 
@@ -1559,7 +1577,7 @@ def _build_odtc_stages_from_steps(steps: List[ODTCStep]) -> List[ODTCStage]:
         stages.append(ODTCStage(steps=cast(List[Step], flat_steps), repeats=1, inner_stages=None))
       continue
     # i is inside some top-level loop; find the loop that ends at the smallest end >= i
-    for (start, end, repeats) in top_level:
+    for start, end, repeats in top_level:
       if start <= i <= end:
         stages.append(_build_one_odtc_stage_for_range(steps_by_num, loops, start, end, repeats))
         i = end + 1
@@ -1617,10 +1635,7 @@ def odtc_cycle_count(odtc: ODTCProtocol) -> int:
   top_level = [
     (start, end, count)
     for (start, end, count) in loops
-    if not any(
-      (s, e, _) != (start, end, count) and s <= start and end <= e
-      for (s, e, _) in loops
-    )
+    if not any((s, e, _) != (start, end, count) and s <= start and end <= e for (s, e, _) in loops)
   ]
   if not top_level:
     return 0
@@ -1667,7 +1682,9 @@ def estimate_method_duration_seconds(odtc: ODTCProtocol) -> float:
 # =============================================================================
 
 
-def _build_protocol_timeline(odtc: ODTCProtocol) -> List[Tuple[float, float, int, int, float, float]]:
+def _build_protocol_timeline(
+  odtc: ODTCProtocol,
+) -> List[Tuple[float, float, int, int, float, float]]:
   """Build timeline segments for an ODTCProtocol (method or premethod).
 
   Returns a list of (t_start, t_end, step_index, cycle_index, setpoint_c, plateau_end_t).
@@ -1728,7 +1745,9 @@ def _protocol_position_from_elapsed(odtc: ODTCProtocol, elapsed_s: float) -> Dic
     return {
       "step_index": 0,
       "cycle_index": 0,
-      "setpoint_c": odtc.start_block_temperature if hasattr(odtc, "start_block_temperature") else None,
+      "setpoint_c": odtc.start_block_temperature
+      if hasattr(odtc, "start_block_temperature")
+      else None,
       "remaining_hold_s": 0.0,
       "total_steps": total_steps,
       "total_cycles": total_cycles,
@@ -1742,7 +1761,7 @@ def _protocol_position_from_elapsed(odtc: ODTCProtocol, elapsed_s: float) -> Dic
     steps_per_cycle = 1
     total_cycles = 1
 
-  for (t_start, t_end, step_index, cycle_index, setpoint_c, plateau_end_t) in segments:
+  for t_start, t_end, step_index, cycle_index, setpoint_c, plateau_end_t in segments:
     if elapsed_s <= t_end:
       remaining = max(0.0, plateau_end_t - elapsed_s)
       return {
@@ -1824,8 +1843,12 @@ class ODTCProgress:
       lid_temp_c = parsed.get("lid_temp_c")
       step_idx = parsed["current_step_index"] if parsed.get("current_step_index") is not None else 0
       step_count = parsed["total_step_count"] if parsed.get("total_step_count") is not None else 0
-      cycle_idx = parsed["current_cycle_index"] if parsed.get("current_cycle_index") is not None else 0
-      cycle_count = parsed["total_cycle_count"] if parsed.get("total_cycle_count") is not None else 0
+      cycle_idx = (
+        parsed["current_cycle_index"] if parsed.get("current_cycle_index") is not None else 0
+      )
+      cycle_count = (
+        parsed["total_cycle_count"] if parsed.get("total_cycle_count") is not None else 0
+      )
       hold_s = parsed["remaining_hold_s"] if parsed.get("remaining_hold_s") is not None else 0.0
 
     if odtc is None:

@@ -79,9 +79,7 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     Raises:
       NotImplementedError: This backend does not support running stored protocols by name.
     """
-    raise NotImplementedError(
-      "This backend does not support running stored protocols by name."
-    )
+    raise NotImplementedError("This backend does not support running stored protocols by name.")
 
   @abstractmethod
   async def get_block_current_temperature(self) -> List[float]:

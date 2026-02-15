@@ -12,22 +12,14 @@ from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tupl
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol
 
-from .odtc_sila_interface import (
-  DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS,
-  DEFAULT_LIFETIME_OF_EXECUTION,
-  FirstEventType,
-  ODTCSiLAInterface,
-  POLLING_START_BUFFER,
-  SiLAState,
-)
 from .odtc_model import (
+  PREMETHOD_ESTIMATED_DURATION_SECONDS,
   ODTCConfig,
+  ODTCHardwareConstraints,
   ODTCMethodSet,
   ODTCProgress,
   ODTCProtocol,
   ODTCSensorValues,
-  ODTCHardwareConstraints,
-  PREMETHOD_ESTIMATED_DURATION_SECONDS,
   ProtocolList,
   estimate_odtc_protocol_duration_seconds,
   generate_odtc_timestamp,
@@ -46,6 +38,14 @@ from .odtc_model import (
   validate_volume_fluid_quantity,
   volume_to_fluid_quantity,
 )
+from .odtc_sila_interface import (
+  DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS,
+  DEFAULT_LIFETIME_OF_EXECUTION,
+  POLLING_START_BUFFER,
+  FirstEventType,
+  ODTCSiLAInterface,
+  SiLAState,
+)
 
 # Buffer (seconds) added to device remaining duration (ExecuteMethod) or first_event_timeout (status commands) for timeout cap (fail faster than full lifetime).
 LIFETIME_BUFFER_SECONDS: float = 60.0
@@ -53,6 +53,7 @@ LIFETIME_BUFFER_SECONDS: float = 60.0
 
 class ODTCCommand(str, Enum):
   """SiLA async command identifier for execute()."""
+
   INITIALIZE = "Initialize"
   RESET = "Reset"
   LOCK_DEVICE = "LockDevice"
@@ -147,9 +148,7 @@ class _NormalizedSiLAResponse:
       else:
         found = None
       if found is None:
-        raise ValueError(
-          f"Parameter '{name}' not found in {self._command_name} response"
-        )
+        raise ValueError(f"Parameter '{name}' not found in {self._command_name} response")
       value = found.get("String")
       if value is None:
         raise ValueError(f"String element not found in {name} parameter")
@@ -177,9 +176,7 @@ class _NormalizedSiLAResponse:
 
     string_elem = param.find("String")
     if string_elem is None or string_elem.text is None:
-      raise ValueError(
-        f"String element not found in {self._command_name} Parameter response"
-      )
+      raise ValueError(f"String element not found in {self._command_name} Parameter response")
     return str(string_elem.text)
 
   def _get_dict_path(self, path: List[str], required: bool = True) -> Any:
@@ -248,12 +245,19 @@ class ODTCExecution:
 
   def _log_wait_info(self) -> None:
     import time
+
     name = f"{self.method_name} ({self.command_name})" if self.method_name else self.command_name
-    lifetime = self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
+    lifetime = (
+      self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
+    )
     started_at = self.started_at if self.started_at is not None else time.time()
     remaining = max(0.0, lifetime - (time.time() - started_at)) if lifetime is not None else None
     ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    lines = [f"[{ts}] Waiting for command", f"  Command: {name}", f"  Duration (timeout): {lifetime}s"]
+    lines = [
+      f"[{ts}] Waiting for command",
+      f"  Command: {name}",
+      f"  Duration (timeout): {lifetime}s",
+    ]
     if remaining is not None:
       lines.append(f"  Remaining: {remaining:.0f}s")
     self.backend.logger.info("\n".join(lines))
@@ -268,7 +272,10 @@ class ODTCExecution:
     if interval and interval > 0:
       task = asyncio.create_task(
         self.backend._run_progress_loop_until(
-          self.request_id, interval, self._is_done, self.backend.progress_callback,
+          self.request_id,
+          interval,
+          self._is_done,
+          self.backend.progress_callback,
         )
       )
       try:
@@ -284,9 +291,12 @@ class ODTCExecution:
 
   async def wait_resumable(self, poll_interval: float = 5.0) -> None:
     import time
+
     self._log_wait_info()
     started_at = self.started_at if self.started_at is not None else time.time()
-    lifetime = self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
+    lifetime = (
+      self.lifetime if self.lifetime is not None else self.backend._get_effective_lifetime()
+    )
     await self.backend.wait_for_completion_by_time(
       request_id=self.request_id,
       started_at=started_at,
@@ -336,9 +346,9 @@ class ODTCBackend(ThermocyclerBackend):
     lifetime_of_execution: Optional[float] = None,
     on_response_event_missing: Literal["warn_and_continue", "error"] = "warn_and_continue",
     progress_log_interval: Optional[float] = 150.0,
-  progress_callback: Optional[Callable[..., None]] = None,
-  data_event_log_path: Optional[str] = None,
-  first_event_timeout_seconds: float = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS,
+    progress_callback: Optional[Callable[..., None]] = None,
+    data_event_log_path: Optional[str] = None,
+    first_event_timeout_seconds: float = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS,
   ):
     """Initialize ODTC backend.
 
@@ -458,7 +468,7 @@ class ODTCBackend(ThermocyclerBackend):
       except Exception as e:  # noqa: BLE001
         last_error = e
         if attempt < max_attempts - 1:
-          wait_time = retry_backoff_base_seconds * (2 ** attempt)
+          wait_time = retry_backoff_base_seconds * (2**attempt)
           self.logger.warning(
             "Setup attempt %s/%s failed: %s. Retrying in %.1fs.",
             attempt + 1,
@@ -537,9 +547,7 @@ class ODTCBackend(ThermocyclerBackend):
     if wait:
       await self._sila.send_command(command_name, **send_kwargs)
       return None
-    fut, request_id, started_at = await self._sila.start_command(
-      command_name, **send_kwargs
-    )
+    fut, request_id, started_at = await self._sila.start_command(command_name, **send_kwargs)
     effective = self._get_effective_lifetime()
     event_type = self._sila.get_first_event_type_for_command(command_name)
 
@@ -605,7 +613,8 @@ class ODTCBackend(ThermocyclerBackend):
       if event_receiver_uri is None:
         event_receiver_uri = f"http://{self._sila._client_ip}:{self._sila.bound_port}/"
       return await self._run_async_command(
-        "Reset", wait,
+        "Reset",
+        wait,
         deviceId=kwargs.get("device_id", "ODTC"),
         eventReceiverURI=event_receiver_uri,
         simulationMode=self._simulation_mode,
@@ -652,15 +661,14 @@ class ODTCBackend(ThermocyclerBackend):
         else:
           estimated_duration_s = self._get_effective_lifetime()
       handle = await self._run_async_command(
-        "ExecuteMethod", False,
+        "ExecuteMethod",
+        False,
         method_name=method_name,
         estimated_duration_s=estimated_duration_s,
         **params,
       )
       assert handle is not None
-      handle._future.add_done_callback(
-        lambda _: self._clear_execution_state_for_handle(handle)
-      )
+      handle._future.add_done_callback(lambda _: self._clear_execution_state_for_handle(handle))
       if protocol_to_register is not None:
         self._protocol_by_request_id[handle.request_id] = protocol_to_register
       self._current_execution = handle
@@ -734,7 +742,9 @@ class ODTCBackend(ThermocyclerBackend):
     )
     return result if isinstance(result, dict) else {}
 
-  async def lock_device(self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True) -> Optional[ODTCExecution]:
+  async def lock_device(
+    self, lock_id: str, lock_timeout: Optional[float] = None, wait: bool = True
+  ) -> Optional[ODTCExecution]:
     """Lock the device for exclusive access (SiLA: LockDevice). See execute(ODTCCommand.LOCK_DEVICE)."""
     return await self.execute(
       ODTCCommand.LOCK_DEVICE, wait=wait, lock_id=lock_id, lock_timeout=lock_timeout
@@ -752,7 +762,6 @@ class ODTCBackend(ThermocyclerBackend):
   async def close_door(self, wait: bool = True) -> Optional[ODTCExecution]:
     """Close the door (thermocycler lid). SiLA: CloseDoor. See execute(ODTCCommand.CLOSE_DOOR)."""
     return await self.execute(ODTCCommand.CLOSE_DOOR, wait=wait)
-
 
   async def read_temperatures(self) -> ODTCSensorValues:
     """Read all temperature sensors.
@@ -842,9 +851,7 @@ class ODTCBackend(ThermocyclerBackend):
       if timeout is not None:
         elapsed = time.time() - start_time
         if elapsed > timeout:
-          raise TimeoutError(
-            f"Method execution did not complete within {timeout}s"
-          )
+          raise TimeoutError(f"Method execution did not complete within {timeout}s")
       await asyncio.sleep(poll_interval)
 
   async def wait_for_completion_by_time(
@@ -884,7 +891,9 @@ class ODTCBackend(ThermocyclerBackend):
     """
     import time
 
-    interval = progress_log_interval if progress_log_interval is not None else self.progress_log_interval
+    interval = (
+      progress_log_interval if progress_log_interval is not None else self.progress_log_interval
+    )
     callback = progress_callback if progress_callback is not None else self.progress_callback
     buffer = POLLING_START_BUFFER
     eta = estimated_remaining_time or 0.0
@@ -892,18 +901,18 @@ class ODTCBackend(ThermocyclerBackend):
       now = time.time()
       elapsed = now - started_at
       if elapsed >= lifetime:
-        raise TimeoutError(
-          f"Command (request_id={request_id}) did not complete within {lifetime}s"
-        )
+        raise TimeoutError(f"Command (request_id={request_id}) did not complete within {lifetime}s")
       # Don't start polling until estimated time + buffer has passed
       remaining_wait = started_at + eta + buffer - now
       if remaining_wait > 0:
         await asyncio.sleep(min(remaining_wait, poll_interval))
         continue
+
       # From here: poll until terminal_state or timeout; progress via same loop as wait()
       async def _is_done() -> bool:
         status = await self.get_status()
         return status == terminal_state or (time.time() - started_at) >= lifetime
+
       progress_task: Optional[asyncio.Task[None]] = None
       if interval and interval > 0:
         progress_task = asyncio.create_task(
@@ -927,7 +936,9 @@ class ODTCBackend(ThermocyclerBackend):
           except asyncio.CancelledError:
             pass
 
-  async def get_data_events(self, request_id: Optional[int] = None) -> Dict[int, List[Dict[str, Any]]]:
+  async def get_data_events(
+    self, request_id: Optional[int] = None
+  ) -> Dict[int, List[Dict[str, Any]]]:
     """Get collected DataEvents.
 
     Args:
@@ -1044,8 +1055,7 @@ class ODTCBackend(ThermocyclerBackend):
       allow_overwrite = True
       if not odtc.name:
         self.logger.warning(
-          "ODTCProtocol name resolved to scratch name '%s'. "
-          "Auto-enabling allow_overwrite=True.",
+          "ODTCProtocol name resolved to scratch name '%s'. " "Auto-enabling allow_overwrite=True.",
           resolved_name,
         )
 
@@ -1182,13 +1192,17 @@ class ODTCBackend(ThermocyclerBackend):
       for method in method_set.methods:
         existing_method = get_method_by_name(existing_method_set, method.name)
         if existing_method is not None:
-          conflicts.append(f"Method '{method.name}' already exists as {_existing_item_type(existing_method)}")
+          conflicts.append(
+            f"Method '{method.name}' already exists as {_existing_item_type(existing_method)}"
+          )
 
       # Check all premethod names (unified search)
       for premethod in method_set.premethods:
         existing_method = get_method_by_name(existing_method_set, premethod.name)
         if existing_method is not None:
-          conflicts.append(f"Method '{premethod.name}' already exists as {_existing_item_type(existing_method)}")
+          conflicts.append(
+            f"Method '{premethod.name}' already exists as {_existing_item_type(existing_method)}"
+          )
 
       if conflicts:
         conflict_msg = "\n".join(f"  - {c}" for c in conflicts)
@@ -1202,6 +1216,7 @@ class ODTCBackend(ThermocyclerBackend):
     # Debug XML output if requested
     if debug_xml or xml_output_path:
       import xml.dom.minidom
+
       # Pretty-print for readability
       try:
         dom = xml.dom.minidom.parseString(method_set_xml)
@@ -1224,6 +1239,7 @@ class ODTCBackend(ThermocyclerBackend):
     # SetParameters expects paramsXML in ResponseType_1.2.xsd format
     # Format: <ParameterSet><Parameter parameterType="String" name="MethodsXML"><String>...</String></Parameter></ParameterSet>
     import xml.etree.ElementTree as ET
+
     param_set = ET.Element("ParameterSet")
     param = ET.SubElement(param_set, "Parameter", parameterType="String", name="MethodsXML")
     string_elem = ET.SubElement(param, "String")
@@ -1601,9 +1617,7 @@ class ODTCBackend(ThermocyclerBackend):
     """Get remaining hold time in seconds for the current step."""
     request_id = self._request_id_for_get_progress()
     if request_id is None:
-      raise RuntimeError(
-        "No profile running; get_hold_time requires an active method execution."
-      )
+      raise RuntimeError("No profile running; get_hold_time requires an active method execution.")
     progress = await self._get_progress(request_id)
     if progress is None:
       raise RuntimeError(

@@ -91,9 +91,7 @@ class OpentronsThermocyclerBackend(ThermocyclerBackend):
     """Deactivate the lid heater."""
     return thermocycler_deactivate_lid(module_id=self.opentrons_id)
 
-  async def run_protocol(
-    self, protocol: Protocol, block_max_volume: float, **kwargs
-  ):
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, **kwargs):
     """Enqueue and return immediately (no wait) the PCR profile command."""
 
     # flatten the protocol to a list of Steps

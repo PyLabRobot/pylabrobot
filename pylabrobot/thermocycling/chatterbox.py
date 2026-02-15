@@ -97,9 +97,7 @@ class ThermocyclerChatterboxBackend(ThermocyclerBackend):
     print("Deactivating lid.")
     self._state.lid_target = None
 
-  async def run_protocol(
-    self, protocol: Protocol, block_max_volume: float, **kwargs
-  ):
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, **kwargs):
     """Run a protocol with stages and repeats."""
     print("Running protocol:")
 

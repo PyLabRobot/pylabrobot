@@ -166,9 +166,7 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
               volume=volume,
             )
 
-  async def run_protocol(
-    self, protocol: Protocol, block_max_volume: float, **kwargs
-  ):
+  async def run_protocol(self, protocol: Protocol, block_max_volume: float, **kwargs):
     """Execute thermocycler protocol using similar execution logic from thermocycler.py.
 
     Implements specific to opentrons thermocycler:

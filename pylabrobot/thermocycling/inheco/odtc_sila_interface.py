@@ -15,17 +15,15 @@ import json
 import logging
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Set
 
-import xml.etree.ElementTree as ET
-
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
-from pylabrobot.storage.inheco.scila.soap import soap_decode, soap_encode, XSI
+from pylabrobot.storage.inheco.scila.soap import XSI, soap_decode, soap_encode
 
 from .odtc_model import ODTCProgress
-
 
 # -----------------------------------------------------------------------------
 # SiLA/ODTC exceptions (typed command and device errors)
@@ -127,7 +125,9 @@ class SiLAState(str, Enum):
   IDLE = "idle"
   BUSY = "busy"
   PAUSED = "paused"
-  ERRORHANDLING = "errorHandling"  # Device returns "errorHandling" (camelCase per SCILABackend pattern)
+  ERRORHANDLING = (
+    "errorHandling"  # Device returns "errorHandling" (camelCase per SCILABackend pattern)
+  )
   INERROR = "inError"  # Device returns "inError" (camelCase per SCILABackend comment)
 
 
@@ -282,27 +282,134 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
   # State allowability table from ODTC doc section 4
   # Format: {command: {state: True if allowed}}
   STATE_ALLOWABILITY: Dict[str, Dict[SiLAState, bool]] = {
-    "Abort": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "CloseDoor": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "DoContinue": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "ExecuteMethod": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "GetConfiguration": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
-    "GetParameters": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "GetDeviceIdentification": {SiLAState.STARTUP: True, SiLAState.STANDBY: True, SiLAState.INITIALIZING: True, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "GetLastData": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "GetStatus": {SiLAState.STARTUP: True, SiLAState.STANDBY: True, SiLAState.INITIALIZING: True, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "Initialize": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
-    "LockDevice": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
-    "OpenDoor": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "Pause": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "PrepareForInput": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "PrepareForOutput": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "ReadActualTemperature": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "Reset": {SiLAState.STARTUP: True, SiLAState.STANDBY: True, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "SetConfiguration": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
-    "SetParameters": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "StopMethod": {SiLAState.STARTUP: False, SiLAState.STANDBY: False, SiLAState.IDLE: True, SiLAState.BUSY: True},
-    "UnlockDevice": {SiLAState.STARTUP: False, SiLAState.STANDBY: True, SiLAState.IDLE: False, SiLAState.BUSY: False},
+    "Abort": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "CloseDoor": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "DoContinue": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "ExecuteMethod": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "GetConfiguration": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: True,
+      SiLAState.IDLE: False,
+      SiLAState.BUSY: False,
+    },
+    "GetParameters": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "GetDeviceIdentification": {
+      SiLAState.STARTUP: True,
+      SiLAState.STANDBY: True,
+      SiLAState.INITIALIZING: True,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "GetLastData": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "GetStatus": {
+      SiLAState.STARTUP: True,
+      SiLAState.STANDBY: True,
+      SiLAState.INITIALIZING: True,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "Initialize": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: True,
+      SiLAState.IDLE: False,
+      SiLAState.BUSY: False,
+    },
+    "LockDevice": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: True,
+      SiLAState.IDLE: False,
+      SiLAState.BUSY: False,
+    },
+    "OpenDoor": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "Pause": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "PrepareForInput": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "PrepareForOutput": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "ReadActualTemperature": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "Reset": {
+      SiLAState.STARTUP: True,
+      SiLAState.STANDBY: True,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "SetConfiguration": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: True,
+      SiLAState.IDLE: False,
+      SiLAState.BUSY: False,
+    },
+    "SetParameters": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "StopMethod": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: False,
+      SiLAState.IDLE: True,
+      SiLAState.BUSY: True,
+    },
+    "UnlockDevice": {
+      SiLAState.STARTUP: False,
+      SiLAState.STANDBY: True,
+      SiLAState.IDLE: False,
+      SiLAState.BUSY: False,
+    },
   }
 
   # Synchronous commands (return code 1, no ResponseEvent)
@@ -572,7 +679,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       self._logger.debug("_update_state_from_status: Empty state string, skipping update")
       return
 
-    self._logger.debug(f"_update_state_from_status: Received state: {state_str!r} (type: {type(state_str).__name__})")
+    self._logger.debug(
+      f"_update_state_from_status: Received state: {state_str!r} (type: {type(state_str).__name__})"
+    )
 
     # Match exactly against enum values (no normalization - we want to see what device actually returns)
     try:
@@ -612,17 +721,23 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
     elif return_code == 5:
       raise SiLAError(f"Command {command_name} rejected: LockId mismatch (return code 5)", code=5)
     elif return_code == 6:
-      raise SiLAError(f"Command {command_name} rejected: Invalid or duplicate requestId (return code 6)", code=6)
+      raise SiLAError(
+        f"Command {command_name} rejected: Invalid or duplicate requestId (return code 6)", code=6
+      )
     elif return_code == 9:
       raise SiLAError(
         f"Command {command_name} not allowed in state {self._current_state.value} (return code 9)",
         code=9,
       )
     elif return_code == 11:
-      raise SiLAError(f"Command {command_name} rejected: Invalid parameter (return code 11): {message}", code=11)
+      raise SiLAError(
+        f"Command {command_name} rejected: Invalid parameter (return code 11): {message}", code=11
+      )
     elif return_code == 12:
       # Finished with warning
-      self._logger.warning(f"Command {command_name} finished with warning (return code 12): {message}")
+      self._logger.warning(
+        f"Command {command_name} finished with warning (return code 12): {message}"
+      )
       return
     elif return_code >= 1000:
       # Device-specific return code
@@ -700,7 +815,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
         err_msg = message.replace("\n", " ") if message else f"Unknown error (code {return_code})"
         self._complete_pending(
           request_id,
-          exception=RuntimeError(f"Command {pending.name} failed with code {return_code}: '{err_msg}'"),
+          exception=RuntimeError(
+            f"Command {pending.name} failed with code {return_code}: '{err_msg}'"
+          ),
           update_lock_state=False,
         )
 
@@ -747,7 +864,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
             with open(self.data_event_log_path, "a", encoding="utf-8") as f:
               f.write(json.dumps(data_event, default=str) + "\n")
           except OSError as e:
-            self._logger.warning("Failed to append DataEvent to %s: %s", self.data_event_log_path, e)
+            self._logger.warning(
+              "Failed to append DataEvent to %s: %s", self.data_event_log_path, e
+            )
 
       return SOAP_RESPONSE_DataEventResponse.encode("utf-8")
 
@@ -759,7 +878,9 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
       return_code = return_value.get("returnCode")
       message = return_value.get("message", "")
 
-      self._logger.error(f"ErrorEvent for requestId {req_id}: code {return_code}, message: {message}")
+      self._logger.error(
+        f"ErrorEvent for requestId {req_id}: code {return_code}, message: {message}"
+      )
 
       self._current_state = SiLAState.ERRORHANDLING
 
@@ -904,9 +1025,7 @@ class ODTCSiLAInterface(InhecoSiLAInterface):
           if pending_ref is None or pending_ref.fut.done():
             break
           eta = self._estimated_remaining_by_request_id.get(request_id) or 0.0
-          remaining_wait = (
-            started_at + eta + POLLING_START_BUFFER - time.time()
-          )
+          remaining_wait = started_at + eta + POLLING_START_BUFFER - time.time()
           if remaining_wait > 0:
             await asyncio.sleep(min(remaining_wait, self._poll_interval))
             continue

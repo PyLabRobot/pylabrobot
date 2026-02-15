@@ -9,13 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pylabrobot.resources import Coordinate
 from pylabrobot.thermocycling.inheco.odtc_backend import ODTCBackend, ODTCExecution
 from pylabrobot.thermocycling.inheco.odtc_model import (
-  ODTCMethodSet,
   ODTC_DIMENSIONS,
+  PREMETHOD_ESTIMATED_DURATION_SECONDS,
+  ODTCMethodSet,
   ODTCProgress,
   ODTCProtocol,
   ODTCStage,
   ODTCStep,
-  PREMETHOD_ESTIMATED_DURATION_SECONDS,
   estimate_method_duration_seconds,
   method_set_to_xml,
   normalize_variant,
@@ -36,7 +36,7 @@ def _minimal_data_event_payload(remaining_s: float = 300.0) -> Dict[str, Any]:
   """Minimal DataEvent payload (valid XML); ODTCProgress.from_data_event parses elapsed_s=0 when no Elapsed time."""
   inner = (
     f'<d><dataSeries nameId="Remaining duration" unit="s">'
-    f'<integerValue>{int(remaining_s)}</integerValue></dataSeries></d>'
+    f"<integerValue>{int(remaining_s)}</integerValue></dataSeries></d>"
   )
   escaped = inner.replace("<", "&lt;").replace(">", "&gt;")
   return {
@@ -50,7 +50,7 @@ def _data_event_payload_with_elapsed(elapsed_s: float, request_id: int = 12345) 
   ms = int(elapsed_s * 1000)
   inner = (
     f'<d><dataSeries nameId="Elapsed time" unit="ms">'
-    f'<integerValue>{ms}</integerValue></dataSeries></d>'
+    f"<integerValue>{ms}</integerValue></dataSeries></d>"
   )
   escaped = inner.replace("<", "&lt;").replace(">", "&gt;")
   return {
@@ -69,22 +69,22 @@ def _data_event_payload_with_elapsed_and_temps(
   """DataEvent payload with Elapsed time and optional temperatures (1/100°C in XML)."""
   parts = [
     f'<dataSeries nameId="Elapsed time" unit="ms">'
-    f'<integerValue>{int(elapsed_s * 1000)}</integerValue></dataSeries>',
+    f"<integerValue>{int(elapsed_s * 1000)}</integerValue></dataSeries>",
   ]
   if current_temp_c is not None:
     parts.append(
       f'<dataSeries nameId="Current temperature" unit="1/100°C">'
-      f'<integerValue>{int(current_temp_c * 100)}</integerValue></dataSeries>'
+      f"<integerValue>{int(current_temp_c * 100)}</integerValue></dataSeries>"
     )
   if lid_temp_c is not None:
     parts.append(
       f'<dataSeries nameId="LID temperature" unit="1/100°C">'
-      f'<integerValue>{int(lid_temp_c * 100)}</integerValue></dataSeries>'
+      f"<integerValue>{int(lid_temp_c * 100)}</integerValue></dataSeries>"
     )
   if target_temp_c is not None:
     parts.append(
       f'<dataSeries nameId="Target temperature" unit="1/100°C">'
-      f'<integerValue>{int(target_temp_c * 100)}</integerValue></dataSeries>'
+      f"<integerValue>{int(target_temp_c * 100)}</integerValue></dataSeries>"
     )
   inner = "<d>" + "".join(parts) + "</d>"
   escaped = inner.replace("<", "&lt;").replace(">", "&gt;")
@@ -121,7 +121,7 @@ class TestODTCProgressFromDataEventPayload(unittest.TestCase):
     inner = (
       '<containerData><experimentStep name="Temperatures" sequence="5" type="Measurement">'
       '<dataSeries nameId="Elapsed time" unit="ms"><integerValue>10000</integerValue></dataSeries>'
-      '</experimentStep></containerData>'
+      "</experimentStep></containerData>"
     )
     escaped = inner.replace("<", "&lt;").replace(">", "&gt;")
     payload = {"requestId": 1, "dataValue": f"<r><AnyData>{escaped}</AnyData></r>"}
@@ -139,7 +139,9 @@ class TestEstimateMethodDurationSeconds(unittest.TestCase):
 
   def test_empty_method_returns_zero(self):
     """Method with no steps has zero duration."""
-    odtc = ODTCProtocol(kind="method", name="empty", start_block_temperature=20.0, steps=[], stages=[])
+    odtc = ODTCProtocol(
+      kind="method", name="empty", start_block_temperature=20.0, steps=[], stages=[]
+    )
     self.assertEqual(estimate_method_duration_seconds(odtc), 0.0)
 
   def test_single_step_no_loop(self):
@@ -593,23 +595,23 @@ class TestODTCSiLAInterface(unittest.IsolatedAsyncioTestCase):
 
     self.interface._update_state_from_status("standby")
     self.assertEqual(self.interface._current_state, SiLAState.STANDBY)
-    
+
     # Test camelCase enum values (exact match required)
     self.interface._update_state_from_status("inError")
     self.assertEqual(self.interface._current_state, SiLAState.INERROR)
-    
+
     self.interface._update_state_from_status("errorHandling")
     self.assertEqual(self.interface._current_state, SiLAState.ERRORHANDLING)
-    
+
     # Test that case mismatches are NOT accepted (exact matching only)
     # These should keep the current state and log a warning
     initial_state = self.interface._current_state
     self.interface._update_state_from_status("Idle")  # Wrong case
     self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
-    
+
     self.interface._update_state_from_status("BUSY")  # Wrong case
     self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
-    
+
     self.interface._update_state_from_status("INERROR")  # Wrong case
     self.assertEqual(self.interface._current_state, initial_state)  # Should remain unchanged
 
@@ -865,7 +867,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       return_value={
         "GetStatusResponse": {
           "state": "idle",
-          "GetStatusResult": {"returnCode": 1, "message": "Success."}
+          "GetStatusResult": {"returnCode": 1, "message": "Success."},
         }
       }
     )
@@ -957,9 +959,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     self.backend._sila._lock_id = "my_lock_id"
     self.backend._sila.send_command = AsyncMock()  # type: ignore[method-assign]
     await self.backend.unlock_device()
-    self.backend._sila.send_command.assert_called_once_with(
-      "UnlockDevice", lock_id="my_lock_id"
-    )
+    self.backend._sila.send_command.assert_called_once_with("UnlockDevice", lock_id="my_lock_id")
 
   async def test_unlock_device_not_locked(self):
     """Test unlock_device when device is not locked."""
@@ -970,7 +970,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_block_current_temperature(self):
     """Test get_block_current_temperature."""
-    sensor_xml = '<SensorValues><Mount>2500</Mount></SensorValues>'
+    sensor_xml = "<SensorValues><Mount>2500</Mount></SensorValues>"
     root = ET.Element("ResponseData")
     param = ET.SubElement(root, "Parameter", name="SensorValues")
     string_elem = ET.SubElement(param, "String")
@@ -983,7 +983,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_lid_current_temperature(self):
     """Test get_lid_current_temperature."""
-    sensor_xml = '<SensorValues><Lid>2600</Lid></SensorValues>'
+    sensor_xml = "<SensorValues><Lid>2600</Lid></SensorValues>"
     root = ET.Element("ResponseData")
     param = ET.SubElement(root, "Parameter", name="SensorValues")
     string_elem = ET.SubElement(param, "String")
@@ -1135,9 +1135,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
     )
     self.backend._sila.start_command = AsyncMock(return_value=(fut, 12345, 0.0))  # type: ignore[method-assign]
     self.backend._sila.wait_for_first_event = AsyncMock(  # type: ignore[method-assign]
-      side_effect=FirstEventTimeout(
-        "No DataEvent received for request_id 12345 within 60.0s"
-      )
+      side_effect=FirstEventTimeout("No DataEvent received for request_id 12345 within 60.0s")
     )
     with self.assertRaises(FirstEventTimeout) as cm:
       await self.backend.execute_method("MyMethod", wait=False)
@@ -1268,19 +1266,13 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
 
   async def test_is_method_running(self):
     """Test is_method_running()."""
-    with patch.object(
-      ODTCBackend, "get_status", new_callable=AsyncMock, return_value="busy"
-    ):
+    with patch.object(ODTCBackend, "get_status", new_callable=AsyncMock, return_value="busy"):
       self.assertTrue(await self.backend.is_method_running())
 
-    with patch.object(
-      ODTCBackend, "get_status", new_callable=AsyncMock, return_value="idle"
-    ):
+    with patch.object(ODTCBackend, "get_status", new_callable=AsyncMock, return_value="idle"):
       self.assertFalse(await self.backend.is_method_running())
 
-    with patch.object(
-      ODTCBackend, "get_status", new_callable=AsyncMock, return_value="BUSY"
-    ):
+    with patch.object(ODTCBackend, "get_status", new_callable=AsyncMock, return_value="BUSY"):
       # Backend compares to SiLAState.BUSY.value ("busy"), so uppercase is False
       self.assertFalse(await self.backend.is_method_running())
 
@@ -1403,9 +1395,7 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
       self.backend, "get_method_set", new_callable=AsyncMock, return_value=ODTCMethodSet()
     ):
       await self.backend.run_stored_protocol("MyMethod", wait=True)
-    self.backend.execute_method.assert_called_once_with(
-      "MyMethod", wait=True, protocol=None
-    )
+    self.backend.execute_method.assert_called_once_with("MyMethod", wait=True, protocol=None)
 
 
 class TestODTCThermocycler(unittest.TestCase):
@@ -1525,10 +1515,7 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
     data_events_by_request_id: Dict[int, List[Dict[str, Any]]] = {}
 
     # Simulate receiving a DataEvent
-    data_event = {
-      "requestId": 12345,
-      "data": "test_data"
-    }
+    data_event = {"requestId": 12345, "data": "test_data"}
 
     # Apply the same logic as in _on_http handler
     request_id = data_event.get("requestId")
@@ -1540,16 +1527,10 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
     # Verify storage
     self.assertIn(12345, data_events_by_request_id)
     self.assertEqual(len(data_events_by_request_id[12345]), 1)
-    self.assertEqual(
-      data_events_by_request_id[12345][0]["requestId"],
-      12345
-    )
+    self.assertEqual(data_events_by_request_id[12345][0]["requestId"], 12345)
 
     # Test multiple events for same request_id
-    data_event2 = {
-      "requestId": 12345,
-      "data": "test_data2"
-    }
+    data_event2 = {"requestId": 12345, "data": "test_data2"}
     request_id = data_event2.get("requestId")
     if request_id is not None and isinstance(request_id, int):
       if request_id not in data_events_by_request_id:
@@ -1559,9 +1540,7 @@ class TestODTCSiLAInterfaceDataEvents(unittest.TestCase):
     self.assertEqual(len(data_events_by_request_id[12345]), 2)
 
     # Test event with None request_id (should not be stored)
-    data_event_no_id = {
-      "data": "test_data_no_id"
-    }
+    data_event_no_id = {"data": "test_data_no_id"}
     request_id = data_event_no_id.get("requestId")
     if request_id is not None and isinstance(request_id, int):
       if request_id not in data_events_by_request_id:
@@ -1637,7 +1616,9 @@ class TestODTCStageAndRoundTrip(unittest.TestCase):
     """Serialize ODTCProtocol (from parsed XML) back to XML and re-parse; structure preserved."""
     method_set = parse_method_set(_minimal_method_xml_with_nested_loops())
     odtc = method_set.methods[0]
-    xml_out = method_set_to_xml(ODTCMethodSet(delete_all_methods=False, premethods=[], methods=[odtc]))
+    xml_out = method_set_to_xml(
+      ODTCMethodSet(delete_all_methods=False, premethods=[], methods=[odtc])
+    )
     method_set2 = parse_method_set(xml_out)
     self.assertEqual(len(method_set2.methods), 1)
     odtc2 = method_set2.methods[0]
@@ -1666,7 +1647,9 @@ class TestODTCStageAndRoundTrip(unittest.TestCase):
       steps=[],  # No steps; serialization will use stages
       stages=[outer],
     )
-    xml_str = method_set_to_xml(ODTCMethodSet(delete_all_methods=False, premethods=[], methods=[odtc]))
+    xml_str = method_set_to_xml(
+      ODTCMethodSet(delete_all_methods=False, premethods=[], methods=[odtc])
+    )
     method_set = parse_method_set(xml_str)
     self.assertEqual(len(method_set.methods), 1)
     reparsed = method_set.methods[0]

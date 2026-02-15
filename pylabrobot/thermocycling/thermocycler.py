@@ -117,9 +117,7 @@ class Thermocycler(ResourceHolder, Machine):
               f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
             )
 
-    return await self.backend.run_protocol(
-      protocol, block_max_volume, **backend_kwargs
-    )
+    return await self.backend.run_protocol(protocol, block_max_volume, **backend_kwargs)
 
   async def run_stored_protocol(
     self,
