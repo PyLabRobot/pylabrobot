@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import http.server
 import logging
 import random
@@ -12,7 +13,13 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from pylabrobot.storage.inheco.scila.soap import XSI, soap_decode, soap_encode
+from pylabrobot.storage.inheco.scila.soap import (
+  XSI,
+  _localname,
+  soap_body_payload,
+  soap_decode,
+  soap_encode,
+)
 
 SOAP_RESPONSE_ResponseEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
   <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -44,6 +51,21 @@ SOAP_RESPONSE_StatusEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlso
 </s:Envelope>"""
 
 
+SOAP_RESPONSE_DataEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <DataEventResponse xmlns="http://sila.coop">
+      <DataEventResult>
+        <returnCode>1</returnCode>
+        <message>Success</message>
+        <duration>PT0S</duration>
+        <deviceClass>0</deviceClass>
+      </DataEventResult>
+    </DataEventResponse>
+  </s:Body>
+</s:Envelope>"""
+
+
 def _get_local_ip(machine_ip: str) -> str:
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   try:
@@ -55,6 +77,15 @@ def _get_local_ip(machine_ip: str) -> str:
   finally:
     s.close()
   return local_ip
+
+
+class SiLAError(RuntimeError):
+  def __init__(self, code: int, message: str, command: str, details: Optional[dict] = None):
+    self.code = code
+    self.message = message
+    self.command = command
+    self.details = details or {}
+    super().__init__(f"Command {command} failed with code {code}: '{message}'")
 
 
 class InhecoSiLAInterface:
@@ -196,33 +227,50 @@ class InhecoSiLAInterface:
 
     cmd = self._pending
 
-    if cmd is not None and not cmd.fut.done():
-      response_event = soap_decode(req.body.decode("utf-8"))
-      if "ResponseEvent" in response_event:
-        request_id = response_event["ResponseEvent"].get("requestId")
-        if request_id != cmd.request_id:
-          self._logger.warning("Request ID does not match pending command.")
-        else:
-          return_value = response_event["ResponseEvent"].get("returnValue", {})
-          return_code = return_value.get("returnCode")
-          if return_code != 3:  # error
-            err_msg = return_value.get("message", "Unknown error").replace("\n", " ")
+    try:
+      xml_str = req.body.decode("utf-8")
+      payload = soap_body_payload(xml_str)
+      tag_local = _localname(payload.tag)
+
+      if cmd is not None and not cmd.fut.done() and tag_local == "ResponseEvent":
+        response_event = soap_decode(xml_str)
+        if response_event["ResponseEvent"].get("requestId") == cmd.request_id:
+          ret = response_event["ResponseEvent"].get("returnValue", {})
+          rc = ret.get("returnCode")
+          if rc != 3:  # 3=Success
             cmd.fut.set_exception(
-              RuntimeError(f"Command {cmd.name} failed with code {return_code}: '{err_msg}'")
+              SiLAError(rc, ret.get("message", "").replace(chr(10), " "), cmd.name, details=ret)
             )
           else:
-            response_data = response_event["ResponseEvent"].get("responseData", "")
-            root = ET.fromstring(response_data)
-            cmd.fut.set_result(root)
-    else:
-      self._logger.warning("No pending command to match response to.")
+            cmd.fut.set_result(
+              ET.fromstring(d)
+              if (d := response_event["ResponseEvent"].get("responseData"))
+              else ET.Element("EmptyResponse")
+            )
 
-    if "ResponseEvent" in req.body.decode("utf-8"):
+      if tag_local == "DataEvent":
+        try:
+          raw = next(e.text for e in payload.iter() if _localname(e.tag) == "dataValue")
+          series = ET.fromstring(ET.fromstring(raw).find(".//AnyData").text).findall(
+            ".//dataSeries"
+          )
+          data = {}
+          for s in series:
+            val = s.findall(".//integerValue")[-1].text
+            unit = s.get("unit")
+            data[s.get("nameId")] = f"{val} {unit}" if unit else val
+          print(f"[{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] [SiLA DataEvent] {data}")
+        except:
+          pass
+        return SOAP_RESPONSE_DataEventResponse.encode("utf-8")
+
+      if tag_local == "StatusEvent":
+        return SOAP_RESPONSE_StatusEventResponse.encode("utf-8")
       return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
-    if "StatusEvent" in req.body.decode("utf-8"):
-      return SOAP_RESPONSE_StatusEventResponse.encode("utf-8")
-    self._logger.warning("Unknown event type received.")
-    return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
+
+    except Exception as e:
+      self._logger.error(f"Error handling event: {e}")
+      return SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
 
   def _get_return_code_and_message(self, command_name: str, response: Any) -> Tuple[int, str]:
     resp_level = response.get(f"{command_name}Response", {})  # first level
