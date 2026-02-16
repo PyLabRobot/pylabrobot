@@ -14,17 +14,7 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
 
   WELL_DIAMETER = 9.2  # measured (circular -> inscribed square sizing is used elsewhere; see below)
   WELL_DEPTH = 37.40  # measured
-
-  # PLR's OT loader converts circular diameter to a square footprint using diameter / sqrt(2).
-  # Your earlier code already used inner well width/length of 9.2; if 9.2 is the *square* size,
-  # keep it. If 9.2 is the *diameter*, convert like load_ot_tube_rack does.
-  #
-  # If 9.2 is "inner square width", use:
   well_size_x = well_size_y = WELL_DIAMETER
-  #
-  # If instead 9.2 is a measured *diameter*, use this:
-  # import math
-  # well_size_x = well_size_y = round(WELL_DIAMETER / math.sqrt(2), 3)
 
   return TubeRack(
     name=name,
