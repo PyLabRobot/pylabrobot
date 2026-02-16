@@ -80,13 +80,27 @@ class SCILABackend(MachineBackend):
     if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     await self._sila_interface.send_command("PrepareForInput", position=drawer_id)
-    await self._sila_interface.send_command("OpenDoor")
+    try:
+      await self._sila_interface.send_command("OpenDoor")
+    except Exception as e:
+      if "warning" in str(e).lower():
+        # co2 flow warning
+        print(f"Warning while opening drawer {drawer_id}: {e}")
+      else:
+        raise
 
   async def close(self, drawer_id: int) -> None:
     if drawer_id not in {1, 2, 3, 4}:
       raise ValueError(f"Invalid drawer ID: {drawer_id}. Must be 1, 2, 3, or 4.")
     await self._sila_interface.send_command("PrepareForOutput", position=drawer_id)
-    await self._sila_interface.send_command("CloseDoor")
+    try:
+      await self._sila_interface.send_command("CloseDoor")
+    except Exception as e:
+      if "warning" in str(e).lower():
+        # co2 flow warning
+        print(f"Warning while closing drawer {drawer_id}: {e}")
+      else:
+        raise
 
   async def request_drawer_statuses(self) -> Dict[int, DrawerStatus]:
     root = await self._sila_interface.send_command("GetDoorStatus")
