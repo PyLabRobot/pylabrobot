@@ -530,7 +530,19 @@ class PicoBackend(ImagerBackend):
     try:
       return rpc(request, metadata=metadata, timeout=timeout)
     except grpc.RpcError as e:
-      raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
+      err_msg = _decode_grpc_error(e)
+      if with_lock and "CommandRequiresLock" in err_msg:
+        try:
+          self._unlock()
+        except (grpc.RpcError, RuntimeError):
+          pass
+        self._lock()
+        metadata = self._lock_metadata()
+        try:
+          return rpc(request, metadata=metadata, timeout=timeout)
+        except grpc.RpcError as e2:
+          raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e2)}") from e2
+      raise RuntimeError(f"{service}/{method}: {err_msg}") from e
 
   def _stream(
     self,
