@@ -36,6 +36,7 @@ machine-agnostic-features/writing-robot-agnostic-protocols
 machine-agnostic-features/tip-spot-generators
 machine-agnostic-features/validation
 machine-agnostic-features/error-handling-general
+machine-agnostic-features/sila-discovery
 ```
 
 ```{toctree}
