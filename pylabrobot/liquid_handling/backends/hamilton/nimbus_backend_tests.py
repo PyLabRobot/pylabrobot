@@ -708,6 +708,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
       maximal_volume=300.0,
       tip_size=TipSize.STANDARD_VOLUME,
       pickup_method=TipPickupMethod.OUT_OF_RACK,
+      collar_height=8.0,
     )
 
   def _get_commands(self, cmd_type):
@@ -1080,7 +1081,10 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_10uL
 
     tip_rack = hamilton_96_tiprack_10uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    rails_loc = self.deck.rails_to_location(1)
+    self.deck.assign_child_resource(
+      tip_rack, location=Coordinate(x=rails_loc.x, y=rails_loc.y, z=-6.1)
+    )
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 
@@ -1107,7 +1111,10 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_50uL
 
     tip_rack = hamilton_96_tiprack_50uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    rails_loc = self.deck.rails_to_location(1)
+    self.deck.assign_child_resource(
+      tip_rack, location=Coordinate(x=rails_loc.x, y=rails_loc.y, z=-6.1)
+    )
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 
@@ -1134,7 +1141,10 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL
 
     tip_rack = hamilton_96_tiprack_300uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    rails_loc = self.deck.rails_to_location(1)
+    self.deck.assign_child_resource(
+      tip_rack, location=Coordinate(x=rails_loc.x, y=rails_loc.y, z=-6.1)
+    )
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 
@@ -1161,7 +1171,10 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_1000uL
 
     tip_rack = hamilton_96_tiprack_1000uL("tips")
-    self.deck.assign_child_resource(tip_rack, rails=1)
+    rails_loc = self.deck.rails_to_location(1)
+    self.deck.assign_child_resource(
+      tip_rack, location=Coordinate(x=rails_loc.x, y=rails_loc.y, z=-6.1)
+    )
     tip_spot = tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
 

@@ -157,6 +157,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,
+    frame_height: Optional[float] = None,
   ):
     super().__init__(
       name,
@@ -168,12 +169,20 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       category=category,
       model=model,
     )
+    self._frame_height = frame_height
 
     if ordered_items is not None and len(ordered_items) > 0:
       if with_tips:
         self.fill()
       else:
         self.empty()
+
+  @property
+  def frame_height(self) -> float:
+    """Return frame_height, raising if it is None."""
+    if self._frame_height is None:
+      raise ValueError(f"frame_height is not defined for this tip rack: {self!r}")
+    return self._frame_height
 
   def __repr__(self) -> str:
     return (
@@ -304,3 +313,51 @@ class NestedTipRack(TipRack):
         "Location must be specified if " + "resource is not a NestedTipRack."
       )
     return super().assign_child_resource(resource, location=location, reassign=reassign)
+
+
+class EmbeddedTipRack(TipRack):
+  """The EmbeddedTipRack - this is what some might call a "standard" TipRack; they cannot stand on their own, they require an EmbeddedTipRackHolder at all times to be functional.
+
+  have historically been referred to as FTRs (officially "framed tip rack" from Hamilton, sometimes we used to call them "floating tip racks".
+  """
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sinking_depth: float,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
+    ordering: Optional[List[str]] = None,
+    category: str = "tip_rack",
+    model: Optional[str] = None,
+    with_tips: bool = True,
+    frame_height: Optional[float] = None,
+  ):
+    """sinking_depth: the depth the tip rack sinks into the tip holder when placed inside it."""
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      ordered_items=ordered_items,
+      ordering=ordering,
+      category=category,
+      model=model,
+      with_tips=with_tips,
+      frame_height=frame_height,
+    )
+    self.sinking_depth = sinking_depth
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "sinking_depth": self.sinking_depth,
+    }
+
+
+class StandingTipRack(TipRack):
+  """It's defining geometric characteristic is that it is completely self-sufficient and does not require a separate TipHolder to embed into."""
+
+  # TODO

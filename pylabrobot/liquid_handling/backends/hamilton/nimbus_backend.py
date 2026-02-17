@@ -44,6 +44,7 @@ from pylabrobot.resources import Tip
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
 from pylabrobot.resources.hamilton.nimbus_decks import NimbusDeck
+from pylabrobot.resources.tip_rack import EmbeddedTipRack
 from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def _get_tip_type_from_tip(tip: Tip) -> int:
   if tip.tip_size == TipSize.LOW_VOLUME:  # 10ul tip
     return NimbusTipType.LOW_VOLUME_10UL_FILTER if tip.has_filter else NimbusTipType.LOW_VOLUME_10UL
 
-  if tip.tip_size == TipSize.STANDARD_VOLUME and tip.maximal_volume < 60:  # 50ul tip
+  if tip.tip_size == TipSize.STANDARD_VOLUME and tip.maximal_volume < 100:  # 50ul tip
     return NimbusTipType.TIP_50UL_FILTER if tip.has_filter else NimbusTipType.TIP_50UL
 
   if tip.tip_size == TipSize.STANDARD_VOLUME:  # 300ul tip
@@ -1385,54 +1386,6 @@ class NimbusBackend(HamiltonTCPBackend):
 
     return x_positions_full, y_positions_full
 
-  def _compute_tip_handling_parameters(
-    self,
-    ops: Sequence[Union[Pickup, Drop]],
-    use_channels: List[int],
-    use_fixed_offset: bool = False,
-    fixed_offset_mm: float = 10.0,
-  ):
-    """Calculate Z positions for tip pickup/drop operations.
-
-    Pickup (use_fixed_offset=False): Z based on tip length
-      z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
-    Drop (use_fixed_offset=True): Z based on fixed offset (matches VantageBackend default)
-      z_start = max_z + fixed_offset_mm (default 10.0mm), z_stop = max_z
-
-    Returns: (begin_position, end_position) in 0.01mm units
-    """
-    if not isinstance(self.deck, NimbusDeck):
-      raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
-
-    z_positions_mm: List[float] = []
-    for op in ops:
-      abs_location = op.resource.get_location_wrt(self.deck) + op.offset
-      hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
-      z_positions_mm.append(hamilton_coord.z)
-
-    max_z_hamilton = max(z_positions_mm)  # Highest resource Z in Hamilton coordinates
-
-    if use_fixed_offset:
-      # For drop operations: use fixed offsets relative to resource surface
-      begin_position_mm = max_z_hamilton + fixed_offset_mm
-      end_position_mm = max_z_hamilton
-    else:
-      # For pickup operations: use tip length
-      # Similar to STAR backend: z_start = max_z + max_total_tip_length, z_stop = max_z + max_tip_length
-      max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-      max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
-      begin_position_mm = max_z_hamilton + max_total_tip_length
-      end_position_mm = max_z_hamilton + max_tip_length
-
-    # Convert to 0.01mm units
-    begin_position = [round(begin_position_mm * 100)] * len(ops)
-    end_position = [round(end_position_mm * 100)] * len(ops)
-
-    begin_position_full = self._fill_by_channels(begin_position, use_channels, default=0)
-    end_position_full = self._fill_by_channels(end_position, use_channels, default=0)
-
-    return begin_position_full, end_position_full
-
   async def pick_up_tips(
     self,
     ops: List[Pickup],
@@ -1483,8 +1436,36 @@ class NimbusBackend(HamiltonTCPBackend):
       logger.warning(f"Could not check tip presence before pickup: {e}")
 
     x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
-    begin_tip_pick_up_process, end_tip_pick_up_process = self._compute_tip_handling_parameters(
-      ops, use_channels
+
+    # Compute Z positions for pickup
+    z_positions_mm: List[float] = []
+    for op in ops:
+      abs_location = op.resource.get_location_wrt(self.deck) + op.offset
+      hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
+      z_positions_mm.append(hamilton_coord.z)
+
+    max_z_hamilton = max(z_positions_mm)
+
+    tip_rack = ops[0].resource.parent
+    if not isinstance(tip_rack, EmbeddedTipRack):
+      raise TypeError("Tip rack must be an EmbeddedTipRack")
+
+    collar_height = ops[0].tip.collar_height
+    if any(op.tip.collar_height != collar_height for op in ops):
+      raise ValueError("All tips must have the same collar_height")
+
+    fitting_depth = ops[0].tip.fitting_depth
+    if any(op.tip.fitting_depth != fitting_depth for op in ops):
+      raise ValueError("All tips must have the same fitting_depth")
+
+    begin_position_mm = max_z_hamilton + collar_height
+    end_position_mm = begin_position_mm - fitting_depth
+
+    begin_tip_pick_up_process = self._fill_by_channels(
+      [round(begin_position_mm * 100)] * len(ops), use_channels, default=0
+    )
+    end_tip_pick_up_process = self._fill_by_channels(
+      [round(end_position_mm * 100)] * len(ops), use_channels, default=0
     )
 
     # Build tip pattern array (True for active channels, False for inactive)
@@ -1618,9 +1599,35 @@ class NimbusBackend(HamiltonTCPBackend):
       # Compute x and y positions for regular resources
       x_positions_full, y_positions_full = self._compute_ops_xy_locations(ops, use_channels)
 
-      # Compute Z positions using fixed offsets (not tip length) for drop operations
-      begin_tip_deposit_process, end_tip_deposit_process = self._compute_tip_handling_parameters(
-        ops, use_channels, use_fixed_offset=True
+      # Compute Z positions for drop operations
+      z_positions_mm: List[float] = []
+      for op in ops:
+        abs_location = op.resource.get_location_wrt(self.deck) + op.offset
+        hamilton_coord = self.deck.to_hamilton_coordinate(abs_location)
+        z_positions_mm.append(hamilton_coord.z)
+
+      max_z_hamilton = max(z_positions_mm)
+
+      tip_rack = ops[0].resource.parent
+      if not isinstance(tip_rack, EmbeddedTipRack):
+        raise TypeError("Tip rack must be an EmbeddedTipRack")
+
+      total_tip_length = ops[0].tip.total_tip_length
+      if any(op.tip.total_tip_length != total_tip_length for op in ops):
+        raise ValueError("All tips must have the same total_tip_length")
+
+      collar_height = ops[0].tip.collar_height
+      if any(op.tip.collar_height != collar_height for op in ops):
+        raise ValueError("All tips must have the same collar_height")
+
+      end_position_mm = max_z_hamilton - total_tip_length + collar_height
+      begin_position_mm = end_position_mm + 10.0  # I think 10mm might be the collar height
+
+      begin_tip_deposit_process = self._fill_by_channels(
+        [round(begin_position_mm * 100)] * len(ops), use_channels, default=0
+      )
+      end_tip_deposit_process = self._fill_by_channels(
+        [round(end_position_mm * 100)] * len(ops), use_channels, default=0
       )
 
       # Compute final Z positions. Use the traverse height if not provided. Fill to num_channels.

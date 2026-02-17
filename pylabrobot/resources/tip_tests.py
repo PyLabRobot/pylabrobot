@@ -23,6 +23,7 @@ class TipTests(unittest.TestCase):
         "total_tip_length": 10.0,
         "maximal_volume": 10.0,
         "fitting_depth": 1.0,
+        "collar_height": None,
       },
     )
 
@@ -49,6 +50,7 @@ class TipTests(unittest.TestCase):
         "maximal_volume": 10.0,
         "pickup_method": "OUT_OF_RACK",
         "tip_size": "HIGH_VOLUME",
+        "collar_height": None,
       },
     )
 
