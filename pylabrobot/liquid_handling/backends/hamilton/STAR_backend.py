@@ -7838,23 +7838,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.6 Query CoRe 96 Head --------------
 
-  async def measure_tip_presence_in_core_96_head(self):
-    """Deprecated - use `head96_measure_tip_presence` instead.
+  async def request_tip_presence_in_core_96_head(self):
+    """Deprecated - use `head96_request_tip_presence` instead.
 
     Returns:
       dictionary with key qh:
         qh: 0 = no tips, 1 = tips are picked up
     """
     warnings.warn(  # TODO: remove 2026-06
-      "`measure_tip_presence_in_core_96_head` is deprecated and will be "
-      "removed in 2026-06 use `head96_measure_tip_presence` instead.",
+      "`request_tip_presence_in_core_96_head` is deprecated and will be "
+      "removed in 2026-06 use `head96_request_tip_presence` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
 
     return await self.send_command(module="C0", command="QH", fmt="qh#")
 
-  async def head96_measure_tip_presence(self) -> int:
+  async def head96_request_tip_presence(self) -> int:
     """Request Tip presence on the 96-Head
 
     Note: this command requests this information from the STAR(let)'s
