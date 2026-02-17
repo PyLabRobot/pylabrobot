@@ -175,7 +175,7 @@ class STARChatterboxBackend(STARBackend):
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
 
-  async def request_tip_presence(self) -> List[Optional[bool]]:
+  async def measure_tip_presence(self) -> List[Optional[bool]]:
     """Return mock tip presence based on the tip tracker state.
 
     Returns:

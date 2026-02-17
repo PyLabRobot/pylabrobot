@@ -1250,7 +1250,7 @@ class NimbusBackend(HamiltonTCPBackend):
     """Stop the backend and close connection."""
     await HamiltonTCPBackend.stop(self)
 
-  async def request_tip_presence(self) -> List[Optional[bool]]:
+  async def measure_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.
 
     Returns:

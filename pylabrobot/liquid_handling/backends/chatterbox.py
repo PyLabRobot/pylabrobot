@@ -229,7 +229,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   async def drop_resource(self, drop: ResourceDrop):
     print(f"Dropping resource: {drop}")
 
-  async def request_tip_presence(self) -> List[Optional[bool]]:
+  async def measure_tip_presence(self) -> List[Optional[bool]]:
     """Return tip presence based on the tip tracker state.
 
     Returns:

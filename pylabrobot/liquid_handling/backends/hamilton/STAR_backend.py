@@ -1473,7 +1473,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       if self.core96_head_installed:
         await self.move_core_96_to_safe_position()
 
-    tip_presences = await self.request_tip_presence()
+    tip_presences = await self.measure_tip_presence()
     self._num_channels = len(tip_presences)
 
     async def set_up_pip():
@@ -1850,7 +1850,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     # Make sure we have tips on all channels and know their lengths
-    tip_presence = await self.request_tip_presence()
+    tip_presence = await self.measure_tip_presence()
     if not all(tip_presence[idx] for idx in use_channels):
       raise RuntimeError("All specified channels must have tips attached.")
 
@@ -2186,7 +2186,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     if channels is None:
-      channel_occupancy = await self.request_tip_presence()
+      channel_occupancy = await self.measure_tip_presence()
       channels = [ch for ch, occupied in enumerate(channel_occupancy) if occupied]
     else:
       # Validate that all provided channels are within valid range
@@ -6381,7 +6381,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channel_idx: Index of pipetting channel. Must be between 0 and 15.  0 is the backmost channel.
     """
 
-    if not (await self.request_tip_presence())[channel_idx]:
+    if not (await self.measure_tip_presence())[channel_idx]:
       raise RuntimeError(f"No tip mounted on channel {channel_idx}")
 
     if not 0 <= channel_idx <= self.num_channels - 1:
@@ -6397,7 +6397,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Extract z-coordinate and convert to mm
     return float(z_pos_query["rd"] / 10)
 
-  async def request_tip_presence(self) -> List[Optional[bool]]:
+  async def measure_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.
 
     Returns:
@@ -7838,23 +7838,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10.6 Query CoRe 96 Head --------------
 
-  async def request_tip_presence_in_core_96_head(self):
-    """Deprecated - use `head96_request_tip_presence` instead.
+  async def measure_tip_presence_in_core_96_head(self):
+    """Deprecated - use `head96_measure_tip_presence` instead.
 
     Returns:
       dictionary with key qh:
         qh: 0 = no tips, 1 = tips are picked up
     """
     warnings.warn(  # TODO: remove 2026-06
-      "`request_tip_presence_in_core_96_head` is deprecated and will be "
-      "removed in 2026-06 use `head96_request_tip_presence` instead.",
+      "`measure_tip_presence_in_core_96_head` is deprecated and will be "
+      "removed in 2026-06 use `head96_measure_tip_presence` instead.",
       DeprecationWarning,
       stacklevel=2,
     )
 
     return await self.send_command(module="C0", command="QH", fmt="qh#")
 
-  async def head96_request_tip_presence(self) -> int:
+  async def head96_measure_tip_presence(self) -> int:
     """Request Tip presence on the 96-Head
 
     Note: this command requests this information from the STAR(let)'s
@@ -10239,7 +10239,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Ensure tip is mounted
-    tip_presence = await self.request_tip_presence()
+    tip_presence = await self.measure_tip_presence()
     if not tip_presence[channel_idx]:
       raise RuntimeError(f"No tip mounted on channel {channel_idx}")
 
@@ -10642,7 +10642,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Ensure tip is mounted
-    tip_presence = await self.request_tip_presence()
+    tip_presence = await self.measure_tip_presence()
     if not tip_presence[channel_idx]:
       raise RuntimeError(f"No tip mounted on channel {channel_idx}")
 
@@ -10745,7 +10745,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     # Check there is a tip on the channel
-    all_channel_occupancy = await self.request_tip_presence()
+    all_channel_occupancy = await self.measure_tip_presence()
     if not all_channel_occupancy[channel_idx]:
       raise RuntimeError(f"No tip present on channel {channel_idx}")
 

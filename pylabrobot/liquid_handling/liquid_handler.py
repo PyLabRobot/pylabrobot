@@ -504,7 +504,7 @@ class LiquidHandler(Resource, Machine):
     successes = [error is None] * len(pickups)
     if error is not None:
       try:
-        tip_presence = await self.backend.request_tip_presence()
+        tip_presence = await self.backend.measure_tip_presence()
         successes = [tip_presence[ch] is True for ch in use_channels]
       except Exception as tip_presence_error:
         if not isinstance(tip_presence_error, NotImplementedError):
@@ -650,7 +650,7 @@ class LiquidHandler(Resource, Machine):
     successes = [error is None] * len(drops)
     if error is not None:
       try:
-        tip_presence = await self.backend.request_tip_presence()
+        tip_presence = await self.backend.measure_tip_presence()
         successes = [tip_presence[ch] is False for ch in use_channels]
       except Exception as tip_presence_error:
         if not isinstance(tip_presence_error, NotImplementedError):
