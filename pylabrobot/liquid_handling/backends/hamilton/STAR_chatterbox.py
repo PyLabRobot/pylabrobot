@@ -184,14 +184,6 @@ class STARChatterboxBackend(STARBackend):
     """
     return [self.head[ch].has_tip for ch in range(self.num_channels)]
 
-  async def channels_sense_tip_presence(self) -> List[int]:
-    """Return mock tip presence as integers (STAR firmware format).
-
-    Returns:
-      List of integers where 0 = no tip, 1 = tip present (for each channel).
-    """
-    return [int(self.head[ch].has_tip) for ch in range(self.num_channels)]
-
   async def request_z_pos_channel_n(self, channel: int) -> float:
     return 285.0
 

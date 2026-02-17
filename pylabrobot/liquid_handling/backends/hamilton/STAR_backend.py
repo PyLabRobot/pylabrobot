@@ -6398,24 +6398,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return float(z_pos_query["rd"] / 10)
 
   async def measure_tip_presence(self) -> List[Optional[bool]]:
-    """Request tip presence on each channel.
+    """Measure tip presence on all single channels using their sleeve sensors.
 
     Returns:
       A list of length `num_channels` where each element is `True` if a tip is mounted,
       `False` if not, or `None` if unknown.
     """
-    raw = await self.channels_sense_tip_presence()
-    return [bool(v) for v in raw]
-
-  async def channels_sense_tip_presence(self) -> List[int]:
-    """Measure tip presence on all single channels using their sleeve sensors.
-
-    Returns:
-      List of integers where 0 = no tip, 1 = tip present (for each channel)
-    """
-
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
-    return cast(List[int], resp.get("rt"))
+    return [bool(v) for v in cast(List[int], resp.get("rt"))]
 
   async def request_pip_height_last_lld(self) -> List[float]:
     """
