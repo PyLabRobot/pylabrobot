@@ -1,0 +1,238 @@
+syntax = "proto3";
+package pylabrobot.resources.remote;
+
+// ============================================================
+// Messages
+// ============================================================
+
+message Empty {}
+
+message Coordinate {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message Rotation {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message Size {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message TipData {
+  string type = 1;           // "Tip" or "HamiltonTip"
+  string name = 2;
+  bool has_filter = 3;
+  double total_tip_length = 4;
+  double maximal_volume = 5;
+  double fitting_depth = 6;
+  string tip_size = 7;       // TipSize enum name, empty if plain Tip
+  string pickup_method = 8;  // TipPickupMethod enum name, empty if plain Tip
+}
+
+message ResourceData {
+  string name = 1;
+  string type = 2;           // Python class name: "Well", "Plate", "TipSpot", etc.
+  double size_x = 3;
+  double size_y = 4;
+  double size_z = 5;
+  string category = 6;
+  string model = 7;
+  Coordinate location = 8;
+  Rotation rotation = 9;
+  string parent_name = 10;
+
+  optional double material_z_thickness = 11;
+  optional double max_volume = 12;
+
+  string well_bottom_type = 13;
+  string cross_section_type = 14;
+
+  string plate_type = 15;
+  bool has_lid = 16;
+
+  TipData prototype_tip = 17;
+
+  map<string, string> ordering = 18;
+
+  optional double nesting_z_height = 19;
+}
+
+message ResourceTree {
+  ResourceData data = 1;
+  repeated ResourceTree children = 2;
+}
+
+message VolumeTrackerState {
+  double volume = 1;
+  double pending_volume = 2;
+  double max_volume = 3;
+  bool is_disabled = 4;
+}
+
+message TipTrackerState {
+  bool has_tip = 1;
+  TipData tip = 2;
+  bool is_disabled = 3;
+}
+
+// ============================================================
+// Requests
+// ============================================================
+
+message GetTreeRequest {
+  string root_name = 1;
+}
+
+message ResourceByNameRequest {
+  string name = 1;
+}
+
+message GetLocationWrtRequest {
+  string resource_name = 1;
+  string other_name = 2;
+  string anchor_x = 3;
+  string anchor_y = 4;
+  string anchor_z = 5;
+}
+
+message GetAbsoluteLocationRequest {
+  string resource_name = 1;
+  string anchor_x = 2;
+  string anchor_y = 3;
+  string anchor_z = 4;
+}
+
+message GetAbsoluteRotationRequest {
+  string resource_name = 1;
+}
+
+message GetAbsoluteSizeRequest {
+  string resource_name = 1;
+}
+
+message GetHighestPointRequest {
+  string resource_name = 1;
+}
+
+message LocationWrtItem {
+  string resource_name = 1;
+  string other_name = 2;
+  string anchor_x = 3;
+  string anchor_y = 4;
+  string anchor_z = 5;
+}
+
+message BatchGetLocationWrtRequest {
+  repeated LocationWrtItem items = 1;
+}
+
+message BatchCoordinateResponse {
+  repeated Coordinate coordinates = 1;
+}
+
+message ComputeVolumeHeightRequest {
+  string resource_name = 1;
+  double value = 2;
+}
+
+message FloatResponse {
+  double value = 1;
+}
+
+message BoolResponse {
+  bool value = 1;
+}
+
+message GetTipRequest {
+  string tip_spot_name = 1;
+}
+
+message TrackerOpRequest {
+  string resource_name = 1;
+  double volume = 2;
+}
+
+message BatchTrackerOpRequest {
+  repeated TrackerOpRequest ops = 1;
+}
+
+message TipTrackerOpRequest {
+  string tip_spot_name = 1;
+}
+
+message CommitRollbackRequest {
+  repeated string resource_names = 1;
+}
+
+message AssignChildRequest {
+  string child_name = 1;
+  string parent_name = 2;
+  Coordinate location = 3;
+}
+
+message UnassignChildRequest {
+  string resource_name = 1;
+}
+
+message HasLidRequest {
+  string plate_name = 1;
+}
+
+// ============================================================
+// Service
+// ============================================================
+
+service DeckService {
+  // --- Tree ---
+  rpc GetTree(GetTreeRequest) returns (ResourceTree);
+  rpc GetResource(ResourceByNameRequest) returns (ResourceData);
+  rpc HasResource(ResourceByNameRequest) returns (BoolResponse);
+  rpc GetTrashArea(Empty) returns (ResourceData);
+  rpc GetTrashArea96(Empty) returns (ResourceData);
+
+  // --- Spatial ---
+  rpc GetLocationWrt(GetLocationWrtRequest) returns (Coordinate);
+  rpc GetAbsoluteLocation(GetAbsoluteLocationRequest) returns (Coordinate);
+  rpc GetAbsoluteRotation(GetAbsoluteRotationRequest) returns (Rotation);
+  rpc GetAbsoluteSize(GetAbsoluteSizeRequest) returns (Size);
+  rpc GetHighestPoint(GetHighestPointRequest) returns (FloatResponse);
+  rpc BatchGetLocationWrt(BatchGetLocationWrtRequest) returns (BatchCoordinateResponse);
+
+  // --- Computed methods ---
+  rpc ComputeVolumeFromHeight(ComputeVolumeHeightRequest) returns (FloatResponse);
+  rpc ComputeHeightFromVolume(ComputeVolumeHeightRequest) returns (FloatResponse);
+  rpc SupportsComputeHeightVolume(ResourceByNameRequest) returns (BoolResponse);
+  rpc HasLid(HasLidRequest) returns (BoolResponse);
+
+  // --- Tip access ---
+  rpc GetTip(GetTipRequest) returns (TipData);
+
+  // --- Volume tracker ---
+  rpc GetVolumeTrackerState(ResourceByNameRequest) returns (VolumeTrackerState);
+  rpc RemoveLiquid(TrackerOpRequest) returns (Empty);
+  rpc AddLiquid(TrackerOpRequest) returns (Empty);
+  rpc BatchRemoveLiquid(BatchTrackerOpRequest) returns (Empty);
+  rpc BatchAddLiquid(BatchTrackerOpRequest) returns (Empty);
+
+  // --- Tip tracker ---
+  rpc GetTipTrackerState(ResourceByNameRequest) returns (TipTrackerState);
+  rpc RemoveTip(TipTrackerOpRequest) returns (Empty);
+  rpc AddTip(TipTrackerOpRequest) returns (Empty);
+
+  // --- Commit / Rollback ---
+  rpc CommitVolumeTrackers(CommitRollbackRequest) returns (Empty);
+  rpc RollbackVolumeTrackers(CommitRollbackRequest) returns (Empty);
+  rpc CommitTipTrackers(CommitRollbackRequest) returns (Empty);
+  rpc RollbackTipTrackers(CommitRollbackRequest) returns (Empty);
+
+  // --- Structure mutation ---
+  rpc AssignChild(AssignChildRequest) returns (Empty);
+  rpc UnassignChild(UnassignChildRequest) returns (Empty);
+}
