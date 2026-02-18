@@ -4,7 +4,8 @@ import unittest
 import unittest.mock
 
 import pytest
-import requests
+import urllib.request
+
 import websockets
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
@@ -103,8 +104,8 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
 
   def test_get_index_html(self):
     """Test that the index.html file is returned."""
-    r = requests.get("http://localhost:1337/", timeout=10)
-    self.assertEqual(r.status_code, 200)
+    r = urllib.request.urlopen("http://localhost:1337/", timeout=10)
+    self.assertEqual(r.status, 200)
     self.assertIn(
       r.headers["Content-Type"],
       ["text/html", "text/html; charset=utf-8"],
