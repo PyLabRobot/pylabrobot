@@ -200,7 +200,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def approach(
     self,
-    position: Union[PreciseFlexCartesianCoords, Dict["PFAxis", float]],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ):
     """Move the arm to an approach position (offset from target).
@@ -235,7 +235,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def pick_up_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, Dict["PFAxis", float]],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     plate_width: float,
     access: Optional[AccessPattern] = None,
     finger_speed_percent: float = 50.0,
@@ -288,7 +288,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def drop_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, Dict["PFAxis", float]],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ):
     """Place a plate at the specified position.
@@ -325,7 +325,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._place_plate_c(cartesian_position=position, access=access)
 
   async def move_to(
-    self, position: Union[PreciseFlexCartesianCoords, Dict["PFAxis", float]]
+    self, position: Union[PreciseFlexCartesianCoords, Dict[int, float]]
   ):
     """Move the arm to a specified position in 3D space.
 
@@ -343,7 +343,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     else:
       raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
-  async def get_joint_position(self) -> Dict["PFAxis", float]:
+  async def get_joint_position(self) -> Dict[int, float]:
     """Get the current joint position of the arm."""
 
     await self.wait_for_eom()
@@ -411,7 +411,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     return data
 
-  async def _approach_j(self, joint_position: Dict["PFAxis", float], access: AccessPattern):
+  async def _approach_j(self, joint_position: Dict[int, float], access: AccessPattern):
     """Move the arm to a position above the specified coordinates.
 
     The approach behavior depends on the access pattern:
@@ -422,7 +422,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._set_grip_detail(access)
     await self.move_to_stored_location_appro(self.location_index, self.profile_index)
 
-  async def _pick_plate_j(self, joint_position: Dict["PFAxis", float], access: AccessPattern):
+  async def _pick_plate_j(self, joint_position: Dict[int, float], access: AccessPattern):
     """Pick a plate from the specified position using joint coordinates."""
     await self.set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail(access)
@@ -430,7 +430,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
 
-  async def _place_plate_j(self, joint_position: Dict["PFAxis", float], access: AccessPattern):
+  async def _place_plate_j(self, joint_position: Dict[int, float], access: AccessPattern):
     """Place a plate at the specified position using joint coordinates."""
     await self.set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail(access)
@@ -860,7 +860,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def get_location_angles(
     self, location_index: int
-  ) -> tuple[int, int, Dict["PFAxis", float]]:
+  ) -> tuple[int, int, Dict[int, float]]:
     """Get the angle values for the specified station index.
 
     Args:
@@ -887,7 +887,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
   async def set_joint_angles(
     self,
     location_index: int,
-    joint_position: Dict["PFAxis", float],
+    joint_position: Dict[int, float],
   ) -> None:
     """Set joint angles for stored location, handling rail configuration."""
     if self._has_rail:
@@ -1103,7 +1103,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     return (x, y, z, yaw, pitch, roll, config)
 
-  async def dest_j(self, arg1: int = 0) -> Dict["PFAxis", float]:
+  async def dest_j(self, arg1: int = 0) -> Dict[int, float]:
     """Get the destination or current joint location of the robot.
 
     Args:
@@ -1533,7 +1533,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     await self.send_command(cmd)
 
-  async def move_j(self, profile_index: int, joint_coords: Dict["PFAxis", float]) -> None:
+  async def move_j(self, profile_index: int, joint_coords: Dict[int, float]) -> None:
     """Move the robot using joint coordinates, handling rail configuration."""
     if self._has_rail:
       angles_str = (
@@ -2345,7 +2345,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     return (x, y, z, yaw, pitch, roll)
 
-  def _parse_angles_response(self, parts: List[str]) -> Dict["PFAxis", float]:
+  def _parse_angles_response(self, parts: List[str]) -> Dict[int, float]:
     """Parse angle values from a response string.
 
     For self._has_rail=True:  wire order is [base, shoulder, elbow, wrist, gripper, rail]

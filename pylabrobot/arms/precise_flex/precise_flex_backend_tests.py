@@ -1,4 +1,5 @@
 import unittest
+from typing import Dict
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.arms.backend import HorizontalAccess, VerticalAccess
@@ -213,7 +214,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 moveAppro 1 1\r\n",  # move_to_stored_location_appro
     ]
-    position = {
+    position: Dict[int, float] = {
       PFAxis.RAIL: 0.0,
       PFAxis.BASE: 10.0,
       PFAxis.SHOULDER: 20.0,
@@ -303,7 +304,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(
       TypeError, "place_plate only supports CartesianCoords for PreciseFlex."
     ):
-      await self.backend.drop_resource([1, 2, 3, 4, 5, 6])
+      await self.backend.drop_resource("invalid")  # type: ignore
 
   async def test_move_to_joint_space(self):
     self.mock_socket_instance.readline.side_effect = [
@@ -311,7 +312,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 0.0 0.0 0.0 0.0 0.0\r\n",  # wherej response (current position)
       b"0 moveJ 1 10.0 20.0 30.0 40.0 50.0\r\n",  # moveJ response
     ]
-    position = {
+    position: Dict[int, float] = {
       PFAxis.BASE: 10.0,
       PFAxis.SHOULDER: 20.0,
       PFAxis.ELBOW: 30.0,
@@ -387,7 +388,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 moveAppro 1 1\r\n",  # move_to_stored_location_appro
     ]
-    joint_coords = {
+    joint_coords: Dict[int, float] = {
       PFAxis.RAIL: 0.0,
       PFAxis.BASE: 10.0,
       PFAxis.SHOULDER: 20.0,
@@ -406,7 +407,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 1\r\n",  # pick_plate_from_stored_position
     ]
-    joint_coords = {
+    joint_coords: Dict[int, float] = {
       PFAxis.RAIL: 0.0,
       PFAxis.BASE: 10.0,
       PFAxis.SHOULDER: 20.0,
@@ -425,7 +426,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 placeplate 1 0 0\r\n",  # place_plate_to_stored_position
     ]
-    joint_coords = {
+    joint_coords: Dict[int, float] = {
       PFAxis.RAIL: 0.0,
       PFAxis.BASE: 10.0,
       PFAxis.SHOULDER: 20.0,
@@ -741,7 +742,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_joint_angles_no_rail(self):
     self.mock_socket_instance.readline.return_value = b"0 locAngles 1 10.0 20.0 30.0 40.0 50.0\r\n"
-    joint_coords = {
+    joint_coords: Dict[int, float] = {
       PFAxis.RAIL: 0.0,
       PFAxis.BASE: 10.0,
       PFAxis.SHOULDER: 20.0,
@@ -758,7 +759,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.readline.return_value = (
       b"0 locAngles 1 0.0 10.0 20.0 30.0 40.0 50.0\r\n"
     )
-    joint_coords = {
+    joint_coords: Dict[int, float] = {
       PFAxis.RAIL: 0.0,
       PFAxis.BASE: 10.0,
       PFAxis.SHOULDER: 20.0,
