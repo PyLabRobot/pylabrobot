@@ -3888,7 +3888,7 @@ class VantageBackend(HamiltonLiquidHandler):
     presences_int = cast(List[int], resp["rt"])
     return [bool(p) for p in presences_int]
 
-  async def measure_tip_presence(self) -> List[Optional[bool]]:
+  async def request_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.
 
     Returns:

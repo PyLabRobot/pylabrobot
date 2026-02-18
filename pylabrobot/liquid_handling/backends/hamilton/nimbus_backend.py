@@ -995,7 +995,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Query tip presence (use discovered address only)
     try:
-      tip_present = await self.measure_tip_presence()
+      tip_present = await self.request_tip_presence()
       logger.info(f"Tip presence: {tip_present}")
     except Exception as e:
       logger.warning(f"Failed to query tip presence: {e}")
@@ -1248,7 +1248,7 @@ class NimbusBackend(HamiltonTCPBackend):
     """Stop the backend and close connection."""
     await HamiltonTCPBackend.stop(self)
 
-  async def measure_tip_presence(self) -> List[Optional[bool]]:
+  async def request_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.
 
     Returns:
@@ -1478,7 +1478,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Check tip presence before picking up tips
     try:
-      tip_present = await self.measure_tip_presence()
+      tip_present = await self.request_tip_presence()
       channels_with_tips = [
         i for i, present in enumerate(tip_present) if i in use_channels and present
       ]
