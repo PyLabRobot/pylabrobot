@@ -2,10 +2,9 @@ import json
 import time
 import unittest
 import unittest.mock
-
-import pytest
 import urllib.request
 
+import pytest
 import websockets
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
