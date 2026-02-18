@@ -324,9 +324,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       raise TypeError("place_plate only supports CartesianCoords for PreciseFlex.")
     await self._place_plate_c(cartesian_position=position, access=access)
 
-  async def move_to(
-    self, position: Union[PreciseFlexCartesianCoords, Dict[int, float]]
-  ):
+  async def move_to(self, position: Union[PreciseFlexCartesianCoords, Dict[int, float]]):
     """Move the arm to a specified position in 3D space.
 
     Args:
@@ -858,9 +856,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   # region LOCATION COMMANDS
 
-  async def get_location_angles(
-    self, location_index: int
-  ) -> tuple[int, int, Dict[int, float]]:
+  async def get_location_angles(self, location_index: int) -> tuple[int, int, Dict[int, float]]:
     """Get the angle values for the specified station index.
 
     Args:
