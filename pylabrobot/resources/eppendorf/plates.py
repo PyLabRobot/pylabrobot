@@ -103,7 +103,7 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
 def eppendorf_96_wellplate_1000ul_Vb(name: str) -> Plate:
   """Eppendorf Deepwell Plate 96/1000uL, cat. no.: 951032921
 
-  https://archive.vn/uMRwv 
+  https://archive.vn/uMRwv
   """
 
   material_z_thickness = 1.05  # measured with ztouch_probe_z_height_using_channel
@@ -145,13 +145,13 @@ def eppendorf_96_wellplate_2000ul_vb(name: str) -> Plate:
   """
 
   material_z_thickness = 1.3  # measured with ztouch_probe_z_height_using_channel
-  well_diameter_top = 8.2    # from spec (d)
+  well_diameter_top = 8.2  # from spec (d)
 
   return Plate(
     name=name,
     size_x=127.8,  # l
-    size_y=85.5,   # w
-    size_z=44.1,   # h
+    size_y=85.5,  # w
+    size_z=44.1,  # h
     lid=None,
     model=eppendorf_96_wellplate_2000ul_vb.__name__,
     plate_type="skirted",
