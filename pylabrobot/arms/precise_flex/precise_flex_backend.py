@@ -418,8 +418,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self.io.write(command.encode("utf-8") + b"\n")
     reply = await self.io.readline()
 
-    # print(f"Sent command: {command}, Received reply: {reply!r}")
-
     return self._parse_reply_ensure_successful(reply)
 
   def _parse_reply_ensure_successful(self, reply: bytes) -> str:
@@ -429,7 +427,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
     - replycode is an integer at the beginning
     - data is rest of the line (excluding CRLF)
     """
-    # print("REPLY: ", reply)
     text = reply.decode().strip()  # removes \r\n
     if not text:
       raise PreciseFlexError(-1, "Empty reply from device.")
@@ -1577,12 +1574,12 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """Move the robot using joint coordinates, handling rail configuration."""
     if self._has_rail:
       angles_str = (
-        f"{joint_coords.rail} "
         f"{joint_coords.base} "
         f"{joint_coords.shoulder} "
         f"{joint_coords.elbow} "
         f"{joint_coords.wrist} "
-        f"{joint_coords.gripper}"
+        f"{joint_coords.gripper} "
+        f"{joint_coords.rail} "
       )
     else:
       # Exclude rail for robots without rail
@@ -2399,12 +2396,12 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     if self._has_rail:
       return (
+        float(parts[5]) if len(parts) > 5 else 0.0,
         float(parts[0]),
         float(parts[1]),
         float(parts[2]),
         float(parts[3]) if len(parts) > 3 else 0.0,
         float(parts[4]) if len(parts) > 4 else 0.0,
-        float(parts[5]) if len(parts) > 5 else 0.0,
       )
 
     return (
