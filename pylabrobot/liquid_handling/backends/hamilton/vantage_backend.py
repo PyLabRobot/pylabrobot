@@ -3888,15 +3888,6 @@ class VantageBackend(HamiltonLiquidHandler):
     presences_int = cast(List[int], resp["rt"])
     return [bool(p) for p in presences_int]
 
-  async def measure_tip_presence(self) -> List[Optional[bool]]:
-    """Request tip presence on each channel.
-
-    Returns:
-      A list of length `num_channels` where each element is `True` if a tip is mounted,
-      `False` if not, or `None` if unknown.
-    """
-    return await self.query_tip_presence()
-
   async def request_height_of_last_lld(self):
     """Request height of last LLD"""
 

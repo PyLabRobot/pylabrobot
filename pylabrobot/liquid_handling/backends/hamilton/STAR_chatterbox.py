@@ -175,14 +175,25 @@ class STARChatterboxBackend(STARBackend):
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
 
-  async def measure_tip_presence(self) -> List[Optional[bool]]:
-    """Return mock tip presence based on the tip tracker state.
+  async def request_tip_presence(self, mock_presence: Optional[List[int]] = None) -> List[int]:
+    """Check mock tip presence with optional list for user-modifiable tip presence.
+    (Mock MEM-READ command)
+    Args:
+      mock_presence: Optional list indicating tip presence for each channel.
+        1 indicates tip present, 0 indicates no tip.
+
+    Default: all tips present.
 
     Returns:
-      A list of length `num_channels` where each element is `True` if a tip is mounted,
-      `False` if not, or `None` if unknown.
+      List of integers indicating tip presence for each channel.
     """
-    return [self.head[ch].has_tip for ch in range(self.num_channels)]
+    if mock_presence is None:
+      return [1 for channel_idx in range(self.num_channels)]
+
+    assert (
+      len(mock_presence) == self.num_channels
+    ), "Length of mock_presence must match number of channels."
+    return mock_presence
 
   async def request_z_pos_channel_n(self, channel: int) -> float:
     return 285.0
