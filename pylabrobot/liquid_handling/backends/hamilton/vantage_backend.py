@@ -3895,7 +3895,8 @@ class VantageBackend(HamiltonLiquidHandler):
       A list of length `num_channels` where each element is `True` if a tip is mounted,
       `False` if not, or `None` if unknown.
     """
-    return await self.query_tip_presence()
+    result: List[Optional[bool]] = list(await self.query_tip_presence())
+    return result
 
   async def request_height_of_last_lld(self):
     """Request height of last LLD"""
