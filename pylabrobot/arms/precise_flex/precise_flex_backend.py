@@ -206,7 +206,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """Move the arm to an approach position (offset from target).
 
     Args:
-      position: Target position (CartesianCoords or Dict[PFAxis, float])
+      position: Target position (CartesianCoords or Dict[int, float])
       access: Access pattern defining how to approach the target. Defaults to VerticalAccess() if not specified.
 
     Example:
@@ -231,7 +231,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self._approach_c(position, access)
     else:
-      raise TypeError("Position must be of type Dict[PFAxis, float] or CartesianCoords.")
+      raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
   async def pick_up_resource(
     self,
@@ -284,7 +284,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     elif isinstance(position, dict):
       await self._pick_plate_j(position, access)
     else:
-      raise TypeError("Position must be of type Dict[PFAxis, float] or CartesianCoords.")
+      raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
   async def drop_resource(
     self,
@@ -341,7 +341,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self.move_c(profile_index=self.profile_index, cartesian_coords=position)
     else:
-      raise TypeError("Position must be of type Dict[PFAxis, float] or CartesianCoords.")
+      raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
   async def get_joint_position(self) -> Dict["PFAxis", float]:
     """Get the current joint position of the arm."""
