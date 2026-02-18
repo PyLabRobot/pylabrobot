@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 from pylabrobot.arms.backend import HorizontalAccess, VerticalAccess
 from pylabrobot.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
-from pylabrobot.arms.precise_flex.joints import PreciseFlexJointCoords
+from pylabrobot.arms.precise_flex.joints import PFAxis
 from pylabrobot.arms.precise_flex.precise_flex_backend import PreciseFlexBackend, PreciseFlexError
 from pylabrobot.io.socket import Socket  # Import Socket for mocking
 from pylabrobot.resources import Coordinate, Rotation
@@ -55,30 +55,6 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertFalse(backend_with_rail.horizontal_compliance)
     self.assertEqual(backend_with_rail.horizontal_compliance_torque, 0)
     self.assertEqual(backend_with_rail.timeout, 20)
-
-  async def test_convert_to_joint_space_no_rail(self):
-    position = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0]
-    joint_coords = self.backend._convert_to_joint_space(position)
-    self.assertEqual(joint_coords.rail, 0.0)
-    self.assertEqual(joint_coords.base, 10.0)
-    self.assertEqual(joint_coords.shoulder, 20.0)
-    self.assertEqual(joint_coords.elbow, 30.0)
-    self.assertEqual(joint_coords.wrist, 40.0)
-    self.assertEqual(joint_coords.gripper, 50.0)
-
-  async def test_convert_to_joint_space_no_rail_error(self):
-    position = [1.0, 10.0, 20.0, 30.0, 40.0, 50.0]
-    with self.assertRaisesRegex(
-      ValueError, r"Position\[0\] \(rail\) must be 0.0 for robot without rail."
-    ):
-      self.backend._convert_to_joint_space(position)
-
-  async def test_convert_to_joint_space_too_few_elements(self):
-    position = [0.0, 10.0, 20.0, 30.0, 40.0]
-    with self.assertRaisesRegex(
-      ValueError, "Position must have 6 joint angles for robot with rail."
-    ):
-      self.backend._convert_to_joint_space(position)
 
   async def test_convert_to_cartesian_space(self):
     position = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, ElbowOrientation.RIGHT)
@@ -237,7 +213,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 moveAppro 1 1\r\n",  # move_to_stored_location_appro
     ]
-    position = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0]
+    position = {
+      PFAxis.RAIL: 0.0,
+      PFAxis.BASE: 10.0,
+      PFAxis.SHOULDER: 20.0,
+      PFAxis.ELBOW: 30.0,
+      PFAxis.WRIST: 40.0,
+      PFAxis.GRIPPER: 50.0,
+    }
     await self.backend.approach(position)
     self.mock_socket_instance.write.assert_any_call(b"locAngles 1 10.0 20.0 30.0 40.0 50.0\n")
     self.mock_socket_instance.write.assert_any_call(b"StationType 1 1 0 100 0 10\n")
@@ -263,7 +246,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_approach_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Iterable\[float\] or CartesianCoords."
+      TypeError, r"Position must be of type Dict\[PFAxis, float\] or CartesianCoords."
     ):
       await self.backend.approach("invalid")  # type: ignore
 
@@ -294,7 +277,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 OK\r\n",  # For set_grasp_data
     ]
     with self.assertRaisesRegex(
-      TypeError, r"Position must be of type Iterable\[float\] or CartesianCoords."
+      TypeError, r"Position must be of type Dict\[PFAxis, float\] or CartesianCoords."
     ):
       await self.backend.pick_up_resource("invalid", plate_width=1.0)  # type: ignore
 
@@ -323,8 +306,18 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       await self.backend.drop_resource([1, 2, 3, 4, 5, 6])
 
   async def test_move_to_joint_space(self):
-    self.mock_socket_instance.readline.return_value = b"0 moveJ 1 0.0 10.0 20.0 30.0 40.0 50.0\r\n"
-    position = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0]
+    self.mock_socket_instance.readline.side_effect = [
+      b"0 OK\r\n",  # waitForEom
+      b"0 0.0 0.0 0.0 0.0 0.0\r\n",  # wherej response (current position)
+      b"0 moveJ 1 10.0 20.0 30.0 40.0 50.0\r\n",  # moveJ response
+    ]
+    position = {
+      PFAxis.BASE: 10.0,
+      PFAxis.SHOULDER: 20.0,
+      PFAxis.ELBOW: 30.0,
+      PFAxis.WRIST: 40.0,
+      PFAxis.GRIPPER: 50.0,
+    }
     await self.backend.move_to(position)
     self.mock_socket_instance.write.assert_called_with(b"moveJ 1 10.0 20.0 30.0 40.0 50.0\n")
 
@@ -340,7 +333,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_move_to_invalid_position_type(self):
     with self.assertRaisesRegex(
-      TypeError, "Position must be of type Iterable\\[float\\] or CartesianCoords."
+      TypeError, r"Position must be of type Dict\[PFAxis, float\] or CartesianCoords."
     ):
       await self.backend.move_to("invalid")  # type: ignore
 
@@ -349,12 +342,12 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 10.0 20.0 30.0 40.0 50.0\r\n"  # 5 values for base, shoulder, elbow, wrist, gripper
     )
     joint_coords = await self.backend.get_joint_position()
-    self.assertEqual(joint_coords.rail, 0.0)
-    self.assertEqual(joint_coords.base, 10.0)
-    self.assertEqual(joint_coords.shoulder, 20.0)
-    self.assertEqual(joint_coords.elbow, 30.0)
-    self.assertEqual(joint_coords.wrist, 40.0)
-    self.assertEqual(joint_coords.gripper, 50.0)
+    self.assertEqual(joint_coords[PFAxis.RAIL], 0.0)
+    self.assertEqual(joint_coords[PFAxis.BASE], 10.0)
+    self.assertEqual(joint_coords[PFAxis.SHOULDER], 20.0)
+    self.assertEqual(joint_coords[PFAxis.ELBOW], 30.0)
+    self.assertEqual(joint_coords[PFAxis.WRIST], 40.0)
+    self.assertEqual(joint_coords[PFAxis.GRIPPER], 50.0)
     self.mock_socket_instance.write.assert_called_with(b"wherej\n")
 
   async def test_get_cartesian_position(self):
@@ -394,9 +387,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 moveAppro 1 1\r\n",  # move_to_stored_location_appro
     ]
-    joint_coords = PreciseFlexJointCoords(
-      rail=0.0, base=10.0, shoulder=20.0, elbow=30.0, wrist=40.0, gripper=50.0
-    )
+    joint_coords = {
+      PFAxis.RAIL: 0.0,
+      PFAxis.BASE: 10.0,
+      PFAxis.SHOULDER: 20.0,
+      PFAxis.ELBOW: 30.0,
+      PFAxis.WRIST: 40.0,
+      PFAxis.GRIPPER: 50.0,
+    }
     await self.backend._approach_j(joint_coords, VerticalAccess())
     self.mock_socket_instance.write.assert_any_call(b"locAngles 1 10.0 20.0 30.0 40.0 50.0\n")
     self.mock_socket_instance.write.assert_any_call(b"StationType 1 1 0 100 0 10\n")
@@ -408,9 +406,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 1\r\n",  # pick_plate_from_stored_position
     ]
-    joint_coords = PreciseFlexJointCoords(
-      rail=0.0, base=10.0, shoulder=20.0, elbow=30.0, wrist=40.0, gripper=50.0
-    )
+    joint_coords = {
+      PFAxis.RAIL: 0.0,
+      PFAxis.BASE: 10.0,
+      PFAxis.SHOULDER: 20.0,
+      PFAxis.ELBOW: 30.0,
+      PFAxis.WRIST: 40.0,
+      PFAxis.GRIPPER: 50.0,
+    }
     await self.backend._pick_plate_j(joint_coords, VerticalAccess())
     self.mock_socket_instance.write.assert_any_call(b"locAngles 1 10.0 20.0 30.0 40.0 50.0\n")
     self.mock_socket_instance.write.assert_any_call(b"StationType 1 1 0 100 0 10\n")
@@ -422,9 +425,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       b"0 StationType 1 1 0 50.0 0.0 0.0\r\n",  # _set_grip_detail
       b"0 placeplate 1 0 0\r\n",  # place_plate_to_stored_position
     ]
-    joint_coords = PreciseFlexJointCoords(
-      rail=0.0, base=10.0, shoulder=20.0, elbow=30.0, wrist=40.0, gripper=50.0
-    )
+    joint_coords = {
+      PFAxis.RAIL: 0.0,
+      PFAxis.BASE: 10.0,
+      PFAxis.SHOULDER: 20.0,
+      PFAxis.ELBOW: 30.0,
+      PFAxis.WRIST: 40.0,
+      PFAxis.GRIPPER: 50.0,
+    }
     await self.backend._place_plate_j(joint_coords, VerticalAccess())
     self.mock_socket_instance.write.assert_any_call(b"locAngles 1 10.0 20.0 30.0 40.0 50.0\n")
     self.mock_socket_instance.write.assert_any_call(b"StationType 1 1 0 100 0 10\n")
@@ -715,15 +723,15 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_get_location_angles(self):
     self.mock_socket_instance.readline.return_value = b"0 1 1 10.0 20.0 30.0 40.0 50.0 60.0\r\n"  # type_code, station_index, 5 values for base, shoulder, elbow, wrist, gripper
-    type_code, station_index, a1, a2, a3, a4, a5, a6 = await self.backend.get_location_angles(1)
+    type_code, station_index, angles = await self.backend.get_location_angles(1)
     self.assertEqual(type_code, 1)
     self.assertEqual(station_index, 1)
-    self.assertEqual(a1, 0.0)  # rail
-    self.assertEqual(a2, 10.0)  # base
-    self.assertEqual(a3, 20.0)
-    self.assertEqual(a4, 30.0)
-    self.assertEqual(a5, 40.0)
-    self.assertEqual(a6, 50.0)
+    self.assertEqual(angles[PFAxis.RAIL], 0.0)
+    self.assertEqual(angles[PFAxis.BASE], 10.0)
+    self.assertEqual(angles[PFAxis.SHOULDER], 20.0)
+    self.assertEqual(angles[PFAxis.ELBOW], 30.0)
+    self.assertEqual(angles[PFAxis.WRIST], 40.0)
+    self.assertEqual(angles[PFAxis.GRIPPER], 50.0)
     self.mock_socket_instance.write.assert_called_with(b"locAngles 1\n")
 
   async def test_get_location_angles_invalid_type(self):
@@ -733,9 +741,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_set_joint_angles_no_rail(self):
     self.mock_socket_instance.readline.return_value = b"0 locAngles 1 10.0 20.0 30.0 40.0 50.0\r\n"
-    joint_coords = PreciseFlexJointCoords(
-      rail=0.0, base=10.0, shoulder=20.0, elbow=30.0, wrist=40.0, gripper=50.0
-    )
+    joint_coords = {
+      PFAxis.RAIL: 0.0,
+      PFAxis.BASE: 10.0,
+      PFAxis.SHOULDER: 20.0,
+      PFAxis.ELBOW: 30.0,
+      PFAxis.WRIST: 40.0,
+      PFAxis.GRIPPER: 50.0,
+    }
     await self.backend.set_joint_angles(1, joint_coords)
     self.mock_socket_instance.write.assert_called_with(b"locAngles 1 10.0 20.0 30.0 40.0 50.0\n")
 
@@ -745,9 +758,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.readline.return_value = (
       b"0 locAngles 1 0.0 10.0 20.0 30.0 40.0 50.0\r\n"
     )
-    joint_coords = PreciseFlexJointCoords(
-      rail=0.0, base=10.0, shoulder=20.0, elbow=30.0, wrist=40.0, gripper=50.0
-    )
+    joint_coords = {
+      PFAxis.RAIL: 0.0,
+      PFAxis.BASE: 10.0,
+      PFAxis.SHOULDER: 20.0,
+      PFAxis.ELBOW: 30.0,
+      PFAxis.WRIST: 40.0,
+      PFAxis.GRIPPER: 50.0,
+    }
     await backend_with_rail.set_joint_angles(1, joint_coords)
     self.mock_socket_instance.write.assert_called_with(
       b"locAngles 1 0.0 10.0 20.0 30.0 40.0 50.0\n"
@@ -872,25 +890,25 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     self.mock_socket_instance.readline.return_value = (
       b"0 10.0 20.0 30.0 40.0 50.0\r\n"  # 5 values for base, shoulder, elbow, wrist, gripper
     )
-    a1, a2, a3, a4, a5, a6 = await self.backend.dest_j()
-    self.assertEqual(a1, 0.0)  # rail
-    self.assertEqual(a2, 10.0)  # base
-    self.assertEqual(a3, 20.0)
-    self.assertEqual(a4, 30.0)
-    self.assertEqual(a5, 40.0)
-    self.assertEqual(a6, 50.0)
+    angles = await self.backend.dest_j()
+    self.assertEqual(angles[PFAxis.RAIL], 0.0)
+    self.assertEqual(angles[PFAxis.BASE], 10.0)
+    self.assertEqual(angles[PFAxis.SHOULDER], 20.0)
+    self.assertEqual(angles[PFAxis.ELBOW], 30.0)
+    self.assertEqual(angles[PFAxis.WRIST], 40.0)
+    self.assertEqual(angles[PFAxis.GRIPPER], 50.0)
     self.mock_socket_instance.write.assert_called_with(b"destJ\n")
 
     self.mock_socket_instance.readline.return_value = (
       b"0 10.0 20.0 30.0 40.0 50.0\r\n"  # 5 values for base, shoulder, elbow, wrist, gripper
     )
-    a1, a2, a3, a4, a5, a6 = await self.backend.dest_j(1)
-    self.assertEqual(a1, 0.0)  # rail
-    self.assertEqual(a2, 10.0)  # base
-    self.assertEqual(a3, 20.0)
-    self.assertEqual(a4, 30.0)
-    self.assertEqual(a5, 40.0)
-    self.assertEqual(a6, 50.0)
+    angles = await self.backend.dest_j(1)
+    self.assertEqual(angles[PFAxis.RAIL], 0.0)
+    self.assertEqual(angles[PFAxis.BASE], 10.0)
+    self.assertEqual(angles[PFAxis.SHOULDER], 20.0)
+    self.assertEqual(angles[PFAxis.ELBOW], 30.0)
+    self.assertEqual(angles[PFAxis.WRIST], 40.0)
+    self.assertEqual(angles[PFAxis.GRIPPER], 50.0)
     self.mock_socket_instance.write.assert_called_with(b"destJ 1\n")
 
   async def test_dest_j_invalid_response(self):
@@ -1524,13 +1542,13 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_parse_angles_response_no_rail(self):
     parts = ["10.0", "20.0", "30.0", "40.0", "50.0"]
-    a1, a2, a3, a4, a5, a6 = self.backend._parse_angles_response(parts)
-    self.assertEqual(a1, 0.0)
-    self.assertEqual(a2, 10.0)
-    self.assertEqual(a3, 20.0)
-    self.assertEqual(a4, 30.0)
-    self.assertEqual(a5, 40.0)
-    self.assertEqual(a6, 50.0)
+    angles = self.backend._parse_angles_response(parts)
+    self.assertEqual(angles[PFAxis.RAIL], 0.0)
+    self.assertEqual(angles[PFAxis.BASE], 10.0)
+    self.assertEqual(angles[PFAxis.SHOULDER], 20.0)
+    self.assertEqual(angles[PFAxis.ELBOW], 30.0)
+    self.assertEqual(angles[PFAxis.WRIST], 40.0)
+    self.assertEqual(angles[PFAxis.GRIPPER], 50.0)
 
     with self.assertRaisesRegex(PreciseFlexError, "Unexpected response format for angles."):
       self.backend._parse_angles_response(["10.0", "20.0"])
@@ -1539,13 +1557,13 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
     backend_with_rail = PreciseFlexBackend(has_rail=True, host="localhost", port=10100)
     backend_with_rail.io = self.mock_socket_instance
     parts = ["0.0", "10.0", "20.0", "30.0", "40.0", "50.0"]
-    a1, a2, a3, a4, a5, a6 = backend_with_rail._parse_angles_response(parts)
-    self.assertEqual(a1, 0.0)
-    self.assertEqual(a2, 10.0)
-    self.assertEqual(a3, 20.0)
-    self.assertEqual(a4, 30.0)
-    self.assertEqual(a5, 40.0)
-    self.assertEqual(a6, 50.0)
+    angles = backend_with_rail._parse_angles_response(parts)
+    self.assertEqual(angles[PFAxis.RAIL], 50.0)
+    self.assertEqual(angles[PFAxis.BASE], 0.0)
+    self.assertEqual(angles[PFAxis.SHOULDER], 10.0)
+    self.assertEqual(angles[PFAxis.ELBOW], 20.0)
+    self.assertEqual(angles[PFAxis.WRIST], 30.0)
+    self.assertEqual(angles[PFAxis.GRIPPER], 40.0)
 
     with self.assertRaisesRegex(PreciseFlexError, "Unexpected response format for angles."):
       backend_with_rail._parse_angles_response(["0.0", "10.0"])

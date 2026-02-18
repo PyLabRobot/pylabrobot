@@ -1,24 +1,10 @@
-from dataclasses import dataclass
-from typing import Iterator
+from enum import IntEnum
 
 
-@dataclass
-class PreciseFlexJointCoords:
-  base: float
-  shoulder: float
-  elbow: float
-  wrist: float
-  gripper: float
-  rail: float = 0
-
-  def __iter__(self) -> Iterator[float]:
-    return iter(
-      [
-        self.rail,
-        self.base,
-        self.shoulder,
-        self.elbow,
-        self.wrist,
-        self.gripper,
-      ]
-    )
+class PFAxis(IntEnum):
+  BASE = 1
+  SHOULDER = 2
+  ELBOW = 3
+  WRIST = 4
+  GRIPPER = 5
+  RAIL = 6
