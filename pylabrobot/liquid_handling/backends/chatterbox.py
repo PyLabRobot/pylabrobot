@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Optional, Union
 
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -228,6 +228,15 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
 
   async def drop_resource(self, drop: ResourceDrop):
     print(f"Dropping resource: {drop}")
+
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Return tip presence based on the tip tracker state.
+
+    Returns:
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
+    """
+    return [self.head[ch].has_tip for ch in range(self.num_channels)]
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return True

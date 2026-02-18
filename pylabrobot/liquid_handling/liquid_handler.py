@@ -494,16 +494,23 @@ class LiquidHandler(Resource, Machine):
       del backend_kwargs[extra]
 
     # actually pick up the tips
-    error: Optional[Exception] = None
+    error: Optional[BaseException] = None
     try:
       await self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
-    except Exception as e:
+    except BaseException as e:
       error = e
 
     # determine which channels were successful
     successes = [error is None] * len(pickups)
-    if error is not None and isinstance(error, ChannelizedError):
-      successes = [channel_idx not in error.errors for channel_idx in use_channels]
+    if error is not None:
+      try:
+        tip_presence = await self.backend.request_tip_presence()
+        successes = [tip_presence[ch] is True for ch in use_channels]
+      except Exception as tip_presence_error:
+        if not isinstance(tip_presence_error, NotImplementedError):
+          logger.warning("Failed to query tip presence after error: %s", tip_presence_error)
+        if isinstance(error, ChannelizedError):
+          successes = [channel_idx not in error.errors for channel_idx in use_channels]
 
     # commit or rollback the state trackers
     for channel, op, success in zip(use_channels, pickups, successes):
@@ -633,16 +640,23 @@ class LiquidHandler(Resource, Machine):
       del backend_kwargs[extra]
 
     # actually drop the tips
-    error: Optional[Exception] = None
+    error: Optional[BaseException] = None
     try:
       await self.backend.drop_tips(ops=drops, use_channels=use_channels, **backend_kwargs)
-    except Exception as e:
+    except BaseException as e:
       error = e
 
     # determine which channels were successful
     successes = [error is None] * len(drops)
-    if error is not None and isinstance(error, ChannelizedError):
-      successes = [channel_idx not in error.errors for channel_idx in use_channels]
+    if error is not None:
+      try:
+        tip_presence = await self.backend.request_tip_presence()
+        successes = [tip_presence[ch] is False for ch in use_channels]
+      except Exception as tip_presence_error:
+        if not isinstance(tip_presence_error, NotImplementedError):
+          logger.warning("Failed to query tip presence after error: %s", tip_presence_error)
+        if isinstance(error, ChannelizedError):
+          successes = [channel_idx not in error.errors for channel_idx in use_channels]
 
     # commit or rollback the state trackers
     for channel, op, success in zip(use_channels, drops, successes):
