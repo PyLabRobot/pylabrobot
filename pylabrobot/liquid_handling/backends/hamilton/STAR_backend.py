@@ -6415,8 +6415,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       DeprecationWarning,
       stacklevel=2,
     )
-    resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
-    return cast(List[int], resp.get("rt"))
+    return [int(v) for v in await self.request_tip_presence() if v is not None]
 
   async def request_pip_height_last_lld(self) -> List[float]:
     """
