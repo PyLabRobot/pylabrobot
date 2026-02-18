@@ -191,48 +191,86 @@ message HasLidRequest {
 
 service DeckService {
   // --- Tree ---
+
+  // Return the full resource tree rooted at the given resource (or the deck if empty).
   rpc GetTree(GetTreeRequest) returns (ResourceTree);
+  // Return the flat data for a single resource by name.
   rpc GetResource(ResourceByNameRequest) returns (ResourceData);
+  // Check whether a resource with the given name exists on the deck.
   rpc HasResource(ResourceByNameRequest) returns (BoolResponse);
+  // Return the single-channel trash area resource.
   rpc GetTrashArea(Empty) returns (ResourceData);
+  // Return the 96-channel trash area resource.
   rpc GetTrashArea96(Empty) returns (ResourceData);
 
   // --- Spatial ---
+
+  // Get the location of a resource relative to another resource, with anchor offsets.
   rpc GetLocationWrt(GetLocationWrtRequest) returns (Coordinate);
+  // Get the absolute (deck-space) location of a resource, with anchor offsets.
   rpc GetAbsoluteLocation(GetAbsoluteLocationRequest) returns (Coordinate);
+  // Get the cumulative rotation of a resource in deck-space.
   rpc GetAbsoluteRotation(GetAbsoluteRotationRequest) returns (Rotation);
+  // Get the rotation-aware bounding-box size of a resource.
   rpc GetAbsoluteSize(GetAbsoluteSizeRequest) returns (Size);
+  // Get the highest known z-coordinate point of a resource and its children.
   rpc GetHighestPoint(GetHighestPointRequest) returns (FloatResponse);
+  // Batch version of GetLocationWrt for multiple resource pairs at once.
   rpc BatchGetLocationWrt(BatchGetLocationWrtRequest) returns (BatchCoordinateResponse);
 
   // --- Computed methods ---
+
+  // Compute the liquid volume in a well given a liquid height.
   rpc ComputeVolumeFromHeight(ComputeVolumeHeightRequest) returns (FloatResponse);
+  // Compute the liquid height in a well given a liquid volume.
   rpc ComputeHeightFromVolume(ComputeVolumeHeightRequest) returns (FloatResponse);
+  // Check whether a resource supports height/volume conversion functions.
   rpc SupportsComputeHeightVolume(ResourceByNameRequest) returns (BoolResponse);
+  // Check whether a plate currently has a lid attached.
   rpc HasLid(HasLidRequest) returns (BoolResponse);
 
   // --- Tip access ---
+
+  // Get the tip currently sitting on a tip spot.
   rpc GetTip(GetTipRequest) returns (TipData);
 
   // --- Volume tracker ---
+
+  // Get the current volume tracker state (volume, pending, max, disabled) for a container.
   rpc GetVolumeTrackerState(ResourceByNameRequest) returns (VolumeTrackerState);
+  // Record a pending liquid removal from a container's volume tracker.
   rpc RemoveLiquid(TrackerOpRequest) returns (Empty);
+  // Record a pending liquid addition to a container's volume tracker.
   rpc AddLiquid(TrackerOpRequest) returns (Empty);
+  // Batch version of RemoveLiquid for multiple containers at once.
   rpc BatchRemoveLiquid(BatchTrackerOpRequest) returns (Empty);
+  // Batch version of AddLiquid for multiple containers at once.
   rpc BatchAddLiquid(BatchTrackerOpRequest) returns (Empty);
 
   // --- Tip tracker ---
+
+  // Get the current tip tracker state (has_tip, tip data, disabled) for a tip spot.
   rpc GetTipTrackerState(ResourceByNameRequest) returns (TipTrackerState);
+  // Remove the tip from a tip spot's tracker (e.g. after a pick-up).
   rpc RemoveTip(TipTrackerOpRequest) returns (Empty);
+  // Add a new tip to a tip spot's tracker (e.g. after a return).
   rpc AddTip(TipTrackerOpRequest) returns (Empty);
 
   // --- Commit / Rollback ---
+
+  // Commit pending volume tracker changes for the given containers.
   rpc CommitVolumeTrackers(CommitRollbackRequest) returns (Empty);
+  // Roll back pending volume tracker changes for the given containers.
   rpc RollbackVolumeTrackers(CommitRollbackRequest) returns (Empty);
+  // Commit pending tip tracker changes for the given tip spots.
   rpc CommitTipTrackers(CommitRollbackRequest) returns (Empty);
+  // Roll back pending tip tracker changes for the given tip spots.
   rpc RollbackTipTrackers(CommitRollbackRequest) returns (Empty);
 
   // --- Structure mutation ---
+
+  // Re-parent a child resource under a new parent at the given location.
   rpc AssignChild(AssignChildRequest) returns (Empty);
+  // Remove a resource from its current parent.
   rpc UnassignChild(UnassignChildRequest) returns (Empty);
 }
