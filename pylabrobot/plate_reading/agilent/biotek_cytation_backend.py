@@ -134,6 +134,9 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
     self._filters = None
     self._slow_mode = None
 
+    self._clear_imaging_state()
+
+  def _clear_imaging_state(self):
     self._exposure = None
     self._focal_height = None
     self._gain = None
@@ -491,6 +494,10 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       device_info[node_feature_name] = node_feature_value
 
     return device_info
+  
+  async def close(self, plate: Optional[Plate], slow: bool = False):
+    await super().close(plate, slow)
+    self._clear_imaging_state()
 
   def start_acquisition(self):
     if self._cam is None:
