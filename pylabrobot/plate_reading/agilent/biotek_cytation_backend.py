@@ -373,34 +373,37 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
         if configuration is None:
           raise RuntimeError("Failed to load objective configuration")
         # TODO: loading when no objective is set. I believe it's four 0s.
-        middle_part = re.split(r"\s+", configuration.decode("utf-8"))[1]
+        middle_part = re.split(r"\s+", configuration.rstrip(b"\x03").decode("utf-8"))[1]
         # not the real part number, but it's what's used in the xml files. eg "UPLFLN"
-        part_number = "".join([weird_encoding[x] for x in bytes.fromhex(middle_part)])
-        part_number2objective = {
-          "UPLSAPO 40X2": Objective.O_40X_PL_APO,
-          "LUCPLFLN 60X": Objective.O_60X_PL_FL,
-          "UPLFLN 4X": Objective.O_4X_PL_FL,
-          "LUCPLFLN 20XPh": Objective.O_20X_PL_FL_Phase,
-          "LUCPLFLN 40XPh": Objective.O_40X_PL_FL_Phase,
-          "U PLAN": Objective.O_2_5X_PL_ACH_Meiji,
-          "UPLFLN 10XPh": Objective.O_10X_PL_FL_Phase,
-          "PLAPON 1.25X": Objective.O_1_25X_PL_APO,
-          "UPLFLN 10X": Objective.O_10X_PL_FL,
-          "UPLFLN 60XOI": Objective.O_60X_OIL_PL_FL,
-          "PLN 4X": Objective.O_4X_PL_ACH,
-          "PLN 40X": Objective.O_40X_PL_ACH,
-          "LUCPLFLN 40X": Objective.O_40X_PL_FL,
-          "EC-H-Plan/2x": Objective.O_2X_PL_ACH_Motic,
-          "UPLFLN 100XO2": Objective.O_100X_OIL_PL_FL,
-          "UPLFLN 4XPh": Objective.O_4X_PL_FL_Phase,
-          "LUCPLFLN 20X": Objective.O_20X_PL_FL,
-          "PLN 20X": Objective.O_20X_PL_ACH,
-          "FLUAR 2.5X/0.12": Objective.O_2_5X_FL_Zeiss,
-          "UPLSAPO 100XO": Objective.O_100X_OIL_PL_APO,
-          "PLAPON 60XO": Objective.O_60X_OIL_PL_APO,
-          "UPLSAPO 20X": Objective.O_20X_PL_APO,
-        }
-        self._objectives.append(part_number2objective[part_number])
+        if middle_part == "0000":
+          self._objectives.append(None)
+        else:
+          part_number = "".join([weird_encoding[x] for x in bytes.fromhex(middle_part)])
+          part_number2objective = {
+            "uplsapo 40x2": Objective.O_40X_PL_APO,
+            "lucplfln 60X": Objective.O_60X_PL_FL,
+            "uplfln 4x": Objective.O_4X_PL_FL,
+            "lucplfln 20xph": Objective.O_20X_PL_FL_Phase,
+            "lucplfln 40xph": Objective.O_40X_PL_FL_Phase,
+            "u plan": Objective.O_2_5X_PL_ACH_Meiji,
+            "uplfln 10xph": Objective.O_10X_PL_FL_Phase,
+            "plapon 1.25x": Objective.O_1_25X_PL_APO,
+            "uplfln 10x": Objective.O_10X_PL_FL,
+            "uplfln 60xoi": Objective.O_60X_OIL_PL_FL,
+            "pln 4x": Objective.O_4X_PL_ACH,
+            "pln 40x": Objective.O_40X_PL_ACH,
+            "lucplfln 40x": Objective.O_40X_PL_FL,
+            "ec-h-plan/2x": Objective.O_2X_PL_ACH_Motic,
+            "uplfln 100xO2": Objective.O_100X_OIL_PL_FL,
+            "uplfln 4xph": Objective.O_4X_PL_FL_Phase,
+            "lucplfln 20X": Objective.O_20X_PL_FL,
+            "pln 20x": Objective.O_20X_PL_ACH,
+            "fluar 2.5x/0.12": Objective.O_2_5X_FL_Zeiss,
+            "uplsapo 100xo": Objective.O_100X_OIL_PL_APO,
+            "plapon 60xo": Objective.O_60X_OIL_PL_APO,
+            "uplsapo 20x": Objective.O_20X_PL_APO,
+          }
+          self._objectives.append(part_number2objective[part_number.lower()])
     elif self.version.startswith("2"):
       for spot in range(1, 7):
         # +1 for some reason, eg first is h2
@@ -497,7 +500,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
       device_info[node_feature_name] = node_feature_value
 
     return device_info
-  
+
   async def close(self, plate: Optional[Plate], slow: bool = False):
     await super().close(plate, slow)
     self._clear_imaging_state()
