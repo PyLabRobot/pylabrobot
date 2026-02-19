@@ -50,8 +50,7 @@ class PumpArray(Machine):
     data_copy = data.copy()
     calibration_data = data_copy.pop("calibration", None)
     if calibration_data is not None:
-      calibration = PumpCalibration.deserialize(calibration_data)
-      data_copy["calibration"] = calibration
+      data_copy["calibration"] = PumpCalibration(**calibration_data)
     return super().deserialize(data_copy)
 
   async def run_revolutions(

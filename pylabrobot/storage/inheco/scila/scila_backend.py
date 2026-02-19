@@ -131,7 +131,3 @@ class SCILABackend(MachineBackend):
       "scila_ip": self._sila_interface.machine_ip,
       "client_ip": self._sila_interface.client_ip,
     }
-
-  @classmethod
-  def deserialize(cls, data: dict[str, Any]) -> "SCILABackend":
-    return cls(scila_ip=data["scila_ip"], client_ip=data.get("client_ip"))

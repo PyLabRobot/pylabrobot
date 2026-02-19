@@ -2,6 +2,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
 
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
 from pylabrobot.storage.inheco.scila.scila_backend import SCILABackend
 
@@ -220,15 +221,15 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(data["client_ip"])
 
   def test_deserialize(self):
-    data = {"scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
-    SCILABackend.deserialize(data)
+    data = {"type": "SCILABackend", "scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
+    MachineBackend.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(
       client_ip="192.168.1.10", machine_ip="169.254.1.117"
     )
 
   def test_deserialize_no_client_ip(self):
-    data = {"scila_ip": "169.254.1.117"}
-    SCILABackend.deserialize(data)
+    data = {"type": "SCILABackend", "scila_ip": "169.254.1.117"}
+    MachineBackend.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
 
 
