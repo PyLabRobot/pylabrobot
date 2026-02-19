@@ -1,7 +1,7 @@
 import asyncio
 import warnings
 from abc import ABC
-from typing import Dict, Iterable, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.arms.backend import (
   AccessPattern,
@@ -11,7 +11,7 @@ from pylabrobot.arms.backend import (
 )
 from pylabrobot.arms.precise_flex.coords import ElbowOrientation, PreciseFlexCartesianCoords
 from pylabrobot.arms.precise_flex.error_codes import ERROR_CODES
-from pylabrobot.arms.precise_flex.joints import PreciseFlexJointCoords
+from pylabrobot.arms.precise_flex.joints import PFAxis
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -58,30 +58,6 @@ class PreciseFlexBackend(SCARABackend, ABC):
       warnings.warn(
         "Dual gripper support is experimental and may not work as expected.", UserWarning
       )
-
-  def _convert_to_joint_space(self, position: Iterable[float]) -> PreciseFlexJointCoords:
-    """Convert joint list to PreciseFlexJointCoords.
-
-    Args:
-      position: List of 6 floats (always padded to 6). position[0] must be 0.0 if robot has no rail.
-    """
-
-    position = list(position)
-
-    if len(position) < 6:
-      raise ValueError("Position must have 6 joint angles for robot with rail.")
-
-    if not self._has_rail and position[0] != 0.0:
-      raise ValueError("Position[0] (rail) must be 0.0 for robot without rail.")
-
-    return PreciseFlexJointCoords(
-      rail=position[0],
-      base=position[1],
-      shoulder=position[2],
-      elbow=position[3],
-      wrist=position[4],
-      gripper=position[5],
-    )
 
   def _convert_to_cartesian_space(
     self, position: tuple[float, float, float, float, float, float, Optional[ElbowOrientation]]
@@ -224,13 +200,13 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   async def approach(
     self,
-    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ):
     """Move the arm to an approach position (offset from target).
 
     Args:
-      position: Target position (CartesianCoords or Iterable[float])
+      position: Target position (CartesianCoords or Dict[int, float])
       access: Access pattern defining how to approach the target. Defaults to VerticalAccess() if not specified.
 
     Example:
@@ -250,17 +226,16 @@ class PreciseFlexBackend(SCARABackend, ABC):
     if access is None:
       access = VerticalAccess()
 
-    if isinstance(position, list):
-      joint_position = self._convert_to_joint_space(position)
-      await self._approach_j(joint_position, access)
+    if isinstance(position, dict):
+      await self._approach_j(position, access)
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self._approach_c(position, access)
     else:
-      raise TypeError("Position must be of type Iterable[float] or CartesianCoords.")
+      raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
   async def pick_up_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     plate_width: float,
     access: Optional[AccessPattern] = None,
     finger_speed_percent: float = 50.0,
@@ -269,7 +244,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     """Pick a plate from the specified position.
 
     Args:
-      position: Target position for pickup (CartesianCoords only, PreciseFlexJointCoords not supported)
+      position: Target position for pickup (CartesianCoords only, joint coords not supported)
       plate_width: Gripper width in millimeters used when gripping the plate.
       access: How to access the location (VerticalAccess or HorizontalAccess).  Defaults to VerticalAccess() if not specified.
       finger_speed_percent: Speed percentage for the gripper fingers (1-100)
@@ -306,21 +281,20 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     if isinstance(position, PreciseFlexCartesianCoords):
       await self._pick_plate_c(cartesian_position=position, access=access)
-    elif isinstance(position, list):
-      joint_position = self._convert_to_joint_space(position)
-      await self._pick_plate_j(joint_position, access)
+    elif isinstance(position, dict):
+      await self._pick_plate_j(position, access)
     else:
-      raise TypeError("Position must be of type Iterable[float] or CartesianCoords.")
+      raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
   async def drop_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
   ):
     """Place a plate at the specified position.
 
     Args:
-      position: Target position for placement (CartesianCoords only, PreciseFlexJointCoords not supported)
+      position: Target position for placement (CartesianCoords only, joint coords not supported)
       access: How to access the location (VerticalAccess or HorizontalAccess).  Defaults to VerticalAccess() if not specified.
 
     Raises:
@@ -350,33 +324,25 @@ class PreciseFlexBackend(SCARABackend, ABC):
       raise TypeError("place_plate only supports CartesianCoords for PreciseFlex.")
     await self._place_plate_c(cartesian_position=position, access=access)
 
-  async def move_to(self, position: Union[PreciseFlexCartesianCoords, Iterable[float]]):
+  async def move_to(self, position: Union[PreciseFlexCartesianCoords, Dict[int, float]]):
     """Move the arm to a specified position in 3D space.
 
     Args:
-      position: Either CartesianCoords or a 6-element list [rail, base, shoulder, elbow, wrist, gripper]
+      position: Either CartesianCoords or a dict mapping PFAxis to float values.
+        When using a dict, any unspecified axes will be filled in from the current position.
     """
-    if isinstance(position, list):
-      if len(position) < 6:
-        raise ValueError(
-          "Joint list must have 6 elements: [rail, base, shoulder, elbow, wrist, gripper]"
-        )
-      joint_coords = PreciseFlexJointCoords(
-        rail=position[0],
-        base=position[1],
-        shoulder=position[2],
-        elbow=position[3],
-        wrist=position[4],
-        gripper=position[5],
-      )
+    print(position, isinstance(position, dict))
+    if isinstance(position, dict):
+      current = await self.get_joint_position()
+      joint_coords = {**current, **position}
       await self.move_j(profile_index=self.profile_index, joint_coords=joint_coords)
     elif isinstance(position, PreciseFlexCartesianCoords):
       await self.move_c(profile_index=self.profile_index, cartesian_coords=position)
     else:
-      raise TypeError("Position must be of type Iterable[float] or CartesianCoords.")
+      raise TypeError("Position must be of type Dict[int, float] or CartesianCoords.")
 
-  async def get_joint_position(self) -> PreciseFlexJointCoords:
-    """Get the current position of the arm in 3D space."""
+  async def get_joint_position(self) -> Dict[int, float]:
+    """Get the current joint position of the arm."""
 
     await self.wait_for_eom()
 
@@ -389,8 +355,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     else:
       raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
 
-    axes = list(self._parse_angles_response(parts))
-    return self._convert_to_joint_space(axes)
+    return self._parse_angles_response(parts)
 
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in 3D space."""
@@ -444,7 +409,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     return data
 
-  async def _approach_j(self, joint_position: PreciseFlexJointCoords, access: AccessPattern):
+  async def _approach_j(self, joint_position: Dict[int, float], access: AccessPattern):
     """Move the arm to a position above the specified coordinates.
 
     The approach behavior depends on the access pattern:
@@ -455,7 +420,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     await self._set_grip_detail(access)
     await self.move_to_stored_location_appro(self.location_index, self.profile_index)
 
-  async def _pick_plate_j(self, joint_position: PreciseFlexJointCoords, access: AccessPattern):
+  async def _pick_plate_j(self, joint_position: Dict[int, float], access: AccessPattern):
     """Pick a plate from the specified position using joint coordinates."""
     await self.set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail(access)
@@ -463,7 +428,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       self.location_index, self.horizontal_compliance, self.horizontal_compliance_torque
     )
 
-  async def _place_plate_j(self, joint_position: PreciseFlexJointCoords, access: AccessPattern):
+  async def _place_plate_j(self, joint_position: Dict[int, float], access: AccessPattern):
     """Place a plate at the specified position using joint coordinates."""
     await self.set_joint_angles(self.location_index, joint_position)
     await self._set_grip_detail(access)
@@ -891,16 +856,14 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
   # region LOCATION COMMANDS
 
-  async def get_location_angles(
-    self, location_index: int
-  ) -> tuple[int, int, float, float, float, float, float, float]:
+  async def get_location_angles(self, location_index: int) -> tuple[int, int, Dict[int, float]]:
     """Get the angle values for the specified station index.
 
     Args:
       location_index: The station index, from 1 to N_LOC.
 
     Returns:
-      A tuple containing (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6)
+      A tuple containing (type_code, station_index, angles_dict)
 
     Raises:
       PreciseFlexError: If attempting to get angles from a Cartesian location.
@@ -913,35 +876,34 @@ class PreciseFlexBackend(SCARABackend, ABC):
       raise PreciseFlexError(-1, "Location is not of angles type.")
 
     station_index = int(parts[1])
-    angle1, angle2, angle3, angle4, angle5, angle6 = self._parse_angles_response(parts[2:])
+    angles = self._parse_angles_response(parts[2:])
 
-    return (type_code, station_index, angle1, angle2, angle3, angle4, angle5, angle6)
+    return (type_code, station_index, angles)
 
   async def set_joint_angles(
     self,
     location_index: int,
-    joint_position: PreciseFlexJointCoords,
+    joint_position: Dict[int, float],
   ) -> None:
     """Set joint angles for stored location, handling rail configuration."""
     if self._has_rail:
       await self.send_command(
         f"locAngles {location_index} "
-        f"{joint_position.rail} "
-        f"{joint_position.base} "
-        f"{joint_position.shoulder} "
-        f"{joint_position.elbow} "
-        f"{joint_position.wrist} "
-        f"{joint_position.gripper}"
+        f"{joint_position[PFAxis.RAIL]} "
+        f"{joint_position[PFAxis.BASE]} "
+        f"{joint_position[PFAxis.SHOULDER]} "
+        f"{joint_position[PFAxis.ELBOW]} "
+        f"{joint_position[PFAxis.WRIST]} "
+        f"{joint_position[PFAxis.GRIPPER]}"
       )
     else:
-      # Exclude rail for robots without rail
       await self.send_command(
         f"locAngles {location_index} "
-        f"{joint_position.base} "
-        f"{joint_position.shoulder} "
-        f"{joint_position.elbow} "
-        f"{joint_position.wrist} "
-        f"{joint_position.gripper}"
+        f"{joint_position[PFAxis.BASE]} "
+        f"{joint_position[PFAxis.SHOULDER]} "
+        f"{joint_position[PFAxis.ELBOW]} "
+        f"{joint_position[PFAxis.WRIST]} "
+        f"{joint_position[PFAxis.GRIPPER]}"
       )
 
   async def get_location_xyz(
@@ -1137,7 +1099,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     return (x, y, z, yaw, pitch, roll, config)
 
-  async def dest_j(self, arg1: int = 0) -> tuple[float, float, float, float, float, float]:
+  async def dest_j(self, arg1: int = 0) -> Dict[int, float]:
     """Get the destination or current joint location of the robot.
 
     Args:
@@ -1146,7 +1108,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
       1 = Return target joint location of the previous or current move
 
     Returns:
-      A list containing [axis1, axis2, ..., axisn]
+      A dict mapping PFAxis to float values.
       If arg1 = 1 or robot is moving, returns the target joint positions.
       If arg1 = 0 and robot is not moving, returns the current joint positions.
     """
@@ -1159,10 +1121,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     if not parts:
       raise PreciseFlexError(-1, "Unexpected response format from destJ command.")
 
-    # Ensure we have exactly 6 elements, padding with 0.0 if necessary
-    angle1, angle2, angle3, angle4, angle5, angle6 = self._parse_angles_response(parts)
-
-    return (angle1, angle2, angle3, angle4, angle5, angle6)
+    return self._parse_angles_response(parts)
 
   async def here_j(self, location_index: int) -> None:
     """Record the current position of the selected robot into the specified Location as angles.
@@ -1570,25 +1529,24 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     await self.send_command(cmd)
 
-  async def move_j(self, profile_index: int, joint_coords: PreciseFlexJointCoords) -> None:
+  async def move_j(self, profile_index: int, joint_coords: Dict[int, float]) -> None:
     """Move the robot using joint coordinates, handling rail configuration."""
     if self._has_rail:
       angles_str = (
-        f"{joint_coords.base} "
-        f"{joint_coords.shoulder} "
-        f"{joint_coords.elbow} "
-        f"{joint_coords.wrist} "
-        f"{joint_coords.gripper} "
-        f"{joint_coords.rail} "
+        f"{joint_coords[PFAxis.BASE]} "
+        f"{joint_coords[PFAxis.SHOULDER]} "
+        f"{joint_coords[PFAxis.ELBOW]} "
+        f"{joint_coords[PFAxis.WRIST]} "
+        f"{joint_coords[PFAxis.GRIPPER]} "
+        f"{joint_coords[PFAxis.RAIL]} "
       )
     else:
-      # Exclude rail for robots without rail
       angles_str = (
-        f"{joint_coords.base} "
-        f"{joint_coords.shoulder} "
-        f"{joint_coords.elbow} "
-        f"{joint_coords.wrist} "
-        f"{joint_coords.gripper}"
+        f"{joint_coords[PFAxis.BASE]} "
+        f"{joint_coords[PFAxis.SHOULDER]} "
+        f"{joint_coords[PFAxis.ELBOW]} "
+        f"{joint_coords[PFAxis.WRIST]} "
+        f"{joint_coords[PFAxis.GRIPPER]}"
       )
     await self.send_command(f"moveJ {profile_index} {angles_str}")
 
@@ -2383,32 +2341,31 @@ class PreciseFlexBackend(SCARABackend, ABC):
 
     return (x, y, z, yaw, pitch, roll)
 
-  def _parse_angles_response(
-    self, parts: List[str]
-  ) -> tuple[float, float, float, float, float, float]:
-    """
-    For self._has_rail=True:  [rail, base, shoulder, elbow, wrist, gripper]
-    For self._has_rail=False: [base, shoulder, elbow, wrist, gripper, 0.0(padding)]
+  def _parse_angles_response(self, parts: List[str]) -> Dict[int, float]:
+    """Parse angle values from a response string.
+
+    For self._has_rail=True:  wire order is [base, shoulder, elbow, wrist, gripper, rail]
+    For self._has_rail=False: wire order is [base, shoulder, elbow, wrist, gripper]
     """
 
     if len(parts) < 3:
       raise PreciseFlexError(-1, "Unexpected response format for angles.")
 
     if self._has_rail:
-      return (
-        float(parts[5]) if len(parts) > 5 else 0.0,
-        float(parts[0]),
-        float(parts[1]),
-        float(parts[2]),
-        float(parts[3]) if len(parts) > 3 else 0.0,
-        float(parts[4]) if len(parts) > 4 else 0.0,
-      )
+      return {
+        PFAxis.RAIL: float(parts[5]) if len(parts) > 5 else 0.0,
+        PFAxis.BASE: float(parts[0]),
+        PFAxis.SHOULDER: float(parts[1]),
+        PFAxis.ELBOW: float(parts[2]),
+        PFAxis.WRIST: float(parts[3]) if len(parts) > 3 else 0.0,
+        PFAxis.GRIPPER: float(parts[4]) if len(parts) > 4 else 0.0,
+      }
 
-    return (
-      0.0,
-      float(parts[0]),
-      float(parts[1]),
-      float(parts[2]) if len(parts) > 2 else 0.0,
-      float(parts[3]) if len(parts) > 3 else 0.0,
-      float(parts[4]) if len(parts) > 4 else 0.0,
-    )
+    return {
+      PFAxis.RAIL: 0.0,
+      PFAxis.BASE: float(parts[0]),
+      PFAxis.SHOULDER: float(parts[1]),
+      PFAxis.ELBOW: float(parts[2]) if len(parts) > 2 else 0.0,
+      PFAxis.WRIST: float(parts[3]) if len(parts) > 3 else 0.0,
+      PFAxis.GRIPPER: float(parts[4]) if len(parts) > 4 else 0.0,
+    }
