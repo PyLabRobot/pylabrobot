@@ -1,8 +1,12 @@
 """ Corning plates. """
 
 from pylabrobot.resources.height_volume_functions import (
+  calculate_liquid_height_in_container_2segments_round_vbottom,
   calculate_liquid_height_in_container_2segments_square_vbottom,
+  calculate_liquid_volume_container_2segments_round_vbottom,
   calculate_liquid_volume_container_2segments_square_vbottom,
+  compute_height_from_volume_conical_frustum_in_well,
+  compute_volume_from_height_conical_frustum_in_well,
 )
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
@@ -35,6 +39,12 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
 
   # This used to be Cos_96_EZWash in the Esvelt lab
 
+  # Corning MicroplateDimensions96-384-1536.pdf:
+  # top internal diameter 6.86mm, bottom internal diameter 6.35mm, well depth 10.67mm
+  BOTTOM_RADIUS = 6.35 / 2
+  TOP_RADIUS = 6.86 / 2
+  WELL_DEPTH = 10.67
+
   return Plate(
     name=name,
     size_x=127.76,
@@ -53,11 +63,21 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=6.86,  # top
       size_y=6.86,  # top
-      size_z=10.67,
+      size_z=WELL_DEPTH,
       material_z_thickness=0.5,
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,
+      compute_volume_from_height=lambda liquid_height: (
+        compute_volume_from_height_conical_frustum_in_well(
+          liquid_height, BOTTOM_RADIUS, TOP_RADIUS, WELL_DEPTH
+        )
+      ),
+      compute_height_from_volume=lambda liquid_volume: (
+        compute_height_from_volume_conical_frustum_in_well(
+          liquid_volume, BOTTOM_RADIUS, TOP_RADIUS, WELL_DEPTH
+        )
+      ),
     ),
   )
 
@@ -80,6 +100,82 @@ def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
 # Previous names in PLR:
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
   raise ValueError("Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead.")
+
+
+# # # # # # # # # # Cor_96_wellplate_320ul_Vb # # # # # # # # # #
+
+
+def Cor_96_wellplate_320ul_Vb(name: str, with_lid: bool = False) -> Plate:
+  """
+  Corning cat. no.s: 3894, 3896, 3897, 3898, 3342
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2c/US/en/Microplates/
+    Assay-Microplates/96-Well-Microplates/Corning%C2%AE-96-well-Clear-Polystyrene-Microplates/p/3894
+  - brand: Corning / Costar
+  - material: Polystyrene
+  - notes:
+      - Standard 96-well V-bottom microplate.
+      - Well geometry: conical V-bottom section (cone height ~1.6mm) transitioning to a
+        cylindrical section. Dimensions from Corning MicroplateDimensions96-384-1536.pdf:
+        top internal diameter 6.86mm, bottom internal diameter 6.37mm, well depth 11.12mm,
+        total well volume 320uL.
+  """
+
+  # Corning MicroplateDimensions96-384-1536.pdf:
+  # top internal diameter 6.86mm, bottom internal diameter 6.37mm, well depth 11.12mm
+  # The V-bottom is modeled as a cone (apex at bottom) transitioning to a cylinder.
+  # Cone height back-calculated from published total volume (320uL) using d=6.37mm.
+  WELL_DIAMETER = 6.37  # diameter at cone-to-cylinder transition
+  CONE_HEIGHT = 1.62  # mm, back-calculated to match 320uL total volume
+  CYLINDER_HEIGHT = 11.12 - CONE_HEIGHT  # 9.50mm
+  WELL_DEPTH = 11.12
+
+  return Plate(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=14.2,
+    lid=Cor_96_wellplate_320ul_Vb_Lid(name=name + "_lid") if with_lid else None,
+    model="Cor_96_wellplate_320ul_Vb",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.87,  # 14.3-6.86/2
+      dy=7.77,  # 11.2-6.86/2
+      dz=2.58,  # 14.2 - 11.12 - 0.5
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=6.86,
+      size_y=6.86,
+      size_z=WELL_DEPTH,
+      material_z_thickness=0.5,
+      bottom_type=WellBottomType.V,
+      cross_section_type=CrossSectionType.CIRCLE,
+      compute_volume_from_height=lambda liquid_height: (
+        calculate_liquid_volume_container_2segments_round_vbottom(
+          d=WELL_DIAMETER, h_cone=CONE_HEIGHT, h_cylinder=CYLINDER_HEIGHT,
+          liquid_height=liquid_height,
+        )
+      ),
+      compute_height_from_volume=lambda liquid_volume: (
+        calculate_liquid_height_in_container_2segments_round_vbottom(
+          d=WELL_DIAMETER, h_cone=CONE_HEIGHT, h_cylinder=CYLINDER_HEIGHT,
+          liquid_volume=liquid_volume,
+        )
+      ),
+    ),
+  )
+
+
+def Cor_96_wellplate_320ul_Vb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+
+
+# Previous names in PLR:
+def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
+  raise NotImplementedError(
+    "Deprecated. Use 'Cor_96_wellplate_320ul_Vb' instead."
+  )
 
 
 # # # # # # # # # # Cor_96_wellplate_2mL_Vb # # # # # # # # # #

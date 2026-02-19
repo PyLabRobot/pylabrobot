@@ -559,6 +559,72 @@ def compute_height_from_volume_conical_frustum(
   )
 
 
+def compute_volume_from_height_conical_frustum_in_well(
+  liquid_height: float, bottom_radius: float, top_radius: float, total_height: float
+) -> float:
+  """Compute volume (uL) from height (mm) for liquid in a conical-frustum-shaped well.
+
+  Unlike :func:`compute_volume_from_height_conical_frustum`, this correctly interpolates the
+  radius at the liquid surface based on the fill height. In a tapered well, the cross-sectional
+  radius varies linearly from ``bottom_radius`` at h=0 to ``top_radius`` at h=total_height.
+
+  Args:
+    liquid_height: Height of the liquid in mm.
+    bottom_radius: Inner radius at the bottom of the well in mm.
+    top_radius: Inner radius at the top of the well in mm.
+    total_height: Total internal height of the well in mm.
+
+  Returns:
+    Volume of liquid in uL (= mm^3).
+  """
+  if liquid_height <= 0:
+    return 0.0
+  h = min(liquid_height, total_height)
+  r_at_h = bottom_radius + (top_radius - bottom_radius) * h / total_height
+  return (math.pi * h / 3.0) * (r_at_h**2 + r_at_h * bottom_radius + bottom_radius**2)
+
+
+def compute_height_from_volume_conical_frustum_in_well(
+  liquid_volume: float, bottom_radius: float, top_radius: float, total_height: float
+) -> float:
+  """Compute height (mm) from volume (uL) for liquid in a conical-frustum-shaped well.
+
+  Inverse of :func:`compute_volume_from_height_conical_frustum_in_well`. Uses binary search
+  because the volume-height relationship is cubic (not analytically invertible in closed form).
+
+  Args:
+    liquid_volume: Volume of the liquid in uL (= mm^3).
+    bottom_radius: Inner radius at the bottom of the well in mm.
+    top_radius: Inner radius at the top of the well in mm.
+    total_height: Total internal height of the well in mm.
+
+  Returns:
+    Height of the liquid in mm.
+  """
+  if liquid_volume <= 0:
+    return 0.0
+
+  max_volume = compute_volume_from_height_conical_frustum_in_well(
+    total_height, bottom_radius, top_radius, total_height
+  )
+  if liquid_volume > max_volume:
+    raise ValueError(
+      f"Volume {liquid_volume} exceeds maximum well volume {max_volume:.2f}."
+    )
+
+  low, high = 0.0, total_height
+  tolerance = 1e-6
+  while high - low > tolerance:
+    mid = (low + high) / 2
+    if compute_volume_from_height_conical_frustum_in_well(
+      mid, bottom_radius, top_radius, total_height
+    ) < liquid_volume:
+      low = mid
+    else:
+      high = mid
+  return (low + high) / 2
+
+
 def compute_volume_from_height_square(liquid_height: float, well_side_length: float) -> float:
   """Compute volume (uL) from height (mm) for a square well."""
   return liquid_height * (well_side_length**2)
