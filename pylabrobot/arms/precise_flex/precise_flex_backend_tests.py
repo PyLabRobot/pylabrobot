@@ -1538,7 +1538,7 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_parse_angles_response_with_rail(self):
     backend_with_rail = PreciseFlexBackend(has_rail=True, host="localhost", port=10100)
     backend_with_rail.io = self.mock_socket_instance
-    parts = ["0.0", "10.0", "20.0", "30.0", "40.0", "50.0"]
+    parts = ["10.0", "20.0", "30.0", "40.0", "50.0", "0.0"]
     a1, a2, a3, a4, a5, a6 = backend_with_rail._parse_angles_response(parts)
     self.assertEqual(a1, 0.0)
     self.assertEqual(a2, 10.0)
