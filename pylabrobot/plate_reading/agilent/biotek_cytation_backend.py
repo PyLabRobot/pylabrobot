@@ -117,7 +117,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
         # python kernel is restarted.
         try:
           await self.stop()
-        except:
+        except Exception:
           pass
         raise
 
