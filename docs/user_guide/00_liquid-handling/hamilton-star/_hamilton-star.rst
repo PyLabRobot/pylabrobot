@@ -1,6 +1,15 @@
 Hamilton STAR
 =============
 
+Installation
+------------
+
+.. code-block:: bash
+
+   pip install pylabrobot[usb]
+
+See :ref:`using-the-usb-interface` for platform-specific driver setup (libusb on Mac, Zadig on Windows).
+
 Tools for working with Hamilton-STAR specific functions.
 
 .. toctree::

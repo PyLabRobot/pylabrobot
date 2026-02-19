@@ -329,8 +329,8 @@ class USB(IOBase):
 
     if not USE_USB:
       raise RuntimeError(
-        f"USB dependencies could not be imported due to the following error: {_USB_IMPORT_ERROR}. "
-        "Please install pyusb and libusb. "
+        "pyusb/libusb is not installed. Install with: pip install pylabrobot[usb]. "
+        f"Import error: {_USB_IMPORT_ERROR}. "
         "https://docs.pylabrobot.org/installation.html"
       )
 

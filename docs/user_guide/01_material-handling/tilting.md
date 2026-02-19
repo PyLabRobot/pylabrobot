@@ -1,5 +1,11 @@
 # Tilting
 
+## Installation
+
+```bash
+pip install pylabrobot[serial]
+```
+
 Currently only the Hamilton tilt module is supported.
 
 ```python
