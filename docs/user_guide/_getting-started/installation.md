@@ -56,7 +56,6 @@ There's a multitude of other optional dependencies that you can install. Replace
 | `ftdi` | pylibftdi, pyusb | FTDI devices: BioTek Synergy H1 plate reader |
 | `hid` | hid | HID devices: Inheco Incubator/Shaker (HID mode) |
 | `modbus` | pymodbus | Modbus devices: Agrow Pump Array |
-| `http` | requests | HTTP-based backends |
 | `websockets` | websockets | WebSocket backend |
 | `opentrons` | opentrons-http-api-client | Opentrons backend |
 | `gui` | flask | PyLabRobot GUI |
