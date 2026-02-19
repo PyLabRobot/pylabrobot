@@ -115,7 +115,10 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
         # so that the user can try calling setup() again.
         # if we don't close the ftdi connection here, it will be open until the
         # python kernel is restarted.
-        await self.stop()
+        try:
+          await self.stop()
+        except:
+          pass
         raise
 
   async def stop(self):
