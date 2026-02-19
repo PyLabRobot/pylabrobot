@@ -1,9 +1,7 @@
-from collections.abc import Iterable
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 from pylabrobot.arms.backend import AccessPattern, SCARABackend
 from pylabrobot.arms.precise_flex.coords import PreciseFlexCartesianCoords
-from pylabrobot.arms.standard import JointCoords
 from pylabrobot.machines.machine import Machine
 
 
@@ -16,15 +14,13 @@ class ExperimentalSCARA(Machine):
 
   async def move_to(
     self,
-    position: Union[PreciseFlexCartesianCoords, Iterable[float]],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     **backend_kwargs,
   ) -> None:
     """Move the arm to a specified position in 3D space or joint space."""
-    if isinstance(position, Iterable) and not isinstance(position, list):
-      position = list(position)
     return await self.backend.move_to(position, **backend_kwargs)
 
-  async def get_joint_position(self, **backend_kwargs) -> JointCoords:
+  async def get_joint_position(self, **backend_kwargs) -> Dict[int, float]:
     """Get the current position of the arm in joint space."""
     return await self.backend.get_joint_position(**backend_kwargs)
 
@@ -55,23 +51,21 @@ class ExperimentalSCARA(Machine):
 
   async def approach(
     self,
-    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
     **backend_kwargs,
   ) -> None:
     """Move the arm to an approach position (offset from target).
 
     Args:
-      position: Target position (CartesianCoords or JointCoords)
+      position: Target position (CartesianCoords or joint position dict)
       access: Access pattern defining how to approach the target.  Defaults to VerticalAccess() if not specified.
     """
-    if isinstance(position, Iterable) and not isinstance(position, list):
-      position = list(position)
     return await self.backend.approach(position, access=access, **backend_kwargs)
 
   async def pick_up_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     plate_width: float,
     access: Optional[AccessPattern] = None,
     **backend_kwargs,
@@ -83,15 +77,13 @@ class ExperimentalSCARA(Machine):
       access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
       plate_width: gripper width in millimeters used when gripping the plate.
     """
-    if isinstance(position, Iterable) and not isinstance(position, list):
-      position = list(position)
     return await self.backend.pick_up_resource(
       plate_width=plate_width, position=position, access=access, **backend_kwargs
     )
 
   async def drop_resource(
     self,
-    position: Union[PreciseFlexCartesianCoords, JointCoords],
+    position: Union[PreciseFlexCartesianCoords, Dict[int, float]],
     access: Optional[AccessPattern] = None,
     **backend_kwargs,
   ) -> None:
@@ -101,6 +93,4 @@ class ExperimentalSCARA(Machine):
       position: Target position for placement
       access: Access pattern defining how to approach and retract.  Defaults to VerticalAccess() if not specified.
     """
-    if isinstance(position, Iterable) and not isinstance(position, list):
-      position = list(position)
     return await self.backend.drop_resource(position, access=access, **backend_kwargs)

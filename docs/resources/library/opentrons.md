@@ -39,6 +39,11 @@ Unfortunately, most of the other labware (plates) is missing information that is
 - `opentrons_24_tuberack_nest_0_5ml_screwcap`
 - `opentrons_24_tuberack_nest_1_5ml_screwcap`
 - `opentrons_24_tuberack_nest_1_5ml_snapcap`
+
+| Description | Image | PLR definition |
+|-|-|-|
+| 'opentrons_24_tuberack_generic_1point5ml_snapcap_short'<br>Part no.: 3405002<br>[manufacturer website](https://www.thingiverse.com/thing:3405002) | ![](img/opentrons/ot2-1.5mL-tube-rack-24w.png) | `opentrons_24_tuberack_generic_1point5ml_snapcap_short` |
+
 - `opentrons_24_tuberack_nest_2ml_screwcap`
 - `opentrons_24_tuberack_nest_2ml_snapcap`
 - `opentrons_6_tuberack_falcon_50ml_conical`
