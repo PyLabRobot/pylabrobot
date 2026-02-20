@@ -163,6 +163,7 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     self.backend.set_deck(self.deck)
+    self.backend.set_heads(head=self.head, head96=self.head96)
     await super().setup(**backend_kwargs)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
