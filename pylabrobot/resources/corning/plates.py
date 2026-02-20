@@ -171,13 +171,6 @@ def Cor_96_wellplate_320ul_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
 
 
-# Previous names in PLR:
-def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
-  raise NotImplementedError(
-    "Deprecated. Use 'Cor_96_wellplate_320ul_Vb' instead."
-  )
-
-
 # # # # # # # # # # Cor_96_wellplate_2mL_Vb # # # # # # # # # #
 
 
