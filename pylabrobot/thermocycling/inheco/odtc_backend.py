@@ -331,9 +331,9 @@ class ODTCBackend(ThermocyclerBackend):
   Uses ODTCSiLAInterface for low-level SiLA communication with parallelism,
   state management, and lockId validation.
 
-  ODTC dimensions for Thermocycler: size_x=147, size_y=298, size_z=130 (mm).
+  ODTC dimensions for Thermocycler: size_x=156.5, size_y=248, size_z=124.3 (mm).
   Construct: backend = ODTCBackend(odtc_ip="...", variant=384000); then
-  Thermocycler(name="odtc1", size_x=147, size_y=298, size_z=130, backend=backend, ...).
+  Thermocycler(name="odtc1", size_x=156.5, size_y=248, size_z=124.3, backend=backend, ...).
   """
 
   def __init__(
@@ -521,13 +521,22 @@ class ODTCBackend(ThermocyclerBackend):
     await self._sila.close()
 
   def serialize(self) -> dict:
-    """Return serialized representation of the backend."""
-    return {
+    """Return serialized representation of the backend.
+
+    Only includes "port" when the SiLA event receiver has been started (e.g. after
+    setup()), so the visualizer can serialize the deck without connecting to the ODTC.
+    """
+    out = {
       **super().serialize(),
       "odtc_ip": self.odtc_ip,
       "variant": self.variant,
-      "port": self._sila.bound_port,
     }
+    try:
+      out["port"] = self._sila.bound_port
+    except RuntimeError:
+      # Server not started yet; omit port so deck can be serialized without connecting
+      pass
+    return out
 
   def _get_effective_lifetime(self) -> float:
     """Effective max wait for async command completion (seconds)."""

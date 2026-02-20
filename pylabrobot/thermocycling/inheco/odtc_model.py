@@ -97,7 +97,7 @@ class ODTCDimensions:
   z: float
 
 
-ODTC_DIMENSIONS = ODTCDimensions(x=147.0, y=298.0, z=130.0)
+ODTC_DIMENSIONS = ODTCDimensions(x=156.5, y=248.0, z=124.3)
 
 # PreMethod estimated duration (10 min) when DynamicPreMethodDuration is off (ODTC Firmware doc).
 PREMETHOD_ESTIMATED_DURATION_SECONDS: float = 600.0

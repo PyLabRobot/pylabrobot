@@ -24,7 +24,7 @@ class ODTCThermocycler(Thermocycler):
   """Inheco ODTC thermocycler resource.
 
   Owns connection params (odtc_ip, variant) and creates ODTCBackend by default.
-  Dimensions (147 x 298 x 130 mm) are set from ODTC_DIMENSIONS.
+  Dimensions (156.5 x 248 x 124.3 mm) are set from ODTC_DIMENSIONS.
   """
 
   def __init__(

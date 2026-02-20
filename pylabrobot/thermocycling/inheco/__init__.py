@@ -14,9 +14,9 @@ Alternative: use generic Thermocycler with ODTCBackend (e.g. for custom backend)
   backend = ODTCBackend(odtc_ip="192.168.1.100", variant=384)
   tc = Thermocycler(
     name="odtc1",
-    size_x=147,
-    size_y=298,
-    size_z=130,
+    size_x=156.5,
+    size_y=248,
+    size_z=124.3,
     backend=backend,
     child_location=...,
   )
