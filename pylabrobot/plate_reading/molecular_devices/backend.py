@@ -286,7 +286,11 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
         break
     logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
-    response = raw_response.decode("utf-8").strip().split(RES_TERM_CHAR.decode())
+    response = (
+      raw_response.decode("utf-8", errors="replace")
+      .strip()
+      .split(RES_TERM_CHAR.decode())
+    )
     response = [r.strip() for r in response if r.strip() != ""]
     self._parse_basic_errors(response, command)
     return response
@@ -313,7 +317,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
           f"Command '{command}' failed with unparsable error: {response[0]}"
         )
 
-    if "OK" not in response[0]:
+    if not any("OK" in r for r in response):
       raise MolecularDevicesError(f"Command '{command}' failed with response: {response}")
     if "warning" in response[0].lower():
       logger.warning("Warning for command '%s': %s", command, response)
@@ -326,19 +330,27 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   async def get_status(self) -> List[str]:
     res = await self.send_command("!STATUS")
-    return res[1].split()
+    return res[1].split() if len(res) > 1 else res
 
   async def read_error_log(self) -> str:
     res = await self.send_command("!ERROR")
-    return res[1]
+    return res[1] if len(res) > 1 else res[0]
 
   async def clear_error_log(self) -> None:
     await self.send_command("!CLEAR ERROR")
 
   async def get_temperature(self) -> Tuple[float, float]:
     res = await self.send_command("!TEMP")
-    parts = res[1].split()
-    return (float(parts[1]), float(parts[0]))  # current, set_point
+    if len(res) > 1:
+      parts = res[1].split()
+    else:
+      parts = res[0].replace("OK", "").split()
+
+    if len(parts) >= 2:
+      return (float(parts[1]), float(parts[0]))  # current, set_point
+    elif len(parts) == 1:
+      return (float(parts[0]), float(parts[0]))
+    return (0.0, 0.0)
 
   async def set_temperature(self, temperature: float) -> None:
     if not (0 <= temperature <= 45):
