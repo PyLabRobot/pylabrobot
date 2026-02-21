@@ -286,11 +286,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
         break
     logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
-    response = (
-      raw_response.decode("utf-8", errors="replace")
-      .strip()
-      .split(RES_TERM_CHAR.decode())
-    )
+    response = raw_response.decode("utf-8", errors="replace").strip().split(RES_TERM_CHAR.decode())
     response = [r.strip() for r in response if r.strip() != ""]
     self._parse_basic_errors(response, command)
     return response
