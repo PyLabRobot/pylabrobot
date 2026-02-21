@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.get\_anchor
+=======================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.get_anchor

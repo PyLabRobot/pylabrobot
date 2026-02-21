@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.imager.Imager.centers
+===============================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. automethod:: Imager.centers

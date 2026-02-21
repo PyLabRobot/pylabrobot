@@ -1,0 +1,6 @@
+pylabrobot.resources.Lid.at
+===========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Lid.at

@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.get\_anchor
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.get_anchor

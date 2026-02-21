@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.rotate
+=========================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.rotate

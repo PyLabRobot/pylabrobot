@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.chatterbox.PlateReaderChatterboxBackend.deserialize
+=============================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.chatterbox
+
+.. automethod:: PlateReaderChatterboxBackend.deserialize

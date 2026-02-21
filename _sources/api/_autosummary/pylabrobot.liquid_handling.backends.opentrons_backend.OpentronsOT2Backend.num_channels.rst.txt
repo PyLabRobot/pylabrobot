@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.opentrons\_backend.OpentronsOT2Backend.num\_channels
+=========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.opentrons_backend
+
+.. autoproperty:: OpentronsOT2Backend.num_channels

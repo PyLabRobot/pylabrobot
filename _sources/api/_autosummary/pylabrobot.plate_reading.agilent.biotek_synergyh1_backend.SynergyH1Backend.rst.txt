@@ -1,0 +1,55 @@
+﻿pylabrobot.plate\_reading.agilent.biotek\_synergyh1\_backend.SynergyH1Backend
+=============================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent.biotek_synergyh1_backend
+
+.. autoclass:: SynergyH1Backend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SynergyH1Backend.abs_wavelength_range
+      ~SynergyH1Backend.emission_range
+      ~SynergyH1Backend.excitation_range
+      ~SynergyH1Backend.focal_height_range
+      ~SynergyH1Backend.supports_cooling
+      ~SynergyH1Backend.supports_heating
+      ~SynergyH1Backend.temperature_range
+      ~SynergyH1Backend.version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SynergyH1Backend.__init__
+      ~SynergyH1Backend.close
+      ~SynergyH1Backend.deserialize
+      ~SynergyH1Backend.get_all_instances
+      ~SynergyH1Backend.get_current_temperature
+      ~SynergyH1Backend.get_firmware_version
+      ~SynergyH1Backend.get_serial_number
+      ~SynergyH1Backend.home
+      ~SynergyH1Backend.open
+      ~SynergyH1Backend.read_absorbance
+      ~SynergyH1Backend.read_fluorescence
+      ~SynergyH1Backend.read_luminescence
+      ~SynergyH1Backend.send_command
+      ~SynergyH1Backend.serialize
+      ~SynergyH1Backend.set_plate
+      ~SynergyH1Backend.set_temperature
+      ~SynergyH1Backend.setup
+      ~SynergyH1Backend.shake
+      ~SynergyH1Backend.stop
+      ~SynergyH1Backend.stop_heating_or_cooling
+      ~SynergyH1Backend.stop_shaking
+   
+   

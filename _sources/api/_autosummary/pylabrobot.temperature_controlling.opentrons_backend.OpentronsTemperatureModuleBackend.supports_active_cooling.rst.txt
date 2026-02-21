@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.opentrons\_backend.OpentronsTemperatureModuleBackend.supports\_active\_cooling
+==================================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.opentrons_backend
+
+.. autoproperty:: OpentronsTemperatureModuleBackend.supports_active_cooling

@@ -1,0 +1,6 @@
+pylabrobot.io.sila.discovery.SiLADevice.serial\_number
+======================================================
+
+.. currentmodule:: pylabrobot.io.sila.discovery
+
+.. autoattribute:: SiLADevice.serial_number

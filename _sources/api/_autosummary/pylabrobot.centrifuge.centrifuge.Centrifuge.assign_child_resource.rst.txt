@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.assign\_child\_resource
+===================================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.assign_child_resource

@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.register\_state\_update\_callback
+====================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.register_state_update_callback

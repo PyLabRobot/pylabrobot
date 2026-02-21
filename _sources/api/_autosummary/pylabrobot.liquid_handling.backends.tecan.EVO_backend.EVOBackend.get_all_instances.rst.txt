@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.tecan.EVO\_backend.EVOBackend.get\_all\_instances
+======================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.tecan.EVO_backend
+
+.. automethod:: EVOBackend.get_all_instances

@@ -1,0 +1,6 @@
+pylabrobot.resources.opentrons.load.load\_ot\_plate\_holder
+===========================================================
+
+.. currentmodule:: pylabrobot.resources.opentrons.load
+
+.. autofunction:: load_ot_plate_holder

@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.standard.ImagingResult.images
+=======================================================
+
+.. currentmodule:: pylabrobot.plate_reading.standard
+
+.. autoattribute:: ImagingResult.images

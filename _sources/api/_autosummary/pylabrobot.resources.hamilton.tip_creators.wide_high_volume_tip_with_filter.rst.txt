@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.wide\_high\_volume\_tip\_with\_filter
+=================================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autofunction:: wide_high_volume_tip_with_filter

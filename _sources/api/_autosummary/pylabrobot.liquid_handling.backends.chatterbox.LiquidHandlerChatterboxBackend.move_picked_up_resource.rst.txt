@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.chatterbox.LiquidHandlerChatterboxBackend.move\_picked\_up\_resource
+=========================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.chatterbox
+
+.. automethod:: LiquidHandlerChatterboxBackend.move_picked_up_resource

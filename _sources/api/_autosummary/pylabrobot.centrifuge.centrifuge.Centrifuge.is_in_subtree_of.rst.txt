@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.is\_in\_subtree\_of
+===============================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.is_in_subtree_of

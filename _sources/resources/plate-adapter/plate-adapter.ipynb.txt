@@ -1,0 +1,119 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "211553de",
+   "metadata": {},
+   "source": [
+    "# PlateAdapter\n",
+    "\n",
+    "`PlateAdapter` represents accessories that hold plates while providing a\n",
+    "standardized grid of holes or wells. It is useful when a plate cannot be placed\n",
+    "directly on a carrier site because the skirt or dimensions do not match the\n",
+    "standard ANSI/SLAS format. Examples include magnetic racks, heater shakers or\n",
+    "adapters for semi-skirted PCR plates.\n",
+    "\n",
+    "By treating adapters as resources, PyLabRobot can automatically compute the\n",
+    "position of the plate relative to the adapter. This ensures wells line up with\n",
+    "the adapter holes while keeping a simple API for moving plates around.\n",
+    "\n",
+    "In most workflows you create an adapter and then assign a plate to it."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5ba42bf1",
+   "metadata": {},
+   "source": [
+    "## Creating a PlateAdapter\n",
+    "\n",
+    "You can instantiate a `PlateAdapter` directly by specifying its size and the\n",
+    "layout of its holes. The example below creates a simplified magnetic rack for a\n",
+    "96 well plate."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1d427527",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources.plate_adapter import PlateAdapter\n",
+    "\n",
+    "magnet = PlateAdapter(\n",
+    "    name=\"magnet\",\n",
+    "    size_x=127.76,\n",
+    "    size_y=85.48,\n",
+    "    size_z=35.0,\n",
+    "    dx=9.8,\n",
+    "    dy=6.8,\n",
+    "    dz=27.5,  # height of the plate above the deck\n",
+    "    adapter_hole_size_x=8.0,\n",
+    "    adapter_hole_size_y=8.0,\n",
+    "    adapter_hole_size_z=8.0,\n",
+    ")\n",
+    "magnet"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "abbafb2c",
+   "metadata": {},
+   "source": [
+    "## Placing a plate on an adapter\n",
+    "\n",
+    "`PlateAdapter.assign_child_resource()` automatically aligns the plate's wells\n",
+    "with the adapter holes. This uses `compute_plate_location()` internally.\n",
+    "Below we place a Corning 96 well plate on our magnetic rack."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "88b02d82",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources.corning import Cor_96_wellplate_2mL_Vb\n",
+    "\n",
+    "plate = Cor_96_wellplate_2mL_Vb(name=\"plate\")\n",
+    "magnet.assign_child_resource(plate)\n",
+    "magnet.children"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9c1f90c1",
+   "metadata": {},
+   "source": [
+    "`compute_plate_location()` can also be called directly to see where the plate\n",
+    "will be positioned relative to the adapter."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3e3cbbd0",
+   "metadata": {
+    "lines_to_next_cell": 2
+   },
+   "outputs": [],
+   "source": [
+    "magnet.compute_plate_location(plate)"
+   ]
+  }
+ ],
+ "metadata": {
+  "jupytext": {
+   "cell_metadata_filter": "-all",
+   "main_language": "python",
+   "notebook_metadata_filter": "-all"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.HamiltonTip
+=======================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autoclass:: HamiltonTip

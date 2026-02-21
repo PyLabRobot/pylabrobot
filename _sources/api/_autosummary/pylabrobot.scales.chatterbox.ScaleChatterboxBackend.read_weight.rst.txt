@@ -1,0 +1,6 @@
+pylabrobot.scales.chatterbox.ScaleChatterboxBackend.read\_weight
+================================================================
+
+.. currentmodule:: pylabrobot.scales.chatterbox
+
+.. automethod:: ScaleChatterboxBackend.read_weight

@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_racks.LT
+===========================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
+
+.. autofunction:: LT

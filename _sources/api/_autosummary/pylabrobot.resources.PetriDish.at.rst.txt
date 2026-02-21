@@ -1,0 +1,6 @@
+pylabrobot.resources.PetriDish.at
+=================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PetriDish.at

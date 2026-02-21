@@ -1,0 +1,6 @@
+pylabrobot.resources.opentrons.load.load\_ot\_tip\_rack
+=======================================================
+
+.. currentmodule:: pylabrobot.resources.opentrons.load
+
+.. autofunction:: load_ot_tip_rack

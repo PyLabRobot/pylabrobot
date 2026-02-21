@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.temperature\_controller.TemperatureController.is\_in\_subtree\_of
+=====================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.temperature_controller
+
+.. automethod:: TemperatureController.is_in_subtree_of

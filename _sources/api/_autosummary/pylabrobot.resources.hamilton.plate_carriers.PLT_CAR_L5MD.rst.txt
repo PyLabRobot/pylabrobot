@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.plate\_carriers.PLT\_CAR\_L5MD
+============================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.plate_carriers
+
+.. autofunction:: PLT_CAR_L5MD

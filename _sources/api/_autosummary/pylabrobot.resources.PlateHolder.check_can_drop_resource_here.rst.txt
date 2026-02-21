@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.check\_can\_drop\_resource\_here
+=================================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.check_can_drop_resource_here

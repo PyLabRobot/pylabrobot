@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.set\_volume
+=====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Tube.set_volume

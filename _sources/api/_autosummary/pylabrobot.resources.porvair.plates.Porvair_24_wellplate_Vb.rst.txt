@@ -1,0 +1,6 @@
+pylabrobot.resources.porvair.plates.Porvair\_24\_wellplate\_Vb
+==============================================================
+
+.. currentmodule:: pylabrobot.resources.porvair.plates
+
+.. autofunction:: Porvair_24_wellplate_Vb

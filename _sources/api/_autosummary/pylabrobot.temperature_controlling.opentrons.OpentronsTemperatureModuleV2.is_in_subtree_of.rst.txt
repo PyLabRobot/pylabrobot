@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.opentrons.OpentronsTemperatureModuleV2.is\_in\_subtree\_of
+==============================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.opentrons
+
+.. automethod:: OpentronsTemperatureModuleV2.is_in_subtree_of

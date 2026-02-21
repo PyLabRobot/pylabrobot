@@ -1,0 +1,6 @@
+pylabrobot.resources.Plate.get\_child\_identifier
+=================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Plate.get_child_identifier

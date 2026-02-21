@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.save
+=======================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.save

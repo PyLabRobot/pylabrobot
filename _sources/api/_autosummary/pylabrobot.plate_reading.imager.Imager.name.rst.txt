@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.imager.Imager.name
+============================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. autoproperty:: Imager.name

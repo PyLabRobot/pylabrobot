@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.assign\_child\_by\_anchor
+==========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.assign_child_by_anchor

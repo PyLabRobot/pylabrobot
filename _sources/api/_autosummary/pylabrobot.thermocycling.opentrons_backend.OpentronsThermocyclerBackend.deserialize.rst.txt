@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons\_backend.OpentronsThermocyclerBackend.deserialize
+====================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons_backend
+
+.. automethod:: OpentronsThermocyclerBackend.deserialize

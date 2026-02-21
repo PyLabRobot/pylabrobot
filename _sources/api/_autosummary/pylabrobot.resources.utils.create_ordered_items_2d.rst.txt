@@ -1,0 +1,6 @@
+pylabrobot.resources.utils.create\_ordered\_items\_2d
+=====================================================
+
+.. currentmodule:: pylabrobot.resources.utils
+
+.. autofunction:: create_ordered_items_2d

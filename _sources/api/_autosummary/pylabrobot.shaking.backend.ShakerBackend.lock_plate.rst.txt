@@ -1,0 +1,6 @@
+pylabrobot.shaking.backend.ShakerBackend.lock\_plate
+====================================================
+
+.. currentmodule:: pylabrobot.shaking.backend
+
+.. automethod:: ShakerBackend.lock_plate

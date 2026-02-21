@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.imager.Imager.deregister\_state\_update\_callback
+===========================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. automethod:: Imager.deregister_state_update_callback

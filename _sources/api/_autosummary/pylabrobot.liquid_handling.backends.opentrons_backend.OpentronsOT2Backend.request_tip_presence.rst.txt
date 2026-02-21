@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.opentrons\_backend.OpentronsOT2Backend.request\_tip\_presence
+==================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.opentrons_backend
+
+.. automethod:: OpentronsOT2Backend.request_tip_presence

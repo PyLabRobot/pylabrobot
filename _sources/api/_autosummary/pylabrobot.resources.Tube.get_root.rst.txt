@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.get\_root
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Tube.get_root

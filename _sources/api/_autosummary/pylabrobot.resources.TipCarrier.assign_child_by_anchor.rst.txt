@@ -1,0 +1,6 @@
+pylabrobot.resources.TipCarrier.assign\_child\_by\_anchor
+=========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: TipCarrier.assign_child_by_anchor

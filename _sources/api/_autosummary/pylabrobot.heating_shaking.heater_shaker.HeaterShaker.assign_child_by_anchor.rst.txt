@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.heater\_shaker.HeaterShaker.assign\_child\_by\_anchor
+=================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.heater_shaker
+
+.. automethod:: HeaterShaker.assign_child_by_anchor

@@ -1,0 +1,70 @@
+﻿pylabrobot.plate\_reading.agilent.biotek\_cytation\_backend.CytationBackend
+===========================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent.biotek_cytation_backend
+
+.. autoclass:: CytationBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CytationBackend.abs_wavelength_range
+      ~CytationBackend.emission_range
+      ~CytationBackend.excitation_range
+      ~CytationBackend.filters
+      ~CytationBackend.focal_height_range
+      ~CytationBackend.objectives
+      ~CytationBackend.supports_cooling
+      ~CytationBackend.supports_heating
+      ~CytationBackend.temperature_range
+      ~CytationBackend.version
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CytationBackend.__init__
+      ~CytationBackend.capture
+      ~CytationBackend.close
+      ~CytationBackend.deserialize
+      ~CytationBackend.get_all_instances
+      ~CytationBackend.get_current_temperature
+      ~CytationBackend.get_firmware_version
+      ~CytationBackend.get_serial_number
+      ~CytationBackend.home
+      ~CytationBackend.led_off
+      ~CytationBackend.led_on
+      ~CytationBackend.open
+      ~CytationBackend.read_absorbance
+      ~CytationBackend.read_fluorescence
+      ~CytationBackend.read_luminescence
+      ~CytationBackend.select
+      ~CytationBackend.send_command
+      ~CytationBackend.serialize
+      ~CytationBackend.set_auto_exposure
+      ~CytationBackend.set_exposure
+      ~CytationBackend.set_focus
+      ~CytationBackend.set_gain
+      ~CytationBackend.set_imaging_mode
+      ~CytationBackend.set_objective
+      ~CytationBackend.set_plate
+      ~CytationBackend.set_position
+      ~CytationBackend.set_temperature
+      ~CytationBackend.setup
+      ~CytationBackend.shake
+      ~CytationBackend.start_acquisition
+      ~CytationBackend.stop
+      ~CytationBackend.stop_acquisition
+      ~CytationBackend.stop_heating_or_cooling
+      ~CytationBackend.stop_shaking
+   
+   

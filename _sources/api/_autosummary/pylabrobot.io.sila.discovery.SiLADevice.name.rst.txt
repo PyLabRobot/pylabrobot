@@ -1,0 +1,6 @@
+pylabrobot.io.sila.discovery.SiLADevice.name
+============================================
+
+.. currentmodule:: pylabrobot.io.sila.discovery
+
+.. autoattribute:: SiLADevice.name

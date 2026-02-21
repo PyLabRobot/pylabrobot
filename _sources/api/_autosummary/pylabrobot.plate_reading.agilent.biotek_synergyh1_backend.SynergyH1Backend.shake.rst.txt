@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.agilent.biotek\_synergyh1\_backend.SynergyH1Backend.shake
+===================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent.biotek_synergyh1_backend
+
+.. automethod:: SynergyH1Backend.shake

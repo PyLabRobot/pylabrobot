@@ -1,0 +1,36 @@
+﻿pylabrobot.temperature\_controlling.chatterbox.TemperatureControllerChatterboxBackend
+=====================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.chatterbox
+
+.. autoclass:: TemperatureControllerChatterboxBackend
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureControllerChatterboxBackend.supports_active_cooling
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureControllerChatterboxBackend.__init__
+      ~TemperatureControllerChatterboxBackend.deactivate
+      ~TemperatureControllerChatterboxBackend.deserialize
+      ~TemperatureControllerChatterboxBackend.get_all_instances
+      ~TemperatureControllerChatterboxBackend.get_current_temperature
+      ~TemperatureControllerChatterboxBackend.serialize
+      ~TemperatureControllerChatterboxBackend.set_temperature
+      ~TemperatureControllerChatterboxBackend.setup
+      ~TemperatureControllerChatterboxBackend.stop
+   
+   

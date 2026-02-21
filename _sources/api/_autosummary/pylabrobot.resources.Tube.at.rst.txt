@@ -1,0 +1,6 @@
+pylabrobot.resources.Tube.at
+============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Tube.at

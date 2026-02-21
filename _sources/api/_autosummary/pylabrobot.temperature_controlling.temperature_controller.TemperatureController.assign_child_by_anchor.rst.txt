@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.temperature\_controller.TemperatureController.assign\_child\_by\_anchor
+===========================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.temperature_controller
+
+.. automethod:: TemperatureController.assign_child_by_anchor

@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.load\_all\_state
+====================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.load_all_state

@@ -1,0 +1,37 @@
+﻿pylabrobot.plate\_reading.bmg\_labtech.clario\_star\_backend.CLARIOstarBackend
+==============================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.bmg_labtech.clario_star_backend
+
+.. autoclass:: CLARIOstarBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CLARIOstarBackend.__init__
+      ~CLARIOstarBackend.close
+      ~CLARIOstarBackend.deserialize
+      ~CLARIOstarBackend.get_all_instances
+      ~CLARIOstarBackend.get_stat
+      ~CLARIOstarBackend.initialize
+      ~CLARIOstarBackend.open
+      ~CLARIOstarBackend.read_absorbance
+      ~CLARIOstarBackend.read_command_status
+      ~CLARIOstarBackend.read_fluorescence
+      ~CLARIOstarBackend.read_luminescence
+      ~CLARIOstarBackend.read_resp
+      ~CLARIOstarBackend.request_eeprom_data
+      ~CLARIOstarBackend.send
+      ~CLARIOstarBackend.serialize
+      ~CLARIOstarBackend.setup
+      ~CLARIOstarBackend.stop
+   
+   

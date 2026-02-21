@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.opentrons\_backend.OpentronsThermocyclerBackend.set\_block\_temperature
+================================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons_backend
+
+.. automethod:: OpentronsThermocyclerBackend.set_block_temperature

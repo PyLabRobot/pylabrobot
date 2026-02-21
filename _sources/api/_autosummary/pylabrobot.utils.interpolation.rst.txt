@@ -1,0 +1,29 @@
+﻿pylabrobot.utils.interpolation
+==============================
+
+.. currentmodule:: pylabrobot.utils
+
+.. automodule:: pylabrobot.utils.interpolation
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      interpolate_1d
+   
+   
+
+   
+   
+   
+
+   
+   
+   

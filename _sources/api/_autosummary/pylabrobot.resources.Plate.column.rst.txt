@@ -1,0 +1,6 @@
+pylabrobot.resources.Plate.column
+=================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Plate.column

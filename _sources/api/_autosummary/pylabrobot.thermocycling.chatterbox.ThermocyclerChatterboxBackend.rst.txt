@@ -1,0 +1,45 @@
+﻿pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend
+=================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.chatterbox
+
+.. autoclass:: ThermocyclerChatterboxBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ThermocyclerChatterboxBackend.__init__
+      ~ThermocyclerChatterboxBackend.close_lid
+      ~ThermocyclerChatterboxBackend.deactivate_block
+      ~ThermocyclerChatterboxBackend.deactivate_lid
+      ~ThermocyclerChatterboxBackend.deserialize
+      ~ThermocyclerChatterboxBackend.get_all_instances
+      ~ThermocyclerChatterboxBackend.get_block_current_temperature
+      ~ThermocyclerChatterboxBackend.get_block_status
+      ~ThermocyclerChatterboxBackend.get_block_target_temperature
+      ~ThermocyclerChatterboxBackend.get_current_cycle_index
+      ~ThermocyclerChatterboxBackend.get_current_step_index
+      ~ThermocyclerChatterboxBackend.get_hold_time
+      ~ThermocyclerChatterboxBackend.get_lid_current_temperature
+      ~ThermocyclerChatterboxBackend.get_lid_open
+      ~ThermocyclerChatterboxBackend.get_lid_status
+      ~ThermocyclerChatterboxBackend.get_lid_target_temperature
+      ~ThermocyclerChatterboxBackend.get_total_cycle_count
+      ~ThermocyclerChatterboxBackend.get_total_step_count
+      ~ThermocyclerChatterboxBackend.open_lid
+      ~ThermocyclerChatterboxBackend.run_protocol
+      ~ThermocyclerChatterboxBackend.serialize
+      ~ThermocyclerChatterboxBackend.set_block_temperature
+      ~ThermocyclerChatterboxBackend.set_lid_temperature
+      ~ThermocyclerChatterboxBackend.setup
+      ~ThermocyclerChatterboxBackend.stop
+   
+   

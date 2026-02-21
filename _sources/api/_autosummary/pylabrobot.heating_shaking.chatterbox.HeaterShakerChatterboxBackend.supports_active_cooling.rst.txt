@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.chatterbox.HeaterShakerChatterboxBackend.supports\_active\_cooling
+==============================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.chatterbox
+
+.. autoproperty:: HeaterShakerChatterboxBackend.supports_active_cooling

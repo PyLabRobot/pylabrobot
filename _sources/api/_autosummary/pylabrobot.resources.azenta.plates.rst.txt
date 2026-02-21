@@ -1,0 +1,31 @@
+﻿pylabrobot.resources.azenta.plates
+==================================
+
+.. currentmodule:: pylabrobot.resources.azenta
+
+.. automodule:: pylabrobot.resources.azenta.plates
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      Azenta4titudeFrameStar_96_wellplate_200ul_Vb
+      Azenta4titudeFrameStar_96_wellplate_200ul_Vb_Lid
+      Azenta4titudeFrameStar_96_wellplate_skirted
+   
+   
+
+   
+   
+   
+
+   
+   
+   

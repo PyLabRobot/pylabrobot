@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.get\_location\_wrt
+==============================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.get_location_wrt

@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_racks.hamilton\_96\_tiprack\_300uL\_filter
+=============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
+
+.. autofunction:: hamilton_96_tiprack_300uL_filter

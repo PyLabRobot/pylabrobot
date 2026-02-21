@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.plate\_reader.PlateReader.is\_in\_subtree\_of
+=======================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.plate_reader
+
+.. automethod:: PlateReader.is_in_subtree_of

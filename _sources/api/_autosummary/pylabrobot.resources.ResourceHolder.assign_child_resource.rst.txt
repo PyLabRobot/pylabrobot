@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceHolder.assign\_child\_resource
+===========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceHolder.assign_child_resource

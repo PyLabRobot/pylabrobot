@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.chatterbox.ThermocyclerChatterboxBackend.set\_lid\_temperature
+=======================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.chatterbox
+
+.. automethod:: ThermocyclerChatterboxBackend.set_lid_temperature

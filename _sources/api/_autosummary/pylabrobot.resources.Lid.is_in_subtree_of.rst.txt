@@ -1,0 +1,6 @@
+pylabrobot.resources.Lid.is\_in\_subtree\_of
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Lid.is_in_subtree_of

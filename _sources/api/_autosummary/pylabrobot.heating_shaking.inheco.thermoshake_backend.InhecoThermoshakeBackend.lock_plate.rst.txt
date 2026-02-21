@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.inheco.thermoshake\_backend.InhecoThermoshakeBackend.lock\_plate
+============================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.inheco.thermoshake_backend
+
+.. automethod:: InhecoThermoshakeBackend.lock_plate

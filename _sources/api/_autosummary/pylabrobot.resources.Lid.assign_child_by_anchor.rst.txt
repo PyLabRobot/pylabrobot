@@ -1,0 +1,6 @@
+pylabrobot.resources.Lid.assign\_child\_by\_anchor
+==================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Lid.assign_child_by_anchor

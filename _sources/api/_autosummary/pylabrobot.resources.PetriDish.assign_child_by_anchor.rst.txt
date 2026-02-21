@@ -1,0 +1,6 @@
+pylabrobot.resources.PetriDish.assign\_child\_by\_anchor
+========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PetriDish.assign_child_by_anchor

@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.get\_root
+=====================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.get_root

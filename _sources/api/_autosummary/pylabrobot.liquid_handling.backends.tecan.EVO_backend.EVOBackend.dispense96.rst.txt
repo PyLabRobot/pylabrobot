@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.tecan.EVO\_backend.EVOBackend.dispense96
+=============================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.tecan.EVO_backend
+
+.. automethod:: EVOBackend.dispense96

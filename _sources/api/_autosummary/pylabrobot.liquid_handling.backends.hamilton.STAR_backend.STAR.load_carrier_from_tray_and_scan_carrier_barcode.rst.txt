@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.load\_carrier\_from\_tray\_and\_scan\_carrier\_barcode
+=======================================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.load_carrier_from_tray_and_scan_carrier_barcode

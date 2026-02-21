@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.search\_for\_teach\_in\_signal\_using\_pipetting\_channel\_n\_in\_x\_direction
+===============================================================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.search_for_teach_in_signal_using_pipetting_channel_n_in_x_direction

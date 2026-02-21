@@ -1,0 +1,6 @@
+pylabrobot.pumps.cole\_parmer.masterflex\_backend.MasterflexBackend.send\_command
+=================================================================================
+
+.. currentmodule:: pylabrobot.pumps.cole_parmer.masterflex_backend
+
+.. automethod:: MasterflexBackend.send_command

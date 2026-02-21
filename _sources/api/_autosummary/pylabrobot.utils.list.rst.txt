@@ -1,0 +1,31 @@
+﻿pylabrobot.utils.list
+=====================
+
+.. currentmodule:: pylabrobot.utils
+
+.. automodule:: pylabrobot.utils.list
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      assert_shape
+      chunk_list
+      reshape_2d
+   
+   
+
+   
+   
+   
+
+   
+   
+   

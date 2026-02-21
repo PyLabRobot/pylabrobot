@@ -1,0 +1,6 @@
+pylabrobot.resources.PetriDish.named
+====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PetriDish.named

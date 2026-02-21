@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.agilent.biotek\_cytation\_backend.CytationBackend.excitation\_range
+=============================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent.biotek_cytation_backend
+
+.. autoproperty:: CytationBackend.excitation_range

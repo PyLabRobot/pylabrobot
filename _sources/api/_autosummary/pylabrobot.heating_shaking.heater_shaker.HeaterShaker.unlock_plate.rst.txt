@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.heater\_shaker.HeaterShaker.unlock\_plate
+=====================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.heater_shaker
+
+.. automethod:: HeaterShaker.unlock_plate

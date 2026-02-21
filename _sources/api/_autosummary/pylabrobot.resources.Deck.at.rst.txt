@@ -1,0 +1,6 @@
+pylabrobot.resources.Deck.at
+============================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Deck.at

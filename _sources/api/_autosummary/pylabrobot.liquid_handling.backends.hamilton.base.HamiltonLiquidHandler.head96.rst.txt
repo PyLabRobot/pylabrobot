@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.base.HamiltonLiquidHandler.head96
+===============================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.base
+
+.. autoproperty:: HamiltonLiquidHandler.head96

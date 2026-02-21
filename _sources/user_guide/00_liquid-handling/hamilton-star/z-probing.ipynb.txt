@@ -1,0 +1,422 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Z-probing\n",
+    "\n",
+    "With PyLabRobot, one can probe the surface of any object on a STAR(let) deck. This effectively makes the STAR act as a [Coordinate-Measurement Machine (CMM)](https://en.wikipedia.org/wiki/Coordinate-measuring_machine). See also [y probing](./y-probing) for doing the same in the y direction.\n",
+    "\n",
+    "There are two ways to probe the surface of an object:\n",
+    "\n",
+    "- Using capacitive liquid level sensors (cLLD) to map capacitive objects.\n",
+    "- Moving the tip down onto an object until resistance is detected (a \"controlled crash\"), which works with both capacitive and non-capacitive objects."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Example setup"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.liquid_handling import LiquidHandler, STARBackend\n",
+    "from pylabrobot.resources import STARLetDeck\n",
+    "from pylabrobot.resources import (\n",
+    "  TIP_CAR_480_A00,\n",
+    "  PLT_CAR_L5AC_A00,\n",
+    "  hamilton_96_tiprack_50uL,\n",
+    "  Cor_96_wellplate_360ul_Fb\n",
+    ")\n",
+    "\n",
+    "star = STARBackend()\n",
+    "lh = LiquidHandler(backend=star, deck=STARLetDeck())\n",
+    "await lh.setup()\n",
+    "\n",
+    "# assign a tip rack\n",
+    "tip_carrier = TIP_CAR_480_A00(name=\"tip_carrier\")\n",
+    "tip_carrier[1] = tip_rack = hamilton_96_tiprack_50uL(name=\"tip_rack\")\n",
+    "lh.deck.assign_child_resource(tip_carrier, rails=1)\n",
+    "\n",
+    "# assign a plate\n",
+    "plt_carrier = PLT_CAR_L5AC_A00(name=\"plt_carrier\")\n",
+    "plt_carrier[0] = plate = Cor_96_wellplate_360ul_Fb(name=\"plt\")\n",
+    "lh.deck.assign_child_resource(plt_carrier, rails=7)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Capacitive probing using cLLD\n",
+    "\n",
+    "If you are mapping a capacitive surface, you can use the cLLD sensor to detect the surface. This is safer and more accurate than the controlled crash method.\n",
+    "\n",
+    "```{warning}\n",
+    "For safety purposes, we recommend using Hamilton 50ul tips for mapping surfaces. These are relatively long and soft, acting as 'cushions' in case you try out faster detection speeds (not recommended). Small bends are tolerated well by the 50ul tips.\n",
+    "```\n",
+    "\n",
+    "Introduced in [PR #69](https://github.com/PyLabRobot/pylabrobot/pull/69)."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Mapping a single point"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.pick_up_tips(tip_rack[\"A1\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For more information on manually moving channels, see [Manually moving channels around](../moving-channels-around.ipynb)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await star.prepare_for_manual_channel_operation(0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# TODO: change this to a position that works for you\n",
+    "await star.move_channel_x(0, 260)\n",
+    "await star.move_channel_y(0, 190)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Use `STARBackend.probe_z_height_using_channel` to probe the z-height of a single point at the current location. This function will slowly lower the channel until the liquid level sensor detects a change in capacitance. The z-height of the point of the tip is then returned."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await star.clld_probe_z_height_using_channel(0, move_channels_to_safe_pos_after=True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "(mapping-a-3d-surface)=\n",
+    "### Mapping a 3D surface"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.pick_up_tips(tip_rack[\"A1\"])\n",
+    "await star.prepare_for_manual_channel_operation(0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "xs = [260 + i * 3 for i in range(13)]  # in mm, absolute coordinates\n",
+    "ys = [190 + i * 3 for i in range(10)]  # in mm, absolute coordinates\n",
+    "\n",
+    "data = []\n",
+    "\n",
+    "for x in xs:\n",
+    "  await star.move_channel_x(0, x)\n",
+    "  for y in ys:\n",
+    "    await star.move_channel_y(0, y)\n",
+    "    height = await star.clld_probe_z_height_using_channel(0, start_pos_search=25000)\n",
+    "    data.append((x, y, height))\n",
+    "    await lh.move_channel_z(0, 230)  # move up slightly for traversal"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Plotting requires `matplotlib` and `numpy`. If you don't have them installed, you can install them with `pip install matplotlib numpy`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import matplotlib.pyplot as plt\n",
+    "import numpy as np\n",
+    "\n",
+    "data = np.array(data)\n",
+    "fig = plt.figure()\n",
+    "ax = fig.add_subplot(111, projection='3d')\n",
+    "ax.scatter(data[:, 0], data[:, 1], data[:, 2])\n",
+    "ax.set_xlabel('X')\n",
+    "ax.set_ylabel('Y')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Check out the following video demo of mapping a 3D surface:\n",
+    "\n",
+    "<iframe width=\"640\" height=\"360\" src=\"https://www.youtube.com/embed/_uPf9hyTBog\" title=\"YouTube video player\" frameborder=\"0\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture\" allowfullscreen></iframe>"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Non-capacitive probing\n",
+    "\n",
+    "There are two ways to probe non-capacitive surfaces:\n",
+    "\n",
+    "- using the pLLD sensor\n",
+    "- using the force sensor (a \"controlled crash\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Using the force sensor\n",
+    "\n",
+    "This uses moves a tip down slowly until resistance is detected (a \"controlled crash\"), to measure the surface z-height. This technique is similar to what is routinely used for discarding tips into the trash in both VENUS and PLR.\n",
+    "\n",
+    "Sensor accuracy for z-height readings needs to be further tested but in initial tests has been at least 0.2 mm."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Picking up teaching needles\n",
+    "\n",
+    "Most STAR(let)s come with a teaching block that includes 8 teaching needles. These needles are equivalent to standard volume (300uL) pipette tips but are made from metal instead of plastic. This leads to more accurate results when probing surfaces.\n",
+    "\n",
+    "```{warning}\n",
+    "When using the teaching needles, be careful not to damage the STAR(let) deck or channels. The needles are made from metal and can bend the pipetting channels more easily than soft plastic tips.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "teaching_tip_rack = lh.deck.get_resource(\"teaching_tip_rack\")\n",
+    "await lh.pick_up_tips(teaching_tip_rack[\"A2\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Alternatively, you can use plastic tips for probing surfaces. However, these are softer and therefore less accurate than the metal teaching needles. 50uL tips are the softest and cannot be used with force z-probing."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Moving the channel and mapping a point\n",
+    "\n",
+    "See above for more information on moving channels.\n",
+    "\n",
+    "```{warning}\n",
+    "Make sure the tip is at a safe height above the labware before moving the channel. Use `STARBackend.move_channel_z` to move the channel to a safe height.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await star.prepare_for_manual_channel_operation(0)\n",
+    "await star.move_channel_x(0, 260)\n",
+    "await star.move_channel_y(0, 190)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await star.ztouch_probe_z_height_using_channel(\n",
+    "  channel_idx=0,\n",
+    "  move_channels_to_save_pos_after=True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Check out [mapping a 3d surface](#mapping-a-3d-surface) for more information on mapping a surface."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Using pLLD\n",
+    "\n",
+    "The pLLD sensor can also be used to probe non-capacitive surfaces. This is done by slowly lowering the tip until a change in pressure is detected by the pLLD sensor.\n",
+    "\n",
+    "Do not use teaching needles for pLLD probing!"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.pick_up_tips(tip_rack[\"A1\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Moving the channel and mapping a point\n",
+    "\n",
+    "See above for more information on moving channels.\n",
+    "\n",
+    "```{warning}\n",
+    "Make sure the tip is at a safe height above the labware before moving the channel. Use `STARBackend.move_channel_z` to move the channel to a safe height.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await star.prepare_for_manual_channel_operation(0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# TODO: change this to a position that works for you\n",
+    "await star.move_channel_x(0, 260)\n",
+    "await star.move_channel_y(0, 190)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Probing:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await star.plld_probe_z_height_using_channel(0, move_channels_to_safe_pos_after=True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.15"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}

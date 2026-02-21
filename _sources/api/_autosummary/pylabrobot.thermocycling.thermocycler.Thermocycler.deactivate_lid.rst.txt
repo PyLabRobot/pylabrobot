@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.deactivate\_lid
+==================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.deactivate_lid

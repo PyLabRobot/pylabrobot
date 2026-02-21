@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.imager.Imager.at
+==========================================
+
+.. currentmodule:: pylabrobot.plate_reading.imager
+
+.. automethod:: Imager.at

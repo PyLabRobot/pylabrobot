@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateHolder.get\_location\_wrt
+===================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateHolder.get_location_wrt

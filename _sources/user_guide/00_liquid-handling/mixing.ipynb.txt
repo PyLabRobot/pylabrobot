@@ -1,0 +1,189 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "788f6f66",
+   "metadata": {},
+   "source": [
+    "# Mixing\n",
+    "\n",
+    "![star supported](https://img.shields.io/badge/STAR-supported-blue)\n",
+    "![Vantage supported](https://img.shields.io/badge/Vantage-supported-blue)\n",
+    "![OT supported](https://img.shields.io/badge/OT-supported-blue)\n",
+    "![EVO not tested](https://img.shields.io/badge/EVO-not%20supported-red)\n",
+    "\n",
+    "Mixing in PLR is hardware agnostic. You can currently mix before an aspiration or after a dispense by passing the `mix` parameter to the corresponding method call.\n",
+    "\n",
+    "A standalone mixing operation will be added in the future."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "9bc0da6c",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Setting up the liquid handler.\n",
+      "Resource deck was assigned to the liquid handler.\n",
+      "Resource trash was assigned to the liquid handler.\n",
+      "Resource trash_core96 was assigned to the liquid handler.\n",
+      "Resource waste_block was assigned to the liquid handler.\n",
+      "Resource tiprack_1 was assigned to the liquid handler.\n",
+      "Resource plate_carrier_1 was assigned to the liquid handler.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Example deck setup for STAR. This can be any robot.\n",
+    "from pylabrobot.liquid_handling import LiquidHandler, LiquidHandlerChatterboxBackend\n",
+    "from pylabrobot.resources import STARDeck  # as an example\n",
+    "lh = LiquidHandler(backend=LiquidHandlerChatterboxBackend(), deck=STARDeck())\n",
+    "await lh.setup()\n",
+    "\n",
+    "from pylabrobot.resources import TIP_CAR_480_A00, hamilton_96_tiprack_1000uL_filter\n",
+    "tip_carrier = TIP_CAR_480_A00(name=\"tiprack_1\")\n",
+    "tip_carrier[0] = tr0 = hamilton_96_tiprack_1000uL_filter(name=\"tiprack_1_0\")\n",
+    "lh.deck.assign_child_resource(tip_carrier, rails=1)\n",
+    "\n",
+    "from pylabrobot.resources import PLT_CAR_L5AC_A00, Cor_96_wellplate_360ul_Fb\n",
+    "plate_carrier = PLT_CAR_L5AC_A00(name=\"plate_carrier_1\")\n",
+    "plate_carrier[0] = plate = Cor_96_wellplate_360ul_Fb(name=\"plate_1\")\n",
+    "lh.deck.assign_child_resource(plate_carrier, rails=10)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "1268dd30",
+   "metadata": {},
+   "source": [
+    "## Mixing\n",
+    "\n",
+    "Import the `Mix` object, and pass it to the `mix` parameter of LiquidHandler.aspirate and LiquidHandler.dispense as a list, with one object per channel."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "aabc816d",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Picking up tips:\n",
+      "pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    \n",
+      "  p0: tiprack_1_0_tipspot_0_0 0,0,0            HamiltonTip  1065             8                    95.1             Yes       \n"
+     ]
+    }
+   ],
+   "source": [
+    "await lh.pick_up_tips(tr0[\"A1\"])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "138129de",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Aspirating:\n",
+      "pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       \n",
+      "  p0: 100.0    plate_1_well_0_0     0,0,0            None       None       None       \n"
+     ]
+    }
+   ],
+   "source": [
+    "from pylabrobot.liquid_handling.standard import Mix\n",
+    "await lh.aspirate(plate[\"A1\"], vols=[100], mix=[Mix(volume=50, repetitions=3, flow_rate=100)])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "ef35b35e",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Dispensing:\n",
+      "pip#  vol(ul)  resource             offset           flow rate  blowout    lld_z       \n",
+      "  p0: 100.0    plate_1_well_0_0     0,0,0            None       None       None       \n"
+     ]
+    }
+   ],
+   "source": [
+    "await lh.dispense(plate[\"A1\"], vols=[100], mix=[Mix(volume=50, repetitions=3, flow_rate=100)])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "16158719",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Dropping tips:\n",
+      "pip#  resource             offset           tip type     max volume (µL)  fitting depth (mm)   tip length (mm)  filter    \n",
+      "  p0: tiprack_1_0_tipspot_0_0 0,0,0            HamiltonTip  1065             8                    95.1             Yes       \n"
+     ]
+    }
+   ],
+   "source": [
+    "await lh.return_tips()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "1478be9c",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Stopping the liquid handler.\n"
+     ]
+    }
+   ],
+   "source": [
+    "await lh.stop()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.13.7"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

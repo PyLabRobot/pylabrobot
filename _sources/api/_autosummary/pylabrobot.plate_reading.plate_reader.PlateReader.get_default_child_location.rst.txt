@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.plate\_reader.PlateReader.get\_default\_child\_location
+=================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.plate_reader
+
+.. automethod:: PlateReader.get_default_child_location

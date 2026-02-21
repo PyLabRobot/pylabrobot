@@ -1,0 +1,47 @@
+﻿pylabrobot.tilting.hamilton\_backend.HamiltonTiltModuleBackend
+==============================================================
+
+.. currentmodule:: pylabrobot.tilting.hamilton_backend
+
+.. autoclass:: HamiltonTiltModuleBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~HamiltonTiltModuleBackend.__init__
+      ~HamiltonTiltModuleBackend.deserialize
+      ~HamiltonTiltModuleBackend.get_all_instances
+      ~HamiltonTiltModuleBackend.send_command
+      ~HamiltonTiltModuleBackend.serialize
+      ~HamiltonTiltModuleBackend.set_angle
+      ~HamiltonTiltModuleBackend.setup
+      ~HamiltonTiltModuleBackend.stop
+      ~HamiltonTiltModuleBackend.tilt_go_to_position
+      ~HamiltonTiltModuleBackend.tilt_initial_offset
+      ~HamiltonTiltModuleBackend.tilt_initialize
+      ~HamiltonTiltModuleBackend.tilt_move_to_absolute_step_position
+      ~HamiltonTiltModuleBackend.tilt_move_to_relative_step_position
+      ~HamiltonTiltModuleBackend.tilt_port_clear_open_collector
+      ~HamiltonTiltModuleBackend.tilt_port_set_open_collector
+      ~HamiltonTiltModuleBackend.tilt_power_off
+      ~HamiltonTiltModuleBackend.tilt_request_error
+      ~HamiltonTiltModuleBackend.tilt_request_offset_between_light_barrier_and_init_position
+      ~HamiltonTiltModuleBackend.tilt_request_sensor
+      ~HamiltonTiltModuleBackend.tilt_set_drain_time
+      ~HamiltonTiltModuleBackend.tilt_set_name
+      ~HamiltonTiltModuleBackend.tilt_set_speed
+      ~HamiltonTiltModuleBackend.tilt_set_temperature
+      ~HamiltonTiltModuleBackend.tilt_set_waste_pump_off
+      ~HamiltonTiltModuleBackend.tilt_set_waste_pump_on
+      ~HamiltonTiltModuleBackend.tilt_switch_encoder
+      ~HamiltonTiltModuleBackend.tilt_switch_off_temperature_controller
+   
+   

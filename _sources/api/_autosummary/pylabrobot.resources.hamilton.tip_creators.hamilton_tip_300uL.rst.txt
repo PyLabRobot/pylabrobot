@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.hamilton\_tip\_300uL
+================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autofunction:: hamilton_tip_300uL

@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.wait\_for\_profile\_completion
+=================================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.wait_for_profile_completion

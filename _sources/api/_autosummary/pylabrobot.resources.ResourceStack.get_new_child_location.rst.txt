@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceStack.get\_new\_child\_location
+============================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceStack.get_new_child_location

@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.chatterbox.TemperatureControllerChatterboxBackend.supports\_active\_cooling
+===============================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.chatterbox
+
+.. autoproperty:: TemperatureControllerChatterboxBackend.supports_active_cooling

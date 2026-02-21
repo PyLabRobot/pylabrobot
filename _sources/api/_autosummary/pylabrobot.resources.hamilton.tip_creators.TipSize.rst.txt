@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.TipSize
+===================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autoclass:: TipSize

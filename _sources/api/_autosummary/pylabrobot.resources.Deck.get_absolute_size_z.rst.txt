@@ -1,0 +1,6 @@
+pylabrobot.resources.Deck.get\_absolute\_size\_z
+================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Deck.get_absolute_size_z

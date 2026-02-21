@@ -1,0 +1,6 @@
+pylabrobot.resources.Trough.is\_in\_subtree\_of
+===============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trough.is_in_subtree_of

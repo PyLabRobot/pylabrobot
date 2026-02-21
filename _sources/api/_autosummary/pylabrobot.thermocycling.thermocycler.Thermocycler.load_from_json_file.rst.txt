@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.load\_from\_json\_file
+=========================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.load_from_json_file

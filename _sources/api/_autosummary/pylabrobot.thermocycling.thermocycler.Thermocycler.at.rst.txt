@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.at
+=====================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.at

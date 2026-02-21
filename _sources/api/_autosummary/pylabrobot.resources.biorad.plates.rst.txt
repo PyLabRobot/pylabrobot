@@ -1,0 +1,29 @@
+﻿pylabrobot.resources.biorad.plates
+==================================
+
+.. currentmodule:: pylabrobot.resources.biorad
+
+.. automodule:: pylabrobot.resources.biorad.plates
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      BioRad_384_wellplate_50uL_Vb
+   
+   
+
+   
+   
+   
+
+   
+   
+   

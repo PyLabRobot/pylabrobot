@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.five\_ml\_tip
+=========================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autofunction:: five_ml_tip

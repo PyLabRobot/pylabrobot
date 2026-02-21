@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.deserialize
+==============================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.deserialize

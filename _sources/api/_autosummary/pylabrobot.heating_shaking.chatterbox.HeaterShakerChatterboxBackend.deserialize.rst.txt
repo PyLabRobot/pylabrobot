@@ -1,0 +1,6 @@
+pylabrobot.heating\_shaking.chatterbox.HeaterShakerChatterboxBackend.deserialize
+================================================================================
+
+.. currentmodule:: pylabrobot.heating_shaking.chatterbox
+
+.. automethod:: HeaterShakerChatterboxBackend.deserialize

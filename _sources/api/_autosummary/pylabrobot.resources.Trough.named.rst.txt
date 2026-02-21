@@ -1,0 +1,6 @@
+pylabrobot.resources.Trough.named
+=================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Trough.named

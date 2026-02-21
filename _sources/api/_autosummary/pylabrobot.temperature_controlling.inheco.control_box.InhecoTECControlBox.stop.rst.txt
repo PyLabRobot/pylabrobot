@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.inheco.control\_box.InhecoTECControlBox.stop
+================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.control_box
+
+.. automethod:: InhecoTECControlBox.stop

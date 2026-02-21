@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.plate\_reader.PlateReader.assign\_child\_by\_anchor
+=============================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.plate_reader
+
+.. automethod:: PlateReader.assign_child_by_anchor

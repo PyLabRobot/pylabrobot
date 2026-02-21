@@ -1,0 +1,28 @@
+﻿pylabrobot.only\_fans.chatterbox.FanChatterboxBackend
+=====================================================
+
+.. currentmodule:: pylabrobot.only_fans.chatterbox
+
+.. autoclass:: FanChatterboxBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FanChatterboxBackend.__init__
+      ~FanChatterboxBackend.deserialize
+      ~FanChatterboxBackend.get_all_instances
+      ~FanChatterboxBackend.serialize
+      ~FanChatterboxBackend.setup
+      ~FanChatterboxBackend.stop
+      ~FanChatterboxBackend.turn_off
+      ~FanChatterboxBackend.turn_on
+   
+   

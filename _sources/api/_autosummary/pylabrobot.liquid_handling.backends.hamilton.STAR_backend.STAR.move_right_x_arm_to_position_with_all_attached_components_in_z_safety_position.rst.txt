@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.hamilton.STAR\_backend.STAR.move\_right\_x\_arm\_to\_position\_with\_all\_attached\_components\_in\_z\_safety\_position
+============================================================================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.hamilton.STAR_backend
+
+.. automethod:: STAR.move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position

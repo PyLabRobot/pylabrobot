@@ -1,0 +1,43 @@
+﻿pylabrobot.resources.hamilton.tip\_carriers
+===========================================
+
+.. currentmodule:: pylabrobot.resources.hamilton
+
+.. automodule:: pylabrobot.resources.hamilton.tip_carriers
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      TIP_CAR_120BC_4mlTF_A00
+      TIP_CAR_120BC_5mlT_A00
+      TIP_CAR_288_A00
+      TIP_CAR_288_B00
+      TIP_CAR_288_C00
+      TIP_CAR_384BC_A00
+      TIP_CAR_384_A00
+      TIP_CAR_480
+      TIP_CAR_480BC_A00
+      TIP_CAR_480_A00
+      TIP_CAR_72_4mlTF_C00
+      TIP_CAR_72_5mlT_C00
+      TIP_CAR_96BC_4mlTF_A00
+      TIP_CAR_96BC_5mlT_A00
+      TIP_CAR_NTR_A00
+   
+   
+
+   
+   
+   
+
+   
+   
+   

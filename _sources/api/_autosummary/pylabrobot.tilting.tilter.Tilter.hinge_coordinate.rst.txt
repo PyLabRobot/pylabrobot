@@ -1,0 +1,6 @@
+pylabrobot.tilting.tilter.Tilter.hinge\_coordinate
+==================================================
+
+.. currentmodule:: pylabrobot.tilting.tilter
+
+.. autoproperty:: Tilter.hinge_coordinate

@@ -1,0 +1,6 @@
+pylabrobot.scales.chatterbox.ScaleChatterboxBackend.serialize
+=============================================================
+
+.. currentmodule:: pylabrobot.scales.chatterbox
+
+.. automethod:: ScaleChatterboxBackend.serialize

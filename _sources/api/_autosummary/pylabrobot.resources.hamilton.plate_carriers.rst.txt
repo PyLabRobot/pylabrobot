@@ -1,0 +1,57 @@
+﻿pylabrobot.resources.hamilton.plate\_carriers
+=============================================
+
+.. currentmodule:: pylabrobot.resources.hamilton
+
+.. automodule:: pylabrobot.resources.hamilton.plate_carriers
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      PLT_CAR_L4HD
+      PLT_CAR_L4ST_B00
+      PLT_CAR_L4ST_B00_4x5_Nunc96
+      PLT_CAR_L4ST_C00
+      PLT_CAR_L4ST_HIGH_A00
+      PLT_CAR_L4ST_HIGH_A00_4x5_Nunc96
+      PLT_CAR_L4ST_LOW_A00
+      PLT_CAR_L4ST_LOW_A00_4x9_Nunc96
+      PLT_CAR_L4_HHS_ALT_A00
+      PLT_CAR_L5AC
+      PLT_CAR_L5AC_A00
+      PLT_CAR_L5AC_P_A00
+      PLT_CAR_L5FLEX_AC
+      PLT_CAR_L5FLEX_AC_A00
+      PLT_CAR_L5FLEX_MD_A00
+      PLT_CAR_L5MD
+      PLT_CAR_L5MD_A00
+      PLT_CAR_L5PCR
+      PLT_CAR_L5PCR_A00
+      PLT_CAR_L5PCR_A01
+      PLT_CAR_L5_ALT_A00
+      PLT_CAR_L5_DWP
+      PLT_CAR_P3AC_A00
+      PLT_CAR_P3AC_A01
+      PLT_CAR_P3HD
+      PLT_CAR_P3LI_A00
+      PLT_CAR_P3MD
+      PLT_CAR_P3MD_A00
+      PLT_CAR_P3MD_A01
+   
+   
+
+   
+   
+   
+
+   
+   
+   

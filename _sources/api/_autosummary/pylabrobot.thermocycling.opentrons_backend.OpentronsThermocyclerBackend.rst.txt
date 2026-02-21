@@ -1,0 +1,45 @@
+﻿pylabrobot.thermocycling.opentrons\_backend.OpentronsThermocyclerBackend
+========================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.opentrons_backend
+
+.. autoclass:: OpentronsThermocyclerBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OpentronsThermocyclerBackend.__init__
+      ~OpentronsThermocyclerBackend.close_lid
+      ~OpentronsThermocyclerBackend.deactivate_block
+      ~OpentronsThermocyclerBackend.deactivate_lid
+      ~OpentronsThermocyclerBackend.deserialize
+      ~OpentronsThermocyclerBackend.get_all_instances
+      ~OpentronsThermocyclerBackend.get_block_current_temperature
+      ~OpentronsThermocyclerBackend.get_block_status
+      ~OpentronsThermocyclerBackend.get_block_target_temperature
+      ~OpentronsThermocyclerBackend.get_current_cycle_index
+      ~OpentronsThermocyclerBackend.get_current_step_index
+      ~OpentronsThermocyclerBackend.get_hold_time
+      ~OpentronsThermocyclerBackend.get_lid_current_temperature
+      ~OpentronsThermocyclerBackend.get_lid_open
+      ~OpentronsThermocyclerBackend.get_lid_status
+      ~OpentronsThermocyclerBackend.get_lid_target_temperature
+      ~OpentronsThermocyclerBackend.get_total_cycle_count
+      ~OpentronsThermocyclerBackend.get_total_step_count
+      ~OpentronsThermocyclerBackend.open_lid
+      ~OpentronsThermocyclerBackend.run_protocol
+      ~OpentronsThermocyclerBackend.serialize
+      ~OpentronsThermocyclerBackend.set_block_temperature
+      ~OpentronsThermocyclerBackend.set_lid_temperature
+      ~OpentronsThermocyclerBackend.setup
+      ~OpentronsThermocyclerBackend.stop
+   
+   

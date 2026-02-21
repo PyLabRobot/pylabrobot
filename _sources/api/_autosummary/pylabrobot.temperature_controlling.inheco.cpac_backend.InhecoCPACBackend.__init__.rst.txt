@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.inheco.cpac\_backend.InhecoCPACBackend.\_\_init\_\_
+=======================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.inheco.cpac_backend
+
+.. automethod:: InhecoCPACBackend.__init__

@@ -1,0 +1,27 @@
+﻿pylabrobot.tilting.chatterbox.TilterChatterboxBackend
+=====================================================
+
+.. currentmodule:: pylabrobot.tilting.chatterbox
+
+.. autoclass:: TilterChatterboxBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TilterChatterboxBackend.__init__
+      ~TilterChatterboxBackend.deserialize
+      ~TilterChatterboxBackend.get_all_instances
+      ~TilterChatterboxBackend.serialize
+      ~TilterChatterboxBackend.set_angle
+      ~TilterChatterboxBackend.setup
+      ~TilterChatterboxBackend.stop
+   
+   

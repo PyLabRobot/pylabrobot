@@ -1,0 +1,6 @@
+pylabrobot.resources.TipRack.item\_dx
+=====================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. autoproperty:: TipRack.item_dx
