@@ -1,10 +1,19 @@
 import datetime
 from contextlib import asynccontextmanager
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import Head96Information, STARBackend
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
+  Head96Information,
+  STARBackend,
+)
+from pylabrobot.resources.container import Container
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.well import Well
+
+# Type aliases for nested enums (for cleaner signatures)
+LLDMode = STARBackend.LLDMode
+PressureLLDMode = STARBackend.PressureLLDMode
 
 
 class STARChatterboxBackend(STARBackend):
@@ -205,6 +214,15 @@ class STARChatterboxBackend(STARBackend):
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
 
+  async def move_channel_x(self, channel: int, x: float):
+    print(f"moving channel {channel} to x: {x}")
+
+  async def move_all_channels_in_z_safety(self):
+    print("moving all channels to z safety")
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    print(f"positioning channels in z: {zs}")
+
   # # # # # # # # 1_000 uL Channel: Complex Commands # # # # # # # #
 
   async def step_off_foil(
@@ -273,3 +291,131 @@ class STARChatterboxBackend(STARBackend):
     finally:
       messages.append("end slow iswap")
       print(" | ".join(messages))
+
+  # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
+
+  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
+    """Return tip length from the tip tracker.
+
+    Args:
+      channel_idx: Index of the pipetting channel (0-indexed).
+
+    Returns:
+      The tip length in mm from the tip tracker.
+
+    Raises:
+      NoTipError: If no tip is present on the channel (via tip tracker).
+    """
+    tip = self.head[channel_idx].get_tip()
+    return tip.total_tip_length
+
+  async def probe_liquid_heights(
+    self,
+    containers: List[Container],
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    lld_mode: LLDMode = LLDMode.GAMMA,
+    search_speed: float = 10.0,
+    n_replicates: int = 1,
+    move_to_z_safety_before: bool = True,
+    move_to_z_safety_after: bool = True,
+    allow_duplicate_channels: bool = False,
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+    min_traverse_height_during_command: Optional[float] = None,
+    z_position_at_end_of_command: Optional[float] = None,
+    channel_acceleration: float = 800.0,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: float = 0.0,
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    channel_speed_above_start_pos_search: float = 120.0,
+    z_drive_current_limit: int = 3,
+    tip_has_filter: bool = False,
+    dispense_drive_speed: float = 5.0,
+    dispense_drive_acceleration: float = 0.2,
+    dispense_drive_max_speed: float = 14.5,
+    dispense_drive_current_limit: int = 3,
+    plld_detection_edge: int = 30,
+    plld_detection_drop: int = 10,
+    clld_verification: bool = False,
+    clld_detection_edge: int = 10,
+    clld_detection_drop: int = 2,
+    max_delta_plld_clld: float = 5.0,
+    plld_mode: Optional[PressureLLDMode] = None,
+    plld_foam_detection_drop: int = 30,
+    plld_foam_detection_edge_tolerance: int = 30,
+    plld_foam_ad_values: int = 30,
+    plld_foam_search_speed: float = 10.0,
+    dispense_back_plld_volume: Optional[float] = None,
+  ) -> List[float]:
+    """Probe liquid heights by computing from tracked container volumes.
+
+    Instead of simulating hardware LLD, this mock computes liquid heights directly from
+    each container's volume tracker using `container.compute_height_from_volume()`.
+
+    Args:
+      containers: List of Container objects to probe.
+      use_channels: Channel indices (validated for tip presence).
+      All other parameters: Accepted for API compatibility but unused in mock.
+
+    Returns:
+      Liquid heights in mm from cavity bottom for each container, computed from tracked volumes.
+
+    Raises:
+      NotImplementedError: If a container doesn't support compute_height_from_volume.
+    """
+    # Unused parameters kept for signature compatibility:
+    _ = (
+      lld_mode,
+      search_speed,
+      n_replicates,
+      move_to_z_safety_before,
+      move_to_z_safety_after,
+      allow_duplicate_channels,
+      min_traverse_height_at_beginning_of_command,
+      min_traverse_height_during_command,
+      z_position_at_end_of_command,
+      channel_acceleration,
+      post_detection_trajectory,
+      post_detection_dist,
+      detection_edge,
+      detection_drop,
+      channel_speed_above_start_pos_search,
+      z_drive_current_limit,
+      tip_has_filter,
+      dispense_drive_speed,
+      dispense_drive_acceleration,
+      dispense_drive_max_speed,
+      dispense_drive_current_limit,
+      plld_detection_edge,
+      plld_detection_drop,
+      clld_verification,
+      clld_detection_edge,
+      clld_detection_drop,
+      max_delta_plld_clld,
+      plld_mode,
+      plld_foam_detection_drop,
+      plld_foam_detection_edge_tolerance,
+      plld_foam_ad_values,
+      plld_foam_search_speed,
+      dispense_back_plld_volume,
+      resource_offsets,
+    )
+    if use_channels is None:
+      use_channels = list(range(len(containers)))
+
+    # Validate tip presence using tip tracker
+    for ch in use_channels:
+      self.head[ch].get_tip()  # Raises NoTipError if no tip
+
+    heights: List[float] = []
+    for container in containers:
+      volume = container.tracker.get_used_volume()
+      if volume == 0:
+        heights.append(0.0)
+      else:
+        height = container.compute_height_from_volume(volume)
+        heights.append(height)
+
+    print(f"probe_liquid_heights: {[f'{h:.2f}' for h in heights]} mm")
+    return heights
