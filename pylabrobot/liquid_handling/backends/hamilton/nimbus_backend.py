@@ -995,9 +995,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Query tip presence (use discovered address only)
     try:
-      tip_status = await self.send_command(IsTipPresent(self._pipette_address))
-      assert tip_status is not None, "IsTipPresent command returned None"
-      tip_present = tip_status.get("tip_present", [])
+      tip_present = await self.request_tip_presence()
       logger.info(f"Tip presence: {tip_present}")
     except Exception as e:
       logger.warning(f"Failed to query tip presence: {e}")
@@ -1250,6 +1248,20 @@ class NimbusBackend(HamiltonTCPBackend):
     """Stop the backend and close connection."""
     await HamiltonTCPBackend.stop(self)
 
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Request tip presence on each channel.
+
+    Returns:
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
+    """
+    if self._pipette_address is None:
+      raise RuntimeError("Pipette address not discovered. Call setup() first.")
+    tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+    assert tip_status is not None, "IsTipPresent command returned None"
+    tip_present = tip_status.get("tip_present", [])
+    return [bool(v) for v in tip_present]
+
   def _build_waste_position_params(
     self,
     use_channels: List[int],
@@ -1466,18 +1478,17 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Check tip presence before picking up tips
     try:
-      tip_status = await self.send_command(IsTipPresent(self._pipette_address))
-      assert tip_status is not None, "IsTipPresent command returned None"
-      tip_present = tip_status.get("tip_present", [])
-      # Check if any channels we're trying to use already have tips
+      tip_present = await self.request_tip_presence()
       channels_with_tips = [
-        i for i, present in enumerate(tip_present) if i in use_channels and present != 0
+        i for i, present in enumerate(tip_present) if i in use_channels and present
       ]
       if channels_with_tips:
         raise RuntimeError(
           f"Cannot pick up tips: channels {channels_with_tips} already have tips mounted. "
           f"Drop existing tips first."
         )
+    except RuntimeError:
+      raise
     except Exception as e:
       # If tip presence check fails, log warning but continue
       logger.warning(f"Could not check tip presence before pickup: {e}")

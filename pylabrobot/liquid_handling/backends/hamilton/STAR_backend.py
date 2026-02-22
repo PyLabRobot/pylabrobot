@@ -6397,29 +6397,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Extract z-coordinate and convert to mm
     return float(z_pos_query["rd"] / 10)
 
-  async def request_tip_presence(self) -> List[int]:
-    """Request query tip presence on each channel
-
-    Returns:
-      0 = no tip, 1 = Tip in gripper (for each channel)
-    """
-    warnings.warn(  # TODO: remove 2026-06
-      "`request_tip_presence` is deprecated and will be "
-      "removed in 2026-06 use `channels_sense_tip_presence` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.channels_sense_tip_presence()
-
-  async def channels_sense_tip_presence(self) -> List[int]:
+  async def request_tip_presence(self) -> List[Optional[bool]]:
     """Measure tip presence on all single channels using their sleeve sensors.
 
     Returns:
-      List of integers where 0 = no tip, 1 = tip present (for each channel)
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
     """
-
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
-    return cast(List[int], resp.get("rt"))
+    return [bool(v) for v in cast(List[int], resp.get("rt"))]
+
+  async def channels_sense_tip_presence(self) -> List[int]:
+    """Deprecated - use `request_tip_presence` instead."""
+    warnings.warn(
+      "`channels_sense_tip_presence` is deprecated and will be "
+      "removed in a future version. Use `request_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return [int(v) for v in await self.request_tip_presence() if v is not None]
 
   async def request_pip_height_last_lld(self) -> List[float]:
     """

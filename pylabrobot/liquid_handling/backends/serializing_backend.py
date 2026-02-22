@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -225,6 +225,18 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   async def move_channel_z(self, channel: int, z: float):
     await self.send_command(command="move_channel_z", data={"channel": channel, "z": z})
+
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Request tip presence on each channel via the serialized command interface.
+
+    Returns:
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
+    """
+    result = await self.send_command(command="request_tip_presence")
+    if result is not None and "tip_presence" in result:
+      return cast(List[Optional[bool]], result["tip_presence"])
+    return [None] * self.num_channels
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return True

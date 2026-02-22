@@ -152,6 +152,12 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
 
     raise NotImplementedError()
 
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Request the tip presence status for each channel. Returns a list of length `num_channels`
+    where each element is `True` if a tip is mounted, `False` if not, or `None` if unknown."""
+
+    raise NotImplementedError()
+
   @abstractmethod
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     """Check if the tip can be picked up by the specified channel. Does not consider
