@@ -1,17 +1,52 @@
 {
   "editor.tabSize": 2,
   "files.trimTrailingWhitespace": true,
+  "cSpell.words": [
+    "agrow",
+    "agrowpumps",
+    "coro",
+    "cytomat",
+    "decalibrate",
+    "Defaultable",
+    "Deprecated",
+    "frontmost",
+    "hepa",
+    "Inheco",
+    "iswap",
+    "jsonify",
+    "klass",
+    "labware",
+    "modbus",
+    "pylabrobot",
+    "pytest",
+    "subclassing",
+    "subresource",
+    "tadm",
+    "tiprack",
+    "usascientific",
+    "websockets"
+  ],
   "python.linting.mypyEnabled": true,
   "python.linting.enabled": true,
-  "python.testing.pytestArgs": ["."],
+  "python.testing.pytestArgs": [
+    "."
+  ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
   "python.testing.autoTestDiscoverOnSaveEnabled": true,
-  "editor.rulers": [100],
+  "editor.rulers": [
+    100
+  ],
   "files.exclude": {
     "**/__pycache__": true
   },
-  "python.testing.unittestArgs": ["-v", "-s", ".", "-p", "*_test.py"],
+  "python.testing.unittestArgs": [
+    "-v",
+    "-s",
+    ".",
+    "-p",
+    "*_test.py"
+  ],
   "[markdown]": {
     "editor.wordWrap": "bounded",
     "editor.wordWrapColumn": 100
