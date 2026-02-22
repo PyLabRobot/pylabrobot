@@ -11,7 +11,11 @@ from pylabrobot.thermocycling.standard import BlockStatus, LidStatus, Protocol, 
 
 
 class Thermocycler(ResourceHolder, Machine):
-  """Generic Thermocycler: block + lid + profile + status queries."""
+  """Generic Thermocycler: block + lid + profile + status queries.
+
+  Awaitable: ``await tc`` waits for the current profile to complete (equivalent
+  to ``await tc.wait_for_profile_completion()`` with default args).
+  """
 
   def __init__(
     self,
@@ -79,24 +83,63 @@ class Thermocycler(ResourceHolder, Machine):
     """Turn off the lid heater."""
     return await self.backend.deactivate_lid(**backend_kwargs)
 
-  async def run_protocol(self, protocol: Protocol, block_max_volume: float, **backend_kwargs):
-    """Enqueue a multi-stage temperature protocol (fire-and-forget).
+  async def run_protocol(
+    self,
+    protocol: Protocol,
+    block_max_volume: float,
+    **backend_kwargs,
+  ):
+    """Start a multi-stage temperature protocol; return an execution handle.
+
+    Always returns immediately (non-blocking). To block until the protocol
+    completes, await the handle (e.g. await handle.wait()) or use
+    wait_for_profile_completion().
 
     Args:
       protocol: Protocol object containing stages with steps and repeats.
+        Backends may accept subclasses (e.g. ODTCProtocol).
       block_max_volume: Maximum block volume (µL) for safety.
-    """
+      **backend_kwargs: Backend-specific options (e.g. ODTC accepts
+        config=ODTCConfig).
 
-    num_zones = len(protocol.stages[0].steps[0].temperature)
-    for stage in protocol.stages:
-      for i, step in enumerate(stage.steps):
-        if len(step.temperature) != num_zones:
-          raise ValueError(
-            f"All steps must have the same number of temperatures. "
-            f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
-          )
+    Returns:
+      Execution handle (backend-specific), or None for backends that do not
+      return a handle. To block until done: await handle.wait() or
+      wait_for_profile_completion().
+    """
+    if protocol.stages:
+      num_zones = len(protocol.stages[0].steps[0].temperature)
+      for stage in protocol.stages:
+        for i, step in enumerate(stage.steps):
+          if len(step.temperature) != num_zones:
+            raise ValueError(
+              f"All steps must have the same number of temperatures. "
+              f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
+            )
 
     return await self.backend.run_protocol(protocol, block_max_volume, **backend_kwargs)
+
+  async def run_stored_protocol(
+    self,
+    name: str,
+    **backend_kwargs,
+  ):
+    """Run a stored protocol by name (backends that support it override).
+
+    Args:
+      name: Name of the stored protocol to run.
+      **backend_kwargs: Backend-specific options (e.g. wait=True for ODTC to
+        block until done before returning).
+
+    Returns:
+      Execution handle (backend-specific). To block until done, await
+      handle.wait() or use wait_for_profile_completion(); some backends
+      (e.g. ODTC) accept wait=True in backend_kwargs.
+
+    Raises:
+      NotImplementedError: If this backend does not support running stored protocols by name.
+    """
+    return await self.backend.run_stored_protocol(name, **backend_kwargs)
 
   async def run_pcr_profile(
     self,
@@ -272,8 +315,21 @@ class Thermocycler(ResourceHolder, Machine):
       return True
     return False
 
+  def __await__(self):
+    """Make the thermocycler awaitable: wait for the current profile to complete.
+
+    Equivalent to ``await self.wait_for_profile_completion()`` with default
+    poll_interval. For backends that track current execution (e.g. ODTC), this
+    uses the execution handle when available.
+    """
+    return self.wait_for_profile_completion().__await__()
+
   async def wait_for_profile_completion(self, poll_interval: float = 60.0, **backend_kwargs):
-    """Block until the profile finishes, polling at `poll_interval` seconds."""
+    """Block until the profile finishes, polling at `poll_interval` seconds.
+
+    ``await tc`` is equivalent to ``await tc.wait_for_profile_completion()``
+    with default args.
+    """
     while await self.is_profile_running(**backend_kwargs):
       await asyncio.sleep(poll_interval)
 

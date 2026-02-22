@@ -927,6 +927,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     cover_enabled=True,
     protocol_name: str = "PCR_Protocol",
     stage_name_prefixes: Optional[List[str]] = None,
+    **kwargs,
   ):
     assert block_id is not None, "block_id must be specified"
 
