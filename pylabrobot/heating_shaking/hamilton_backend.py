@@ -1,6 +1,6 @@
-import abc
 import time
 import warnings
+import abc
 from enum import Enum
 from typing import Dict, Literal, Optional
 
@@ -96,7 +96,7 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
       "interface": None,  # TODO: implement serialization
     }
 
-  async def shake(
+  async def start_shaking(
     self,
     speed: float = 800,
     direction: Literal[0, 1] = 0,
@@ -125,6 +125,26 @@ class HamiltonHeaterShakerBackend(HeaterShakerBackend):
         break
       if timeout is not None and time.time() - now > timeout:
         raise TimeoutError("Failed to start shaking within timeout")
+
+  async def shake(
+    self,
+    speed: float = 800,
+    direction: Literal[0, 1] = 0,
+    acceleration: int = 1_000,
+    timeout: Optional[float] = 30,
+  ):
+    """Deprecated alias for ``start_shaking``."""
+    warnings.warn(
+      "HamiltonHeaterShakerBackend.shake() is deprecated. Use start_shaking() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    await self.start_shaking(
+      speed=speed,
+      direction=direction,
+      acceleration=acceleration,
+      timeout=timeout,
+    )
 
   async def stop_shaking(self):
     await self._stop_shaking()

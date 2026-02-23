@@ -1,3 +1,5 @@
+import warnings
+
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.temperature_controlling.inheco.temperature_controller import (
   InhecoTemperatureControllerBackend,
@@ -14,7 +16,7 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerB
     await self.stop_shaking()
     await super().stop()
 
-  async def start_shaking(self):
+  async def _start_shaking_command(self):
     """Start shaking the device at the speed set by `set_shaker_speed`"""
 
     return await self.interface.send_command(f"{self.index}ASE1")
@@ -51,7 +53,7 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerB
 
     return await self.interface.send_command(f"1SSS{shape}")
 
-  async def shake(self, speed: float, shape: int = 0):
+  async def start_shaking(self, speed: float, shape: int = 0):
     """Shake the shaker at the given speed
 
     Args:
@@ -60,7 +62,16 @@ class InhecoThermoshakeBackend(InhecoTemperatureControllerBackend, HeaterShakerB
 
     await self.set_shaker_speed(speed=speed)
     await self.set_shaker_shape(shape=shape)
-    await self.start_shaking()
+    await self._start_shaking_command()
+
+  async def shake(self, speed: float, shape: int = 0):
+    """Deprecated alias for ``start_shaking``."""
+    warnings.warn(
+      "InhecoThermoshakeBackend.shake() is deprecated. Use start_shaking() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    await self.start_shaking(speed=speed, shape=shape)
 
   @property
   def supports_locking(self) -> bool:
