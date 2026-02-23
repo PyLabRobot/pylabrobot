@@ -331,7 +331,7 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     else:
       raise ValueError(f"Could not parse status from response: {res}")
 
-  async def read_error_log(self) -> str:
+  async def read_error_log(self) -> List[str]:
     res = await self.send_command("!ERROR")
     if len(res) > 1:
       return res[1].split()
