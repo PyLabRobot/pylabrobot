@@ -43,7 +43,8 @@ class ResourceHolder(Resource):
     child_location: Coordinate = Coordinate.zero(),
     preferred_pickup_location: Optional[Coordinate] = None,
   ):
-    super().__init__(
+    Resource.__init__(
+      self,
       name=name,
       size_x=size_x,
       size_y=size_y,

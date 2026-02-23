@@ -33,7 +33,6 @@ try:
 
   # for run cancellation
   import ot_api.requestor as _req
-  from requests import HTTPError
 
   USE_OT = True
 except ImportError as e:
@@ -129,17 +128,14 @@ class OpentronsOT2Backend(LiquidHandlerBackend):
     if run_id:
       try:
         _req.post(f"/runs/{run_id}/cancel")
-      except HTTPError as err:
-        if err.response.status_code == 404:
-          _req.post(f"/runs/{run_id}/actions/cancel")
-        else:
-          raise
       except Exception:
-        # fallback: delete the run entirely
         try:
-          _req.delete(f"/runs/{run_id}")
+          _req.post(f"/runs/{run_id}/actions/cancel")
         except Exception:
-          pass
+          try:
+            _req.delete(f"/runs/{run_id}")
+          except Exception:
+            pass
 
   def get_ot_name(self, plr_resource_name: str) -> str:
     """Opentrons only allows names in ^[a-z0-9._]+$, but in PLR we are flexible.

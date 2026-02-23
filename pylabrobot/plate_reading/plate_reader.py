@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, cast
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.plate_reading.standard import NoPlateError
-from pylabrobot.resources import Coordinate, Plate, Resource, ResourceHolder, Well
+from pylabrobot.resources import Coordinate, Plate, Resource, ResourceHolder, Rotation, Well
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class PlateReader(ResourceHolder, Machine):
     size_y: float,
     size_z: float,
     backend: PlateReaderBackend,
+    rotation: Optional["Rotation"] = None,
     category: Optional[str] = "plate_reader",
     model: Optional[str] = None,
     child_location: Coordinate = Coordinate.zero(),
@@ -43,6 +44,7 @@ class PlateReader(ResourceHolder, Machine):
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
+      rotation=rotation,
       category=category,
       model=model,
       child_location=child_location,
