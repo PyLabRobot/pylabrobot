@@ -326,11 +326,17 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   async def get_status(self) -> List[str]:
     res = await self.send_command("!STATUS")
-    return res[1].split() if len(res) > 1 else res
+    if len(res) > 1:
+      return res[1].split()
+    else:
+      raise ValueError(f"Could not parse status from response: {res}")
 
   async def read_error_log(self) -> str:
     res = await self.send_command("!ERROR")
-    return res[1] if len(res) > 1 else res[0]
+    if len(res) > 1:
+      return res[1].split()
+    else:
+      raise ValueError(f"Could not parse error log from response: {res}")
 
   async def clear_error_log(self) -> None:
     await self.send_command("!CLEAR ERROR")
@@ -344,9 +350,8 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
     if len(parts) >= 2:
       return (float(parts[1]), float(parts[0]))  # current, set_point
-    elif len(parts) == 1:
-      return (float(parts[0]), float(parts[0]))
-    return (0.0, 0.0)
+    else:
+      raise ValueError(f"Could not parse temperature from response: {res}")
 
   async def set_temperature(self, temperature: float) -> None:
     if not (0 <= temperature <= 45):
