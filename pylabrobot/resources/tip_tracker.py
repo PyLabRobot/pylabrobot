@@ -111,6 +111,9 @@ class TipTracker:
   def commit(self) -> None:
     """Commit the pending operations."""
     self._tip = self._pending_tip
+    # Propagate state-update callback to the tip's volume tracker
+    if self._tip is not None and self._callback is not None:
+      self._tip.tracker.register_callback(self._callback)
     if self._callback is not None:
       self._callback()
 

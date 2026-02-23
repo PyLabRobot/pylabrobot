@@ -64,7 +64,7 @@ class HamiltonDeckTests(unittest.TestCase):
           │
     (31)  ├── waste_block               Resource             (775.000, 115.000, 100.000)
           │   ├── teaching_tip_rack     TipRack              (780.900, 461.100, 100.000)
-          │   ├── core_grippers         HamiltonCoreGrippers (797.500, 125.000, 205.000)
+          │   ├── core_grippers         HamiltonCoreGrippers (797.500, 085.500, 205.000)
           │
     (32)  ├── trash                     Trash                (800.000, 190.600, 137.100)
     """[1:]

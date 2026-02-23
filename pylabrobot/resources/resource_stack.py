@@ -145,3 +145,7 @@ class ResourceStack(Resource):
       raise ValueError("Stack is empty")
 
     return self.children[-1]
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    # for now, any resource can be dropped onto a stack.
+    pass

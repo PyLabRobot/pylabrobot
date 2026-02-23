@@ -5,6 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PyLabRobot Visualizer</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.3/font/bootstrap-icons.css"
@@ -15,20 +16,208 @@
       integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3"
       crossorigin="anonymous"
     />
-    <link href="./main.css" rel="stylesheet" />
+    <link href="./main.css?v=2" rel="stylesheet" />
   </head>
 
   <body>
     <nav class="navbar bg-light">
       <div class="container-fluid">
-        <a class="navbar-brand" href="#">
-          PyLabRobot Visualizer <span class="fs-6 text-muted">(v0.1)</span></a
+        <button id="toolbar-left-toggle" class="toolbar-left-toggle" title="Tools Panel">
+          <svg width="27" height="27" viewBox="0 0 24 24" fill="#333" stroke="none">
+            <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>
+          </svg>
+        </button>
+        <div class="navbar-divider"></div>
+        <a class="navbar-brand" href="#" style="display: flex; align-items: center;">
+          <img src="/favicon.png" alt="Logo" style="height: 42px; margin-right: 8px;">
+          PyLabRobot Visualizer</a
         >
 
-        <div class="recording-stuff">
+        <span id="source-filename" title="Python source file being visualized">{{ source_filename }}</span>
+        <div class="navbar-divider navbar-divider-machine-tools"></div>
+        <div id="navbar-lh-machine-tools"></div>
+
+        <div class="status-box">
+          <button type="button" onclick="openSocket();" id="status-indicator" aria-label="Reconnect to server"></button>
+          <span id="status-label">Loading...</span>
+        </div>
+        <div class="navbar-divider"></div>
+        <button id="toolbar-right-toggle" class="toolbar-right-toggle" title="Inspector Panel">
+          <svg width="30" height="30" viewBox="0 0 40 40" fill="#333" stroke="none">
+            <!-- Hat crown -->
+            <path d="M12 14c0-5 3.5-9 8-9s8 4 8 9H12z"/>
+            <!-- Hat band -->
+            <rect x="12" y="13" width="16" height="1.5" fill="#dde1e5"/>
+            <!-- Hat brim -->
+            <ellipse cx="20" cy="15" rx="13" ry="3"/>
+            <!-- Hair sides -->
+            <path d="M11 16c0 0-1 2-1 4h2c0-2 0.5-3 0.5-3z"/>
+            <path d="M29 16c0 0 1 2 1 4h-2c0-2-0.5-3-0.5-3z"/>
+            <!-- Face (blank oval) -->
+            <ellipse cx="20" cy="22" rx="6" ry="7" fill="#dde1e5"/>
+            <!-- Neck -->
+            <rect x="18" y="28" width="4" height="3" fill="#dde1e5"/>
+            <!-- Coat body -->
+            <path d="M8 40V32c0-2 2-4 5-5l7 5 7-5c3 1 5 3 5 5v8z"/>
+            <!-- Lapel left -->
+            <path d="M13 27l7 5v8H8V32c0-2 2-3.5 5-5z" fill="#333"/>
+            <path d="M13.5 27.5l6 4.5v7" fill="none" stroke="#dde1e5" stroke-width="0.8"/>
+            <!-- Lapel right -->
+            <path d="M27 27l-7 5v8h12V32c0-2-2-3.5-5-5z" fill="#333"/>
+            <path d="M26.5 27.5l-6 4.5v7" fill="none" stroke="#dde1e5" stroke-width="0.8"/>
+            <!-- Tie -->
+            <polygon points="20,30 18.5,33 20,40 21.5,33" fill="#333"/>
+            <!-- Shirt triangle -->
+            <polygon points="18,30 20,32 22,30" fill="#dde1e5"/>
+          </svg>
+        </button>
+      </div>
+    </nav>
+
+    <div class="content">
+      <aside id="toolbar-left">
+        <div class="toolbar-section">
+          <button class="toolbar-btn active" id="toolbar-cursor-btn" title="Select">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="#333" stroke="none">
+              <path d="M4 1 L4 16 L8.5 12 L13 18 L15 17 L10.5 11 L16 10 Z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="toolbar-section">
+          <button class="toolbar-btn" id="toolbar-coords-btn" title="Get Location">
+            <svg width="18" height="18" viewBox="3 3 14 14" fill="none" stroke="#333" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="10" cy="10" r="4.2"/>
+              <circle cx="10" cy="10" r="1" fill="#333"/>
+              <line x1="10" y1="3" x2="10" y2="5"/>
+              <line x1="10" y1="15" x2="10" y2="17"/>
+              <line x1="3" y1="10" x2="5" y2="10"/>
+              <line x1="15" y1="10" x2="17" y2="10"/>
+            </svg>
+          </button>
+        </div>
+        <div class="toolbar-section">
+          <button class="toolbar-btn" id="toolbar-gif-btn" title="GIF Recording">
+            <span style="font-size: 17px; line-height: 1;">🎥</span>
+          </button>
+        </div>
+      </aside>
+      <main>
+        <div id="kanvas"></div>
+        <div id="zoom-controls">
+          <button id="zoom-in-btn" title="Zoom in">+</button>
+          <button id="zoom-out-btn" title="Zoom out">&minus;</button>
+        </div>
+        <div id="coords-panel" class="tool-panel" style="display: none;">
+          <div class="tool-panel-title" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Resource location...</span>
+            <svg width="22" height="22" viewBox="0 0 22 22" style="flex-shrink: 0;">
+              <defs>
+                <filter id="resLocGlow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+                  <feFlood flood-color="#BBCC33" flood-opacity="0.8" result="color"/>
+                  <feComposite in="color" in2="blur" operator="in" result="glow"/>
+                  <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <g filter="url(#resLocGlow)">
+                <circle cx="11" cy="11" r="6" fill="none" stroke="#99DDFF" stroke-width="3.125"/>
+                <circle cx="11" cy="11" r="2.4375" fill="#99DDFF" opacity="0.95"/>
+                <line x1="0.5" y1="11" x2="5" y2="11" stroke="#99DDFF" stroke-width="2.5"/>
+                <line x1="17" y1="11" x2="21.5" y2="11" stroke="#99DDFF" stroke-width="2.5"/>
+                <line x1="11" y1="0.5" x2="11" y2="5" stroke="#99DDFF" stroke-width="2.5"/>
+                <line x1="11" y1="17" x2="11" y2="21.5" stroke="#99DDFF" stroke-width="2.5"/>
+              </g>
+            </svg>
+          </div>
+          <div class="tool-panel-axes">
+            <div class="tool-panel-row">
+              <span class="tool-panel-label" style="color: #b02a37;">x</span>
+              <select class="tool-panel-select" id="coords-x-ref">
+                <option value="left" selected>left</option>
+                <option value="center">center</option>
+                <option value="right">right</option>
+              </select>
+            </div>
+            <div class="tool-panel-row">
+              <span class="tool-panel-label" style="color: #146c43;">y</span>
+              <select class="tool-panel-select" id="coords-y-ref">
+                <option value="front" selected>front</option>
+                <option value="center">center</option>
+                <option value="back">back</option>
+              </select>
+            </div>
+            <div class="tool-panel-row">
+              <span class="tool-panel-label" style="color: #1a4b8c;">z</span>
+              <select class="tool-panel-select" id="coords-z-ref">
+                <option value="bottom" selected>bottom</option>
+                <option value="center">center</option>
+                <option value="top">top</option>
+                <option value="cavity_bottom">cavity_bottom</option>
+              </select>
+            </div>
+          </div>
+          <div class="tool-panel-row tool-panel-row-full">
+            <span class="tool-panel-label" style="color: #555;" title="with regards to">wrt</span>
+            <select class="tool-panel-select" id="coords-wrt-ref" title="with regards to">
+              <option value="root" selected>(abs)</option>
+            </select>
+            <svg width="22" height="22" viewBox="0 0 22 22" style="flex-shrink: 0; margin-left: 2px;">
+              <circle cx="11" cy="11" r="6" fill="none" stroke="#FFAABB" stroke-width="3.125"/>
+              <circle cx="11" cy="11" r="2.4375" fill="#FFAABB" opacity="0.95"/>
+              <line x1="0.5" y1="11" x2="5" y2="11" stroke="#FFAABB" stroke-width="2.5"/>
+              <line x1="17" y1="11" x2="21.5" y2="11" stroke="#FFAABB" stroke-width="2.5"/>
+              <line x1="11" y1="0.5" x2="11" y2="5" stroke="#FFAABB" stroke-width="2.5"/>
+              <line x1="11" y1="17" x2="11" y2="21.5" stroke="#FFAABB" stroke-width="2.5"/>
+            </svg>
+          </div>
+          <div class="tool-panel-axes">
+            <div class="tool-panel-row">
+              <span class="tool-panel-label" style="color: #b02a37;">x</span>
+              <select class="tool-panel-select" id="coords-wrt-x-ref">
+                <option value="left" selected>left</option>
+                <option value="center">center</option>
+                <option value="right">right</option>
+              </select>
+            </div>
+            <div class="tool-panel-row">
+              <span class="tool-panel-label" style="color: #146c43;">y</span>
+              <select class="tool-panel-select" id="coords-wrt-y-ref">
+                <option value="front" selected>front</option>
+                <option value="center">center</option>
+                <option value="back">back</option>
+              </select>
+            </div>
+            <div class="tool-panel-row">
+              <span class="tool-panel-label" style="color: #1a4b8c;">z</span>
+              <select class="tool-panel-select" id="coords-wrt-z-ref">
+                <option value="bottom" selected>bottom</option>
+                <option value="center">center</option>
+                <option value="top">top</option>
+                <option value="cavity_bottom">cavity_bottom</option>
+              </select>
+            </div>
+          </div>
+          <div style="width: 105%; align-self: center; height: 1px; background: #ced4da; margin-top: 8px;"></div>
+          <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px; margin-bottom: 2px;">
+            <input type="checkbox" id="delta-lines-toggle" style="cursor: pointer; width: 15px; height: 15px;">
+            <label for="delta-lines-toggle" style="font-size: 15px; color: #555; cursor: pointer; user-select: none;">Δ Delta lines</label>
+          </div>
+          <div style="width: 105%; align-self: center; height: 1px; background: #ced4da; margin-top: 6px;"></div>
+          <div class="tool-panel-title" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: baseline;">Recorded Measurements <span style="font-weight: 600; font-size: 14px; font-family: monospace; color: #1a4b8c;">mm</span></div>
+          <div id="coords-measurements" style="max-height: 270px; overflow-y: auto; width: 100%;">
+            <div id="coords-measurements-hint" style="color: #aaa; font-size: 12px; line-height: 1.6; max-width: 0; min-width: 100%;">
+              1. Choose a "with regards to" (wrt) resource<br>
+              2. Set reference options above for both the wrt and the investigated resource<br>
+              3. Hover over a resource to preview<br>
+              4. Click to record the measurement
+            </div>
+          </div>
+        </div>
+        <div id="gif-panel" class="tool-panel" style="display: none;">
+          <div class="tool-panel-title">GIF Recording</div>
           <div class="gif-box" id="gif-start">
             <div class="frame-rate">
-              <p id="current-value">Frame Save Interval: 8</p>
+              <p id="current-value">Frame Interval: 8</p>
               <div id="slider-container">
                 <span class="fr-bound">1</span>
                 <input
@@ -42,22 +231,18 @@
                 <span class="fr-bound">96</span>
               </div>
             </div>
-
             <button id="start-recording-button" class="btn btn-primary">
               Start Recording
             </button>
           </div>
-
           <div class="gif-box" id="gif-recording">
             <button id="stop-recording-button" class="btn btn-danger">
               Stop Recording
             </button>
           </div>
-
           <div class="gif-box" id="gif-processing">
             <div id="progressBar" style="font-size: 18px"></div>
           </div>
-
           <div class="gif-box" id="gif-download">
             <input
               type="text"
@@ -70,18 +255,95 @@
             </button>
           </div>
         </div>
-
-        <div class="ml-auto">
-          <span onclick="openSocket();" id="status-indicator"></span>
-          <span id="status-label">Loading...</span>
+        <div id="home-button" title="Reset view">
+          <svg width="28" height="28" viewBox="0 0 20 20">
+            <path d="M10 1L1 9h3v8h5v-5h2v5h5V9h3L10 1z" fill="#888"/>
+          </svg>
         </div>
-      </div>
-    </nav>
-
-    <div class="content">
-      <main>
-        <div id="kanvas"></div>
+        <div id="axis-legend">
+          <svg width="60" height="60" viewBox="0 0 60 60">
+            <!-- X axis arrow (red, pointing right) -->
+            <line x1="10" y1="50" x2="52" y2="50" stroke="#dc3545" stroke-width="3"/>
+            <polygon points="55,50 47,45 47,55" fill="#dc3545"/>
+            <text x="54" y="42" fill="#dc3545" font-size="15" font-weight="700" text-anchor="middle">x</text>
+            <!-- Y axis arrow (green, pointing up) -->
+            <line x1="10" y1="50" x2="10" y2="8" stroke="#198754" stroke-width="3"/>
+            <polygon points="10,5 5,13 15,13" fill="#198754"/>
+            <text x="23" y="11" fill="#198754" font-size="15" font-weight="700" text-anchor="middle">y</text>
+          </svg>
+        </div>
+        <div id="scale-bar">
+          <div id="scale-bar-line"></div>
+          <span id="scale-bar-label"></span>
+        </div>
       </main>
+
+      <aside id="sidepanel">
+        <div class="sidepanel-resize-handle" id="sidepanel-resize-handle"></div>
+        <div class="sidepanel-header">
+          <span class="sidepanel-title">Workcell Tree</span>
+          <div class="sidepanel-header-actions">
+            <button class="tree-action-btn" id="toggle-expand-btn" title="Collapse All">
+              <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3,3 7,7 11,3"/>
+                <polyline points="3,15 7,11 11,15"/>
+              </svg>
+            </button>
+            <div style="display:flex;">
+              <button class="tree-action-btn" id="collapse-all-btn" title="Show up to depth...">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="1" y1="3" x2="10" y2="3"/>
+                  <line x1="4" y1="7" x2="13" y2="7"/>
+                  <line x1="7" y1="11" x2="13" y2="11"/>
+                </svg>
+              </button>
+              <input type="number" id="tree-depth-input" class="tree-depth-input" value="1" min="0" max="20" title="Depth levels below root">
+            </div>
+          </div>
+        </div>
+        <div id="resource-tree"></div>
+        <div id="search-view" style="display: none;">
+          <div class="search-header">
+            <input type="text" id="search-input" class="search-input" placeholder="Search resource by name...">
+            <div class="search-filters">
+              <span class="search-filters-label">Include:</span>
+              <label class="search-filter-label">
+                <input type="checkbox" id="search-include-wells"> Wells
+              </label>
+              <label class="search-filter-label">
+                <input type="checkbox" id="search-include-tips"> Tips
+              </label>
+              <label class="search-filter-label">
+                <input type="checkbox" id="search-include-sites" checked> Sites
+              </label>
+            </div>
+          </div>
+          <div id="search-results"></div>
+        </div>
+      </aside>
+      <aside id="toolbar">
+        <div class="toolbar-section">
+          <button class="toolbar-btn active" id="toolbar-tree-btn" title="Workcell Tree">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="#333">
+              <rect x="1" y="2" width="6" height="3" rx="1"/>
+              <rect x="9" y="8" width="6" height="3" rx="1"/>
+              <rect x="9" y="14" width="6" height="3" rx="1"/>
+              <line x1="4" y1="5" x2="4" y2="9.5" stroke="#333" stroke-width="1.5" fill="none"/>
+              <line x1="4" y1="9.5" x2="9" y2="9.5" stroke="#333" stroke-width="1.5" fill="none"/>
+              <line x1="4" y1="9.5" x2="4" y2="15.5" stroke="#333" stroke-width="1.5" fill="none"/>
+              <line x1="4" y1="15.5" x2="9" y2="15.5" stroke="#333" stroke-width="1.5" fill="none"/>
+            </svg>
+          </button>
+        </div>
+        <div class="toolbar-section">
+          <button class="toolbar-btn" id="toolbar-search-btn" title="Search">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#333" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8.5" cy="8.5" r="5.5"/>
+              <line x1="13" y1="13" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </aside>
     </div>
 
     <!-- Load JavaScript libraries -->
@@ -92,10 +354,11 @@
 
     <!-- Load JavaScript libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <!-- Load custom scripts -->
-    <script src="./lib.js"></script>
-    <script src="./vis.js"></script>
+    <script src="./lib.js?v=2"></script>
+    <script src="./vis.js?v=2"></script>
 
     <input type="text" id="fs_port" value="{{ fs_port }}" hidden />
     <input type="text" id="ws_port" value="{{ ws_port }}" hidden />

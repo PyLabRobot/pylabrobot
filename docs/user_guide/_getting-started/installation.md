@@ -54,7 +54,6 @@ There's a multitude of other optional dependencies that you can install. Replace
 - `websockets`: Needed for the WebSocket backend.
 - `simulation`: Needed for the simulation backend.
 - `opentrons`: Needed for the Opentrons backend.
-- `server`: Needed for LH server, an HTTP front end to LH.
 - `agrow`: Needed for the AgrowPumpArray backend.
 - `plate_reading`: Needed to interact with the CLARIO Star plate reader.
 - `inheco`: Needed for the Inheco backend.
@@ -64,7 +63,7 @@ There's a multitude of other optional dependencies that you can install. Replace
 To install multiple dependencies, separate them with a comma:
 
 ```bash
-pip install 'pylabrobot[fw,server]'
+pip install 'pylabrobot[fw,http]'
 ```
 
 Or install all dependencies at once:

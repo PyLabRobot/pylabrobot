@@ -15,7 +15,7 @@ logger = logging.getLogger("pylabrobot")
 class MettlerToledoError(Exception):
   """Exceptions raised by a Mettler Toledo scale."""
 
-  def __init__(self, title: str, message: Optional[str]) -> None:
+  def __init__(self, title: str, message: Optional[str] = None) -> None:
     self.title = title
     self.message = message
 
