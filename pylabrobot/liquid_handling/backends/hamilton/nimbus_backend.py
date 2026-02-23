@@ -1093,6 +1093,8 @@ class NimbusBackend(HamiltonTCPBackend):
       except Exception as e:
         logger.warning(f"Failed to unlock door: {e}")
 
+    self.setup_finished = True
+
   async def _discover_instrument_objects(self):
     """Discover instrument-specific objects using introspection."""
     introspection = HamiltonIntrospection(self)

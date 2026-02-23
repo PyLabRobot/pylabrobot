@@ -99,6 +99,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       auto_reconnect: Enable automatic reconnection
       max_reconnect_attempts: Maximum reconnection attempts
     """
+    super().__init__()
 
     self.io = Socket(
       host=host,
@@ -540,15 +541,9 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     # Build command message
     message = command.build()
 
-    # Log command parameters for debugging
+    # Log command parameters at debug level (noisy when discovering subobjects)
     log_params = command.get_log_params()
-    logger.info(f"{command.__class__.__name__} parameters:")
-    for key, value in log_params.items():
-      # Format arrays nicely if very long
-      if isinstance(value, list) and len(value) > 8:
-        logger.info(f"  {key}: {value[:4]}... ({len(value)} items)")
-      else:
-        logger.info(f"  {key}: {value}")
+    logger.debug("%s parameters: %s", command.__class__.__name__, log_params)
 
     # Send command
     await self.write(message)
@@ -578,6 +573,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
       logger.warning(f"Error during stop: {e}")
     finally:
       self._connected = False
+      self.setup_finished = False
     logger.info("Hamilton backend stopped")
 
   def serialize(self) -> dict:
