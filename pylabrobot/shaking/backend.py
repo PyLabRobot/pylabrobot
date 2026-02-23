@@ -1,5 +1,4 @@
 from abc import ABCMeta, abstractmethod
-import warnings
 
 from pylabrobot.machines.backend import MachineBackend
 
@@ -14,19 +13,6 @@ class ShakerBackend(MachineBackend, metaclass=ABCMeta):
     Args:
       speed: Speed of shaking in revolutions per minute (RPM)
     """
-
-  async def shake(self, speed: float):
-    """Deprecated alias for ``start_shaking``.
-
-    Backends should implement ``start_shaking``. This method exists for backwards compatibility.
-    """
-
-    warnings.warn(
-      "ShakerBackend.shake() is deprecated. Use start_shaking() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    await self.start_shaking(speed=speed)
 
   @abstractmethod
   async def stop_shaking(self):

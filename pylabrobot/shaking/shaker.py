@@ -53,12 +53,6 @@ class Shaker(ResourceHolder, Machine):
     if self.backend.supports_locking:
       await self.backend.unlock_plate()
 
-  async def start_shaking(self, speed: float, **backend_kwargs):
-    """Start shaking indefinitely at the given speed."""
-    if self.backend.supports_locking:
-      await self.backend.lock_plate()
-    await self.backend.start_shaking(speed=speed, **backend_kwargs)
-
   async def stop_shaking(self, **backend_kwargs):
     await self.backend.stop_shaking(**backend_kwargs)
 
