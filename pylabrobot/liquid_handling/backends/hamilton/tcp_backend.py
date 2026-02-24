@@ -518,12 +518,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     try:
       await self.send_command(GetObjectCommand(root[0]), ensure_connection=False)
-    except (
-      BrokenPipeError,
-      ConnectionResetError,
-      ConnectionAbortedError,
-      TimeoutError,
-    ) as e:
+    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, TimeoutError) as e:
       logger.warning(
         f"{self.io._unique_id} Connection probe failed, reconnecting: {e}"
       )
