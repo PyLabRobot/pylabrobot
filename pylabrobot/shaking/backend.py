@@ -7,8 +7,8 @@ class ShakerBackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a shaker machine"""
 
   @abstractmethod
-  async def start_shaking(self, speed: float):
-    """Start shaking at the given speed.
+  async def shake(self, speed: float):
+    """Shake the shaker at the given speed
 
     Args:
       speed: Speed of shaking in revolutions per minute (RPM)

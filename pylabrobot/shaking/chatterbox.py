@@ -1,5 +1,3 @@
-import warnings
-
 from pylabrobot.shaking import ShakerBackend
 
 
@@ -14,16 +12,8 @@ class ShakerChatterboxBackend(ShakerBackend):
   async def stop(self):
     print("Stopping shaker")
 
-  async def start_shaking(self, speed: float):
-    print("Shaking at speed", speed)
-
   async def shake(self, speed: float):
-    warnings.warn(
-      "ShakerChatterboxBackend.shake() is deprecated. Use start_shaking() instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    await self.start_shaking(speed=speed)
+    print("Shaking at speed", speed)
 
   async def stop_shaking(self):
     print("Stopping shaking")
