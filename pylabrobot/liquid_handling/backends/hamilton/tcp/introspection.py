@@ -585,7 +585,7 @@ class HamiltonIntrospection:
       Object metadata
     """
     command = GetObjectCommand(address)
-    response = await self.backend.send_command(command)
+    response = await self.backend.send_command(command, ensure_connection=False)
 
     return ObjectInfo(
       name=response["name"],
@@ -606,7 +606,7 @@ class HamiltonIntrospection:
       Method signature
     """
     command = GetMethodCommand(address, method_index)
-    response = await self.backend.send_command(command)
+    response = await self.backend.send_command(command, ensure_connection=False)
 
     return MethodInfo(
       interface_id=response["interface_id"],
@@ -630,7 +630,7 @@ class HamiltonIntrospection:
       Subobject address
     """
     command = GetSubobjectAddressCommand(address, subobject_index)
-    response = await self.backend.send_command(command)
+    response = await self.backend.send_command(command, ensure_connection=False)
 
     # Type: ignore needed because response dict is typed as dict[str, Any]
     # but we know 'address' key contains Address object
@@ -646,7 +646,7 @@ class HamiltonIntrospection:
       List of interface information
     """
     command = GetInterfacesCommand(address)
-    response = await self.backend.send_command(command)
+    response = await self.backend.send_command(command, ensure_connection=False)
 
     return [
       InterfaceInfo(
@@ -666,7 +666,7 @@ class HamiltonIntrospection:
       List of enum definitions
     """
     command = GetEnumsCommand(address, interface_id)
-    response = await self.backend.send_command(command)
+    response = await self.backend.send_command(command, ensure_connection=False)
 
     return [
       EnumInfo(enum_id=enum_def["enum_id"], name=enum_def["name"], values=enum_def["values"])
@@ -684,7 +684,7 @@ class HamiltonIntrospection:
       List of struct definitions
     """
     command = GetStructsCommand(address, interface_id)
-    response = await self.backend.send_command(command)
+    response = await self.backend.send_command(command, ensure_connection=False)
 
     return [
       StructInfo(

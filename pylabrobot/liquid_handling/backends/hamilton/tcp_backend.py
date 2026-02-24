@@ -15,6 +15,7 @@ from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetObjectCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
   InitMessage,
@@ -31,7 +32,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
 )
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class HamiltonError:
@@ -498,6 +498,38 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     return objects
 
+  async def _probe_connection(self) -> None:
+    """Probe the connection by sending ObjectInfo (iface=0, id=1) to the root object.
+
+    If the root has not been discovered yet (e.g. during initial setup), this method
+    returns immediately — the connection is being established for the first time so
+    there is nothing to probe against.
+
+    On a retryable connection failure (broken pipe, reset, timeout) the backend is
+    marked as disconnected and a full reconnect is attempted before returning.  After
+    a successful reconnect the caller can send the real command knowing the connection
+    is healthy.
+
+    This is called with ensure_connection=False so it never recurses.
+    """
+    root = self._discovered_objects.get("root", [])
+    if not root:
+      return
+
+    try:
+      await self.send_command(GetObjectCommand(root[0]), ensure_connection=False)
+    except (
+      BrokenPipeError,
+      ConnectionResetError,
+      ConnectionAbortedError,
+      TimeoutError,
+    ) as e:
+      logger.warning(
+        f"{self.io._unique_id} Connection probe failed, reconnecting: {e}"
+      )
+      self._connected = False
+      await self._reconnect()
+
   def _allocate_sequence_number(self, dest_address: Address) -> int:
     """Allocate next sequence number for destination.
 
@@ -512,23 +544,44 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     self._sequence_numbers[dest_address] = next_seq
     return next_seq
 
-  async def send_command(self, command: HamiltonCommand, timeout: float = 10.0) -> Optional[dict]:
+  async def send_command(
+    self,
+    command: HamiltonCommand,
+    ensure_connection: bool = True,
+  ) -> Optional[dict]:
     """Send Hamilton command and wait for response.
 
     Sets source_address if not already set by caller (for testing).
     Uses backend's client_address assigned during Protocol 7 initialization.
 
+    When ensure_connection=True (default), probes the root object with a
+    lightweight ObjectInfo call before sending.  If the probe detects a dead
+    connection it reconnects before the real command is sent, so the command
+    is never sent on a broken connection and is never sent twice.
+
+    Pass ensure_connection=False for commands that are part of the setup /
+    discovery flow (e.g. HamiltonIntrospection calls), or when a root object
+    address has not yet been discovered.
+
+    Read/write timeouts are enforced at the backend level (read_timeout and
+    write_timeout passed into HamiltonTCPBackend and used by the Socket).
+
     Args:
-      command: Hamilton command to execute
-      timeout: Maximum time to wait for response
+      command: Hamilton command to execute.
+      ensure_connection: If True, probe the root object before sending and
+        reconnect if the probe fails.  If False, send directly without probing.
 
     Returns:
-      Parsed response dictionary, or None if command has no information to extract
+      Parsed response dictionary, or None if the command has no return data.
 
     Raises:
-      TimeoutError: If no response received within timeout
-      HamiltonError: If command returned an error
+      ConnectionError: If the connection is not established and auto_reconnect
+        is disabled, or if reconnection fails.
+      RuntimeError: If the Hamilton firmware returns an error action code.
     """
+    if ensure_connection:
+      await self._probe_connection()
+
     # Set source address with smart fallback
     if command.source_address is None:
       if self.client_address is None:
@@ -543,12 +596,12 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     # Log command parameters at debug level (noisy when discovering subobjects)
     log_params = command.get_log_params()
-    logger.debug("%s parameters: %s", command.__class__.__name__, log_params)
+    logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
 
     # Send command
     await self.write(message)
 
-    # Read response (timeout handled by TCP layer)
+    # Read response (uses backend read_timeout)
     response_message = await self._read_one_message()
     assert isinstance(response_message, CommandResponse)
 

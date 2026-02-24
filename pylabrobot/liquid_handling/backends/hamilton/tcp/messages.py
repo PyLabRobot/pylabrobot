@@ -119,9 +119,17 @@ class HoiParams:
     data = Writer().i64(value).finish()
     return self._add_fragment(HamiltonDataType.I64, data)
 
-  def u8(self, value: int) -> "HoiParams":
-    """Add unsigned 8-bit integer parameter."""
+  def u8(self, value: int, padded: bool = False) -> "HoiParams":
+    """Add unsigned 8-bit integer parameter.
+
+    Args:
+      value: Value to encode.
+      padded: If True, use flags=0x01 and append pad byte (Prep compatibility).
+    """
     data = Writer().u8(value).finish()
+    if padded:
+      data += b"\x00"
+      return self._add_fragment(HamiltonDataType.U8, data, flags=0x01)
     return self._add_fragment(HamiltonDataType.U8, data)
 
   def u16(self, value: int) -> "HoiParams":
@@ -156,10 +164,57 @@ class HoiParams:
     data = Writer().string(value).finish()
     return self._add_fragment(HamiltonDataType.STRING, data)
 
-  def bool_value(self, value: bool) -> "HoiParams":
-    """Add boolean parameter."""
+  def bool_value(self, value: bool, padded: bool = False) -> "HoiParams":
+    """Add boolean parameter.
+
+    Args:
+      value: The boolean value.
+      padded: If True, use Prep-compatible encoding: flags=0x01 and append pad
+        byte [type=23][flags=1][len=2][0x00 or 0x01][0x00]. Default False for
+        Nimbus compatibility.
+    """
     data = Writer().u8(1 if value else 0).finish()
+    if padded:
+      data += b"\x00"
+      return self._add_fragment(HamiltonDataType.BOOL, data, flags=0x01)
     return self._add_fragment(HamiltonDataType.BOOL, data)
+
+  # Enum and structure types (Prep)
+  def enum_value(self, value: int) -> "HoiParams":
+    """Add enum parameter (encoded as u32, type_id=32)."""
+    data = Writer().u32(value).finish()
+    return self._add_fragment(HamiltonDataType.ENUM, data)
+
+  def hc_result(self, value: int) -> "HoiParams":
+    """Add HC_RESULT parameter (same wire format as u16, type_id=33)."""
+    data = Writer().u16(value).finish()
+    return self._add_fragment(HamiltonDataType.HC_RESULT, data)
+
+  def enum_array(self, values: list[int]) -> "HoiParams":
+    """Add array of enums (each u32, type_id=35)."""
+    writer = Writer()
+    for val in values:
+      writer.u32(val)
+    return self._add_fragment(HamiltonDataType.ENUM_ARRAY, writer.finish())
+
+  def structure(self, nested: "HoiParams") -> "HoiParams":
+    """Add nested structure (type_id=30). Data is concatenated DataFragments."""
+    return self._add_fragment(HamiltonDataType.STRUCTURE, nested.build())
+
+  def structure_from_bytes(self, data: bytes) -> "HoiParams":
+    """Add structure (type_id=30) from raw concatenated DataFragment bytes.
+
+    Used when building from Prep dataclasses that still use .encode().
+    """
+    return self._add_fragment(HamiltonDataType.STRUCTURE, data)
+
+  def structure_array(self, elements: list["HoiParams"]) -> "HoiParams":
+    """Add array of structures (type_id=31). Each element wrapped as Structure fragment."""
+    inner = b""
+    for elem in elements:
+      payload = elem.build()
+      inner += Writer().u8(HamiltonDataType.STRUCTURE).u8(0).u16(len(payload)).raw_bytes(payload).finish()
+    return self._add_fragment(HamiltonDataType.STRUCTURE_ARRAY, inner)
 
   # Array types
   def i8_array(self, values: list[int]) -> "HoiParams":
@@ -284,6 +339,35 @@ class HoiParams:
       writer.string(val)
     return self._add_fragment(HamiltonDataType.STRING_ARRAY, writer.finish())
 
+  # ------------------------------------------------------------------
+  # Generic dataclass serialiser (wire_types.py Annotated metadata)
+  # ------------------------------------------------------------------
+
+  @classmethod
+  def from_struct(cls, obj) -> "HoiParams":
+    """Serialize any dataclass whose fields use ``Annotated`` wire-type metadata.
+
+    Fields without ``Annotated`` metadata (e.g. plain ``Address``) are skipped.
+    The polymorphic ``WireType.encode_into`` on each annotation handles all
+    dispatch -- no if/elif required here.
+    """
+    from dataclasses import fields as dc_fields
+    from typing import get_type_hints
+
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import WireType
+
+    hints = get_type_hints(type(obj), include_extras=True)
+    params = cls()
+    for f in dc_fields(obj):
+      ann = hints.get(f.name)
+      if ann is None or not hasattr(ann, "__metadata__"):
+        continue
+      meta = ann.__metadata__[0]
+      if not isinstance(meta, WireType):
+        continue
+      params = meta.encode_into(getattr(obj, f.name), params)
+    return params
+
   def build(self) -> bytes:
     """Return concatenated DataFragments."""
     return b"".join(self._fragments)
@@ -366,9 +450,34 @@ class HoiParamsParser:
     except ValueError:
       pass  # Not a valid enum value, continue to other checks
 
-    # Special case: bool
+    # Special case: bool (may have padding byte; we read first byte only)
     if type_id == HamiltonDataType.BOOL:
       return reader.u8() == 1
+
+    # Enum and structure types
+    if type_id == HamiltonDataType.ENUM:
+      return reader.u32()
+    if type_id == HamiltonDataType.HC_RESULT:
+      return reader.u16()
+    if type_id == HamiltonDataType.STRUCTURE:
+      return data  # Raw bytes; caller can HoiParamsParser(data).parse_all()
+    if type_id == HamiltonDataType.ENUM_ARRAY:
+      count = len(data) // 4
+      return [reader.u32() for _ in range(count)]
+    if type_id == HamiltonDataType.STRUCTURE_ARRAY:
+      # Data is concatenated Structure fragments: [type=30][flags][len:2][payload]...
+      result = []
+      r = Reader(data)
+      while r.offset() + 4 <= len(data):
+        frag_type = r.u8()
+        _frag_flags = r.u8()
+        frag_len = r.u16()
+        if frag_type != HamiltonDataType.STRUCTURE:
+          raise ValueError(f"Expected STRUCTURE fragment in STRUCTURE_ARRAY, got type {frag_type}")
+        if r.offset() + frag_len > len(data):
+          raise ValueError("STRUCTURE_ARRAY element extends beyond buffer")
+        result.append(r.raw_bytes(frag_len))
+      return result
 
     # Dispatch table for array element parsers
     array_element_parsers = {

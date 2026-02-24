@@ -152,6 +152,13 @@ class HamiltonDataType(IntEnum):
   STRING = 15
   BOOL = 23
 
+  # Structure and enum types (Prep and introspection)
+  STRUCTURE = 30
+  STRUCTURE_ARRAY = 31
+  ENUM = 32
+  HC_RESULT = 33  # Same wire format as U16, used for error codes
+  ENUM_ARRAY = 35
+
   # Array types
   U8_ARRAY = 22
   I8_ARRAY = 24
