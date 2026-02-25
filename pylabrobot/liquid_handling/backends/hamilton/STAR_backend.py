@@ -1644,11 +1644,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       and ``dispensing_cycles``.
     """
 
-    results: List[dict] = []
-    for idx in range(self.num_channels):
-      counts = await self.channel_request_cycle_counts(channel_idx=idx)
-      results.append(counts)
-    return results
+    return list(await asyncio.gather(
+      *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
+    ))
 
   # # # ACTION Commands # # #
 
