@@ -1604,6 +1604,43 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
 
+  # # # MEASUREMENT Commands # # # #
+
+  async def channel_measure_temperature(self, channel_idx: int) -> float:
+    """Measure the temperature of a single channel.
+
+    Args:
+      channel_idx: The channel index to query (0-indexed).
+
+    Returns:
+      The temperature reading as a float.
+    """
+
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
+      )
+
+    resp = await self.send_command(
+      module=STARBackend.channel_id(channel_idx),
+      command="RM",
+      fmt="rm####",
+    )
+    return round(resp["rm"] / 100.0, 2)
+
+  async def channels_measure_temperatures(self) -> List[float]:
+    """Measure the temperature of all channels.
+
+    Returns:
+      A list of temperature readings as floats, one per channel, ordered by channel index.
+    """
+
+    temperatures: List[float] = []
+    for idx in range(self.num_channels):
+      temperature = await self.channel_measure_temperature(channel_idx=idx)
+      temperatures.append(temperature)
+    return temperatures
+
   # # # ACTION Commands # # #
 
   async def pick_up_tips(
