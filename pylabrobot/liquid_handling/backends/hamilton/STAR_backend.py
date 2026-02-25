@@ -1604,7 +1604,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
-    
+
   class ChannelCycleCounts(TypedDict):
     tip_pick_up_cycles: int
     tip_discard_cycles: int
@@ -1651,9 +1651,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       and ``dispensing_cycles``.
     """
 
-    return list(await asyncio.gather(
-      *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
-    ))
+    return list(
+      await asyncio.gather(
+        *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
+      )
+    )
 
   # # # ACTION Commands # # #
 
