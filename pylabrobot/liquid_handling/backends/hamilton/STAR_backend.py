@@ -20,6 +20,7 @@ from typing import (
   Sequence,
   Tuple,
   Type,
+  TypedDict,
   TypeVar,
   Union,
   cast,
@@ -1604,7 +1605,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
     
-  async def channel_request_cycle_counts(self, channel_idx: int) -> dict:
+  class ChannelCycleCounts(TypedDict):
+    tip_pick_up_cycles: int
+    tip_discard_cycles: int
+    aspiration_cycles: int
+    dispensing_cycles: int
+
+  async def channel_request_cycle_counts(self, channel_idx: int) -> ChannelCycleCounts:
     """Request cycle counters for a single channel.
 
     Returns the number of tip pick-up, tip discard, aspiration, and dispensing cycles
@@ -1635,7 +1642,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       "dispensing_cycles": resp["nd"],
     }
 
-  async def channels_request_cycle_counts(self) -> List[dict]:
+  async def channels_request_cycle_counts(self) -> List[ChannelCycleCounts]:
     """Request cycle counters for all channels.
 
     Returns:
