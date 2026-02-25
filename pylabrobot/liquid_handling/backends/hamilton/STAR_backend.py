@@ -1624,7 +1624,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     resp = await self.send_command(
-      module=STARBackend.channel_id(channel_idx),
+      module=self.channel_id(channel_idx),
       command="RV",
       fmt="na##########nb##########nc##########nd##########",
     )
