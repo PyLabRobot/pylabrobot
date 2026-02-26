@@ -632,11 +632,11 @@ class PrepDeck(Deck):
     for column in range(2):
       for row in range(4):
         x = column * 140
-        y = row * 100  # ?
+        y = row * 95.5  # ?
         spot = ResourceHolder(
           name=f"spot_{column}_{row}",
           size_x=127.76,
-          size_y=96.52,
+          size_y=92,
           size_z=0,
         )
         self.assign_child_resource(spot, location=Coordinate(x, y, 0))

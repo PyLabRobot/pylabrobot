@@ -21,20 +21,19 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import TYPE_CHECKING, Annotated, List, Optional, Union
+from typing import TYPE_CHECKING, Annotated, List, Optional, Tuple, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
-  HamiltonIntrospection,
-)
-from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams, HoiParamsParser
+from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   EnumArray,
   F32,
+  I8,
   I16,
   I16Array,
+  I64,
   PaddedBool,
   PaddedU8,
   Str,
@@ -98,6 +97,59 @@ class TadmRecordingModes(IntEnum):
   NoRecording = 0
   Errors = 1
   All = 2
+
+
+# =============================================================================
+# Hardware config (probed from instrument, immutable)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class DeckBounds:
+  """Deck axis bounds in mm (from GetDeckBounds / DeckConfiguration)."""
+
+  min_x: float
+  max_x: float
+  min_y: float
+  max_y: float
+  min_z: float
+  max_z: float
+
+
+@dataclass(frozen=True)
+class DeckSiteInfo:
+  """A deck slot read from DeckConfiguration.GetDeckSiteDefinitions."""
+
+  id: int
+  left_bottom_front_x: float
+  left_bottom_front_y: float
+  left_bottom_front_z: float
+  length: float
+  width: float
+  height: float
+
+
+@dataclass(frozen=True)
+class WasteSiteInfo:
+  """A waste position read from DeckConfiguration.GetWasteSiteDefinitions."""
+
+  index: int
+  x_position: float
+  y_position: float
+  z_position: float
+  z_seek: float
+
+
+@dataclass(frozen=True)
+class InstrumentConfig:
+  """Instrument hardware configuration probed at setup."""
+
+  deck_bounds: Optional[DeckBounds]
+  has_enclosure: bool
+  safe_speeds_enabled: bool
+  default_traverse_height: float
+  deck_sites: Tuple[DeckSiteInfo, ...]
+  waste_sites: Tuple[WasteSiteInfo, ...]
 
 
 # =============================================================================
@@ -697,6 +749,32 @@ class TipPositionParameters:
   z_position: F32
   z_seek: F32
 
+  @classmethod
+  def for_op(
+    cls,
+    channel: WEnum,
+    loc,
+    tip,
+    *,
+    z_seek_offset: Optional[float] = None,
+  ) -> "TipPositionParameters":
+    """Build from an op location and tip (pickup).
+
+    z_seek default: z_position + fitting_depth + 5mm guard (tip-type-aware,
+    comparable to Nimbus/Vantage). z_seek_offset: additive mm on top of
+    computed default (None = 0).
+    """
+    z = loc.z + tip.total_tip_length
+    z_seek = z + tip.fitting_depth + 5.0 + (z_seek_offset or 0.0)
+    return cls(
+      default_values=False,
+      channel=channel,
+      x_position=loc.x,
+      y_position=loc.y,
+      z_position=z,
+      z_seek=z_seek,
+    )
+
 
 @dataclass
 class TipDropParameters:
@@ -707,6 +785,34 @@ class TipDropParameters:
   z_position: F32
   z_seek: F32
   drop_type: WEnum
+
+  @classmethod
+  def for_op(
+    cls,
+    channel: WEnum,
+    loc,
+    tip,
+    *,
+    z_seek_offset: Optional[float] = None,
+    drop_type: Optional["TipDropType"] = None,
+  ) -> "TipDropParameters":
+    """Build from an op location and tip (drop).
+
+    z_seek default: z_position + total_tip_length + 10mm so tip bottom clears
+    adjacent tips during lateral approach. z_seek_offset: additive mm on top
+    of computed default (None = 0).
+    """
+    z = loc.z + tip.total_tip_length
+    z_seek = z + tip.total_tip_length + 10.0 + (z_seek_offset or 0.0)
+    return cls(
+      default_values=False,
+      channel=channel,
+      x_position=loc.x,
+      y_position=loc.y,
+      z_position=z,
+      z_seek=z_seek,
+      drop_type=drop_type if drop_type is not None else TipDropType.FixedHeight,
+    )
 
 
 @dataclass
@@ -1242,12 +1348,9 @@ class PrepGetIsInitialized(PrepCommand):
   command_id = 2  # GetIsInitialized per introspection_output/MLPrepRoot_MLPrep.txt
   action_code = 0  # STATUS_REQUEST (query methods use 0, like Nimbus IsInitialized)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse GetIsInitialized response: single I64 (value), exposed as bool."""
-    parser = HoiParamsParser(data)
-    _, value = parser.parse_next()  # I64
-    return {"initialized": bool(value)}
+  @dataclass(frozen=True)
+  class Response:
+    value: I64
 
 
 @dataclass
@@ -1384,16 +1487,166 @@ class PrepMethodAbort(PrepCommand):
 
 @dataclass
 class PrepIsParked(PrepCommand):
-  """Query parked status (cmd=34, dest=MLPrep)."""
+  """Query parked status (cmd=34, dest=MLPrep). Introspection: IsParked(()) -> parked: I64."""
 
   command_id = 34
+  action_code = 0  # STATUS_REQUEST
+
+  @dataclass(frozen=True)
+  class Response:
+    value: I64
 
 
 @dataclass
 class PrepIsSpread(PrepCommand):
-  """Query spread status (cmd=35, dest=MLPrep)."""
+  """Query spread status (cmd=35, dest=MLPrep). Introspection: IsSpread(()) -> parked: I64."""
 
   command_id = 35
+  action_code = 0  # STATUS_REQUEST
+
+  @dataclass(frozen=True)
+  class Response:
+    value: I64
+
+
+# -----------------------------------------------------------------------------
+# Wire structs for config responses (used by nested Response and InstrumentConfig)
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class _DeckSiteDefinitionWire:
+  """Wire shape for one DeckSiteDefinition (GetDeckSiteDefinitions element)."""
+
+  default_values: PaddedBool
+  id: U32
+  left_bottom_front_x: F32
+  left_bottom_front_y: F32
+  left_bottom_front_z: F32
+  length: F32
+  width: F32
+  height: F32
+
+
+@dataclass
+class _WasteSiteDefinitionWire:
+  """Wire shape for one WasteSiteDefinition (GetWasteSiteDefinitions element)."""
+
+  default_values: PaddedBool
+  index: WEnum
+  x_position: I8
+  y_position: U16
+  z_position: F32
+  z_seek: F32
+
+
+# -----------------------------------------------------------------------------
+# Config queries (MLPrep / DeckConfiguration) for _probe_hardware_config
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class _PrepStatusQuery(PrepCommand):
+  """Base for MLPrep status queries: STATUS_REQUEST (0), no params."""
+
+  action_code = 0
+
+
+@dataclass
+class PrepGetIsEnclosurePresent(_PrepStatusQuery):
+  """GetIsEnclosurePresent (cmd=21, dest=MLPrep). Returns I64 as bool."""
+
+  command_id = 21
+
+  @dataclass(frozen=True)
+  class Response:
+    value: I64
+
+
+@dataclass
+class PrepGetSafeSpeedsEnabled(_PrepStatusQuery):
+  """GetSafeSpeedsEnabled (cmd=28, dest=MLPrep). Returns I64 as bool."""
+
+  command_id = 28
+
+  @dataclass(frozen=True)
+  class Response:
+    value: I64
+
+
+@dataclass
+class PrepGetDefaultTraverseHeight(_PrepStatusQuery):
+  """GetDefaultTraverseHeight (cmd=10, dest=MLPrep). Returns F32."""
+
+  command_id = 10
+
+  @dataclass(frozen=True)
+  class Response:
+    value: F32
+
+
+@dataclass
+class PrepGetTipAndNeedleDefinitions(_PrepStatusQuery):
+  """GetTipAndNeedleDefinitions (cmd=11, dest=MLPrep).
+
+  Returns the list of tip/needle definitions registered on the instrument.
+  Introspection: iface=1 id=11 GetTipAndNeedleDefinitions(value: type_64) -> void
+  (response carries STRUCTURE_ARRAY of tip definition structs).
+  """
+
+  command_id = 11
+
+  @dataclass(frozen=True)
+  class Response:
+    definitions: Annotated[list[TipDefinition], StructArray()]
+
+
+@dataclass
+class PrepGetDeckBounds(_PrepStatusQuery):
+  """GetDeckBounds (cmd=1, dest=DeckConfiguration). Returns 6× F32 (min/max x,y,z)."""
+
+  command_id = 1
+
+  @dataclass(frozen=True)
+  class Response:
+    min_x: F32
+    max_x: F32
+    min_y: F32
+    max_y: F32
+    min_z: F32
+    max_z: F32
+
+
+@dataclass
+class PrepGetDeckSiteDefinitions(_PrepStatusQuery):
+  """GetDeckSiteDefinitions (cmd=7, dest=DeckConfiguration).
+
+  Response is a STRUCTURE_ARRAY of DeckSiteDefinition structs:
+    DefaultValues: BOOL, Id: U32, LeftBottomFrontX: F32, LeftBottomFrontY: F32,
+    LeftBottomFrontZ: F32, Length: F32, Width: F32, Height: F32
+  """
+
+  command_id = 7
+
+  @dataclass(frozen=True)
+  class Response:
+    sites: Annotated[list[_DeckSiteDefinitionWire], StructArray()]
+
+
+@dataclass
+class PrepGetWasteSiteDefinitions(_PrepStatusQuery):
+  """GetWasteSiteDefinitions (cmd=12, dest=DeckConfiguration).
+
+  Response is a STRUCTURE_ARRAY of WasteSiteDefinition structs:
+    DefaultValues: BOOL, Index: ENUM, XPosition: I8, YPosition: U16,
+    ZPosition: F32, ZSeek: F32
+  """
+
+  command_id = 12
+
+  @dataclass(frozen=True)
+  class Response:
+    sites: Annotated[list[_WasteSiteDefinitionWire], StructArray()]
 
 
 # =============================================================================
@@ -1432,9 +1685,7 @@ class PrepBackend(HamiltonTCPBackend):
       auto_reconnect=auto_reconnect,
       max_reconnect_attempts=max_reconnect_attempts,
     )
-    self._mlprep_address: Optional[Address] = None
-    self._pipettor_address: Optional[Address] = None
-    self._coordinator_address: Optional[Address] = None
+    self._config: Optional[InstrumentConfig] = None
 
   # ---------------------------------------------------------------------------
   # Setup & discovery
@@ -1444,8 +1695,8 @@ class PrepBackend(HamiltonTCPBackend):
     """Set up Prep: connect, discover objects, then conditionally initialize MLPrep.
 
     Order:
-      1. TCP + Protocol 7/3 init and root discovery (super().setup())
-      2. Discover Prep objects: MLPrep, Pipettor, ChannelCoordinator
+      1. TCP + Protocol 7/3 init, root discovery, and depth-1 interface discovery (super().setup())
+      2. Lazy-resolve Pipettor (depth-2) for commands
       3. If force_initialize: always run Initialize(smart=smart).
          Else: query GetIsInitialized; only run Initialize(smart=smart) when not initialized.
       4. Mark setup complete.
@@ -1456,9 +1707,9 @@ class PrepBackend(HamiltonTCPBackend):
         when GetIsInitialized reports not initialized (e.g. reconnect-safe).
     """
     await super().setup()
-    await self._discover_prep_objects()
+    await self._registry.resolve("MLPrepRoot.PipettorRoot.Pipettor")
 
-    if self._mlprep_address is None:
+    if not self._registry.has("MLPrepRoot.MLPrep"):
       raise RuntimeError("MLPrep object not discovered. Cannot proceed with setup.")
 
     if force_initialize:
@@ -1476,6 +1727,19 @@ class PrepBackend(HamiltonTCPBackend):
         await self._run_initialize(smart=smart)
         logger.info("Prep initialization complete")
 
+    self._config = await self._probe_hardware_config()
+    logger.info(
+      "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
+      "deck_bounds=%s, deck_sites=%d, waste_sites=%d",
+      self._config.has_enclosure,
+      self._config.safe_speeds_enabled,
+      self._config.default_traverse_height,
+      self._config.deck_bounds,
+      len(self._config.deck_sites),
+      len(self._config.waste_sites),
+    )
+
+    # await self.ensure_spread()
     self.setup_finished = True
 
   async def _run_initialize(self, smart: bool):
@@ -1493,45 +1757,74 @@ class PrepBackend(HamiltonTCPBackend):
       )
     )
 
-  async def _discover_prep_objects(self):
-    """Discover MLPrep, Pipettor, and ChannelCoordinator via introspection."""
-    introspection = HamiltonIntrospection(self)
-    root_objects = self._discovered_objects.get("root", [])
-    if not root_objects:
-      logger.warning("No root objects discovered")
-      return
+  async def _probe_hardware_config(self) -> InstrumentConfig:
+    """Query MLPrep and DeckConfiguration for hardware config, deck sites, and waste sites."""
+    mlprep = self._mlprep_dest()
+    enc_resp = await self.send_command(PrepGetIsEnclosurePresent(dest=mlprep))
+    safe_resp = await self.send_command(PrepGetSafeSpeedsEnabled(dest=mlprep))
+    height_resp = await self.send_command(PrepGetDefaultTraverseHeight(dest=mlprep))
+    has_enclosure = bool(enc_resp.value) if enc_resp else False
+    safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
+    default_traverse_height = float(height_resp.value) if height_resp else 0.0
 
-    root_addr = root_objects[0]
+    deck_bounds: Optional[DeckBounds] = None
+    deck_sites: Tuple[DeckSiteInfo, ...] = ()
+    waste_sites: Tuple[WasteSiteInfo, ...] = ()
     try:
-      root_info = await introspection.get_object(root_addr)
-      for i in range(root_info.subobject_count):
-        try:
-          sub_addr = await introspection.get_subobject_address(root_addr, i)
-          sub_info = await introspection.get_object(sub_addr)
+      deck_addr = await self._registry.resolve("MLPrepRoot.MLPrepCalibration.DeckConfiguration")
 
-          if sub_info.name == "MLPrep":
-            self._mlprep_address = sub_addr
-            logger.info(f"Found MLPrep at {sub_addr}")
+      bounds_resp = await self.send_command(PrepGetDeckBounds(dest=deck_addr))
+      if bounds_resp:
+        deck_bounds = DeckBounds(
+          min_x=bounds_resp.min_x,
+          max_x=bounds_resp.max_x,
+          min_y=bounds_resp.min_y,
+          max_y=bounds_resp.max_y,
+          min_z=bounds_resp.min_z,
+          max_z=bounds_resp.max_z,
+        )
 
-          if sub_info.name == "ChannelCoordinator":
-            self._coordinator_address = sub_addr
-            logger.info(f"Found ChannelCoordinator at {sub_addr}")
+      sites_resp = await self.send_command(PrepGetDeckSiteDefinitions(dest=deck_addr))
+      if sites_resp and sites_resp.sites:
+        deck_sites = tuple(
+          DeckSiteInfo(
+            id=int(s.id),
+            left_bottom_front_x=float(s.left_bottom_front_x),
+            left_bottom_front_y=float(s.left_bottom_front_y),
+            left_bottom_front_z=float(s.left_bottom_front_z),
+            length=float(s.length),
+            width=float(s.width),
+            height=float(s.height),
+          )
+          for s in sites_resp.sites
+        )
+        logger.info("Discovered %d deck sites", len(deck_sites))
 
-          if sub_info.name == "PipettorRoot":
-            for j in range(sub_info.subobject_count):
-              try:
-                pip_sub_addr = await introspection.get_subobject_address(sub_addr, j)
-                pip_sub_info = await introspection.get_object(pip_sub_addr)
-                if pip_sub_info.name == "Pipettor":
-                  self._pipettor_address = pip_sub_addr
-                  logger.info(f"Found Pipettor at {pip_sub_addr}")
-                  break
-              except Exception as e:
-                logger.debug(f"Failed to get PipettorRoot subobject {j}: {e}")
-        except Exception as e:
-          logger.debug(f"Failed to get root subobject {i}: {e}")
-    except Exception as e:
-      logger.warning(f"Failed to discover Prep objects: {e}")
+      waste_resp = await self.send_command(PrepGetWasteSiteDefinitions(dest=deck_addr))
+      if waste_resp and waste_resp.sites:
+        waste_sites = tuple(
+          WasteSiteInfo(
+            index=int(s.index),
+            x_position=float(s.x_position),
+            y_position=float(s.y_position),
+            z_position=float(s.z_position),
+            z_seek=float(s.z_seek),
+          )
+          for s in waste_resp.sites
+        )
+        logger.info("Discovered %d waste sites: %s", len(waste_sites), waste_sites)
+
+    except (KeyError, RuntimeError) as e:
+      logger.debug("DeckConfiguration not available: %s", e)
+
+    return InstrumentConfig(
+      deck_bounds=deck_bounds,
+      has_enclosure=has_enclosure,
+      safe_speeds_enabled=safe_speeds_enabled,
+      default_traverse_height=default_traverse_height,
+      deck_sites=deck_sites,
+      waste_sites=waste_sites,
+    )
 
   # ---------------------------------------------------------------------------
   # Properties
@@ -1539,15 +1832,24 @@ class PrepBackend(HamiltonTCPBackend):
 
   @property
   def mlprep_address(self) -> Optional[Address]:
-    return self._mlprep_address
+    try:
+      return self._registry.address("MLPrepRoot.MLPrep") if self._registry.has("MLPrepRoot.MLPrep") else None
+    except KeyError:
+      return None
 
   @property
   def pipettor_address(self) -> Optional[Address]:
-    return self._pipettor_address
+    for path in ("MLPrepRoot.PipettorRoot.Pipettor", "MLPrepRoot.ChannelCoordinator"):
+      if self._registry.has(path):
+        return self._registry.address(path)
+    return None
 
   @property
   def coordinator_address(self) -> Optional[Address]:
-    return self._coordinator_address
+    try:
+      return self._registry.address("MLPrepRoot.ChannelCoordinator") if self._registry.has("MLPrepRoot.ChannelCoordinator") else None
+    except KeyError:
+      return None
 
   @property
   def num_channels(self) -> int:
@@ -1555,15 +1857,24 @@ class PrepBackend(HamiltonTCPBackend):
     return 2
 
   def _pipettor_dest(self) -> Address:
-    dest = self._pipettor_address or self._coordinator_address
-    if dest is None:
-      raise RuntimeError("Pipettor/Coordinator not discovered. Call setup() first.")
-    return dest
+    for path in ("MLPrepRoot.PipettorRoot.Pipettor", "MLPrepRoot.ChannelCoordinator"):
+      if self._registry.has(path):
+        return self._registry.address(path)
+    raise RuntimeError("Pipettor/Coordinator not discovered. Call setup() first.")
 
   def _mlprep_dest(self) -> Address:
-    if self._mlprep_address is None:
-      raise RuntimeError("MLPrep address not discovered. Call setup() first.")
-    return self._mlprep_address
+    return self._registry.address("MLPrepRoot.MLPrep")
+
+  def _validate_position(self, x: float, y: float, z: float) -> None:
+    """Raise ValueError if (x, y, z) is outside deck bounds. No-op if config/bounds not set."""
+    if self._config is None or self._config.deck_bounds is None:
+      return
+    b = self._config.deck_bounds
+    if not (b.min_x <= x <= b.max_x and b.min_y <= y <= b.max_y and b.min_z <= z <= b.max_z):
+      raise ValueError(
+        f"Position ({x}, {y}, {z}) outside deck bounds "
+        f"(x=[{b.min_x}, {b.max_x}], y=[{b.min_y}, {b.max_y}], z=[{b.min_z}, {b.max_z}])"
+      )
 
   async def is_initialized(self) -> bool:
     """Query whether MLPrep reports as initialized (GetIsInitialized, cmd=2).
@@ -1575,7 +1886,30 @@ class PrepBackend(HamiltonTCPBackend):
     result = await self.send_command(PrepGetIsInitialized(dest=self._mlprep_dest()))
     if result is None:
       return False
-    return result.get("initialized", False)
+    return bool(result.value)
+
+  async def get_tip_and_needle_definitions(self) -> Tuple[TipDefinition, ...]:
+    """Return tip/needle definitions registered on the instrument (GetTipAndNeedleDefinitions, cmd=11)."""
+    result = await self.send_command(
+      PrepGetTipAndNeedleDefinitions(dest=self._mlprep_dest())
+    )
+    if result is None or not getattr(result, "definitions", None):
+      return ()
+    return tuple(result.definitions)
+
+  async def is_parked(self) -> bool:
+    """Query whether MLPrep is parked (IsParked, cmd=34)."""
+    result = await self.send_command(PrepIsParked(dest=self._mlprep_dest()))
+    if result is None:
+      return False
+    return bool(result.value)
+
+  async def is_spread(self) -> bool:
+    """Query whether channels are spread (IsSpread, cmd=35). Pipettor commands typically require spread state."""
+    result = await self.send_command(PrepIsSpread(dest=self._mlprep_dest()))
+    if result is None:
+      return False
+    return bool(result.value)
 
   # ---------------------------------------------------------------------------
   # LiquidHandlerBackend abstract methods
@@ -1585,14 +1919,33 @@ class PrepBackend(HamiltonTCPBackend):
     self,
     ops: List[Pickup],
     use_channels: List[int],
-    final_z: float = 123.87,
+    final_z: Optional[float] = None,
     seek_speed: float = 15.0,
+    z_seek_offset: Optional[float] = None,
     enable_tadm: bool = False,
     dispenser_volume: float = 0.0,
     dispenser_speed: float = 250.0,
   ):
+    """Pick up tips.
+
+    The arm moves to z_seek during lateral XY approach, then descends to z_position
+    to engage the tip. Default z_seek = z_position + fitting_depth + 5mm (tip-type-
+    aware; avoids descending into the rack during approach).
+
+    Args:
+      final_z: Traverse/safe height (mm) for the move and Z position after command.
+        Defaults to the instrument's configured traverse height from setup.
+      seek_speed: Speed (mm/s) for the seek/approach phase.
+      z_seek_offset: Additive mm on top of the geometry-based default. None = 0
+        (use default only). Use to raise or lower the approach height if needed.
+      enable_tadm: Enable tip-adjust during pickup.
+      dispenser_volume: Dispenser volume for TADM (if enabled).
+      dispenser_speed: Dispenser speed for TADM (if enabled).
+    """
     assert len(ops) == len(use_channels)
     assert max(use_channels) <= 2, "Only two channels are supported"
+
+    resolved_final_z = final_z if final_z is not None else self._config.default_traverse_height
 
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
     tip_positions: List[TipPositionParameters] = []
@@ -1601,17 +1954,12 @@ class PrepBackend(HamiltonTCPBackend):
         continue
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "t")
-      z = loc.z + op.resource.get_tip().total_tip_length
-      tip_positions.append(
-        TipPositionParameters(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          x_position=loc.x,
-          y_position=loc.y,
-          z_position=z,
-          z_seek=z + 12,
-        )
+      params = TipPositionParameters.for_op(
+        _CHANNEL_INDEX[ch], loc, op.resource.get_tip(),
+        z_seek_offset=z_seek_offset,
       )
+      self._validate_position(loc.x, loc.y, params.z_position)
+      tip_positions.append(params)
 
     assert len(set(op.tip for op in ops)) == 1, "All ops must use the same tip type"
     tip = ops[0].tip
@@ -1629,7 +1977,7 @@ class PrepBackend(HamiltonTCPBackend):
       PrepPickUpTips(
         dest=self._pipettor_dest(),
         tip_positions=tip_positions,
-        final_z=final_z,
+        final_z=resolved_final_z,
         seek_speed=seek_speed,
         tip_definition=tip_definition,
         enable_tadm=enable_tadm,
@@ -1642,12 +1990,32 @@ class PrepBackend(HamiltonTCPBackend):
     self,
     ops: List[Drop],
     use_channels: List[int],
-    final_z: float = 123.87,
-    seek_speed: float = 10.0,
+    final_z: Optional[float] = None,
+    seek_speed: float = 30.0,
+    z_seek_offset: Optional[float] = None,
+    drop_type: TipDropType = TipDropType.FixedHeight,
     tip_roll_off_distance: float = 0.0,
   ):
+    """Drop tips.
+
+    The arm moves to z_seek during lateral XY approach (tip is on pipette, so tip
+    bottom is at z_seek - total_tip_length). Default z_seek = z_position +
+    total_tip_length + 10mm so the tip bottom stays above adjacent tips in the
+    rack during approach.
+
+    Args:
+      final_z: Traverse/safe height (mm) for the move and Z position after command.
+        Defaults to the instrument's configured traverse height from setup.
+      seek_speed: Speed (mm/s) for the seek/approach phase.
+      z_seek_offset: Additive mm on top of the geometry-based default. None = 0
+        (use default only). Use to raise or lower the approach height if needed.
+      drop_type: How the tip is released (FixedHeight, Stall, or CLLDSeek).
+      tip_roll_off_distance: Roll-off distance (mm) for tip release.
+    """
     assert len(ops) == len(use_channels)
     assert max(use_channels) <= 2, "Only two channels are supported"
+
+    resolved_final_z = final_z if final_z is not None else self._config.default_traverse_height
 
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
     tip_positions: List[TipDropParameters] = []
@@ -1656,24 +2024,19 @@ class PrepBackend(HamiltonTCPBackend):
         continue
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "t")
-      z = loc.z + op.resource.get_tip().total_tip_length
-      tip_positions.append(
-        TipDropParameters(
-          default_values=False,
-          channel=_CHANNEL_INDEX[ch],
-          x_position=loc.x,
-          y_position=loc.y,
-          z_position=z,
-          z_seek=z + 12,
-          drop_type=TipDropType.FixedHeight,
-        )
+      params = TipDropParameters.for_op(
+        _CHANNEL_INDEX[ch], loc, op.resource.get_tip(),
+        z_seek_offset=z_seek_offset,
+        drop_type=drop_type,
       )
+      self._validate_position(loc.x, loc.y, params.z_position)
+      tip_positions.append(params)
 
     await self.send_command(
       PrepDropTips(
         dest=self._pipettor_dest(),
         tip_positions=tip_positions,
-        final_z=final_z,
+        final_z=resolved_final_z,
         seek_speed=seek_speed,
         tip_roll_off_distance=tip_roll_off_distance,
       )
@@ -1709,6 +2072,7 @@ class PrepBackend(HamiltonTCPBackend):
         continue
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
+      self._validate_position(loc.x, loc.y, loc.z)
       assert op.resource.get_size_x() == op.resource.get_size_y(), "Only round wells supported"
       radius = op.resource.get_size_x() / 2
       aspirate_parameters.append(
@@ -1772,6 +2136,7 @@ class PrepBackend(HamiltonTCPBackend):
         continue
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
+      self._validate_position(loc.x, loc.y, loc.z)
       assert op.resource.get_size_x() == op.resource.get_size_y(), "Only round wells supported"
       radius = op.resource.get_size_x() / 2
       dispense_parameters.append(
@@ -1882,6 +2247,10 @@ class PrepBackend(HamiltonTCPBackend):
 
   async def move_to_position(self, move_parameters: GantryMoveXYZParameters) -> None:
     """Move to position (cmd=26)."""
+    for ax in move_parameters.axis_parameters:
+      self._validate_position(
+        move_parameters.gantry_x_position, ax.y_position, ax.z_position
+      )
     await self.send_command(
       PrepMoveToPosition(
         dest=self._pipettor_dest(),
@@ -1891,6 +2260,10 @@ class PrepBackend(HamiltonTCPBackend):
 
   async def move_to_position_via_lane(self, move_parameters: GantryMoveXYZParameters) -> None:
     """Move to position via lane (cmd=27)."""
+    for ax in move_parameters.axis_parameters:
+      self._validate_position(
+        move_parameters.gantry_x_position, ax.y_position, ax.z_position
+      )
     await self.send_command(
       PrepMoveToPositionViaLane(
         dest=self._pipettor_dest(),
