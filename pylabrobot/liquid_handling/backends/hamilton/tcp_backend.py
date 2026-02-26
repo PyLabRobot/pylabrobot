@@ -9,13 +9,16 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetObjectCommand
+from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+  HamiltonIntrospection,
+  ObjectInfo,
+)
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
   InitMessage,
@@ -32,6 +35,75 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ObjectRegistry:
+  """Maps object paths to addresses. Depth-1 eager by default; lazy resolution beyond."""
+
+  def __init__(self, backend: "HamiltonTCPBackend"):
+    self._backend = backend
+    self._objects: Dict[str, ObjectInfo] = {}
+    self._root_addresses: List[Address] = []
+
+  def set_root_addresses(self, addresses: List[Address]) -> None:
+    self._root_addresses = list(addresses)
+
+  def get_root_addresses(self) -> List[Address]:
+    return list(self._root_addresses)
+
+  def register(self, path: str, obj: ObjectInfo) -> None:
+    self._objects[path] = obj
+
+  def has(self, path: str) -> bool:
+    return path in self._objects
+
+  def find_path_ending_with(self, suffix: str) -> Optional[str]:
+    """Return a registered path whose last component equals suffix (e.g. 'Pipette' or 'DoorLock')."""
+    for path in self._objects:
+      if path == suffix or path.endswith("." + suffix):
+        return path
+    return None
+
+  def address(self, path: str) -> Address:
+    obj = self._objects.get(path)
+    if obj is None:
+      raise KeyError(f"Object '{path}' not discovered")
+    return obj.address
+
+  async def resolve(self, path: str) -> Address:
+    if path in self._objects:
+      return self._objects[path].address
+    parts = [p for p in path.split(".") if p]
+    if not parts:
+      raise KeyError(f"Invalid path: '{path}'")
+    parent_path = ".".join(parts[:-1])
+    child_name = parts[-1]
+    introspection = HamiltonIntrospection(self._backend)
+
+    if not parent_path:
+      if not self._root_addresses:
+        raise KeyError("No root addresses; run discovery first")
+      parent_addr = self._root_addresses[0]
+      parent_info = await introspection.get_object(parent_addr)
+      parent_info.children = {}
+      self.register(parent_info.name, parent_info)
+      if parent_info.name == child_name:
+        return parent_info.address
+      raise KeyError(f"Root object is '{parent_info.name}', not '{child_name}'")
+
+    parent_addr = await self.resolve(parent_path)
+    parent_info = self._objects[parent_path]
+    for i in range(parent_info.subobject_count):
+      sub_addr = await introspection.get_subobject_address(parent_info.address, i)
+      sub_info = await introspection.get_object(sub_addr)
+      sub_info.children = {}
+      child_path = f"{parent_path}.{sub_info.name}"
+      parent_info.children[sub_info.name] = sub_info
+      self.register(child_path, sub_info)
+      if sub_info.name == child_name:
+        return sub_info.address
+    raise KeyError(f"Child '{child_name}' not found under '{parent_path}'")
+
 
 @dataclass
 class HamiltonError:
@@ -118,10 +190,7 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     self._client_id: Optional[int] = None
     self.client_address: Optional[Address] = None
     self._sequence_numbers: Dict[Address, int] = {}
-    self._discovered_objects: Dict[str, list[Address]] = {}
-
-    # Instrument-specific addresses (set by subclasses)
-    self._instrument_addresses: Dict[str, Address] = {}
+    self._registry = ObjectRegistry(self)
 
   async def _ensure_connected(self):
     """Ensure connection is healthy before operations."""
@@ -315,6 +384,9 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     # Step 4: Discover root objects
     await self._discover_root()
 
+    # Step 5: Walk depth-1 (or more) and register interfaces
+    await self._discover_interfaces(max_depth=1)
+
     logger.info(f"Hamilton backend setup complete. Client ID: {self._client_id}")
 
   async def _initialize_connection(self):
@@ -449,10 +521,45 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     root_objects = self._parse_registration_response(response)
     logger.info(f"[DISCOVER_ROOT] ✓ Found {len(root_objects)} root objects")
 
-    # Store discovered root objects
-    self._discovered_objects["root"] = root_objects
+    self._registry.set_root_addresses(root_objects)
 
     logger.info(f"✓ Discovery complete: {len(root_objects)} root objects")
+
+  async def _discover_interfaces(self, max_depth: int = 1) -> None:
+    """Walk root and register objects up to max_depth. Default 1 = root + direct children."""
+    root_addresses = self._registry.get_root_addresses()
+    if not root_addresses:
+      logger.warning("No root addresses; skipping interface discovery")
+      return
+    introspection = HamiltonIntrospection(self)
+    root_addr = root_addresses[0]
+    await self._register_tree(introspection, root_addr, "", max_depth)
+
+  async def _register_tree(
+    self,
+    introspection: HamiltonIntrospection,
+    addr: Address,
+    parent_path: str,
+    max_depth: int,
+  ) -> None:
+    """Recursively register one node and its children up to max_depth."""
+    info = await introspection.get_object(addr)
+    info.children = {}
+    path = info.name if not parent_path else f"{parent_path}.{info.name}"
+    self._registry.register(path, info)
+    if max_depth <= 0:
+      return
+    for i in range(info.subobject_count):
+      try:
+        sub_addr = await introspection.get_subobject_address(addr, i)
+        sub_info = await introspection.get_object(sub_addr)
+        sub_info.children = {}
+        sub_path = f"{path}.{sub_info.name}"
+        info.children[sub_info.name] = sub_info
+        self._registry.register(sub_path, sub_info)
+        await self._register_tree(introspection, sub_addr, path, max_depth - 1)
+      except Exception as e:
+        logger.debug("Failed to get subobject %s/%s: %s", path, i, e)
 
   def _parse_registration_response(self, response: RegistrationResponse) -> list[Address]:
     """Parse registration response options to extract object addresses.
@@ -498,33 +605,6 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
 
     return objects
 
-  async def _probe_connection(self) -> None:
-    """Probe the connection by sending ObjectInfo (iface=0, id=1) to the root object.
-
-    If the root has not been discovered yet (e.g. during initial setup), this method
-    returns immediately — the connection is being established for the first time so
-    there is nothing to probe against.
-
-    On a retryable connection failure (broken pipe, reset, timeout) the backend is
-    marked as disconnected and a full reconnect is attempted before returning.  After
-    a successful reconnect the caller can send the real command knowing the connection
-    is healthy.
-
-    This is called with ensure_connection=False so it never recurses.
-    """
-    root = self._discovered_objects.get("root", [])
-    if not root:
-      return
-
-    try:
-      await self.send_command(GetObjectCommand(root[0]), ensure_connection=False)
-    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, TimeoutError) as e:
-      logger.warning(
-        f"{self.io._unique_id} Connection probe failed, reconnecting: {e}"
-      )
-      self._connected = False
-      await self._reconnect()
-
   def _allocate_sequence_number(self, dest_address: Address) -> int:
     """Allocate next sequence number for destination.
 
@@ -543,75 +623,85 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     self,
     command: HamiltonCommand,
     ensure_connection: bool = True,
-  ) -> Optional[dict]:
+  ) -> Optional[Any]:
     """Send Hamilton command and wait for response.
 
     Sets source_address if not already set by caller (for testing).
     Uses backend's client_address assigned during Protocol 7 initialization.
 
-    When ensure_connection=True (default), probes the root object with a
-    lightweight ObjectInfo call before sending.  If the probe detects a dead
-    connection it reconnects before the real command is sent, so the command
-    is never sent on a broken connection and is never sent twice.
-
-    Pass ensure_connection=False for commands that are part of the setup /
-    discovery flow (e.g. HamiltonIntrospection calls), or when a root object
-    address has not yet been discovered.
+    When ensure_connection=True (default), on connection error (broken pipe,
+    reset, timeout, etc.) the backend reconnects and retries the command once.
+    Pass ensure_connection=False for setup/discovery commands so they are sent
+    once with no retry.
 
     Read/write timeouts are enforced at the backend level (read_timeout and
     write_timeout passed into HamiltonTCPBackend and used by the Socket).
 
     Args:
       command: Hamilton command to execute.
-      ensure_connection: If True, probe the root object before sending and
-        reconnect if the probe fails.  If False, send directly without probing.
+      ensure_connection: If True, reconnect and retry once on connection error.
+        If False, send once (for setup/discovery).
 
     Returns:
-      Parsed response dictionary, or None if the command has no return data.
+      Parsed response (Command.Response instance, dict, or None).
 
     Raises:
       ConnectionError: If the connection is not established and auto_reconnect
         is disabled, or if reconnection fails.
       RuntimeError: If the Hamilton firmware returns an error action code.
     """
-    if ensure_connection:
-      await self._probe_connection()
+    connection_errors = (
+      BrokenPipeError,
+      ConnectionError,
+      ConnectionResetError,
+      ConnectionAbortedError,
+      TimeoutError,
+      OSError,
+    )
+    max_attempts = 2 if ensure_connection else 1
+    last_error: Optional[BaseException] = None
 
-    # Set source address with smart fallback
-    if command.source_address is None:
-      if self.client_address is None:
-        raise RuntimeError("Backend not initialized - call setup() first to assign client_address")
-      command.source_address = self.client_address
+    for attempt in range(max_attempts):
+      try:
+        if command.source_address is None:
+          if self.client_address is None:
+            raise RuntimeError("Backend not initialized - call setup() first to assign client_address")
+          command.source_address = self.client_address
 
-    # Allocate sequence number for this command
-    command.sequence_number = self._allocate_sequence_number(command.dest_address)
+        command.sequence_number = self._allocate_sequence_number(command.dest_address)
+        message = command.build()
 
-    # Build command message
-    message = command.build()
+        log_params = command.get_log_params()
+        logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
 
-    # Log command parameters at debug level (noisy when discovering subobjects)
-    log_params = command.get_log_params()
-    logger.debug(f"{command.__class__.__name__} parameters: {log_params}")
+        await self.write(message)
+        response_message = await self._read_one_message()
+        assert isinstance(response_message, CommandResponse)
 
-    # Send command
-    await self.write(message)
+        action = Hoi2Action(response_message.hoi.action_code)
+        if action in (
+          Hoi2Action.STATUS_EXCEPTION,
+          Hoi2Action.COMMAND_EXCEPTION,
+          Hoi2Action.INVALID_ACTION_RESPONSE,
+        ):
+          error_message = f"Error response (action={action:#x}): {response_message.hoi.params.hex()}"
+          logger.error(f"Hamilton error {action}: {error_message}")
+          raise RuntimeError(f"Hamilton error {action}: {error_message}")
 
-    # Read response (uses backend read_timeout)
-    response_message = await self._read_one_message()
-    assert isinstance(response_message, CommandResponse)
+        return command.interpret_response(response_message)
 
-    # Check for error actions
-    action = Hoi2Action(response_message.hoi.action_code)
-    if action in (
-      Hoi2Action.STATUS_EXCEPTION,
-      Hoi2Action.COMMAND_EXCEPTION,
-      Hoi2Action.INVALID_ACTION_RESPONSE,
-    ):
-      error_message = f"Error response (action={action:#x}): {response_message.hoi.params.hex()}"
-      logger.error(f"Hamilton error {action}: {error_message}")
-      raise RuntimeError(f"Hamilton error {action}: {error_message}")
+      except connection_errors as e:
+        last_error = e
+        self._connected = False
+        if not self.auto_reconnect or attempt == max_attempts - 1:
+          raise
+        logger.warning(
+          f"{self.io._unique_id} Command failed (connection error), reconnecting and retrying: {e}"
+        )
+        await self._reconnect()
 
-    return command.interpret_response(response_message)
+    assert last_error is not None
+    raise last_error
 
   async def stop(self):
     """Stop the backend and close connection."""
@@ -629,5 +719,5 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     return {
       **super().serialize(),
       "client_id": self._client_id,
-      "instrument_addresses": {k: str(v) for k, v in self._instrument_addresses.items()},
+      "registry_paths": list(self._registry._objects.keys()),
     }

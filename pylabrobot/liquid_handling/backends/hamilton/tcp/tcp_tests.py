@@ -4,7 +4,10 @@ This module tests the packet structures, message builders, parameter encoding,
 and command classes in the Hamilton TCP protocol stack.
 """
 
+import struct
 import unittest
+from dataclasses import dataclass
+from typing import Annotated
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
@@ -16,6 +19,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   InitResponse,
   RegistrationMessage,
   RegistrationResponse,
+  parse_into_struct,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
   Address,
@@ -27,11 +31,32 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
   encode_version_byte,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
-  HamiltonDataType,
   HamiltonProtocol,
   Hoi2Action,
   RegistrationActionCode,
   RegistrationOptionType,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+  Bool,
+  BoolArray,
+  CountedFlatArray,
+  F32,
+  F32Array,
+  F64,
+  HamiltonDataType,
+  I8,
+  I16,
+  I32,
+  I32Array,
+  I64,
+  Str,
+  StrArray,
+  U8,
+  U16,
+  U16Array,
+  U32,
+  U64,
+  decode_fragment,
 )
 
 
@@ -354,7 +379,7 @@ class TestHoiParams(unittest.TestCase):
     self.assertEqual(HoiParams().count(), 0)
 
   def test_i8(self):
-    params = HoiParams().i8(-128).build()
+    params = HoiParams().add(-128, I8).build()
     # DataFragment: [type=1][flags=0][length=1][data=-128]
     self.assertEqual(params[0], HamiltonDataType.I8)
     self.assertEqual(params[1], 0)  # flags
@@ -362,98 +387,98 @@ class TestHoiParams(unittest.TestCase):
     self.assertEqual(params[4], 0x80)  # -128 as signed byte
 
   def test_i16(self):
-    params = HoiParams().i16(-1000).build()
+    params = HoiParams().add(-1000, I16).build()
     self.assertEqual(params[0], HamiltonDataType.I16)
     self.assertEqual(params[2:4], b"\x02\x00")  # length = 2
 
   def test_i32(self):
-    params = HoiParams().i32(100000).build()
+    params = HoiParams().add(100000, I32).build()
     self.assertEqual(params[0], HamiltonDataType.I32)
     self.assertEqual(params[2:4], b"\x04\x00")  # length = 4
 
   def test_i64(self):
-    params = HoiParams().i64(2**40).build()
+    params = HoiParams().add(2**40, I64).build()
     self.assertEqual(params[0], HamiltonDataType.I64)
     self.assertEqual(params[2:4], b"\x08\x00")  # length = 8
 
   def test_u8(self):
-    params = HoiParams().u8(255).build()
+    params = HoiParams().add(255, U8).build()
     self.assertEqual(params[0], HamiltonDataType.U8)
     self.assertEqual(params[4], 255)
 
   def test_u16(self):
-    params = HoiParams().u16(65535).build()
+    params = HoiParams().add(65535, U16).build()
     self.assertEqual(params[0], HamiltonDataType.U16)
     self.assertEqual(params[4:6], b"\xFF\xFF")
 
   def test_u32(self):
-    params = HoiParams().u32(0xDEADBEEF).build()
+    params = HoiParams().add(0xDEADBEEF, U32).build()
     self.assertEqual(params[0], HamiltonDataType.U32)
     self.assertEqual(params[4:8], b"\xEF\xBE\xAD\xDE")
 
   def test_u64(self):
-    params = HoiParams().u64(0xDEADBEEFCAFEBABE).build()
+    params = HoiParams().add(0xDEADBEEFCAFEBABE, U64).build()
     self.assertEqual(params[0], HamiltonDataType.U64)
 
   def test_f32(self):
-    params = HoiParams().f32(3.14).build()
+    params = HoiParams().add(3.14, F32).build()
     self.assertEqual(params[0], HamiltonDataType.F32)
     self.assertEqual(params[2:4], b"\x04\x00")
 
   def test_f64(self):
-    params = HoiParams().f64(3.14159265358979).build()
+    params = HoiParams().add(3.14159265358979, F64).build()
     self.assertEqual(params[0], HamiltonDataType.F64)
     self.assertEqual(params[2:4], b"\x08\x00")
 
   def test_string(self):
-    params = HoiParams().string("test").build()
+    params = HoiParams().add("test", Str).build()
     self.assertEqual(params[0], HamiltonDataType.STRING)
     self.assertEqual(params[2:4], b"\x05\x00")  # length = 5 (including null)
     self.assertEqual(params[4:9], b"test\x00")
 
   def test_bool_true(self):
-    params = HoiParams().bool_value(True).build()
+    params = HoiParams().add(True, Bool).build()
     self.assertEqual(params[0], HamiltonDataType.BOOL)
     self.assertEqual(params[4], 1)
 
   def test_bool_false(self):
-    params = HoiParams().bool_value(False).build()
+    params = HoiParams().add(False, Bool).build()
     self.assertEqual(params[0], HamiltonDataType.BOOL)
     self.assertEqual(params[4], 0)
 
   def test_i32_array(self):
-    params = HoiParams().i32_array([1, 2, 3]).build()
+    params = HoiParams().add([1, 2, 3], I32Array).build()
     self.assertEqual(params[0], HamiltonDataType.I32_ARRAY)
     self.assertEqual(params[2:4], b"\x0C\x00")  # length = 12 (3 * 4)
 
   def test_u16_array(self):
-    params = HoiParams().u16_array([100, 200, 300]).build()
+    params = HoiParams().add([100, 200, 300], U16Array).build()
     self.assertEqual(params[0], HamiltonDataType.U16_ARRAY)
     self.assertEqual(params[2:4], b"\x06\x00")  # length = 6 (3 * 2)
 
   def test_f32_array(self):
-    params = HoiParams().f32_array([1.0, 2.0, 3.0]).build()
+    params = HoiParams().add([1.0, 2.0, 3.0], F32Array).build()
     self.assertEqual(params[0], HamiltonDataType.F32_ARRAY)
     self.assertEqual(params[2:4], b"\x0C\x00")  # length = 12 (3 * 4)
 
   def test_bool_array(self):
-    params = HoiParams().bool_array([True, False, True]).build()
+    params = HoiParams().add([True, False, True], BoolArray).build()
     self.assertEqual(params[0], HamiltonDataType.BOOL_ARRAY)
     self.assertEqual(params[1], 0x01)  # flags = 0x01 for bool arrays
     self.assertEqual(params[2:4], b"\x03\x00")  # length = 3
     self.assertEqual(params[4:7], b"\x01\x00\x01")
 
   def test_string_array(self):
-    params = HoiParams().string_array(["a", "bc"]).build()
+    params = HoiParams().add(["a", "bc"], StrArray).build()
     self.assertEqual(params[0], HamiltonDataType.STRING_ARRAY)
     # String arrays have u32 count prefix
     self.assertEqual(params[4:8], b"\x02\x00\x00\x00")  # count = 2
 
   def test_method_chaining(self):
-    self.assertEqual(HoiParams().i32(1).string("test").bool_value(True).count(), 3)
+    self.assertEqual(HoiParams().add(1, I32).add("test", Str).add(True, Bool).count(), 3)
 
   def test_count(self):
-    builder = HoiParams().i32(1).i32(2).i32(3)
+    builder = HoiParams().add(1, I32).add(2, I32).add(3, I32)
     self.assertEqual(builder.count(), 3)
 
 
@@ -461,55 +486,55 @@ class TestHoiParamsParser(unittest.TestCase):
   """Tests for HoiParamsParser."""
 
   def test_parse_i32(self):
-    params = HoiParams().i32(12345).build()
+    params = HoiParams().add(12345, I32).build()
     parser = HoiParamsParser(params)
     type_id, value = parser.parse_next()
     self.assertEqual(type_id, HamiltonDataType.I32)
     self.assertEqual(value, 12345)
 
   def test_parse_negative_i32(self):
-    params = HoiParams().i32(-12345).build()
+    params = HoiParams().add(-12345, I32).build()
     parser = HoiParamsParser(params)
     _, value = parser.parse_next()
     self.assertEqual(value, -12345)
 
   def test_parse_string(self):
-    params = HoiParams().string("hello").build()
+    params = HoiParams().add("hello", Str).build()
     parser = HoiParamsParser(params)
     type_id, value = parser.parse_next()
     self.assertEqual(type_id, HamiltonDataType.STRING)
     self.assertEqual(value, "hello")
 
   def test_parse_bool(self):
-    params = HoiParams().bool_value(True).build()
+    params = HoiParams().add(True, Bool).build()
     parser = HoiParamsParser(params)
     type_id, value = parser.parse_next()
     self.assertEqual(type_id, HamiltonDataType.BOOL)
     self.assertEqual(value, True)
 
   def test_parse_i32_array(self):
-    params = HoiParams().i32_array([10, 20, 30]).build()
+    params = HoiParams().add([10, 20, 30], I32Array).build()
     parser = HoiParamsParser(params)
     type_id, value = parser.parse_next()
     self.assertEqual(type_id, HamiltonDataType.I32_ARRAY)
     self.assertEqual(value, [10, 20, 30])
 
   def test_parse_u16_array(self):
-    params = HoiParams().u16_array([100, 200, 300]).build()
+    params = HoiParams().add([100, 200, 300], U16Array).build()
     parser = HoiParamsParser(params)
     type_id, value = parser.parse_next()
     self.assertEqual(type_id, HamiltonDataType.U16_ARRAY)
     self.assertEqual(value, [100, 200, 300])
 
   def test_parse_bool_array(self):
-    params = HoiParams().bool_array([True, False, True, False]).build()
+    params = HoiParams().add([True, False, True, False], BoolArray).build()
     parser = HoiParamsParser(params)
     type_id, value = parser.parse_next()
     self.assertEqual(type_id, HamiltonDataType.BOOL_ARRAY)
     self.assertEqual(value, [True, False, True, False])
 
   def test_parse_multiple(self):
-    params = HoiParams().i32(100).string("test").bool_value(False).build()
+    params = HoiParams().add(100, I32).add("test", Str).add(False, Bool).build()
     parser = HoiParamsParser(params)
 
     _, v1 = parser.parse_next()
@@ -521,7 +546,7 @@ class TestHoiParamsParser(unittest.TestCase):
     self.assertEqual(v3, False)
 
   def test_parse_all(self):
-    params = HoiParams().i32(1).i32(2).i32(3).build()
+    params = HoiParams().add(1, I32).add(2, I32).add(3, I32).build()
     parser = HoiParamsParser(params)
     results = parser.parse_all()
 
@@ -529,7 +554,7 @@ class TestHoiParamsParser(unittest.TestCase):
     self.assertEqual([v for _, v in results], [1, 2, 3])
 
   def test_has_remaining(self):
-    params = HoiParams().i32(1).build()
+    params = HoiParams().add(1, I32).build()
     parser = HoiParamsParser(params)
     self.assertTrue(parser.has_remaining())
     parser.parse_next()
@@ -551,18 +576,18 @@ class TestHoiParamsParser(unittest.TestCase):
     bool_val = True
 
     builder = HoiParams()
-    builder.i8(i8_val)
-    builder.i16(i16_val)
-    builder.i32(i32_val)
-    builder.i64(i64_val)
-    builder.u8(u8_val)
-    builder.u16(u16_val)
-    builder.u32(u32_val)
-    builder.u64(u64_val)
-    builder.f32(f32_val)
-    builder.f64(f64_val)
-    builder.string(string_val)
-    builder.bool_value(bool_val)
+    builder.add(i8_val, I8)
+    builder.add(i16_val, I16)
+    builder.add(i32_val, I32)
+    builder.add(i64_val, I64)
+    builder.add(u8_val, U8)
+    builder.add(u16_val, U16)
+    builder.add(u32_val, U32)
+    builder.add(u64_val, U64)
+    builder.add(f32_val, F32)
+    builder.add(f64_val, F64)
+    builder.add(string_val, Str)
+    builder.add(bool_val, Bool)
 
     params = builder.build()
     parser = HoiParamsParser(params)
@@ -588,7 +613,7 @@ class TestCommandMessage(unittest.TestCase):
 
   def test_build_simple_command(self):
     dest = Address(1, 1, 257)
-    params = HoiParams().i32(100)
+    params = HoiParams().add(100, I32)
     msg = CommandMessage(dest=dest, interface_id=1, method_id=4, params=params)
 
     src = Address(2, 1, 65535)
@@ -917,7 +942,7 @@ class TestHamiltonCommand(unittest.TestCase):
       command_id = 4
 
       def build_parameters(self):
-        return HoiParams().i32(100)
+        return HoiParams().add(100, I32)
 
     cmd = TestCommand(Address(1, 1, 257))
     cmd.source_address = Address(2, 1, 65535)
@@ -954,6 +979,101 @@ class TestHamiltonCommand(unittest.TestCase):
     self.assertNotIn("self", log_params)
 
 
+class TestInterpretResponseAutoDecode(unittest.TestCase):
+  """Tests for interpret_response auto-decode when command has Response class."""
+
+  def test_auto_decode_with_response_class(self):
+    """Command with nested Response decodes via parse_into_struct."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import I64
+
+    class CommandWithResponse(HamiltonCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 0
+
+      @dataclass(frozen=True)
+      class Response:
+        value: I64
+
+    cmd = CommandWithResponse(Address(0, 0, 0))
+    params = HoiParams().add(42, I64).build()
+    hoi = HoiPacket(
+      interface_id=1,
+      action_code=Hoi2Action.COMMAND_RESPONSE,
+      action_id=0,
+      params=params,
+    )
+    harp = HarpPacket(
+      src=Address(0, 0, 0),
+      dst=Address(0, 0, 0),
+      seq=0,
+      protocol=2,
+      action_code=4,
+      payload=hoi.pack(),
+    )
+    ip = IpPacket(protocol=6, payload=harp.pack())
+    response = CommandResponse.from_bytes(ip.pack())
+    result = cmd.interpret_response(response)
+    self.assertIsInstance(result, CommandWithResponse.Response)
+    self.assertEqual(result.value, 42)
+
+  def test_auto_decode_fallback_no_response_class(self):
+    """Command without Response returns None when params empty."""
+    class CommandNoResponse(HamiltonCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 0
+      command_id = 1
+
+    cmd = CommandNoResponse(Address(0, 0, 0))
+    hoi = HoiPacket(interface_id=0, action_code=4, action_id=1, params=b"")
+    harp = HarpPacket(
+      src=Address(0, 0, 0),
+      dst=Address(0, 0, 0),
+      seq=0,
+      protocol=2,
+      action_code=4,
+      payload=hoi.pack(),
+    )
+    ip = IpPacket(protocol=6, payload=harp.pack())
+    response = CommandResponse.from_bytes(ip.pack())
+    result = cmd.interpret_response(response)
+    self.assertIsNone(result)
+
+  def test_auto_decode_fallback_parse_response_parameters(self):
+    """Command with parse_response_parameters override but no Response uses override."""
+    class CommandWithOverride(HamiltonCommand):
+      protocol = HamiltonProtocol.OBJECT_DISCOVERY
+      interface_id = 1
+      command_id = 0
+
+      @classmethod
+      def parse_response_parameters(cls, data):
+        parser = HoiParamsParser(data)
+        _, v = parser.parse_next()
+        return {"value": v}
+
+    cmd = CommandWithOverride(Address(0, 0, 0))
+    params = HoiParams().add(100, I32).build()
+    hoi = HoiPacket(
+      interface_id=1,
+      action_code=Hoi2Action.COMMAND_RESPONSE,
+      action_id=0,
+      params=params,
+    )
+    harp = HarpPacket(
+      src=Address(0, 0, 0),
+      dst=Address(0, 0, 0),
+      seq=0,
+      protocol=2,
+      action_code=4,
+      payload=hoi.pack(),
+    )
+    ip = IpPacket(protocol=6, payload=harp.pack())
+    response = CommandResponse.from_bytes(ip.pack())
+    result = cmd.interpret_response(response)
+    self.assertEqual(result, {"value": 100})
+
+
 class TestProtocolEnums(unittest.TestCase):
   """Tests for protocol enum values."""
 
@@ -981,6 +1101,248 @@ class TestProtocolEnums(unittest.TestCase):
     self.assertEqual(HamiltonDataType.STRING, 15)
     self.assertEqual(HamiltonDataType.BOOL, 23)
     self.assertEqual(HamiltonDataType.I32_ARRAY, 27)
+
+
+class TestDecodeFragment(unittest.TestCase):
+  """Tests for decode_fragment() and correct Python types."""
+
+  def test_decode_i32(self):
+    data = struct.pack("<i", 42)
+    out = decode_fragment(HamiltonDataType.I32, data)
+    self.assertIsInstance(out, int)
+    self.assertEqual(out, 42)
+
+  def test_decode_f32(self):
+    data = struct.pack("<f", 3.14)
+    out = decode_fragment(HamiltonDataType.F32, data)
+    self.assertIsInstance(out, float)
+    self.assertAlmostEqual(out, 3.14, places=5)
+
+  def test_decode_bool(self):
+    data = struct.pack("?", True)
+    out = decode_fragment(HamiltonDataType.BOOL, data)
+    self.assertIsInstance(out, bool)
+    self.assertIs(out, True)
+
+  def test_decode_i16_array(self):
+    data = struct.pack("<hhh", 1, 2, 3)
+    out = decode_fragment(HamiltonDataType.I16_ARRAY, data)
+    self.assertIsInstance(out, list)
+    self.assertEqual(out, [1, 2, 3])
+
+  def test_decode_string(self):
+    data = b"hello\x00"
+    out = decode_fragment(HamiltonDataType.STRING, data)
+    self.assertIsInstance(out, str)
+    self.assertEqual(out, "hello")
+
+  def test_decode_structure(self):
+    data = b"raw\x00"
+    out = decode_fragment(HamiltonDataType.STRUCTURE, data)
+    self.assertIsInstance(out, bytes)
+    self.assertEqual(out, data)
+
+  def test_decode_structure_array(self):
+    # Two STRUCTURE sub-fragments: [30][0][len:2][payload]
+    p1 = b"a"
+    p2 = b"bc"
+    inner = (
+      bytes([HamiltonDataType.STRUCTURE, 0])
+      + struct.pack("<H", len(p1))
+      + p1
+      + bytes([HamiltonDataType.STRUCTURE, 0])
+      + struct.pack("<H", len(p2))
+      + p2
+    )
+    out = decode_fragment(HamiltonDataType.STRUCTURE_ARRAY, inner)
+    self.assertIsInstance(out, list)
+    self.assertEqual(len(out), 2)
+    self.assertEqual(out[0], p1)
+    self.assertEqual(out[1], p2)
+
+  def test_decode_unknown_type_id_raises(self):
+    with self.assertRaises(ValueError) as ctx:
+      decode_fragment(0xFF, b"")
+    self.assertIn("Unknown DataFragment type_id", str(ctx.exception))
+
+
+class TestWireTypeRoundTrip(unittest.TestCase):
+  """Encode via WireType.encode_into, decode via decode_from; round-trip equality."""
+
+  def _roundtrip_scalar(self, alias, value, type_id):
+    meta = alias.__metadata__[0]
+    params = HoiParams()
+    meta.encode_into(value, params)
+    frag = params._fragments[0]
+    payload = frag[4 : 4 + int.from_bytes(frag[2:4], "little")]
+    decoded = decode_fragment(type_id, payload)
+    self.assertEqual(decoded, value, f"round-trip for {alias}")
+
+  def _roundtrip_array(self, alias, value, type_id):
+    meta = alias.__metadata__[0]
+    params = HoiParams()
+    meta.encode_into(value, params)
+    frag = params._fragments[0]
+    payload = frag[4 : 4 + int.from_bytes(frag[2:4], "little")]
+    decoded = decode_fragment(type_id, payload)
+    self.assertEqual(decoded, value, f"round-trip for {alias}")
+
+  def test_roundtrip_i32(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import I32
+
+    self._roundtrip_scalar(I32, 42, HamiltonDataType.I32)
+
+  def test_roundtrip_f32(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import F32
+
+    value = 2.5  # exactly representable in float32
+    meta = F32.__metadata__[0]
+    params = HoiParams()
+    meta.encode_into(value, params)
+    frag = params._fragments[0]
+    payload = frag[4 : 4 + int.from_bytes(frag[2:4], "little")]
+    decoded = decode_fragment(HamiltonDataType.F32, payload)
+    self.assertEqual(decoded, value)
+
+  def test_roundtrip_bool(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import Bool
+
+    self._roundtrip_scalar(Bool, True, HamiltonDataType.BOOL)
+
+  def test_roundtrip_i16_array(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import I16Array
+
+    self._roundtrip_array(I16Array, [1, 2, 3], HamiltonDataType.I16_ARRAY)
+
+  def test_roundtrip_string(self):
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import Str
+
+    meta = Str.__metadata__[0]
+    params = HoiParams()
+    meta.encode_into("hello", params)
+    frag = params._fragments[0]
+    payload = frag[4 : 4 + int.from_bytes(frag[2:4], "little")]
+    decoded = decode_fragment(HamiltonDataType.STRING, payload)
+    self.assertEqual(decoded, "hello")
+
+
+class TestCountedFlatArray(unittest.TestCase):
+  """Tests for CountedFlatArray decode in parse_into_struct."""
+
+  def test_counted_flat_array_single_level(self):
+    """Encode count (I64) + N flat fragments, decode with CountedFlatArray DTO."""
+    # Wire: count=2, then 2× (interface_id: I64, name: Str, version: I64)
+    data = (
+      HoiParams()
+      .add(2, I64)
+      .add(1, I64)
+      .add("if1", Str)
+      .add(10, I64)
+      .add(2, I64)
+      .add("if2", Str)
+      .add(20, I64)
+      .build()
+    )
+
+    @dataclass
+    class _InterfaceWire:
+      interface_id: I64
+      name: Str
+      version: I64
+
+    @dataclass
+    class _GetInterfacesResponse:
+      interfaces: Annotated[list[_InterfaceWire], CountedFlatArray()]
+
+    r = parse_into_struct(HoiParamsParser(data), _GetInterfacesResponse)
+    self.assertEqual(len(r.interfaces), 2)
+    self.assertEqual(r.interfaces[0].interface_id, 1)
+    self.assertEqual(r.interfaces[0].name, "if1")
+    self.assertEqual(r.interfaces[0].version, 10)
+    self.assertEqual(r.interfaces[1].interface_id, 2)
+    self.assertEqual(r.interfaces[1].name, "if2")
+    self.assertEqual(r.interfaces[1].version, 20)
+
+  def test_counted_flat_array_nested(self):
+    """Encode outer count + N×(2 scalars + inner count + M×2 scalars), decode with nested CountedFlatArray."""
+    # Wire: enum_count=1, then enum_id=1, name="E1", value_count=2, then ("v1", 10), ("v2", 20)
+    data = (
+      HoiParams()
+      .add(1, I64)
+      .add(1, I64)
+      .add("E1", Str)
+      .add(2, I64)
+      .add("v1", Str)
+      .add(10, I64)
+      .add("v2", Str)
+      .add(20, I64)
+      .build()
+    )
+
+    @dataclass
+    class _EnumValueWire:
+      name: Str
+      value: I64
+
+    @dataclass
+    class _EnumWire:
+      enum_id: I64
+      name: Str
+      values: Annotated[list[_EnumValueWire], CountedFlatArray()]
+
+    @dataclass
+    class _GetEnumsResponse:
+      enums: Annotated[list[_EnumWire], CountedFlatArray()]
+
+    r = parse_into_struct(HoiParamsParser(data), _GetEnumsResponse)
+    self.assertEqual(len(r.enums), 1)
+    self.assertEqual(r.enums[0].enum_id, 1)
+    self.assertEqual(r.enums[0].name, "E1")
+    self.assertEqual(len(r.enums[0].values), 2)
+    self.assertEqual(r.enums[0].values[0].name, "v1")
+    self.assertEqual(r.enums[0].values[0].value, 10)
+    self.assertEqual(r.enums[0].values[1].name, "v2")
+    self.assertEqual(r.enums[0].values[1].value, 20)
+
+
+class TestIntrospectionResponseDecode(unittest.TestCase):
+  """Round-trip tests for introspection command Response auto-decode."""
+
+  def test_get_object_command_interpret_response(self):
+    """GetObjectCommand.Response decodes name, version, method_count, subobject_count."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import GetObjectCommand
+
+    cmd = GetObjectCommand(Address(0, 0, 0))
+    params = (
+      HoiParams()
+      .add("RootObj", Str)
+      .add("1.0", Str)
+      .add(3, I32)
+      .add(2, I32)
+      .build()
+    )
+    hoi = HoiPacket(
+      interface_id=0,
+      action_code=Hoi2Action.COMMAND_RESPONSE,
+      action_id=0,
+      params=params,
+    )
+    harp = HarpPacket(
+      src=Address(0, 0, 0),
+      dst=Address(0, 0, 0),
+      seq=0,
+      protocol=2,
+      action_code=4,
+      payload=hoi.pack(),
+    )
+    ip = IpPacket(protocol=6, payload=harp.pack())
+    response = CommandResponse.from_bytes(ip.pack())
+    result = cmd.interpret_response(response)
+    self.assertIsInstance(result, GetObjectCommand.Response)
+    self.assertEqual(result.name, "RootObj")
+    self.assertEqual(result.version, "1.0")
+    self.assertEqual(result.method_count, 3)
+    self.assertEqual(result.subobject_count, 2)
 
 
 if __name__ == "__main__":

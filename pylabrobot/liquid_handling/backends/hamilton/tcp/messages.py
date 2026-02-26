@@ -1,41 +1,21 @@
-"""High-level Hamilton message builders and response parsers.
+"""Framing and protocol message layer for Hamilton TCP.
 
-This module provides user-facing message builders and their corresponding
-response parsers. Each message type is paired with its response type:
+HoiParams is a fragment accumulator with add(value, wire_type) and
+from_struct(obj); it has no type-specific encoding logic and delegates all
+encoding to WireType.encode_into in wire_types. HoiParamsParser is a thin
+cursor over sequential DataFragments; it reads [type_id:1][flags:1][length:2]
+[data:N] headers and delegates value decoding to wire_types.decode_fragment().
+parse_into_struct() is the dataclass codec that uses WireType annotations to
+decode fragment sequences into typed instances.
 
-Request Builders:
-- InitMessage: Builds IP[Connection] for initialization
-- RegistrationMessage: Builds IP[HARP[Registration]] for discovery
-- CommandMessage: Builds IP[HARP[HOI]] for method calls
-
-Response Parsers:
-- InitResponse: Parses initialization responses
-- RegistrationResponse: Parses registration responses
-- CommandResponse: Parses command responses
-
-This pairing creates symmetry and makes correlation explicit.
-
-Architectural Note:
-Parameter encoding (HoiParams/HoiParamsParser) is conceptually a separate layer
-in the Hamilton protocol architecture (per documented architecture), but is
-implemented here for efficiency since it's exclusively used by HOI messages.
-This preserves the conceptual separation while optimizing implementation.
-
-Example:
-  # Build and send
-  msg = CommandMessage(dest, interface_id=0, method_id=42)
-  msg.add_i32(100)
-  packet_bytes = msg.build(src, seq=1)
-
-  # Parse response
-  response = CommandResponse.from_bytes(received_bytes)
-  params = response.hoi.params
+Also: message builders (CommandMessage, InitMessage, RegistrationMessage) and
+response parsers (CommandResponse, InitResponse, RegistrationResponse).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, fields as dc_fields
+from typing import Any, get_args, get_origin, get_type_hints
 
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
@@ -46,9 +26,12 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
   RegistrationPacket,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
-  HamiltonDataType,
   HarpTransportableProtocol,
   RegistrationOptionType,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+  HamiltonDataType,
+  decode_fragment,
 )
 
 # ============================================================================
@@ -75,9 +58,9 @@ class HoiParams:
     [0x03|0x00|0x04|0x00|100][0x0F|0x00|0x05|0x00|"test\0"][0x1C|0x00|...array...]
 
     params = (HoiParams()
-              .i32(100)
-              .string("test")
-              .u32_array([1, 2, 3])
+              .add(100, I32)
+              .add("test", Str)
+              .add([1, 2, 3], U32Array)
               .build())
   """
 
@@ -98,246 +81,14 @@ class HoiParams:
     self._fragments.append(fragment)
     return self
 
-  # Scalar integer types
-  def i8(self, value: int) -> "HoiParams":
-    """Add signed 8-bit integer parameter."""
-    data = Writer().i8(value).finish()
-    return self._add_fragment(HamiltonDataType.I8, data)
+  def add(self, value: Any, wire_type: Any) -> "HoiParams":
+    """Encode a value using its WireType and append the DataFragment.
 
-  def i16(self, value: int) -> "HoiParams":
-    """Add signed 16-bit integer parameter."""
-    data = Writer().i16(value).finish()
-    return self._add_fragment(HamiltonDataType.I16, data)
-
-  def i32(self, value: int) -> "HoiParams":
-    """Add signed 32-bit integer parameter."""
-    data = Writer().i32(value).finish()
-    return self._add_fragment(HamiltonDataType.I32, data)
-
-  def i64(self, value: int) -> "HoiParams":
-    """Add signed 64-bit integer parameter."""
-    data = Writer().i64(value).finish()
-    return self._add_fragment(HamiltonDataType.I64, data)
-
-  def u8(self, value: int, padded: bool = False) -> "HoiParams":
-    """Add unsigned 8-bit integer parameter.
-
-    Args:
-      value: Value to encode.
-      padded: If True, use flags=0x01 and append pad byte (Prep compatibility).
+    wire_type may be a WireType instance or an Annotated alias (e.g. I32, Str).
     """
-    data = Writer().u8(value).finish()
-    if padded:
-      data += b"\x00"
-      return self._add_fragment(HamiltonDataType.U8, data, flags=0x01)
-    return self._add_fragment(HamiltonDataType.U8, data)
-
-  def u16(self, value: int) -> "HoiParams":
-    """Add unsigned 16-bit integer parameter."""
-    data = Writer().u16(value).finish()
-    return self._add_fragment(HamiltonDataType.U16, data)
-
-  def u32(self, value: int) -> "HoiParams":
-    """Add unsigned 32-bit integer parameter."""
-    data = Writer().u32(value).finish()
-    return self._add_fragment(HamiltonDataType.U32, data)
-
-  def u64(self, value: int) -> "HoiParams":
-    """Add unsigned 64-bit integer parameter."""
-    data = Writer().u64(value).finish()
-    return self._add_fragment(HamiltonDataType.U64, data)
-
-  # Floating-point types
-  def f32(self, value: float) -> "HoiParams":
-    """Add 32-bit float parameter."""
-    data = Writer().f32(value).finish()
-    return self._add_fragment(HamiltonDataType.F32, data)
-
-  def f64(self, value: float) -> "HoiParams":
-    """Add 64-bit double parameter."""
-    data = Writer().f64(value).finish()
-    return self._add_fragment(HamiltonDataType.F64, data)
-
-  # String and bool
-  def string(self, value: str) -> "HoiParams":
-    """Add null-terminated string parameter."""
-    data = Writer().string(value).finish()
-    return self._add_fragment(HamiltonDataType.STRING, data)
-
-  def bool_value(self, value: bool, padded: bool = False) -> "HoiParams":
-    """Add boolean parameter.
-
-    Args:
-      value: The boolean value.
-      padded: If True, use Prep-compatible encoding: flags=0x01 and append pad
-        byte [type=23][flags=1][len=2][0x00 or 0x01][0x00]. Default False for
-        Nimbus compatibility.
-    """
-    data = Writer().u8(1 if value else 0).finish()
-    if padded:
-      data += b"\x00"
-      return self._add_fragment(HamiltonDataType.BOOL, data, flags=0x01)
-    return self._add_fragment(HamiltonDataType.BOOL, data)
-
-  # Enum and structure types (Prep)
-  def enum_value(self, value: int) -> "HoiParams":
-    """Add enum parameter (encoded as u32, type_id=32)."""
-    data = Writer().u32(value).finish()
-    return self._add_fragment(HamiltonDataType.ENUM, data)
-
-  def hc_result(self, value: int) -> "HoiParams":
-    """Add HC_RESULT parameter (same wire format as u16, type_id=33)."""
-    data = Writer().u16(value).finish()
-    return self._add_fragment(HamiltonDataType.HC_RESULT, data)
-
-  def enum_array(self, values: list[int]) -> "HoiParams":
-    """Add array of enums (each u32, type_id=35)."""
-    writer = Writer()
-    for val in values:
-      writer.u32(val)
-    return self._add_fragment(HamiltonDataType.ENUM_ARRAY, writer.finish())
-
-  def structure(self, nested: "HoiParams") -> "HoiParams":
-    """Add nested structure (type_id=30). Data is concatenated DataFragments."""
-    return self._add_fragment(HamiltonDataType.STRUCTURE, nested.build())
-
-  def structure_from_bytes(self, data: bytes) -> "HoiParams":
-    """Add structure (type_id=30) from raw concatenated DataFragment bytes.
-
-    Used when building from Prep dataclasses that still use .encode().
-    """
-    return self._add_fragment(HamiltonDataType.STRUCTURE, data)
-
-  def structure_array(self, elements: list["HoiParams"]) -> "HoiParams":
-    """Add array of structures (type_id=31). Each element wrapped as Structure fragment."""
-    inner = b""
-    for elem in elements:
-      payload = elem.build()
-      inner += Writer().u8(HamiltonDataType.STRUCTURE).u8(0).u16(len(payload)).raw_bytes(payload).finish()
-    return self._add_fragment(HamiltonDataType.STRUCTURE_ARRAY, inner)
-
-  # Array types
-  def i8_array(self, values: list[int]) -> "HoiParams":
-    """Add array of signed 8-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.i8(val)
-    return self._add_fragment(HamiltonDataType.I8_ARRAY, writer.finish())
-
-  def i16_array(self, values: list[int]) -> "HoiParams":
-    """Add array of signed 16-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.i16(val)
-    return self._add_fragment(HamiltonDataType.I16_ARRAY, writer.finish())
-
-  def i32_array(self, values: list[int]) -> "HoiParams":
-    """Add array of signed 32-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.i32(val)
-    return self._add_fragment(HamiltonDataType.I32_ARRAY, writer.finish())
-
-  def i64_array(self, values: list[int]) -> "HoiParams":
-    """Add array of signed 64-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.i64(val)
-    return self._add_fragment(HamiltonDataType.I64_ARRAY, writer.finish())
-
-  def u8_array(self, values: list[int]) -> "HoiParams":
-    """Add array of unsigned 8-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.u8(val)
-    return self._add_fragment(HamiltonDataType.U8_ARRAY, writer.finish())
-
-  def u16_array(self, values: list[int]) -> "HoiParams":
-    """Add array of unsigned 16-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.u16(val)
-    return self._add_fragment(HamiltonDataType.U16_ARRAY, writer.finish())
-
-  def u32_array(self, values: list[int]) -> "HoiParams":
-    """Add array of unsigned 32-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.u32(val)
-    return self._add_fragment(HamiltonDataType.U32_ARRAY, writer.finish())
-
-  def u64_array(self, values: list[int]) -> "HoiParams":
-    """Add array of unsigned 64-bit integers.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.u64(val)
-    return self._add_fragment(HamiltonDataType.U64_ARRAY, writer.finish())
-
-  def f32_array(self, values: list[float]) -> "HoiParams":
-    """Add array of 32-bit floats.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.f32(val)
-    return self._add_fragment(HamiltonDataType.F32_ARRAY, writer.finish())
-
-  def f64_array(self, values: list[float]) -> "HoiParams":
-    """Add array of 64-bit doubles.
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-    """
-    writer = Writer()
-    for val in values:
-      writer.f64(val)
-    return self._add_fragment(HamiltonDataType.F64_ARRAY, writer.finish())
-
-  def bool_array(self, values: list[bool]) -> "HoiParams":
-    """Add array of booleans (stored as u8: 0 or 1).
-
-    Format: [element0][element1]... (NO count prefix - count derived from DataFragment length)
-
-    Note: BOOL_ARRAY uses flags=0x01 in the DataFragment header (unlike other types which use 0x00).
-    """
-    writer = Writer()
-    for val in values:
-      writer.u8(1 if val else 0)
-    return self._add_fragment(HamiltonDataType.BOOL_ARRAY, writer.finish(), flags=0x01)
-
-  def string_array(self, values: list[str]) -> "HoiParams":
-    """Add array of null-terminated strings.
-
-    Format: [count:4][str0\0][str1\0]...
-    """
-    writer = Writer().u32(len(values))
-    for val in values:
-      writer.string(val)
-    return self._add_fragment(HamiltonDataType.STRING_ARRAY, writer.finish())
+    if hasattr(wire_type, "__metadata__"):
+      wire_type = wire_type.__metadata__[0]
+    return wire_type.encode_into(value, self)
 
   # ------------------------------------------------------------------
   # Generic dataclass serialiser (wire_types.py Annotated metadata)
@@ -378,9 +129,10 @@ class HoiParams:
 
 
 class HoiParamsParser:
-  """Parser for HOI DataFragment parameters.
+  """Cursor over sequential DataFragments in an HOI payload.
 
-  Parses DataFragment-wrapped values from HOI response payloads.
+  Reads [type_id:1][flags:1][length:2][data:N] headers and delegates
+  value decoding to the unified codec in wire_types.decode_fragment().
   """
 
   def __init__(self, data: bytes):
@@ -388,181 +140,87 @@ class HoiParamsParser:
     self._offset = 0
 
   def parse_next(self) -> tuple[int, Any]:
-    """Parse the next DataFragment and return (type_id, value).
-
-    Returns:
-      Tuple of (type_id, parsed_value)
-
-    Raises:
-      ValueError: If data is malformed or insufficient
-    """
     if self._offset + 4 > len(self._data):
-      raise ValueError(f"Insufficient data for DataFragment header at offset {self._offset}")
-
-    # Parse DataFragment header
-    reader = Reader(self._data[self._offset :])
-    type_id = reader.u8()
-    _flags = reader.u8()  # Read but unused
-    length = reader.u16()
-
-    data_start = self._offset + 4
-    data_end = data_start + length
-
-    if data_end > len(self._data):
+      raise ValueError(f"Insufficient data at offset {self._offset}")
+    type_id = self._data[self._offset]
+    length = int.from_bytes(self._data[self._offset + 2 : self._offset + 4], "little")
+    payload_end = self._offset + 4 + length
+    if payload_end > len(self._data):
       raise ValueError(
-        f"DataFragment data extends beyond buffer: need {data_end}, have {len(self._data)}"
+        f"DataFragment data extends beyond buffer: need {payload_end}, have {len(self._data)}"
       )
-
-    # Extract data payload
-    fragment_data = self._data[data_start:data_end]
-    value = self._parse_value(type_id, fragment_data)
-
-    # Move offset past this fragment
-    self._offset = data_end
-
-    return (type_id, value)
-
-  def _parse_value(self, type_id: int, data: bytes) -> Any:
-    """Parse value based on type_id using dispatch table."""
-    reader = Reader(data)
-
-    # Dispatch table for scalar types
-    scalar_parsers = {
-      HamiltonDataType.I8: reader.i8,
-      HamiltonDataType.I16: reader.i16,
-      HamiltonDataType.I32: reader.i32,
-      HamiltonDataType.I64: reader.i64,
-      HamiltonDataType.U8: reader.u8,
-      HamiltonDataType.U16: reader.u16,
-      HamiltonDataType.U32: reader.u32,
-      HamiltonDataType.U64: reader.u64,
-      HamiltonDataType.F32: reader.f32,
-      HamiltonDataType.F64: reader.f64,
-      HamiltonDataType.STRING: reader.string,
-    }
-
-    # Check scalar types first
-    # Cast int to HamiltonDataType enum for dict lookup
-    try:
-      data_type = HamiltonDataType(type_id)
-      if data_type in scalar_parsers:
-        return scalar_parsers[data_type]()
-    except ValueError:
-      pass  # Not a valid enum value, continue to other checks
-
-    # Special case: bool (may have padding byte; we read first byte only)
-    if type_id == HamiltonDataType.BOOL:
-      return reader.u8() == 1
-
-    # Enum and structure types
-    if type_id == HamiltonDataType.ENUM:
-      return reader.u32()
-    if type_id == HamiltonDataType.HC_RESULT:
-      return reader.u16()
-    if type_id == HamiltonDataType.STRUCTURE:
-      return data  # Raw bytes; caller can HoiParamsParser(data).parse_all()
-    if type_id == HamiltonDataType.ENUM_ARRAY:
-      count = len(data) // 4
-      return [reader.u32() for _ in range(count)]
-    if type_id == HamiltonDataType.STRUCTURE_ARRAY:
-      # Data is concatenated Structure fragments: [type=30][flags][len:2][payload]...
-      result = []
-      r = Reader(data)
-      while r.offset() + 4 <= len(data):
-        frag_type = r.u8()
-        _frag_flags = r.u8()
-        frag_len = r.u16()
-        if frag_type != HamiltonDataType.STRUCTURE:
-          raise ValueError(f"Expected STRUCTURE fragment in STRUCTURE_ARRAY, got type {frag_type}")
-        if r.offset() + frag_len > len(data):
-          raise ValueError("STRUCTURE_ARRAY element extends beyond buffer")
-        result.append(r.raw_bytes(frag_len))
-      return result
-
-    # Dispatch table for array element parsers
-    array_element_parsers = {
-      HamiltonDataType.I8_ARRAY: reader.i8,
-      HamiltonDataType.I16_ARRAY: reader.i16,
-      HamiltonDataType.I32_ARRAY: reader.i32,
-      HamiltonDataType.I64_ARRAY: reader.i64,
-      HamiltonDataType.U8_ARRAY: reader.u8,
-      HamiltonDataType.U16_ARRAY: reader.u16,
-      HamiltonDataType.U32_ARRAY: reader.u32,
-      HamiltonDataType.U64_ARRAY: reader.u64,
-      HamiltonDataType.F32_ARRAY: reader.f32,
-      HamiltonDataType.F64_ARRAY: reader.f64,
-      HamiltonDataType.STRING_ARRAY: reader.string,
-    }
-
-    # Handle arrays
-    # Arrays don't have a count prefix - count is derived from DataFragment length
-    # Calculate element size based on type
-    element_sizes = {
-      HamiltonDataType.I8_ARRAY: 1,
-      HamiltonDataType.I16_ARRAY: 2,
-      HamiltonDataType.I32_ARRAY: 4,
-      HamiltonDataType.I64_ARRAY: 8,
-      HamiltonDataType.U8_ARRAY: 1,
-      HamiltonDataType.U16_ARRAY: 2,
-      HamiltonDataType.U32_ARRAY: 4,
-      HamiltonDataType.U64_ARRAY: 8,
-      HamiltonDataType.F32_ARRAY: 4,
-      HamiltonDataType.F64_ARRAY: 8,
-      HamiltonDataType.STRING_ARRAY: None,  # Variable length, handled separately
-    }
-
-    # Cast int to HamiltonDataType enum for dict lookup
-    try:
-      data_type = HamiltonDataType(type_id)
-      if data_type in array_element_parsers:
-        element_size = element_sizes.get(data_type)
-        if element_size is not None:
-          # Fixed-size elements: calculate count from data length
-          count = len(data) // element_size
-          return [array_element_parsers[data_type]() for _ in range(count)]
-        elif data_type == HamiltonDataType.STRING_ARRAY:
-          # String arrays: null-terminated strings concatenated, no count prefix
-          # Parse by splitting on null bytes
-          strings = []
-          current_string = bytearray()
-          for byte in data:
-            if byte == 0:
-              if current_string:
-                strings.append(current_string.decode("utf-8", errors="replace"))
-                current_string = bytearray()
-            else:
-              current_string.append(byte)
-          # Handle case where last string doesn't end with null (shouldn't happen, but be safe)
-          if current_string:
-            strings.append(current_string.decode("utf-8", errors="replace"))
-          return strings
-    except ValueError:
-      # Not a valid enum value, continue to other checks
-      # This shouldn't happen for valid Hamilton types, but we continue anyway
-      pass
-
-    # Special case: bool array (1 byte per element)
-    if type_id == HamiltonDataType.BOOL_ARRAY:
-      count = len(data) // 1  # Each bool is 1 byte
-      return [reader.u8() == 1 for _ in range(count)]
-
-    # Unknown type
-    raise ValueError(f"Unknown or unsupported type_id: {type_id}")
+    data = self._data[self._offset + 4 : payload_end]
+    self._offset = payload_end
+    return type_id, decode_fragment(type_id, data)
 
   def has_remaining(self) -> bool:
-    """Check if there are more DataFragments to parse."""
     return self._offset < len(self._data)
 
   def parse_all(self) -> list[tuple[int, Any]]:
-    """Parse all remaining DataFragments.
-
-    Returns:
-      List of (type_id, value) tuples
-    """
     results = []
     while self.has_remaining():
       results.append(self.parse_next())
     return results
+
+
+def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:
+  """Decode a sequence of DataFragments into a dataclass instance using its wire-type annotations.
+
+  Mirrors HoiParams.from_struct: walks the same Annotated field metadata and, for each field in
+  order, consumes one fragment (via parser.parse_next()). Scalars/arrays/string yield the value
+  as returned by the parser; Struct recurses on the payload bytes; StructArray yields a list of
+  recursively decoded instances.
+
+  Args:
+    parser: Parser positioned at the start of the fragment sequence (e.g. response payload).
+    cls: Dataclass type whose fields are annotated with wire_types (F32, Struct(), etc.).
+
+  Returns:
+    An instance of cls with fields populated from the parsed fragments.
+
+  Raises:
+    ValueError: If data is malformed or insufficient.
+  """
+  from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+    CountedFlatArray,
+    Struct,
+    StructArray,
+    WireType,
+  )
+
+  hints = get_type_hints(cls, include_extras=True)
+  values: dict[str, Any] = {}
+  for f in dc_fields(cls):
+    ann = hints.get(f.name)
+    if ann is None or not hasattr(ann, "__metadata__"):
+      continue
+    meta = ann.__metadata__[0]
+    if not isinstance(meta, WireType):
+      continue
+
+    if isinstance(meta, CountedFlatArray):
+      _, count = parser.parse_next()
+      element_type = get_args(get_args(ann)[0])[0]
+      values[f.name] = [parse_into_struct(parser, element_type) for _ in range(count)]
+      continue
+
+    type_id, value = parser.parse_next()
+
+    if isinstance(meta, Struct):
+      inner_type = get_args(ann)[0]
+      value = parse_into_struct(HoiParamsParser(value), inner_type)
+    elif isinstance(meta, StructArray):
+      inner_ann = get_args(ann)[0]
+      if get_origin(inner_ann) is list:
+        element_type = get_args(inner_ann)[0]
+      else:
+        element_type = inner_ann
+      value = [parse_into_struct(HoiParamsParser(p), element_type) for p in value]
+    # else: decode_fragment() already returned correctly-typed value
+
+    values[f.name] = value
+
+  return cls(**values)
 
 
 # ============================================================================

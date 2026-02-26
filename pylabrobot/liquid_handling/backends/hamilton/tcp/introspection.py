@@ -9,14 +9,20 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Annotated, Any, Dict, List
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams, HoiParamsParser
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
-from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
+from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+  CountedFlatArray,
   HamiltonDataType,
-  HamiltonProtocol,
+  I32,
+  Str,
+  U8,
+  U16,
+  U32,
 )
 
 logger = logging.getLogger(__name__)
@@ -189,6 +195,7 @@ class ObjectInfo:
   method_count: int
   subobject_count: int
   address: Address
+  children: Dict[str, "ObjectInfo"] = field(default_factory=dict)
 
 
 @dataclass
@@ -301,6 +308,54 @@ class StructInfo:
 
 
 # ============================================================================
+# WIRE STRUCTS FOR INTROSPECTION RESPONSES
+# ============================================================================
+
+
+@dataclass(frozen=True)
+class _InterfaceRowWire:
+  """One row of GetInterfaces response: interface_id, name, version."""
+
+  interface_id: I32
+  name: Str
+  version: I32
+
+
+@dataclass(frozen=True)
+class _EnumValueWire:
+  """One enum value: name, value."""
+
+  value_name: Str
+  value_value: I32
+
+
+@dataclass(frozen=True)
+class _EnumRowWire:
+  """One row of GetEnums response: enum_id, name, values (counted flat array)."""
+
+  enum_id: I32
+  name: Str
+  values: Annotated[list[_EnumValueWire], CountedFlatArray()]
+
+
+@dataclass(frozen=True)
+class _StructFieldWire:
+  """One struct field: field_name, field_type."""
+
+  field_name: Str
+  field_type: I32
+
+
+@dataclass(frozen=True)
+class _StructRowWire:
+  """One row of GetStructs response: struct_id, name, fields (counted flat array)."""
+
+  struct_id: I32
+  name: Str
+  fields: Annotated[list[_StructFieldWire], CountedFlatArray()]
+
+
+# ============================================================================
 # INTROSPECTION COMMAND CLASSES
 # ============================================================================
 
@@ -316,23 +371,12 @@ class GetObjectCommand(HamiltonCommand):
   def __init__(self, object_address: Address):
     super().__init__(object_address)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse get_object response."""
-    # Parse HOI2 DataFragments
-    parser = HoiParamsParser(data)
-
-    _, name = parser.parse_next()
-    _, version = parser.parse_next()
-    _, method_count = parser.parse_next()
-    _, subobject_count = parser.parse_next()
-
-    return {
-      "name": name,
-      "version": version,
-      "method_count": method_count,
-      "subobject_count": subobject_count,
-    }
+  @dataclass(frozen=True)
+  class Response:
+    name: Str
+    version: Str
+    method_count: I32
+    subobject_count: I32
 
 
 class GetMethodCommand(HamiltonCommand):
@@ -349,7 +393,7 @@ class GetMethodCommand(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_method command."""
-    return HoiParams().u32(self.method_index)
+    return HoiParams().add(self.method_index, U32)
 
   @classmethod
   def parse_response_parameters(cls, data: bytes) -> dict:
@@ -435,18 +479,13 @@ class GetSubobjectAddressCommand(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_subobject_address command."""
-    return HoiParams().u16(self.subobject_index)  # Use u16, not u32
+    return HoiParams().add(self.subobject_index, U16)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse get_subobject_address response."""
-    parser = HoiParamsParser(data)
-
-    _, module_id = parser.parse_next()
-    _, node_id = parser.parse_next()
-    _, object_id = parser.parse_next()
-
-    return {"address": Address(module_id, node_id, object_id)}
+  @dataclass(frozen=True)
+  class Response:
+    module_id: U16
+    node_id: U16
+    object_id: U16
 
 
 class GetInterfacesCommand(HamiltonCommand):
@@ -460,21 +499,9 @@ class GetInterfacesCommand(HamiltonCommand):
   def __init__(self, object_address: Address):
     super().__init__(object_address)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse get_interfaces response."""
-    parser = HoiParamsParser(data)
-
-    interfaces = []
-    _, interface_count = parser.parse_next()
-
-    for _ in range(interface_count):
-      _, interface_id = parser.parse_next()
-      _, name = parser.parse_next()
-      _, version = parser.parse_next()
-      interfaces.append({"interface_id": interface_id, "name": name, "version": version})
-
-    return {"interfaces": interfaces}
+  @dataclass(frozen=True)
+  class Response:
+    interfaces: Annotated[list[_InterfaceRowWire], CountedFlatArray()]
 
 
 class GetEnumsCommand(HamiltonCommand):
@@ -491,31 +518,11 @@ class GetEnumsCommand(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_enums command."""
-    return HoiParams().u8(self.target_interface_id)
+    return HoiParams().add(self.target_interface_id, U8)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse get_enums response."""
-    parser = HoiParamsParser(data)
-
-    enums = []
-    _, enum_count = parser.parse_next()
-
-    for _ in range(enum_count):
-      _, enum_id = parser.parse_next()
-      _, name = parser.parse_next()
-
-      # Parse enum values
-      _, value_count = parser.parse_next()
-      values = {}
-      for _ in range(value_count):
-        _, value_name = parser.parse_next()
-        _, value_value = parser.parse_next()
-        values[value_name] = value_value
-
-      enums.append({"enum_id": enum_id, "name": name, "values": values})
-
-    return {"enums": enums}
+  @dataclass(frozen=True)
+  class Response:
+    enums: Annotated[list[_EnumRowWire], CountedFlatArray()]
 
 
 class GetStructsCommand(HamiltonCommand):
@@ -532,31 +539,11 @@ class GetStructsCommand(HamiltonCommand):
 
   def build_parameters(self) -> HoiParams:
     """Build parameters for get_structs command."""
-    return HoiParams().u8(self.target_interface_id)
+    return HoiParams().add(self.target_interface_id, U8)
 
-  @classmethod
-  def parse_response_parameters(cls, data: bytes) -> dict:
-    """Parse get_structs response."""
-    parser = HoiParamsParser(data)
-
-    structs = []
-    _, struct_count = parser.parse_next()
-
-    for _ in range(struct_count):
-      _, struct_id = parser.parse_next()
-      _, name = parser.parse_next()
-
-      # Parse struct fields
-      _, field_count = parser.parse_next()
-      fields = {}
-      for _ in range(field_count):
-        _, field_name = parser.parse_next()
-        _, field_type = parser.parse_next()
-        fields[field_name] = field_type
-
-      structs.append({"struct_id": struct_id, "name": name, "fields": fields})
-
-    return {"structs": structs}
+  @dataclass(frozen=True)
+  class Response:
+    structs: Annotated[list[_StructRowWire], CountedFlatArray()]
 
 
 # ============================================================================
@@ -586,12 +573,14 @@ class HamiltonIntrospection:
     """
     command = GetObjectCommand(address)
     response = await self.backend.send_command(command, ensure_connection=False)
+    if response is None:
+      raise RuntimeError("GetObjectCommand returned None")
 
     return ObjectInfo(
-      name=response["name"],
-      version=response["version"],
-      method_count=response["method_count"],
-      subobject_count=response["subobject_count"],
+      name=response.name,
+      version=response.version,
+      method_count=int(response.method_count),
+      subobject_count=int(response.subobject_count),
       address=address,
     )
 
@@ -631,10 +620,10 @@ class HamiltonIntrospection:
     """
     command = GetSubobjectAddressCommand(address, subobject_index)
     response = await self.backend.send_command(command, ensure_connection=False)
+    if response is None:
+      raise RuntimeError("GetSubobjectAddressCommand returned None")
 
-    # Type: ignore needed because response dict is typed as dict[str, Any]
-    # but we know 'address' key contains Address object
-    return response["address"]  # type: ignore[no-any-return, return-value]
+    return Address(response.module_id, response.node_id, response.object_id)
 
   async def get_interfaces(self, address: Address) -> List[InterfaceInfo]:
     """Get available interfaces.
@@ -647,12 +636,16 @@ class HamiltonIntrospection:
     """
     command = GetInterfacesCommand(address)
     response = await self.backend.send_command(command, ensure_connection=False)
+    if response is None:
+      raise RuntimeError("GetInterfacesCommand returned None")
 
     return [
       InterfaceInfo(
-        interface_id=iface["interface_id"], name=iface["name"], version=iface["version"]
+        interface_id=int(iface.interface_id),
+        name=iface.name,
+        version=str(iface.version),
       )
-      for iface in response["interfaces"]
+      for iface in response.interfaces
     ]
 
   async def get_enums(self, address: Address, interface_id: int) -> List[EnumInfo]:
@@ -667,10 +660,16 @@ class HamiltonIntrospection:
     """
     command = GetEnumsCommand(address, interface_id)
     response = await self.backend.send_command(command, ensure_connection=False)
+    if response is None:
+      raise RuntimeError("GetEnumsCommand returned None")
 
     return [
-      EnumInfo(enum_id=enum_def["enum_id"], name=enum_def["name"], values=enum_def["values"])
-      for enum_def in response["enums"]
+      EnumInfo(
+        enum_id=int(enum_def.enum_id),
+        name=enum_def.name,
+        values={v.value_name: int(v.value_value) for v in enum_def.values},
+      )
+      for enum_def in response.enums
     ]
 
   async def get_structs(self, address: Address, interface_id: int) -> List[StructInfo]:
@@ -685,12 +684,16 @@ class HamiltonIntrospection:
     """
     command = GetStructsCommand(address, interface_id)
     response = await self.backend.send_command(command, ensure_connection=False)
+    if response is None:
+      raise RuntimeError("GetStructsCommand returned None")
 
     return [
       StructInfo(
-        struct_id=struct_def["struct_id"], name=struct_def["name"], fields=struct_def["fields"]
+        struct_id=int(struct_def.struct_id),
+        name=struct_def.name,
+        fields={f.field_name: int(f.field_type) for f in struct_def.fields},
       )
-      for struct_def in response["structs"]
+      for struct_def in response.structs
     ]
 
   async def get_all_methods(self, address: Address) -> List[MethodInfo]:
