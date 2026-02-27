@@ -379,7 +379,20 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN],
       [4339544, NaN, 3698255, NaN, 2832844, NaN, 2697772, NaN, 2799316, NaN, 3675674, NaN],
       [NaN, NaN, NaN, NaN, 5540778, 3750929, 4408238, 3466838, 4570484, 4180324, NaN, NaN],
-      [4638239, NaN, 4478322, NaN, 2829157, 5192196, 2045115, 4018946, 1619483, 4215321, 2473302, NaN],
+      [
+        4638239,
+        NaN,
+        4478322,
+        NaN,
+        2829157,
+        5192196,
+        2045115,
+        4018946,
+        1619483,
+        4215321,
+        2473302,
+        NaN,
+      ],
       [NaN, NaN, NaN, NaN, NaN, 3999330, 4645523, 2516745, 3049162, 2240607, 4706624, 4451055],
       [4981153, NaN, 5391780, NaN, 3862731, NaN, 2049449, 4042665, 1386693, 2328369, 1745744, NaN],
       [NaN, NaN, NaN, NaN, NaN, 4756136, 3675092, 2299700, 3184874, 2585026, 3927160, NaN],
@@ -387,7 +400,8 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
     for r in range(8):
       for c in range(12):
-        if math.isnan(expected[r][c]):
-          self.assertTrue(math.isnan(result[r][c]), f"Expected NaN at ({r},{c}), got {result[r][c]}")
+        e, v = expected[r][c], result[r][c]
+        if math.isnan(e):
+          self.assertTrue(v is not None and math.isnan(v), f"Expected NaN at ({r},{c}), got {v}")
         else:
-          self.assertEqual(result[r][c], expected[r][c], f"Mismatch at ({r},{c})")
+          self.assertEqual(v, e, f"Mismatch at ({r},{c})")
