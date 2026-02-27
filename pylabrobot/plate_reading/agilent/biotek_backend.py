@@ -278,7 +278,8 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
         assert len(group) == 3
         row_index = int(group[0].decode()) - 1  # 1-based index in the response
         column_index = int(group[1].decode()) - 1  # 1-based index in the response
-        value = float(group[2].decode())
+        raw_value = group[2].decode()
+        value = float("nan") if "*" in raw_value else float(raw_value)
         parsed_data[(row_index, column_index)] = value
 
     result: List[List[Optional[float]]] = [
