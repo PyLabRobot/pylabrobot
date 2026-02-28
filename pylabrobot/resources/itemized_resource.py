@@ -239,7 +239,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   @property
   def num_items(self) -> int:
-    return len(self.children)
+    return len(self._ordering)
 
   def traverse(
     self,

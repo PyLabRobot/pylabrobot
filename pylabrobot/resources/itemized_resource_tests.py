@@ -11,6 +11,7 @@ from pylabrobot.resources import (
   create_equally_spaced_2d,
   create_ordered_items_2d,
 )
+from pylabrobot.resources.plate import Lid
 
 if sys.version_info >= (3, 8):
   from typing import Literal
@@ -227,6 +228,39 @@ class TestItemizedResource(unittest.TestCase):
         "plate_well_H4",
       ],
     )
+
+
+class TestItemizedResourceWithLid(unittest.TestCase):
+  def setUp(self) -> None:
+    self.plate = Plate(
+      "plate",
+      size_x=127,
+      size_y=86,
+      size_z=15,
+      lid=Lid("lid", size_x=127, size_y=86, size_z=10, nesting_z_height=2),
+      ordered_items=create_ordered_items_2d(
+        Well,
+        num_items_x=12,
+        num_items_y=8,
+        dx=0,
+        dy=0,
+        dz=0,
+        item_dx=9,
+        item_dy=9,
+        size_x=9,
+        size_y=9,
+        size_z=9,
+      ),
+    )
+
+  def test_num_items_excludes_lid(self):
+    self.assertEqual(self.plate.num_items, 96)
+
+  def test_get_all_items_excludes_lid(self):
+    items = self.plate.get_all_items()
+    self.assertEqual(len(items), 96)
+    for item in items:
+      self.assertNotIsInstance(item, Lid)
 
 
 class TestCreateEquallySpaced(unittest.TestCase):
