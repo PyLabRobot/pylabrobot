@@ -41,6 +41,7 @@ from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+  GET_SUBOBJECT_ADDRESS,
   HamiltonIntrospection,
   ObjectInfo,
   TypeRegistry,
@@ -114,6 +115,12 @@ class ObjectRegistry:
     return None
 
   async def resolve(self, path: str) -> Address:
+    """Resolve a dot-path to an Address, lazy-resolving and registering as needed.
+
+    Uses the object's method table (GetMethod) to determine which Interface 0
+    methods are supported; only calls GetSubobjectAddress when the parent
+    supports it. Interfaces are per-object (no aggregation from children).
+    """
     if path in self._objects:
       return self._objects[path].address
     parts = [p for p in path.split(".") if p]
@@ -136,6 +143,12 @@ class ObjectRegistry:
 
     parent_addr = await self.resolve(parent_path)
     parent_info = self._objects[parent_path]
+    supported = await introspection.get_supported_interface0_method_ids(parent_info.address)
+    if GET_SUBOBJECT_ADDRESS not in supported:
+      raise KeyError(
+        f"Object at path '{parent_path}' does not support GetSubobjectAddress "
+        f"(interface 0, method 3); cannot resolve child '{child_name}'"
+      )
     for i in range(parent_info.subobject_count):
       sub_addr = await introspection.get_subobject_address(parent_info.address, i)
       sub_info = await introspection.get_object(sub_addr)
@@ -658,12 +671,23 @@ class HamiltonTCPClient:
     parent_path: str,
     max_depth: int,
   ) -> None:
-    """Recursively register one node and its children up to max_depth."""
+    """Recursively register one node and its children up to max_depth.
+
+    Only calls GetSubobjectAddress when the object supports it (interface 0,
+    method 3); otherwise skips children to avoid unsupported-method errors.
+    """
     info = await introspection.get_object(addr)
     info.children = {}
     path = info.name if not parent_path else f"{parent_path}.{info.name}"
     self._registry.register(path, info)
     if max_depth <= 0:
+      return
+    supported = await introspection.get_supported_interface0_method_ids(addr)
+    if GET_SUBOBJECT_ADDRESS not in supported:
+      logger.debug(
+        "Object %s does not support GetSubobjectAddress (interface 0, method 3); skipping children",
+        path,
+      )
       return
     for i in range(info.subobject_count):
       try:

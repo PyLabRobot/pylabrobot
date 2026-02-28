@@ -629,12 +629,31 @@ class GetStructsCommand(HamiltonCommand):
 
 
 # ============================================================================
+# INTERFACE 0 METHOD IDS (Object Discovery / Introspection)
+# ============================================================================
+# Used to guard calls: only call an Interface 0 method if it is in the set
+# returned by get_supported_interface0_method_ids (from the object's method table).
+
+GET_OBJECT = 1
+GET_METHOD = 2
+GET_SUBOBJECT_ADDRESS = 3
+GET_INTERFACES = 4
+GET_ENUMS = 5
+GET_STRUCTS = 6
+
+
+# ============================================================================
 # HIGH-LEVEL INTROSPECTION API
 # ============================================================================
 
 
 class HamiltonIntrospection:
-  """High-level API for Hamilton introspection."""
+  """High-level API for Hamilton introspection.
+
+  Uses the object's method table (GetMethod) to determine which Interface 0
+  methods are supported and only calls those. Interfaces are per-object;
+  there is no aggregation from children.
+  """
 
   def __init__(self, backend):
     """Initialize introspection API.
@@ -649,6 +668,25 @@ class HamiltonIntrospection:
     if isinstance(addr_or_path, str):
       return self.backend._registry.address(addr_or_path)
     return addr_or_path
+
+  async def get_supported_interface0_method_ids(self, address: Address) -> Set[int]:
+    """Return the set of Interface 0 method IDs this object supports.
+
+    Calls GetObject to get method_count, then GetMethod(address, i) for each
+    index and collects method_id for every method where interface_id == 0.
+    Used to guard calls so we never send an Interface 0 command the object
+    did not advertise.
+    """
+    obj = await self.get_object(address)
+    supported: Set[int] = set()
+    for i in range(obj.method_count):
+      try:
+        method = await self.get_method(address, i)
+        if method.interface_id == 0:
+          supported.add(method.method_id)
+      except Exception as e:
+        logger.debug("get_method(%s, %d) failed: %s", address, i, e)
+    return supported
 
   async def get_object(self, address: Address) -> ObjectInfo:
     """Get object metadata.
@@ -717,7 +755,8 @@ class HamiltonIntrospection:
     """Get available interfaces.
 
     The device returns 2 columnar fragments: interface_ids (I8_ARRAY) and
-    interface_names (STRING_ARRAY).
+    interface_names (STRING_ARRAY). Returns [] if the object does not support
+    GetInterfaces (interface 0, method 4).
 
     Args:
       address: Object address
@@ -725,6 +764,13 @@ class HamiltonIntrospection:
     Returns:
       List of interface information
     """
+    supported = await self.get_supported_interface0_method_ids(address)
+    if GET_INTERFACES not in supported:
+      logger.debug(
+        "Object at %s does not support GetInterfaces (interface 0, method 4); returning []",
+        address,
+      )
+      return []
     command = GetInterfacesCommand(address)
     response = await self.backend.send_command(command, ensure_connection=False)
     if response is None:
@@ -848,14 +894,22 @@ class HamiltonIntrospection:
   async def get_all_methods(self, address: Address) -> List[MethodInfo]:
     """Get all methods for an object.
 
+    Returns [] if the object does not support GetMethod (interface 0, method 2).
+
     Args:
       address: Object address
 
     Returns:
       List of all method signatures
     """
-    # First get object info to know how many methods there are
     object_info = await self.get_object(address)
+    supported = await self.get_supported_interface0_method_ids(address)
+    if GET_METHOD not in supported:
+      logger.debug(
+        "Object at %s does not support GetMethod (interface 0, method 2); returning []",
+        address,
+      )
+      return []
 
     methods = []
     for i in range(object_info.method_count):
@@ -872,7 +926,8 @@ class HamiltonIntrospection:
 
     Uses InterfaceDescriptors (get_interfaces) as the canonical source of
     interface IDs; then queries structs and enums only for those interfaces.
-    No probing or fallback from method-derived interface IDs.
+    Only calls Interface 0 methods that the object supports; skips unsupported
+    commands and builds a partial registry.
 
     Args:
       address: Object address or dot-path (e.g. "MLPrepRoot.MphRoot.MPH").
@@ -882,23 +937,29 @@ class HamiltonIntrospection:
     """
     address = self._resolve_address(address)
     registry = TypeRegistry(address=address)
+    supported = await self.get_supported_interface0_method_ids(address)
 
-    # Canonical interface list — InterfaceDescriptors (command id=4)
-    interfaces = await self.get_interfaces(address)
+    if GET_INTERFACES in supported:
+      interfaces = await self.get_interfaces(address)
+      for iface in interfaces:
+        registry.interfaces[iface.interface_id] = iface
+    else:
+      interfaces = []
+
+    if GET_METHOD in supported:
+      registry.methods = await self.get_all_methods(address)
+    else:
+      registry.methods = []
+
     for iface in interfaces:
-      registry.interfaces[iface.interface_id] = iface
-
-    # Methods — query separately; don't use for interface discovery
-    registry.methods = await self.get_all_methods(address)
-
-    # Structs + enums for each declared interface
-    for iface in interfaces:
-      structs = await self.get_structs(address, iface.interface_id)
-      if structs:
-        registry.structs[iface.interface_id] = {s.struct_id: s for s in structs}
-      enums = await self.get_enums(address, iface.interface_id)
-      if enums:
-        registry.enums[iface.interface_id] = {e.enum_id: e for e in enums}
+      if GET_STRUCTS in supported:
+        structs = await self.get_structs(address, iface.interface_id)
+        if structs:
+          registry.structs[iface.interface_id] = {s.struct_id: s for s in structs}
+      if GET_ENUMS in supported:
+        enums = await self.get_enums(address, iface.interface_id)
+        if enums:
+          registry.enums[iface.interface_id] = {e.enum_id: e for e in enums}
 
     return registry
 
@@ -926,14 +987,18 @@ class HamiltonIntrospection:
     registry = await self.build_type_registry(address)
 
     if subobject_addresses is None:
-      obj_info = await self.get_object(address)
-      subobject_addresses = []
-      for i in range(obj_info.subobject_count):
-        try:
-          sub_addr = await self.get_subobject_address(address, i)
-          subobject_addresses.append(sub_addr)
-        except Exception:
-          logger.debug("get_subobject_address(%d) failed for %s", i, address)
+      supported = await self.get_supported_interface0_method_ids(address)
+      if GET_SUBOBJECT_ADDRESS not in supported:
+        subobject_addresses = []
+      else:
+        obj_info = await self.get_object(address)
+        subobject_addresses = []
+        for i in range(obj_info.subobject_count):
+          try:
+            sub_addr = await self.get_subobject_address(address, i)
+            subobject_addresses.append(sub_addr)
+          except Exception:
+            logger.debug("get_subobject_address(%d) failed for %s", i, address)
 
     for sub_addr in subobject_addresses:
       try:

@@ -8,6 +8,7 @@ import struct
 import unittest
 from dataclasses import dataclass
 from typing import Annotated
+from unittest.mock import AsyncMock
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
@@ -1343,6 +1344,102 @@ class TestIntrospectionResponseDecode(unittest.TestCase):
     self.assertEqual(result.version, "1.0")
     self.assertEqual(result.method_count, 3)
     self.assertEqual(result.subobject_count, 2)
+
+
+class TestInterface0Capability(unittest.IsolatedAsyncioTestCase):
+  """Tests for Interface 0 capability checks and clean traversal."""
+
+  def test_interface0_constants(self):
+    """Interface 0 method ID constants match the introspection command IDs."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      GET_ENUMS,
+      GET_INTERFACES,
+      GET_METHOD,
+      GET_OBJECT,
+      GET_STRUCTS,
+      GET_SUBOBJECT_ADDRESS,
+    )
+
+    self.assertEqual(GET_OBJECT, 1)
+    self.assertEqual(GET_METHOD, 2)
+    self.assertEqual(GET_SUBOBJECT_ADDRESS, 3)
+    self.assertEqual(GET_INTERFACES, 4)
+    self.assertEqual(GET_ENUMS, 5)
+    self.assertEqual(GET_STRUCTS, 6)
+
+  async def test_get_supported_interface0_method_ids_returns_expected_set(self):
+    """get_supported_interface0_method_ids returns method_ids for interface 0 only."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      GetMethodCommand,
+      GetObjectCommand,
+      HamiltonIntrospection,
+    )
+
+    addr = Address(1, 1, 100)
+    get_object_response = GetObjectCommand.Response(
+      name="Obj",
+      version="1.0",
+      method_count=2,
+      subobject_count=0,
+    )
+    get_method_responses = [
+      {"interface_id": 0, "method_id": 1, "call_type": 0, "name": "GetObject"},
+      {"interface_id": 0, "method_id": 3, "call_type": 0, "name": "GetSubobjectAddress"},
+    ]
+
+    async def mock_send(cmd, **kwargs):
+      if isinstance(cmd, GetObjectCommand):
+        return get_object_response
+      if isinstance(cmd, GetMethodCommand):
+        idx = cmd.method_index
+        return get_method_responses[idx] if idx < len(get_method_responses) else {}
+      return None
+
+    backend = AsyncMock()
+    backend.send_command = AsyncMock(side_effect=mock_send)
+    backend._registry = None
+    introspection = HamiltonIntrospection(backend)
+    result = await introspection.get_supported_interface0_method_ids(addr)
+    self.assertEqual(result, {1, 3})
+
+  async def test_resolve_raises_when_parent_does_not_support_get_subobject_address(self):
+    """resolve() raises KeyError with clear message when parent does not support (0, 3)."""
+    from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
+      GetObjectCommand,
+      ObjectInfo,
+    )
+    from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import ObjectRegistry
+
+    root_addr = Address(1, 1, 48896)
+    root_info = ObjectInfo(
+      name="Root",
+      version="1.0",
+      method_count=0,
+      subobject_count=1,
+      address=root_addr,
+    )
+
+    async def mock_send(cmd, **kwargs):
+      if isinstance(cmd, GetObjectCommand):
+        return GetObjectCommand.Response(
+          name="Root",
+          version="1.0",
+          method_count=0,
+          subobject_count=1,
+        )
+      return None
+
+    transport = AsyncMock()
+    transport.send_command = AsyncMock(side_effect=mock_send)
+    registry = ObjectRegistry(transport)
+    registry.set_root_addresses([root_addr])
+    registry.register("Root", root_info)
+
+    with self.assertRaises(KeyError) as ctx:
+      await registry.resolve("Root.Child")
+    self.assertIn("GetSubobjectAddress", str(ctx.exception))
+    self.assertIn("interface 0, method 3", str(ctx.exception))
+    self.assertIn("Child", str(ctx.exception))
 
 
 if __name__ == "__main__":
