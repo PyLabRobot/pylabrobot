@@ -20,6 +20,7 @@ from typing import (
   Sequence,
   Tuple,
   Type,
+  TypedDict,
   TypeVar,
   Union,
   cast,
@@ -1208,6 +1209,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._setup_done = False
 
   @property
+  def num_arms(self) -> int:
+    return 1 if self.iswap_installed else 0
+
+  @property
+  def head96_installed(self) -> Optional[bool]:
+    return self.core96_head_installed
+
+  @property
   def unsafe(self) -> "UnSafe":
     """Actions that have a higher risk of damaging the robot. Use with care!"""
     return self._unsafe
@@ -1595,6 +1604,58 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
+
+  class ChannelCycleCounts(TypedDict):
+    tip_pick_up_cycles: int
+    tip_discard_cycles: int
+    aspiration_cycles: int
+    dispensing_cycles: int
+
+  async def channel_request_cycle_counts(self, channel_idx: int) -> ChannelCycleCounts:
+    """Request cycle counters for a single channel.
+
+    Returns the number of tip pick-up, tip discard, aspiration, and dispensing cycles
+    performed by the channel.
+
+    Args:
+      channel_idx: The channel index to query (0-indexed).
+
+    Returns:
+      A dict with keys ``tip_pick_up_cycles``, ``tip_discard_cycles``,
+      ``aspiration_cycles``, and ``dispensing_cycles``.
+    """
+
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
+      )
+
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx),
+      command="RV",
+      fmt="na##########nb##########nc##########nd##########",
+    )
+    return {
+      "tip_pick_up_cycles": resp["na"],
+      "tip_discard_cycles": resp["nb"],
+      "aspiration_cycles": resp["nc"],
+      "dispensing_cycles": resp["nd"],
+    }
+
+  async def channels_request_cycle_counts(self) -> List[ChannelCycleCounts]:
+    """Request cycle counters for all channels.
+
+    Returns:
+      A list of dicts (one per channel, ordered by channel index), each with keys
+      ``tip_pick_up_cycles``, ``tip_discard_cycles``, ``aspiration_cycles``,
+      and ``dispensing_cycles``.
+    """
+
+    return list(
+      await asyncio.gather(
+        *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
+      )
+    )
 
   # # # ACTION Commands # # #
 
@@ -6389,29 +6450,25 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Extract z-coordinate and convert to mm
     return float(z_pos_query["rd"] / 10)
 
-  async def request_tip_presence(self) -> List[int]:
-    """Request query tip presence on each channel
-
-    Returns:
-      0 = no tip, 1 = Tip in gripper (for each channel)
-    """
-    warnings.warn(  # TODO: remove 2026-06
-      "`request_tip_presence` is deprecated and will be "
-      "removed in 2026-06 use `channels_sense_tip_presence` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.channels_sense_tip_presence()
-
-  async def channels_sense_tip_presence(self) -> List[int]:
+  async def request_tip_presence(self) -> List[Optional[bool]]:
     """Measure tip presence on all single channels using their sleeve sensors.
 
     Returns:
-      List of integers where 0 = no tip, 1 = tip present (for each channel)
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
     """
-
     resp = await self.send_command(module="C0", command="RT", fmt="rt# (n)")
-    return cast(List[int], resp.get("rt"))
+    return [bool(v) for v in cast(List[int], resp.get("rt"))]
+
+  async def channels_sense_tip_presence(self) -> List[int]:
+    """Deprecated - use `request_tip_presence` instead."""
+    warnings.warn(
+      "`channels_sense_tip_presence` is deprecated and will be "
+      "removed in a future version. Use `request_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return [int(v) for v in await self.request_tip_presence() if v is not None]
 
   async def request_pip_height_last_lld(self) -> List[float]:
     """
