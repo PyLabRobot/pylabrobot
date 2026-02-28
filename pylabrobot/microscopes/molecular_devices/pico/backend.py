@@ -25,7 +25,7 @@ from pylabrobot.resources.plate import Plate
 try:
   import numpy as np
 except ImportError:
-  np = None
+  np = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -90,39 +90,41 @@ def _decode_fields(data: bytes) -> Dict[int, List[Tuple[int, Any]]]:
     field_number = tag >> 3
     wire_type = tag & 0x07
     if wire_type == _WIRE_VARINT:
-      value, pos = _decode_varint(data, pos)
-      fields[field_number].append((wire_type, value))
+      val_int, pos = _decode_varint(data, pos)
+      fields[field_number].append((wire_type, val_int))
     elif wire_type == _WIRE_LENGTH_DELIMITED:
       length, pos = _decode_varint(data, pos)
-      value = data[pos : pos + length]
+      val_bytes = data[pos : pos + length]
       pos += length
-      fields[field_number].append((wire_type, value))
+      fields[field_number].append((wire_type, val_bytes))
     elif wire_type == _WIRE_64BIT:
-      value = data[pos : pos + 8]
+      val_bytes = data[pos : pos + 8]
       pos += 8
-      fields[field_number].append((wire_type, value))
+      fields[field_number].append((wire_type, val_bytes))
     elif wire_type == _WIRE_32BIT:
-      value = data[pos : pos + 4]
+      val_bytes = data[pos : pos + 4]
       pos += 4
-      fields[field_number].append((wire_type, value))
+      fields[field_number].append((wire_type, val_bytes))
     else:
       break
   return dict(fields)
 
 
-def _get_field_bytes(fields: dict, field_number: int) -> Optional[bytes]:
+def _get_field_bytes(
+  fields: Dict[int, List[Tuple[int, Any]]], field_number: int
+) -> Optional[bytes]:
   entries = fields.get(field_number, [])
   for wire_type, value in entries:
     if wire_type == _WIRE_LENGTH_DELIMITED:
-      return value
+      return bytes(value)
   return None
 
 
-def _get_field_varint(fields: dict, field_number: int) -> Optional[int]:
+def _get_field_varint(fields: Dict[int, List[Tuple[int, Any]]], field_number: int) -> Optional[int]:
   entries = fields.get(field_number, [])
   for wire_type, value in entries:
     if wire_type == _WIRE_VARINT:
-      return value
+      return int(value)
   return None
 
 
@@ -528,7 +530,8 @@ class PicoBackend(ImagerBackend):
       response_deserializer=lambda x: x,
     )
     try:
-      return rpc(request, metadata=metadata, timeout=timeout)
+      result: bytes = rpc(request, metadata=metadata, timeout=timeout)
+      return result
     except grpc.RpcError as e:
       raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
 
@@ -548,15 +551,18 @@ class PicoBackend(ImagerBackend):
       response_deserializer=lambda x: x,
     )
     try:
-      return rpc(request, metadata=metadata, timeout=timeout)
+      result: Iterator[bytes] = rpc(request, metadata=metadata, timeout=timeout)
+      return result
     except grpc.RpcError as e:
       raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
 
   def _lock(self) -> None:
+    assert self._lock_id is not None
     self._call(_LOCK_SVC, "LockServer", _lock_server_params(self._lock_id, self._lock_timeout))
     self._locked = True
 
   def _unlock(self) -> None:
+    assert self._lock_id is not None
     self._call(_LOCK_SVC, "UnlockServer", _unlock_server_params(self._lock_id))
     self._locked = False
 
@@ -565,13 +571,13 @@ class PicoBackend(ImagerBackend):
 
   async def _get_installed_objectives(self) -> List[dict]:
     raw = await asyncio.to_thread(self._call, _OBJ_SVC, "Get_InstalledObjectives", b"")
-    data = json.loads(_decode_sila_string_response(raw))
-    return data.get("objectivesData", [])
+    data: dict = json.loads(_decode_sila_string_response(raw))
+    return list(data.get("objectivesData", []))
 
   async def _get_installed_filter_cubes(self) -> List[dict]:
     raw = await asyncio.to_thread(self._call, _FC_SVC, "Get_InstalledFilterCubes", b"")
-    data = json.loads(_decode_sila_string_response(raw))
-    return data.get("filterCubesData", [])
+    data: dict = json.loads(_decode_sila_string_response(raw))
+    return list(data.get("filterCubesData", []))
 
   # -- lifecycle --
 
@@ -639,8 +645,8 @@ class PicoBackend(ImagerBackend):
     if self._channel is None:
       raise RuntimeError("Backend not set up. Call setup() first.")
     raw = await asyncio.to_thread(self._call, _INST_SVC, "Get_InstrumentConfiguration", b"")
-    data = json.loads(_decode_sila_string_response(raw))
-    return data.get("InstrumentConfiguration", data)
+    data: dict = json.loads(_decode_sila_string_response(raw))
+    return dict(data.get("InstrumentConfiguration", data))
 
   # -- door --
 
@@ -705,8 +711,8 @@ class PicoBackend(ImagerBackend):
     raw = await asyncio.to_thread(
       self._call, _OBJ_SVC, "GetAvailableObjectivesForPosition", req, True
     )
-    data = json.loads(_decode_sila_string_response(raw))
-    return data.get("objectives", data.get("Objectives", []))
+    data: dict = json.loads(_decode_sila_string_response(raw))
+    return list(data.get("objectives", data.get("Objectives", [])))
 
   async def get_available_filter_cubes(self) -> List[dict]:
     """Query which filter cubes are compatible with this instrument.
@@ -719,8 +725,8 @@ class PicoBackend(ImagerBackend):
     if self._channel is None:
       raise RuntimeError("Backend not set up. Call setup() first.")
     raw = await asyncio.to_thread(self._call, _FC_SVC, "Get_CompatibleFilterCubes", b"")
-    data = json.loads(_decode_sila_string_response(raw))
-    return data.get("filterCubes", data.get("FilterCubes", []))
+    data: dict = json.loads(_decode_sila_string_response(raw))
+    return list(data.get("filterCubes", data.get("FilterCubes", [])))
 
   async def change_objective(self, position: int, objective_id: str) -> None:
     """Register a new objective in a turret position.
