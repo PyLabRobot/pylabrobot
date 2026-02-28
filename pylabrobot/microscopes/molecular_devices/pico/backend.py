@@ -7,10 +7,25 @@ import logging
 import struct
 import time
 from collections import defaultdict
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import grpc
 
+from pylabrobot.io.sila.grpc import (
+  command_execution_uuid as _command_execution_uuid,
+  decode_command_confirmation as _decode_command_confirmation,
+  decode_fields as _decode_fields,
+  decode_grpc_error as _decode_grpc_error,
+  decode_sila_string_response as _decode_sila_string_response,
+  get_field_bytes as _get_field_bytes,
+  get_field_varint as _get_field_varint,
+  length_delimited as _length_delimited,
+  lock_server_params as _lock_server_params,
+  metadata_lock_identifier as _metadata_lock_identifier,
+  sila_string as _sila_string,
+  unlock_server_params as _unlock_server_params,
+  varint_as_signed as _varint_as_signed,
+)
 from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.plate_reading.standard import (
   Exposure,
@@ -29,208 +44,11 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Protobuf wire-format helpers (hand-rolled, no grpc_tools dependency)
-# ---------------------------------------------------------------------------
-
-
-def _encode_varint(value: int) -> bytes:
-  parts = bytearray()
-  while value > 0x7F:
-    parts.append((value & 0x7F) | 0x80)
-    value >>= 7
-  parts.append(value & 0x7F)
-  return bytes(parts)
-
-
-def _encode_signed_varint(value: int) -> bytes:
-  if value < 0:
-    value = (1 << 64) + value
-  return _encode_varint(value)
-
-
-def _length_delimited(field_number: int, data: bytes) -> bytes:
-  tag = _encode_varint((field_number << 3) | 2)
-  return tag + _encode_varint(len(data)) + data
-
-
-def _varint_field(field_number: int, value: int) -> bytes:
-  tag = _encode_varint((field_number << 3) | 0)
-  return tag + _encode_signed_varint(value)
-
-
-# ---------------------------------------------------------------------------
-# Protobuf decoder
-# ---------------------------------------------------------------------------
-
-_WIRE_VARINT = 0
-_WIRE_64BIT = 1
-_WIRE_LENGTH_DELIMITED = 2
-_WIRE_32BIT = 5
-
-
-def _decode_varint(data: bytes, pos: int) -> Tuple[int, int]:
-  result = 0
-  shift = 0
-  while True:
-    b = data[pos]
-    result |= (b & 0x7F) << shift
-    pos += 1
-    if not (b & 0x80):
-      break
-    shift += 7
-  return result, pos
-
-
-def _decode_fields(data: bytes) -> Dict[int, List[Tuple[int, Any]]]:
-  fields: Dict[int, List[Tuple[int, Any]]] = defaultdict(list)
-  pos = 0
-  while pos < len(data):
-    tag, pos = _decode_varint(data, pos)
-    field_number = tag >> 3
-    wire_type = tag & 0x07
-    if wire_type == _WIRE_VARINT:
-      val_int, pos = _decode_varint(data, pos)
-      fields[field_number].append((wire_type, val_int))
-    elif wire_type == _WIRE_LENGTH_DELIMITED:
-      length, pos = _decode_varint(data, pos)
-      val_bytes = data[pos : pos + length]
-      pos += length
-      fields[field_number].append((wire_type, val_bytes))
-    elif wire_type == _WIRE_64BIT:
-      val_bytes = data[pos : pos + 8]
-      pos += 8
-      fields[field_number].append((wire_type, val_bytes))
-    elif wire_type == _WIRE_32BIT:
-      val_bytes = data[pos : pos + 4]
-      pos += 4
-      fields[field_number].append((wire_type, val_bytes))
-    else:
-      break
-  return dict(fields)
-
-
-def _get_field_bytes(
-  fields: Dict[int, List[Tuple[int, Any]]], field_number: int
-) -> Optional[bytes]:
-  entries = fields.get(field_number, [])
-  for wire_type, value in entries:
-    if wire_type == _WIRE_LENGTH_DELIMITED:
-      return bytes(value)
-  return None
-
-
-def _get_field_varint(fields: Dict[int, List[Tuple[int, Any]]], field_number: int) -> Optional[int]:
-  entries = fields.get(field_number, [])
-  for wire_type, value in entries:
-    if wire_type == _WIRE_VARINT:
-      return int(value)
-  return None
-
-
-def _varint_as_signed(value: int) -> int:
-  if value > 0x7FFFFFFFFFFFFFFF:
-    return value - (1 << 64)
-  return value
-
-
-def _extract_proto_strings(data: bytes) -> List[str]:
-  """Recursively extract all string-like fields from a protobuf message."""
-  strings = []
-  try:
-    fields = _decode_fields(data)
-    for entries in fields.values():
-      for wire_type, value in entries:
-        if wire_type == _WIRE_LENGTH_DELIMITED:
-          try:
-            s = value.decode("utf-8")
-            if s.isprintable() and len(s) > 0:
-              strings.append(s)
-          except UnicodeDecodeError:
-            pass
-          strings.extend(_extract_proto_strings(value))
-  except Exception:
-    pass
-  return strings
-
-
-def _decode_grpc_error(error: grpc.RpcError) -> str:
-  """Decode a SiLA gRPC error into a human-readable string.
-
-  SiLA error details are base64-encoded protobuf in the gRPC details field.
-  """
-  details = error.details() if hasattr(error, "details") else str(error)
-  if not details:
-    return str(error)
-
-  try:
-    raw = base64.b64decode(details)
-    strings = _extract_proto_strings(raw)
-    if strings:
-      return ": ".join(strings)
-  except Exception:
-    pass
-
-  return details
-
-
-# ---------------------------------------------------------------------------
-# SiLA 2 standard wrapper types
-# ---------------------------------------------------------------------------
-
-
-def _sila_string(value: str) -> bytes:
-  return _length_delimited(1, value.encode("utf-8"))
-
-
-def _sila_integer(value: int) -> bytes:
-  return _varint_field(1, value)
-
-
-# ---------------------------------------------------------------------------
-# SiLA message encoders / decoders
-# ---------------------------------------------------------------------------
-
-
-def _lock_server_params(lock_id: str, timeout_seconds: int = 60) -> bytes:
-  return _length_delimited(1, _sila_string(lock_id)) + _length_delimited(
-    2, _sila_integer(timeout_seconds)
-  )
-
-
-def _unlock_server_params(lock_id: str) -> bytes:
-  return _length_delimited(1, _sila_string(lock_id))
-
-
-def _metadata_lock_identifier(lock_id: str) -> bytes:
-  return _length_delimited(1, _sila_string(lock_id))
-
-
-def _command_execution_uuid(uuid_str: str) -> bytes:
-  return _length_delimited(1, uuid_str.encode("utf-8"))
-
 
 def _snap_images_params(labware_json: str, snap_json: str) -> bytes:
   return _length_delimited(1, _sila_string(labware_json)) + _length_delimited(
     2, _sila_string(snap_json)
   )
-
-
-def _decode_sila_string_response(data: bytes) -> str:
-  """Decode a response containing a single SiLA String field (field 1)."""
-  fields = _decode_fields(data)
-  sila_str_msg = _get_field_bytes(fields, 1)
-  if sila_str_msg is None:
-    raise ValueError("No SiLA String in response")
-  inner_fields = _decode_fields(sila_str_msg)
-  value = _get_field_bytes(inner_fields, 1)
-  if value is None:
-    raise ValueError("No value in SiLA String")
-  return value.decode("utf-8")
-
-
-def _decode_command_confirmation(data: bytes) -> str:
-  return _decode_sila_string_response(data)
 
 
 def _decode_intermediate_response(data: bytes) -> Tuple[bytes, Dict[str, int]]:
