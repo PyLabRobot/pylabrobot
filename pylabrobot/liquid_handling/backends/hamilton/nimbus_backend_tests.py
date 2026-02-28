@@ -41,6 +41,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   I16Array,
   U16,
 )
+from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import ObjectInfo
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address, HarpPacket, HoiPacket, IpPacket
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol, Hoi2Action
 from pylabrobot.liquid_handling.standard import (
@@ -555,17 +556,15 @@ class TestNimbusBackendUnit(unittest.IsolatedAsyncioTestCase):
 
   async def test_backend_init(self):
     backend = NimbusBackend(host="192.168.1.100", port=2000)
-    self.assertEqual(backend.io._host, "192.168.1.100")
-    self.assertEqual(backend.io._port, 2000)
+    self.assertEqual(backend.client.io._host, "192.168.1.100")
+    self.assertEqual(backend.client.io._port, 2000)
     self.assertIsNone(backend._num_channels)
-    self.assertIsNone(backend._pipette_address)
-    self.assertIsNone(backend._door_lock_address)
-    self.assertIsNone(backend._nimbus_core_address)
+    self.assertEqual(backend.client._registry._objects, {})
     self.assertEqual(backend._channel_traversal_height, 146.0)
 
   async def test_backend_init_default_port(self):
     backend = NimbusBackend(host="192.168.1.100")
-    self.assertEqual(backend.io._port, 2000)
+    self.assertEqual(backend.client.io._port, 2000)
 
   async def test_num_channels_before_setup_raises(self):
     backend = NimbusBackend(host="192.168.1.100")
@@ -643,12 +642,27 @@ def _mock_send_command_response(command):
 
 
 def _setup_backend() -> NimbusBackend:
-  """Create a NimbusBackend with pre-configured state for testing."""
+  """Create a NimbusBackend with pre-configured state for testing (registry populated).
+
+  Tests seed the registry with Address(...) and ObjectInfo directly (rather than
+  going through the proxy) so that wire-format and address values are under test.
+  """
   backend = NimbusBackend(host="192.168.1.100", port=2000)
   backend._num_channels = 8
-  backend._pipette_address = Address(1, 1, 257)
-  backend._door_lock_address = Address(1, 1, 268)
-  backend._nimbus_core_address = Address(1, 1, 48896)
+  backend.client._registry.set_root_addresses([Address(1, 1, 48896)])
+  backend.client._registry.register(
+    "NimbusCORE",
+    ObjectInfo("NimbusCORE", "1.0", 10, 2, Address(1, 1, 48896)),
+  )
+  backend.client._registry.register(
+    "NimbusCORE.Pipette",
+    ObjectInfo("Pipette", "1.0", 20, 0, Address(1, 1, 257)),
+  )
+  backend.client._registry.register(
+    "NimbusCORE.DoorLock",
+    ObjectInfo("DoorLock", "1.0", 3, 0, Address(1, 1, 268)),
+  )
+  backend._has_door_lock = True  # DoorLock is present in registry
   backend._is_initialized = True
   return backend
 
@@ -666,7 +680,7 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = _setup_backend()
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
+    self.backend.client.send_command = self.mock_send  # type: ignore[method-assign]
 
   def _get_command(self, cmd_type):
     for call in self.mock_send.call_args_list:
@@ -696,22 +710,26 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(self._get_command(Park), Park)
 
   async def test_door_methods_without_address_raise(self):
-    self.backend._door_lock_address = None
+    # When door lock is not available (_has_door_lock=False), methods return early without sending.
+    self.backend._has_door_lock = False
+    self.mock_send.reset_mock()
 
-    with self.assertRaises(RuntimeError):
-      await self.backend.lock_door()
+    await self.backend.lock_door()
+    await self.backend.unlock_door()
+    self.assertEqual(self.mock_send.call_count, 0)
 
-    with self.assertRaises(RuntimeError):
-      await self.backend.unlock_door()
-
-    with self.assertRaises(RuntimeError):
-      await self.backend.is_door_locked()
+    result = await self.backend.is_door_locked()
+    self.assertFalse(result)
+    self.assertEqual(self.mock_send.call_count, 0)
 
   async def test_park_without_address_raises(self):
-    self.backend._nimbus_core_address = None
+    # Backend with no registry entries (e.g. setup() not run); .address raises KeyError
+    backend = NimbusBackend(host="192.168.1.100", port=2000)
+    backend._num_channels = 8
+    backend._is_initialized = True
 
-    with self.assertRaises(RuntimeError):
-      await self.backend.park()
+    with self.assertRaises(KeyError):
+      await backend.park()
 
 
 class TestNimbusBackendSerialization(unittest.IsolatedAsyncioTestCase):
@@ -719,7 +737,7 @@ class TestNimbusBackendSerialization(unittest.IsolatedAsyncioTestCase):
 
   async def test_serialize(self):
     backend = NimbusBackend(host="192.168.1.100", port=2000)
-    backend._client_id = 5
+    backend.client._client_id = 5
 
     serialized = backend.serialize()
     self.assertEqual(serialized["client_id"], 5)
@@ -734,7 +752,7 @@ class TestNimbusLiquidHandling(unittest.IsolatedAsyncioTestCase):
     self.deck = NimbusDeck()
     self.backend = _setup_backend_with_deck(self.deck)
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
+    self.backend.client.send_command = self.mock_send  # type: ignore[method-assign]
 
     self.tip_rack = hamilton_96_tiprack_300uL("tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=1)
@@ -1110,7 +1128,7 @@ class TestNimbusTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.deck = NimbusDeck()
     self.backend = _setup_backend_with_deck(self.deck)
     self.mock_send = unittest.mock.AsyncMock(side_effect=_mock_send_command_response)
-    self.backend.send_command = self.mock_send  # type: ignore[method-assign]
+    self.backend.client.send_command = self.mock_send  # type: ignore[method-assign]
 
   def _get_commands(self, cmd_type):
     return [

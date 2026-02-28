@@ -1,7 +1,33 @@
-"""Hamilton TCP Backend Base Class.
+"""Hamilton TCP communication layer.
 
-This module provides the base backend for all Hamilton TCP instruments.
-It handles connection management, message routing, and the introspection API.
+HamiltonTCPClient
+-----------------
+Standalone, instrument-agnostic TCP transport for Hamilton HOI/HARP protocol.
+Use directly in notebooks/scripts for discovery, introspection, and firmware
+interaction without a LiquidHandler. Also composed by instrument backends as
+``self.client``.
+
+Usage (standalone)::
+
+    client = HamiltonTCPClient(host="192.168.100.102")
+    await client.setup()
+    intro = HamiltonIntrospection(client)
+    registry = await intro.build_type_registry("MLPrepRoot.MphRoot.MPH")
+
+Usage (in backends)::
+
+    self.client = HamiltonTCPClient(host=host, port=port)
+    await self.client.setup()
+    await self.client.send_command(SomeCommand(...))
+
+Error handling: By default (detailed_errors=True), command failures include
+Layer A (HC_RESULT enum description) and Layer B (async method signature /
+parameter diagnosis). Set detailed_errors=False to skip Layer B.
+
+Key classes
+-----------
+- ObjectRegistry: maps dot-path strings to Address (e.g. "MLPrepRoot.MphRoot.MPH")
+- RegistryProxy: dot-syntax accessor (client.interfaces.MLPrepRoot.MphRoot.MPH.address)
 """
 
 from __future__ import annotations
@@ -13,16 +39,18 @@ from typing import Any, Dict, List, Optional, Union
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
   HamiltonIntrospection,
   ObjectInfo,
+  TypeRegistry,
+  describe_hc_result,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
   InitMessage,
   InitResponse,
+  parse_hamilton_error_params,
   RegistrationMessage,
   RegistrationResponse,
 )
@@ -40,8 +68,8 @@ logger = logging.getLogger(__name__)
 class ObjectRegistry:
   """Maps object paths to addresses. Depth-1 eager by default; lazy resolution beyond."""
 
-  def __init__(self, backend: "HamiltonTCPBackend"):
-    self._backend = backend
+  def __init__(self, transport: "HamiltonTCPClient"):
+    self._transport = transport
     self._objects: Dict[str, ObjectInfo] = {}
     self._root_addresses: List[Address] = []
 
@@ -70,6 +98,21 @@ class ObjectRegistry:
       raise KeyError(f"Object '{path}' not discovered")
     return obj.address
 
+  def path(self, address: Address) -> Optional[str]:
+    """Return the registered object path for this address, or None if not in registry."""
+    return self.find_path_by_address(address)
+
+  def find_path_by_address(self, address: Address) -> Optional[str]:
+    """Return the registered object path for this address, or None if not in registry."""
+    for path, obj in self._objects.items():
+      if (
+        obj.address.module == address.module
+        and obj.address.node == address.node
+        and obj.address.object == address.object
+      ):
+        return path
+    return None
+
   async def resolve(self, path: str) -> Address:
     if path in self._objects:
       return self._objects[path].address
@@ -78,7 +121,7 @@ class ObjectRegistry:
       raise KeyError(f"Invalid path: '{path}'")
     parent_path = ".".join(parts[:-1])
     child_name = parts[-1]
-    introspection = HamiltonIntrospection(self._backend)
+    introspection = HamiltonIntrospection(self._transport)
 
     if not parent_path:
       if not self._root_addresses:
@@ -103,6 +146,83 @@ class ObjectRegistry:
       if sub_info.name == child_name:
         return sub_info.address
     raise KeyError(f"Child '{child_name}' not found under '{parent_path}'")
+
+
+class RegistryProxy:
+  """Chainable dot-syntax accessor over ObjectRegistry.
+
+  Routing: .address for required paths (KeyError if missing). Optional paths: .is_available
+  or a firmware probe, per interface. Depth-2+ paths: await .resolve() once before .address.
+  .info for metadata; __dir__ for tab-completion.
+  """
+
+  def __init__(self, registry: "ObjectRegistry", path: str = ""):
+    object.__setattr__(self, "_registry", registry)
+    object.__setattr__(self, "_path", path)
+
+  def __getattr__(self, name: str) -> "RegistryProxy":
+    current = object.__getattribute__(self, "_path")
+    new_path = name if not current else f"{current}.{name}"
+    return RegistryProxy(object.__getattribute__(self, "_registry"), new_path)
+
+  def __getitem__(self, name: str) -> "RegistryProxy":
+    """Support backend.interfaces['RootName'] or backend.interfaces['Root.Child']."""
+    current = object.__getattribute__(self, "_path")
+    if not current:
+      new_path = name
+    elif "." in name:
+      new_path = name
+    else:
+      new_path = f"{current}.{name}"
+    return RegistryProxy(object.__getattribute__(self, "_registry"), new_path)
+
+  def __dir__(self):
+    current = object.__getattribute__(self, "_path")
+    registry = object.__getattribute__(self, "_registry")
+    prefix = f"{current}." if current else ""
+    children = set()
+    for key in registry._objects:
+      if key.startswith(prefix):
+        segment = key[len(prefix) :].split(".")[0]
+        if segment:
+          children.add(segment)
+    return list(children)
+
+  async def resolve(self) -> "RegistryProxy":
+    """Lazily resolve this path (depth-2+). Must be awaited once before .address is accessible."""
+    path = object.__getattribute__(self, "_path")
+    registry = object.__getattribute__(self, "_registry")
+    await registry.resolve(path)
+    return self
+
+  @property
+  def address(self) -> Address:
+    """Wire-level destination for this path. Use for required interfaces; KeyError if not discovered."""
+    path = object.__getattribute__(self, "_path")
+    registry = object.__getattribute__(self, "_registry")
+    return registry.address(path)
+
+  @property
+  def info(self) -> ObjectInfo:
+    path = object.__getattribute__(self, "_path")
+    registry = object.__getattribute__(self, "_registry")
+    obj = registry._objects.get(path)
+    if obj is None:
+      raise KeyError(f"'{path}' not in registry. Call await .resolve() first.")
+    return obj
+
+  @property
+  def is_available(self) -> bool:
+    """True if this path was discovered and is present in the registry."""
+    path = object.__getattribute__(self, "_path")
+    registry = object.__getattribute__(self, "_registry")
+    return path in registry._objects
+
+  def __repr__(self) -> str:
+    path = object.__getattribute__(self, "_path")
+    registry = object.__getattribute__(self, "_registry")
+    registered = path in registry._objects
+    return f"<RegistryProxy '{path}' {'registered' if registered else 'unresolved'}>"
 
 
 @dataclass
@@ -135,21 +255,15 @@ class ErrorParser:
     )
 
 
-class HamiltonTCPBackend(LiquidHandlerBackend):
-  """Base backend for all Hamilton TCP instruments.
+class HamiltonTCPClient:
+  """Hamilton TCP communication and introspection (instrument-agnostic).
 
-  Hamilton TCP instruments include the Nimbus and the Prep, using Hoi and Harp.
-  STAR and Vantage use the other Hamilton protocol that works over USB.
-
-  This class provides:
-  - Connection management via Socket (wrapped with state tracking)
-  - Protocol 7 initialization
-  - Protocol 3 registration
-  - Generic command execution
-  - Object discovery via introspection
-
-  Hamilton uses strict request-response protocol (no unsolicited messages),
-  so we use simple direct read/write instead of complex routing.
+  Handles connection, Protocol 7/3, discovery, object registry, and command
+  execution. Use standalone for discovery notebooks or assign to
+  self.client in PrepBackend/NimbusBackend. Does not implement liquid-handling.
+  interfaces (RegistryProxy): .address for required paths; .is_available or
+  firmware probe for optional; await .resolve() for depth-2+ paths.
+  detailed_errors=True (default) enables full diagnosis on command failure.
   """
 
   def __init__(
@@ -160,37 +274,39 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     write_timeout: float = 30.0,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
+    detailed_errors: bool = True,
   ):
-    """Initialize Hamilton TCP backend.
-
-    Args:
-      host: Hamilton instrument IP address
-      port: Hamilton instrument port (usually 50007)
-      read_timeout: Read timeout in seconds
-      write_timeout: Write timeout in seconds
-      auto_reconnect: Enable automatic reconnection
-      max_reconnect_attempts: Maximum reconnection attempts
-    """
-    super().__init__()
-
     self.io = Socket(
       host=host,
       port=port,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
     )
-
-    # Connection state tracking (wrapping Socket)
     self._connected = False
     self._reconnect_attempts = 0
     self.auto_reconnect = auto_reconnect
     self.max_reconnect_attempts = max_reconnect_attempts
-
-    # Hamilton-specific state
+    self.detailed_errors = detailed_errors
     self._client_id: Optional[int] = None
     self.client_address: Optional[Address] = None
     self._sequence_numbers: Dict[Address, int] = {}
     self._registry = ObjectRegistry(self)
+    self._type_registries: Dict[Address, TypeRegistry] = {}
+
+  @property
+  def interfaces(self) -> RegistryProxy:
+    """Dot-syntax access to the discovered object registry."""
+    return RegistryProxy(self._registry)
+
+  def discovered_root_name(self) -> str:
+    """Return the root interface name (e.g. NimbusCORE, MLPrepRoot).
+
+    Valid after setup(); use in backends to validate instrument type.
+    """
+    if not self._registry._objects:
+      raise RuntimeError("No objects discovered. Call setup() first.")
+    first_key = next(iter(self._registry._objects.keys()))
+    return first_key.split(".")[0]
 
   async def _ensure_connected(self):
     """Ensure connection is healthy before operations."""
@@ -623,7 +739,9 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     self,
     command: HamiltonCommand,
     ensure_connection: bool = True,
-  ) -> Optional[Any]:
+    return_raw: bool = False,
+    raise_on_error: bool = True,
+  ) -> Any:
     """Send Hamilton command and wait for response.
 
     Sets source_address if not already set by caller (for testing).
@@ -635,20 +753,28 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     once with no retry.
 
     Read/write timeouts are enforced at the backend level (read_timeout and
-    write_timeout passed into HamiltonTCPBackend and used by the Socket).
+    write_timeout passed into HamiltonTCPClient and used by the Socket).
 
     Args:
       command: Hamilton command to execute.
       ensure_connection: If True, reconnect and retry once on connection error.
         If False, send once (for setup/discovery).
+      return_raw: If True, return (params_bytes,) instead of parsing the
+        response. Use with inspect_hoi_params() to debug wire format.
+      raise_on_error: If True (default), log ERROR and raise on STATUS_EXCEPTION
+        / COMMAND_EXCEPTION. If False, log DEBUG and return None (for probing
+        many object/interface pairs without log spam).
 
     Returns:
-      Parsed response (Command.Response instance, dict, or None).
+      If return_raw=True: (params_bytes,). Otherwise parsed response
+      (Command.Response instance, dict, or None). None if raise_on_error=False
+      and the device returned an exception action.
 
     Raises:
       ConnectionError: If the connection is not established and auto_reconnect
         is disabled, or if reconnection fails.
-      RuntimeError: If the Hamilton firmware returns an error action code.
+      RuntimeError: If the Hamilton firmware returns an error action code and
+        raise_on_error is True.
     """
     connection_errors = (
       BrokenPipeError,
@@ -684,10 +810,30 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
           Hoi2Action.COMMAND_EXCEPTION,
           Hoi2Action.INVALID_ACTION_RESPONSE,
         ):
-          error_message = f"Error response (action={action:#x}): {response_message.hoi.params.hex()}"
-          logger.error(f"Hamilton error {action}: {error_message}")
-          raise RuntimeError(f"Hamilton error {action}: {error_message}")
+          parsed = parse_hamilton_error_params(response_message.hoi.params)
+          # Layer A: always append HC_RESULT enum description (synchronous, no round-trips)
+          parsed_addr = HamiltonIntrospection.parse_error_address(parsed)
+          hc_suffix = f" [{describe_hc_result(parsed_addr[3])}]" if parsed_addr else ""
+          enriched_msg = f"Hamilton error {action.name} (action={action:#x}): {parsed}{hc_suffix}"
+          if raise_on_error:
+            logger.error(enriched_msg)
+            if not self.detailed_errors:
+              raise RuntimeError(enriched_msg)
+            # Layer B: async TypeRegistry diagnosis (method signature, expected params)
+            intro = HamiltonIntrospection(self)
+            addr = command.dest_address
+            if addr not in self._type_registries:
+              try:
+                self._type_registries[addr] = await intro.build_type_registry(addr)
+              except Exception:
+                raise RuntimeError(enriched_msg)
+            diagnostic = await intro.diagnose_error(enriched_msg, self._type_registries[addr])
+            raise RuntimeError(diagnostic)
+          logger.debug(enriched_msg)
+          return None
 
+        if return_raw:
+          return (response_message.hoi.params,)
         return command.interpret_response(response_message)
 
       except connection_errors as e:
@@ -704,20 +850,20 @@ class HamiltonTCPBackend(LiquidHandlerBackend):
     raise last_error
 
   async def stop(self):
-    """Stop the backend and close connection."""
+    """Close connection."""
     try:
       await self.io.stop()
     except Exception as e:
       logger.warning(f"Error during stop: {e}")
     finally:
       self._connected = False
-      self.setup_finished = False
-    logger.info("Hamilton backend stopped")
+    logger.info("Hamilton TCP client stopped")
 
   def serialize(self) -> dict:
-    """Serialize backend configuration."""
+    """Serialize client configuration."""
     return {
-      **super().serialize(),
       "client_id": self._client_id,
       "registry_paths": list(self._registry._objects.keys()),
     }
+
+

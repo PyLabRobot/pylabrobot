@@ -1,7 +1,8 @@
 """Hamilton Nimbus backend implementation.
 
-This module provides the NimbusBackend class for controlling Hamilton Nimbus
-instruments via TCP communication using the Hamilton protocol.
+NimbusBackend composes HamiltonTCPClient as self.client for TCP and introspection.
+Interfaces: self.client.interfaces.<Path>.address for routing. Optional presence
+via .is_available or firmware probe (DoorLock uses .is_available).
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U16Array,
   U32Array,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -420,20 +422,22 @@ class Dispense(NimbusCommand):
   recording_mode: U16
 
 
+# Expected root name from discovery; validated at setup().
+_EXPECTED_ROOT = "NimbusCORE"
+
+
 # ============================================================================
 # MAIN BACKEND CLASS
 # ============================================================================
 
 
-class NimbusBackend(HamiltonTCPBackend):
+class NimbusBackend(LiquidHandlerBackend):
   """Backend for Hamilton Nimbus liquid handling instruments.
 
-  This backend uses TCP communication with the Hamilton protocol to control
-  Nimbus instruments. It inherits from both TCPBackend (for communication)
-  and LiquidHandlerBackend (for liquid handling interface).
-
-  Attributes:
-    _door_lock_available: Whether door lock is available on this instrument.
+  Uses HamiltonTCPClient (self.client) for TCP communication and introspection;
+  implements LiquidHandlerBackend for liquid handling.
+  Interfaces: self.client.interfaces.<path>.address for NimbusCORE, Pipette.
+  Optional (e.g. DoorLock) via .is_available; DoorLock uses _has_door_lock.
   """
 
   def __init__(
@@ -445,17 +449,8 @@ class NimbusBackend(HamiltonTCPBackend):
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
   ):
-    """Initialize Nimbus backend.
-
-    Args:
-      host: Hamilton instrument IP address
-      port: Hamilton instrument port (default: 2000)
-      read_timeout: Read timeout in seconds
-      write_timeout: Write timeout in seconds
-      auto_reconnect: Enable automatic reconnection
-      max_reconnect_attempts: Maximum reconnection attempts
-    """
-    super().__init__(
+    super().__init__()
+    self.client = HamiltonTCPClient(
       host=host,
       port=port,
       read_timeout=read_timeout,
@@ -469,57 +464,12 @@ class NimbusBackend(HamiltonTCPBackend):
     self._channel_configurations: Optional[Dict[int, Dict[int, bool]]] = None
 
     self._channel_traversal_height: float = 146.0  # Default traversal height in mm
-
-    # Optional overrides for tests (when set, properties return these instead of registry lookup)
-    self._address_override_nimbus_core: Optional[Address] = None
-    self._address_override_pipette: Optional[Address] = None
-    self._address_override_door_lock: Optional[Address] = None
-
-  @property
-  def _nimbus_core_address(self) -> Optional[Address]:
-    if self._address_override_nimbus_core is not None:
-      return self._address_override_nimbus_core
-    roots = self._registry.get_root_addresses()
-    return roots[0] if roots else None
-
-  @_nimbus_core_address.setter
-  def _nimbus_core_address(self, value: Optional[Address]) -> None:
-    self._address_override_nimbus_core = value
-
-  @property
-  def _pipette_address(self) -> Optional[Address]:
-    if self._address_override_pipette is not None:
-      return self._address_override_pipette
-    path = self._registry.find_path_ending_with("Pipette")
-    if path is None:
-      return None
-    try:
-      return self._registry.address(path)
-    except KeyError:
-      return None
-
-  @_pipette_address.setter
-  def _pipette_address(self, value: Optional[Address]) -> None:
-    self._address_override_pipette = value
-
-  @property
-  def _door_lock_address(self) -> Optional[Address]:
-    if self._address_override_door_lock is not None:
-      return self._address_override_door_lock
-    path = self._registry.find_path_ending_with("DoorLock")
-    if path is None:
-      return None
-    try:
-      return self._registry.address(path)
-    except KeyError:
-      return None
-
-  @_door_lock_address.setter
-  def _door_lock_address(self, value: Optional[Address]) -> None:
-    self._address_override_door_lock = value
+    self._has_door_lock: bool = False  # Set in setup() from .is_available (no Nimbus probe for enclosure)
 
   async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
     """Set up the Nimbus backend.
+
+    Interfaces: self.client.interfaces.<path>.address for required paths; optional via .is_available (e.g. _has_door_lock).
 
     This method:
     1. Establishes TCP connection and performs protocol initialization
@@ -527,7 +477,7 @@ class NimbusBackend(HamiltonTCPBackend):
     3. Queries channel configuration to get num_channels
     4. Queries tip presence
     5. Queries initialization status
-    6. Locks door if available
+    6. Locks door if available (when _has_door_lock)
     7. Conditionally initializes NimbusCore with InitializeSmartRoll (only if not initialized)
     8. Optionally unlocks door after initialization
 
@@ -535,18 +485,24 @@ class NimbusBackend(HamiltonTCPBackend):
       unlock_door: If True, unlock door after initialization (default: False)
       force_initialize: If True, force initialization even if already initialized
     """
-    # Call parent setup (TCP connection, Protocol 7 init, Protocol 3 registration, depth-1 discovery)
-    await super().setup()
+    # Call client setup (TCP connection, Protocol 7 init, Protocol 3 registration, depth-1 discovery)
+    await self.client.setup()
 
-    # Ensure required objects are discovered (registry populated by _discover_interfaces(max_depth=1))
-    if self._nimbus_core_address is None:
-      raise RuntimeError("NimbusCore root object not discovered. Cannot proceed with setup.")
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette object not discovered. Cannot proceed with setup.")
+    # Validate discovered root matches this backend
+    discovered = self.client.discovered_root_name()
+    if discovered != _EXPECTED_ROOT:
+      raise RuntimeError(
+        f"Expected root '{_EXPECTED_ROOT}' (Nimbus), but discovered '{discovered}'. Wrong instrument?"
+      ) from None
+
+    # Required objects are discovered; .address raises KeyError if missing
+    nimbus_core = self.client.interfaces.NimbusCORE.address
+    pipette = self.client.interfaces.NimbusCORE.Pipette.address
+    self._has_door_lock = self.client.interfaces.NimbusCORE.DoorLock.is_available
 
     # Query channel configuration to get num_channels (use discovered address only)
     try:
-      config = await self.send_command(GetChannelConfiguration_1(self._nimbus_core_address))
+      config = await self.client.send_command(GetChannelConfiguration_1(nimbus_core))
       assert config is not None, "GetChannelConfiguration_1 command returned None"
       self._num_channels = config.channels
       logger.info(f"Channel configuration: {config.channels} channels")
@@ -563,7 +519,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Query initialization status (use discovered address only)
     try:
-      init_status = await self.send_command(IsInitialized(self._nimbus_core_address))
+      init_status = await self.client.send_command(IsInitialized(nimbus_core))
       assert init_status is not None, "IsInitialized command returned None"
       self._is_initialized = bool(init_status.value)
       logger.info(f"Instrument initialized: {self._is_initialized}")
@@ -573,7 +529,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Lock door if available (optional - no error if not found)
     # This happens before initialization
-    if self._door_lock_address is not None:
+    if self._has_door_lock:
       try:
         if not await self.is_door_locked():
           await self.lock_door()
@@ -592,9 +548,9 @@ class NimbusBackend(HamiltonTCPBackend):
         # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
         # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
         for channel in range(1, self.num_channels + 1):
-          await self.send_command(
+          await self.client.send_command(
             SetChannelConfiguration(
-              dest=self._pipette_address,
+              dest=pipette,
               channel=channel,
               indexes=[1, 3, 4],
               enables=[True, False, False, False],
@@ -625,9 +581,9 @@ class NimbusBackend(HamiltonTCPBackend):
           roll_distance=None,  # Will default to 9.0mm
         )
 
-        await self.send_command(
+        await self.client.send_command(
           InitializeSmartRoll(
-            dest=self._nimbus_core_address,
+            dest=nimbus_core,
             x_positions=x_positions_full,
             y_positions=y_positions_full,
             begin_tip_deposit_process=begin_tip_deposit_process_full,
@@ -645,7 +601,7 @@ class NimbusBackend(HamiltonTCPBackend):
       logger.info("Instrument already initialized, skipping initialization")
 
     # Unlock door if requested (optional - no error if not found)
-    if unlock_door and self._door_lock_address is not None:
+    if unlock_door and self._has_door_lock:
       try:
         await self.unlock_door()
       except RuntimeError:
@@ -693,13 +649,10 @@ class NimbusBackend(HamiltonTCPBackend):
     """Park the instrument.
 
     Raises:
-      RuntimeError: If NimbusCore address was not discovered during setup.
+      RuntimeError: If NimbusCORE address was not discovered during setup.
     """
-    if self._nimbus_core_address is None:
-      raise RuntimeError("NimbusCore address not discovered. Call setup() first.")
-
     try:
-      await self.send_command(Park(self._nimbus_core_address))
+      await self.client.send_command(Park(self.client.interfaces.NimbusCORE.address))
       logger.info("Instrument parked successfully")
     except Exception as e:
       logger.error(f"Failed to park instrument: {e}")
@@ -709,18 +662,13 @@ class NimbusBackend(HamiltonTCPBackend):
     """Check if the door is locked.
 
     Returns:
-      True if door is locked, False if unlocked.
-
-    Raises:
-      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
+      True if door is locked, False if unlocked or if door lock is not available.
     """
-    if self._door_lock_address is None:
-      raise RuntimeError(
-        "Door lock is not available on this instrument or setup() has not been called."
-      )
+    if not self._has_door_lock:
+      return False
 
     try:
-      status = await self.send_command(IsDoorLocked(self._door_lock_address))
+      status = await self.client.send_command(IsDoorLocked(self.client.interfaces.NimbusCORE.DoorLock.address))
       assert status is not None, "IsDoorLocked command returned None"
       return bool(status.locked)
     except Exception as e:
@@ -728,36 +676,24 @@ class NimbusBackend(HamiltonTCPBackend):
       raise
 
   async def lock_door(self) -> None:
-    """Lock the door.
-
-    Raises:
-      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
-    """
-    if self._door_lock_address is None:
-      raise RuntimeError(
-        "Door lock is not available on this instrument or setup() has not been called."
-      )
+    """Lock the door. No-op if door lock is not available."""
+    if not self._has_door_lock:
+      return
 
     try:
-      await self.send_command(LockDoor(self._door_lock_address))
+      await self.client.send_command(LockDoor(self.client.interfaces.NimbusCORE.DoorLock.address))
       logger.info("Door locked successfully")
     except Exception as e:
       logger.error(f"Failed to lock door: {e}")
       raise
 
   async def unlock_door(self) -> None:
-    """Unlock the door.
-
-    Raises:
-      RuntimeError: If door lock is not available on this instrument, or if setup() has not been called yet.
-    """
-    if self._door_lock_address is None:
-      raise RuntimeError(
-        "Door lock is not available on this instrument or setup() has not been called."
-      )
+    """Unlock the door. No-op if door lock is not available."""
+    if not self._has_door_lock:
+      return
 
     try:
-      await self.send_command(UnlockDoor(self._door_lock_address))
+      await self.client.send_command(UnlockDoor(self.client.interfaces.NimbusCORE.DoorLock.address))
       logger.info("Door unlocked successfully")
     except Exception as e:
       logger.error(f"Failed to unlock door: {e}")
@@ -765,7 +701,11 @@ class NimbusBackend(HamiltonTCPBackend):
 
   async def stop(self):
     """Stop the backend and close connection."""
-    await HamiltonTCPBackend.stop(self)
+    await self.client.stop()
+    self.setup_finished = False
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), **self.client.serialize()}
 
   async def request_tip_presence(self) -> List[Optional[bool]]:
     """Request tip presence on each channel.
@@ -774,9 +714,7 @@ class NimbusBackend(HamiltonTCPBackend):
       A list of length `num_channels` where each element is `True` if a tip is mounted,
       `False` if not, or `None` if unknown.
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-    tip_status = await self.send_command(IsTipPresent(self._pipette_address))
+    tip_status = await self.client.send_command(IsTipPresent(self.client.interfaces.NimbusCORE.Pipette.address))
     assert tip_status is not None, "IsTipPresent command returned None"
     return [bool(v) for v in tip_status.tip_present]
 
@@ -987,9 +925,6 @@ class NimbusBackend(HamiltonTCPBackend):
       RuntimeError: If pipette address or deck is not set
       ValueError: If deck is not a NimbusDeck and minimum_traverse_height_at_beginning_of_a_command is not provided
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -1032,7 +967,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Create and send command
     command = PickupTips(
-      dest=self._pipette_address,
+      dest=self.client.interfaces.NimbusCORE.Pipette.address,
       channels_involved=channels_involved,
       x_positions=x_positions_full,
       y_positions=y_positions_full,
@@ -1043,7 +978,7 @@ class NimbusBackend(HamiltonTCPBackend):
     )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Picked up tips on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to pick up tips: {e}")
@@ -1084,9 +1019,6 @@ class NimbusBackend(HamiltonTCPBackend):
       RuntimeError: If pipette address or deck is not set
       ValueError: If operations mix waste and regular resources
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -1132,7 +1064,7 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
       command = DropTipsRoll(
-        dest=self._pipette_address,
+        dest=self.client.interfaces.NimbusCORE.Pipette.address,
         channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
@@ -1165,7 +1097,7 @@ class NimbusBackend(HamiltonTCPBackend):
         )
 
       command = DropTips(
-        dest=self._pipette_address,
+        dest=self.client.interfaces.NimbusCORE.Pipette.address,
         channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
@@ -1177,7 +1109,7 @@ class NimbusBackend(HamiltonTCPBackend):
       )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Dropped tips on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to drop tips: {e}")
@@ -1232,9 +1164,6 @@ class NimbusBackend(HamiltonTCPBackend):
     Raises:
       RuntimeError: If pipette address or deck is not set
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -1250,10 +1179,10 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.send_command(EnableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(EnableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
       logger.info("Enabled ADC before aspirate")
     else:
-      await self.send_command(DisableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(DisableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
       logger.info("Disabled ADC before aspirate")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -1262,9 +1191,9 @@ class NimbusBackend(HamiltonTCPBackend):
     for channel_idx in use_channels:
       channel_num = channel_idx + 1  # Convert to 1-based
       try:
-        config = await self.send_command(
+        config = await self.client.send_command(
           GetChannelConfiguration(
-            self._pipette_address,
+            self.client.interfaces.NimbusCORE.Pipette.address,
             channel=channel_num,
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
@@ -1439,7 +1368,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Create and send Aspirate command
     command = Aspirate(
-      dest=self._pipette_address,
+      dest=self.client.interfaces.NimbusCORE.Pipette.address,
       aspirate_type=aspirate_type,
       channels_involved=channels_involved,
       x_positions=x_positions_full,
@@ -1476,7 +1405,7 @@ class NimbusBackend(HamiltonTCPBackend):
     )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Aspirated on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to aspirate: {e}")
@@ -1531,9 +1460,6 @@ class NimbusBackend(HamiltonTCPBackend):
     Raises:
       RuntimeError: If pipette address or deck is not set
     """
-    if self._pipette_address is None:
-      raise RuntimeError("Pipette address not discovered. Call setup() first.")
-
     # Validate we have a NimbusDeck for coordinate conversion
     if not isinstance(self.deck, NimbusDeck):
       raise RuntimeError("Deck must be a NimbusDeck for coordinate conversion")
@@ -1549,10 +1475,10 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.send_command(EnableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(EnableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
       logger.info("Enabled ADC before dispense")
     else:
-      await self.send_command(DisableADC(self._pipette_address, channels_involved))
+      await self.client.send_command(DisableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
       logger.info("Disabled ADC before dispense")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -1561,9 +1487,9 @@ class NimbusBackend(HamiltonTCPBackend):
     for channel_idx in use_channels:
       channel_num = channel_idx + 1  # Convert to 1-based
       try:
-        config = await self.send_command(
+        config = await self.client.send_command(
           GetChannelConfiguration(
-            self._pipette_address,
+            self.client.interfaces.NimbusCORE.Pipette.address,
             channel=channel_num,
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
@@ -1741,7 +1667,7 @@ class NimbusBackend(HamiltonTCPBackend):
 
     # Create and send Dispense command
     command = Dispense(
-      dest=self._pipette_address,
+      dest=self.client.interfaces.NimbusCORE.Pipette.address,
       dispense_type=dispense_type,
       channels_involved=channels_involved,
       x_positions=x_positions_full,
@@ -1778,7 +1704,7 @@ class NimbusBackend(HamiltonTCPBackend):
     )
 
     try:
-      await self.send_command(command)
+      await self.client.send_command(command)
       logger.info(f"Dispensed on channels {use_channels}")
     except Exception as e:
       logger.error(f"Failed to dispense: {e}")

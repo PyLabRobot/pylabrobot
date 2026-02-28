@@ -1,19 +1,20 @@
 """Hamilton Prep backend implementation.
 
-Uses HamiltonTCPBackend (Protocol 7/3, introspection) and shares the same
-TCP codec as NimbusBackend. Discovers MLPrep, Pipettor, and ChannelCoordinator
-via introspection and sends commands as HamiltonCommand subclasses.
-
 Three-layer design:
 
-- **Inner structs** (e.g. ``CommonParameters``, ``NoLldParameters``): reusable
-  wire protocol building blocks, no defaults.  ``.default()`` only where it
-  means "tell firmware to use its own defaults".
-- **Command classes** (e.g. ``PrepDropTips``): pure wire shape + identity.
-  ``@dataclass`` with ``dest: Address`` + ``Annotated`` payload fields, no
-  defaults.  ``build_parameters()`` uses ``HoiParams.from_struct(self)``.
-- **PrepBackend methods**: single source of truth for all Prep-specific
-  defaults.  Flat, named, typed kwargs with defaults.
+- **HamiltonTCPClient** (``self.client``): Transport and introspection.
+  All device communication goes through ``self.client.send_command()``.
+  Address resolution: ``self.client.interfaces.<path>.address``.
+
+- **Command dataclasses** (e.g. ``PrepDropTips``, ``MphPickupTips``): Pure wire shapes.
+  ``@dataclass`` with ``dest: Address`` + ``Annotated`` payload fields; no defaults;
+  ``build_parameters()`` uses ``HoiParams.from_struct(self)``.
+
+- **PrepBackend methods**: Domain logic and defaults.
+  Single source of truth for Prep-specific parameter defaults.
+
+Standalone access: ``lh.backend.client.interfaces.MLPrepRoot.MphRoot.MPH.address``,
+``HamiltonIntrospection(lh.backend.client)``.
 """
 
 from __future__ import annotations
@@ -44,7 +45,8 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U8Array,
   Enum as WEnum,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -61,6 +63,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.resources import Tip
+from pylabrobot.resources.tip_rack import TipSpot
 
 if TYPE_CHECKING:
   pass
@@ -147,9 +150,9 @@ class InstrumentConfig:
   deck_bounds: Optional[DeckBounds]
   has_enclosure: bool
   safe_speeds_enabled: bool
-  default_traverse_height: float
   deck_sites: Tuple[DeckSiteInfo, ...]
   waste_sites: Tuple[WasteSiteInfo, ...]
+  default_traverse_height: Optional[float] = None  # None if probe failed; user can set via set_default_traverse_height
 
 
 # =============================================================================
@@ -1093,6 +1096,50 @@ class PrepDropTips(PrepCommand):
 
 
 @dataclass
+class MphPickupTips(PrepCommand):
+  """Pick up tips via MPH coordinator (iface=1 id=9, dest=MphRoot.MPH).
+
+  Resolved introspection signature:
+    PickupTips(tipParameters: struct(iface=1), finalZ: f32,
+               tipDefinition: struct(iface=1), tadm: bool,
+               dispenserVolume: f32, dispenserSpeed: f32,
+               tipMask: u32) -> { seekSpeed: List[u16] }
+
+  The MPH takes a SINGLE struct (type_57) for tip_parameters, not a
+  StructArray (type_61) like the Pipettor. All 8 probes move as one unit;
+  tip_mask selects which channels engage.
+  """
+
+  command_id = 9
+  tip_parameters: Annotated[TipPositionParameters, Struct()]
+  final_z: F32
+  seek_speed: F32
+  tip_definition: Annotated[TipPickupParameters, Struct()]
+  enable_tadm: PaddedBool
+  dispenser_volume: F32
+  dispenser_speed: F32
+  tip_mask: U32
+
+
+@dataclass
+class MphDropTips(PrepCommand):
+  """Drop tips via MPH coordinator (iface=1 id=12, dest=MphRoot.MPH).
+
+  Resolved introspection signature:
+    DropTips(dropTipParameters: struct(iface=1), finalZ: f32,
+             tipRollOffDistance: f32) -> seekSpeed: List[u16]
+
+  Single struct (type_57) for drop position — all probes drop together.
+  """
+
+  command_id = 12
+  drop_parameters: Annotated[TipDropParameters, Struct()]
+  final_z: F32
+  seek_speed: F32
+  tip_roll_off_distance: F32
+
+
+@dataclass
 class PrepPickUpToolById(PrepCommand):
   """Pick up tool by tip-definition ID (cmd=14, dest=Pipettor)."""
 
@@ -1659,13 +1706,16 @@ _CHANNEL_INDEX = {
 }
 
 
-class PrepBackend(HamiltonTCPBackend):
+# Expected root name from discovery; validated at setup().
+_EXPECTED_ROOT = "MLPrepRoot"
+
+
+class PrepBackend(LiquidHandlerBackend):
   """Backend for Hamilton Prep instruments using the shared TCP stack.
 
-  Discovers MLPrep, Pipettor, and ChannelCoordinator via Protocol-7/3
-  introspection, then sends typed PrepCommand instances. All parameter
-  serialisation is handled by HoiParams.from_struct() -- no manual builder
-  calls.
+  Uses HamiltonTCPClient (self.client) for communication and introspection;
+  implements LiquidHandlerBackend for liquid handling.
+  Interfaces: self.client.interfaces.<path>.address for MLPrep, Pipettor, MPH.
   """
 
   def __init__(
@@ -1676,8 +1726,10 @@ class PrepBackend(HamiltonTCPBackend):
     write_timeout: float = 30.0,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = 3,
+    default_traverse_height: Optional[float] = None,
   ):
-    super().__init__(
+    super().__init__()
+    self.client = HamiltonTCPClient(
       host=host,
       port=port,
       read_timeout=read_timeout,
@@ -1686,6 +1738,15 @@ class PrepBackend(HamiltonTCPBackend):
       max_reconnect_attempts=max_reconnect_attempts,
     )
     self._config: Optional[InstrumentConfig] = None
+    self._user_traverse_height: Optional[float] = default_traverse_height
+
+  def set_default_traverse_height(self, value: float) -> None:
+    """Set the default traverse height (mm) used when final_z is not passed to pick_up_tips/drop_tips.
+
+    Use this when the instrument did not report a traverse height at setup, or to override
+    the probed value.
+    """
+    self._user_traverse_height = value
 
   # ---------------------------------------------------------------------------
   # Setup & discovery
@@ -1694,8 +1755,10 @@ class PrepBackend(HamiltonTCPBackend):
   async def setup(self, smart: bool = True, force_initialize: bool = False):
     """Set up Prep: connect, discover objects, then conditionally initialize MLPrep.
 
+    Interfaces: .address for MLPrep/Pipettor; depth-2 paths resolved in setup.
+
     Order:
-      1. TCP + Protocol 7/3 init, root discovery, and depth-1 interface discovery (super().setup())
+      1. TCP + Protocol 7/3 init, root discovery, and depth-1 interface discovery (self.client.setup())
       2. Lazy-resolve Pipettor (depth-2) for commands
       3. If force_initialize: always run Initialize(smart=smart).
          Else: query GetIsInitialized; only run Initialize(smart=smart) when not initialized.
@@ -1706,11 +1769,27 @@ class PrepBackend(HamiltonTCPBackend):
       force_initialize: If True, always run Initialize. If False, run Initialize only
         when GetIsInitialized reports not initialized (e.g. reconnect-safe).
     """
-    await super().setup()
-    await self._registry.resolve("MLPrepRoot.PipettorRoot.Pipettor")
+    await self.client.setup()
 
-    if not self._registry.has("MLPrepRoot.MLPrep"):
-      raise RuntimeError("MLPrep object not discovered. Cannot proceed with setup.")
+    # Validate discovered root matches this backend
+    discovered = self.client.discovered_root_name()
+    if discovered != _EXPECTED_ROOT:
+      raise RuntimeError(
+        f"Expected root '{_EXPECTED_ROOT}' (Prep), but discovered '{discovered}'. Wrong instrument?"
+      ) from None
+
+    await self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.resolve()
+
+    try:
+      await self.client.interfaces.MLPrepRoot.MphRoot.MPH.resolve()
+      logger.info("MPH head discovered at %s", self.client.interfaces.MLPrepRoot.MphRoot.MPH.address)
+    except Exception as e:
+      logger.info("MPH head not available (instrument may not have MPH): %s", e)
+
+    try:
+      self.client.interfaces.MLPrepRoot.MLPrep.address
+    except KeyError:
+      raise RuntimeError("MLPrep object not discovered. Cannot proceed with setup.") from None
 
     if force_initialize:
       await self._run_initialize(smart=smart)
@@ -1744,9 +1823,9 @@ class PrepBackend(HamiltonTCPBackend):
 
   async def _run_initialize(self, smart: bool):
     """Send PrepInitialize to MLPrep (shared by setup)."""
-    await self.send_command(
+    await self.client.send_command(
       PrepInitialize(
-        dest=self._mlprep_dest(),
+        dest=self.client.interfaces.MLPrepRoot.MLPrep.address,
         smart=smart,
         tip_drop_params=InitTipDropParameters(
           default_values=True,
@@ -1759,21 +1838,22 @@ class PrepBackend(HamiltonTCPBackend):
 
   async def _probe_hardware_config(self) -> InstrumentConfig:
     """Query MLPrep and DeckConfiguration for hardware config, deck sites, and waste sites."""
-    mlprep = self._mlprep_dest()
-    enc_resp = await self.send_command(PrepGetIsEnclosurePresent(dest=mlprep))
-    safe_resp = await self.send_command(PrepGetSafeSpeedsEnabled(dest=mlprep))
-    height_resp = await self.send_command(PrepGetDefaultTraverseHeight(dest=mlprep))
+    mlprep = self.client.interfaces.MLPrepRoot.MLPrep.address
+    enc_resp = await self.client.send_command(PrepGetIsEnclosurePresent(dest=mlprep))
+    safe_resp = await self.client.send_command(PrepGetSafeSpeedsEnabled(dest=mlprep))
+    height_resp = await self.client.send_command(PrepGetDefaultTraverseHeight(dest=mlprep))
     has_enclosure = bool(enc_resp.value) if enc_resp else False
     safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
-    default_traverse_height = float(height_resp.value) if height_resp else 0.0
+    default_traverse_height = float(height_resp.value) if height_resp else None
 
     deck_bounds: Optional[DeckBounds] = None
     deck_sites: Tuple[DeckSiteInfo, ...] = ()
     waste_sites: Tuple[WasteSiteInfo, ...] = ()
     try:
-      deck_addr = await self._registry.resolve("MLPrepRoot.MLPrepCalibration.DeckConfiguration")
+      await self.client.interfaces.MLPrepRoot.MLPrepCalibration.DeckConfiguration.resolve()
+      deck_addr = self.client.interfaces.MLPrepRoot.MLPrepCalibration.DeckConfiguration.address
 
-      bounds_resp = await self.send_command(PrepGetDeckBounds(dest=deck_addr))
+      bounds_resp = await self.client.send_command(PrepGetDeckBounds(dest=deck_addr))
       if bounds_resp:
         deck_bounds = DeckBounds(
           min_x=bounds_resp.min_x,
@@ -1784,7 +1864,7 @@ class PrepBackend(HamiltonTCPBackend):
           max_z=bounds_resp.max_z,
         )
 
-      sites_resp = await self.send_command(PrepGetDeckSiteDefinitions(dest=deck_addr))
+      sites_resp = await self.client.send_command(PrepGetDeckSiteDefinitions(dest=deck_addr))
       if sites_resp and sites_resp.sites:
         deck_sites = tuple(
           DeckSiteInfo(
@@ -1800,7 +1880,7 @@ class PrepBackend(HamiltonTCPBackend):
         )
         logger.info("Discovered %d deck sites", len(deck_sites))
 
-      waste_resp = await self.send_command(PrepGetWasteSiteDefinitions(dest=deck_addr))
+      waste_resp = await self.client.send_command(PrepGetWasteSiteDefinitions(dest=deck_addr))
       if waste_resp and waste_resp.sites:
         waste_sites = tuple(
           WasteSiteInfo(
@@ -1821,9 +1901,9 @@ class PrepBackend(HamiltonTCPBackend):
       deck_bounds=deck_bounds,
       has_enclosure=has_enclosure,
       safe_speeds_enabled=safe_speeds_enabled,
-      default_traverse_height=default_traverse_height,
       deck_sites=deck_sites,
       waste_sites=waste_sites,
+      default_traverse_height=default_traverse_height,
     )
 
   # ---------------------------------------------------------------------------
@@ -1833,21 +1913,21 @@ class PrepBackend(HamiltonTCPBackend):
   @property
   def mlprep_address(self) -> Optional[Address]:
     try:
-      return self._registry.address("MLPrepRoot.MLPrep") if self._registry.has("MLPrepRoot.MLPrep") else None
+      return self.client.interfaces.MLPrepRoot.MLPrep.address
     except KeyError:
       return None
 
   @property
   def pipettor_address(self) -> Optional[Address]:
-    for path in ("MLPrepRoot.PipettorRoot.Pipettor", "MLPrepRoot.ChannelCoordinator"):
-      if self._registry.has(path):
-        return self._registry.address(path)
-    return None
+    try:
+      return self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address
+    except KeyError:
+      return None
 
   @property
   def coordinator_address(self) -> Optional[Address]:
     try:
-      return self._registry.address("MLPrepRoot.ChannelCoordinator") if self._registry.has("MLPrepRoot.ChannelCoordinator") else None
+      return self.client.interfaces.MLPrepRoot.ChannelCoordinator.address
     except KeyError:
       return None
 
@@ -1855,15 +1935,6 @@ class PrepBackend(HamiltonTCPBackend):
   def num_channels(self) -> int:
     """Prep has 2 channels (front and rear)."""
     return 2
-
-  def _pipettor_dest(self) -> Address:
-    for path in ("MLPrepRoot.PipettorRoot.Pipettor", "MLPrepRoot.ChannelCoordinator"):
-      if self._registry.has(path):
-        return self._registry.address(path)
-    raise RuntimeError("Pipettor/Coordinator not discovered. Call setup() first.")
-
-  def _mlprep_dest(self) -> Address:
-    return self._registry.address("MLPrepRoot.MLPrep")
 
   def _validate_position(self, x: float, y: float, z: float) -> None:
     """Raise ValueError if (x, y, z) is outside deck bounds. No-op if config/bounds not set."""
@@ -1876,22 +1947,37 @@ class PrepBackend(HamiltonTCPBackend):
         f"(x=[{b.min_x}, {b.max_x}], y=[{b.min_y}, {b.max_y}], z=[{b.min_z}, {b.max_z}])"
       )
 
+  def _resolve_traverse_height(self, final_z: Optional[float]) -> float:
+    """Resolve final_z: explicit arg > user-set default > probed value. Raises if none available."""
+    if final_z is not None:
+      return final_z
+    if self._user_traverse_height is not None:
+      return self._user_traverse_height
+    if self._config is not None and self._config.default_traverse_height is not None:
+      return self._config.default_traverse_height
+    raise RuntimeError(
+      "Default traverse height is required for this operation but could not be determined. "
+      "Either pass final_z explicitly to this call, or set it via "
+      "PrepBackend(..., default_traverse_height=<mm>) or backend.set_default_traverse_height(<mm>). "
+      "If the instrument supports it, the value is also probed during setup(); ensure setup() completed successfully."
+    ) from None
+
   async def is_initialized(self) -> bool:
     """Query whether MLPrep reports as initialized (GetIsInitialized, cmd=2).
 
     Uses MLPrep method from introspection: GetIsInitialized(()) -> value: I64.
-    Requires MLPrep to be discovered (e.g. after super().setup() and
+    Requires MLPrep to be discovered (e.g. after self.client.setup() and
     _discover_prep_objects()). Call before or after PrepInitialize to test.
     """
-    result = await self.send_command(PrepGetIsInitialized(dest=self._mlprep_dest()))
+    result = await self.client.send_command(PrepGetIsInitialized(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
     if result is None:
       return False
     return bool(result.value)
 
   async def get_tip_and_needle_definitions(self) -> Tuple[TipDefinition, ...]:
     """Return tip/needle definitions registered on the instrument (GetTipAndNeedleDefinitions, cmd=11)."""
-    result = await self.send_command(
-      PrepGetTipAndNeedleDefinitions(dest=self._mlprep_dest())
+    result = await self.client.send_command(
+      PrepGetTipAndNeedleDefinitions(dest=self.client.interfaces.MLPrepRoot.MLPrep.address)
     )
     if result is None or not getattr(result, "definitions", None):
       return ()
@@ -1899,14 +1985,14 @@ class PrepBackend(HamiltonTCPBackend):
 
   async def is_parked(self) -> bool:
     """Query whether MLPrep is parked (IsParked, cmd=34)."""
-    result = await self.send_command(PrepIsParked(dest=self._mlprep_dest()))
+    result = await self.client.send_command(PrepIsParked(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
     if result is None:
       return False
     return bool(result.value)
 
   async def is_spread(self) -> bool:
     """Query whether channels are spread (IsSpread, cmd=35). Pipettor commands typically require spread state."""
-    result = await self.send_command(PrepIsSpread(dest=self._mlprep_dest()))
+    result = await self.client.send_command(PrepIsSpread(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
     if result is None:
       return False
     return bool(result.value)
@@ -1934,7 +2020,8 @@ class PrepBackend(HamiltonTCPBackend):
 
     Args:
       final_z: Traverse/safe height (mm) for the move and Z position after command.
-        Defaults to the instrument's configured traverse height from setup.
+        If None, uses the user-set value (constructor or set_default_traverse_height) or the
+        value probed from the instrument at setup. Raises RuntimeError if none is available.
       seek_speed: Speed (mm/s) for the seek/approach phase.
       z_seek_offset: Additive mm on top of the geometry-based default. None = 0
         (use default only). Use to raise or lower the approach height if needed.
@@ -1945,7 +2032,7 @@ class PrepBackend(HamiltonTCPBackend):
     assert len(ops) == len(use_channels)
     assert max(use_channels) <= 2, "Only two channels are supported"
 
-    resolved_final_z = final_z if final_z is not None else self._config.default_traverse_height
+    resolved_final_z = self._resolve_traverse_height(final_z)
 
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
     tip_positions: List[TipPositionParameters] = []
@@ -1973,9 +2060,9 @@ class PrepBackend(HamiltonTCPBackend):
       is_tool=False,
     )
 
-    await self.send_command(
+    await self.client.send_command(
       PrepPickUpTips(
-        dest=self._pipettor_dest(),
+        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
         tip_positions=tip_positions,
         final_z=resolved_final_z,
         seek_speed=seek_speed,
@@ -2005,7 +2092,8 @@ class PrepBackend(HamiltonTCPBackend):
 
     Args:
       final_z: Traverse/safe height (mm) for the move and Z position after command.
-        Defaults to the instrument's configured traverse height from setup.
+        If None, uses the user-set value (constructor or set_default_traverse_height) or the
+        value probed from the instrument at setup. Raises RuntimeError if none is available.
       seek_speed: Speed (mm/s) for the seek/approach phase.
       z_seek_offset: Additive mm on top of the geometry-based default. None = 0
         (use default only). Use to raise or lower the approach height if needed.
@@ -2015,7 +2103,7 @@ class PrepBackend(HamiltonTCPBackend):
     assert len(ops) == len(use_channels)
     assert max(use_channels) <= 2, "Only two channels are supported"
 
-    resolved_final_z = final_z if final_z is not None else self._config.default_traverse_height
+    resolved_final_z = self._resolve_traverse_height(final_z)
 
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
     tip_positions: List[TipDropParameters] = []
@@ -2032,10 +2120,144 @@ class PrepBackend(HamiltonTCPBackend):
       self._validate_position(loc.x, loc.y, params.z_position)
       tip_positions.append(params)
 
-    await self.send_command(
+    await self.client.send_command(
       PrepDropTips(
-        dest=self._pipettor_dest(),
+        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
         tip_positions=tip_positions,
+        final_z=resolved_final_z,
+        seek_speed=seek_speed,
+        tip_roll_off_distance=tip_roll_off_distance,
+      )
+    )
+
+  # ---------------------------------------------------------------------------
+  # MPH head tip operations
+  # ---------------------------------------------------------------------------
+
+  async def pick_up_tips_mph(
+    self,
+    tip_spot: Union[TipSpot, List[TipSpot]],
+    tip_mask: int = 0xFF,
+    final_z: Optional[float] = None,
+    seek_speed: float = 15.0,
+    z_seek_offset: Optional[float] = None,
+    enable_tadm: bool = False,
+    dispenser_volume: float = 0.0,
+    dispenser_speed: float = 250.0,
+  ) -> None:
+    """Pick up tips with the MPH (multi-probe) head.
+
+    Routes to MLPrepRoot.MphRoot.MPH (PickupTips, iface=1 id=9). The MPH
+    takes a single reference position (type_57 = single struct) rather than
+    a per-channel list (type_61). All 8 probes move as one unit; tip_mask
+    selects which channels engage (default 0xFF = all 8).
+
+    The first TipSpot is used as the reference position. For a full column
+    pickup, pass tip_rack["A1:H1"] — only the first spot's (x,y,z) is sent,
+    all 8 probes engage via tip_mask.
+
+    Args:
+      tip_spot: A single TipSpot or a list. The first spot is used as the
+        reference position for all probes.
+      tip_mask: 8-bit bitmask of active MPH channels (bit 0 = channel 0,
+        bit 7 = channel 7). Default 0xFF picks up with all 8 channels.
+      final_z: Traverse/safe height (mm) after command. If None, uses the
+        probed or user-set default traverse height.
+      seek_speed: Speed (mm/s) for the Z approach phase.
+      z_seek_offset: Additive mm offset on top of the geometry-based seek Z
+        (tip.fitting_depth + 5 mm). None = 0.
+      enable_tadm: Enable tip-attachment detection (TADM) during pickup.
+      dispenser_volume: Dispenser volume for TADM (ignored when False).
+      dispenser_speed: Dispenser speed for TADM (ignored when False).
+    """
+    if isinstance(tip_spot, list):
+      spots = tip_spot
+    else:
+      spots = [tip_spot]
+    if not spots:
+      raise ValueError("pick_up_tips_mph: tip_spot list is empty")
+    resolved_final_z = self._resolve_traverse_height(final_z)
+
+    ref_spot = spots[0]
+    tip = ref_spot.get_tip()
+    loc = ref_spot.get_absolute_location("c", "c", "t")
+    tip_parameters = TipPositionParameters.for_op(
+      ChannelIndex.MPHChannel, loc, tip, z_seek_offset=z_seek_offset
+    )
+    self._validate_position(loc.x, loc.y, tip_parameters.z_position)
+
+    tip_definition = TipPickupParameters(
+      default_values=False,
+      volume=tip.maximal_volume,
+      length=tip.total_tip_length - tip.fitting_depth,
+      tip_type=TipTypes.StandardVolume,
+      has_filter=tip.has_filter,
+      is_needle=False,
+      is_tool=False,
+    )
+
+    await self.client.send_command(
+      MphPickupTips(
+        dest=self.client.interfaces.MLPrepRoot.MphRoot.MPH.address,
+        tip_parameters=tip_parameters,
+        final_z=resolved_final_z,
+        seek_speed=seek_speed,
+        tip_definition=tip_definition,
+        enable_tadm=enable_tadm,
+        dispenser_volume=dispenser_volume,
+        dispenser_speed=dispenser_speed,
+        tip_mask=tip_mask,
+      )
+    )
+
+  async def drop_tips_mph(
+    self,
+    tip_spot: Union[TipSpot, List[TipSpot]],
+    final_z: Optional[float] = None,
+    seek_speed: float = 30.0,
+    z_seek_offset: Optional[float] = None,
+    drop_type: TipDropType = TipDropType.FixedHeight,
+    tip_roll_off_distance: float = 0.0,
+  ) -> None:
+    """Drop tips held by the MPH head.
+
+    Routes to MLPrepRoot.MphRoot.MPH (DropTips, iface=1 id=12). The MPH
+    takes a single reference position (type_57 = single struct); all probes
+    drop together at the same location.
+
+    Args:
+      tip_spot: Target drop position. The first spot is used as the reference
+        position for all probes.
+      final_z: Traverse/safe height (mm) after command. If None, uses the
+        probed or user-set default traverse height.
+      seek_speed: Speed (mm/s) for the Z seek/approach phase.
+      z_seek_offset: Additive mm offset on top of the geometry-based seek Z.
+        None = 0 (default seeks tip_bottom + total_tip_length + 10 mm).
+      drop_type: How tips are released (FixedHeight, Stall, or CLLDSeek).
+      tip_roll_off_distance: Roll-off distance (mm) for tip release.
+    """
+    if isinstance(tip_spot, list):
+      spots = tip_spot
+    else:
+      spots = [tip_spot]
+    if not spots:
+      raise ValueError("drop_tips_mph: tip_spot list is empty")
+    resolved_final_z = self._resolve_traverse_height(final_z)
+
+    ref_spot = spots[0]
+    tip = ref_spot.get_tip()
+    loc = ref_spot.get_absolute_location("c", "c", "t")
+    drop_parameters = TipDropParameters.for_op(
+      ChannelIndex.MPHChannel, loc, tip,
+      z_seek_offset=z_seek_offset,
+      drop_type=drop_type,
+    )
+    self._validate_position(loc.x, loc.y, drop_parameters.z_position)
+
+    await self.client.send_command(
+      MphDropTips(
+        dest=self.client.interfaces.MLPrepRoot.MphRoot.MPH.address,
+        drop_parameters=drop_parameters,
         final_z=resolved_final_z,
         seek_speed=seek_speed,
         tip_roll_off_distance=tip_roll_off_distance,
@@ -2099,9 +2321,9 @@ class PrepBackend(HamiltonTCPBackend):
         )
       )
 
-    await self.send_command(
+    await self.client.send_command(
       PrepAspirateNoLldMonitoring(
-        dest=self._pipettor_dest(),
+        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
         aspirate_parameters=aspirate_parameters,
       )
     )
@@ -2163,9 +2385,9 @@ class PrepBackend(HamiltonTCPBackend):
         )
       )
 
-    await self.send_command(
+    await self.client.send_command(
       PrepDispenseNoLld(
-        dest=self._pipettor_dest(),
+        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
         dispense_parameters=dispense_parameters,
       )
     )
@@ -2204,36 +2426,36 @@ class PrepBackend(HamiltonTCPBackend):
 
   async def park(self) -> None:
     """Park the instrument."""
-    await self.send_command(PrepPark(dest=self._mlprep_dest()))
+    await self.client.send_command(PrepPark(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
 
   async def spread(self) -> None:
     """Spread channels."""
-    await self.send_command(PrepSpread(dest=self._mlprep_dest()))
+    await self.client.send_command(PrepSpread(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
 
   async def method_begin(self, automatic_pause: bool = False) -> None:
     """Signal the start of a liquid-handling method."""
-    await self.send_command(
+    await self.client.send_command(
       PrepMethodBegin(
-        dest=self._mlprep_dest(),
+        dest=self.client.interfaces.MLPrepRoot.MLPrep.address,
         automatic_pause=automatic_pause,
       )
     )
 
   async def method_end(self) -> None:
     """Signal the end of a liquid-handling method."""
-    await self.send_command(PrepMethodEnd(dest=self._mlprep_dest()))
+    await self.client.send_command(PrepMethodEnd(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
 
   async def method_abort(self) -> None:
     """Abort the current method."""
-    await self.send_command(PrepMethodAbort(dest=self._mlprep_dest()))
+    await self.client.send_command(PrepMethodAbort(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
 
   async def set_deck_light(
     self, white: int, red: int, green: int, blue: int
   ) -> None:
     """Set the deck LED colour."""
-    await self.send_command(
+    await self.client.send_command(
       PrepSetDeckLight(
-        dest=self._mlprep_dest(),
+        dest=self.client.interfaces.MLPrepRoot.MLPrep.address,
         white=white,
         red=red,
         green=green,
@@ -2251,9 +2473,9 @@ class PrepBackend(HamiltonTCPBackend):
       self._validate_position(
         move_parameters.gantry_x_position, ax.y_position, ax.z_position
       )
-    await self.send_command(
+    await self.client.send_command(
       PrepMoveToPosition(
-        dest=self._pipettor_dest(),
+        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
         move_parameters=move_parameters,
       )
     )
@@ -2264,9 +2486,16 @@ class PrepBackend(HamiltonTCPBackend):
       self._validate_position(
         move_parameters.gantry_x_position, ax.y_position, ax.z_position
       )
-    await self.send_command(
+    await self.client.send_command(
       PrepMoveToPositionViaLane(
-        dest=self._pipettor_dest(),
+        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
         move_parameters=move_parameters,
       )
     )
+
+  async def stop(self) -> None:
+    await self.client.stop()
+    self.setup_finished = False
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), **self.client.serialize()}

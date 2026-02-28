@@ -15,7 +15,7 @@ response parsers (CommandResponse, InitResponse, RegistrationResponse).
 from __future__ import annotations
 
 from dataclasses import dataclass, fields as dc_fields
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any, List, get_args, get_origin, get_type_hints
 
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
@@ -136,6 +136,11 @@ class HoiParamsParser:
   """
 
   def __init__(self, data: bytes):
+    if not isinstance(data, bytes):
+      raise TypeError(
+        f"HoiParamsParser requires bytes, got {type(data).__name__}. "
+        "Use get_structs_raw() and inspect_hoi_params() to see the wire format."
+      )
     self._data = data
     self._offset = 0
 
@@ -161,6 +166,105 @@ class HoiParamsParser:
     while self.has_remaining():
       results.append(self.parse_next())
     return results
+
+
+def inspect_hoi_params(params: bytes) -> List[dict]:
+  """Inspect raw HOI params bytes fragment-by-fragment for debugging.
+
+  Walks the DataFragment stream [type_id:1][flags:1][length:2][data:N] and
+  returns a list of dicts with: type_id, flags, length, payload_hex (first 80
+  chars), payload_len, decoded (decode_fragment result or exception message).
+  Use this to see exactly what the device sends and fix response parsing.
+
+  Example:
+    raw, fragments = await intro.get_structs_raw(mph_addr, 1)
+    for i, f in enumerate(fragments):
+      print(f\"{i}: type_id={f['type_id']} len={f['length']} decoded={f['decoded']!r}\")
+  """
+  if not params:
+    return []
+  out: List[dict] = []
+  offset = 0
+  while offset + 4 <= len(params):
+    type_id = params[offset]
+    flags = params[offset + 1]
+    length = int.from_bytes(params[offset + 2 : offset + 4], "little")
+    payload_end = offset + 4 + length
+    if payload_end > len(params):
+      out.append({
+        "type_id": type_id,
+        "flags": flags,
+        "length": length,
+        "payload_hex": "<incomplete>",
+        "payload_len": 0,
+        "decoded": f"<buffer end: need {payload_end}, have {len(params)}>",
+      })
+      break
+    data = params[offset + 4 : payload_end]
+    hex_preview = data.hex() if len(data) <= 40 else data[:40].hex() + "..."
+    try:
+      decoded = decode_fragment(type_id, data)
+      if isinstance(decoded, bytes):
+        decoded = decoded.decode("utf-8", errors="replace").rstrip("\x00") or f"<bytes {len(decoded)}>"
+      decoded_repr = repr(decoded) if not isinstance(decoded, (str, int, float, bool)) else str(decoded)
+      if isinstance(decoded, list):
+        decoded_repr = f"list[len={len(decoded)}](elem0_type={type(decoded[0]).__name__ if decoded else 'n/a'})"
+    except Exception as e:
+      decoded_repr = f"<decode error: {e!r}>"
+    out.append({
+      "type_id": type_id,
+      "flags": flags,
+      "length": length,
+      "payload_hex": hex_preview,
+      "payload_len": len(data),
+      "decoded": decoded_repr,
+    })
+    offset = payload_end
+  return out
+
+
+def parse_hamilton_error_params(params: bytes) -> str:
+  """Extract a human-readable message from HOI exception params.
+
+  Hamilton COMMAND_EXCEPTION / STATUS_EXCEPTION responses send params as a
+  sequence of DataFragments. Often the first or second fragment is a STRING
+  (type_id=15) with a message like "0xE001.0x0001.0x1100:0x01,0x009,0x020A".
+  This walks the fragment stream, decodes all fragments, and returns a
+  single string (so you can see error codes and the message). If parsing
+  fails, returns a safe fallback (hex or generic message).
+  """
+  parts = _parse_hamilton_error_fragments(params)
+  if not parts:
+    return params.hex() if params else "(empty)"
+  return "; ".join(parts)
+
+
+def _parse_hamilton_error_fragments(params: bytes) -> List[str]:
+  """Decode all DataFragments in exception params. Returns list of "type: value" strings."""
+  if not params:
+    return []
+  out: List[str] = []
+  offset = 0
+  while offset + 4 <= len(params):
+    type_id = params[offset]
+    length = int.from_bytes(params[offset + 2 : offset + 4], "little")
+    payload_end = offset + 4 + length
+    if payload_end > len(params):
+      break
+    data = params[offset + 4 : payload_end]
+    try:
+      decoded = decode_fragment(type_id, data)
+      try:
+        type_name = HamiltonDataType(type_id).name
+      except ValueError:
+        type_name = f"type_{type_id}"
+      if isinstance(decoded, bytes):
+        decoded = decoded.decode("utf-8", errors="replace").rstrip("\x00").strip()
+      out.append(f"{type_name}={decoded}")
+    except Exception:
+      out.append(f"type_{type_id}=<{length} bytes>")
+    offset = payload_end
+  return out
 
 
 def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:
@@ -199,9 +303,23 @@ def parse_into_struct(parser: HoiParamsParser, cls: type) -> Any:
       continue
 
     if isinstance(meta, CountedFlatArray):
-      _, count = parser.parse_next()
+      _, raw = parser.parse_next()
       element_type = get_args(get_args(ann)[0])[0]
-      values[f.name] = [parse_into_struct(parser, element_type) for _ in range(count)]
+      if isinstance(raw, list):
+        # Single fragment was STRUCTURE_ARRAY: list of payload bytes per element
+        if raw and not isinstance(raw[0], bytes):
+          raise ValueError(
+            f"CountedFlatArray decoded to list of {type(raw[0]).__name__}, expected "
+            "list of bytes (STRUCTURE_ARRAY). Use get_structs_raw() and "
+            "inspect_hoi_params() to see the exact wire format."
+          )
+        values[f.name] = [
+          parse_into_struct(HoiParamsParser(p), element_type) for p in raw
+        ]
+      else:
+        # Count then N flat fragments (count-prefixed stream)
+        count = int(raw)
+        values[f.name] = [parse_into_struct(parser, element_type) for _ in range(count)]
       continue
 
     type_id, value = parser.parse_next()
