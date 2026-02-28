@@ -31,42 +31,52 @@ class Writer:
     self._endian = "<" if little_endian else ">"
 
   def u8(self, value: int) -> "Writer":
-    """Write unsigned 8-bit integer (0-255)."""
+    if not 0 <= value <= 0xFF:
+      raise ValueError(f"u8 requires 0 <= value <= 255, got {value}")
     self._buffer.write(struct.pack(f"{self._endian}B", value))
     return self
 
   def u16(self, value: int) -> "Writer":
-    """Write unsigned 16-bit integer."""
+    if not 0 <= value <= 0xFFFF:
+      raise ValueError(f"u16 requires 0 <= value <= 65535, got {value}")
     self._buffer.write(struct.pack(f"{self._endian}H", value))
     return self
 
   def u32(self, value: int) -> "Writer":
-    """Write unsigned 32-bit integer."""
+    if not 0 <= value <= 0xFFFFFFFF:
+      raise ValueError(f"u32 requires 0 <= value <= 4294967295, got {value}")
     self._buffer.write(struct.pack(f"{self._endian}I", value))
     return self
 
   def u64(self, value: int) -> "Writer":
-    """Write unsigned 64-bit integer."""
+    if not 0 <= value <= 0xFFFFFFFFFFFFFFFF:
+      raise ValueError(f"u64 requires 0 <= value <= 18446744073709551615, got {value}")
     self._buffer.write(struct.pack(f"{self._endian}Q", value))
     return self
 
   def i8(self, value: int) -> "Writer":
-    """Write signed 8-bit integer (-128 to 127)."""
+    if not -128 <= value <= 127:
+      raise ValueError(f"i8 requires -128 <= value <= 127, got {value}")
     self._buffer.write(struct.pack(f"{self._endian}b", value))
     return self
 
   def i16(self, value: int) -> "Writer":
-    """Write signed 16-bit integer."""
+    if not -32768 <= value <= 32767:
+      raise ValueError(f"i16 requires -32768 <= value <= 32767, got {value}")
     self._buffer.write(struct.pack(f"{self._endian}h", value))
     return self
 
   def i32(self, value: int) -> "Writer":
-    """Write signed 32-bit integer."""
+    if not -2147483648 <= value <= 2147483647:
+      raise ValueError(f"i32 requires -2147483648 <= value <= 2147483647, got {value}")
     self._buffer.write(struct.pack(f"{self._endian}i", value))
     return self
 
   def i64(self, value: int) -> "Writer":
-    """Write signed 64-bit integer."""
+    if not -9223372036854775808 <= value <= 9223372036854775807:
+      raise ValueError(
+        f"i64 requires -9223372036854775808 <= value <= 9223372036854775807, got {value}"
+      )
     self._buffer.write(struct.pack(f"{self._endian}q", value))
     return self
 
