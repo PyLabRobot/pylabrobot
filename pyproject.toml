@@ -23,6 +23,7 @@ sila = ["zeroconf>=0.131.0"]
 gui = ["flask[async]==3.1.2"]
 dev = [
   "PyLabRobot[fw,plate_reading,websockets,visualizer,opentrons,inheco,agrow,gui,sila]",
+  "grpcio",
   "numpy",
   "pytest==8.4.2",
   "pytest-timeout==2.4.0",
