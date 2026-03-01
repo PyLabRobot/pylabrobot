@@ -160,6 +160,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/byonoy/luminescence.html) / [OEM](https://byonoy.com/luminescence-96-automate/) |
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
+| Molecular Devices | ImageXpress Pico | <span class="badge badge-microscopy">microscopy</span> | Basics | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/pico.html) / [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico) |
 
 
 ### Flow Cytometers
