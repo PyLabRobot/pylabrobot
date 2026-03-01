@@ -378,21 +378,18 @@ class ExperimentalPicoBackend(ImagerBackend):
     self,
     service: str,
     method: str,
-    rpc: Callable[..., _T],
-    request: bytes,
+    fn: Callable[[], _T],
     with_lock: bool,
-    timeout: float,
   ) -> _T:
     for attempt in range(2):
-      metadata = self._lock_metadata() if with_lock else None
       try:
-        return await asyncio.to_thread(rpc, request, metadata=metadata, timeout=timeout)
+        return await asyncio.to_thread(fn)
       except grpc.RpcError as e:
         if attempt == 0 and with_lock and "CommandRequiresLock" in _decode_grpc_error(e):
           await self._relock()
           continue
         raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
-    raise AssertionError("unreachable")
+    raise RuntimeError("unreachable")
 
   async def _call(
     self,
@@ -403,12 +400,17 @@ class ExperimentalPicoBackend(ImagerBackend):
     timeout: float = 30.0,
   ) -> bytes:
     assert self._channel is not None
-    rpc: Callable[..., bytes] = self._channel.unary_unary(
-      f"/{service}/{method}",
-      request_serializer=lambda x: x,
-      response_deserializer=lambda x: x,
-    )
-    return await self._rpc(service, method, rpc, request, with_lock, timeout)
+    metadata = self._lock_metadata() if with_lock else None
+
+    def fn():
+      rpc = self._channel.unary_unary(
+        f"/{service}/{method}",
+        request_serializer=lambda x: x,
+        response_deserializer=lambda x: x,
+      )
+      return rpc(request, metadata=metadata, timeout=timeout)
+
+    return await self._rpc(service, method, fn, with_lock)
 
   async def _stream(
     self,
@@ -417,14 +419,19 @@ class ExperimentalPicoBackend(ImagerBackend):
     request: bytes = b"",
     with_lock: bool = False,
     timeout: float = 300.0,
-  ) -> Iterator[bytes]:
+  ) -> List[bytes]:
     assert self._channel is not None
-    rpc = self._channel.unary_stream(
-      f"/{service}/{method}",
-      request_serializer=lambda x: x,
-      response_deserializer=lambda x: x,
-    )
-    return await self._rpc(service, method, rpc, request, with_lock, timeout)
+    metadata = self._lock_metadata() if with_lock else None
+
+    def fn():
+      rpc = self._channel.unary_stream(
+        f"/{service}/{method}",
+        request_serializer=lambda x: x,
+        response_deserializer=lambda x: x,
+      )
+      return list(rpc(request, metadata=metadata, timeout=timeout))
+
+    return await self._rpc(service, method, fn, with_lock)
 
   async def _lock(self) -> None:
     assert self._lock_id is not None
@@ -694,7 +701,7 @@ class ExperimentalPicoBackend(ImagerBackend):
       blob_chunks = chunks[blob_idx]
       reassembled = b"".join(blob_chunks[k] for k in sorted(blob_chunks.keys()))
 
-      md5_digest = hashlib.md5(reassembled).digest()
+      md5_digest = hashlib.md5(reassembled, usedforsecurity=False).digest()
       computed = struct.unpack("<q", md5_digest[:8])[0]
       expected = checksums[blob_idx]
       if computed != expected:

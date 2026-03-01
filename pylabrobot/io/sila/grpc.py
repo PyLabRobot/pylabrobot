@@ -9,7 +9,10 @@ import base64
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-import grpc
+try:
+  import grpc
+except ImportError:
+  grpc = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Protobuf wire-format encoding
@@ -139,7 +142,7 @@ def extract_proto_strings(data: bytes) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def decode_grpc_error(error: grpc.RpcError) -> str:
+def decode_grpc_error(error: "grpc.RpcError") -> str:
   """Decode a SiLA gRPC error into a human-readable string.
 
   SiLA error details are base64-encoded protobuf in the gRPC details field.
