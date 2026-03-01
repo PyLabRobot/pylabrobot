@@ -7,7 +7,7 @@ import logging
 import struct
 import time
 from collections import defaultdict
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
 
 import grpc
 
@@ -332,6 +332,36 @@ class PicoBackend(ImagerBackend):
     assert self._lock_id is not None
     return [(_LOCK_META_KEY, _metadata_lock_identifier(self._lock_id))]
 
+  def _relock(self) -> None:
+    """Force-release any stale lock and re-acquire."""
+    try:
+      self._unlock()
+    except (grpc.RpcError, RuntimeError):
+      pass
+    self._lock()
+
+  _T = TypeVar("_T")
+
+  def _rpc(
+    self,
+    service: str,
+    method: str,
+    rpc: Callable[..., _T],
+    request: bytes,
+    with_lock: bool,
+    timeout: float,
+  ) -> _T:
+    for attempt in range(2):
+      metadata = self._lock_metadata() if with_lock else None
+      try:
+        return rpc(request, metadata=metadata, timeout=timeout)
+      except grpc.RpcError as e:
+        if attempt == 0 and with_lock and "CommandRequiresLock" in _decode_grpc_error(e):
+          self._relock()
+          continue
+        raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
+    raise AssertionError("unreachable")
+
   def _call(
     self,
     service: str,
@@ -341,29 +371,12 @@ class PicoBackend(ImagerBackend):
     timeout: float = 30.0,
   ) -> bytes:
     assert self._channel is not None
-    metadata = self._lock_metadata() if with_lock else None
-    rpc = self._channel.unary_unary(
+    rpc: Callable[..., bytes] = self._channel.unary_unary(
       f"/{service}/{method}",
       request_serializer=lambda x: x,
       response_deserializer=lambda x: x,
     )
-    try:
-      result: bytes = rpc(request, metadata=metadata, timeout=timeout)
-      return result
-    except grpc.RpcError as e:
-      err_msg = _decode_grpc_error(e)
-      if with_lock and "CommandRequiresLock" in err_msg:
-        try:
-          self._unlock()
-        except (grpc.RpcError, RuntimeError):
-          pass
-        self._lock()
-        metadata = self._lock_metadata()
-        try:
-          return rpc(request, metadata=metadata, timeout=timeout)
-        except grpc.RpcError as e2:
-          raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e2)}") from e2
-      raise RuntimeError(f"{service}/{method}: {err_msg}") from e
+    return self._rpc(service, method, rpc, request, with_lock, timeout)
 
   def _stream(
     self,
@@ -374,17 +387,12 @@ class PicoBackend(ImagerBackend):
     timeout: float = 300.0,
   ) -> Iterator[bytes]:
     assert self._channel is not None
-    metadata = self._lock_metadata() if with_lock else None
     rpc = self._channel.unary_stream(
       f"/{service}/{method}",
       request_serializer=lambda x: x,
       response_deserializer=lambda x: x,
     )
-    try:
-      result: Iterator[bytes] = rpc(request, metadata=metadata, timeout=timeout)
-      return result
-    except grpc.RpcError as e:
-      raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
+    return self._rpc(service, method, rpc, request, with_lock, timeout)
 
   def _lock(self) -> None:
     assert self._lock_id is not None

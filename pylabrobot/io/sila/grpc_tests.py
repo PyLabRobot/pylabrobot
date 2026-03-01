@@ -65,7 +65,7 @@ class TestSignedVarintEncoding(unittest.TestCase):
     self.assertEqual(varint_as_signed(decoded), -1)
 
   def test_negative_roundtrip(self):
-    for value in [-1, -100, -2**31]:
+    for value in [-1, -100, -(2**31)]:
       encoded = encode_signed_varint(value)
       decoded, _ = decode_varint(encoded, 0)
       self.assertEqual(varint_as_signed(decoded), value)

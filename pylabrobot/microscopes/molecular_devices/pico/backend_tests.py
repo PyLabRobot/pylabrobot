@@ -75,6 +75,7 @@ def _intermediate_response(
 # Mock gRPC channel that records calls with metadata
 # ---------------------------------------------------------------------------
 
+
 class _Call:
   """A recorded gRPC call."""
 
@@ -198,14 +199,10 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(channel.calls[3].path, f"/{_FC_SVC}/Get_InstalledFilterCubes")
 
     # Unlock request contains lock ID
-    self.assertEqual(
-      _decode_sila_string_from_request(channel.calls[0].request), "pylabrobot"
-    )
+    self.assertEqual(_decode_sila_string_from_request(channel.calls[0].request), "pylabrobot")
 
     # Lock request contains lock ID "pylabrobot"
-    self.assertEqual(
-      _decode_sila_string_from_request(channel.calls[1].request), "pylabrobot"
-    )
+    self.assertEqual(_decode_sila_string_from_request(channel.calls[1].request), "pylabrobot")
 
   async def test_setup_configures_objectives_and_filter_cubes(self):
     """When objectives/filter_cubes are specified, setup() calls ChangeHardware."""
@@ -499,7 +496,9 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(snap_json["capturePosition"]["cavityCoordinatesIndexXy"]["Item1"], 7)  # col
     self.assertEqual(snap_json["imagesChannelParameters"][0]["exposureTimeUs"], 15000)  # 15ms
     self.assertEqual(snap_json["imagesChannelParameters"][0]["objectiveId"], "PL FLUOTAR 4x/0.13")
-    self.assertEqual(snap_json["imagesChannelParameters"][0]["illuminationConfig"]["filterCubeId"], "DAPI")
+    self.assertEqual(
+      snap_json["imagesChannelParameters"][0]["illuminationConfig"]["filterCubeId"], "DAPI"
+    )
     self.assertTrue(snap_json["skipAutofocus"])
     self.assertAlmostEqual(snap_json["focusSettings"]["baseZPositionUm"], 2500.0)  # 2.5mm
 
@@ -625,8 +624,12 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     channel.set_stream_response(
       f"/{_SNAP_SVC}/SnapImages_Intermediate",
       [
-        _intermediate_response(chunk_0, blob_index=0, blob_checksum=checksum, packet_count=2, packet_index=0),
-        _intermediate_response(chunk_1, blob_index=0, blob_checksum=checksum, packet_count=2, packet_index=1),
+        _intermediate_response(
+          chunk_0, blob_index=0, blob_checksum=checksum, packet_count=2, packet_index=0
+        ),
+        _intermediate_response(
+          chunk_1, blob_index=0, blob_checksum=checksum, packet_count=2, packet_index=1
+        ),
       ],
     )
 
