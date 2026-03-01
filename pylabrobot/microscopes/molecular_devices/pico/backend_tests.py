@@ -232,7 +232,10 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
       _sila_string_response(json.dumps({"filterCubesData": []})),
     )
 
-    with patch("grpc.insecure_channel", return_value=channel):
+    with patch(
+      "pylabrobot.microscopes.molecular_devices.pico.backend.grpc"
+    ) as mock_grpc:
+      mock_grpc.insecure_channel.return_value = channel
       await backend.setup()
 
     self.assertEqual(len(channel.calls), 4)
@@ -278,7 +281,10 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
     channel.set_response(f"/{_OBJ_SVC}/ChangeHardware", b"")
     channel.set_response(f"/{_FC_SVC}/ChangeHardware", b"")
 
-    with patch("grpc.insecure_channel", return_value=channel):
+    with patch(
+      "pylabrobot.microscopes.molecular_devices.pico.backend.grpc"
+    ) as mock_grpc:
+      mock_grpc.insecure_channel.return_value = channel
       await backend.setup()
 
     # Verify ChangeHardware was called with correct JSON params
