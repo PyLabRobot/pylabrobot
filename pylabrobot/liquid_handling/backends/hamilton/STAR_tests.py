@@ -1646,4 +1646,3 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
 
     await lh_9.stop()
     await lh_18.stop()
-

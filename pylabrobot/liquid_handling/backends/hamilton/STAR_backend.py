@@ -1558,7 +1558,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
 
-  async def channel_request_y_minimum_spacing(self, channel_idx: int, rounded: bool = True) -> float:
+  async def channel_request_y_minimum_spacing(
+    self, channel_idx: int, rounded: bool = True
+  ) -> float:
     """Request the minimum Y spacing for a given channel.
 
     Args:
@@ -1598,8 +1600,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
     return list(
       await asyncio.gather(
-        *(self.channel_request_y_minimum_spacing(channel_idx=idx, rounded=False)
-          for idx in range(self.num_channels))
+        *(
+          self.channel_request_y_minimum_spacing(channel_idx=idx, rounded=False)
+          for idx in range(self.num_channels)
+        )
       )
     )
 
@@ -4270,11 +4274,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     center = location + resource.centers()[0] + offset
     y_width_to_gripper_bump = resource.get_absolute_size_y() - gripper_y_margin * 2
     min_spacing = min(self._channels_minimum_y_spacing)
-    assert (
-      min_spacing
-      <= y_width_to_gripper_bump
-      <= round(resource.get_absolute_size_y())
-    ), (
+    assert min_spacing <= y_width_to_gripper_bump <= round(resource.get_absolute_size_y()), (
       f"width between channels must be between {min_spacing} and "
       f"{resource.get_absolute_size_y()} mm"
       " (i.e. the minimal distance between channels and the max y size of the resource"
@@ -10068,12 +10068,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # Insight: STAR machines appear to lose connection to a channel below y-position=6 mm
 
     upper_spacing = self._min_spacing_between(channel_idx, max(channel_idx - 1, 0))
-    lower_spacing = self._min_spacing_between(channel_idx, min(channel_idx + 1, self.num_channels - 1))
+    lower_spacing = self._min_spacing_between(
+      channel_idx, min(channel_idx + 1, self.num_channels - 1)
+    )
     max_safe_upper_y_pos = channel_idx_minus_one_y_pos - upper_spacing
     max_safe_lower_y_pos = (
-      channel_idx_plus_one_y_pos + lower_spacing
-      if channel_idx_plus_one_y_pos != 0
-      else 6
+      channel_idx_plus_one_y_pos + lower_spacing if channel_idx_plus_one_y_pos != 0 else 6
     )
 
     # Enable safe start and end positions
@@ -10157,7 +10157,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
 
       max_safe_y_mov_dist_post_detection = (
-        detected_material_y_pos - adjacent_y_pos - self._min_spacing_between(channel_idx, adjacent_idx)
+        detected_material_y_pos
+        - adjacent_y_pos
+        - self._min_spacing_between(channel_idx, adjacent_idx)
       )
       move_target = detected_material_y_pos - min(
         post_detection_dist, max_safe_y_mov_dist_post_detection
@@ -10171,7 +10173,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
 
       max_safe_y_mov_dist_post_detection = (
-        adjacent_y_pos - detected_material_y_pos - self._min_spacing_between(channel_idx, adjacent_idx)
+        adjacent_y_pos
+        - detected_material_y_pos
+        - self._min_spacing_between(channel_idx, adjacent_idx)
       )
       move_target = detected_material_y_pos + min(
         post_detection_dist, max_safe_y_mov_dist_post_detection
