@@ -1194,7 +1194,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
-    self._channel_minimum_y_spacing: float = 9.0
+    self._channels_minimum_y_spacing: List[float] = [9.0] * 8
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
     self._channel_traversal_height: float = 245.0
@@ -1207,6 +1207,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._default_1d_symbology: Barcode1DSymbology = "Code 128 (Subset B and C)"
 
     self._setup_done = False
+
+  def _min_spacing_between(self, i: int, j: int) -> float:
+    """Return the conservative minimum Y spacing required between channels *i* and *j*.
+
+    The constraint is the larger of the two channels' individual minimum spacings,
+    rounded up to 1 decimal place for safe movement.
+    """
+    return round(max(self._channels_minimum_y_spacing[i], self._channels_minimum_y_spacing[j]), 1)
 
   @property
   def num_arms(self) -> int:
@@ -1480,9 +1488,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     async def set_up_pip():
       if (not initialized or any(tip_presences)) and not skip_pip:
         await self.initialize_pip()
-      self._channel_minimum_y_spacing = (
-        9.0  # TODO: identify from machine directly to override default
-      )
+      self._channels_minimum_y_spacing = await self.channels_request_y_minimum_spacing()
 
     async def set_up_autoload():
       if self.autoload_installed and not skip_autoload:
@@ -1552,10 +1558,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
 
-  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
+  async def channel_request_y_minimum_spacing(self, channel_idx: int, rounded: bool = True) -> float:
     """Request the minimum Y spacing for a given channel.
+
     Args:
       channel_idx: the channel index to query. (0-indexed)
+      rounded: If True (default), round the result to 1 decimal place. Hardware reports
+        exact values (e.g. 8.98) which round to the expected 9.0.
+
     Returns:
       The minimum Y spacing in mm.
     """
@@ -1570,20 +1580,42 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       command="VY",
       fmt="yc### (n)",
     )
+    # Hardware reports exact values (e.g. 8.98); round up to 1 decimal for safe spacing
+    # and getting the expected 9.0 for the default case.
+    if rounded:
+      return round(self.y_drive_increment_to_mm(resp["yc"][1]), 1)
     return self.y_drive_increment_to_mm(resp["yc"][1])
+
+  async def channels_request_y_minimum_spacing(self) -> List[float]:
+    """Query the minimum Y spacing for all channels in parallel.
+
+    Each channel is addressed on its own module (P1, P2, ...), so the queries
+    can run concurrently.
+
+    Returns:
+      A list of exact (unrounded) minimum Y spacings in mm, one per channel,
+      indexed by channel number.
+    """
+    return list(
+      await asyncio.gather(
+        *(self.channel_request_y_minimum_spacing(channel_idx=idx, rounded=False)
+          for idx in range(self.num_channels))
+      )
+    )
 
   def can_reach_position(self, channel_idx: int, position: Coordinate) -> bool:
     """Check if a position is reachable by a channel (center-based)."""
     if not (0 <= channel_idx < self.num_channels):
       raise ValueError(f"Channel {channel_idx} is out of range for this robot.")
 
-    # frontmost channel can go to y=6, every channel after that is about 8.9 mm further back
-    min_y_pos = 6 + 8.9 * (self.num_channels - channel_idx - 1)
+    # frontmost channel can go to y=6, every channel behind it constrains its min Y
+    spacings = self._channels_minimum_y_spacing
+    min_y_pos = 6 + sum(spacings[i] for i in range(channel_idx + 1, self.num_channels))
     if position.y < min_y_pos:
       return False
 
-    # backmost channel can go to y=601.6, every channel before that is about 8.9 mm further forward
-    max_y_pos = 601.6 - 8.9 * channel_idx
+    # backmost channel can go to y=601.6, every channel in front constrains its max Y
+    max_y_pos = 601.6 - sum(spacings[i] for i in range(channel_idx))
     if position.y > max_y_pos:
       return False
 
@@ -4237,12 +4269,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     center = location + resource.centers()[0] + offset
     y_width_to_gripper_bump = resource.get_absolute_size_y() - gripper_y_margin * 2
+    min_spacing = min(self._channels_minimum_y_spacing)
     assert (
-      self._channel_minimum_y_spacing
+      min_spacing
       <= y_width_to_gripper_bump
       <= round(resource.get_absolute_size_y())
     ), (
-      f"width between channels must be between {self._channel_minimum_y_spacing} and "
+      f"width between channels must be between {min_spacing} and "
       f"{resource.get_absolute_size_y()} mm"
       " (i.e. the minimal distance between channels and the max y size of the resource"
     )
@@ -10034,9 +10067,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channel_idx_plus_one_y_pos = 6
       # Insight: STAR machines appear to lose connection to a channel below y-position=6 mm
 
-    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - self._channel_minimum_y_spacing
+    upper_spacing = self._min_spacing_between(channel_idx, max(channel_idx - 1, 0))
+    lower_spacing = self._min_spacing_between(channel_idx, min(channel_idx + 1, self.num_channels - 1))
+    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - upper_spacing
     max_safe_lower_y_pos = (
-      channel_idx_plus_one_y_pos + self._channel_minimum_y_spacing
+      channel_idx_plus_one_y_pos + lower_spacing
       if channel_idx_plus_one_y_pos != 0
       else 6
     )
@@ -10115,26 +10150,28 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Dynamically evaluate post-detection distance to avoid crashes
     if probing_direction == "backward":
+      adjacent_idx = min(channel_idx + 1, self.num_channels - 1)
       if channel_idx == self.num_channels - 1:  # safe default
         adjacent_y_pos = 6.0
       else:  # next channel
         adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx + 1)
 
       max_safe_y_mov_dist_post_detection = (
-        detected_material_y_pos - adjacent_y_pos - self._channel_minimum_y_spacing
+        detected_material_y_pos - adjacent_y_pos - self._min_spacing_between(channel_idx, adjacent_idx)
       )
       move_target = detected_material_y_pos - min(
         post_detection_dist, max_safe_y_mov_dist_post_detection
       )
 
     else:  # probing_direction == "forward"
+      adjacent_idx = max(channel_idx - 1, 0)
       if channel_idx == 0:  # safe default
         adjacent_y_pos = STARBackend.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
       else:  #  previous channel
         adjacent_y_pos = await self.request_y_pos_channel_n(channel_idx - 1)
 
       max_safe_y_mov_dist_post_detection = (
-        adjacent_y_pos - detected_material_y_pos - self._channel_minimum_y_spacing
+        adjacent_y_pos - detected_material_y_pos - self._min_spacing_between(channel_idx, adjacent_idx)
       )
       move_target = detected_material_y_pos + min(
         post_detection_dist, max_safe_y_mov_dist_post_detection
@@ -11008,9 +11045,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     y_positions = [round(y / 10, 2) for y in resp["ry"]]
 
     # sometimes there is (likely) a floating point error and channels are reported to be
-    # less than 9mm apart. (When you set channels using position_channels_in_y_direction,
-    # it will raise an error.) The minimum y is 6mm, so we fix that first (in case that
-    # values is misreported). Then, we traverse the list in reverse and set the min_diff.
+    # less than their minimum spacing apart (typically 9 mm). (When you set channels using
+    # position_channels_in_y_direction, it will raise an error.) The minimum y is 6mm,
+    # so we fix that first (in case that value is misreported). Then, we traverse the
+    # list in reverse and enforce pairwise minimum spacing.
     if y_positions[-1] < 5.8:
       raise RuntimeError(
         "Channels are reported to be too close to the front of the machine. "
@@ -11020,10 +11058,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     elif 5.8 <= y_positions[-1] < 6:
       y_positions[-1] = 6.0
 
-    min_diff = self._channel_minimum_y_spacing
     for i in range(len(y_positions) - 2, -1, -1):
-      if y_positions[i] - y_positions[i + 1] < min_diff:
-        y_positions[i] = y_positions[i + 1] + min_diff
+      spacing = self._min_spacing_between(i, i + 1)
+      if y_positions[i] - y_positions[i + 1] < spacing:
+        y_positions[i] = y_positions[i + 1] + spacing
 
     return {channel_idx: y for channel_idx, y in enumerate(y_positions)}
 
@@ -11034,50 +11072,43 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       ys: A dictionary mapping channel index to the desired Y position in mm. The channel index is
         0-indexed from the back.
-      make_space: If True, the channels will be moved to ensure they are at least 9mm apart and in
-        descending order, after the channels in `ys` have been put at the desired locations. Note
-        that an error may still be raised, if there is insufficient space to move the channels or
-        if the requested locations are not valid. Set this to False if you wan to avoid inadvertently
-        moving other channels.
+      make_space: If True, the channels will be moved to ensure they respect each channel pair's
+        minimum Y spacing and are in descending order, after the channels in `ys` have been put
+        at the desired locations. Note that an error may still be raised, if there is insufficient
+        space to move the channels or if the requested locations are not valid. Set this to False
+        if you want to avoid inadvertently moving other channels.
     """
 
-    # check that the locations of channels after the move will be at least 9mm apart, and in
-    # descending order
+    # check that the locations of channels after the move will respect pairwise minimum
+    # spacing and be in descending order
     channel_locations = await self.get_channels_y_positions()
 
     for channel_idx, y in ys.items():
       channel_locations[channel_idx] = y
 
     if make_space:
-      # For the channels to the back of `back_channel`, make sure the space between them is
-      # >=9mm. We start with the channel closest to `back_channel`, and make sure the
-      # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
-      # to `back_channel`) to the back (channel 0), all channels are put at the correct location.
-      # This order matters because the channel in front of any channel may have been moved in the
-      # previous iteration.
-      # Note that if a channel is already spaced at >=9mm, it is not moved.
+      # For the channels to the back of `back_channel`, make sure the space between each
+      # adjacent pair respects their pairwise minimum. We start with the channel closest to
+      # `back_channel`, and ensure the channel behind it meets the required spacing, updating
+      # if needed. Iterating from front to back, all channels are put at the correct location.
+      # This order matters because the channel in front of any channel may have been moved in
+      # the previous iteration.
       use_channels = list(ys.keys())
       back_channel = min(use_channels)
       for channel_idx in range(back_channel, 0, -1):
-        if (
-          channel_locations[channel_idx - 1] - channel_locations[channel_idx]
-        ) < self._channel_minimum_y_spacing:
-          channel_locations[channel_idx - 1] = (
-            channel_locations[channel_idx] + self._channel_minimum_y_spacing
-          )
+        spacing = self._min_spacing_between(channel_idx - 1, channel_idx)
+        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < spacing:
+          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + spacing
 
       # Similarly for the channels to the front of `front_channel`, make sure they are all
-      # spaced >= channel_minimum_y_spacing (usually 9mm) apart. This time, we iterate from
-      # back (closest to `front_channel`) to the front (lh.backend.num_channels - 1), and
-      # put each channel >= channel_minimum_y_spacing before the one behind it.
+      # spaced by their pairwise minimum. This time, we iterate from back (closest to
+      # `front_channel`) to the front (num_channels - 1), and put each channel at least
+      # the required spacing before the one behind it.
       front_channel = max(use_channels)
       for channel_idx in range(front_channel, self.num_channels - 1):
-        if (
-          channel_locations[channel_idx] - channel_locations[channel_idx + 1]
-        ) < self._channel_minimum_y_spacing:
-          channel_locations[channel_idx + 1] = (
-            channel_locations[channel_idx] - self._channel_minimum_y_spacing
-          )
+        spacing = self._min_spacing_between(channel_idx, channel_idx + 1)
+        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < spacing:
+          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - spacing
 
     # Quick checks before movement.
     if channel_locations[0] > 650:
@@ -11086,11 +11117,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if channel_locations[self.num_channels - 1] < 6:
       raise ValueError("Channel N would hit the front of the robot")
 
-    if not all(
-      round((channel_locations[i] - channel_locations[i + 1]) * 1000) >= 8_990  # float fixing
-      for i in range(len(channel_locations) - 1)
-    ):
-      raise ValueError("Channels must be at least 9mm apart and in descending order")
+    for i in range(len(channel_locations) - 1):
+      required = self._min_spacing_between(i, i + 1)
+      actual = channel_locations[i] - channel_locations[i + 1]
+      if round(actual * 1000) < round(required * 1000):  # compare in um to avoid float issues
+        raise ValueError(
+          f"Channels {i} and {i + 1} must be at least {required}mm apart, "
+          f"but are {actual:.2f}mm apart."
+        )
 
     yp = " ".join([f"{round(y*10):04}" for y in channel_locations.values()])
     return await self.send_command(
