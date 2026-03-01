@@ -99,6 +99,7 @@ class Visualizer:
     name: Optional[str] = None,
     favicon: Optional[str] = None,
     show_machine_tools_at_start: bool = True,
+    liquid_color: str = "F39C12",
   ):
     """Create a new Visualizer. Use :meth:`.setup` to start the visualization.
 
@@ -115,10 +116,13 @@ class Visualizer:
         PyLabRobot logo is used.
       show_machine_tools_at_start: If ``True``, machine tool popups (pipettes, arm) are opened
         automatically when the visualizer starts.
+      liquid_color: Hex color code (without ``#``) used to fill wells, troughs, and tubes to
+        indicate liquid volume. Default is ``"F39C12"`` (amber).
     """
 
     self.setup_finished = False
     self._show_machine_tools_at_start = show_machine_tools_at_start
+    self._liquid_color = liquid_color.lstrip("#")
 
     if name is not None:
       self._source_filename = name
@@ -487,6 +491,7 @@ class Visualizer:
     def start_server(lock):
       ws_port, fs_port, source_filename = self.ws_port, self.fs_port, self._source_filename
       favicon_path = self._favicon_path
+      liquid_color = self._liquid_color
 
       # try to start the server. If the port is in use, try with another port until it succeeds.
       class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -514,6 +519,7 @@ class Visualizer:
             content = content.replace("{{ ws_port }}", str(ws_port))
             content = content.replace("{{ fs_port }}", str(fs_port))
             content = content.replace("{{ source_filename }}", source_filename)
+            content = content.replace("{{ liquid_color }}", liquid_color)
 
             self.send_response(200)
             self.send_header("Content-type", "text/html")

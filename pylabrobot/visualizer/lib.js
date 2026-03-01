@@ -1343,7 +1343,11 @@ class Container extends Resource {
   }
 
   static colorForVolume(volume, maxVolume) {
-    return `rgba(239, 35, 60, ${volume / maxVolume})`;
+    var hex = (document.getElementById("liquid_color") || {}).value || "F39C12";
+    var r = parseInt(hex.substring(0, 2), 16);
+    var g = parseInt(hex.substring(2, 4), 16);
+    var b = parseInt(hex.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${volume / maxVolume})`;
   }
 
   getVolume() {
