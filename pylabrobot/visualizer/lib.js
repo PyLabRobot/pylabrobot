@@ -1342,12 +1342,25 @@ class Container extends Resource {
     this.material_z_thickness = material_z_thickness;
   }
 
+  static _liquidRGB = null;
+
+  static _getLiquidRGB() {
+    if (Container._liquidRGB === null) {
+      var hex = (document.getElementById("liquid_color") || {}).value || "F39C12";
+      hex = hex.replace(/^#/, "");
+      if (!/^[0-9a-fA-F]{6}$/.test(hex)) { hex = "F39C12"; }
+      Container._liquidRGB = [
+        parseInt(hex.substring(0, 2), 16),
+        parseInt(hex.substring(2, 4), 16),
+        parseInt(hex.substring(4, 6), 16),
+      ];
+    }
+    return Container._liquidRGB;
+  }
+
   static colorForVolume(volume, maxVolume) {
-    var hex = (document.getElementById("liquid_color") || {}).value || "F39C12";
-    var r = parseInt(hex.substring(0, 2), 16);
-    var g = parseInt(hex.substring(2, 4), 16);
-    var b = parseInt(hex.substring(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${volume / maxVolume})`;
+    var rgb = Container._getLiquidRGB();
+    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${volume / maxVolume})`;
   }
 
   getVolume() {

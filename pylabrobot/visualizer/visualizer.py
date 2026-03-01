@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 import time
 import webbrowser
@@ -122,7 +123,12 @@ class Visualizer:
 
     self.setup_finished = False
     self._show_machine_tools_at_start = show_machine_tools_at_start
-    self._liquid_color = liquid_color.lstrip("#")
+    color = liquid_color.strip().lstrip("#")
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+      raise ValueError(
+        f"liquid_color must be a 6-character hex string (e.g. 'F39C12'), got '{liquid_color}'"
+      )
+    self._liquid_color = color.upper()
 
     if name is not None:
       self._source_filename = name
