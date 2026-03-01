@@ -1,7 +1,6 @@
 import sys
 from abc import ABCMeta
 from collections import OrderedDict
-from string import ascii_uppercase as LETTERS
 from typing import (
   Dict,
   Generator,
@@ -16,6 +15,7 @@ from typing import (
 )
 
 import pylabrobot.utils
+from pylabrobot.resources.utils import label_to_row_index, row_index_to_label, split_identifier
 
 from .resource import Resource
 
@@ -110,8 +110,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     # validate that ordering is in the transposed Excel style notation
     for identifier in self._ordering:
-      if identifier[0] not in LETTERS or not identifier[1:].isdigit():
-        raise ValueError("Ordering must be in the transposed Excel style notation, e.g. 'A1'.")
+      _ = split_identifier(identifier)
 
   def __getitem__(
     self,
@@ -192,7 +191,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifier, tuple):
       row, column = identifier
-      identifier = LETTERS[row] + str(column + 1)  # standard transposed-Excel style notation
+      identifier = row_index_to_label(row) + str(column + 1)
     if isinstance(identifier, str):
       try:
         identifier = list(self._ordering.keys()).index(identifier)
@@ -387,16 +386,17 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     # Make a title with summary information.
     info_str = repr(self)
 
-    if self.num_items_y > len(LETTERS):
-      # TODO: This will work up to 384-well plates.
-      return info_str + " (too many rows to print)"
-
     # Calculate the maximum number of digits required for any column index.
     max_digits = len(str(self.num_items_x))
 
+    # Row label width (e.g. "A" = 1, "AF" = 2)
+    row_label_width = len(row_index_to_label(self.num_items_y - 1))
+
     # Create the header row with numbers aligned to the columns.
     # Use right-alignment specifier.
-    header_row = "    " + " ".join(f"{i+1:<{max_digits}}" for i in range(self.num_items_x))
+    header_row = " " * (row_label_width + 3) + " ".join(
+      f"{i+1:<{max_digits}}" for i in range(self.num_items_x)
+    )
 
     # Create the item grid with resource absence/presence information.
     item_grid = [
@@ -404,7 +404,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       for i in range(self.num_items_y)
     ]
     spacer = " " * max(1, max_digits)
-    item_list = [LETTERS[i] + ":  " + spacer.join(row) for i, row in enumerate(item_grid)]
+    item_list = [
+      f"{row_index_to_label(i):>{row_label_width}}:  " + spacer.join(row)
+      for i, row in enumerate(item_grid)
+    ]
     item_text = "\n".join(item_list)
 
     # Simple footer with dimensions.
@@ -440,7 +443,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def get_child_row(self, item: T) -> int:
     """Get the row of the item."""
     identifier = self.get_child_identifier(item)
-    return LETTERS.index(identifier[0])  # convert to 0-indexed
+    row_label, _ = split_identifier(identifier)
+    return label_to_row_index(row_label)
 
   def get_all_items(self) -> List[T]:
     """Get all items in the resource. Items are in a 1D list, starting from the top left and going
@@ -452,8 +456,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """Get the size of the grid from the identifiers, or raise an error if not a full grid."""
     rows_set, columns_set = set(), set()
     for identifier in identifiers:
-      rows_set.add(identifier[0])
-      columns_set.add(identifier[1:])
+      row_part, col_part = split_identifier(identifier)
+      rows_set.add(row_part)
+      columns_set.add(col_part)
 
     rows, columns = (
       sorted(list(rows_set)),
@@ -514,16 +519,16 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     Args:
       row: The row index. Either an integer starting at ``0`` or a letter
-        ``"A"``-``"P"`` (case insensitive) corresponding to ``0``-``15``.
+        label (case insensitive), e.g. ``"A"`` for row 0, ``"AA"`` for row 26.
 
     Raises:
-      ValueError: If ``row`` is a string outside ``"A"``-``"P"``.
+      ValueError: If ``row`` is out of range for this resource.
     """
 
     if isinstance(row, str):
-      letter = row.upper()
-      if letter not in LETTERS[:16]:
-        raise ValueError("Row must be between 'A' and 'P'.")
-      row = LETTERS.index(letter)
+      row = label_to_row_index(row)
+
+    if not 0 <= row < self.num_items_y:
+      raise ValueError(f"Row {row} out of range for resource with {self.num_items_y} rows.")
 
     return self[row :: self.num_items_y]

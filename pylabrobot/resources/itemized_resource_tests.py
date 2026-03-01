@@ -230,6 +230,80 @@ class TestItemizedResource(unittest.TestCase):
     )
 
 
+class TestItemizedResource1536(unittest.TestCase):
+  """Test ItemizedResource with a 1536-well plate (>26 rows)."""
+
+  plate: Plate
+
+  @classmethod
+  def setUpClass(cls) -> None:
+    cls.plate = Plate(
+      "plate_1536",
+      size_x=127.8,
+      size_y=85.5,
+      size_z=8.6,
+      ordered_items=create_ordered_items_2d(
+        Well,
+        num_items_x=48,
+        num_items_y=32,
+        dx=9.85,
+        dy=6.75,
+        dz=0.0,
+        item_dx=2.3,
+        item_dy=2.3,
+        size_x=2.3,
+        size_y=2.3,
+        size_z=8.6,
+      ),
+    )
+
+  def test_num_items(self):
+    self.assertEqual(self.plate.num_items, 1536)
+    self.assertEqual(self.plate.num_items_x, 48)
+    self.assertEqual(self.plate.num_items_y, 32)
+
+  def test_identifiers(self):
+    keys = list(self.plate._ordering.keys())
+    self.assertEqual(keys[0], "A1")
+    self.assertEqual(keys[25], "Z1")
+    self.assertEqual(keys[26], "AA1")
+    self.assertEqual(keys[31], "AF1")
+    self.assertEqual(keys[-1], "AF48")
+
+  def test_get_item_str(self):
+    self.assertEqual(self.plate.get_item("A1").name, "plate_1536_well_A1")
+    self.assertEqual(self.plate.get_item("AA1").name, "plate_1536_well_AA1")
+    self.assertEqual(self.plate.get_item("AF48").name, "plate_1536_well_AF48")
+
+  def test_get_item_tuple(self):
+    self.assertEqual(self.plate.get_item((0, 0)).name, "plate_1536_well_A1")
+    self.assertEqual(self.plate.get_item((26, 0)).name, "plate_1536_well_AA1")
+    self.assertEqual(self.plate.get_item((31, 47)).name, "plate_1536_well_AF48")
+
+  def test_row_by_str(self):
+    row_aa = self.plate.row("AA")
+    self.assertEqual(len(row_aa), 48)
+    self.assertEqual(row_aa[0].name, "plate_1536_well_AA1")
+    self.assertEqual(row_aa[47].name, "plate_1536_well_AA48")
+
+  def test_row_by_int(self):
+    row_26 = self.plate.row(26)
+    self.assertEqual(row_26[0].name, "plate_1536_well_AA1")
+
+  def test_row_out_of_range(self):
+    with self.assertRaises(ValueError):
+      self.plate.row("AG")
+    with self.assertRaises(ValueError):
+      self.plate.row(32)
+
+  def test_get_child_row(self):
+    well_aa1 = self.plate.get_item("AA1")
+    self.assertEqual(self.plate.get_child_row(well_aa1), 26)
+
+    well_af48 = self.plate.get_item("AF48")
+    self.assertEqual(self.plate.get_child_row(well_af48), 31)
+
+
 class TestItemizedResourceWithLid(unittest.TestCase):
   def setUp(self) -> None:
     self.plate = Plate(
