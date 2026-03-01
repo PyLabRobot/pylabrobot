@@ -14,7 +14,7 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.mock import patch
 
-import numpy as np  # type: ignore[import-not-found]
+import numpy as np
 
 from pylabrobot.io.sila.grpc import (
   decode_fields,

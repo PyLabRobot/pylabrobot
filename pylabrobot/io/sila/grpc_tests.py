@@ -1,3 +1,4 @@
+import base64
 import unittest
 from unittest.mock import MagicMock
 
@@ -330,8 +331,6 @@ class TestDecodeCommandConfirmation(unittest.TestCase):
 
 class TestDecodeGrpcError(unittest.TestCase):
   def test_base64_protobuf_details(self):
-    import base64
-
     # Encode a protobuf message with a string field
     proto_msg = length_delimited(1, b"Something went wrong")
     b64 = base64.b64encode(proto_msg).decode("ascii")
