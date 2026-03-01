@@ -14,9 +14,10 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.mock import patch
 
+import numpy as np  # type: ignore[import-not-found]
+
 from pylabrobot.io.sila.grpc import (
   decode_fields,
-  decode_sila_string_response,
   get_field_bytes,
   length_delimited,
   sila_string,
@@ -39,7 +40,6 @@ from pylabrobot.plate_reading.standard import ImagingMode, Objective
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
-
 
 # ---------------------------------------------------------------------------
 # Test plate fixture
@@ -197,13 +197,17 @@ def _decode_sila_string_from_request(data: bytes) -> str:
   sila_str_msg = get_field_bytes(fields, 1)
   assert sila_str_msg is not None
   inner = decode_fields(sila_str_msg)
-  return get_field_bytes(inner, 1).decode("utf-8")
+  value = get_field_bytes(inner, 1)
+  assert value is not None
+  return value.decode("utf-8")
 
 
 def _unwrap_sila_string(data: bytes) -> str:
   """Unwrap a raw SiLA String message (field 1 = utf8 bytes)."""
   fields = decode_fields(data)
-  return get_field_bytes(fields, 1).decode("utf-8")
+  value = get_field_bytes(fields, 1)
+  assert value is not None
+  return value.decode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +498,6 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
   async def test_capture_sends_correct_snap_params(self):
     """Verify SnapImages request contains the right labware + snap JSON."""
-    import numpy as np
 
     backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
@@ -527,8 +530,12 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     snap_call = channel.get_calls(f"/{_SNAP_SVC}/SnapImages")[0]
     self.assertTrue(snap_call.has_lock_metadata)
     req_fields = decode_fields(snap_call.request)
-    labware_json = json.loads(_unwrap_sila_string(get_field_bytes(req_fields, 1)))
-    snap_json = json.loads(_unwrap_sila_string(get_field_bytes(req_fields, 2)))
+    labware_bytes = get_field_bytes(req_fields, 1)
+    assert labware_bytes is not None
+    labware_json = json.loads(_unwrap_sila_string(labware_bytes))
+    snap_bytes = get_field_bytes(req_fields, 2)
+    assert snap_bytes is not None
+    snap_json = json.loads(_unwrap_sila_string(snap_bytes))
 
     # Verify labware params derived from the test plate
     dims = labware_json["LabwareDimensions"]
@@ -563,7 +570,6 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
   async def test_capture_auto_exposure_and_autofocus(self):
     """When exposure_time='auto' and focal_height='auto', verify params."""
-    import numpy as np
 
     backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
@@ -585,15 +591,17 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       column=0,
       mode=ImagingMode.DAPI,
       objective=Objective.O_4X_PL_FL,
-      exposure_time="auto",
-      focal_height="auto",
+      exposure_time="machine-auto",
+      focal_height="machine-auto",
       gain=0,
       plate=_test_plate(),
     )
 
     snap_call = channel.get_calls(f"/{_SNAP_SVC}/SnapImages")[0]
     req_fields = decode_fields(snap_call.request)
-    snap_json = json.loads(_unwrap_sila_string(get_field_bytes(req_fields, 2)))
+    snap_bytes = get_field_bytes(req_fields, 2)
+    assert snap_bytes is not None
+    snap_json = json.loads(_unwrap_sila_string(snap_bytes))
 
     self.assertTrue(snap_json["imagesChannelParameters"][0]["doAutoExposure"])
     self.assertFalse(snap_json["skipAutofocus"])
@@ -601,7 +609,6 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
   async def test_capture_observable_command_flow(self):
     """Verify the 3-step observable command protocol: start, stream, result."""
-    import numpy as np
 
     backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
@@ -653,7 +660,6 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
   async def test_capture_multi_chunk_reassembly(self):
     """Verify image data is correctly reassembled from multiple chunks."""
-    import numpy as np
 
     backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
@@ -708,7 +714,6 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
   async def test_capture_brightfield_uses_correct_illumination(self):
     """Brightfield mode uses different light_channel/excitation_source."""
-    import numpy as np
 
     backend, channel = _make_backend(
       objectives={0: Objective.O_4X_PL_FL},
@@ -738,7 +743,9 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
     snap_call = channel.get_calls(f"/{_SNAP_SVC}/SnapImages")[0]
     req_fields = decode_fields(snap_call.request)
-    snap_json = json.loads(_unwrap_sila_string(get_field_bytes(req_fields, 2)))
+    snap_bytes = get_field_bytes(req_fields, 2)
+    assert snap_bytes is not None
+    snap_json = json.loads(_unwrap_sila_string(snap_bytes))
 
     illum = snap_json["imagesChannelParameters"][0]["illuminationConfig"]
     self.assertEqual(illum["lightChannel"], 5)

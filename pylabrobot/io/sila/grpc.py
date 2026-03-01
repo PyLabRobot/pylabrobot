@@ -10,7 +10,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-  import grpc
+  import grpc  # type: ignore[import-untyped]
 except ImportError:
   grpc = None  # type: ignore[assignment]
 

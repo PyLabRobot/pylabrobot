@@ -254,7 +254,7 @@ class TestLockServerParams(unittest.TestCase):
     data = lock_server_params("my-lock", 60)
     fields = decode_fields(data)
     sila_str_field = get_field_bytes(fields, 1)
-    self.assertIsNotNone(sila_str_field)
+    assert sila_str_field is not None
     inner = decode_fields(sila_str_field)
     self.assertEqual(get_field_bytes(inner, 1), b"my-lock")
 
@@ -262,7 +262,7 @@ class TestLockServerParams(unittest.TestCase):
     data = lock_server_params("x", 120)
     fields = decode_fields(data)
     sila_int_field = get_field_bytes(fields, 2)
-    self.assertIsNotNone(sila_int_field)
+    assert sila_int_field is not None
     inner = decode_fields(sila_int_field)
     self.assertEqual(get_field_varint(inner, 1), 120)
 
@@ -272,7 +272,7 @@ class TestUnlockServerParams(unittest.TestCase):
     data = unlock_server_params("my-lock")
     fields = decode_fields(data)
     sila_str_field = get_field_bytes(fields, 1)
-    self.assertIsNotNone(sila_str_field)
+    assert sila_str_field is not None
     inner = decode_fields(sila_str_field)
     self.assertEqual(get_field_bytes(inner, 1), b"my-lock")
 
@@ -282,6 +282,7 @@ class TestMetadataLockIdentifier(unittest.TestCase):
     data = metadata_lock_identifier("lock-123")
     fields = decode_fields(data)
     sila_str_field = get_field_bytes(fields, 1)
+    assert sila_str_field is not None
     inner = decode_fields(sila_str_field)
     self.assertEqual(get_field_bytes(inner, 1), b"lock-123")
 

@@ -7,24 +7,22 @@ import logging
 import struct
 import time
 from collections import defaultdict
-from typing import Callable, Dict, Iterator, List, Optional, Tuple, TypeVar
-
-import grpc
+from typing import Callable, Dict, List, Optional, Tuple, TypeVar
 
 from pylabrobot.io.sila.grpc import (
-  command_execution_uuid as _command_execution_uuid,
-  decode_command_confirmation as _decode_command_confirmation,
-  decode_fields as _decode_fields,
-  decode_grpc_error as _decode_grpc_error,
-  decode_sila_string_response as _decode_sila_string_response,
-  get_field_bytes as _get_field_bytes,
-  get_field_varint as _get_field_varint,
-  length_delimited as _length_delimited,
-  lock_server_params as _lock_server_params,
-  metadata_lock_identifier as _metadata_lock_identifier,
-  sila_string as _sila_string,
-  unlock_server_params as _unlock_server_params,
-  varint_as_signed as _varint_as_signed,
+  command_execution_uuid,
+  decode_command_confirmation,
+  decode_fields,
+  decode_grpc_error,
+  decode_sila_string_response,
+  get_field_bytes,
+  get_field_varint,
+  length_delimited,
+  lock_server_params,
+  metadata_lock_identifier,
+  sila_string,
+  unlock_server_params,
+  varint_as_signed,
 )
 from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.plate_reading.standard import (
@@ -40,47 +38,65 @@ from pylabrobot.resources.utils import row_index_to_label
 from pylabrobot.resources.well import WellBottomType
 
 try:
-  import numpy as np
+  import grpc  # type: ignore[import-untyped]
+
+  HAS_GRPC = True
+except ImportError as e:
+  grpc = None  # type: ignore[assignment]
+  HAS_GRPC = False
+  _GRPC_IMPORT_ERROR = e
+
+try:
+  import numpy as np  # type: ignore[import-not-found]
+
+  HAS_NUMPY = True
 except ImportError:
-  np = None  # type: ignore[assignment]
+  HAS_NUMPY = False
+
+try:
+  from PIL import Image as PILImage  # type: ignore[import-not-found]
+
+  HAS_PIL = True
+except ImportError:
+  HAS_PIL = False
 
 logger = logging.getLogger(__name__)
 
 
 def _snap_images_params(labware_json: str, snap_json: str) -> bytes:
-  return _length_delimited(1, _sila_string(labware_json)) + _length_delimited(
-    2, _sila_string(snap_json)
+  return length_delimited(1, sila_string(labware_json)) + length_delimited(
+    2, sila_string(snap_json)
   )
 
 
 def _decode_intermediate_response(data: bytes) -> Tuple[bytes, Dict[str, int]]:
-  fields = _decode_fields(data)
+  fields = decode_fields(data)
 
-  binary_msg = _get_field_bytes(fields, 1)
+  binary_msg = get_field_bytes(fields, 1)
   if binary_msg is None:
     raise ValueError("No IntermediateImageData in intermediate response")
-  binary_fields = _decode_fields(binary_msg)
-  chunk_data = _get_field_bytes(binary_fields, 1)
+  binary_fields = decode_fields(binary_msg)
+  chunk_data = get_field_bytes(binary_fields, 1)
   if chunk_data is None:
     chunk_data = b""
 
-  snap_event_msg = _get_field_bytes(fields, 2)
+  snap_event_msg = get_field_bytes(fields, 2)
   if snap_event_msg is None:
     raise ValueError("No SnapEventData in intermediate response")
-  snap_event_fields = _decode_fields(snap_event_msg)
+  snap_event_fields = decode_fields(snap_event_msg)
 
-  metadata_struct_msg = _get_field_bytes(snap_event_fields, 1)
+  metadata_struct_msg = get_field_bytes(snap_event_fields, 1)
   if metadata_struct_msg is None:
     raise ValueError("No LargeBinaryPacketMetadata in SnapEventData")
-  meta_fields = _decode_fields(metadata_struct_msg)
+  meta_fields = decode_fields(metadata_struct_msg)
 
   def _extract_integer(field_num: int) -> int:
-    integer_msg = _get_field_bytes(meta_fields, field_num)
+    integer_msg = get_field_bytes(meta_fields, field_num)
     if integer_msg is None:
       return 0
-    int_fields = _decode_fields(integer_msg)
-    val = _get_field_varint(int_fields, 1)
-    return _varint_as_signed(val) if val is not None else 0
+    int_fields = decode_fields(integer_msg)
+    val = get_field_varint(int_fields, 1)
+    return varint_as_signed(val) if val is not None else 0
 
   metadata = {
     "blob_index": _extract_integer(1),
@@ -248,17 +264,14 @@ def _get_image_info(snap_event: dict) -> dict:
 
 
 def _buffer_to_ndarray(image_buffer: bytes, width: int, height: int):
-  if np is None:
+  if not HAS_NUMPY:
     raise ImportError("numpy is required for PicoBackend")
 
   if len(image_buffer) >= 4 and image_buffer[:2] in (b"II", b"MM"):
-    try:
-      from PIL import Image as PILImage
-
+    if HAS_PIL:
       img = PILImage.open(io.BytesIO(image_buffer))
       return np.array(img)
-    except ImportError:
-      logger.warning("PIL not available, attempting raw decode of TIFF buffer")
+    logger.warning("PIL not available, attempting raw decode of TIFF buffer")
 
   expected_16bit = width * height * 2
   if width > 0 and height > 0 and len(image_buffer) >= expected_16bit:
@@ -353,16 +366,22 @@ class ExperimentalPicoBackend(ImagerBackend):
     self._objectives: Dict[int, Objective] = objectives or {}
     self._filter_cubes: Dict[int, ImagingMode] = filter_cubes or {}
 
-    self._channel: Optional[grpc.Channel] = None
+    self._channel: Optional["grpc.Channel"] = None
     self._lock_id: Optional[str] = None
     self._locked = False
     self._door_open = False
 
   # -- gRPC helpers --
 
+  @property
+  def channel(self) -> "grpc.Channel":
+    if self._channel is None:
+      raise RuntimeError("Backend not set up. Call setup() first.")
+    return self._channel
+
   def _lock_metadata(self) -> List[Tuple[str, bytes]]:
     assert self._lock_id is not None
-    return [(_LOCK_META_KEY, _metadata_lock_identifier(self._lock_id))]
+    return [(_LOCK_META_KEY, metadata_lock_identifier(self._lock_id))]
 
   async def _relock(self) -> None:
     """Force-release any stale lock and re-acquire."""
@@ -385,10 +404,10 @@ class ExperimentalPicoBackend(ImagerBackend):
       try:
         return await asyncio.to_thread(fn)
       except grpc.RpcError as e:
-        if attempt == 0 and with_lock and "CommandRequiresLock" in _decode_grpc_error(e):
+        if attempt == 0 and with_lock and "CommandRequiresLock" in decode_grpc_error(e):
           await self._relock()
           continue
-        raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
+        raise RuntimeError(f"{service}/{method}: {decode_grpc_error(e)}") from e
     raise RuntimeError("unreachable")
 
   async def _call(
@@ -399,11 +418,11 @@ class ExperimentalPicoBackend(ImagerBackend):
     with_lock: bool = False,
     timeout: float = 30.0,
   ) -> bytes:
-    assert self._channel is not None
+    channel = self.channel
     metadata = self._lock_metadata() if with_lock else None
 
     def fn():
-      rpc = self._channel.unary_unary(
+      rpc = channel.unary_unary(
         f"/{service}/{method}",
         request_serializer=lambda x: x,
         response_deserializer=lambda x: x,
@@ -420,11 +439,11 @@ class ExperimentalPicoBackend(ImagerBackend):
     with_lock: bool = False,
     timeout: float = 300.0,
   ) -> List[bytes]:
-    assert self._channel is not None
+    channel = self.channel
     metadata = self._lock_metadata() if with_lock else None
 
     def fn():
-      rpc = self._channel.unary_stream(
+      rpc = channel.unary_stream(
         f"/{service}/{method}",
         request_serializer=lambda x: x,
         response_deserializer=lambda x: x,
@@ -435,14 +454,12 @@ class ExperimentalPicoBackend(ImagerBackend):
 
   async def _lock(self) -> None:
     assert self._lock_id is not None
-    await self._call(
-      _LOCK_SVC, "LockServer", _lock_server_params(self._lock_id, self._lock_timeout)
-    )
+    await self._call(_LOCK_SVC, "LockServer", lock_server_params(self._lock_id, self._lock_timeout))
     self._locked = True
 
   async def _unlock(self) -> None:
     assert self._lock_id is not None
-    await self._call(_LOCK_SVC, "UnlockServer", _unlock_server_params(self._lock_id))
+    await self._call(_LOCK_SVC, "UnlockServer", unlock_server_params(self._lock_id))
     self._locked = False
 
   async def _initialize(self) -> None:
@@ -450,17 +467,21 @@ class ExperimentalPicoBackend(ImagerBackend):
 
   async def _get_installed_objectives(self) -> List[dict]:
     raw = await self._call(_OBJ_SVC, "Get_InstalledObjectives", b"")
-    data: dict = json.loads(_decode_sila_string_response(raw))
+    data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("objectivesData", []))
 
   async def _get_installed_filter_cubes(self) -> List[dict]:
     raw = await self._call(_FC_SVC, "Get_InstalledFilterCubes", b"")
-    data: dict = json.loads(_decode_sila_string_response(raw))
+    data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("filterCubesData", []))
 
   # -- lifecycle --
 
   async def setup(self) -> None:
+    if not HAS_GRPC:
+      raise RuntimeError(
+        f"grpcio is required for the PicoBackend. Import error: {_GRPC_IMPORT_ERROR}"
+      )
     self._channel = grpc.insecure_channel(
       f"{self._host}:{self._port}",
       options=[
@@ -521,10 +542,9 @@ class ExperimentalPicoBackend(ImagerBackend):
         ``Id``, ``Description``, ``PositionLabel``
       - ``excitationSources``: list of excitation sources with ``Id``
     """
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     raw = await self._call(_INST_SVC, "Get_InstrumentConfiguration", b"")
-    data: dict = json.loads(_decode_sila_string_response(raw))
+    data: dict = json.loads(decode_sila_string_response(raw))
     return dict(data.get("InstrumentConfiguration", data))
 
   # -- door --
@@ -536,16 +556,14 @@ class ExperimentalPicoBackend(ImagerBackend):
 
   async def open_door(self) -> None:
     """Open the plate drawer."""
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     await self._initialize()
     await self._call(_HW_SVC, "OpenPlateDrawer", b"", True)
     self._door_open = True
 
   async def close_door(self) -> None:
     """Close the plate drawer."""
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     await self._initialize()
     await self._call(_HW_SVC, "ClosePlateDrawer", b"", True)
     self._door_open = False
@@ -558,19 +576,17 @@ class ExperimentalPicoBackend(ImagerBackend):
     Args:
       position: 0-indexed objective turret position.
     """
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     if self._door_open:
       raise RuntimeError("Cannot enter objective maintenance while the plate drawer is open.")
     params = json.dumps({"Index": position})
-    req = _length_delimited(1, _sila_string(params))
+    req = length_delimited(1, sila_string(params))
     await self._initialize()
     await self._call(_OBJ_SVC, "EnterObjectiveMaintenance", req, True)
 
   async def exit_objective_maintenance(self) -> None:
     """Close the objective door after swapping objectives."""
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     await self._call(_OBJ_SVC, "ExitObjectiveMaintenance", b"", True)
 
   async def get_available_objectives(self, position: int) -> List[dict]:
@@ -583,12 +599,11 @@ class ExperimentalPicoBackend(ImagerBackend):
       List of objective dicts, each with ``Id``, ``Description``, ``Magnification``,
       ``NumericalAperture``, ``PositionLabel``, ``IsCalibrated``, etc.
     """
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     params = json.dumps({"Index": position})
-    req = _length_delimited(1, _sila_string(params))
+    req = length_delimited(1, sila_string(params))
     raw = await self._call(_OBJ_SVC, "GetAvailableObjectivesForPosition", req, True)
-    data: dict = json.loads(_decode_sila_string_response(raw))
+    data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("objectives", data.get("Objectives", [])))
 
   async def get_available_filter_cubes(self) -> List[dict]:
@@ -599,10 +614,9 @@ class ExperimentalPicoBackend(ImagerBackend):
       ``PositionLabel``, ``IsCalibrated``, ``EmissionFilterPassBands``,
       ``ExcitationFilterPassBands``, etc.
     """
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     raw = await self._call(_FC_SVC, "Get_CompatibleFilterCubes", b"")
-    data: dict = json.loads(_decode_sila_string_response(raw))
+    data: dict = json.loads(decode_sila_string_response(raw))
     return list(data.get("filterCubes", data.get("FilterCubes", [])))
 
   async def change_objective(self, position: int, objective_id: str) -> None:
@@ -619,8 +633,7 @@ class ExperimentalPicoBackend(ImagerBackend):
     Raises:
       ValueError: If ``objective_id`` is not compatible with the given position.
     """
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     available = await self.get_available_objectives(position)
     valid_ids = [obj.get("Id", obj.get("id")) for obj in available]
     if objective_id not in valid_ids:
@@ -629,7 +642,7 @@ class ExperimentalPicoBackend(ImagerBackend):
         f"Valid IDs: {valid_ids}"
       )
     params = json.dumps({"Id": objective_id, "Index": position})
-    req = _length_delimited(1, _sila_string(params))
+    req = length_delimited(1, sila_string(params))
     await self._call(_OBJ_SVC, "ChangeHardware", req, True)
 
   async def change_filter_cube(self, position: int, filter_cube_id: str) -> None:
@@ -646,8 +659,7 @@ class ExperimentalPicoBackend(ImagerBackend):
     Raises:
       ValueError: If ``filter_cube_id`` is not a compatible filter cube.
     """
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
+
     available = await self.get_available_filter_cubes()
     valid_ids = [fc.get("Id", fc.get("id")) for fc in available]
     if filter_cube_id not in valid_ids:
@@ -656,7 +668,7 @@ class ExperimentalPicoBackend(ImagerBackend):
         f"Valid IDs: {valid_ids}"
       )
     params = json.dumps({"Id": filter_cube_id, "Index": position})
-    req = _length_delimited(1, _sila_string(params))
+    req = length_delimited(1, sila_string(params))
     await self._call(_FC_SVC, "ChangeHardware", req, True)
 
   # -- imaging --
@@ -673,11 +685,11 @@ class ExperimentalPicoBackend(ImagerBackend):
     confirmation_raw = await self._call(
       _SNAP_SVC, "SnapImages", request, with_lock=True, timeout=60.0
     )
-    exec_uuid = _decode_command_confirmation(confirmation_raw)
+    exec_uuid = decode_command_confirmation(confirmation_raw)
     logger.debug("SnapImages exec UUID: %s", exec_uuid[:8])
 
     # Step 2: stream intermediate responses (chunked image data)
-    uuid_request = _command_execution_uuid(exec_uuid)
+    uuid_request = command_execution_uuid(exec_uuid)
     chunks: Dict[int, Dict[int, bytes]] = defaultdict(dict)
     checksums: Dict[int, int] = {}
 
@@ -728,9 +740,6 @@ class ExperimentalPicoBackend(ImagerBackend):
     gain: Gain,
     plate: Plate,
   ) -> ImagingResult:
-    if self._channel is None:
-      raise RuntimeError("Backend not set up. Call setup() first.")
-
     if mode not in _IMAGING_MODE_MAP:
       raise ValueError(
         f"Unsupported imaging mode {mode} for Pico. " f"Supported: {list(_IMAGING_MODE_MAP.keys())}"
