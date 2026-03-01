@@ -11,8 +11,8 @@ import hashlib
 import json
 import struct
 import unittest
-from typing import Dict, List, Optional, Tuple
-from unittest.mock import MagicMock, patch
+from typing import Dict, List, Tuple
+from unittest.mock import patch
 
 from pylabrobot.io.sila.grpc import (
   decode_fields,
@@ -36,6 +36,45 @@ from pylabrobot.microscopes.molecular_devices.pico.backend import (
   _get_image_info,
 )
 from pylabrobot.plate_reading.standard import ImagingMode, Objective
+from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources.well import Well, WellBottomType
+
+
+# ---------------------------------------------------------------------------
+# Test plate fixture
+# ---------------------------------------------------------------------------
+
+
+def _test_plate() -> Plate:
+  """Create a 96-well plate with known geometry for testing.
+
+  dx/dy are LFB (left-front-bottom of well bounding box).  Pico dist2first*
+  values are center-based, so the expected centers are dx + size/2 and
+  dy + size/2:  10.9 + 3.4 = 14.3,  7.96 + 3.4 = 11.36.
+  """
+  return Plate(
+    name="test_plate",
+    size_x=127.6,
+    size_y=85.75,
+    size_z=13.83,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.9,
+      dy=7.96,
+      dz=1.5,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=6.8,
+      size_y=6.8,
+      size_z=10.67,
+      bottom_type=WellBottomType.FLAT,
+      material_z_thickness=0.17,
+      max_volume=350.0,
+    ),
+  )
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +519,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       exposure_time=15.0,  # ms
       focal_height=2.5,  # mm
       gain=0,
-      plate=MagicMock(),
+      plate=_test_plate(),
     )
 
     # Decode the SnapImages request: field 1 = SiLA String(labware JSON),
@@ -490,6 +529,26 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
     req_fields = decode_fields(snap_call.request)
     labware_json = json.loads(_unwrap_sila_string(get_field_bytes(req_fields, 1)))
     snap_json = json.loads(_unwrap_sila_string(get_field_bytes(req_fields, 2)))
+
+    # Verify labware params derived from the test plate
+    dims = labware_json["LabwareDimensions"]
+    self.assertEqual(labware_json["LabwareType"], 1)
+    self.assertAlmostEqual(labware_json["RefractionIndex"], 1.0)
+    self.assertEqual(dims["ncavities"], 96)
+    self.assertEqual(dims["nrows"], 8)
+    self.assertEqual(dims["columns"], 12)
+    self.assertAlmostEqual(dims["labware_length"], 127.6)
+    self.assertAlmostEqual(dims["labware_width"], 85.75)
+    self.assertAlmostEqual(dims["labware_height"], 13.83)
+    self.assertAlmostEqual(dims["dist2firstcol"], 14.3)
+    self.assertAlmostEqual(dims["dist2firstrow"], 11.36)
+    self.assertAlmostEqual(dims["row_distance"], 9.0)
+    self.assertAlmostEqual(dims["well2well_dist_col"], 9.0)
+    self.assertAlmostEqual(dims["bottom_thickness"], 0.17)
+    self.assertAlmostEqual(dims["bottom_length"], 6.8)
+    self.assertAlmostEqual(dims["bottom_width"], 6.8)
+    self.assertAlmostEqual(dims["volume"], 350.0)
+    self.assertFalse(dims["round_bottom"])
 
     # Verify snap params reflect our inputs
     self.assertEqual(snap_json["capturePosition"]["cavityCoordinatesIndexXy"]["Item2"], 3)  # row
@@ -529,7 +588,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       exposure_time="auto",
       focal_height="auto",
       gain=0,
-      plate=MagicMock(),
+      plate=_test_plate(),
     )
 
     snap_call = channel.get_calls(f"/{_SNAP_SVC}/SnapImages")[0]
@@ -567,7 +626,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       exposure_time=10.0,
       focal_height=1.0,
       gain=0,
-      plate=MagicMock(),
+      plate=_test_plate(),
     )
 
     # Initialize, SnapImages, SnapImages_Intermediate, SnapImages_Result
@@ -641,7 +700,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       exposure_time=1.0,
       focal_height=0.5,
       gain=0,
-      plate=MagicMock(),
+      plate=_test_plate(),
     )
 
     self.assertEqual(len(result.images), 1)
@@ -674,7 +733,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
       exposure_time=10.0,
       focal_height=1.0,
       gain=0,
-      plate=MagicMock(),
+      plate=_test_plate(),
     )
 
     snap_call = channel.get_calls(f"/{_SNAP_SVC}/SnapImages")[0]

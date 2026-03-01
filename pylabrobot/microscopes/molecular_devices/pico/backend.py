@@ -36,6 +36,8 @@ from pylabrobot.plate_reading.standard import (
   Objective,
 )
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.utils import row_index_to_label
+from pylabrobot.resources.well import WellBottomType
 
 try:
   import numpy as np
@@ -95,27 +97,61 @@ def _decode_intermediate_response(data: bytes) -> Tuple[bytes, Dict[str, int]]:
 # ---------------------------------------------------------------------------
 
 
-def _default_labware_params() -> dict:
+def _labware_params_from_plate(plate: Plate) -> dict:
+  """Derive Pico labware JSON from a PLR :class:`Plate`.
+
+  Inspects well positions and geometry so the caller doesn't have to supply a
+  hand-crafted dict.
+  """
+  well_a1 = plate.get_well("A1")
+  nrows = plate.num_items_y
+  ncols = plate.num_items_x
+
+  col_spacing = plate.item_dx if ncols > 1 else 9.0
+  row_spacing = plate.item_dy if nrows > 1 else 9.0
+
+  a1_loc = well_a1.location
+  assert a1_loc is not None, "Well A1 must have a location"
+  well_size_x = well_a1.get_size_x()
+  well_size_y = well_a1.get_size_y()
+
+  # PLR locations are Left-Front-Bottom of the well bounding box; Pico
+  # dist2first* are measured to the well center.
+  dist2firstcol = a1_loc.x + well_size_x / 2.0
+
+  last_row_label = row_index_to_label(nrows - 1)
+  last_row_well = plate.get_well(f"{last_row_label}1")
+  last_row_loc = last_row_well.location
+  assert last_row_loc is not None, f"Well {last_row_label}1 must have a location"
+  dist2firstrow = last_row_loc.y + well_size_y / 2.0
+
+  bottom_length = well_size_x
+  bottom_width = well_size_y
+  volume = well_a1.max_volume or 350.0
+  bottom_thickness = well_a1.material_z_thickness
+  bottom_elevation = a1_loc.z or 0.0
+  round_bottom = well_a1.bottom_type in (WellBottomType.U, WellBottomType.V)
+
   return {
     "LabwareType": 1,
     "LabwareDimensions": {
-      "ncavities": 96,
-      "nrows": 8,
-      "columns": 12,
-      "labware_length": 127.6,
-      "labware_width": 85.75,
-      "labware_height": 13.83,
-      "dist2firstcol": 14.3,
-      "dist2firstrow": 11.36,
-      "row_distance": 9.0,
-      "well2well_dist_col": 9.0,
-      "bottom_elevation": 11.93,
-      "bottom_thickness": 0.17,
+      "ncavities": nrows * ncols,
+      "nrows": nrows,
+      "columns": ncols,
+      "labware_length": plate.get_size_x(),
+      "labware_width": plate.get_size_y(),
+      "labware_height": plate.get_size_z(),
+      "dist2firstcol": dist2firstcol,
+      "dist2firstrow": dist2firstrow,
+      "row_distance": row_spacing,
+      "well2well_dist_col": col_spacing,
+      "bottom_elevation": bottom_elevation,
+      "bottom_thickness": bottom_thickness,
       "bottom_clearance": 1.73,
-      "bottom_length": 6.8,
-      "bottom_width": 6.8,
-      "round_bottom": False,
-      "volume": 350.0,
+      "bottom_length": bottom_length,
+      "bottom_width": bottom_width,
+      "round_bottom": round_bottom,
+      "volume": volume,
     },
     "RefractionIndex": 1.0,
   }
@@ -280,8 +316,6 @@ class PicoBackend(ImagerBackend):
     port: gRPC port (default 8091).
     lock_timeout: Instrument lock timeout in seconds. The lock auto-releases if
       no commands are sent within this period.
-    labware_params: Pico labware parameters dict. If ``None``, defaults for a
-      96-well glass-bottom plate (CellVis P96-1.5H-N) are used.
     objectives: Mapping from 0-indexed turret position to :class:`Objective`.
       Applied during :meth:`setup` via :meth:`change_objective`. Not all
       positions need to be specified.
@@ -296,7 +330,6 @@ class PicoBackend(ImagerBackend):
     host: str,
     port: int = 8091,
     lock_timeout: int = 3600,
-    labware_params: Optional[dict] = None,
     objectives: Optional[Dict[int, Objective]] = None,
     filter_cubes: Optional[Dict[int, ImagingMode]] = None,
   ):
@@ -304,7 +337,6 @@ class PicoBackend(ImagerBackend):
     self._host = host
     self._port = port
     self._lock_timeout = lock_timeout
-    self._labware_params = labware_params or _default_labware_params()
 
     for pos, obj in (objectives or {}).items():
       if obj not in _OBJECTIVE_MAP:
@@ -396,7 +428,9 @@ class PicoBackend(ImagerBackend):
 
   async def _lock(self) -> None:
     assert self._lock_id is not None
-    await self._call(_LOCK_SVC, "LockServer", _lock_server_params(self._lock_id, self._lock_timeout))
+    await self._call(
+      _LOCK_SVC, "LockServer", _lock_server_params(self._lock_id, self._lock_timeout)
+    )
     self._locked = True
 
   async def _unlock(self) -> None:
@@ -742,7 +776,8 @@ class PicoBackend(ImagerBackend):
     snap_params["skipAutofocus"] = skip_autofocus
     snap_params["focusSettings"]["baseZPositionUm"] = base_z_um
 
-    images = await self._snap_images(self._labware_params, snap_params)
+    labware_params = _labware_params_from_plate(plate)
+    images = await self._snap_images(labware_params, snap_params)
 
     result_images: List = []
     actual_exposure_us = exposure_us
