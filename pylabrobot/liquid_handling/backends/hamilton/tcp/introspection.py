@@ -321,7 +321,7 @@ class MethodInfo:
     else:
       return_str = "void"
 
-    return f"{self.name}({param_str}) -> {return_str}"
+    return f"[{self.interface_id}:{self.method_id}] {self.name}({param_str}) -> {return_str}"
 
 
 @dataclass
