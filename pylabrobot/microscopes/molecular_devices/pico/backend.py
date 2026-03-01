@@ -332,17 +332,17 @@ class PicoBackend(ImagerBackend):
     assert self._lock_id is not None
     return [(_LOCK_META_KEY, _metadata_lock_identifier(self._lock_id))]
 
-  def _relock(self) -> None:
+  async def _relock(self) -> None:
     """Force-release any stale lock and re-acquire."""
     try:
-      self._unlock()
+      await self._unlock()
     except (grpc.RpcError, RuntimeError):
       pass
-    self._lock()
+    await self._lock()
 
   _T = TypeVar("_T")
 
-  def _rpc(
+  async def _rpc(
     self,
     service: str,
     method: str,
@@ -354,15 +354,15 @@ class PicoBackend(ImagerBackend):
     for attempt in range(2):
       metadata = self._lock_metadata() if with_lock else None
       try:
-        return rpc(request, metadata=metadata, timeout=timeout)
+        return await asyncio.to_thread(rpc, request, metadata=metadata, timeout=timeout)
       except grpc.RpcError as e:
         if attempt == 0 and with_lock and "CommandRequiresLock" in _decode_grpc_error(e):
-          self._relock()
+          await self._relock()
           continue
         raise RuntimeError(f"{service}/{method}: {_decode_grpc_error(e)}") from e
     raise AssertionError("unreachable")
 
-  def _call(
+  async def _call(
     self,
     service: str,
     method: str,
@@ -376,9 +376,9 @@ class PicoBackend(ImagerBackend):
       request_serializer=lambda x: x,
       response_deserializer=lambda x: x,
     )
-    return self._rpc(service, method, rpc, request, with_lock, timeout)
+    return await self._rpc(service, method, rpc, request, with_lock, timeout)
 
-  def _stream(
+  async def _stream(
     self,
     service: str,
     method: str,
@@ -392,28 +392,28 @@ class PicoBackend(ImagerBackend):
       request_serializer=lambda x: x,
       response_deserializer=lambda x: x,
     )
-    return self._rpc(service, method, rpc, request, with_lock, timeout)
+    return await self._rpc(service, method, rpc, request, with_lock, timeout)
 
-  def _lock(self) -> None:
+  async def _lock(self) -> None:
     assert self._lock_id is not None
-    self._call(_LOCK_SVC, "LockServer", _lock_server_params(self._lock_id, self._lock_timeout))
+    await self._call(_LOCK_SVC, "LockServer", _lock_server_params(self._lock_id, self._lock_timeout))
     self._locked = True
 
-  def _unlock(self) -> None:
+  async def _unlock(self) -> None:
     assert self._lock_id is not None
-    self._call(_LOCK_SVC, "UnlockServer", _unlock_server_params(self._lock_id))
+    await self._call(_LOCK_SVC, "UnlockServer", _unlock_server_params(self._lock_id))
     self._locked = False
 
-  def _initialize(self) -> None:
-    self._call(_INST_SVC, "Initialize", b"", with_lock=True)
+  async def _initialize(self) -> None:
+    await self._call(_INST_SVC, "Initialize", b"", with_lock=True)
 
   async def _get_installed_objectives(self) -> List[dict]:
-    raw = await asyncio.to_thread(self._call, _OBJ_SVC, "Get_InstalledObjectives", b"")
+    raw = await self._call(_OBJ_SVC, "Get_InstalledObjectives", b"")
     data: dict = json.loads(_decode_sila_string_response(raw))
     return list(data.get("objectivesData", []))
 
   async def _get_installed_filter_cubes(self) -> List[dict]:
-    raw = await asyncio.to_thread(self._call, _FC_SVC, "Get_InstalledFilterCubes", b"")
+    raw = await self._call(_FC_SVC, "Get_InstalledFilterCubes", b"")
     data: dict = json.loads(_decode_sila_string_response(raw))
     return list(data.get("filterCubesData", []))
 
@@ -431,11 +431,11 @@ class PicoBackend(ImagerBackend):
 
     # Try to unlock a stale lock from a previous session that didn't clean up.
     try:
-      await asyncio.to_thread(self._unlock)
+      await self._unlock()
     except (grpc.RpcError, RuntimeError):
       pass
 
-    await asyncio.to_thread(self._lock)
+    await self._lock()
 
     installed_obj = await self._get_installed_objectives()
     num_obj = len(installed_obj)
@@ -461,7 +461,7 @@ class PicoBackend(ImagerBackend):
     if self._channel is not None:
       if self._locked:
         try:
-          await asyncio.to_thread(self._unlock)
+          await self._unlock()
         except (grpc.RpcError, RuntimeError) as e:
           logger.warning("PicoBackend: unlock failed during stop: %s", e)
       self._channel.close()
@@ -482,7 +482,7 @@ class PicoBackend(ImagerBackend):
     """
     if self._channel is None:
       raise RuntimeError("Backend not set up. Call setup() first.")
-    raw = await asyncio.to_thread(self._call, _INST_SVC, "Get_InstrumentConfiguration", b"")
+    raw = await self._call(_INST_SVC, "Get_InstrumentConfiguration", b"")
     data: dict = json.loads(_decode_sila_string_response(raw))
     return dict(data.get("InstrumentConfiguration", data))
 
@@ -497,16 +497,16 @@ class PicoBackend(ImagerBackend):
     """Open the plate drawer."""
     if self._channel is None:
       raise RuntimeError("Backend not set up. Call setup() first.")
-    await asyncio.to_thread(self._initialize)
-    await asyncio.to_thread(self._call, _HW_SVC, "OpenPlateDrawer", b"", True)
+    await self._initialize()
+    await self._call(_HW_SVC, "OpenPlateDrawer", b"", True)
     self._door_open = True
 
   async def close_door(self) -> None:
     """Close the plate drawer."""
     if self._channel is None:
       raise RuntimeError("Backend not set up. Call setup() first.")
-    await asyncio.to_thread(self._initialize)
-    await asyncio.to_thread(self._call, _HW_SVC, "ClosePlateDrawer", b"", True)
+    await self._initialize()
+    await self._call(_HW_SVC, "ClosePlateDrawer", b"", True)
     self._door_open = False
 
   # -- objective maintenance --
@@ -523,14 +523,14 @@ class PicoBackend(ImagerBackend):
       raise RuntimeError("Cannot enter objective maintenance while the plate drawer is open.")
     params = json.dumps({"Index": position})
     req = _length_delimited(1, _sila_string(params))
-    await asyncio.to_thread(self._initialize)
-    await asyncio.to_thread(self._call, _OBJ_SVC, "EnterObjectiveMaintenance", req, True)
+    await self._initialize()
+    await self._call(_OBJ_SVC, "EnterObjectiveMaintenance", req, True)
 
   async def exit_objective_maintenance(self) -> None:
     """Close the objective door after swapping objectives."""
     if self._channel is None:
       raise RuntimeError("Backend not set up. Call setup() first.")
-    await asyncio.to_thread(self._call, _OBJ_SVC, "ExitObjectiveMaintenance", b"", True)
+    await self._call(_OBJ_SVC, "ExitObjectiveMaintenance", b"", True)
 
   async def get_available_objectives(self, position: int) -> List[dict]:
     """Query which objectives are compatible with a given turret position.
@@ -546,9 +546,7 @@ class PicoBackend(ImagerBackend):
       raise RuntimeError("Backend not set up. Call setup() first.")
     params = json.dumps({"Index": position})
     req = _length_delimited(1, _sila_string(params))
-    raw = await asyncio.to_thread(
-      self._call, _OBJ_SVC, "GetAvailableObjectivesForPosition", req, True
-    )
+    raw = await self._call(_OBJ_SVC, "GetAvailableObjectivesForPosition", req, True)
     data: dict = json.loads(_decode_sila_string_response(raw))
     return list(data.get("objectives", data.get("Objectives", [])))
 
@@ -562,7 +560,7 @@ class PicoBackend(ImagerBackend):
     """
     if self._channel is None:
       raise RuntimeError("Backend not set up. Call setup() first.")
-    raw = await asyncio.to_thread(self._call, _FC_SVC, "Get_CompatibleFilterCubes", b"")
+    raw = await self._call(_FC_SVC, "Get_CompatibleFilterCubes", b"")
     data: dict = json.loads(_decode_sila_string_response(raw))
     return list(data.get("filterCubes", data.get("FilterCubes", [])))
 
@@ -591,7 +589,7 @@ class PicoBackend(ImagerBackend):
       )
     params = json.dumps({"Id": objective_id, "Index": position})
     req = _length_delimited(1, _sila_string(params))
-    await asyncio.to_thread(self._call, _OBJ_SVC, "ChangeHardware", req, True)
+    await self._call(_OBJ_SVC, "ChangeHardware", req, True)
 
   async def change_filter_cube(self, position: int, filter_cube_id: str) -> None:
     """Register a new filter cube in a filter wheel position.
@@ -618,20 +616,22 @@ class PicoBackend(ImagerBackend):
       )
     params = json.dumps({"Id": filter_cube_id, "Index": position})
     req = _length_delimited(1, _sila_string(params))
-    await asyncio.to_thread(self._call, _FC_SVC, "ChangeHardware", req, True)
+    await self._call(_FC_SVC, "ChangeHardware", req, True)
 
   # -- imaging --
 
-  def _snap_images(self, labware_params: dict, snap_params: dict) -> List[dict]:
-    """Acquire images. Runs the SiLA 2 Observable Command flow synchronously."""
+  async def _snap_images(self, labware_params: dict, snap_params: dict) -> List[dict]:
+    """Acquire images via the SiLA 2 Observable Command flow."""
     labware_json = json.dumps(labware_params)
     snap_json = json.dumps(snap_params)
 
-    self._initialize()
+    await self._initialize()
 
     # Step 1: launch SnapImages command
     request = _snap_images_params(labware_json, snap_json)
-    confirmation_raw = self._call(_SNAP_SVC, "SnapImages", request, with_lock=True, timeout=60.0)
+    confirmation_raw = await self._call(
+      _SNAP_SVC, "SnapImages", request, with_lock=True, timeout=60.0
+    )
     exec_uuid = _decode_command_confirmation(confirmation_raw)
     logger.debug("SnapImages exec UUID: %s", exec_uuid[:8])
 
@@ -640,7 +640,7 @@ class PicoBackend(ImagerBackend):
     chunks: Dict[int, Dict[int, bytes]] = defaultdict(dict)
     checksums: Dict[int, int] = {}
 
-    for response_raw in self._stream(
+    for response_raw in await self._stream(
       _SNAP_SVC,
       "SnapImages_Intermediate",
       uuid_request,
@@ -652,7 +652,7 @@ class PicoBackend(ImagerBackend):
       checksums[meta["blob_index"]] = meta["blob_checksum"]
 
     # Step 3: get result (signals command completion)
-    self._call(_SNAP_SVC, "SnapImages_Result", uuid_request, with_lock=True, timeout=60.0)
+    await self._call(_SNAP_SVC, "SnapImages_Result", uuid_request, with_lock=True, timeout=60.0)
 
     # Step 4: reassemble blobs and verify checksums
     images = []
@@ -742,7 +742,7 @@ class PicoBackend(ImagerBackend):
     snap_params["skipAutofocus"] = skip_autofocus
     snap_params["focusSettings"]["baseZPositionUm"] = base_z_um
 
-    images = await asyncio.to_thread(self._snap_images, self._labware_params, snap_params)
+    images = await self._snap_images(self._labware_params, snap_params)
 
     result_images: List = []
     actual_exposure_us = exposure_us
