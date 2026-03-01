@@ -30,7 +30,7 @@ from pylabrobot.microscopes.molecular_devices.pico.backend import (
   _LOCK_SVC,
   _OBJ_SVC,
   _SNAP_SVC,
-  PicoBackend,
+  ExperimentalPicoBackend,
   _decode_intermediate_response,
   _extract_image_buffer,
   _get_image_info,
@@ -175,9 +175,9 @@ def _make_backend(
   objectives=None,
   filter_cubes=None,
   lock_timeout=3600,
-) -> Tuple[PicoBackend, _MockChannel]:
+) -> Tuple[ExperimentalPicoBackend, _MockChannel]:
   """Create a PicoBackend with a mock channel, bypassing setup()."""
-  backend = PicoBackend(
+  backend = ExperimentalPicoBackend(
     host="127.0.0.1",
     port=8091,
     lock_timeout=lock_timeout,
@@ -214,7 +214,7 @@ def _unwrap_sila_string(data: bytes) -> str:
 class TestSetup(unittest.IsolatedAsyncioTestCase):
   async def test_setup_sends_correct_sequence(self):
     """setup() with no objectives/filter_cubes: unlock stale, lock, query hardware."""
-    backend = PicoBackend(host="127.0.0.1", lock_timeout=120)
+    backend = ExperimentalPicoBackend(host="127.0.0.1", lock_timeout=120)
     channel = _MockChannel()
 
     channel.set_response(f"/{_LOCK_SVC}/UnlockServer", b"")
@@ -245,7 +245,7 @@ class TestSetup(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_configures_objectives_and_filter_cubes(self):
     """When objectives/filter_cubes are specified, setup() calls ChangeHardware."""
-    backend = PicoBackend(
+    backend = ExperimentalPicoBackend(
       host="127.0.0.1",
       objectives={0: Objective.O_4X_PL_FL},
       filter_cubes={0: ImagingMode.DAPI},

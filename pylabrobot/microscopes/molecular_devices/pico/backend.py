@@ -305,7 +305,7 @@ _OBJECTIVE_MAP: Dict[Objective, str] = {
 }
 
 
-class PicoBackend(ImagerBackend):
+class ExperimentalPicoBackend(ImagerBackend):
   """Backend for Molecular Devices ImageXpress Pico automated microscope.
 
   Communicates with the instrument via SiLA 2 over gRPC. All services (imaging,
