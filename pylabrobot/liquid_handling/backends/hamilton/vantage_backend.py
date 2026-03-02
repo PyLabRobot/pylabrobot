@@ -34,6 +34,7 @@ from pylabrobot.resources import (
   Resource,
   Tip,
   TipRack,
+  Trash,
   Well,
 )
 from pylabrobot.resources.hamilton import (
@@ -487,40 +488,32 @@ class VantageBackend(HamiltonLiquidHandler):
     tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
     ttti = [await self.get_or_assign_tip_type_index(tip) for tip in tips]
 
+    collar_height = tips[0].collar_height
+    if any(tip.collar_height != collar_height for tip in tips):
+      raise ValueError("Cannot mix tips with different collar heights.")
+
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
-    # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
-      max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      max_tip_length -= 2
+    return await self.pip_tip_pick_up(
+      x_position=x_positions,
+      y_position=y_positions,
+      tip_pattern=tip_pattern,
+      tip_type=ttti,
+      begin_z_deposit_position=[round((max_z + collar_height) * 10)] * len(ops),
+      end_z_deposit_position=[round(max_z * 10)] * len(ops),
+      minimal_traverse_height_at_begin_of_command=[
+        round(th * 10)
+        for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+      ]
+      * len(ops),
+      minimal_height_at_command_end=[
+        round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+      ]
+      * len(ops),
+      tip_handling_method=[1 for _ in tips],
+      blow_out_air_volume=[0] * len(ops),
+    )
 
-    try:
-      return await self.pip_tip_pick_up(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=tip_pattern,
-        tip_type=ttti,
-        begin_z_deposit_position=[round((max_z + max_total_tip_length) * 10)] * len(ops),
-        end_z_deposit_position=[round((max_z + max_tip_length) * 10)] * len(ops),
-        minimal_traverse_height_at_begin_of_command=[
-          round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-        ]
-        * len(ops),
-        minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-        ]
-        * len(ops),
-        tip_handling_method=[1 for _ in tips],  # always appears to be 1 # tip.pickup_method.value
-        blow_out_air_volume=[0] * len(ops),  # Why is this here? Who knows.
-      )
-    except Exception as e:
-      raise e
-
-  # @need_iswap_parked
   async def drop_tips(
     self,
     ops: List[Drop],
@@ -532,31 +525,28 @@ class VantageBackend(HamiltonLiquidHandler):
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
+    tips = [cast(HamiltonTip, op.tip) for op in ops]
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
+    tip_length = max(tip.total_tip_length - tip.collar_height for tip in tips)
 
-    try:
-      return await self.pip_tip_discard(
-        x_position=x_positions,
-        y_position=y_positions,
-        tip_pattern=channels_involved,
-        begin_z_deposit_position=[round((max_z + 10) * 10)] * len(ops),  # +10
-        end_z_deposit_position=[round(max_z * 10)] * len(ops),
-        minimal_traverse_height_at_begin_of_command=[
-          round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
-        ]
-        * len(ops),
-        minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
-        ]
-        * len(ops),
-        tip_handling_method=[0 for _ in ops],  # Always appears to be 0, even in trash.
-        # tip_handling_method=[TipDropMethod.DROP.value if isinstance(op.resource, TipSpot) \
-        #                      else TipDropMethod.PLACE_SHIFT.value for op in ops],
-        TODO_TR_2=0,
-      )
-    except Exception as e:
-      raise e
+    return await self.pip_tip_discard(
+      x_position=x_positions,
+      y_position=y_positions,
+      tip_pattern=channels_involved,
+      begin_z_deposit_position=[round((max_z - tip_length + 10) * 10)] * len(ops),
+      end_z_deposit_position=[round((max_z - tip_length) * 10)] * len(ops),
+      minimal_traverse_height_at_begin_of_command=[
+        round(th * 10)
+        for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+      ]
+      * len(ops),
+      minimal_height_at_command_end=[
+        round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+      ]
+      * len(ops),
+      tip_handling_method=[0 for _ in ops],
+      TODO_TR_2=0,
+    )
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """Assert that resources are in a valid location for pipetting."""

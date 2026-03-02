@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
 from typing import Callable, Optional
 
 from pylabrobot.resources.volume_tracker import VolumeTracker
 
 
-@dataclass
 class Tip:
   """A single tip.
 
@@ -16,16 +14,26 @@ class Tip:
     total_tip_length: total length of the tip, in in mm
     maximal_volume: maximal volume of the tip, in ul
     fitting_depth: the overlap between the tip and the pipette, in mm
+    collar_height: the height of the collar, in mm
     name: optional identifier for this tip
   """
 
-  has_filter: bool
-  total_tip_length: float
-  maximal_volume: float
-  fitting_depth: float
-  name: Optional[str] = None
+  def __init__(
+    self,
+    has_filter: bool,
+    total_tip_length: float,
+    maximal_volume: float,
+    fitting_depth: float,
+    collar_height: Optional[float] = None,
+    name: Optional[str] = None,
+  ):
+    self.has_filter = has_filter
+    self.total_tip_length = total_tip_length
+    self.maximal_volume = maximal_volume
+    self.fitting_depth = fitting_depth
+    self._collar_height = collar_height
+    self.name = name
 
-  def __post_init__(self):
     if self.name is None:
       warnings.warn(
         "Creating a Tip without a name is deprecated. "
@@ -45,7 +53,19 @@ class Tip:
       "has_filter": self.has_filter,
       "maximal_volume": self.maximal_volume,
       "fitting_depth": self.fitting_depth,
+      "collar_height": self._collar_height,
     }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> "Tip":
+    return cls(
+      has_filter=data["has_filter"],
+      total_tip_length=data["total_tip_length"],
+      maximal_volume=data["maximal_volume"],
+      fitting_depth=data["fitting_depth"],
+      collar_height=data.get("collar_height"),
+      name=data.get("name"),
+    )
 
   def __hash__(self):
     return hash(
@@ -54,6 +74,7 @@ class Tip:
         self.total_tip_length,
         self.maximal_volume,
         self.fitting_depth,
+        self._collar_height,
       )
     )
 
@@ -66,7 +87,15 @@ class Tip:
       and self.total_tip_length == other.total_tip_length
       and self.maximal_volume == other.maximal_volume
       and self.fitting_depth == other.fitting_depth
+      and self._collar_height == other._collar_height
     )
+
+  @property
+  def collar_height(self) -> float:
+    """Return collar_height, raising if it is None."""
+    if self._collar_height is None:
+      raise ValueError(f"collar_height is not defined for this tip: {self!r}")
+    return self._collar_height
 
 
 TipCreator = Callable[[str], Tip]
