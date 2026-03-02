@@ -1,3 +1,4 @@
+# mypy: disable-error-code="union-attr,assignment,arg-type,attr-defined"
 """Mock FTDI IO for EL406 testing."""
 
 import asyncio

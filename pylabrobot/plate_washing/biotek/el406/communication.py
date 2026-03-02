@@ -13,15 +13,16 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from pylabrobot.io.binary import Reader
 
+from .error_codes import get_error_message
+from .errors import EL406CommunicationError, EL406DeviceError
+from .protocol import build_framed_message
+
 LONG_READ_TIMEOUT = 120.0  # seconds, for long operations (wash cycles can take >30s)
 
 STATE_INITIAL = 1
 STATE_RUNNING = 2
 STATE_PAUSED = 3
 STATE_STOPPED = 4
-from .error_codes import get_error_message
-from .errors import EL406CommunicationError, EL406DeviceError
-from .protocol import build_framed_message
 
 if TYPE_CHECKING:
   from pylabrobot.io.ftdi import FTDI
@@ -57,7 +58,7 @@ class EL406CommunicationMixin:
 
   io: FTDI | None
   timeout: float
-  _command_lock: asyncio.Lock
+  _command_lock: asyncio.Lock | None
 
   async def _write_to_device(self, data: bytes) -> None:
     """Write bytes to the FTDI device, wrapping errors.
@@ -228,7 +229,7 @@ class EL406CommunicationMixin:
     Raises:
       TimeoutError: If timeout waiting for response.
     """
-    if self.io is None:
+    if self.io is None or self._command_lock is None:
       raise RuntimeError("Device not initialized")
 
     if timeout is None:
@@ -296,7 +297,7 @@ class EL406CommunicationMixin:
       TimeoutError: If timeout waiting for ACK or completion.
       RuntimeError: If device rejects command (NAK).
     """
-    if self.io is None:
+    if self.io is None or self._command_lock is None:
       raise RuntimeError("Device not initialized")
 
     if timeout is None:
@@ -356,7 +357,7 @@ class EL406CommunicationMixin:
       RuntimeError: If device not initialized or response invalid.
       TimeoutError: If timeout waiting for response.
     """
-    if self.io is None:
+    if self.io is None or self._command_lock is None:
       raise RuntimeError("Device not initialized")
 
     if timeout is None:

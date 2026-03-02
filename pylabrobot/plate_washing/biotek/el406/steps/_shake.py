@@ -13,6 +13,7 @@ from pylabrobot.resources import Plate
 
 from ..helpers import plate_to_wire_byte
 from ..protocol import build_framed_message
+from ._base import EL406StepsBaseMixin
 
 INTENSITY_TO_BYTE: dict[str, int] = {
   "Variable": 0x01,
@@ -20,7 +21,6 @@ INTENSITY_TO_BYTE: dict[str, int] = {
   "Medium": 0x03,
   "Fast": 0x04,
 }
-from ._base import EL406StepsBaseMixin
 
 logger = logging.getLogger(__name__)
 

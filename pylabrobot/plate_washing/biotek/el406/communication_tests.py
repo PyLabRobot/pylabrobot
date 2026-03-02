@@ -1,11 +1,6 @@
 # mypy: disable-error-code="union-attr,assignment,arg-type"
 """Tests for BioTek EL406 communication functionality."""
 
-import unittest
-
-from pylabrobot.plate_washing.biotek.el406 import (
-  ExperimentalBioTekEL406Backend,
-)
 from pylabrobot.plate_washing.biotek.el406.mock_tests import EL406TestCase, MockFTDI
 
 

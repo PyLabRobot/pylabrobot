@@ -6,7 +6,8 @@ Sub-mixins inherit from this class so they can reference
 
 from __future__ import annotations
 
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,7 +27,6 @@ class EL406StepsBaseMixin:
       timeout: float | None = None,
     ) -> bytes: ...
 
-    def batch(
-      self,
-      plate: Plate = ...,
-    ) -> AbstractAsyncContextManager[None]: ...
+    @asynccontextmanager
+    async def batch(self, plate: Plate) -> AsyncIterator[None]:
+      yield

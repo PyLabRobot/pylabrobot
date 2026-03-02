@@ -58,7 +58,7 @@ class TestEL406BackendSerialization(unittest.TestCase):
     backend = ExperimentalBioTekEL406Backend(timeout=30.0)
     serialized = backend.serialize()
 
-    self.assertEqual(serialized["type"], "BioTekEL406Backend")
+    self.assertEqual(serialized["type"], "ExperimentalBioTekEL406Backend")
     self.assertEqual(serialized["timeout"], 30.0)
 
   def test_init_without_ftdi_available(self):

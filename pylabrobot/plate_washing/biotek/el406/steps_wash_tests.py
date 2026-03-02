@@ -11,7 +11,6 @@ from pylabrobot.plate_washing.biotek.el406.mock_tests import (
   PT1536,
   PT1536F,
   EL406TestCase,
-  MockFTDI,
 )
 
 
