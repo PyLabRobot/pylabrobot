@@ -257,9 +257,9 @@ class ByonoyAbsorbance96AutomateBackend(_ByonoyBase):
       wells: Subset of wells to return. If omitted, all 96 wells are returned.
     """
 
-    assert (
-      wavelength in self.available_wavelengths
-    ), f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
+    assert wavelength in self.available_wavelengths, (
+      f"Wavelength {wavelength} nm not in available wavelengths {self.available_wavelengths}."
+    )
 
     rows = await self._run_abs_measurement(
       signal_wl=wavelength,
