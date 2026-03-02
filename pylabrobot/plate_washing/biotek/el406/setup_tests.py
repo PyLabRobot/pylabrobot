@@ -4,8 +4,8 @@
 import unittest
 
 from pylabrobot.plate_washing.biotek.el406 import (
-  ExperimentalBioTekEL406Backend,
   EL406CommunicationError,
+  ExperimentalBioTekEL406Backend,
 )
 from pylabrobot.plate_washing.biotek.el406.mock_tests import EL406TestCase, MockFTDI
 

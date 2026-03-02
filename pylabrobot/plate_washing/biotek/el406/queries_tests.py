@@ -8,10 +8,10 @@ import unittest
 
 # Import the backend module
 from pylabrobot.plate_washing.biotek.el406 import (
-  ExperimentalBioTekEL406Backend,
   EL406Sensor,
   EL406SyringeManifold,
   EL406WasherManifold,
+  ExperimentalBioTekEL406Backend,
 )
 from pylabrobot.plate_washing.biotek.el406.mock_tests import EL406TestCase, MockFTDI
 

@@ -2,11 +2,11 @@
 """Tests for BioTek EL406 action methods."""
 
 from pylabrobot.plate_washing.biotek.el406 import (
-  ExperimentalBioTekEL406Backend,
   EL406Motor,
   EL406MotorHomeType,
   EL406StepType,
   EL406WasherManifold,
+  ExperimentalBioTekEL406Backend,
 )
 from pylabrobot.plate_washing.biotek.el406.mock_tests import EL406TestCase
 
