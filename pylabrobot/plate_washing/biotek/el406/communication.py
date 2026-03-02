@@ -81,14 +81,14 @@ class EL406CommunicationMixin:
 
     Args:
       timeout: Total timeout budget in seconds.
-      t0: Start timestamp (from ``time.time()``).
+      t0: Start timestamp (from ``time.monotonic()``).
 
     Raises:
       RuntimeError: If device sends NAK.
       TimeoutError: If no ACK within timeout.
     """
     assert self.io is not None
-    while time.time() - t0 < timeout:
+    while time.monotonic() - t0 < timeout:
       byte = await self.io.read(1)
       if byte:
         if byte[0] == 0x15:  # NAK
@@ -107,14 +107,14 @@ class EL406CommunicationMixin:
     Args:
       count: Number of bytes to read.
       timeout: Total timeout budget in seconds.
-      t0: Start timestamp (from ``time.time()``).
+      t0: Start timestamp (from ``time.monotonic()``).
 
     Returns:
       Bytes read (may be shorter than *count* if timeout is reached).
     """
     assert self.io is not None
     buf = b""
-    while len(buf) < count and time.time() - t0 < timeout:
+    while len(buf) < count and time.monotonic() - t0 < timeout:
       chunk = await self.io.read(count - len(buf))
       if chunk:
         buf += chunk
@@ -252,11 +252,11 @@ class EL406CommunicationMixin:
       logger.debug("Sent framed: %s", framed_message.hex())
 
       # Read full response: ACK + 11-byte header + variable data
-      await self._wait_for_ack(timeout, time.time())
+      await self._wait_for_ack(timeout, time.monotonic())
       result = bytes([0x06])
 
       # Fresh timestamp after ACK — header + data share a single timeout budget.
-      t0 = time.time()
+      t0 = time.monotonic()
       resp_header = await self._read_exact_bytes(11, timeout, t0)
 
       if len(resp_header) == 11:
@@ -308,7 +308,7 @@ class EL406CommunicationMixin:
       await self._write_to_device(framed_message)
       logger.debug("Sent action command: %s", framed_message.hex())
 
-      t0 = time.time()
+      t0 = time.monotonic()
 
       # Step 1: Wait for ACK (short timeout)
       await self._wait_for_ack(min(timeout, self.timeout), t0)
@@ -382,7 +382,7 @@ class EL406CommunicationMixin:
 
       # Wait for ACK
       try:
-        await self._wait_for_ack(timeout, time.time())
+        await self._wait_for_ack(timeout, time.monotonic())
       except RuntimeError as e:
         raise RuntimeError(
           f"Device rejected command 0x{command:04X} (NAK). Check command code and parameters."
@@ -390,7 +390,7 @@ class EL406CommunicationMixin:
       except TimeoutError as e:
         raise TimeoutError(f"Timeout waiting for ACK (command 0x{command:04X})") from e
 
-      t0 = time.time()
+      t0 = time.monotonic()
       # Read 11-byte response header (shares timeout budget with data)
       resp_header = await self._read_exact_bytes(11, timeout, t0)
       if len(resp_header) < 11:
@@ -459,8 +459,8 @@ class EL406CommunicationMixin:
     Raises:
       TimeoutError: If the device stays busy beyond *timeout*.
     """
-    t0 = time.time()
-    while time.time() - t0 < timeout:
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
       poll = await self._poll_device_state()
       if poll.state != STATE_RUNNING:
         return
@@ -518,12 +518,12 @@ class EL406CommunicationMixin:
     await asyncio.sleep(0.5)
 
     # 4. Poll for completion
-    t0 = time.time()
+    t0 = time.monotonic()
     poll_count = 0
 
     logger.debug("Starting polling loop...")
 
-    while time.time() - t0 < timeout:
+    while time.monotonic() - t0 < timeout:
       await asyncio.sleep(poll_interval)
       poll_count += 1
 
