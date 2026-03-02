@@ -436,10 +436,6 @@ class TestGetPeristalticInstalled(EL406TestCase):
       await backend.request_peristaltic_installed(selector=0)
 
 
-if __name__ == "__main__":
-  unittest.main()
-
-
 class TestGetInstrumentSettings(EL406TestCase):
   """Test request_instrument_settings functionality."""
 
@@ -492,3 +488,7 @@ class TestGetInstrumentSettings(EL406TestCase):
     backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.request_instrument_settings()
+
+
+if __name__ == "__main__":
+  unittest.main()
