@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.io.serial import Serial
@@ -126,7 +127,7 @@ class BioShake(HeaterShakerBackend):
     # Initialize the BioShake into home position
     await self._send_command(cmd="shakeGoHome", delay=5)
 
-  async def shake(self, speed: float, acceleration: int = 0):
+  async def start_shaking(self, speed: float, acceleration: int = 0):
     # Check if speed is an integer
     if isinstance(speed, float):
       if not speed.is_integer():
@@ -174,6 +175,15 @@ class BioShake(HeaterShakerBackend):
     # Send the command to start shaking, either with or without duration
 
     await self._send_command(cmd="shakeOn", delay=0.2)
+
+  async def shake(self, speed: float, acceleration: int = 0):
+    warnings.warn(
+      "BioShake.shake() is deprecated and will be removed in a future release. "
+      "Use start_shaking() instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    await self.start_shaking(speed=speed, acceleration=acceleration)
 
   async def stop_shaking(self, deceleration: int = 0):
     # Check if decel is an integer
