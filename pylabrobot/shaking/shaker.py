@@ -43,7 +43,7 @@ class Shaker(ResourceHolder, Machine):
     """
     if self.backend.supports_locking:
       await self.backend.lock_plate()
-    await self.backend.shake(speed=speed, **backend_kwargs)
+    await self.backend.start_shaking(speed=speed, **backend_kwargs)
 
     if duration is None:
       return
