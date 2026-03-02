@@ -305,7 +305,15 @@ class EL406CommunicationMixin:
 
     async with self._command_lock:
       await self._purge_buffers()
-      await self._write_to_device(framed_message)
+
+      # Send header and data separately (matches _send_framed_command protocol)
+      header = framed_message[:11]
+      data = framed_message[11:] if len(framed_message) > 11 else b""
+
+      await self._write_to_device(header)
+      if data:
+        await asyncio.sleep(0.001)
+        await self._write_to_device(data)
       logger.debug("Sent action command: %s", framed_message.hex())
 
       t0 = time.monotonic()
