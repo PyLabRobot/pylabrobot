@@ -3,6 +3,7 @@ from typing import Optional
 from pylabrobot.plate_reading.backend import ImageReaderBackend
 from pylabrobot.plate_reading.imager import Imager
 from pylabrobot.plate_reading.plate_reader import PlateReader
+from pylabrobot.resources import Rotation
 
 
 class ImageReader(PlateReader, Imager):
@@ -17,6 +18,7 @@ class ImageReader(PlateReader, Imager):
     backend: ImageReaderBackend,
     category: str = "heating_shaking",
     model: Optional[str] = None,
+    rotation: Optional[Rotation] = None,
   ):
     super().__init__(
       name=name,
@@ -26,5 +28,6 @@ class ImageReader(PlateReader, Imager):
       backend=backend,
       category=category,
       model=model,
+      rotation=rotation,
     )
     self.backend: ImageReaderBackend = backend  # fix type

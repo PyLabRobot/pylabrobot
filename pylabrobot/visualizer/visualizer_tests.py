@@ -2,9 +2,9 @@ import json
 import time
 import unittest
 import unittest.mock
+import urllib.request
 
 import pytest
-import requests
 import websockets
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
@@ -60,6 +60,30 @@ class SanitizeFloatsTests(unittest.TestCase):
     self.assertEqual(roundtripped["c"]["d"], "NaN")
 
 
+class VisualizerLiquidColorValidationTests(unittest.TestCase):
+  """Tests for liquid_color parameter validation."""
+
+  def test_valid_hex(self):
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(r, open_browser=False, liquid_color="5DADE2")
+    self.assertEqual(vis._liquid_color, "5DADE2")
+
+  def test_valid_hex_with_hash(self):
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    vis = Visualizer(r, open_browser=False, liquid_color="#aabbcc")
+    self.assertEqual(vis._liquid_color, "AABBCC")
+
+  def test_invalid_hex_raises(self):
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    with self.assertRaises(ValueError):
+      Visualizer(r, open_browser=False, liquid_color="nope")
+
+  def test_short_hex_raises(self):
+    r = Resource(size_x=100, size_y=100, size_z=100, name="root")
+    with self.assertRaises(ValueError):
+      Visualizer(r, open_browser=False, liquid_color="FFF")
+
+
 class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
   """Tests for the setup and stop methods of the visualizer backend."""
 
@@ -103,12 +127,19 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
 
   def test_get_index_html(self):
     """Test that the index.html file is returned."""
-    r = requests.get("http://localhost:1337/", timeout=10)
-    self.assertEqual(r.status_code, 200)
+    r = urllib.request.urlopen("http://localhost:1337/", timeout=10)
+    self.assertEqual(r.status, 200)
     self.assertIn(
       r.headers["Content-Type"],
       ["text/html", "text/html; charset=utf-8"],
     )
+
+  def test_liquid_color_default_substituted(self):
+    """Test that the default liquid_color is substituted into the served HTML."""
+    url = f"http://localhost:{self.vis.fs_port}/"
+    html = urllib.request.urlopen(url, timeout=10).read().decode()
+    self.assertNotIn("{{ liquid_color }}", html)
+    self.assertIn('value="F39C12"', html)
 
   async def test_connect(self):
     await self.client.send('{"event": "ready"}')

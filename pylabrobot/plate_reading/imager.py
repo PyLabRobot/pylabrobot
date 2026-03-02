@@ -17,7 +17,7 @@ from pylabrobot.plate_reading.standard import (
   NoPlateError,
   Objective,
 )
-from pylabrobot.resources import Plate, Resource, Well
+from pylabrobot.resources import Plate, Resource, Rotation, Well
 
 try:
   import cv2  # type: ignore
@@ -82,6 +82,7 @@ class Imager(Resource, Machine):
     size_y: float,
     size_z: float,
     backend: ImagerBackend,
+    rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
@@ -91,6 +92,7 @@ class Imager(Resource, Machine):
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
+      rotation=rotation,
       category=category,
       model=model,
     )
@@ -220,7 +222,9 @@ class Imager(Resource, Machine):
     gain: Gain = "machine-auto",
     **backend_kwargs,
   ) -> ImagingResult:
-    if not isinstance(exposure_time, (int, float, AutoExposure)):
+    if exposure_time != "machine-auto" and not isinstance(
+      exposure_time, (int, float, AutoExposure)
+    ):
       raise TypeError(f"Invalid exposure time: {exposure_time}")
     if (
       not isinstance(focal_height, (int, float))

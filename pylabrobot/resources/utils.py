@@ -1,12 +1,80 @@
 import re
 from itertools import groupby
-from string import ascii_uppercase as LETTERS
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
 T = TypeVar("T", bound=Resource)
+
+
+def row_index_to_label(index: int) -> str:
+  """Convert a 0-based row index to a letter label.
+
+  Follows the same convention as Excel column headers:
+  0->A, 1->B, ..., 25->Z, 26->AA, 27->AB, ..., 31->AF, ...
+
+  >>> row_index_to_label(0)
+  'A'
+  >>> row_index_to_label(25)
+  'Z'
+  >>> row_index_to_label(26)
+  'AA'
+  >>> row_index_to_label(31)
+  'AF'
+  """
+  if index < 0:
+    raise ValueError(f"Row index must be non-negative, got {index}")
+  if index < 26:
+    return chr(ord("A") + index)
+  return chr(ord("A") + index // 26 - 1) + chr(ord("A") + index % 26)
+
+
+def label_to_row_index(label: str) -> int:
+  """Convert a letter label to a 0-based row index.
+
+  Inverse of :func:`row_index_to_label`.
+
+  >>> label_to_row_index('A')
+  0
+  >>> label_to_row_index('Z')
+  25
+  >>> label_to_row_index('AA')
+  26
+  >>> label_to_row_index('AF')
+  31
+  """
+  label = label.upper()
+  if len(label) == 1:
+    return ord(label) - ord("A")
+  if len(label) == 2:
+    return (ord(label[0]) - ord("A") + 1) * 26 + (ord(label[1]) - ord("A"))
+  raise ValueError(f"Row labels longer than 2 characters are not supported: '{label}'")
+
+
+def split_identifier(identifier: str) -> Tuple[str, str]:
+  """Split a well identifier into its row-letter and column-number parts.
+
+  Validates that the identifier is in transposed Excel style notation
+  (one or more letters followed by one or more digits, e.g. 'A1', 'AF48').
+
+  >>> split_identifier('A1')
+  ('A', '1')
+  >>> split_identifier('AF48')
+  ('AF', '48')
+
+  Raises:
+    ValueError: If the identifier is not in transposed Excel style notation.
+  """
+  for i, ch in enumerate(identifier):
+    if ch.isdigit():
+      row_part, col_part = identifier[:i], identifier[i:]
+      if row_part.isalpha() and col_part.isdigit():
+        return row_part, col_part
+      break
+  raise ValueError(
+    f"Identifier '{identifier}' is not in transposed Excel style notation, e.g. 'A1'."
+  )
 
 
 def create_equally_spaced_2d(
@@ -176,7 +244,7 @@ def create_ordered_items_2d(
     item_dy=item_dy,
     **kwargs,
   )
-  keys = [f"{LETTERS[j]}{i+1}" for i in range(num_items_x) for j in range(num_items_y)]
+  keys = [f"{row_index_to_label(j)}{i+1}" for i in range(num_items_x) for j in range(num_items_y)]
   for key, item in zip(keys, (item for sublist in items for item in sublist)):
     item.name = f"{klass.__name__.lower()}_{key}"
   return dict(zip(keys, [item for sublist in items for item in sublist]))
