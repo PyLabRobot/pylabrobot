@@ -1228,7 +1228,7 @@ class EL406ManifoldStepsMixin(EL406StepsBaseMixin):
       [11]    secondary_y: signed byte
       [12-13] secondary_z: short LE
       [14-15] reserved: 0x0000
-      [16-17] column mask: 2 bytes (all columns selected: 0xFF 0x0F)
+      [16-17] unknown: 0xFF0F (possibly column mask?)
       [18-21] padding: 4 bytes 0x00
 
     Args:
@@ -1260,7 +1260,7 @@ class EL406ManifoldStepsMixin(EL406StepsBaseMixin):
       .i8(secondary_y)                               # [11] Secondary Y
       .u16(secondary_z)                              # [12-13] Secondary Z (LE)
       .raw_bytes(b'\x00' * 2)                        # [14-15] Reserved
-      .raw_bytes(b'\xff\x0f')                        # [16-17] Column mask (all)
+      .raw_bytes(b'\xff\x0f')                        # [16-17] Unknown, possibly column mask
       .raw_bytes(b'\x00' * 4)                        # [18-21] Padding
       .finish()
     )  # fmt: skip
