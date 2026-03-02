@@ -3,6 +3,7 @@ import datetime
 import enum
 import functools
 import logging
+import math
 import re
 import sys
 import warnings
@@ -1212,9 +1213,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Return the conservative minimum Y spacing required between channels *i* and *j*.
 
     The constraint is the larger of the two channels' individual minimum spacings,
-    rounded up to 1 decimal place for safe movement.
+    ceiling'd to 1 decimal place for safe movement.
     """
-    return round(max(self._channels_minimum_y_spacing[i], self._channels_minimum_y_spacing[j]), 1)
+    if abs(i - j) != 1:
+      raise ValueError(f"Channels must be adjacent, got i={i}, j={j}")
+    spacing = max(self._channels_minimum_y_spacing[i], self._channels_minimum_y_spacing[j])
+    return math.ceil(spacing * 10) / 10
 
   @property
   def num_arms(self) -> int:
@@ -1558,15 +1562,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # # # Machine Query (MEM-READ) Commands: Single-Channel # # #
 
-  async def channel_request_y_minimum_spacing(
-    self, channel_idx: int, rounded: bool = True
-  ) -> float:
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
     """Request the minimum Y spacing for a given channel.
 
     Args:
       channel_idx: the channel index to query. (0-indexed)
-      rounded: If True (default), round the result to 1 decimal place. Hardware reports
-        exact values (e.g. 8.98) which round to the expected 9.0.
 
     Returns:
       The minimum Y spacing in mm.
@@ -1582,10 +1582,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       command="VY",
       fmt="yc### (n)",
     )
-    # Hardware reports exact values (e.g. 8.98); round up to 1 decimal for safe spacing
-    # and getting the expected 9.0 for the default case.
-    if rounded:
-      return round(self.y_drive_increment_to_mm(resp["yc"][1]), 1)
     return self.y_drive_increment_to_mm(resp["yc"][1])
 
   async def channels_request_y_minimum_spacing(self) -> List[float]:
@@ -1601,7 +1597,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return list(
       await asyncio.gather(
         *(
-          self.channel_request_y_minimum_spacing(channel_idx=idx, rounded=False)
+          self.channel_request_y_minimum_spacing(channel_idx=idx)
           for idx in range(self.num_channels)
         )
       )
@@ -1614,12 +1610,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # frontmost channel can go to y=6, every channel behind it constrains its min Y
     spacings = self._channels_minimum_y_spacing
-    min_y_pos = 6 + sum(spacings[i] for i in range(channel_idx + 1, self.num_channels))
+    min_y_pos = 6 + sum(spacings[channel_idx + 1:])
     if position.y < min_y_pos:
       return False
 
     # backmost channel can go to y=601.6, every channel in front constrains its max Y
-    max_y_pos = 601.6 - sum(spacings[i] for i in range(channel_idx))
+    max_y_pos = 601.6 - sum(spacings[:channel_idx])
     if position.y > max_y_pos:
       return False
 

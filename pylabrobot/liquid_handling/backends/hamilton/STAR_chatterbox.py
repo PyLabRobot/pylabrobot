@@ -217,9 +217,7 @@ class STARChatterboxBackend(STARBackend):
 
     return simulated_value
 
-  async def channel_request_y_minimum_spacing(
-    self, channel_idx: int, rounded: bool = True
-  ) -> float:
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
     """Return mock minimum Y spacing for the given channel.
 
     Returns the value stored in ``_channels_minimum_y_spacing`` (set during
@@ -229,8 +227,7 @@ class STARChatterboxBackend(STARBackend):
       raise ValueError(
         f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
       )
-    val = self._channels_minimum_y_spacing[channel_idx]
-    return round(val, 1) if rounded else val
+    return self._channels_minimum_y_spacing[channel_idx]
 
   async def channels_request_y_minimum_spacing(self) -> List[float]:
     """Return mock minimum Y spacings for all channels.

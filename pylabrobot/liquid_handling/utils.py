@@ -4,6 +4,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
 GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS = 9
+MIN_SPACING_BETWEEN_CHANNELS = GENERIC_LH_MIN_SPACING_BETWEEN_CHANNELS
 # minimum spacing between the edge of the container and the center of channel
 MIN_SPACING_EDGE = 1
 
