@@ -7,7 +7,6 @@ The error codes provide human-readable descriptions for errors that may
 occur during communication with the EL406 plate washer.
 """
 
-
 ERROR_CODES: dict[int, str] = {
   0x0175: "Error communicating with instrument software. didn't find find park opto sensor transition.",  # 373
   0x0C01: "Requested config/autocal data absent.",  # 3073

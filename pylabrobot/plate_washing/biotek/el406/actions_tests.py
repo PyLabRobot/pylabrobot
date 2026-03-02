@@ -4,7 +4,7 @@
 import unittest
 
 from pylabrobot.plate_washing.biotek.el406 import (
-  BioTekEL406Backend,
+  ExperimentalBioTekEL406Backend,
   EL406Motor,
   EL406MotorHomeType,
   EL406StepType,
@@ -36,7 +36,7 @@ class TestEL406BackendAbort(EL406TestCase):
 
   async def test_abort_raises_when_device_not_initialized(self):
     """Abort should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.abort()
 
@@ -52,7 +52,7 @@ class TestEL406BackendPause(EL406TestCase):
 
   async def test_pause_raises_when_device_not_initialized(self):
     """Pause should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.pause()
 
@@ -75,7 +75,7 @@ class TestEL406BackendResume(EL406TestCase):
 
   async def test_resume_raises_when_device_not_initialized(self):
     """Resume should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.resume()
 
@@ -98,7 +98,7 @@ class TestEL406BackendReset(EL406TestCase):
 
   async def test_reset_raises_when_device_not_initialized(self):
     """Reset should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.reset()
 
@@ -124,7 +124,7 @@ class TestEL406BackendHomeMotors(EL406TestCase):
 
   async def test_home_motors_raises_when_device_not_initialized(self):
     """home_motors should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.home_motors(home_type=EL406MotorHomeType.HOME_XYZ_MOTORS)
 
@@ -152,7 +152,7 @@ class TestRunSelfCheck(EL406TestCase):
 
   async def test_run_self_check_raises_when_device_not_initialized(self):
     """run_self_check should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.run_self_check()
 
@@ -180,6 +180,6 @@ class TestSetWasherManifold(EL406TestCase):
 
   async def test_set_washer_manifold_raises_when_device_not_initialized(self):
     """set_washer_manifold should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.set_washer_manifold(EL406WasherManifold.TUBE_96_DUAL)

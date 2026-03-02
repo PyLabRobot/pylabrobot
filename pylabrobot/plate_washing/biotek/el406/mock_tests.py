@@ -4,7 +4,7 @@ import asyncio
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.resources import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well
@@ -55,7 +55,7 @@ class EL406TestCase(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self._sleep_patcher = patch("asyncio.sleep", side_effect=_noop)
     self._sleep_patcher.start()
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
     self.backend.io = MockFTDI()
     await self.backend.setup()
     self.backend.io.set_read_buffer(b"\x06" * 500)

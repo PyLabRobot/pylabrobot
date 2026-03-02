@@ -17,7 +17,7 @@ from ..protocol import build_framed_message
 from ._base import EL406StepsBaseMixin
 from ._shake import INTENSITY_TO_BYTE, Intensity, validate_intensity
 
-logger = logging.getLogger("pylabrobot.plate_washing.biotek.el406")
+logger = logging.getLogger(__name__)
 
 Buffer = Literal["A", "B", "C", "D"]
 TravelRate = Literal["1", "2", "3", "4", "5", "1 CW", "2 CW", "3 CW", "4 CW", "6 CW"]
@@ -306,8 +306,7 @@ class EL406ManifoldStepsMixin(EL406StepsBaseMixin):
     validate_delay_ms(final_aspirate_delay_ms)
     if pre_dispense_volume != 0 and not 25 <= pre_dispense_volume <= 3000:
       raise ValueError(
-        f"Wash pre-dispense volume must be 0 (disabled) or 25-3000 uL, "
-        f"got {pre_dispense_volume}"
+        f"Wash pre-dispense volume must be 0 (disabled) or 25-3000 uL, got {pre_dispense_volume}"
       )
     if not 0 <= vacuum_delay_volume <= 3000:
       raise ValueError(f"Wash vacuum delay volume must be 0-3000 uL, got {vacuum_delay_volume}")
@@ -930,7 +929,7 @@ class EL406ManifoldStepsMixin(EL406StepsBaseMixin):
       )
     if submerge_duration != 0 and not 60 <= submerge_duration <= 86340:
       raise ValueError(
-        f"Submerge duration must be 0 (disabled) or 60-86340 seconds, " f"got {submerge_duration}"
+        f"Submerge duration must be 0 (disabled) or 60-86340 seconds, got {submerge_duration}"
       )
     if submerge_duration % 60 != 0:
       raise ValueError(

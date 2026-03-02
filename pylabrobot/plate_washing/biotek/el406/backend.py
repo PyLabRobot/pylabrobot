@@ -19,7 +19,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from pylabrobot.io.ftdi import FTDI
-from pylabrobot.plate_washing.backend import PlateWasherBackend
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Plate
 
 from .actions import EL406ActionsMixin
@@ -29,15 +29,15 @@ from .helpers import plate_to_wire_byte
 from .queries import EL406QueriesMixin
 from .steps import EL406StepsMixin
 
-logger = logging.getLogger("pylabrobot.plate_washing.biotek.el406")
+logger = logging.getLogger(__name__)
 
 
-class BioTekEL406Backend(
+class ExperimentalBioTekEL406Backend(
   EL406CommunicationMixin,
   EL406QueriesMixin,
   EL406ActionsMixin,
   EL406StepsMixin,
-  PlateWasherBackend,
+  MachineBackend,
 ):
   """Backend for BioTek EL406 plate washer.
 
@@ -48,12 +48,7 @@ class BioTekEL406Backend(
 
   Example:
     >>> backend = BioTekEL406Backend()
-    >>> washer = PlateWasher(
-    ...   name="el406",
-    ...   size_x=200, size_y=200, size_z=100,
-    ...   backend=backend
-    ... )
-    >>> await washer.setup()
+    >>> await backend.setup()
     >>> await backend.peristaltic_prime(plate, volume=300.0, flow_rate="High")
     >>> await backend.manifold_wash(plate, cycles=3)
   """

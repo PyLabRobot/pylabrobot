@@ -2,7 +2,7 @@
 
 import unittest
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.mock_tests import PT96, EL406TestCase
 
 

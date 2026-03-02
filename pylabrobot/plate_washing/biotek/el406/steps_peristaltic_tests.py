@@ -8,7 +8,7 @@ This module contains tests for peristaltic pump-related step methods:
 
 import unittest
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.mock_tests import PT96, PT1536, EL406TestCase
 
 
@@ -42,7 +42,7 @@ class TestEL406BackendPeristalticDispense(EL406TestCase):
 
   async def test_peristaltic_dispense_raises_when_device_not_initialized(self):
     """peristaltic_dispense should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     # Note: no setup() called
 
     with self.assertRaises(RuntimeError):
@@ -77,7 +77,7 @@ class TestPeristalticDispenseCommandEncoding(unittest.TestCase):
   """Test peristaltic dispense command binary encoding."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_peristaltic_dispense_step_type(self):
     """Peristaltic dispense command should have step type prefix 0x04."""
@@ -348,7 +348,7 @@ class TestPeristalticDispenseCommandEncodingWithMasks(unittest.TestCase):
   """Test peristaltic dispense command encoding with well and row masks."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_peristaltic_dispense_command_with_column_mask_length(self):
     """Command with well mask should be 24 bytes."""
@@ -530,7 +530,7 @@ class TestEL406BackendPeristalticPurge(EL406TestCase):
 
   async def test_peristaltic_purge_raises_when_device_not_initialized(self):
     """peristaltic_purge should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     # Note: no setup() called
 
     with self.assertRaises(RuntimeError):

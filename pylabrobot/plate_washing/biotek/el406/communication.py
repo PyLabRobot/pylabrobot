@@ -36,7 +36,7 @@ class DevicePollResult(NamedTuple):
   raw_response: bytes
 
 
-logger = logging.getLogger("pylabrobot.plate_washing.biotek.el406")
+logger = logging.getLogger(__name__)
 
 
 class EL406CommunicationMixin:
@@ -384,7 +384,7 @@ class EL406CommunicationMixin:
         await self._wait_for_ack(timeout, time.time())
       except RuntimeError as e:
         raise RuntimeError(
-          f"Device rejected command 0x{command:04X} (NAK). " "Check command code and parameters."
+          f"Device rejected command 0x{command:04X} (NAK). Check command code and parameters."
         ) from e
       except TimeoutError as e:
         raise TimeoutError(f"Timeout waiting for ACK (command 0x{command:04X})") from e

@@ -3,7 +3,7 @@
 
 import unittest
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.mock_tests import (
   PT96,
   PT384,
@@ -150,7 +150,7 @@ class TestWashCompositeCommandEncoding(unittest.TestCase):
   """Test wash composite command encoding."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_composite_command_length(self):
     """Composite wash command should produce the expected payload length."""
@@ -319,7 +319,7 @@ class TestWashMoveHomeFirst(unittest.TestCase):
   """Test move_home_first parameter in wash command."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_move_home_default_disabled(self):
     """move_home_first should default to False."""
@@ -356,7 +356,7 @@ class TestWashSecondaryAspirate(unittest.TestCase):
   """Test secondary aspirate parameters in wash command."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_secondary_aspirate_disabled_default(self):
     """Secondary aspirate offsets should use defaults when disabled."""
@@ -391,7 +391,7 @@ class TestWashPreDispenseFlowRateEncoding(unittest.TestCase):
   """Test pre_dispense_flow_rate encoding in wash command."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_pre_dispense_flow_rate_encoding(self):
     """pre_dispense_flow_rate should encode at correct positions."""
@@ -404,7 +404,7 @@ class TestWashSecondaryXY(unittest.TestCase):
   """Test secondary aspirate X/Y parameters in wash command."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_secondary_xy_default_zero(self):
     """Secondary X/Y should default to 0 and not affect baseline output."""
@@ -443,7 +443,7 @@ class TestWashBottomWash(unittest.TestCase):
   """Test bottom wash parameters in wash command."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_bottom_wash_disabled_dispense1_mirrors_main(self):
     """When bottom_wash=False, Dispense1 should mirror main dispense volume/flow."""
@@ -509,7 +509,7 @@ class TestWashPreDispenseBetweenCycles(unittest.TestCase):
   """Test pre-dispense between cycles parameters in wash command."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_midcyc_disabled_dispense2_uses_main_pre_dispense(self):
     """When midcyc volume=0, Dispense2 pre-dispense mirrors main pre-dispense."""
@@ -572,7 +572,7 @@ class TestWashCaptureVectors(unittest.TestCase):
   """Byte-exact match against reference captures from real EL406 hardware."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_baseline(self):
     """Baseline wash: 3 cycles, flow 7, Z=121, travel 3, asp Z=29."""
@@ -721,50 +721,50 @@ class TestWash384WellPlateSupport(unittest.TestCase):
 
   def test_384_well_plate_type_byte(self):
     """384-well backend should produce the correct plate type prefix."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT384)
     self.assertEqual(cmd[0], 0x01)
 
   def test_96_well_plate_type_byte(self):
     """96-well backend (default) should produce the correct plate type prefix."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96)
     self.assertEqual(cmd[0], 0x04)
 
   def test_wash_format_plate_default(self):
     """Default wash_format='Plate' should encode as 0."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96)
     self.assertEqual(cmd[3], 0x00)
 
   def test_wash_format_sector(self):
     """wash_format='Sector' should encode as 1."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96, wash_format="Sector")
     self.assertEqual(cmd[3], 0x01)
 
   def test_cycles_at_byte6(self):
     """cycles should be encoded at the expected position."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96, cycles=5)
     self.assertEqual(cmd[6], 5)
 
   def test_cycles_default(self):
     """Default cycles=3 should be encoded correctly."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96)
     self.assertEqual(cmd[6], 3)
 
   def test_sector_mask_le_encoding(self):
     """Sector mask should be encoded as 16-bit LE."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96, sector_mask=0x0E)
     self.assertEqual(cmd[4], 0x0E)
     self.assertEqual(cmd[5], 0x00)
 
   def test_384_well_full_combination(self):
     """384-well with Sector format and custom sector mask."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(
       PT384, wash_format="Sector", cycles=1, sector_mask=0x0E, aspirate_travel_rate=3
     )
@@ -805,7 +805,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_96_well_defaults(self):
     """96-well plate should use 96-well defaults (300uL, dispZ=121, aspZ=29)."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96)
     # dispense_volume=300
     self.assertEqual(cmd[8], 0x2C)
@@ -822,7 +822,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_384_well_defaults(self):
     """384-well plate should use 384-well defaults (100uL, dispZ=120, aspZ=22)."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT384)
     self.assertEqual(cmd[0], 0x01)  # plate type
     # dispense_volume=100
@@ -843,7 +843,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_384_pcr_defaults(self):
     """384 PCR plate should use its specific defaults (100uL, dispZ=83, aspZ=2)."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT384PCR)
     self.assertEqual(cmd[0], 0x02)  # plate type
     self.assertEqual(cmd[8], 0x64)  # vol=100 low
@@ -853,7 +853,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_1536_well_defaults(self):
     """1536-well plate should use its specific defaults."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT1536)
     self.assertEqual(cmd[0], 0x00)  # plate type
     # dispense_volume=100
@@ -868,7 +868,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_1536_flange_defaults(self):
     """1536 flange plate should use its specific defaults."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT1536F)
     self.assertEqual(cmd[0], 0x0E)  # plate type
     # dispense_volume=100
@@ -883,7 +883,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_explicit_values_override_plate_defaults(self):
     """Explicit parameter values should override plate-type defaults."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(
       PT384, dispense_volume=500.0, dispense_z=200, aspirate_z=50, secondary_z=30
     )
@@ -899,7 +899,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_secondary_z_independent_of_aspirate_z(self):
     """secondary_z default should be plate-type default, NOT user aspirate_z."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     cmd = backend._build_wash_composite_command(PT96, aspirate_z=40)
     # aspirate_z=40 (user override)
     self.assertEqual(cmd[53], 0x28)  # aspirate_z = 40
@@ -908,7 +908,7 @@ class TestWashPlateTypeDefaults(unittest.TestCase):
 
   def test_all_plate_types_produce_102_bytes(self):
     """Every plate type should produce exactly 102 bytes with defaults."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     plate_types = [PT96, PT384, PT384PCR, PT1536, PT1536F]
     expected_prefixes = {
       "test_96": 0x04,

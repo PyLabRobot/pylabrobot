@@ -22,7 +22,7 @@ INTENSITY_TO_BYTE: dict[str, int] = {
 }
 from ._base import EL406StepsBaseMixin
 
-logger = logging.getLogger("pylabrobot.plate_washing.biotek.el406")
+logger = logging.getLogger(__name__)
 
 
 Intensity = Literal["Variable", "Slow", "Medium", "Fast"]

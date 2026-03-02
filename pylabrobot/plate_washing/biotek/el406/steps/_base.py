@@ -24,11 +24,9 @@ class EL406StepsBaseMixin:
       self,
       framed_message: bytes,
       timeout: float | None = None,
-    ) -> bytes:
-      ...
+    ) -> bytes: ...
 
     def batch(
       self,
       plate: Plate = ...,
-    ) -> AbstractAsyncContextManager[None]:
-      ...
+    ) -> AbstractAsyncContextManager[None]: ...

@@ -7,7 +7,7 @@ This module contains tests for shake-related step methods:
 
 import unittest
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.mock_tests import PT96, EL406TestCase
 
 
@@ -66,7 +66,7 @@ class TestShakeCommandEncoding(unittest.TestCase):
   """Test shake command binary encoding."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_shake_command_basic(self):
     """Basic shake: 10 seconds, medium intensity."""

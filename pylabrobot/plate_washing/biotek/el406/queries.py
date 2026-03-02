@@ -17,7 +17,7 @@ from .enums import (
   EL406WasherManifold,
 )
 
-logger = logging.getLogger("pylabrobot.plate_washing.biotek.el406")
+logger = logging.getLogger(__name__)
 
 _E = TypeVar("_E", bound=enum.Enum)
 

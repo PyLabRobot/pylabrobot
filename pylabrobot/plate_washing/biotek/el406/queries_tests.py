@@ -8,7 +8,7 @@ import unittest
 
 # Import the backend module
 from pylabrobot.plate_washing.biotek.el406 import (
-  BioTekEL406Backend,
+  ExperimentalBioTekEL406Backend,
   EL406Sensor,
   EL406SyringeManifold,
   EL406WasherManifold,
@@ -79,7 +79,7 @@ class TestEL406BackendGetWasherManifold(EL406TestCase):
 
   async def test_request_washer_manifold_raises_when_device_not_initialized(self):
     """request_washer_manifold should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
 
     with self.assertRaises(RuntimeError):
       await backend.request_washer_manifold()
@@ -201,7 +201,7 @@ class TestEL406BackendGetSyringeManifold(EL406TestCase):
 
   async def test_request_syringe_manifold_raises_when_device_not_initialized(self):
     """request_syringe_manifold should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
 
     with self.assertRaises(RuntimeError):
       await backend.request_syringe_manifold()
@@ -255,7 +255,7 @@ class TestEL406BackendGetSerialNumber(EL406TestCase):
 
   async def test_request_serial_number_raises_when_device_not_initialized(self):
     """request_serial_number should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
 
     with self.assertRaises(RuntimeError):
       await backend.request_serial_number()
@@ -340,7 +340,7 @@ class TestEL406BackendGetSensorEnabled(EL406TestCase):
 
   async def test_request_sensor_enabled_raises_when_device_not_initialized(self):
     """request_sensor_enabled should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
 
     with self.assertRaises(RuntimeError):
       await backend.request_sensor_enabled(EL406Sensor.VACUUM)
@@ -381,7 +381,7 @@ class TestGetSyringeBoxInfo(EL406TestCase):
 
   async def test_request_syringe_box_info_raises_when_device_not_initialized(self):
     """request_syringe_box_info should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.request_syringe_box_info()
 
@@ -431,7 +431,7 @@ class TestGetPeristalticInstalled(EL406TestCase):
 
   async def test_request_peristaltic_installed_raises_when_device_not_initialized(self):
     """request_peristaltic_installed should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.request_peristaltic_installed(selector=0)
 
@@ -489,6 +489,6 @@ class TestGetInstrumentSettings(EL406TestCase):
 
   async def test_request_instrument_settings_raises_when_device_not_initialized(self):
     """request_instrument_settings should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.request_instrument_settings()

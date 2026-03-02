@@ -1,6 +1,6 @@
 """BioTek EL406 plate washer backend."""
 
-from .backend import BioTekEL406Backend
+from .backend import ExperimentalBioTekEL406Backend
 from .enums import (
   EL406Motor,
   EL406MotorHomeType,

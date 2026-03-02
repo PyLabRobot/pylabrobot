@@ -3,7 +3,7 @@
 
 import unittest
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.mock_tests import PT96, EL406TestCase
 
 
@@ -120,7 +120,7 @@ class TestEL406BackendDispense(EL406TestCase):
 
   async def test_dispense_raises_when_device_not_initialized(self):
     """Dispense should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.manifold_dispense(PT96, volume=300.0)
 
@@ -181,7 +181,7 @@ class TestEL406BackendSyringeDispense(EL406TestCase):
 
   async def test_syringe_dispense_raises_when_device_not_initialized(self):
     """syringe_dispense should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     # Note: no setup() called
 
     with self.assertRaises(RuntimeError):

@@ -17,7 +17,7 @@ from .enums import (
 )
 from .protocol import build_framed_message
 
-logger = logging.getLogger("pylabrobot.plate_washing.biotek.el406")
+logger = logging.getLogger(__name__)
 
 
 class EL406ActionsMixin:

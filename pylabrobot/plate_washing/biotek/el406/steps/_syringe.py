@@ -19,7 +19,7 @@ from ..helpers import (
 from ..protocol import build_framed_message, columns_to_column_mask, encode_column_mask
 from ._base import EL406StepsBaseMixin
 
-logger = logging.getLogger("pylabrobot.plate_washing.biotek.el406")
+logger = logging.getLogger(__name__)
 
 Syringe = Literal["A", "B", "Both"]
 

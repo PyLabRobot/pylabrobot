@@ -11,7 +11,7 @@ This module contains tests for prime-related step methods:
 
 import unittest
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.mock_tests import PT96, EL406TestCase
 
 
@@ -137,7 +137,7 @@ class TestEL406BackendSyringePrime(EL406TestCase):
 
   async def test_syringe_prime_raises_when_device_not_initialized(self):
     """syringe_prime should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     with self.assertRaises(RuntimeError):
       await backend.syringe_prime(PT96, volume=5000.0, syringe="A")
 
@@ -187,7 +187,7 @@ class TestSyringePrimeCommandEncoding(unittest.TestCase):
   """Test syringe prime command binary encoding."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_syringe_prime_step_type(self):
     """Syringe prime command should have prefix 0x04."""
@@ -437,7 +437,7 @@ class TestEL406BackendManifoldPrime(EL406TestCase):
 
   async def test_manifold_prime_raises_when_device_not_initialized(self):
     """manifold_prime should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     # Note: no setup() called
 
     with self.assertRaises(RuntimeError):
@@ -469,7 +469,7 @@ class TestManifoldPrimeCommandEncoding(unittest.TestCase):
   """Test manifold prime command binary encoding."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_manifold_prime_step_type(self):
     """Manifold prime command should have step type prefix 0x04."""
@@ -622,7 +622,7 @@ class TestEL406BackendAutoClean(EL406TestCase):
 
   async def test_auto_clean_raises_when_device_not_initialized(self):
     """auto_clean should raise RuntimeError if device not initialized."""
-    backend = BioTekEL406Backend()
+    backend = ExperimentalBioTekEL406Backend()
     # Note: no setup() called
 
     with self.assertRaises(RuntimeError):
@@ -659,7 +659,7 @@ class TestAutoCleanCommandEncoding(unittest.TestCase):
   """Test auto-clean command binary encoding."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_auto_clean_step_type(self):
     """Auto-clean command should have step type prefix 0x04."""

@@ -2,7 +2,7 @@
 
 import unittest
 
-from pylabrobot.plate_washing.biotek.el406 import BioTekEL406Backend
+from pylabrobot.plate_washing.biotek.el406 import ExperimentalBioTekEL406Backend
 from pylabrobot.plate_washing.biotek.el406.helpers import plate_to_wire_byte
 from pylabrobot.plate_washing.biotek.el406.mock_tests import (
   PT96,
@@ -37,7 +37,7 @@ class TestHelperFunctions(unittest.TestCase):
   """Test helper functions for encoding."""
 
   def setUp(self):
-    self.backend = BioTekEL406Backend()
+    self.backend = ExperimentalBioTekEL406Backend()
 
   def test_encode_volume_little_endian(self):
     """Volume should be encoded as little-endian 2 bytes."""
