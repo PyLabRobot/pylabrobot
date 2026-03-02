@@ -20,6 +20,7 @@ from typing import (
   Sequence,
   Tuple,
   Type,
+  TypedDict,
   TypeVar,
   Union,
   cast,
@@ -1603,6 +1604,58 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         "Robots with more than 8 channels have limited Y-axis reach per channel; they don't have random access to the full deck area.\n"
         "Try the operation with different channels or a different target position (i.e. different labware placement)."
       )
+
+  class ChannelCycleCounts(TypedDict):
+    tip_pick_up_cycles: int
+    tip_discard_cycles: int
+    aspiration_cycles: int
+    dispensing_cycles: int
+
+  async def channel_request_cycle_counts(self, channel_idx: int) -> ChannelCycleCounts:
+    """Request cycle counters for a single channel.
+
+    Returns the number of tip pick-up, tip discard, aspiration, and dispensing cycles
+    performed by the channel.
+
+    Args:
+      channel_idx: The channel index to query (0-indexed).
+
+    Returns:
+      A dict with keys ``tip_pick_up_cycles``, ``tip_discard_cycles``,
+      ``aspiration_cycles``, and ``dispensing_cycles``.
+    """
+
+    if not (0 <= channel_idx < self.num_channels):
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
+      )
+
+    resp = await self.send_command(
+      module=self.channel_id(channel_idx),
+      command="RV",
+      fmt="na##########nb##########nc##########nd##########",
+    )
+    return {
+      "tip_pick_up_cycles": resp["na"],
+      "tip_discard_cycles": resp["nb"],
+      "aspiration_cycles": resp["nc"],
+      "dispensing_cycles": resp["nd"],
+    }
+
+  async def channels_request_cycle_counts(self) -> List[ChannelCycleCounts]:
+    """Request cycle counters for all channels.
+
+    Returns:
+      A list of dicts (one per channel, ordered by channel index), each with keys
+      ``tip_pick_up_cycles``, ``tip_discard_cycles``, ``aspiration_cycles``,
+      and ``dispensing_cycles``.
+    """
+
+    return list(
+      await asyncio.gather(
+        *(self.channel_request_cycle_counts(channel_idx=idx) for idx in range(self.num_channels))
+      )
+    )
 
   # # # ACTION Commands # # #
 

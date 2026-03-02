@@ -24,6 +24,8 @@ sila = ["zeroconf>=0.131.0"]
 gui = ["flask[async]==3.1.2"]
 dev = [
   "PyLabRobot[serial,usb,ftdi,hid,modbus,websockets,visualizer,opentrons,gui,sila]",
+  "grpcio",
+  "numpy",
   "pytest==8.4.2",
   "pytest-timeout==2.4.0",
   "mypy==1.18.2",
