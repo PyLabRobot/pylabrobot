@@ -7,12 +7,10 @@ class ScaleBackend(MachineBackend, metaclass=ABCMeta):
   """Backend for a scale"""
 
   @abstractmethod
-  async def zero(self):
-    ...
+  async def zero(self): ...
 
   @abstractmethod
-  async def tare(self):
-    ...
+  async def tare(self): ...
 
   @abstractmethod
   async def read_weight(self) -> float:
@@ -27,7 +25,7 @@ class ScaleBackend(MachineBackend, metaclass=ABCMeta):
     import warnings
 
     warnings.warn(
-      "get_weight() is deprecated and will be removed in 2026-03. " "Use read_weight() instead.",
+      "get_weight() is deprecated and will be removed in 2026-03. Use read_weight() instead.",
       DeprecationWarning,
       stacklevel=2,
     )

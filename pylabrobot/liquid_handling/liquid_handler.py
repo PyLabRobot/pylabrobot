@@ -465,9 +465,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert (
-      len(tip_spots) == len(offsets) == len(use_channels)
-    ), "Number of tips and offsets and use_channels must be equal."
+    assert len(tip_spots) == len(offsets) == len(use_channels), (
+      "Number of tips and offsets and use_channels must be equal."
+    )
 
     # create operations
     pickups = [
@@ -609,9 +609,9 @@ class LiquidHandler(Resource, Machine):
     # checks
     self._assert_resources_exist(tip_spots)
     self._make_sure_channels_exist(use_channels)
-    assert (
-      len(tip_spots) == len(offsets) == len(use_channels) == len(tips)
-    ), "Number of channels and offsets and use_channels and tips must be equal."
+    assert len(tip_spots) == len(offsets) == len(use_channels) == len(tips), (
+      "Number of channels and offsets and use_channels and tips must be equal."
+    )
 
     # create operations
     drops = [
@@ -2170,9 +2170,9 @@ class LiquidHandler(Resource, Machine):
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
-      assert (
-        destination.direction == "z"
-      ), "Only ResourceStacks with direction 'z' are currently supported"
+      assert destination.direction == "z", (
+        "Only ResourceStacks with direction 'z' are currently supported"
+      )
 
       # the resource can be rotated wrt the ResourceStack. This is allowed as long
       # as it's in multiples of 180 degrees. 90 degrees is not allowed.
@@ -2840,7 +2840,7 @@ class LiquidHandler(Resource, Machine):
 
       # 6: Execute tip movement/consolidation
       for idx, target_tip_spots in enumerate(merged_target_tip_clusters):
-        print(f"   - tip transfer cycle: {idx+1} / {len_transfers}")
+        print(f"   - tip transfer cycle: {idx + 1} / {len_transfers}")
 
         origin_tip_spots = [all_origin_tip_spots.pop(0) for _ in range(len(target_tip_spots))]
 

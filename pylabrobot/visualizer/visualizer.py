@@ -481,7 +481,7 @@ class Visualizer:
     path = os.path.join(dirname, ".")
     if not os.path.exists(path):
       raise RuntimeError(
-        "Could not find Visualizer files. Please run from the root of the " "repository."
+        "Could not find Visualizer files. Please run from the root of the repository."
       )
 
     def start_server(lock):

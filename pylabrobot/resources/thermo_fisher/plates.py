@@ -249,8 +249,9 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       bottom_type=WellBottomType.U,
       material_z_thickness=31.6 - 29.1 - 1.4,  # from definition, F - L - N
       cross_section_type=CrossSectionType.CIRCLE,
-      compute_height_from_volume=lambda liquid_volume: liquid_volume
-      / (math.pi * ((well_diameter / 2) ** 2)),
+      compute_height_from_volume=lambda liquid_volume: (
+        liquid_volume / (math.pi * ((well_diameter / 2) ** 2))
+      ),
     ),
   )
 
@@ -261,7 +262,7 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
 def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_mm: float) -> float:
   if height_mm > (23.24 - 0.74) * 1.05:
     raise ValueError(
-      f"Height {height_mm} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
+      f"Height {height_mm} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
   # Reverse fit: height → volume, 5th-degree polynomial via numeric inversion
   return max(
@@ -278,7 +279,7 @@ def _compute_volume_from_height_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(height_
 def _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp(volume_ul: float) -> float:
   if volume_ul > 305:  # 5% tolerance above 290 µL
     raise ValueError(
-      f"Volume {volume_ul} is too large for " "thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
+      f"Volume {volume_ul} is too large for thermo_AB_96_wellplate_300ul_Vb_MicroAmp"
     )
   # Polynomial coefficients: degree 5 fit from volume → height
   return max(

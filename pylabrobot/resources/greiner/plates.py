@@ -1,4 +1,4 @@
-""" Greiner plates """
+"""Greiner plates"""
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
