@@ -1218,10 +1218,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     If the iswap is installed, this is bounded by the iswap's current Y position.
     Otherwise, it's the machine drive limit (635 mm).
+    Symmetric with _frontmost_channel_min_y: max_y = limit - spacing[0] + 3.
     """
     if self.iswap_installed:
-      return await self.iswap_rotation_drive_request_y()
-    return 635.0
+      limit = await self.iswap_rotation_drive_request_y()
+    else:
+      limit = 635.0
+    return limit - self._channels_minimum_y_spacing[0] + 3
 
   def _min_spacing_between(self, i: int, j: int) -> float:
     """Return the conservative minimum Y spacing required between channels *i* and *j*.
