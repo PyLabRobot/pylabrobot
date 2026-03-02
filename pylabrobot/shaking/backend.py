@@ -1,5 +1,5 @@
-from abc import ABCMeta, abstractmethod
 import warnings
+from abc import ABCMeta, abstractmethod
 
 from pylabrobot.machines.backend import MachineBackend
 
