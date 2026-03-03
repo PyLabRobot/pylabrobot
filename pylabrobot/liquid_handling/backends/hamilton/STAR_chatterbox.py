@@ -9,11 +9,6 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
 )
 from pylabrobot.resources.well import Well
 
-# Type aliases for nested enums (for cleaner signatures)
-LLDMode = STARBackend.LLDMode
-PressureLLDMode = STARBackend.PressureLLDMode
-
-
 class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
 
