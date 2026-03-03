@@ -30,13 +30,17 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
 from pylabrobot.resources.hamilton import STARLetDeck, hamilton_96_tiprack_300uL_filter
 
-from .STAR_backend import (
+from .backend import (
+  STARBackend,
+)
+from .errors import (
   CommandSyntaxError,
   HamiltonNoTipError,
   HardwareError,
-  STARBackend,
   STARFirmwareError,
   UnknownHamiltonError,
+)
+from .shared import (
   parse_star_fw_string,
 )
 
