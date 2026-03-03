@@ -308,66 +308,9 @@ class STARChatterboxBackend(STARBackend):
     """
     tip = self.head[channel_idx].get_tip()
     return tip.total_tip_length
-
-  async def probe_liquid_heights(
-    self,
-    containers: List[Container],
-    use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
-    lld_mode: LLDMode = LLDMode.GAMMA,
-    search_speed: float = 10.0,
-    n_replicates: int = 1,
-    move_to_z_safety_before: bool = True,
-    move_to_z_safety_after: bool = True,
-    allow_duplicate_channels: bool = False,
-    min_traverse_height_at_beginning_of_command: Optional[float] = None,
-    min_traverse_height_during_command: Optional[float] = None,
-    z_position_at_end_of_command: Optional[float] = None,
-  ) -> List[float]:
-    """Probe liquid heights by computing from tracked container volumes.
-
-    Instead of simulating hardware LLD, this mock computes liquid heights directly from
-    each container's volume tracker using `container.compute_height_from_volume()`.
-
-    Args:
-      containers: List of Container objects to probe.
-      use_channels: Channel indices (validated for tip presence).
-      All other parameters: Accepted for API compatibility but unused in mock.
-
-    Returns:
-      Liquid heights in mm from cavity bottom for each container, computed from tracked volumes.
-
-    Raises:
-      NotImplementedError: If a container doesn't support compute_height_from_volume.
-    """
-    # Unused parameters kept for signature compatibility:
-    _ = (
-      lld_mode,
-      search_speed,
-      n_replicates,
-      move_to_z_safety_before,
-      move_to_z_safety_after,
-      allow_duplicate_channels,
-      min_traverse_height_at_beginning_of_command,
-      min_traverse_height_during_command,
-      z_position_at_end_of_command,
-      resource_offsets,
-    )
-    if use_channels is None:
-      use_channels = list(range(len(containers)))
-
-    # Validate tip presence using tip tracker
-    for ch in use_channels:
-      self.head[ch].get_tip()  # Raises NoTipError if no tip
-
-    heights: List[float] = []
-    for container in containers:
-      volume = container.tracker.get_used_volume()
-      if volume == 0:
-        heights.append(0.0)
-      else:
-        height = container.compute_height_from_volume(volume)
-        heights.append(height)
-
-    print(f"probe_liquid_heights: {[f'{h:.2f}' for h in heights]} mm")
-    return heights
+  
+  async def position_channels_in_y_direction(self, ys, make_space=True):
+    print("positioning channels in y:", ys, "make_space:", make_space)
+  
+  async def request_pip_height_last_lld(self):
+    return list(range(12))
