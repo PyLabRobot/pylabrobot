@@ -472,8 +472,8 @@ class TestHoiParams(unittest.TestCase):
   def test_string_array(self):
     params = HoiParams().add(["a", "bc"], StrArray).build()
     self.assertEqual(params[0], HamiltonDataType.STRING_ARRAY)
-    # String arrays have u32 count prefix
-    self.assertEqual(params[4:8], b"\x02\x00\x00\x00")  # count = 2
+    # String array payload is concatenated null-terminated strings (no count)
+    self.assertEqual(params[4:9], b"a\x00bc\x00")
 
   def test_method_chaining(self):
     self.assertEqual(HoiParams().add(1, I32).add("test", Str).add(True, Bool).count(), 3)

@@ -224,11 +224,16 @@ class StringType(WireType):
     return params._add_fragment(self.type_id, data)
 
   def decode_from(self, data: bytes) -> Any:
-    return data.rstrip(b"\x00").decode("ascii")
+    return data.rstrip(b"\x00").decode("utf-8")
 
 
 class StringArrayType(WireType):
-  """Count-prefixed array of null-terminated strings (type_id=34)."""
+  """Array of null-terminated strings (type_id=34).
+
+  Wire format: payload is a concatenation of null-terminated UTF-8 strings with
+  no leading element count. Fragment length in the HOI header defines the
+  payload boundary.
+  """
 
   __slots__ = ()
 
@@ -236,18 +241,17 @@ class StringArrayType(WireType):
     super().__init__(HamiltonDataType.STRING_ARRAY)
 
   def encode_into(self, value, params: HoiParams) -> HoiParams:
-    data = _struct.pack("<I", len(value))
+    data = b""
     for s in value:
       data += s.encode("utf-8") + b"\x00"
     return params._add_fragment(self.type_id, data)
 
   def decode_from(self, data: bytes) -> Any:
-    if len(data) < 4:
+    if not data:
       return []
-    count = _struct.unpack("<I", data[:4])[0]
     out: list[str] = []
-    off = 4
-    for _ in range(count):
+    off = 0
+    while off < len(data):
       null_pos = data.find(b"\x00", off)
       if null_pos == -1:
         break
