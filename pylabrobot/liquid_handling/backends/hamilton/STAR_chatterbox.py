@@ -9,6 +9,7 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
 )
 from pylabrobot.resources.well import Well
 
+
 class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
 
