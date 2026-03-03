@@ -1,19 +1,14 @@
-
-
-from typing import Awaitable, Callable, Dict, List, Optional
+from typing import Dict, List
 
 from pylabrobot.liquid_handling.utils import MIN_SPACING_BETWEEN_CHANNELS
-from pylabrobot.resources import Container, Coordinate, Resource
+from pylabrobot.resources import Coordinate
 
 
 def group_by_x_batch_by_xy(
-  locations: List[Coordinate] = None,
-  use_channels: Optional[List[int]] = None,
-  channels_minimum_y_spacing: float = MIN_SPACING_BETWEEN_CHANNELS  # TODO: function
-) -> Dict[float, List[List[int]]]:  # x position (group) -> list of batches of indices
-  # Validate parameters.
-  if use_channels is None:
-    use_channels = list(range(len(locations)))
+  locations: List[Coordinate],
+  use_channels: List[int],
+  channels_minimum_y_spacing: float = MIN_SPACING_BETWEEN_CHANNELS,
+) -> Dict[float, List[List[int]]]:
   if len(use_channels) == 0:
     raise ValueError("use_channels must not be empty.")
 
@@ -37,7 +32,7 @@ def group_by_x_batch_by_xy(
   # Within each x group, sort channels from back (lowest channel index) to front (highest channel index)
   for x_group_indices in x_groups.values():
     x_group_indices.sort(key=lambda i: use_channels[i])
-  
+
   # Within each x group, batch by y position while respecting minimum y spacing constraint
   y_batches: dict[float, List[List[int]]] = {}  # x position (group) -> list of batches of indices
   for x_group, x_group_indices in x_groups.items():
@@ -50,7 +45,9 @@ def group_by_x_batch_by_xy(
       for batch in y_batches_for_this_x:
         index_min_y = min(batch, key=lambda i: y_pos[i])
         # check min spacing
-        if y_pos[index_min_y] - y < channels_minimum_y_spacing * (use_channels[i] - use_channels[index_min_y]):
+        if y_pos[index_min_y] - y < channels_minimum_y_spacing * (
+          use_channels[i] - use_channels[index_min_y]
+        ):
           continue
         # check if channel is already used in this batch
         if use_channels[i] in [use_channels[j] for j in batch]:

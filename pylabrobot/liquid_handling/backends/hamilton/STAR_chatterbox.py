@@ -308,9 +308,9 @@ class STARChatterboxBackend(STARBackend):
     """
     tip = self.head[channel_idx].get_tip()
     return tip.total_tip_length
-  
+
   async def position_channels_in_y_direction(self, ys, make_space=True):
     print("positioning channels in y:", ys, "make_space:", make_space)
-  
+
   async def request_pip_height_last_lld(self):
     return list(range(12))

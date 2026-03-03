@@ -1840,21 +1840,23 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if traverse_height is None:
       await self.move_all_channels_in_z_safety()
     else:
-      await self.position_channels_in_z_direction({channel: traverse_height for channel in channels})
+      await self.position_channels_in_z_direction(
+        {channel: traverse_height for channel in channels}
+      )
 
   async def _probe_liquid_heights_batch(
     self,
     containers: List[Container],
-    use_channels: Optional[List[int]] = None,
+    use_channels: List[int],
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 1,
-  ) -> List[int]:
+  ) -> List[float]:
     """Helper for probe_liquid_heights that performs a single batch of liquid level detection using a set of channels.
 
     Assumes channels are moved to the appropriate traverse height before calling, and does not move channels after completion.
     """
-    
+
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
     detect_func: Callable[..., Any]
@@ -1941,17 +1943,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     if inconsistent_ops:
       raise RuntimeError(
         "Inconsistent liquid detection across replicates. "
-        "This may indicate liquid levels near the detection limit:\n"
-        + "\n".join(inconsistent_ops)
+        "This may indicate liquid levels near the detection limit:\n" + "\n".join(inconsistent_ops)
       )
 
     return relative_to_well
 
   def _compute_channels_in_resource_locations(
     self,
-    resources: List[Resource],
+    resources: Sequence[Resource],
     use_channels: List[int],
-    offsets: List[Coordinate],
+    offsets: Optional[List[Coordinate]],
   ) -> List[Coordinate]:
     """Compute absolute locations of resources with given offsets."""
 
@@ -1991,19 +1992,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resource_locations
 
-  async def execute_batched(  # TODO: any star liquid handler
+  async def execute_batched(  # TODO: any hamilton liquid handler
     self,
-
     func: Callable[[List[int]], Awaitable[None]],
-
     resources: List[Container],
     use_channels: Optional[List[int]] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
-
     min_traverse_height_during_command: Optional[float] = None,
   ):
+    if use_channels is None:
+      use_channels = list(range(len(resources)))
+
     # precompute locations and batches
-    locations = self._compute_channels_in_resource_locations(resources, use_channels, resource_offsets)
+    locations = self._compute_channels_in_resource_locations(
+      resources, use_channels, resource_offsets
+    )
     x_batches = group_by_x_batch_by_xy(
       locations=locations,
       use_channels=use_channels,
@@ -2019,7 +2022,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           await self._move_to_traverse_height(
             channels=prev_channels, traverse_height=min_traverse_height_during_command
           )
-        await self.move_channel_x(0, x_value) 
+        await self.move_channel_x(0, x_value)
 
         for y_batch in x_batch:
           if prev_channels is not None:
@@ -2045,12 +2048,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 1,
-
     # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
     min_traverse_height_at_beginning_of_command: Optional[float] = None,
     min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
-
     # Deprecated
     move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
@@ -2138,20 +2139,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         n_replicates=n_replicates,
       )
       for idx, height in zip(batch, liquid_heights):
-        result_by_operation[idx] = height      
+        result_by_operation[idx] = height
 
     await self.execute_batched(
       func=func,
-
       resources=containers,
       use_channels=use_channels,
       resource_offsets=resource_offsets,
-
       min_traverse_height_during_command=min_traverse_height_during_command,
     )
 
     await self._move_to_traverse_height(
-      channels=use_channels, traverse_height=z_position_at_end_of_command,
+      channels=use_channels,
+      traverse_height=z_position_at_end_of_command,
     )
 
     return [result_by_operation[idx] for idx in range(len(containers))]
