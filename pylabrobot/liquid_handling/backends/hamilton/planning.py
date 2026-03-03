@@ -11,6 +11,10 @@ def group_by_x_batch_by_xy(
 ) -> Dict[float, List[List[int]]]:
   if len(use_channels) == 0:
     raise ValueError("use_channels must not be empty.")
+  if len(locations) == 0:
+    raise ValueError("locations must not be empty.")
+  if len(locations) != len(use_channels):
+    raise ValueError("locations and use_channels must have the same length.")
 
   # Move channels to traverse height
   x_pos, y_pos = zip(*[(loc.x, loc.y) for loc in locations])
