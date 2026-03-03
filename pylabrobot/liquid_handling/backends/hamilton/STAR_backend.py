@@ -2121,6 +2121,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         f"got lengths {len(containers)}, {len(use_channels)}."
       )
 
+    # Validate resource_offsets length (if provided) to avoid silent truncation in downstream zips.
+    if resource_offsets is not None and len(resource_offsets) != len(containers):
+      raise ValueError(
+        "Length of resource_offsets must match the length of containers and use_channels, "
+        f"got lengths {len(resource_offsets)} (resource_offsets) and "
+        f"{len(containers)} (containers/use_channels)."
+      )
     # Make sure we have tips on all channels and know their lengths
     tip_presence = await self.request_tip_presence()
     if not all(tip_presence[idx] for idx in use_channels):
