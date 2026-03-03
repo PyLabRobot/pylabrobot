@@ -4,6 +4,8 @@ from .container import Container
 class Trash(Container):
   """Trash area."""
 
+  multichannel_capable: bool = True
+
   def __init__(
     self,
     name,

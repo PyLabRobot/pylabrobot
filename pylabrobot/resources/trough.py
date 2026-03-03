@@ -16,6 +16,8 @@ class TroughBottomType(enum.Enum):
 class Trough(Container):
   """A trough is a container, particularly useful for multichannel liquid handling operations."""
 
+  multichannel_capable: bool = True
+
   def __init__(
     self,
     name: str,

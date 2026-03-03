@@ -767,6 +767,22 @@ class LiquidHandler(Resource, Machine):
     if n == 0:
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
+    # Use per-channel waste tip spots if the deck provides them (e.g. HamiltonSTARDeck).
+    # Fall back to the standard trash area + tight Y offsets if not available.
+    get_waste_positions = getattr(self.deck, "get_waste_positions_for_channels", None)
+    if get_waste_positions is not None:
+      try:
+        waste_spots = get_waste_positions(n)
+        return await self.drop_tips(
+          tip_spots=waste_spots,
+          use_channels=use_channels,
+          offsets=offsets,
+          allow_nonzero_volume=allow_nonzero_volume,
+          **backend_kwargs,
+        )
+      except (RuntimeError, ValueError):
+        pass  # No spots defined or n exceeds available spots; fall through to trash.
+
     trash = self.deck.get_trash_area()
     trash_offsets = get_tight_single_resource_liquid_op_offsets(
       trash,
@@ -943,8 +959,9 @@ class LiquidHandler(Resource, Machine):
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
-    # center of the resource.
-    if len(set(resources)) == 1:
+    # center of the resource. Only applies to bulk containers (e.g. Trough, Trash) where
+    # multichannel access makes physical sense.
+    if len(set(resources)) == 1 and resources[0].multichannel_capable:
       resource = resources[0]
       resources = [resource] * len(use_channels)
       if spread == "tight":
@@ -1124,10 +1141,10 @@ class LiquidHandler(Resource, Machine):
     liquid_height = [float(lh) if lh is not None else None for lh in liquid_height]
     blow_out_air_volume = [float(bav) if bav is not None else None for bav in blow_out_air_volume]
 
-    # If the user specified a single resource, but multiple channels to use, we will assume they
+    # If the user specified a single resource that is multichannel capable, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
-    if len(set(resources)) == 1:
+    if len(set(resources)) == 1 and resources[0].multichannel_capable:
       resource = resources[0]
       resources = [resource] * len(use_channels)
       if spread == "tight":

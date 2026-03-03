@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import Literal, Optional, cast
+from typing import List, Literal, Optional, cast
 
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -27,6 +27,15 @@ STAR_NUM_RAILS = 56
 STAR_SIZE_X = 1545
 STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
+
+# Default single-channel waste tip spot positions for a STARLet deck.
+# Source: development/refs/star_waste_positions.txt
+# Note: Hamilton mm == PLR mm for STAR/STARLet (no origin offset), so no conversion is needed.
+# 16 evenly-spaced spots: x=800.0, y from 405.0 down to 217.5 in 12.5 mm steps, z=187.0.
+STAR_DEFAULT_WASTE_POSITIONS: List[Coordinate] = [
+  Coordinate(x=800.0, y=405.0 - i * 12.5, z=187.0)
+  for i in range(16)
+]
 
 
 def rails_for_x_coordinate(x: float) -> int:
@@ -444,10 +453,18 @@ class HamiltonSTARDeck(HamiltonDeck):
     core_grippers: Optional[
       Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
     ] = "1000uL-5mL-on-waste",
+    waste_positions: Optional[List[Coordinate]] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size.
 
     `with_trash` and `with_teaching_rack` require `with_waste_block` to be true.
+
+    Args:
+      waste_positions: Optional list of waste position coordinates in PLR mm (absolute, relative
+        to deck origin). If provided, creates named :class:`~pylabrobot.resources.Trash` resources
+        (``waste_position_1`` … ``waste_position_N``) as children of the waste block, enabling
+        :meth:`get_waste_positions_for_channels` to select evenly-spaced positions for any number
+        of active channels.  Requires ``with_waste_block=True``.
     """
 
     super().__init__(
@@ -518,11 +535,31 @@ class HamiltonSTARDeck(HamiltonDeck):
         waste_block.assign_child_resource(
           teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
         )
+      if waste_positions is not None:
+        for i, pos in enumerate(waste_positions, start=1):
+          pos_rel = Coordinate(
+            x=pos.x - waste_block.location.x,
+            y=pos.y - waste_block.location.y,
+            z=pos.z - waste_block.location.z,
+          )
+          waste_block.assign_child_resource(
+            Trash(
+              name=f"waste_position_{i}",
+              size_x=0.0,
+              size_y=0.0,
+              size_z=0.0,
+              category="waste_position",
+            ),
+            location=pos_rel,
+          )
+
     else:
       if with_trash:
         raise RuntimeError("Trash area cannot be created when no waste block is present.")
       if with_teaching_rack:
         raise RuntimeError("Teaching rack cannot be created when no waste block is present.")
+      if waste_positions is not None:
+        raise RuntimeError("Waste tip spots cannot be created when no waste block is present.")
 
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
@@ -556,6 +593,51 @@ class HamiltonSTARDeck(HamiltonDeck):
       )
     return self._trash96
 
+  def get_waste_positions_for_channels(self, n_channels: int) -> List[Trash]:
+    """Return ``n_channels`` evenly-spaced :class:`~pylabrobot.resources.Trash` waste resources.
+
+    Despite the ``waste_position`` naming convention, these are :class:`~pylabrobot.resources.Trash`
+    instances (not ``TipSpot``), created at deck initialisation via ``waste_positions``.
+    The selection spreads the requested channels across the full extent of the waste block:
+
+    * 16 positions, 8 channels  → spots 1, 3, 5, 7, 9, 11, 13, 15
+    * 16 positions, 4 channels  → spots 1, 5, 9, 13
+    * 16 positions, 16 channels → spots 1 … 16
+
+    Args:
+      n_channels: Number of channels that need a waste position.
+
+    Returns:
+      List of :class:`~pylabrobot.resources.trash.Trash` resources, one per channel, in
+      channel order (lowest index first).
+
+    Raises:
+      RuntimeError: If no waste tip spots were defined at deck initialisation.
+      ValueError: If ``n_channels`` exceeds the number of defined waste tip spots.
+    """
+    waste_block = self.get_resource("waste_block")
+
+    # Filter children by category, then sort by numeric suffix to guarantee order.
+    all_positions: List[Trash] = sorted(
+      [cast(Trash, child) for child in waste_block.children if child.category == "waste_position"],
+      key=lambda r: int(r.name.split("_")[-1]),
+    )
+
+    if not all_positions:
+      raise RuntimeError(
+        "No waste tip spots are defined on this deck. "
+        "Initialise with `waste_positions=<list of Coordinate>`."
+      )
+
+    n_total = len(all_positions)
+    if n_channels > n_total:
+      raise ValueError(
+        f"Requested {n_channels} channels but only {n_total} waste tip spots are defined."
+      )
+
+    step = max(1, n_total // n_channels)
+    return [all_positions[i * step] for i in range(n_channels)]
+
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
     children_names = [child.name for child in self.children]
@@ -576,6 +658,7 @@ def STARLetDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
+  waste_positions: Optional[List[Coordinate]] = STAR_DEFAULT_WASTE_POSITIONS,
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck.
 
@@ -592,6 +675,7 @@ def STARLetDeck(
     with_trash96=with_trash96,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
+    waste_positions=waste_positions,
   )
 
 
@@ -603,6 +687,7 @@ def STARDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
+  waste_positions: Optional[List[Coordinate]] = None,
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck.
 
@@ -619,4 +704,5 @@ def STARDeck(
     with_trash96=with_trash96,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
+    waste_positions=waste_positions,
   )

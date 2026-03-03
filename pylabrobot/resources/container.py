@@ -10,6 +10,8 @@ from .volume_tracker import VolumeTracker
 class Container(Resource):
   """A container is an abstract base class for a resource that can hold liquid."""
 
+  multichannel_capable: bool = False  # Override in bulk containers (e.g. Trough, Trash)
+
   def __init__(
     self,
     name: str,

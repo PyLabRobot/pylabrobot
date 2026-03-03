@@ -1687,15 +1687,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Drop tips to a resource.
 
     Args:
-      drop_method: The method to use for dropping tips. If None, the default method for dropping to
-        tip spots is `DROP`, and everything else is `PLACE_SHIFT`. Note that `DROP` is only the
-        default if *all* tips are being dropped to a tip spot.
+      drop_method: The method to use for dropping tips. If None, the method is chosen
+        automatically: ``PLACE_SHIFT`` when all resources are :class:`~pylabrobot.resources.Trash`
+        (waste blocks) or any resource is not a :class:`~pylabrobot.resources.TipSpot`;
+        ``DROP`` otherwise (tip spots in tip racks). When dropping to waste, ``begin`` and
+        ``end`` z-positions default to ``waste_z + 10`` and ``waste_z`` respectively (tip-cone-end
+        coordinates), giving a 10 mm approach above the waste surface with full descent.
     """
 
     self.ensure_can_reach_position(use_channels, ops, "drop_tips")
 
+    is_waste_drop = all(isinstance(op.resource, Trash) for op in ops)
     if drop_method is None:
-      if any(not isinstance(op.resource, TipSpot) for op in ops):
+      if is_waste_drop:
+        drop_method = TipDropMethod.PLACE_SHIFT  # lateral eject for waste blocks
+      elif any(not isinstance(op.resource, TipSpot) for op in ops):
         drop_method = TipDropMethod.PLACE_SHIFT
       else:
         drop_method = TipDropMethod.DROP
@@ -1705,17 +1711,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # get highest z position
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     if drop_method == TipDropMethod.PLACE_SHIFT:
-      # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
-      begin_tip_deposit_process = (
-        round((max_z + 59.9) * 10)
-        if begin_tip_deposit_process is None
-        else round(begin_tip_deposit_process * 10)
-      )
-      end_tip_deposit_process = (
-        round((max_z + 49.9) * 10)
-        if end_tip_deposit_process is None
-        else round(end_tip_deposit_process * 10)
-      )
+      if is_waste_drop:
+        begin_tip_deposit_process = (
+          round((max_z + 10) * 10)
+          if begin_tip_deposit_process is None
+          else round(begin_tip_deposit_process * 10)
+        )
+        end_tip_deposit_process = (
+          round(max_z * 10)
+          if end_tip_deposit_process is None
+          else round(end_tip_deposit_process * 10)
+        )
+      else:
+        # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
+        begin_tip_deposit_process = (
+          round((max_z + 59.9) * 10)
+          if begin_tip_deposit_process is None
+          else round(begin_tip_deposit_process * 10)
+        )
+        end_tip_deposit_process = (
+          round((max_z + 49.9) * 10)
+          if end_tip_deposit_process is None
+          else round(end_tip_deposit_process * 10)
+        )
     else:
       max_total_tip_length = max(op.tip.total_tip_length for op in ops)
       max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
