@@ -212,7 +212,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR.io.write = unittest.mock.MagicMock()
     self.STAR.io.read = unittest.mock.MagicMock()
 
-    self.deck = STARLetDeck()
+    self.deck = STARLetDeck(waste_positions=None)
     self.lh = LiquidHandler(self.STAR, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
@@ -243,6 +243,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     class BlueBucket(Container):
+      multichannel_capable = True
+
       def __init__(self, name: str):
         super().__init__(
           name,
@@ -1010,6 +1012,26 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       [
         _any_write_and_read_command_call(
           "C0TRid0003xp08000 08000 08000 08000 08000 08000 08000 08000yp3427 3337 3247 3157 3067 2977 2887 2797tm1 1 1 1 1 1 1 1tp1970tz1870th2450te2450ti0",
+        )
+      ]
+    )
+
+  async def test_discard_tips_to_waste_positions(self):
+    """When the deck has addressable waste positions, discard_tips uses them with waste-spot z (tp1970tz1870)."""
+    deck = STARLetDeck()
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[1] = tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    deck.assign_child_resource(tip_car, rails=1)
+    lh = LiquidHandler(self.STAR, deck=deck)
+    await lh.setup()
+
+    await lh.pick_up_tips(tip_rack["A1:H1"])
+    self.STAR._write_and_read_command.reset_mock()
+    await lh.discard_tips()
+    self.STAR._write_and_read_command.assert_has_calls(
+      [
+        _any_write_and_read_command_call(
+          "C0TRid0003xp08000 08000 08000 08000 08000 08000 08000 08000yp4050 3800 3550 3300 3050 2800 2550 2300tm1 1 1 1 1 1 1 1tp1970tz1870th2450te2450ti0",
         )
       ]
     )

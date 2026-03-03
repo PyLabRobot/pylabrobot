@@ -1743,15 +1743,21 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         automatically: ``PLACE_SHIFT`` when all resources are :class:`~pylabrobot.resources.Trash`
         (waste blocks) or any resource is not a :class:`~pylabrobot.resources.TipSpot`;
         ``DROP`` otherwise (tip spots in tip racks). When dropping to waste, ``begin`` and
-        ``end`` z-positions default to ``waste_z + 10`` and ``waste_z`` respectively (tip-cone-end
-        coordinates), giving a 10 mm approach above the waste surface with full descent.
+        ``end`` z-positions default to ``waste_z + 10`` and ``waste_z`` for addressable waste spots
+        (category ``waste_position``); the single trash area uses the original magic offsets (59.9,
+        49.9 mm above resource z).
     """
 
     self.ensure_can_reach_position(use_channels, ops, "drop_tips")
 
-    is_waste_drop = all(isinstance(op.resource, Trash) for op in ops)
+    # New z formula (max_z+10, max_z) only for addressable waste spots; fallback to trash area
+    # uses the original magic numbers (59.9, 49.9).
+    all_trash = all(isinstance(op.resource, Trash) for op in ops)
+    is_waste_drop = all_trash and all(
+      getattr(op.resource, "category", None) == "waste_position" for op in ops
+    )
     if drop_method is None:
-      if is_waste_drop:
+      if all_trash:
         drop_method = TipDropMethod.PLACE_SHIFT  # lateral eject for waste blocks
       elif any(not isinstance(op.resource, TipSpot) for op in ops):
         drop_method = TipDropMethod.PLACE_SHIFT
