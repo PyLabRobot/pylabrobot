@@ -8,11 +8,11 @@ hardware with the same behavior. The visualizer renders all as Container (one ty
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.serializer import serialize as plr_serialize
 from pylabrobot.resources.container import Container
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.volume_tracker import VolumeTracker
+from pylabrobot.serializer import serialize as plr_serialize
 from pylabrobot.utils.interpolation import interpolate_1d
 
 if TYPE_CHECKING:
