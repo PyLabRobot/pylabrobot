@@ -29,12 +29,10 @@ STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
 
 # Default single-channel waste tip spot positions for a STARLet deck.
-# Source: development/refs/star_waste_positions.txt
 # Note: Hamilton mm == PLR mm for STAR/STARLet (no origin offset), so no conversion is needed.
 # 16 evenly-spaced spots: x=800.0, y from 405.0 down to 217.5 in 12.5 mm steps, z=187.0.
 STAR_DEFAULT_WASTE_POSITIONS: List[Coordinate] = [
-  Coordinate(x=800.0, y=405.0 - i * 12.5, z=187.0)
-  for i in range(16)
+  Coordinate(x=800.0, y=405.0 - i * 12.5, z=187.0) for i in range(16)
 ]
 
 
@@ -534,11 +532,14 @@ class HamiltonSTARDeck(HamiltonDeck):
           teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
         )
       if waste_positions is not None:
+        wb_loc = waste_block.location
+        if wb_loc is None:
+          raise RuntimeError("Waste block has no location.")
         for i, pos in enumerate(waste_positions, start=1):
           pos_rel = Coordinate(
-            x=pos.x - waste_block.location.x,
-            y=pos.y - waste_block.location.y,
-            z=pos.z - waste_block.location.z,
+            x=pos.x - wb_loc.x,
+            y=pos.y - wb_loc.y,
+            z=pos.z - wb_loc.z,
           )
           waste_block.assign_child_resource(
             Trash(

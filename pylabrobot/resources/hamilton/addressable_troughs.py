@@ -6,22 +6,22 @@ hardware with the same behavior. The visualizer renders all as Container (one ty
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.serializer import serialize as plr_serialize
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.volume_tracker import VolumeTracker
 from pylabrobot.utils.interpolation import interpolate_1d
-from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:
   from pylabrobot.resources.liquid import Liquid
-  from pylabrobot.resources.volume_tracker import VolumeTracker
 
 # ---------------------------------------------------------------------------
 # TroughSpec: parameterization for any addressable trough
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class TroughSpec:
@@ -30,6 +30,7 @@ class TroughSpec:
   Register with register_trough_spec() so AddressableTrough can deserialize by
   spec_name. Spot positions are (spot_id, x_center_mm, y_center_mm) in local coords.
   """
+
   name: str  # Key for registry (e.g. \"hamilton_60ml\")
   size_x: float
   size_y: float
@@ -99,17 +100,13 @@ def _hamilton_60ml_volume_from_height(h_mm: float) -> float:
     raise ValueError("Height must be ≥ 0 mm.")
   if h_mm > _HAMILTON_60ML_SIZE_Z * 1.05:
     raise ValueError(f"Height {h_mm} is too large for 60 mL trough.")
-  return round(
-    max(0.0, interpolate_1d(h_mm, _HEIGHT_TO_VOLUME, bounds_handling="error")), 3
-  )
+  return round(max(0.0, interpolate_1d(h_mm, _HEIGHT_TO_VOLUME, bounds_handling="error")), 3)
 
 
 def _hamilton_60ml_height_from_volume(volume_ul: float) -> float:
   if volume_ul < 0:
     raise ValueError(f"Volume must be ≥ 0 µL; got {volume_ul} µL")
-  return round(
-    max(0.0, interpolate_1d(volume_ul, _VOLUME_TO_HEIGHT, bounds_handling="error")), 3
-  )
+  return round(max(0.0, interpolate_1d(volume_ul, _VOLUME_TO_HEIGHT, bounds_handling="error")), 3)
 
 
 # A1 = back, H1 = front
@@ -166,9 +163,12 @@ class TroughSpot(Container):
       compute_volume_from_height=lambda h: trough.compute_volume_from_height(h),
       compute_height_from_volume=lambda v: trough.compute_height_from_volume(v),
     )
-    self.tracker = DelegatingVolumeTracker(
-      thing=f"{self.name}_volume_tracker",
-      parent=trough.tracker,
+    self.tracker = cast(
+      VolumeTracker,
+      DelegatingVolumeTracker(
+        thing=f"{self.name}_volume_tracker",
+        parent=trough.tracker,
+      ),
     )
 
   def serialize(self) -> dict:
@@ -263,7 +263,6 @@ class AddressableTrough(Container):
     self._spec = spec
     self._spots: List[TroughSpot] = []
     self._spot_by_id: Dict[str, TroughSpot] = {}
-    spot_ids = [s[0] for s in spec.spots]
 
     if from_deserialize:
       self.register_did_assign_resource_callback(self._on_spot_assigned_from_deserialize)
@@ -282,9 +281,12 @@ class AddressableTrough(Container):
   def _on_spot_assigned_from_deserialize(self, resource: Resource) -> None:
     if not isinstance(resource, TroughSpot) or len(self._spots) >= len(self._spec.spots):
       return
-    resource.tracker = DelegatingVolumeTracker(
-      thing=f"{resource.name}_volume_tracker",
-      parent=self.tracker,
+    resource.tracker = cast(
+      VolumeTracker,
+      DelegatingVolumeTracker(
+        thing=f"{resource.name}_volume_tracker",
+        parent=self.tracker,
+      ),
     )
     resource._trough = self
     resource._size_x = self._spec.spot_size_xy
@@ -319,9 +321,7 @@ class AddressableTrough(Container):
       return self._spots[identifier]
     if isinstance(identifier, str):
       if identifier not in self._spot_by_id:
-        raise KeyError(
-          f"Unknown spot '{identifier}'; valid ids are {list(self._spot_by_id)}."
-        )
+        raise KeyError(f"Unknown spot '{identifier}'; valid ids are {list(self._spot_by_id)}.")
       return self._spot_by_id[identifier]
     raise TypeError(f"identifier must be str, int, or tuple; got {type(identifier)}.")
 
@@ -330,6 +330,7 @@ class AddressableTrough(Container):
     identifiers: Union[str, List[int], List[str]],
   ) -> List[TroughSpot]:
     import pylabrobot.utils
+
     if isinstance(identifiers, str):
       identifiers = pylabrobot.utils.expand_string_range(identifiers)
     return [self.get_item(i) for i in identifiers]
@@ -397,9 +398,7 @@ class DelegatingVolumeTracker:
   def set_volume(self, volume: float) -> None:
     self._parent.set_volume(volume)
 
-  def set_liquids(
-    self, liquids: List[Tuple[Optional["Liquid"], float]]
-  ) -> None:
+  def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]) -> None:
     self._parent.set_liquids(liquids)
 
   def remove_liquid(self, volume: float) -> None:

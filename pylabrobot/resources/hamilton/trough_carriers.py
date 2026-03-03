@@ -59,7 +59,7 @@ def Trough_CAR_5R60_A00(name: str) -> TroughCarrier:
         Coordinate(1.5, 103.0, 62.0 + 1.5),
         Coordinate(1.5, 199.0, 62.0 + 1.5),
         Coordinate(1.5, 295.0, 62.0 + 1.5),
-        Coordinate(1.5, 391.0, 62.0 + 1.5)
+        Coordinate(1.5, 391.0, 62.0 + 1.5),
       ],  # measured 62 to bottom of holder, but there is a 1.5mm pedestal
       resource_size_x=19.0,
       resource_size_y=90.0,
