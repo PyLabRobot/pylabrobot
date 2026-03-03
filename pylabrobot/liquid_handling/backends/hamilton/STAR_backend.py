@@ -2109,8 +2109,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     if not len(containers) == len(use_channels):
       raise ValueError(
-        "Length of containers, use_channels, and resource_offsets must match."
-        f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)}."
+        "Length of containers and use_channels must match, "
+        f"got lengths {len(containers)}, {len(use_channels)}."
       )
 
     # Make sure we have tips on all channels and know their lengths
@@ -11154,6 +11154,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channel_locations[channel_idx] = y
 
     if make_space:
+      use_channels = list(ys.keys())
+      back_channel = min(use_channels)
+      front_channel = max(use_channels)
+
+      # Position channels in between used channels
+      for intermediate_ch in range(back_channel + 1, front_channel):
+        if intermediate_ch not in ys:
+          channel_locations[intermediate_ch] = (
+            channel_locations[intermediate_ch - 1] - self._channel_minimum_y_spacing
+          )
+
       # For the channels to the back of `back_channel`, make sure the space between them is
       # >=9mm. We start with the channel closest to `back_channel`, and make sure the
       # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
@@ -11161,8 +11172,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # This order matters because the channel in front of any channel may have been moved in the
       # previous iteration.
       # Note that if a channel is already spaced at >=9mm, it is not moved.
-      use_channels = list(ys.keys())
-      back_channel = min(use_channels)
       for channel_idx in range(back_channel, 0, -1):
         if (
           channel_locations[channel_idx - 1] - channel_locations[channel_idx]
@@ -11175,7 +11184,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # spaced >= channel_minimum_y_spacing (usually 9mm) apart. This time, we iterate from
       # back (closest to `front_channel`) to the front (lh.backend.num_channels - 1), and
       # put each channel >= channel_minimum_y_spacing before the one behind it.
-      front_channel = max(use_channels)
       for channel_idx in range(front_channel, self.num_channels - 1):
         if (
           channel_locations[channel_idx] - channel_locations[channel_idx + 1]
@@ -11183,17 +11191,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           channel_locations[channel_idx + 1] = (
             channel_locations[channel_idx] - self._channel_minimum_y_spacing
           )
-      
-      # TODO: channels in between the channels that are given.
-      # y_positions: Dict[int, float] = {use_channels[i]: y_pos[i] for i in y_batch}
-      # sorted_batch_chs = sorted(batch_channels)
-      # for k in range(len(sorted_batch_chs) - 1):
-      #   ch_lo, ch_hi = sorted_batch_chs[k], sorted_batch_chs[k + 1]
-      #   for intermediate_ch in range(ch_lo + 1, ch_hi):
-      #     if intermediate_ch not in y_positions:
-      #       y_positions[intermediate_ch] = (
-      #         y_positions[ch_lo] - (intermediate_ch - ch_lo) * self._channel_minimum_y_spacing
-      #       )
 
     # Quick checks before movement.
     if channel_locations[0] > 650:

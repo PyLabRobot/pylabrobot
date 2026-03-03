@@ -48,8 +48,8 @@ def group_by_x_batch_by_xy(
       # find the first batch that this index can be added to without violating the minimum y spacing constraint
       # if no batch is found, create a new batch with this index
       for batch in y_batches_for_this_x:
-        min_y_in_batch = min(y_pos[j] for j in batch)
-        if min_y_in_batch - y >= channels_minimum_y_spacing:  # TODO: use function, count unused channels
+        index_min_y = min(batch, key=lambda i: y_pos[i])
+        if y_pos[index_min_y] - y >= channels_minimum_y_spacing * (use_channels[i] - use_channels[index_min_y]):
           batch.append(i)
           break
       else:
