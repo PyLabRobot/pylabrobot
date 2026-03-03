@@ -2013,25 +2013,29 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # loop over batches. keep track of channels used in previous batch to ensure they are raised to traverse height before next batch
     prev_channels: Optional[List[int]] = None
 
-    for x_value, x_batch in x_batches.items():
-      if prev_channels is not None:
-        await self._move_to_traverse_height(
-          channels=prev_channels, traverse_height=min_traverse_height_during_command
-        )
-      await self.move_channel_x(0, x_value) 
-
-      for y_batch in x_batch:
+    try:
+      for x_value, x_batch in x_batches.items():
         if prev_channels is not None:
           await self._move_to_traverse_height(
             channels=prev_channels, traverse_height=min_traverse_height_during_command
           )
-        await self.position_channels_in_y_direction(
-          {use_channels[idx]: locations[idx].y for idx in y_batch},
-        )
+        await self.move_channel_x(0, x_value) 
 
-        await func(y_batch)
+        for y_batch in x_batch:
+          if prev_channels is not None:
+            await self._move_to_traverse_height(
+              channels=prev_channels, traverse_height=min_traverse_height_during_command
+            )
+          await self.position_channels_in_y_direction(
+            {use_channels[idx]: locations[idx].y for idx in y_batch},
+          )
 
-        prev_channels = [use_channels[idx] for idx in y_batch]
+          await func(y_batch)
+
+          prev_channels = [use_channels[idx] for idx in y_batch]
+    except:
+      await self.move_all_channels_in_z_safety()
+      raise
 
   async def probe_liquid_heights(
     self,
