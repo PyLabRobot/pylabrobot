@@ -1841,7 +1841,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 1,
-    allow_duplicate_channels: bool = False,
 
     # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
     min_traverse_height_at_beginning_of_command: Optional[float] = None,
@@ -1849,7 +1848,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     z_position_at_end_of_command: Optional[float] = None,
 
     # Deprecated
-    move_to_z_safety_after: Optional[bool] = False,
+    move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -1866,8 +1865,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
-      allow_duplicate_channels: Whether to allow the same channel index to appear multiple times
-        in use_channels. Default False.
       min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
         channels to before the first batch. None (default) uses full Z safety.
       min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
@@ -1938,12 +1935,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # Validate parameters.
     if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
       raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
-
-    if not allow_duplicate_channels and len(use_channels) != len(set(use_channels)):
-      raise ValueError(
-        "use_channels must not contain duplicates. "
-        "Set `allow_duplicate_channels=True` to override."
-      )
 
     if not len(containers) == len(use_channels) == len(resource_offsets):
       raise ValueError(
@@ -2680,7 +2671,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
-        allow_duplicate_channels=True,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
@@ -3043,7 +3033,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         use_channels=use_channels,
         resource_offsets=[op.offset for op in ops],
         move_to_z_safety_after=False,
-        allow_duplicate_channels=True,
       )
 
       # override minimum traversal height because we don't want to move channels up. we are already above the liquid.
