@@ -1,4 +1,4 @@
-""" Corning plates. """
+"""Corning plates."""
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_container_1segment_round_fbottom,
