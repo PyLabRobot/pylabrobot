@@ -1835,11 +1835,20 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     LIQUID = 0
     FOAM = 1
 
-  async def _move_to_traverse_height(self, channels: List[int], traverse_height: Optional[float]):
-    """Move channels to a specified traverse height, if given, otherwise move to full Z safety."""
+  async def _move_to_traverse_height(
+    self, channels: Optional[List[int]] = None, traverse_height: Optional[float] = None
+  ):
+    """Move channels to a specified traverse height, if given, otherwise move to full Z safety.
+
+    Args:
+      channels: Channels to move. If None, all channels are moved.
+      traverse_height: Absolute Z position in mm. If None, move to full Z safety.
+    """
     if traverse_height is None:
       await self.move_all_channels_in_z_safety()
     else:
+      if channels is None:
+        channels = list(range(self.num_channels))
       await self.position_channels_in_z_direction(
         {channel: traverse_height for channel in channels}
       )
