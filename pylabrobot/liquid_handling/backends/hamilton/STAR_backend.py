@@ -2036,7 +2036,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           await func(y_batch)
 
           prev_channels = [use_channels[idx] for idx in y_batch]
-    except:
+    except Exception:
+      await self.move_all_channels_in_z_safety()
+      raise
+    except BaseException:
       await self.move_all_channels_in_z_safety()
       raise
 
