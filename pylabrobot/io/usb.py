@@ -70,9 +70,9 @@ class USB(IOBase):
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new USB object while capture or validation is active")
 
-    assert (
-      packet_read_timeout < read_timeout
-    ), "packet_read_timeout must be smaller than read_timeout."
+    assert packet_read_timeout < read_timeout, (
+      "packet_read_timeout must be smaller than read_timeout."
+    )
 
     self._id_vendor = id_vendor
     self._id_product = id_product
@@ -239,7 +239,7 @@ class USB(IOBase):
       if self._serial_number is not None:
         if dev._serial_number is None:
           raise RuntimeError(
-            "A serial number was specified, but the device does not have a serial " "number."
+            "A serial number was specified, but the device does not have a serial number."
           )
 
         if dev.serial_number != self._serial_number:
@@ -354,14 +354,16 @@ class USB(IOBase):
 
     self.write_endpoint = usb.util.find_descriptor(
       intf,
-      custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
-      == usb.util.ENDPOINT_OUT,
+      custom_match=lambda e: (
+        usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
+      ),
     )
 
     self.read_endpoint = usb.util.find_descriptor(
       intf,
-      custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
-      == usb.util.ENDPOINT_IN,
+      custom_match=lambda e: (
+        usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
+      ),
     )
 
     logger.info(

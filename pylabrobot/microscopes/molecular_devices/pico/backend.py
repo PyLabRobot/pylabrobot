@@ -282,7 +282,7 @@ def _buffer_to_ndarray(image_buffer: bytes, width: int, height: int):
     return np.frombuffer(image_buffer[:expected_8bit], dtype=np.uint8).reshape(height, width)
 
   raise ValueError(
-    f"Cannot decode image buffer: {len(image_buffer)} bytes, " f"expected {width}x{height} pixels"
+    f"Cannot decode image buffer: {len(image_buffer)} bytes, expected {width}x{height} pixels"
   )
 
 
@@ -354,13 +354,12 @@ class ExperimentalPicoBackend(ImagerBackend):
     for pos, obj in (objectives or {}).items():
       if obj not in _OBJECTIVE_MAP:
         raise ValueError(
-          f"Objective {obj} not supported by Pico. " f"Supported: {list(_OBJECTIVE_MAP.keys())}"
+          f"Objective {obj} not supported by Pico. Supported: {list(_OBJECTIVE_MAP.keys())}"
         )
     for pos, mode in (filter_cubes or {}).items():
       if mode not in _IMAGING_MODE_MAP:
         raise ValueError(
-          f"Imaging mode {mode} not supported by Pico. "
-          f"Supported: {list(_IMAGING_MODE_MAP.keys())}"
+          f"Imaging mode {mode} not supported by Pico. Supported: {list(_IMAGING_MODE_MAP.keys())}"
         )
 
     self._objectives: Dict[int, Objective] = objectives or {}
@@ -742,11 +741,11 @@ class ExperimentalPicoBackend(ImagerBackend):
   ) -> ImagingResult:
     if mode not in _IMAGING_MODE_MAP:
       raise ValueError(
-        f"Unsupported imaging mode {mode} for Pico. " f"Supported: {list(_IMAGING_MODE_MAP.keys())}"
+        f"Unsupported imaging mode {mode} for Pico. Supported: {list(_IMAGING_MODE_MAP.keys())}"
       )
     if objective not in _OBJECTIVE_MAP:
       raise ValueError(
-        f"Unsupported objective {objective} for Pico. " f"Supported: {list(_OBJECTIVE_MAP.keys())}"
+        f"Unsupported objective {objective} for Pico. Supported: {list(_OBJECTIVE_MAP.keys())}"
       )
 
     light_channel, filter_cube, excitation_source = _IMAGING_MODE_MAP[mode]

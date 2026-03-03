@@ -30,7 +30,7 @@ dev = [
   "pytest-timeout==2.4.0",
   "mypy==1.18.2",
   "sphinx-reredirects==0.1.6",
-  "ruff==0.2.1",
+  "ruff==0.15.4",
   "nbconvert==7.16.6",
   "sphinx-sitemap==2.8.0",
   "pydata-sphinx-theme==0.16.1",
