@@ -198,7 +198,7 @@ class STARChatterboxBackend(STARBackend):
     Returns a mock position with a default value of 0.0 for all channels.
     """
     if not (0 <= channel_idx < self.num_channels):
-      raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}")
+      raise ValueError(f"channel_idx must be between 0 and {self.num_channels - 1}")
 
     return simulated_value
 

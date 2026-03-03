@@ -222,7 +222,9 @@ class Imager(Resource, Machine):
     gain: Gain = "machine-auto",
     **backend_kwargs,
   ) -> ImagingResult:
-    if not isinstance(exposure_time, (int, float, AutoExposure)):
+    if exposure_time != "machine-auto" and not isinstance(
+      exposure_time, (int, float, AutoExposure)
+    ):
       raise TypeError(f"Invalid exposure time: {exposure_time}")
     if (
       not isinstance(focal_height, (int, float))
@@ -253,9 +255,9 @@ class Imager(Resource, Machine):
       )
 
     if isinstance(focal_height, AutoFocus):
-      assert isinstance(
-        exposure_time, (int, float)
-      ), "Exposure time must be specified for auto focus"
+      assert isinstance(exposure_time, (int, float)), (
+        "Exposure time must be specified for auto focus"
+      )
       assert gain != "machine-auto", "Gain must be specified for auto focus"
       return await self._capture_auto_focus(
         well=well,

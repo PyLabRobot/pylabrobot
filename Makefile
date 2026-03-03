@@ -19,16 +19,18 @@ clean-docs:
 	rm -rf docs/jupyter_execute
 	rm -rf docs/user_guide/jupyter_execute
 
+TRACKED_PY = $(shell git ls-files 'pylabrobot/*.py' 'pylabrobot/*.ipynb')
+
 lint:
-	$(BIN)python -m ruff check pylabrobot
+	$(BIN)python -m ruff check $(TRACKED_PY)
 
 format:
-	$(BIN)python -m ruff format pylabrobot
-	$(BIN)python -m ruff check --fix pylabrobot --select I
+	$(BIN)python -m ruff format $(TRACKED_PY)
+	$(BIN)python -m ruff check --fix $(TRACKED_PY) --select I
 
 format-check:
-	$(BIN)python -m ruff format --check pylabrobot
-	$(BIN)python -m ruff check pylabrobot --select I
+	$(BIN)python -m ruff format --check $(TRACKED_PY)
+	$(BIN)python -m ruff check $(TRACKED_PY) --select I
 
 test:
 	$(BIN)python -m pytest -s -v
