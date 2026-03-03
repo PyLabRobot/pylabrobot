@@ -1841,13 +1841,15 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 1,
-    move_to_z_safety_before: bool = True,
-    move_to_z_safety_after: bool = True,
     allow_duplicate_channels: bool = False,
+
     # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
     min_traverse_height_at_beginning_of_command: Optional[float] = None,
     min_traverse_height_during_command: Optional[float] = None,
     z_position_at_end_of_command: Optional[float] = None,
+
+    # Deprecated
+    move_to_z_safety_after: Optional[bool] = False,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -1864,8 +1866,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
-      move_to_z_safety_after: Whether to move channels to safe Z height after probing.
-        Default True.
       allow_duplicate_channels: Whether to allow the same channel index to appear multiple times
         in use_channels. Default False.
       min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
@@ -1873,7 +1873,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
         between batches (X groups and Y sub-batches). None (default) uses full Z safety.
       z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
-        probing (only used when move_to_z_safety_after is True). None (default) uses full Z safety.
+        probing. None (default) uses full Z safety.
 
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
@@ -1887,6 +1887,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       - For single containers with odd channel counts, Y-offsets are applied to avoid
         center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
     """
+
+    if move_to_z_safety_after is not None:
+      warnings.warn(
+        "The 'move_to_z_safety_after' parameter is deprecated and will be removed in a future release. "
+        "Use 'z_position_at_end_of_command' with an appropriate Z height instead. If not set, "
+        "the default behavior will be to move to full Z safety after the command.",
+        DeprecationWarning,
+      )
 
     if use_channels is None:
       use_channels = list(range(len(containers)))
@@ -1950,15 +1958,14 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
-    # Default: move all channels to Z safety first (including uninvolved channels),
-    # be conservative on safety but allow repeated calls with minimal "channel jumping"
-    if move_to_z_safety_before:
-      await self.move_all_channels_in_z_safety()
-    # Optional: lower only the involved channels to the requested traverse height
+    # Move channels to traverse height: either all to full safety (default),
+    # or only involved channels to specified height for efficiency
     if min_traverse_height_at_beginning_of_command is not None:
       await self.position_channels_in_z_direction(
         {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
       )
+    else:
+      await self.move_all_channels_in_z_safety()
 
     # Compute X and Y positions for all containers
     x_pos = [
@@ -2176,13 +2183,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + "\n".join(inconsistent_channels)
       )
 
-    if move_to_z_safety_after:
-      if z_position_at_end_of_command is None:
-        await self.move_all_channels_in_z_safety()
-      else:
-        await self.position_channels_in_z_direction(
-          {ch: z_position_at_end_of_command for ch in use_channels}
-        )
+    if z_position_at_end_of_command is None:
+      await self.move_all_channels_in_z_safety()
+    else:
+      await self.position_channels_in_z_direction(
+        {ch: z_position_at_end_of_command for ch in use_channels}
+      )
 
     return relative_to_well
 
