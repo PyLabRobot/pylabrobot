@@ -1833,6 +1833,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     LIQUID = 0
     FOAM = 1
 
+  async def _move_to_traverse_height(self, channels: List[int], traverse_height: Optional[float]):
+    """Move channels to a specified traverse height, if given, otherwise move to full Z safety."""
+    if traverse_height is not None:
+      await self.move_all_channels_in_z_safety()
+    else:
+      await self.position_channels_in_z_direction({channel: traverse_height for channel in channels})
+
   async def probe_liquid_heights(
     self,
     containers: List[Container],
@@ -1949,14 +1956,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
 
-    # Move channels to traverse height: either all to full safety (default),
-    # or only involved channels to specified height for efficiency
-    if min_traverse_height_at_beginning_of_command is not None:
-      await self.position_channels_in_z_direction(
-        {ch: min_traverse_height_at_beginning_of_command for ch in use_channels}
-      )
-    else:
-      await self.move_all_channels_in_z_safety()
+    # Move channels to traverse height
+    await self._move_to_traverse_height(
+      channels=use_channels, traverse_height=min_traverse_height_at_beginning_of_command
+    )
 
     # Compute X and Y positions for all containers
     x_pos = [
@@ -1997,13 +2000,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         # Raise channels before moving X carriage (tips may be lowered from previous group)
         if not is_first_x_group:
           assert prev_indices is not None
-          if min_traverse_height_during_command is None:
-            await self.move_all_channels_in_z_safety()
-          else:
-            prev_channels = [use_channels[i] for i in prev_indices]
-            await self.position_channels_in_z_direction(
-              {ch: min_traverse_height_during_command for ch in prev_channels}
-            )
+          await self._move_to_traverse_height(
+            channels=[use_channels[i] for i in prev_indices],
+            traverse_height=min_traverse_height_during_command,
+          )
         await self.move_channel_x(0, group_x)
 
         # ──────────────────────────────────────────────────────────────────────────
@@ -2068,13 +2068,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           # Raise channels before Y repositioning (skip first batch in each X group —
           # already safe from the X-group-level raise or initial raise)
           if y_batch_idx > 0:
-            if min_traverse_height_during_command is None:
-              await self.move_all_channels_in_z_safety()
-            else:
-              prev_batch_channels = [use_channels[i] for i in y_batches[y_batch_idx - 1]]
-              await self.position_channels_in_z_direction(
-                {ch: min_traverse_height_during_command for ch in prev_batch_channels}
-              )
+            await self._move_to_traverse_height(
+              channels=batch_channels, traverse_height=min_traverse_height_during_command
+            )
 
           # Position the batch's channels in Y, including any intermediate channels
           # (channels between batch members that aren't part of this batch) to ensure
@@ -2174,12 +2170,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         + "\n".join(inconsistent_channels)
       )
 
-    if z_position_at_end_of_command is None:
-      await self.move_all_channels_in_z_safety()
-    else:
-      await self.position_channels_in_z_direction(
-        {ch: z_position_at_end_of_command for ch in use_channels}
-      )
+    await self._move_to_traverse_height(
+      channels=use_channels, traverse_height=z_position_at_end_of_command,
+    )
 
     return relative_to_well
 
