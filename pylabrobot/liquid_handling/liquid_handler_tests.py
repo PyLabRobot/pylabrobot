@@ -478,7 +478,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.maxDiff = None
 
     self.backend = _create_mock_backend(num_channels=8)
-    self.deck = STARLetDeck()
+    self.deck = STARLetDeck(waste_positions=None)
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
