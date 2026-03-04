@@ -15,4 +15,3 @@ class BarcodeScannerBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def scan_barcode(self) -> Barcode:
     """Scan a barcode and return its value."""
-    pass

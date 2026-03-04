@@ -57,7 +57,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
       await asyncio.sleep(self.poll_interval)
     else:
       raise BarcodeScannerError(
-        "Failed to initialize Keyence barcode scanner: " "Timeout waiting for motor to turn on."
+        "Failed to initialize Keyence barcode scanner: Timeout waiting for motor to turn on."
       )
 
   async def send_command(self, command: str) -> str:
