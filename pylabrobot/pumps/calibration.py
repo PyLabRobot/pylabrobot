@@ -4,8 +4,10 @@ import csv
 import json
 from typing import Dict, List, Literal, Optional, Union
 
+from pylabrobot.serializer import SerializableMixin
 
-class PumpCalibration:
+
+class PumpCalibration(SerializableMixin):
   """Calibration for a single pump or pump array
 
   Attributes:
