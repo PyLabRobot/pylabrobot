@@ -2,10 +2,11 @@ import inspect
 import weakref
 from abc import ABC, abstractmethod
 
+from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.object_parsing import find_subclass
 
 
-class MachineBackend(ABC):
+class MachineBackend(SerializableMixin, ABC):
   """Abstract class for machine backends."""
 
   _instances: weakref.WeakSet["MachineBackend"] = weakref.WeakSet()

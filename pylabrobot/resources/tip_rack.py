@@ -73,7 +73,7 @@ class TipSpot(Resource):
       tip = self._make_tip_func(self._get_next_tip_name())
     else:
       warnings.warn(
-        "The make_tip function should accept a 'name' parameter to " "assign unique names to tips.",
+        "The make_tip function should accept a 'name' parameter to assign unique names to tips.",
         DeprecationWarning,
       )
       tip = self._make_tip_func()  # type: ignore # ignore type check for deprecated behavior
