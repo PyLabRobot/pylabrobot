@@ -97,17 +97,6 @@ class HamiltonTip(Tip):
       "tip_size": self.tip_size.name,
     }
 
-  @classmethod
-  def deserialize(cls, data):
-    return HamiltonTip(
-      name=data["name"],
-      has_filter=data["has_filter"],
-      total_tip_length=data["total_tip_length"],
-      maximal_volume=data["maximal_volume"],
-      tip_size=TipSize[data["tip_size"]],
-      pickup_method=TipPickupMethod[data["pickup_method"]],
-    )
-
 
 def standard_volume_tip_no_filter(name: Optional[str] = None) -> HamiltonTip:
   """Deprecated. Use :func:`hamilton_tip_300uL` instead."""

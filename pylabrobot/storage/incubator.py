@@ -194,16 +194,16 @@ class Incubator(Machine, Resource):
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    backend = IncubatorBackend.deserialize(data.pop("backend"))
+    rotation_data = data.get("rotation")
     return cls(
-      backend=backend,
+      backend=IncubatorBackend.deserialize(data["backend"]),
       name=data["name"],
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
       racks=[PlateCarrier.deserialize(rack) for rack in data["racks"]],
       loading_tray_location=cast(Coordinate, deserialize(data["loading_tray_location"])),
-      rotation=Rotation.deserialize(data["rotation"]),
-      category=data["category"],
-      model=data["model"],
+      rotation=deserialize(rotation_data) if rotation_data else None,
+      category=data.get("category"),
+      model=data.get("model"),
     )
