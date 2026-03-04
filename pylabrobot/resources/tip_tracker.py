@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable, Optional, cast
 
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.tip import Tip
-from pylabrobot.serializer import deserialize
+from pylabrobot.serializer import SerializableMixin, deserialize
 
 if TYPE_CHECKING:
   from pylabrobot.resources.tip_rack import TipSpot
@@ -33,7 +33,7 @@ def no_tip_tracking():
 TrackerCallback = Callable[[], None]
 
 
-class TipTracker:
+class TipTracker(SerializableMixin):
   """A tip tracker tracks tip operations and raises errors if the tip operations are invalid."""
 
   def __init__(self, thing: str):
