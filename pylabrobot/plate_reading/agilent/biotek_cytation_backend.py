@@ -738,6 +738,7 @@ class CytationBackend(BioTekPlateReaderBackend, ImagerBackend):
 
     if mode == self._imaging_mode:
       logger.debug("Imaging mode is already set to %s", mode)
+      await self.led_on(intensity=led_intensity)
       return
 
     if mode == ImagingMode.COLOR_BRIGHTFIELD:
