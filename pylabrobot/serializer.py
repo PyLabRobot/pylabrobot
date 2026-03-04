@@ -104,7 +104,7 @@ def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
         raise ValueError(f"Could not find class '{klass_type}'")
       params = {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
       if "deserialize" in klass.__dict__:
-        return klass.deserialize(params)
+        return klass.deserialize(params)  # type: ignore[attr-defined]
       return klass(**params)
     return {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
   if isinstance(data, object):
