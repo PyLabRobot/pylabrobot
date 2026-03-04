@@ -59,6 +59,12 @@ tr > td:nth-child(5) { width: 15%; }
 | Cole Parmer | Masterflex L/S 07522-20 07522-30 07551-20 07551-30 07575-30 07575-40 | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html) / [OEM](https://www.masterflex.nl/assets/uploads/2017/09/07551-xx.pdf) |
 | Agrowtek | Pump Array | Full | [OEM](https://www.agrowtek.com/index.php/products/dosing_systems/dosing-pumps/agrowdose-adi-digital-persitaltic-dosing-pumps-detail) |
 
+### Plate Washers
+
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Agilent (BioTek) | EL406 | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/plate-washing/biotek-el406.html) / [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-el406-washer-dispenser-795212) |
+
 ---
 
 ## Material Handling
@@ -155,10 +161,12 @@ tr > td:nth-child(5) { width: 15%; }
 | Agilent (BioTek) | Cytation 1 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/cytation.html) / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-1-cell-imaging-multimode-reader-1623200) |
 | Agilent (BioTek) | Cytation 5 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span><span class="badge badge-microscopy">microscopy</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/cytation.html) / [OEM](https://www.agilent.com/en/product/cell-analysis/cell-imaging-microscopy/cell-imaging-multimode-readers/biotek-cytation-5-cell-imaging-multimode-reader-1623202) |
 | Agilent (BioTek) | Synergy H1 | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span><span class="badge badge-luminescence">luminescence</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/synergyh1.html) / [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-h1-multimode-reader-1623193) |
-| Byonoy | Absorbance 96 Automate | <span class="badge badge-absorbance">absorbance</span> | WIP | [OEM](https://byonoy.com/absorbance-96-automate/) |
-| Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | WIP | [OEM](https://byonoy.com/luminescence-96-automate/) |
+| Byonoy | Absorbance 96 Automate | <span class="badge badge-absorbance">absorbance</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/byonoy/absorbance.html) / [OEM](https://byonoy.com/absorbance-96-automate/) |
+| Byonoy | Luminescence 96 | <span class="badge badge-luminescence">luminescence</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/byonoy/luminescence.html) / [OEM](https://byonoy.com/luminescence-96/) |
+| Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/byonoy/luminescence.html) / [OEM](https://byonoy.com/luminescence-96-automate/) |
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
+| Molecular Devices | ImageXpress Pico | <span class="badge badge-microscopy">microscopy</span> | Basics | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/pico.html) / [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico) |
 
 
 ### Flow Cytometers

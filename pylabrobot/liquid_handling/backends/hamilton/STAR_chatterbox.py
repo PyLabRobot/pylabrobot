@@ -1,26 +1,36 @@
 import datetime
 from contextlib import asynccontextmanager
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import Head96Information, STARBackend
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
+  Head96Information,
+  STARBackend,
+)
 from pylabrobot.resources.well import Well
 
 
 class STARChatterboxBackend(STARBackend):
   """Chatterbox backend for 'STAR'"""
 
-  def __init__(self, num_channels: int = 8, core96_head_installed: bool = True):
+  def __init__(
+    self,
+    num_channels: int = 8,
+    core96_head_installed: bool = True,
+    iswap_installed: bool = True,
+  ):
     """Initialize a chatter box backend.
 
     Args:
       num_channels: Number of pipetting channels (default: 8)
       core96_head_installed: Whether the CoRe 96 head is installed (default: True)
+      iswap_installed: Whether the iSWAP robotic arm is installed (default: True)
     """
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
     self._core96_head_installed = core96_head_installed
+    self._iswap_installed = iswap_installed
 
   async def setup(
     self,
@@ -132,12 +142,13 @@ class STARChatterboxBackend(STARBackend):
     """
     # Calculate xl byte based on installed modules
     # Bit 0: (reserved)
-    # Bit 1: iSWAP (always True in this mock)
+    # Bit 1: iSWAP (based on __init__ parameter)
     # Bit 2: 96-head (based on __init__ parameter)
-    xl_value = 0b10  # iSWAP installed (bit 1)
+    xl_value = 0
+    if self._iswap_installed:
+      xl_value |= 0b10  # Add iSWAP (bit 1)
     if self._core96_head_installed:
       xl_value |= 0b100  # Add 96-head (bit 2)
-    # Result: xl = 6 (0b110) if 96-head installed, 2 (0b10) if not
 
     self._extended_conf = {
       "ka": 65537,
@@ -167,25 +178,14 @@ class STARChatterboxBackend(STARBackend):
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
 
-  async def request_tip_presence(self, mock_presence: Optional[List[int]] = None) -> List[int]:
-    """Check mock tip presence with optional list for user-modifiable tip presence.
-    (Mock MEM-READ command)
-    Args:
-      mock_presence: Optional list indicating tip presence for each channel.
-        1 indicates tip present, 0 indicates no tip.
-
-    Default: all tips present.
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Return mock tip presence based on the tip tracker state.
 
     Returns:
-      List of integers indicating tip presence for each channel.
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
     """
-    if mock_presence is None:
-      return [1 for channel_idx in range(self.num_channels)]
-
-    assert (
-      len(mock_presence) == self.num_channels
-    ), "Length of mock_presence must match number of channels."
-    return mock_presence
+    return [self.head[ch].has_tip for ch in range(self.num_channels)]
 
   async def request_z_pos_channel_n(self, channel: int) -> float:
     return 285.0
@@ -201,12 +201,21 @@ class STARChatterboxBackend(STARBackend):
     Returns a mock position with a default value of 0.0 for all channels.
     """
     if not (0 <= channel_idx < self.num_channels):
-      raise ValueError(f"channel_idx must be between 0 and {self.num_channels-1}")
+      raise ValueError(f"channel_idx must be between 0 and {self.num_channels - 1}")
 
     return simulated_value
 
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
+
+  async def move_channel_x(self, channel: int, x: float):
+    print(f"moving channel {channel} to x: {x}")
+
+  async def move_all_channels_in_z_safety(self):
+    print("moving all channels to z safety")
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    print(f"positioning channels in z: {zs}")
 
   # # # # # # # # 1_000 uL Channel: Complex Commands # # # # # # # #
 
@@ -276,3 +285,26 @@ class STARChatterboxBackend(STARBackend):
     finally:
       messages.append("end slow iswap")
       print(" | ".join(messages))
+
+  # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
+
+  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
+    """Return tip length from the tip tracker.
+
+    Args:
+      channel_idx: Index of the pipetting channel (0-indexed).
+
+    Returns:
+      The tip length in mm from the tip tracker.
+
+    Raises:
+      NoTipError: If no tip is present on the channel (via tip tracker).
+    """
+    tip = self.head[channel_idx].get_tip()
+    return tip.total_tip_length
+
+  async def position_channels_in_y_direction(self, ys, make_space=True):
+    print("positioning channels in y:", ys, "make_space:", make_space)
+
+  async def request_pip_height_last_lld(self):
+    return list(range(12))

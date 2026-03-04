@@ -3,4 +3,4 @@ from .chatterbox import IncubatorChatterboxBackend
 from .cytomat import CytomatBackend
 from .incubator import Incubator
 from .liconic import LiconicBackend
-# from .inheco import *
+from .inheco.scila import SCILABackend

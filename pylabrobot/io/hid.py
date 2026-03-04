@@ -10,6 +10,7 @@ from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
   import hid  # type: ignore
+  from hid import HIDException
 
   USE_HID = True
 except ImportError as e:
@@ -46,8 +47,8 @@ class HID(IOBase):
     """
     if not USE_HID:
       raise RuntimeError(
-        "This backend requires the `hid` package to be installed."
-        f" Import error: {_HID_IMPORT_ERROR}"
+        "hid is not installed. Install with: pip install pylabrobot[hid]. "
+        f"Import error: {_HID_IMPORT_ERROR}"
       )
 
     # --- 1. Enumerate all HID devices ---
@@ -156,7 +157,12 @@ class HID(IOBase):
 
     def _read():
       assert self.device is not None, "forgot to call setup?"
-      return self.device.read(size, timeout=int(timeout))
+      try:
+        return self.device.read(size, timeout=int(timeout))
+      except HIDException as e:
+        if str(e) == "Success":
+          return b""
+        raise
 
     if self._executor is None:
       raise RuntimeError("Call setup() first.")

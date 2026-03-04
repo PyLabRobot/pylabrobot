@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 
+from pylabrobot.serializer import SerializableMixin
 
-class IOBase(ABC):
+
+class IOBase(SerializableMixin, ABC):
   @abstractmethod
   async def write(self, data: bytes, *args, **kwargs):
     pass

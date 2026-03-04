@@ -10,6 +10,10 @@ from .resource import Resource
 from .rotation import Rotation
 
 
+def _make_test_deck() -> Deck:
+  return Deck(size_x=100, size_y=100, size_z=100)
+
+
 class TestResource(unittest.TestCase):
   def test_simple_get_size(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
@@ -36,7 +40,7 @@ class TestResource(unittest.TestCase):
     self.assertAlmostEqual(r.get_absolute_size_y(), height1, places=5)
 
   def test_get_resource(self):
-    deck = Deck()
+    deck = _make_test_deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
     child = Resource("child", size_x=5, size_y=5, size_z=5)
@@ -49,7 +53,7 @@ class TestResource(unittest.TestCase):
       deck.get_resource("not_a_resource")
 
   def test_assign_in_order(self):
-    deck = Deck()
+    deck = _make_test_deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
     child = Resource("child", size_x=10, size_y=10, size_z=10)
@@ -66,7 +70,7 @@ class TestResource(unittest.TestCase):
     child = Resource("child", size_x=5, size_y=5, size_z=5)
     parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
-    deck = Deck()
+    deck = _make_test_deck()
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
 
     self.assertEqual(deck.get_resource("parent"), parent)
@@ -76,7 +80,7 @@ class TestResource(unittest.TestCase):
     self.assertIsNone(deck.parent)
 
   def test_assign_name_taken(self):
-    deck = Deck()
+    deck = _make_test_deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
     child = Resource("child", size_x=5, size_y=5, size_z=5)
@@ -122,7 +126,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(resource.get_anchor(x="c", y="c", z="c"), Coordinate(6, 6, 6))
 
   def test_absolute_location(self):
-    deck = Deck()
+    deck = _make_test_deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
     child = Resource("child", size_x=5, size_y=5, size_z=5)
@@ -138,7 +142,7 @@ class TestResource(unittest.TestCase):
     )
 
   def test_get_absolute_location_with_anchor(self):
-    deck = Deck()
+    deck = _make_test_deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
     child = Resource("child", size_x=5, size_y=5, size_z=5)
@@ -161,7 +165,7 @@ class TestResource(unittest.TestCase):
     )
 
   def test_unassign_child(self):
-    deck = Deck()
+    deck = _make_test_deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
     child = Resource("child", size_x=5, size_y=5, size_z=5)
@@ -187,7 +191,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(parent2.children, [child])
 
   def test_get_all_children(self):
-    deck = Deck()
+    deck = _make_test_deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
     child = Resource("child", size_x=5, size_y=5, size_z=5)
@@ -196,8 +200,8 @@ class TestResource(unittest.TestCase):
     self.assertEqual(deck.get_all_children(), [parent, child])
 
   def test_eq(self):
-    deck1 = Deck()
-    deck2 = Deck()
+    deck1 = _make_test_deck()
+    deck2 = _make_test_deck()
     self.assertEqual(deck1, deck2)
 
     parent1 = Resource("parent", size_x=10, size_y=10, size_z=10)
@@ -240,6 +244,7 @@ class TestResource(unittest.TestCase):
           "symbology": "code128",
           "position_on_resource": "left",
         },
+        "preferred_pickup_location": None,
       },
     )
 
@@ -287,12 +292,14 @@ class TestResource(unittest.TestCase):
             "parent_name": "test",
             "model": None,
             "barcode": None,
+            "preferred_pickup_location": None,
           }
         ],
         "category": None,
         "parent_name": None,
         "model": None,
         "barcode": None,
+        "preferred_pickup_location": None,
       },
     )
 

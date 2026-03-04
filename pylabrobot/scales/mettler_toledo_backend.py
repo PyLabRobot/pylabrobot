@@ -15,7 +15,7 @@ logger = logging.getLogger("pylabrobot")
 class MettlerToledoError(Exception):
   """Exceptions raised by a Mettler Toledo scale."""
 
-  def __init__(self, title: str, message: Optional[str]) -> None:
+  def __init__(self, title: str, message: Optional[str] = None) -> None:
     self.title = title
     self.message = message
 
@@ -516,7 +516,7 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   async def get_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
     """Deprecated: Use read_weight() instead."""
     warnings.warn(
-      "get_weight() is deprecated and will be removed in 2026-03. " "Use read_weight() instead.",
+      "get_weight() is deprecated and will be removed in 2026-03. Use read_weight() instead.",
       DeprecationWarning,
       stacklevel=2,
     )
