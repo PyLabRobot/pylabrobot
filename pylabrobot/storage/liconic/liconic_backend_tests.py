@@ -1,7 +1,7 @@
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
-from pylabrobot.resources import Plate, PlateHolder
+from pylabrobot.resources import PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.liconic.constants import LiconicType
 from pylabrobot.storage.liconic.liconic_backend import LICONIC_SITE_HEIGHT_TO_STEPS, LiconicBackend
@@ -9,7 +9,6 @@ from pylabrobot.storage.liconic.racks import (
   liconic_rack_5mm_42,
   liconic_rack_17mm_22,
   liconic_rack_44mm_10,
-  liconic_rack_104mm_4,
 )
 
 
@@ -216,6 +215,153 @@ class TestValueConversions(unittest.IsolatedAsyncioTestCase):
       await backend.set_humidity(0.5)
 
 
+class TestShaking(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend._send_command = AsyncMock(return_value="OK")
+    self.backend._wait_ready = AsyncMock()
+
+  async def test_stop_shaking(self):
+    await self.backend.stop_shaking()
+    self.backend._send_command.assert_any_call("RS 1913")
+    self.backend._wait_ready.assert_awaited()
+
+  async def test_get_shaker_speed(self):
+    self.backend._send_command = AsyncMock(return_value="250")
+    speed = await self.backend.get_shaker_speed()
+    self.assertAlmostEqual(speed, 25.0)
+
+  async def test_shaker_status_not_implemented(self):
+    with self.assertRaises(NotImplementedError):
+      await self.backend.shaker_status()
+
+
+class TestDoorControl(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend._send_command = AsyncMock(return_value="OK")
+    self.backend._wait_ready = AsyncMock()
+
+  async def test_open_door(self):
+    await self.backend.open_door()
+    self.backend._send_command.assert_any_call("ST 1901")
+    self.backend._wait_ready.assert_awaited()
+
+  async def test_close_door(self):
+    await self.backend.close_door()
+    self.backend._send_command.assert_any_call("ST 1902")
+    self.backend._wait_ready.assert_awaited()
+
+
+class TestSensors(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend._wait_ready = AsyncMock()
+
+  async def test_check_shovel_sensor_true(self):
+    self.backend._send_command = AsyncMock(side_effect=["OK", "1"])
+    result = await self.backend.check_shovel_sensor()
+    self.assertTrue(result)
+
+  async def test_check_shovel_sensor_false(self):
+    self.backend._send_command = AsyncMock(side_effect=["OK", "0"])
+    result = await self.backend.check_shovel_sensor()
+    self.assertFalse(result)
+
+  async def test_check_shovel_sensor_unexpected(self):
+    self.backend._send_command = AsyncMock(side_effect=["OK", "X"])
+    with self.assertRaises(RuntimeError):
+      await self.backend.check_shovel_sensor()
+
+  async def test_check_transfer_sensor_true(self):
+    self.backend._send_command = AsyncMock(return_value="1")
+    result = await self.backend.check_transfer_sensor()
+    self.assertTrue(result)
+
+  async def test_check_transfer_sensor_false(self):
+    self.backend._send_command = AsyncMock(return_value="0")
+    result = await self.backend.check_transfer_sensor()
+    self.assertFalse(result)
+
+  async def test_check_second_transfer_sensor_true(self):
+    self.backend._send_command = AsyncMock(return_value="1")
+    result = await self.backend.check_second_transfer_sensor()
+    self.assertTrue(result)
+
+  async def test_check_second_transfer_sensor_false(self):
+    self.backend._send_command = AsyncMock(return_value="0")
+    result = await self.backend.check_second_transfer_sensor()
+    self.assertFalse(result)
+
+
+class TestClimateGetters(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend._wait_ready = AsyncMock()
+
+  async def test_get_target_temperature(self):
+    self.backend._send_command = AsyncMock(return_value="375")
+    result = await self.backend.get_target_temperature()
+    self.assertAlmostEqual(result, 37.5)
+
+  async def test_get_target_humidity(self):
+    self.backend._send_command = AsyncMock(return_value="900")
+    result = await self.backend.get_target_humidity()
+    self.assertAlmostEqual(result, 0.9)
+
+  async def test_get_target_co2(self):
+    self.backend._send_command = AsyncMock(return_value="500")
+    result = await self.backend.get_target_co2_level()
+    self.assertAlmostEqual(result, 0.05)
+
+  async def test_get_n2_level(self):
+    self.backend._send_command = AsyncMock(return_value="9000")
+    result = await self.backend.get_n2_level()
+    self.assertAlmostEqual(result, 0.9)
+
+  async def test_get_target_n2(self):
+    self.backend._send_command = AsyncMock(return_value="9000")
+    result = await self.backend.get_target_n2_level()
+    self.assertAlmostEqual(result, 0.9)
+
+  async def test_nc_model_rejects_humidity(self):
+    backend = LiconicBackend(model=LiconicType.STX44_NC, port="/dev/null")
+    with self.assertRaises(NotImplementedError):
+      await backend.get_humidity()
+    with self.assertRaises(NotImplementedError):
+      await backend.get_target_humidity()
+    with self.assertRaises(NotImplementedError):
+      await backend.get_target_temperature()
+
+
+class TestSwapStation(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+
+  async def test_turn_swap_station_home_when_swapped(self):
+    self.backend._send_command = AsyncMock(return_value="1")
+    await self.backend.turn_swap_station(home=True)
+    self.backend._send_command.assert_any_call("RS 1912")
+
+  async def test_turn_swap_station_swap_when_home(self):
+    self.backend._send_command = AsyncMock(return_value="0")
+    await self.backend.turn_swap_station(home=False)
+    self.backend._send_command.assert_any_call("ST 1912")
+
+
+class TestInitialize(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend._send_command = AsyncMock(return_value="OK")
+    self.backend._wait_ready = AsyncMock()
+
+  async def test_initialize(self):
+    await self.backend.initialize()
+    self.backend._send_command.assert_any_call("ST 1900")
+    self.backend._send_command.assert_any_call("ST 1801")
+    self.backend._wait_ready.assert_awaited()
+
+
 class TestSerialization(unittest.TestCase):
   def test_serialize_roundtrip(self):
     backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/ttyUSB0")
@@ -251,8 +397,9 @@ class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
 
   async def test_send_command_raises_on_unknown_error(self):
     self.backend.io.read = AsyncMock(return_value=b"E9")
-    with self.assertRaises(RuntimeError, msg="Unknown error"):
+    with self.assertRaises(RuntimeError) as ctx:
       await self.backend._send_command("ST 1801")
+    self.assertIn("Unknown error", str(ctx.exception))
 
 
 if __name__ == "__main__":

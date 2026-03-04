@@ -73,13 +73,13 @@ class Incubator(Machine, Resource):
           return site
     raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
 
-  async def fetch_plate_to_loading_tray(self, plate_name: str) -> Plate:
+  async def fetch_plate_to_loading_tray(self, plate_name: str, **backend_kwargs) -> Plate:
     """Fetch a plate from the incubator and put it on the loading tray."""
 
     site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
     assert plate is not None
-    await self.backend.fetch_plate_to_loading_tray(plate)
+    await self.backend.fetch_plate_to_loading_tray(plate, **backend_kwargs)
     plate.unassign()
     self.loading_tray.assign_child_resource(plate)
     return plate
@@ -112,11 +112,13 @@ class Incubator(Machine, Resource):
   def find_random_site(self, plate: Plate) -> PlateHolder:
     return random.choice(self._find_available_sites_sorted(plate))
 
-  async def take_in_plate(self, site: Union[PlateHolder, Literal["random", "smallest"]]):
+  async def take_in_plate(
+    self, site: Union[PlateHolder, Literal["random", "smallest"]], **backend_kwargs
+  ):
     """Take a plate from the loading tray and put it in the incubator."""
 
-    plate = cast(Plate, self.loading_tray.resource)
-    if plate is None:
+    plate = self.loading_tray.resource
+    if not isinstance(plate, Plate):
       raise ResourceNotFoundError(f"No plate on the loading tray of incubator '{self.name}'")
 
     if site == "random":
@@ -128,7 +130,7 @@ class Incubator(Machine, Resource):
         raise ValueError(f"Site {site.name} is not available for plate {plate.name}")
     else:
       raise ValueError(f"Invalid site: {site}")
-    await self.backend.take_in_plate(plate, site)
+    await self.backend.take_in_plate(plate, site, **backend_kwargs)
     plate.unassign()
     site.assign_child_resource(plate)
 

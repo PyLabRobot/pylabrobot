@@ -282,7 +282,8 @@ class LiconicBackend(IncubatorBackend):
       logger.error(f"Command {command} failed with {resp}")
       for member in ControllerError:
         if resp == member.value:
-          raise controller_error_map[member]
+          cls, msg = controller_error_map[member]
+          raise cls(msg)
       raise RuntimeError(f"Unknown error {resp} when sending command {command}")
     return resp
 
@@ -316,7 +317,8 @@ class LiconicBackend(IncubatorBackend):
       error = await self._send_command("RD DM200")
       for member in HandlingError:
         if error == member.value:
-          raise handler_error_map[member]
+          cls, msg = handler_error_map[member]
+          raise cls(msg)
       raise RuntimeError(f"Liconic Handler in unknown error state with memory showing {error}")
     raise TimeoutError(f"Incubator did not become ready within {timeout} seconds")
 
