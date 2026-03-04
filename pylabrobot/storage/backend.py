@@ -3,7 +3,6 @@ from typing import List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
-from pylabrobot.resources.barcode import Barcode
 
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
@@ -46,53 +45,8 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def start_shaking(self, frequency: float):
     """Start shaking the incubator at the given frequency in Hz."""
+    pass
 
   @abstractmethod
   async def stop_shaking(self):
     pass
-
-  @abstractmethod
-  async def get_target_temperature(self) -> float:
-    """Get the set value temperature of the incubator in degrees Celsius."""
-
-  @abstractmethod
-  async def set_humidity(self, humidity: float):
-    """Set operation humidity of the incubator as a fraction; e.g. 0.9 for 90% RH."""
-
-  @abstractmethod
-  async def get_humidity(self) -> float:
-    """Get the current humidity of the incubator as a fraction; e.g. 0.9 for 90% RH."""
-
-  @abstractmethod
-  async def get_target_humidity(self) -> float:
-    """Get the set value humidity of the incubator as a fraction; e.g. 0.9 for 90% RH."""
-
-  @abstractmethod
-  async def set_co2_level(self, co2_level: float):
-    """Set operation CO2 level of the incubator as a fraction; e.g. 0.05 for 5%."""
-
-  @abstractmethod
-  async def get_co2_level(self) -> float:
-    """Get the current CO2 level of the incubator as a fraction; e.g. 0.05 for 5%."""
-
-  @abstractmethod
-  async def get_target_co2_level(self) -> float:
-    """Get the set value CO2 level of the incubator as a fraction; e.g. 0.05 for 5%."""
-
-  @abstractmethod
-  async def set_n2_level(self, n2_level: float):
-    """Set operation N2 level of the incubator as a fraction; e.g. 0.9 for 90%."""
-
-  @abstractmethod
-  async def get_n2_level(self) -> float:
-    """Get the current N2 level of the incubator as a fraction; e.g. 0.9 for 90%."""
-
-  @abstractmethod
-  async def get_target_n2_level(self) -> float:
-    """Get the set value N2 level of the incubator as a fraction; e.g. 0.9 for 90%."""
-
-  @abstractmethod
-  async def move_position_to_position(
-    self, plate: Plate, dest_site: PlateHolder, read_barcode: bool = False
-  ):
-    """Move plate to another position in the storage unit"""

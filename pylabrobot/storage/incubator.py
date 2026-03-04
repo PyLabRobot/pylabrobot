@@ -73,13 +73,13 @@ class Incubator(Machine, Resource):
           return site
     raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
 
-  async def fetch_plate_to_loading_tray(self, plate_name: str, **backend_kwargs) -> Plate:
+  async def fetch_plate_to_loading_tray(self, plate_name: str) -> Plate:
     """Fetch a plate from the incubator and put it on the loading tray."""
 
     site = self.get_site_by_plate_name(plate_name)
     plate = site.resource
     assert plate is not None
-    await self.backend.fetch_plate_to_loading_tray(plate, **backend_kwargs)
+    await self.backend.fetch_plate_to_loading_tray(plate)
     plate.unassign()
     self.loading_tray.assign_child_resource(plate)
     return plate
@@ -112,9 +112,7 @@ class Incubator(Machine, Resource):
   def find_random_site(self, plate: Plate) -> PlateHolder:
     return random.choice(self._find_available_sites_sorted(plate))
 
-  async def take_in_plate(
-    self, site: Union[PlateHolder, Literal["random", "smallest"]], **backend_kwargs
-  ):
+  async def take_in_plate(self, site: Union[PlateHolder, Literal["random", "smallest"]]):
     """Take a plate from the loading tray and put it in the incubator."""
 
     plate = cast(Plate, self.loading_tray.resource)
@@ -130,7 +128,7 @@ class Incubator(Machine, Resource):
         raise ValueError(f"Site {site.name} is not available for plate {plate.name}")
     else:
       raise ValueError(f"Invalid site: {site}")
-    await self.backend.take_in_plate(plate, site, **backend_kwargs)
+    await self.backend.take_in_plate(plate, site)
     plate.unassign()
     site.assign_child_resource(plate)
 
@@ -209,55 +207,3 @@ class Incubator(Machine, Resource):
       category=data["category"],
       model=data["model"],
     )
-
-  async def get_target_temperature(self) -> float:
-    """Get the set value temperature of the incubator in degrees Celsius."""
-    return await self.backend.get_target_temperature()
-
-  async def set_humidity(self, humidity: float):
-    """Set the humidity of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.set_humidity(humidity)
-
-  async def get_humidity(self) -> float:
-    """Get the humidity of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.get_humidity()
-
-  async def get_target_humidity(self) -> float:
-    """Get the set value humidity of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.get_target_humidity()
-
-  async def set_co2_level(self, co2_level: float):
-    """Set the CO2 level of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.set_co2_level(co2_level)
-
-  async def get_co2_level(self) -> float:
-    """Get the CO2 level of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.get_co2_level()
-
-  async def get_target_co2_level(self) -> float:
-    """Get the set value CO2 level of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.get_target_co2_level()
-
-  async def set_n2_level(self, n2_level: float):
-    """Set the N2 level of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.set_n2_level(n2_level)
-
-  async def get_n2_level(self) -> float:
-    """Get the N2 level of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.get_n2_level()
-
-  async def get_target_n2_level(self) -> float:
-    """Get the set value N2 level of the incubator as a fraction (0.0 to 1.0)."""
-    return await self.backend.get_target_n2_level()
-
-  async def move_position_to_position(
-    self, plate_name: str, dest_site: PlateHolder, **backend_kwargs
-  ) -> Plate:
-    """Move a plate to another internal position in the storage unit."""
-    site = self.get_site_by_plate_name(plate_name)
-    plate = site.resource
-    assert plate is not None
-    await self.backend.move_position_to_position(plate, dest_site, **backend_kwargs)
-    plate.unassign()
-    dest_site.assign_child_resource(plate)
-    return plate
