@@ -1351,24 +1351,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._setup_done = False
 
-  _DEPRECATED_INSTALLED_ATTRS = frozenset(
-    {
-      "autoload_installed",
-      "iswap_installed",
-      "core96_head_installed",
-    }
-  )
-
-  def __setattr__(self, name: str, value: Any) -> None:
-    if name in self._DEPRECATED_INSTALLED_ATTRS:
-      warnings.warn(
-        f"Setting {name} is deprecated. Pass the appropriate configuration objects instead.",
-        DeprecationWarning,
-        stacklevel=2,
-      )
-      return
-    super().__setattr__(name, value)
-
   @property
   def machine_conf(self) -> MachineConfiguration:
     """Machine configuration."""
