@@ -30,7 +30,6 @@ _DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
   left_x_drive=DriveConfiguration(iswap_installed=True, core_96_head_installed=True),
   min_iswap_collision_free_position=350.0,
   max_iswap_collision_free_position=600.0,
-  num_pip_channels=8,
 )
 
 
