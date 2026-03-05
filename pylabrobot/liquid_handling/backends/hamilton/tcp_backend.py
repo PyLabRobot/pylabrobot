@@ -240,6 +240,98 @@ class RegistryProxy:
 
 
 @dataclass
+class InterfaceSpec:
+  """Spec for a backend interface: instrument path, required flag, and raise-when-missing behavior.
+
+  Logs use the dict key (name) and path only; no display_name.
+  """
+
+  path: str
+  required: bool
+  raise_when_missing: bool = True
+
+
+class HamiltonInterfaceResolver:
+  """Resolves named interfaces (path -> Address) with caching and required/optional behavior.
+
+  Used by Nimbus and Prep backends. Holds client, interfaces dict, and _resolved cache.
+  """
+
+  def __init__(self, client: "HamiltonTCPClient", interfaces: dict[str, InterfaceSpec]):
+    self.client = client
+    self.interfaces = interfaces
+    self._resolved: dict[str, Optional[Address]] = {}
+
+  def clear(self) -> None:
+    """Clear cached addresses (for reconnect-safe setup)."""
+    self._resolved.clear()
+
+  def has_interface(self, name: str) -> bool:
+    """Return True if the interface was resolved and is present."""
+    return name in self._resolved and self._resolved[name] is not None
+
+  async def get(self, name: str) -> Optional[Address]:
+    """Resolve once and cache. Required + missing -> raise. Optional + missing -> cache None, return None."""
+    if name not in self.interfaces:
+      raise KeyError(f"Unknown interface: {name}")
+    spec = self.interfaces[name]
+    if name in self._resolved:
+      return self._resolved[name]
+    try:
+      await self.client.interfaces[spec.path].resolve()
+      addr = self.client.interfaces[spec.path].address
+      self._resolved[name] = addr
+      logger.debug("Resolved %s → %s (%s)", name, addr, spec.path)
+      return addr
+    except KeyError:
+      if spec.required:
+        msg = f"Could not find interface '{name}' ({spec.path}) on instrument."
+        raise RuntimeError(msg) from None
+      self._resolved[name] = None
+      return None
+
+  async def require(self, name: str) -> Address:
+    """Return address or raise. If optional and missing: log warning when raise_when_missing, then raise."""
+    if name not in self.interfaces:
+      raise KeyError(f"Unknown interface: {name}")
+    spec = self.interfaces[name]
+    msg = f"Could not find interface '{name}' ({spec.path}) on instrument."
+    if name in self._resolved:
+      if self._resolved[name] is None:
+        if spec.raise_when_missing:
+          logger.warning("%s", msg)
+        raise RuntimeError(msg) from None
+      return self._resolved[name]
+    try:
+      await self.client.interfaces[spec.path].resolve()
+      addr = self.client.interfaces[spec.path].address
+      self._resolved[name] = addr
+      logger.debug("Resolved %s → %s (%s)", name, addr, spec.path)
+      return addr
+    except KeyError:
+      if spec.required:
+        raise RuntimeError(msg) from None
+      self._resolved[name] = None
+      if spec.raise_when_missing:
+        logger.warning("%s", msg)
+      raise RuntimeError(msg) from None
+
+  async def run_setup_loop(self) -> None:
+    """Clear cache, then resolve all interfaces: required fail-fast; optional log and continue."""
+    self.clear()
+    for name, spec in self.interfaces.items():
+      if spec.required:
+        addr = await self.require(name)
+        logger.info("Found interface '%s' (%s) at %s", name, spec.path, addr)
+      else:
+        addr = await self.get(name)
+        if addr is not None:
+          logger.info("Found interface '%s' (%s) at %s", name, spec.path, addr)
+        else:
+          logger.info("Could not find interface '%s' (%s) on instrument.", name, spec.path)
+
+
+@dataclass
 class HamiltonError:
   """Hamilton error response."""
 
@@ -518,8 +610,13 @@ class HamiltonTCPClient:
     # Step 4b: Discover global objects (shared type definitions)
     await self._discover_globals()
 
-    # Step 5: Walk depth-1 (or more) and register interfaces
-    await self._discover_interfaces(max_depth=1)
+    # Step 5: Register root object only (depth-1+ resolved lazily on demand)
+    root_addresses = self._registry.get_root_addresses()
+    if root_addresses:
+      introspection = HamiltonIntrospection(self)
+      root_info = await introspection.get_object(root_addresses[0])
+      root_info.children = {}
+      self._registry.register(root_info.name, root_info)
 
     logger.info(f"Hamilton backend setup complete. Client ID: {self._client_id}")
 
@@ -705,52 +802,6 @@ class HamiltonTCPClient:
     self._global_object_addresses = global_objects
     logger.info(f"[DISCOVER_GLOBALS] ✓ Found {len(global_objects)} global objects")
 
-  async def _discover_interfaces(self, max_depth: int = 1) -> None:
-    """Walk root and register objects up to max_depth. Default 1 = root + direct children."""
-    root_addresses = self._registry.get_root_addresses()
-    if not root_addresses:
-      logger.warning("No root addresses; skipping interface discovery")
-      return
-    introspection = HamiltonIntrospection(self)
-    root_addr = root_addresses[0]
-    await self._register_tree(introspection, root_addr, "", max_depth)
-
-  async def _register_tree(
-    self,
-    introspection: HamiltonIntrospection,
-    addr: Address,
-    parent_path: str,
-    max_depth: int,
-  ) -> None:
-    """Recursively register one node and its children up to max_depth.
-
-    Only calls GetSubobjectAddress when the object supports it (interface 0,
-    method 3); otherwise skips children to avoid unsupported-method errors.
-    """
-    info = await introspection.get_object(addr)
-    info.children = {}
-    path = info.name if not parent_path else f"{parent_path}.{info.name}"
-    self._registry.register(path, info)
-    if max_depth <= 0:
-      return
-    supported = await introspection.get_supported_interface0_method_ids(addr)
-    if GET_SUBOBJECT_ADDRESS not in supported:
-      logger.debug(
-        "Object %s does not support GetSubobjectAddress (interface 0, method 3); skipping children",
-        path,
-      )
-      return
-    for i in range(info.subobject_count):
-      try:
-        sub_addr = await introspection.get_subobject_address(addr, i)
-        sub_info = await introspection.get_object(sub_addr)
-        sub_info.children = {}
-        sub_path = f"{path}.{sub_info.name}"
-        info.children[sub_info.name] = sub_info
-        self._registry.register(sub_path, sub_info)
-        await self._register_tree(introspection, sub_addr, path, max_depth - 1)
-      except Exception as e:
-        logger.debug("Failed to get subobject %s/%s: %s", path, i, e)
 
   def _parse_registration_response(self, response: RegistrationResponse) -> list[Address]:
     """Parse registration response options to extract object addresses.

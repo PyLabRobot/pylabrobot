@@ -662,7 +662,10 @@ def _setup_backend() -> NimbusBackend:
     "NimbusCORE.DoorLock",
     ObjectInfo("DoorLock", "1.0", 3, 0, Address(1, 1, 268)),
   )
-  backend._has_door_lock = True  # DoorLock is present in registry
+  # Pre-populate resolver cache so _has_interface and _require use cached addresses
+  backend._resolver._resolved["nimbus_core"] = Address(1, 1, 48896)
+  backend._resolver._resolved["pipette"] = Address(1, 1, 257)
+  backend._resolver._resolved["door_lock"] = Address(1, 1, 268)
   backend._is_initialized = True
   return backend
 
@@ -710,8 +713,8 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
     self.assertIsInstance(self._get_command(Park), Park)
 
   async def test_door_methods_without_address_raise(self):
-    # When door lock is not available (_has_door_lock=False), methods return early without sending.
-    self.backend._has_door_lock = False
+    # When door lock is not available (_has_interface("door_lock")=False), methods return early without sending.
+    self.backend._resolver._resolved["door_lock"] = None
     self.mock_send.reset_mock()
 
     await self.backend.lock_door()
@@ -723,13 +726,15 @@ class TestNimbusBackendCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.mock_send.call_count, 0)
 
   async def test_park_without_address_raises(self):
-    # Backend with no registry entries (e.g. setup() not run); .address raises KeyError
+    # Backend with no resolved interfaces (e.g. setup() not run); _require raises RuntimeError
     backend = NimbusBackend(host="192.168.1.100", port=2000)
     backend._num_channels = 8
     backend._is_initialized = True
 
-    with self.assertRaises(KeyError):
+    with self.assertRaises(RuntimeError) as ctx:
       await backend.park()
+    self.assertIn("Could not find interface", str(ctx.exception))
+    self.assertIn("nimbus_core", str(ctx.exception))
 
 
 class TestNimbusBackendSerialization(unittest.IsolatedAsyncioTestCase):

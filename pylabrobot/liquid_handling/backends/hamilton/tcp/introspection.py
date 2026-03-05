@@ -146,9 +146,10 @@ _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
 }
 
 # Type ID sets for categorization
-_ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 82, 102}
+# 78 = enum (Argument); 60, 64 = struct (ReturnValue) — see _INTROSPECTION_TYPE_NAMES comments
+_ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 78, 82, 102}
 _RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 68, 76}
-_RETURN_VALUE_TYPE_IDS = {25, 26, 27, 28, 29, 30, 31, 32, 36, 44, 48, 52, 56, 69, 81, 85, 104, 105}
+_RETURN_VALUE_TYPE_IDS = {25, 26, 27, 28, 29, 30, 31, 32, 36, 44, 48, 52, 56, 60, 64, 69, 81, 85, 104, 105}
 
 # Complex type sentinels: byte values that begin a 3-byte triple [type_id, source_id, ref_id].
 # The two contexts (method parameterTypes vs struct structureElementTypes) use different sentinels.
@@ -261,10 +262,10 @@ class ParameterType:
       return base
     if registry is None:
       return f"{base}(iface={self.source_id}, id={self.ref_id})"
-    if "struct" in base.lower():
+    if self.is_struct_ref:
       s = registry.resolve_struct(self.source_id, self.ref_id)
       return s.name if s else f"{base}(iface={self.source_id}, id={self.ref_id})"
-    if "enum" in base.lower():
+    if self.is_enum_ref:
       e = registry.resolve_enum(self.source_id, self.ref_id)
       return e.name if e else f"{base}(iface={self.source_id}, id={self.ref_id})"
     return f"{base}(iface={self.source_id}, id={self.ref_id})"
@@ -433,8 +434,10 @@ class TypeRegistry:
     """
     if source_id == 1 and self.global_pool is not None:
       return self.global_pool.resolve_struct(ref_id)
-    # source_id=2 or fallback: treat source_id as interface_id
-    return self.structs.get(source_id, {}).get(ref_id)
+    if source_id == 2:
+      return self.structs.get(source_id, {}).get(ref_id)
+    logger.warning("resolve_struct: unhandled source_id=%d ref_id=%d", source_id, ref_id)
+    return None
 
   def resolve_enum(self, source_id: int, ref_id: int) -> Optional["EnumInfo"]:
     """Look up an enum by source_id and ref_id.
@@ -588,12 +591,14 @@ def _resolve_struct_field_type(
   """
   if pt.is_complex and pt.source_id is not None and pt.ref_id is not None:
     if registry is not None:
-      s = registry.resolve_struct(pt.source_id, pt.ref_id)
-      if s:
-        return f"struct({s.name})"
-      e = registry.resolve_enum(pt.source_id, pt.ref_id)
-      if e:
-        return e.name
+      if pt.is_struct_ref:
+        s = registry.resolve_struct(pt.source_id, pt.ref_id)
+        if s:
+          return f"struct({s.name})"
+      elif pt.is_enum_ref:
+        e = registry.resolve_enum(pt.source_id, pt.ref_id)
+        if e:
+          return e.name
     return f"ref(iface={pt.source_id}, id={pt.ref_id})"
   return resolve_type_id(pt.type_id)  # HamiltonDataType resolver
 
@@ -689,6 +694,7 @@ class GetMethodCommand(HamiltonCommand):
         if label:
           return_labels.append(label)
       else:
+        logger.warning("Unknown introspection type category for type_id=%d; treating as parameter", pt.type_id)
         parameter_types.append(pt)
         if label:
           parameter_labels.append(label)
@@ -1258,26 +1264,27 @@ class HamiltonIntrospection:
     address: Union[Address, str],
     interface_id: int,
     method_id: int,
+    registry: Optional[TypeRegistry] = None,
   ) -> Optional[MethodInfo]:
     """Return the method with the given interface_id and method_id (action id).
 
-    Use this when you get a COMMAND_EXCEPTION to see the expected parameter
-    names and types for the command that was rejected. Example::
-
-      intro = HamiltonIntrospection(backend.client)
-      method = await intro.get_method_by_id(mph_address, interface_id=1, method_id=9)
-      if method:
-        print("Expected parameters:", method.parameter_labels)
-        print("Signature:", method.get_signature_string())
+    When a TypeRegistry is provided and contains the method, returns it
+    without any device round-trips. Falls back to a full device scan only
+    when no registry is available or the method isn't in it.
 
     Args:
       address: Object address or dot-path (e.g. "MLPrepRoot.MphRoot.MPH").
       interface_id: Interface ID (e.g. 1 for IChannel/IMph).
       method_id: Method/command ID (e.g. 9 for PickupTips).
+      registry: Optional TypeRegistry with cached methods.
 
     Returns:
       MethodInfo for the matching method, or None if not found.
     """
+    if registry is not None:
+      cached = registry.get_method(interface_id, method_id)
+      if cached is not None:
+        return cached
     address = self._resolve_address(address)
     methods = await self.get_all_methods(address)
     for m in methods:
@@ -1451,9 +1458,13 @@ class HamiltonIntrospection:
 # ============================================================================
 
 
-def _snake_to_pascal(name: str) -> str:
-  """Convert snake_case to PascalCase for name comparison."""
-  return "".join(word.capitalize() for word in name.split("_"))
+def _normalize_name(name: str) -> str:
+  """Normalize a name for comparison (remove underscores, make lowercase).
+
+  Allows Pythonic `snake_case` (e.g. `z_liquid_exit_speed`) to match
+  Hamilton's arbitrary PascalCase (`ZLiquidExitSpeed` or `Zliquidexitspeed`).
+  """
+  return name.replace("_", "").lower()
 
 
 def _get_wire_type_id(annotation) -> Optional[int]:
@@ -1555,10 +1566,11 @@ def validate_struct(
   hints = typing.get_type_hints(dataclass_cls, include_extras=True)
   hand_fields = list(dc.fields(dataclass_cls))
   hand_names = [f.name for f in hand_fields]
-  hand_pascal = [_snake_to_pascal(n) for n in hand_names]
+  hand_norm = [_normalize_name(n) for n in hand_names]
 
   # Get introspected fields
   intro_names = list(introspected.fields.keys())
+  intro_norm = [_normalize_name(n) for n in intro_names]
   intro_types = list(introspected.fields.values())
 
   # 1. Field count
@@ -1571,27 +1583,33 @@ def validate_struct(
     ))
 
   # 2. Field names (order-aware)
-  for i, (hp, ip) in enumerate(zip(hand_pascal, intro_names)):
-    if hp != ip:
+  for i, (hn_norm, in_norm) in enumerate(zip(hand_norm, intro_norm)):
+    if hn_norm != in_norm:
       mismatches.append(FieldMismatch(
         field_name=hand_names[i],
         issue=f"name mismatch at position {i}",
-        expected=ip,
-        actual=hp,
+        expected=intro_names[i],
+        actual=hand_names[i],
       ))
 
   # 3. Extra / missing fields
-  hand_set = set(hand_pascal)
-  intro_set = set(intro_names)
-  for missing in intro_set - hand_set:
-    mismatches.append(FieldMismatch(field_name=missing, issue="missing in hand-crafted"))
-  for extra in hand_set - intro_set:
-    mismatches.append(FieldMismatch(field_name=extra, issue="extra in hand-crafted (not in introspection)"))
+  hand_set = set(hand_norm)
+  intro_set = set(intro_norm)
+
+  # For error reporting, we want the original casing, so we build reverse maps
+  hand_map = {hn_norm: h for hn_norm, h in zip(hand_norm, hand_names)}
+  intro_map = {in_norm: i for in_norm, i in zip(intro_norm, intro_names)}
+
+  for missing_norm in intro_set - hand_set:
+    original_intro = intro_map[missing_norm]
+    mismatches.append(FieldMismatch(field_name=original_intro, issue="missing in hand-crafted"))
+  for extra_norm in hand_set - intro_set:
+    original_hand = hand_map[extra_norm]
+    mismatches.append(FieldMismatch(field_name=original_hand, issue="extra in hand-crafted (not in introspection)"))
 
   # 4. Field types (where names match)
   for i, (hand_name, intro_name) in enumerate(zip(hand_names, intro_names)):
-    hp = _snake_to_pascal(hand_name)
-    if hp != intro_name:
+    if _normalize_name(hand_name) != _normalize_name(intro_name):
       continue  # Already reported as name mismatch
     annotation = hints.get(hand_name)
     if annotation is None:
@@ -1698,7 +1716,13 @@ def validate_command(
   ]
 
   for (pf, annotation), pt in zip(struct_fields, struct_params):
-    intro_struct = pool.resolve_struct(pt.ref_id)
+    if pt.source_id == 1:
+      intro_struct = pool.resolve_struct(pt.ref_id)
+    elif pt.source_id == 0:
+      # Same-interface ref: would need interface_id context; skip for now
+      intro_struct = None
+    else:
+      intro_struct = pool.resolve_struct(pt.ref_id)
     nested_cls = _get_nested_dataclass(annotation)
     if intro_struct and nested_cls:
       child_result = validate_struct(nested_cls, intro_struct, pool)

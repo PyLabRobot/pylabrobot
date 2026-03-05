@@ -47,7 +47,11 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
 )
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
+  HamiltonTCPClient,
+  HamiltonInterfaceResolver,
+  InterfaceSpec,
+)
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -1589,7 +1593,7 @@ class _WasteSiteDefinitionWire:
 
 
 # -----------------------------------------------------------------------------
-# Config queries (MLPrep / DeckConfiguration) for _probe_hardware_config
+# Config queries (MLPrep / DeckConfiguration) for _get_hardware_config
 # -----------------------------------------------------------------------------
 
 
@@ -1716,8 +1720,19 @@ class PrepBackend(LiquidHandlerBackend):
 
   Uses HamiltonTCPClient (self.client) for communication and introspection;
   implements LiquidHandlerBackend for liquid handling.
-  Interfaces: self.client.interfaces.<path>.address for MLPrep, Pipettor, MPH.
+  Interfaces resolved lazily via _require() on first use.
+
+  On-demand introspection: ``await self.client.introspect(path)``.
   """
+
+  # Declare known object paths via InterfaceSpec. deck_config required (key positions, traverse height, deck info).
+  _INTERFACES: dict[str, InterfaceSpec] = {
+    "mlprep":      InterfaceSpec("MLPrepRoot.MLPrep", True, True),
+    "pipettor":    InterfaceSpec("MLPrepRoot.PipettorRoot.Pipettor", True, True),
+    "coordinator": InterfaceSpec("MLPrepRoot.ChannelCoordinator", True, True),
+    "deck_config": InterfaceSpec("MLPrepRoot.MLPrepCalibration.DeckConfiguration", True, True),
+    "mph":         InterfaceSpec("MLPrepRoot.MphRoot.MPH", False, True),
+  }
 
   def __init__(
     self,
@@ -1740,6 +1755,11 @@ class PrepBackend(LiquidHandlerBackend):
     )
     self._config: Optional[InstrumentConfig] = None
     self._user_traverse_height: Optional[float] = default_traverse_height
+    self._resolver = HamiltonInterfaceResolver(self.client, self._INTERFACES)
+
+  def _has_interface(self, name: str) -> bool:
+    """Return True if the interface was resolved and is present."""
+    return self._resolver.has_interface(name)
 
   def set_default_traverse_height(self, value: float) -> None:
     """Set the default traverse height (mm) used when final_z is not passed to pick_up_tips/drop_tips.
@@ -1750,8 +1770,12 @@ class PrepBackend(LiquidHandlerBackend):
     self._user_traverse_height = value
 
   # ---------------------------------------------------------------------------
-  # Setup & discovery
+  # Setup & interface resolution
   # ---------------------------------------------------------------------------
+
+  async def _require(self, name: str) -> Address:
+    """Resolve and return an interface address, lazy on first call. Raises RuntimeError if not found."""
+    return await self._resolver.require(name)
 
   async def setup(self, smart: bool = True, force_initialize: bool = False):
     """Set up Prep: connect, discover objects, then conditionally initialize MLPrep.
@@ -1779,18 +1803,8 @@ class PrepBackend(LiquidHandlerBackend):
         f"Expected root '{_EXPECTED_ROOT}' (Prep), but discovered '{discovered}'. Wrong instrument?"
       ) from None
 
-    await self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.resolve()
-
-    try:
-      await self.client.interfaces.MLPrepRoot.MphRoot.MPH.resolve()
-      logger.info("MPH head discovered at %s", self.client.interfaces.MLPrepRoot.MphRoot.MPH.address)
-    except Exception as e:
-      logger.info("MPH head not available (instrument may not have MPH): %s", e)
-
-    try:
-      self.client.interfaces.MLPrepRoot.MLPrep.address
-    except KeyError:
-      raise RuntimeError("MLPrep object not discovered. Cannot proceed with setup.") from None
+    # Resolve all interfaces (required fail-fast; optional log and continue)
+    await self._resolver.run_setup_loop()
 
     if force_initialize:
       await self._run_initialize(smart=smart)
@@ -1807,7 +1821,7 @@ class PrepBackend(LiquidHandlerBackend):
         await self._run_initialize(smart=smart)
         logger.info("Prep initialization complete")
 
-    self._config = await self._probe_hardware_config()
+    self._config = await self._get_hardware_config()
     logger.info(
       "Hardware config: has_enclosure=%s, safe_speeds=%s, traverse_height=%s, "
       "deck_bounds=%s, deck_sites=%d, waste_sites=%d",
@@ -1826,7 +1840,7 @@ class PrepBackend(LiquidHandlerBackend):
     """Send PrepInitialize to MLPrep (shared by setup)."""
     await self.client.send_command(
       PrepInitialize(
-        dest=self.client.interfaces.MLPrepRoot.MLPrep.address,
+        dest=await self._require("mlprep"),
         smart=smart,
         tip_drop_params=InitTipDropParameters(
           default_values=True,
@@ -1837,9 +1851,9 @@ class PrepBackend(LiquidHandlerBackend):
       )
     )
 
-  async def _probe_hardware_config(self) -> InstrumentConfig:
-    """Query MLPrep and DeckConfiguration for hardware config, deck sites, and waste sites."""
-    mlprep = self.client.interfaces.MLPrepRoot.MLPrep.address
+  async def _get_hardware_config(self) -> InstrumentConfig:
+    """Aggregate getters: query MLPrep and DeckConfiguration for hardware config, deck sites, and waste sites."""
+    mlprep = await self._require("mlprep")
     enc_resp = await self.client.send_command(PrepGetIsEnclosurePresent(dest=mlprep))
     safe_resp = await self.client.send_command(PrepGetSafeSpeedsEnabled(dest=mlprep))
     height_resp = await self.client.send_command(PrepGetDefaultTraverseHeight(dest=mlprep))
@@ -1850,53 +1864,48 @@ class PrepBackend(LiquidHandlerBackend):
     deck_bounds: Optional[DeckBounds] = None
     deck_sites: Tuple[DeckSiteInfo, ...] = ()
     waste_sites: Tuple[WasteSiteInfo, ...] = ()
-    try:
-      await self.client.interfaces.MLPrepRoot.MLPrepCalibration.DeckConfiguration.resolve()
-      deck_addr = self.client.interfaces.MLPrepRoot.MLPrepCalibration.DeckConfiguration.address
+    deck_addr = await self._require("deck_config")
 
-      bounds_resp = await self.client.send_command(PrepGetDeckBounds(dest=deck_addr))
-      if bounds_resp:
-        deck_bounds = DeckBounds(
-          min_x=bounds_resp.min_x,
-          max_x=bounds_resp.max_x,
-          min_y=bounds_resp.min_y,
-          max_y=bounds_resp.max_y,
-          min_z=bounds_resp.min_z,
-          max_z=bounds_resp.max_z,
+    bounds_resp = await self.client.send_command(PrepGetDeckBounds(dest=deck_addr))
+    if bounds_resp:
+      deck_bounds = DeckBounds(
+        min_x=bounds_resp.min_x,
+        max_x=bounds_resp.max_x,
+        min_y=bounds_resp.min_y,
+        max_y=bounds_resp.max_y,
+        min_z=bounds_resp.min_z,
+        max_z=bounds_resp.max_z,
+      )
+
+    sites_resp = await self.client.send_command(PrepGetDeckSiteDefinitions(dest=deck_addr))
+    if sites_resp and sites_resp.sites:
+      deck_sites = tuple(
+        DeckSiteInfo(
+          id=int(s.id),
+          left_bottom_front_x=float(s.left_bottom_front_x),
+          left_bottom_front_y=float(s.left_bottom_front_y),
+          left_bottom_front_z=float(s.left_bottom_front_z),
+          length=float(s.length),
+          width=float(s.width),
+          height=float(s.height),
         )
+        for s in sites_resp.sites
+      )
+      logger.info("Discovered %d deck sites", len(deck_sites))
 
-      sites_resp = await self.client.send_command(PrepGetDeckSiteDefinitions(dest=deck_addr))
-      if sites_resp and sites_resp.sites:
-        deck_sites = tuple(
-          DeckSiteInfo(
-            id=int(s.id),
-            left_bottom_front_x=float(s.left_bottom_front_x),
-            left_bottom_front_y=float(s.left_bottom_front_y),
-            left_bottom_front_z=float(s.left_bottom_front_z),
-            length=float(s.length),
-            width=float(s.width),
-            height=float(s.height),
-          )
-          for s in sites_resp.sites
+    waste_resp = await self.client.send_command(PrepGetWasteSiteDefinitions(dest=deck_addr))
+    if waste_resp and waste_resp.sites:
+      waste_sites = tuple(
+        WasteSiteInfo(
+          index=int(s.index),
+          x_position=float(s.x_position),
+          y_position=float(s.y_position),
+          z_position=float(s.z_position),
+          z_seek=float(s.z_seek),
         )
-        logger.info("Discovered %d deck sites", len(deck_sites))
-
-      waste_resp = await self.client.send_command(PrepGetWasteSiteDefinitions(dest=deck_addr))
-      if waste_resp and waste_resp.sites:
-        waste_sites = tuple(
-          WasteSiteInfo(
-            index=int(s.index),
-            x_position=float(s.x_position),
-            y_position=float(s.y_position),
-            z_position=float(s.z_position),
-            z_seek=float(s.z_seek),
-          )
-          for s in waste_resp.sites
-        )
-        logger.info("Discovered %d waste sites: %s", len(waste_sites), waste_sites)
-
-    except (KeyError, RuntimeError) as e:
-      logger.debug("DeckConfiguration not available: %s", e)
+        for s in waste_resp.sites
+      )
+      logger.info("Discovered %d waste sites: %s", len(waste_sites), waste_sites)
 
     return InstrumentConfig(
       deck_bounds=deck_bounds,
@@ -1910,27 +1919,6 @@ class PrepBackend(LiquidHandlerBackend):
   # ---------------------------------------------------------------------------
   # Properties
   # ---------------------------------------------------------------------------
-
-  @property
-  def mlprep_address(self) -> Optional[Address]:
-    try:
-      return self.client.interfaces.MLPrepRoot.MLPrep.address
-    except KeyError:
-      return None
-
-  @property
-  def pipettor_address(self) -> Optional[Address]:
-    try:
-      return self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address
-    except KeyError:
-      return None
-
-  @property
-  def coordinator_address(self) -> Optional[Address]:
-    try:
-      return self.client.interfaces.MLPrepRoot.ChannelCoordinator.address
-    except KeyError:
-      return None
 
   @property
   def num_channels(self) -> int:
@@ -1970,7 +1958,7 @@ class PrepBackend(LiquidHandlerBackend):
     Requires MLPrep to be discovered (e.g. after self.client.setup() and
     _discover_prep_objects()). Call before or after PrepInitialize to test.
     """
-    result = await self.client.send_command(PrepGetIsInitialized(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
+    result = await self.client.send_command(PrepGetIsInitialized(dest=await self._require("mlprep")))
     if result is None:
       return False
     return bool(result.value)
@@ -1978,7 +1966,7 @@ class PrepBackend(LiquidHandlerBackend):
   async def get_tip_and_needle_definitions(self) -> Tuple[TipDefinition, ...]:
     """Return tip/needle definitions registered on the instrument (GetTipAndNeedleDefinitions, cmd=11)."""
     result = await self.client.send_command(
-      PrepGetTipAndNeedleDefinitions(dest=self.client.interfaces.MLPrepRoot.MLPrep.address)
+      PrepGetTipAndNeedleDefinitions(dest=await self._require("mlprep"))
     )
     if result is None or not getattr(result, "definitions", None):
       return ()
@@ -1986,14 +1974,14 @@ class PrepBackend(LiquidHandlerBackend):
 
   async def is_parked(self) -> bool:
     """Query whether MLPrep is parked (IsParked, cmd=34)."""
-    result = await self.client.send_command(PrepIsParked(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
+    result = await self.client.send_command(PrepIsParked(dest=await self._require("mlprep")))
     if result is None:
       return False
     return bool(result.value)
 
   async def is_spread(self) -> bool:
     """Query whether channels are spread (IsSpread, cmd=35). Pipettor commands typically require spread state."""
-    result = await self.client.send_command(PrepIsSpread(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
+    result = await self.client.send_command(PrepIsSpread(dest=await self._require("mlprep")))
     if result is None:
       return False
     return bool(result.value)
@@ -2063,7 +2051,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     await self.client.send_command(
       PrepPickUpTips(
-        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
+        dest=await self._require("pipettor"),
         tip_positions=tip_positions,
         final_z=resolved_final_z,
         seek_speed=seek_speed,
@@ -2123,7 +2111,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     await self.client.send_command(
       PrepDropTips(
-        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
+        dest=await self._require("pipettor"),
         tip_positions=tip_positions,
         final_z=resolved_final_z,
         seek_speed=seek_speed,
@@ -2199,7 +2187,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     await self.client.send_command(
       MphPickupTips(
-        dest=self.client.interfaces.MLPrepRoot.MphRoot.MPH.address,
+        dest=await self._require("mph"),
         tip_parameters=tip_parameters,
         final_z=resolved_final_z,
         seek_speed=seek_speed,
@@ -2257,7 +2245,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     await self.client.send_command(
       MphDropTips(
-        dest=self.client.interfaces.MLPrepRoot.MphRoot.MPH.address,
+        dest=await self._require("mph"),
         drop_parameters=drop_parameters,
         final_z=resolved_final_z,
         seek_speed=seek_speed,
@@ -2324,7 +2312,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     await self.client.send_command(
       PrepAspirateNoLldMonitoring(
-        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
+        dest=await self._require("pipettor"),
         aspirate_parameters=aspirate_parameters,
       )
     )
@@ -2388,7 +2376,7 @@ class PrepBackend(LiquidHandlerBackend):
 
     await self.client.send_command(
       PrepDispenseNoLld(
-        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
+        dest=await self._require("pipettor"),
         dispense_parameters=dispense_parameters,
       )
     )
@@ -2427,28 +2415,28 @@ class PrepBackend(LiquidHandlerBackend):
 
   async def park(self) -> None:
     """Park the instrument."""
-    await self.client.send_command(PrepPark(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
+    await self.client.send_command(PrepPark(dest=await self._require("mlprep")))
 
   async def spread(self) -> None:
     """Spread channels."""
-    await self.client.send_command(PrepSpread(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
+    await self.client.send_command(PrepSpread(dest=await self._require("mlprep")))
 
   async def method_begin(self, automatic_pause: bool = False) -> None:
     """Signal the start of a liquid-handling method."""
     await self.client.send_command(
       PrepMethodBegin(
-        dest=self.client.interfaces.MLPrepRoot.MLPrep.address,
+        dest=await self._require("mlprep"),
         automatic_pause=automatic_pause,
       )
     )
 
   async def method_end(self) -> None:
     """Signal the end of a liquid-handling method."""
-    await self.client.send_command(PrepMethodEnd(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
+    await self.client.send_command(PrepMethodEnd(dest=await self._require("mlprep")))
 
   async def method_abort(self) -> None:
     """Abort the current method."""
-    await self.client.send_command(PrepMethodAbort(dest=self.client.interfaces.MLPrepRoot.MLPrep.address))
+    await self.client.send_command(PrepMethodAbort(dest=await self._require("mlprep")))
 
   async def set_deck_light(
     self, white: int, red: int, green: int, blue: int
@@ -2456,7 +2444,7 @@ class PrepBackend(LiquidHandlerBackend):
     """Set the deck LED colour."""
     await self.client.send_command(
       PrepSetDeckLight(
-        dest=self.client.interfaces.MLPrepRoot.MLPrep.address,
+        dest=await self._require("mlprep"),
         white=white,
         red=red,
         green=green,
@@ -2476,7 +2464,7 @@ class PrepBackend(LiquidHandlerBackend):
       )
     await self.client.send_command(
       PrepMoveToPosition(
-        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
+        dest=await self._require("pipettor"),
         move_parameters=move_parameters,
       )
     )
@@ -2489,7 +2477,7 @@ class PrepBackend(LiquidHandlerBackend):
       )
     await self.client.send_command(
       PrepMoveToPositionViaLane(
-        dest=self.client.interfaces.MLPrepRoot.PipettorRoot.Pipettor.address,
+        dest=await self._require("pipettor"),
         move_parameters=move_parameters,
       )
     )

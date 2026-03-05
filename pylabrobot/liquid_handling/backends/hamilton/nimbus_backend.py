@@ -28,7 +28,11 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   U32Array,
 )
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
+  HamiltonTCPClient,
+  HamiltonInterfaceResolver,
+  InterfaceSpec,
+)
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -436,9 +440,17 @@ class NimbusBackend(LiquidHandlerBackend):
 
   Uses HamiltonTCPClient (self.client) for TCP communication and introspection;
   implements LiquidHandlerBackend for liquid handling.
-  Interfaces: self.client.interfaces.<path>.address for NimbusCORE, Pipette.
-  Optional (e.g. DoorLock) via .is_available; DoorLock uses _has_door_lock.
+  Interfaces resolved lazily via _require() on first use.
+
+  On-demand introspection: ``await self.client.introspect(path)``.
   """
+
+  # Declare known object paths via InterfaceSpec. Optional interfaces (e.g. pipette, door_lock) may be absent on some systems.
+  _INTERFACES: dict[str, InterfaceSpec] = {
+    "nimbus_core": InterfaceSpec("NimbusCORE", True, True),
+    "pipette":     InterfaceSpec("NimbusCORE.Pipette", False, True),
+    "door_lock":   InterfaceSpec("NimbusCORE.DoorLock", False, True),
+  }
 
   def __init__(
     self,
@@ -464,12 +476,24 @@ class NimbusBackend(LiquidHandlerBackend):
     self._channel_configurations: Optional[Dict[int, Dict[int, bool]]] = None
 
     self._channel_traversal_height: float = 146.0  # Default traversal height in mm
-    self._has_door_lock: bool = False  # Set in setup() from .is_available (no Nimbus probe for enclosure)
+    self._resolver = HamiltonInterfaceResolver(self.client, self._INTERFACES)
+
+  # ---------------------------------------------------------------------------
+  # Setup & interface resolution
+  # ---------------------------------------------------------------------------
+
+  def _has_interface(self, name: str) -> bool:
+    """Return True if the interface was resolved and is present."""
+    return self._resolver.has_interface(name)
+
+  async def _require(self, name: str) -> Address:
+    """Resolve and return an interface address, lazy on first call. Raises RuntimeError if not found."""
+    return await self._resolver.require(name)
 
   async def setup(self, unlock_door: bool = False, force_initialize: bool = False):
     """Set up the Nimbus backend.
 
-    Interfaces: self.client.interfaces.<path>.address for required paths; optional via .is_available (e.g. _has_door_lock).
+    Interfaces: self.client.interfaces.<path>.address for required paths; optional via _has_interface(name).
 
     This method:
     1. Establishes TCP connection and performs protocol initialization
@@ -477,7 +501,7 @@ class NimbusBackend(LiquidHandlerBackend):
     3. Queries channel configuration to get num_channels
     4. Queries tip presence
     5. Queries initialization status
-    6. Locks door if available (when _has_door_lock)
+    6. Locks door if available (when _has_interface(\"door_lock\"))
     7. Conditionally initializes NimbusCore with InitializeSmartRoll (only if not initialized)
     8. Optionally unlocks door after initialization
 
@@ -495,14 +519,14 @@ class NimbusBackend(LiquidHandlerBackend):
         f"Expected root '{_EXPECTED_ROOT}' (Nimbus), but discovered '{discovered}'. Wrong instrument?"
       ) from None
 
-    # Required objects are discovered; .address raises KeyError if missing
-    nimbus_core = self.client.interfaces.NimbusCORE.address
-    pipette = self.client.interfaces.NimbusCORE.Pipette.address
-    self._has_door_lock = self.client.interfaces.NimbusCORE.DoorLock.is_available
+    # Resolve all interfaces (required fail-fast; optional log and continue)
+    await self._resolver.run_setup_loop()
 
-    # Query channel configuration to get num_channels (use discovered address only)
+    nimbus_core = await self._require("nimbus_core")
+
+    # Query channel configuration to get num_channels
     try:
-      config = await self.client.send_command(GetChannelConfiguration_1(nimbus_core))
+      config = await self.client.send_command(GetChannelConfiguration_1(dest=nimbus_core))
       assert config is not None, "GetChannelConfiguration_1 command returned None"
       self._num_channels = config.channels
       logger.info(f"Channel configuration: {config.channels} channels")
@@ -517,9 +541,9 @@ class NimbusBackend(LiquidHandlerBackend):
     except Exception as e:
       logger.warning(f"Failed to query tip presence: {e}")
 
-    # Query initialization status (use discovered address only)
+    # Query initialization status
     try:
-      init_status = await self.client.send_command(IsInitialized(nimbus_core))
+      init_status = await self.client.send_command(IsInitialized(dest=nimbus_core))
       assert init_status is not None, "IsInitialized command returned None"
       self._is_initialized = bool(init_status.value)
       logger.info(f"Instrument initialized: {self._is_initialized}")
@@ -529,7 +553,7 @@ class NimbusBackend(LiquidHandlerBackend):
 
     # Lock door if available (optional - no error if not found)
     # This happens before initialization
-    if self._has_door_lock:
+    if self._has_interface("door_lock"):
       try:
         if not await self.is_door_locked():
           await self.lock_door()
@@ -543,23 +567,26 @@ class NimbusBackend(LiquidHandlerBackend):
 
     # Conditional initialization - only if not already initialized
     if not self._is_initialized or force_initialize:
-      # Set channel configuration for each channel (required before InitializeSmartRoll)
-      try:
-        # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
-        # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
-        for channel in range(1, self.num_channels + 1):
-          await self.client.send_command(
-            SetChannelConfiguration(
-              dest=pipette,
-              channel=channel,
-              indexes=[1, 3, 4],
-              enables=[True, False, False, False],
+      # Set channel configuration for each channel (when Pipette is present; required before InitializeSmartRoll)
+      if self._has_interface("pipette"):
+        try:
+          # Configure all channels (1 to num_channels) - one SetChannelConfiguration call per channel
+          # Parameters: channel (1-based), indexes=[1, 3, 4], enables=[True, False, False, False]
+          for channel in range(1, self.num_channels + 1):
+            await self.client.send_command(
+              SetChannelConfiguration(
+                dest=await self._require("pipette"),
+                channel=channel,
+                indexes=[1, 3, 4],
+                enables=[True, False, False, False],
+              )
             )
-          )
-        logger.info(f"Channel configuration set for {self.num_channels} channels")
-      except Exception as e:
-        logger.error(f"Failed to set channel configuration: {e}")
-        raise
+          logger.info(f"Channel configuration set for {self.num_channels} channels")
+        except Exception as e:
+          logger.error(f"Failed to set channel configuration: {e}")
+          raise
+      else:
+        logger.info("Skipping channel configuration (no Pipette interface)")
 
       # Initialize NimbusCore with InitializeSmartRoll using waste positions
       try:
@@ -601,7 +628,7 @@ class NimbusBackend(LiquidHandlerBackend):
       logger.info("Instrument already initialized, skipping initialization")
 
     # Unlock door if requested (optional - no error if not found)
-    if unlock_door and self._has_door_lock:
+    if unlock_door and self._has_interface("door_lock"):
       try:
         await self.unlock_door()
       except RuntimeError:
@@ -652,7 +679,7 @@ class NimbusBackend(LiquidHandlerBackend):
       RuntimeError: If NimbusCORE address was not discovered during setup.
     """
     try:
-      await self.client.send_command(Park(self.client.interfaces.NimbusCORE.address))
+      await self.client.send_command(Park(await self._require("nimbus_core")))
       logger.info("Instrument parked successfully")
     except Exception as e:
       logger.error(f"Failed to park instrument: {e}")
@@ -664,11 +691,11 @@ class NimbusBackend(LiquidHandlerBackend):
     Returns:
       True if door is locked, False if unlocked or if door lock is not available.
     """
-    if not self._has_door_lock:
+    if not self._has_interface("door_lock"):
       return False
 
     try:
-      status = await self.client.send_command(IsDoorLocked(self.client.interfaces.NimbusCORE.DoorLock.address))
+      status = await self.client.send_command(IsDoorLocked(await self._require("door_lock")))
       assert status is not None, "IsDoorLocked command returned None"
       return bool(status.locked)
     except Exception as e:
@@ -677,11 +704,11 @@ class NimbusBackend(LiquidHandlerBackend):
 
   async def lock_door(self) -> None:
     """Lock the door. No-op if door lock is not available."""
-    if not self._has_door_lock:
+    if not self._has_interface("door_lock"):
       return
 
     try:
-      await self.client.send_command(LockDoor(self.client.interfaces.NimbusCORE.DoorLock.address))
+      await self.client.send_command(LockDoor(await self._require("door_lock")))
       logger.info("Door locked successfully")
     except Exception as e:
       logger.error(f"Failed to lock door: {e}")
@@ -689,11 +716,11 @@ class NimbusBackend(LiquidHandlerBackend):
 
   async def unlock_door(self) -> None:
     """Unlock the door. No-op if door lock is not available."""
-    if not self._has_door_lock:
+    if not self._has_interface("door_lock"):
       return
 
     try:
-      await self.client.send_command(UnlockDoor(self.client.interfaces.NimbusCORE.DoorLock.address))
+      await self.client.send_command(UnlockDoor(await self._require("door_lock")))
       logger.info("Door unlocked successfully")
     except Exception as e:
       logger.error(f"Failed to unlock door: {e}")
@@ -714,7 +741,7 @@ class NimbusBackend(LiquidHandlerBackend):
       A list of length `num_channels` where each element is `True` if a tip is mounted,
       `False` if not, or `None` if unknown.
     """
-    tip_status = await self.client.send_command(IsTipPresent(self.client.interfaces.NimbusCORE.Pipette.address))
+    tip_status = await self.client.send_command(IsTipPresent(await self._require("pipette")))
     assert tip_status is not None, "IsTipPresent command returned None"
     return [bool(v) for v in tip_status.tip_present]
 
@@ -967,7 +994,7 @@ class NimbusBackend(LiquidHandlerBackend):
 
     # Create and send command
     command = PickupTips(
-      dest=self.client.interfaces.NimbusCORE.Pipette.address,
+      dest=await self._require("pipette"),
       channels_involved=channels_involved,
       x_positions=x_positions_full,
       y_positions=y_positions_full,
@@ -1064,7 +1091,7 @@ class NimbusBackend(LiquidHandlerBackend):
       )
 
       command = DropTipsRoll(
-        dest=self.client.interfaces.NimbusCORE.Pipette.address,
+        dest=await self._require("pipette"),
         channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
@@ -1097,7 +1124,7 @@ class NimbusBackend(LiquidHandlerBackend):
         )
 
       command = DropTips(
-        dest=self.client.interfaces.NimbusCORE.Pipette.address,
+        dest=await self._require("pipette"),
         channels_involved=channels_involved,
         x_positions=x_positions_full,
         y_positions=y_positions_full,
@@ -1179,10 +1206,10 @@ class NimbusBackend(LiquidHandlerBackend):
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.client.send_command(EnableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
+      await self.client.send_command(EnableADC(await self._require("pipette"), channels_involved))
       logger.info("Enabled ADC before aspirate")
     else:
-      await self.client.send_command(DisableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
+      await self.client.send_command(DisableADC(await self._require("pipette"), channels_involved))
       logger.info("Disabled ADC before aspirate")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -1193,7 +1220,7 @@ class NimbusBackend(LiquidHandlerBackend):
       try:
         config = await self.client.send_command(
           GetChannelConfiguration(
-            self.client.interfaces.NimbusCORE.Pipette.address,
+            await self._require("pipette"),
             channel=channel_num,
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
@@ -1368,7 +1395,7 @@ class NimbusBackend(LiquidHandlerBackend):
 
     # Create and send Aspirate command
     command = Aspirate(
-      dest=self.client.interfaces.NimbusCORE.Pipette.address,
+      dest=await self._require("pipette"),
       aspirate_type=aspirate_type,
       channels_involved=channels_involved,
       x_positions=x_positions_full,
@@ -1475,10 +1502,10 @@ class NimbusBackend(LiquidHandlerBackend):
 
     # Call ADC command (EnableADC or DisableADC)
     if adc_enabled:
-      await self.client.send_command(EnableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
+      await self.client.send_command(EnableADC(await self._require("pipette"), channels_involved))
       logger.info("Enabled ADC before dispense")
     else:
-      await self.client.send_command(DisableADC(self.client.interfaces.NimbusCORE.Pipette.address, channels_involved))
+      await self.client.send_command(DisableADC(await self._require("pipette"), channels_involved))
       logger.info("Disabled ADC before dispense")
 
     # Call GetChannelConfiguration for each active channel (index 2 = "Aspirate monitoring with cLLD")
@@ -1489,7 +1516,7 @@ class NimbusBackend(LiquidHandlerBackend):
       try:
         config = await self.client.send_command(
           GetChannelConfiguration(
-            self.client.interfaces.NimbusCORE.Pipette.address,
+            await self._require("pipette"),
             channel=channel_num,
             indexes=[2],  # Index 2 = "Aspirate monitoring with cLLD"
           )
@@ -1667,7 +1694,7 @@ class NimbusBackend(LiquidHandlerBackend):
 
     # Create and send Dispense command
     command = Dispense(
-      dest=self.client.interfaces.NimbusCORE.Pipette.address,
+      dest=await self._require("pipette"),
       dispense_type=dispense_type,
       channels_involved=channels_involved,
       x_positions=x_positions_full,
