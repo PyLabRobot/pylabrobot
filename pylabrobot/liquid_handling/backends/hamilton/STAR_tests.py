@@ -1543,13 +1543,13 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
   async def test_can_reach_4ch_18mm_rejects_position_reachable_at_9mm(self):
     """A position reachable by channel 0 at 9mm spacing is unreachable at 18mm spacing.
 
-    Channel 0 (backmost) max_y = 601.6 - sum(spacings[0..0]) = 601.6 - 0 = 601.6  (same)
-    Channel 0 (backmost) min_y = 6 + sum(spacings[1..3])
+    Channel 0 (backmost) min_y = left_arm_min_y_position + sum(spacings[1..3])
       At 9mm:  6 + 9*3 = 33   → y=33 reachable
       At 18mm: 6 + 18*3 = 60  → y=33 unreachable
     """
     backend = STARBackend()
     backend._num_channels = 4
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
 
     backend._channels_minimum_y_spacing = [9.0] * 4
     self.assertTrue(backend.can_reach_position(0, Coordinate(100, 33, 100)))
@@ -1560,12 +1560,13 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
   async def test_can_reach_4ch_18mm_rejects_back_channel_too_far_back(self):
     """At 18mm spacing, the backmost channel has a lower max_y than at 9mm.
 
-    Channel 3 (frontmost) max_y = 601.6 - sum(spacings[0..2])
-      At 9mm:  601.6 - 9*3 = 574.6  → y=574 reachable
-      At 18mm: 601.6 - 18*3 = 547.6 → y=574 unreachable
+    Channel 3 (frontmost) max_y = pip_maximal_y_position - sum(spacings[0..2])
+      At 9mm:  606.5 - 9*3 = 579.5  → y=574 reachable
+      At 18mm: 606.5 - 18*3 = 552.5 → y=574 unreachable
     """
     backend = STARBackend()
     backend._num_channels = 4
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
 
     backend._channels_minimum_y_spacing = [9.0] * 4
     self.assertTrue(backend.can_reach_position(3, Coordinate(100, 574, 100)))

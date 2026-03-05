@@ -1352,23 +1352,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._setup_done = False
 
-  def _frontmost_channel_min_y(self) -> float:
-    """Minimum Y position the frontmost channel can reach."""
-    return self._channels_minimum_y_spacing[-1] - 3
-
-  async def _backmost_channel_max_y(self) -> float:
-    """Maximum Y position the backmost channel can reach.
-
-    If the iswap is installed, this is bounded by the iswap's current Y position.
-    Otherwise, it's the machine drive limit (635 mm).
-    Symmetric with _frontmost_channel_min_y: max_y = limit - spacing[0] + 3.
-    """
-    if self.extended_conf.left_x_drive.iswap_installed:
-      limit = await self.iswap_rotation_drive_request_y()
-    else:
-      limit = 635.0
-    return limit - self._channels_minimum_y_spacing[0] + 3
-
   def _min_spacing_between(self, i: int, j: int) -> float:
     """Return the conservative minimum Y spacing required between channels *i* and *j*.
 
@@ -1799,12 +1782,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # frontmost channel can go to y=6, every channel behind it constrains its min Y
     spacings = self._channels_minimum_y_spacing
-    min_y_pos = self._frontmost_channel_min_y() + sum(spacings[channel_idx + 1 :])
+    min_y_pos = self.extended_conf.left_arm_min_y_position + sum(spacings[channel_idx + 1 :])
     if position.y < min_y_pos:
       return False
 
-    # backmost channel can go to y=601.6, every channel in front constrains its max Y
-    max_y_pos = 601.6 - sum(spacings[:channel_idx])
+    # backmost channel max Y from config, every channel in front constrains its max Y
+    max_y_pos = self.extended_conf.pip_maximal_y_position - sum(spacings[:channel_idx])
     if position.y > max_y_pos:
       return False
 
@@ -4500,11 +4483,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      if self.extended_conf.left_x_drive.iswap_installed:
-        max_y_pos = await self.iswap_rotation_drive_request_y()
-      else:
-        # STAR machines do not allow channels y > 635 mm
-        max_y_pos = 635
+      max_y_pos = self.extended_conf.pip_maximal_y_position
       if y > max_y_pos:
         raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm")
 
@@ -4517,9 +4496,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
     else:
       # STAR machines do not allow channels y < minimum
-      if y < self._frontmost_channel_min_y():
+      if y < self.extended_conf.left_arm_min_y_position:
         raise ValueError(
-          f"channel {channel} y-target must be >= {self._frontmost_channel_min_y()} mm"
+          f"channel {channel} y-target must be >= {self.extended_conf.left_arm_min_y_position} mm"
         )
 
     await self.position_single_pipetting_channel_in_y_direction(
@@ -6291,8 +6270,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     assert back_channel_y_center > front_channel_y_center, (
       "back_channel_y_center must be greater than front_channel_y_center"
     )
-    assert front_channel_y_center > self._frontmost_channel_min_y(), (
-      f"front_channel_y_center must be greater than {self._frontmost_channel_min_y()}mm"
+    assert front_channel_y_center > self.extended_conf.left_arm_min_y_position, (
+      f"front_channel_y_center must be greater than {self.extended_conf.left_arm_min_y_position}mm"
     )
     return back_channel_y_center, front_channel_y_center
 
@@ -10460,13 +10439,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       adj_upper_y = await self.request_y_pos_channel_n(channel_idx - 1)
       max_safe_upper_y_pos = adj_upper_y - self._min_spacing_between(channel_idx, channel_idx - 1)
     else:
-      max_safe_upper_y_pos = await self._backmost_channel_max_y()
+      max_safe_upper_y_pos = self.extended_conf.pip_maximal_y_position
 
     if channel_idx < (self.num_channels - 1):
       adj_lower_y = await self.request_y_pos_channel_n(channel_idx + 1)
       max_safe_lower_y_pos = adj_lower_y + self._min_spacing_between(channel_idx, channel_idx + 1)
     else:
-      max_safe_lower_y_pos = self._frontmost_channel_min_y()
+      max_safe_lower_y_pos = self.extended_conf.left_arm_min_y_position
 
     # Enable safe start and end positions
     if start_pos_search:
@@ -10547,7 +10526,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           channel_idx, channel_idx + 1
         )
       else:
-        min_y = self._frontmost_channel_min_y()
+        min_y = self.extended_conf.left_arm_min_y_position
 
       max_safe_dist = detected_material_y_pos - min_y
       move_target = detected_material_y_pos - min(post_detection_dist, max_safe_dist)
@@ -10558,7 +10537,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           channel_idx, channel_idx - 1
         )
       else:
-        max_y = await self._backmost_channel_max_y()
+        max_y = self.extended_conf.pip_maximal_y_position
 
       max_safe_dist = max_y - detected_material_y_pos
       move_target = detected_material_y_pos + min(post_detection_dist, max_safe_dist)
@@ -11435,7 +11414,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # position_channels_in_y_direction, it will raise an error.) The minimum y is 6mm,
     # so we fix that first (in case that value is misreported). Then, we traverse the
     # list in reverse and enforce pairwise minimum spacing.
-    min_y = self._frontmost_channel_min_y()
+    min_y = self.extended_conf.left_arm_min_y_position
     if y_positions[-1] < min_y - 0.2:
       raise RuntimeError(
         "Channels are reported to be too close to the front of the machine. "
