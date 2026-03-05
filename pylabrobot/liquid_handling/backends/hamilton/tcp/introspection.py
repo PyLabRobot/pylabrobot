@@ -28,6 +28,7 @@ from typing import Annotated, Dict, List, Optional, Set, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
+  PADDED_FLAG,
   HoiParams,
   HoiParamsParser,
   inspect_hoi_params,
@@ -82,6 +83,8 @@ def resolve_type_id(type_id: int) -> str:
 # - ReturnValue types: Single return value
 
 _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
+  # Void (0) - used for empty/placeholder parameters
+  0: "void",
   # Argument types (1-8, 33, 41, 45, 49, 53, 61, 66, 82, 102)
   1: "i8",
   2: "u8",
@@ -146,7 +149,13 @@ _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
 _ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 82, 102}
 _RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 68, 76}
 _RETURN_VALUE_TYPE_IDS = {25, 26, 27, 28, 29, 30, 31, 32, 36, 44, 48, 52, 56, 69, 81, 85, 104, 105}
-_COMPLEX_TYPE_IDS = {57, 60, 61, 64, 78, 81, 82, 85}  # Types that need source_id + ref_id
+
+# Complex type sentinels: byte values that begin a 3-byte triple [type_id, source_id, ref_id].
+# The two contexts (method parameterTypes vs struct structureElementTypes) use different sentinels.
+_COMPLEX_METHOD_TYPE_IDS = {57, 60, 61, 64, 78, 81, 82, 85}  # GetMethod parameterTypes triples
+_COMPLEX_STRUCT_TYPE_IDS = {30, 31, 32, 35}  # STRUCTURE=30, STRUCT_ARRAY=31, ENUM=32, ENUM_ARRAY=35
+# Backward-compat alias (used by ParameterType.is_complex for method parameters)
+_COMPLEX_TYPE_IDS = _COMPLEX_METHOD_TYPE_IDS
 
 # HC_RESULT codes returned in COMMAND_EXCEPTION / STATUS_EXCEPTION (extend as observed)
 _HC_RESULT_DESCRIPTIONS: Dict[int, str] = {
@@ -213,22 +222,37 @@ class ObjectInfo:
 
 @dataclass
 class ParameterType:
-  """A resolved type reference from a method signature.
+  """A resolved type reference used for both method parameters and struct fields.
 
   Simple types (i8, f32, etc.) have only type_id set.
-  Complex types (struct, enum, List[struct], List[enum]) additionally have
-  source_id (the interface defining the struct/enum) and ref_id (struct_id
-  or enum_id within that interface). These are encoded as 3-byte triples
-  [type_id, source_id, ref_id] in the GetMethod response.
+  Complex references additionally carry source_id (the interface defining the
+  struct/enum) and ref_id (struct_id or enum_id within that interface).
+  These are encoded as 3-byte triples [type_id, source_id, ref_id] in two
+  distinct contexts that each use a different sentinel byte:
+
+  - GetMethod parameterTypes: sentinels in _COMPLEX_METHOD_TYPE_IDS (57, 61 …)
+  - GetStructs structureElementTypes: sentinel 0xE8 (_COMPLEX_STRUCT_TYPE_IDS)
   """
 
   type_id: int
   source_id: Optional[int] = None
   ref_id: Optional[int] = None
+  _byte_width: int = 1  # Bytes consumed in struct element_types (1=simple, 3=ref, 7+=inline)
 
   @property
   def is_complex(self) -> bool:
-    return self.type_id in _COMPLEX_TYPE_IDS
+    """True if this is a 3-byte complex reference (method param or struct field)."""
+    return self.type_id in (_COMPLEX_METHOD_TYPE_IDS | _COMPLEX_STRUCT_TYPE_IDS)
+
+  @property
+  def is_struct_ref(self) -> bool:
+    """True if this is a struct reference (type 30 in struct context, 57/61 in method context)."""
+    return self.type_id in {30, 31, 57, 60, 61, 64}
+
+  @property
+  def is_enum_ref(self) -> bool:
+    """True if this is an enum reference (type 32 in struct context, 78/81/82/85 in method)."""
+    return self.type_id in {32, 35, 78, 81, 82, 85}
 
   def resolve_name(self, registry: Optional["TypeRegistry"] = None) -> str:
     """Resolve to a human-readable name, optionally using a TypeRegistry."""
@@ -246,25 +270,76 @@ class ParameterType:
     return f"{base}(iface={self.source_id}, id={self.ref_id})"
 
 
-def _parse_type_ids(raw: str) -> List[ParameterType]:
-  """Parse the parameter_types string from GetMethod into ParameterType list.
+def _parse_type_seq(
+  data: bytes | list[int],
+  complex_ids: set[int],
+) -> List[ParameterType]:
+  """Shared variable-width parser for Hamilton type-ID byte sequences.
 
-  Simple types are 1 byte each. Complex types (struct, enum references) are
-  3-byte triples: [type_id, source_id, ref_id]. The _COMPLEX_TYPE_IDS set
-  identifies which type_ids consume 3 bytes.
+  Both GetMethod parameterTypes and GetStructs structureElementTypes encode types
+  as a byte stream where simple types occupy 1 byte and complex references have
+  variable width.
+
+  For struct element types (complex_ids = _COMPLEX_STRUCT_TYPE_IDS), complex
+  sentinels (30=STRUCTURE, 31=STRUCT_ARRAY, 32=ENUM, 35=ENUM_ARRAY) have two
+  encoding formats determined by the second byte:
+
+  - **Reference** (second byte ≤ 3): 3 bytes ``[sentinel, source_id, ref_id]``
+    where source 1=global, 2=local, 3=network.
+  - **Inline definition** (second byte = 4): variable width, terminated by
+    ``0xEE`` (238). Typically 7 bytes: ``[sentinel, 4, base_type, 0, 1, 0, 0xEE]``.
+    The ``base_type`` specifies the underlying wire type (1=I8, 2=I16, 3=I32).
+
+  For method parameter types, only the 3-byte reference format is used.
+
+  Args:
+    data: Raw bytes or list of ints to parse.
+    complex_ids: Set of type_id values that introduce a multi-byte entry.
+
+  Returns:
+    List of ParameterType, one per logical type entry.
   """
-  data = [ord(c) for c in raw] if raw else []
+  _INLINE_MARKER = 4
+  _INLINE_TERMINATOR = 0xEE  # 238
+
+  ints = list(data) if isinstance(data, bytes) else data
   result: List[ParameterType] = []
   i = 0
-  while i < len(data):
-    tid = data[i]
-    if tid in _COMPLEX_TYPE_IDS and i + 2 < len(data):
-      result.append(ParameterType(tid, source_id=data[i + 1], ref_id=data[i + 2]))
-      i += 3
+  while i < len(ints):
+    tid = ints[i]
+    if tid in complex_ids and i + 2 < len(ints):
+      second = ints[i + 1]
+      if second == _INLINE_MARKER:
+        # Inline type definition: scan forward to 0xEE terminator
+        end = i + 2
+        while end < len(ints) and ints[end] != _INLINE_TERMINATOR:
+          end += 1
+        end += 1  # consume the 0xEE byte itself
+        # Store as ParameterType with the base wire type from byte [i+2]
+        width = end - i
+        base_type = ints[i + 2] if i + 2 < len(ints) else 0
+        result.append(ParameterType(tid, source_id=_INLINE_MARKER, ref_id=base_type, _byte_width=width))
+        i = end
+      else:
+        # Standard 3-byte reference: [sentinel, source_id, ref_id]
+        result.append(ParameterType(tid, source_id=second, ref_id=ints[i + 2], _byte_width=3))
+        i += 3
     else:
       result.append(ParameterType(tid))
       i += 1
   return result
+
+
+def _parse_type_ids(raw: str | bytes | None) -> List[ParameterType]:
+  """Parse GetMethod parameterTypes blob. Thin wrapper around _parse_type_seq.
+
+  Accepts bytes (preferred) or str — the device sends STRING (15) but the
+  payload is binary, so callers must use parse_next_raw() to avoid UTF-8 errors.
+  """
+  if raw is None:
+    return []
+  data: list[int] = list(raw) if isinstance(raw, bytes) else [ord(c) for c in raw]
+  return _parse_type_seq(data, _COMPLEX_METHOD_TYPE_IDS)
 
 
 @dataclass
@@ -332,6 +407,11 @@ class TypeRegistry:
   interface info so method signatures can be fully resolved without additional
   device calls. Use build_type_registry() to create.
 
+  Source ID semantics (from piglet):
+    source_id=1: Global pool (shared type definitions from global objects)
+    source_id=2: Local to the current object's interface
+    source_id=3: Built-in NetworkResult error type
+
   Example:
     registry = await intro.build_type_registry(mph_addr)
     method = registry.get_method(interface_id=1, method_id=9)
@@ -343,14 +423,28 @@ class TypeRegistry:
   structs: Dict[int, Dict[int, "StructInfo"]] = field(default_factory=dict)
   enums: Dict[int, Dict[int, "EnumInfo"]] = field(default_factory=dict)
   methods: List[MethodInfo] = field(default_factory=list)
+  global_pool: Optional["GlobalTypePool"] = None
 
-  def resolve_struct(self, interface_id: int, struct_id: int) -> Optional["StructInfo"]:
-    """Look up a struct by interface_id and struct_id."""
-    return self.structs.get(interface_id, {}).get(struct_id)
+  def resolve_struct(self, source_id: int, ref_id: int) -> Optional["StructInfo"]:
+    """Look up a struct by source_id and ref_id.
 
-  def resolve_enum(self, interface_id: int, enum_id: int) -> Optional["EnumInfo"]:
-    """Look up an enum by interface_id and enum_id."""
-    return self.enums.get(interface_id, {}).get(enum_id)
+    source_id=1: Global pool (1-based index, piglet subtracts 1)
+    source_id=2: Local interface structs (keyed by interface_id in self.structs)
+    """
+    if source_id == 1 and self.global_pool is not None:
+      return self.global_pool.resolve_struct(ref_id)
+    # source_id=2 or fallback: treat source_id as interface_id
+    return self.structs.get(source_id, {}).get(ref_id)
+
+  def resolve_enum(self, source_id: int, ref_id: int) -> Optional["EnumInfo"]:
+    """Look up an enum by source_id and ref_id.
+
+    source_id=1: Global pool (1-based index)
+    source_id=2: Local interface enums
+    """
+    if source_id == 1 and self.global_pool is not None:
+      return self.global_pool.resolve_enum(ref_id)
+    return self.enums.get(source_id, {}).get(ref_id)
 
   def get_method(self, interface_id: int, method_id: int) -> Optional[MethodInfo]:
     """Find a method by interface_id and method_id."""
@@ -398,32 +492,110 @@ class EnumInfo:
 
 @dataclass
 class StructInfo:
-  """Struct definition from introspection."""
+  """Struct definition from introspection.
+
+  ``interface_id`` records which interface this struct was defined on,
+  enabling ``source_id=0`` (same-interface) resolution in the global pool.
+
+  ``fields`` maps field names to ``ParameterType`` instances, preserving the
+  full (type_id, source_id, ref_id) triple for fields that are complex
+  references (type 30=STRUCTURE, 32=ENUM).  Call ``get_struct_string(registry)``
+  to get human-readable names with struct/enum references resolved.
+  """
 
   struct_id: int
   name: str
-  fields: Dict[str, int]  # field_name -> type_id
+  fields: Dict[str, "ParameterType"]  # field_name -> ParameterType
+  interface_id: Optional[int] = None    # Interface this struct was defined on
 
   @property
   def field_type_names(self) -> Dict[str, str]:
-    """Get human-readable field type names."""
-    return {field_name: resolve_type_id(type_id) for field_name, type_id in self.fields.items()}
+    """Get human-readable field type names using HamiltonDataType resolver."""
+    return {name: _resolve_struct_field_type(pt) for name, pt in self.fields.items()}
 
-  def get_struct_string(self) -> str:
-    """Get struct definition as a readable string."""
+  def get_struct_string(self, registry: Optional["TypeRegistry"] = None) -> str:
+    """Get struct definition as a readable string.
+
+    If a TypeRegistry is provided, complex references (struct/enum fields)
+    are resolved to their names.
+    """
     field_strs = [
-      f"{field_name}: {resolve_type_id(type_id)}" for field_name, type_id in self.fields.items()
+      f"{name}: {_resolve_struct_field_type(pt, registry)}" for name, pt in self.fields.items()
     ]
     fields_str = "\n  ".join(field_strs) if field_strs else "  (empty)"
     return f"struct {self.name} {{\n  {fields_str}\n}}"
 
 
-# GetStructs wire format (device sends 4 separate array fragments, not count+rows):
+@dataclass
+class GlobalTypePool:
+  """Flat, sequentially-indexed pool of structs/enums from global objects.
+
+  Piglet builds this by walking ``robot.globals`` objects, iterating each
+  interface's structs/enums, and inserting them in encounter order.  A
+  ``source_id=1`` reference uses ``ref_id`` as a **1-based** index into this
+  pool (piglet subtracts 1 for lookup).
+  """
+
+  structs: List[StructInfo] = field(default_factory=list)
+  enums: List[EnumInfo] = field(default_factory=list)
+  interface_structs: Dict[int, Dict[int, StructInfo]] = field(default_factory=dict)
+
+  def resolve_struct(self, ref_id: int) -> Optional[StructInfo]:
+    """Look up global struct by 1-based ref_id."""
+    idx = ref_id - 1  # 1-based → 0-based
+    return self.structs[idx] if 0 <= idx < len(self.structs) else None
+
+  def resolve_struct_local(self, interface_id: int, ref_id: int) -> Optional[StructInfo]:
+    """Resolve a source_id=0 struct ref within a specific interface."""
+    return self.interface_structs.get(interface_id, {}).get(ref_id)
+
+  def resolve_enum(self, ref_id: int) -> Optional[EnumInfo]:
+    """Look up global enum by 1-based ref_id."""
+    idx = ref_id - 1
+    return self.enums[idx] if 0 <= idx < len(self.enums) else None
+
+  def print_summary(self) -> None:
+    """Print global pool summary."""
+    print(f"GlobalTypePool: {len(self.structs)} structs, {len(self.enums)} enums")
+    for i, s in enumerate(self.structs):
+      print(f"  struct[{i+1}]: {s.name} ({len(s.fields)} fields)")
+    for i, e in enumerate(self.enums):
+      print(f"  enum[{i+1}]: {e.name} ({len(e.values)} values)")
+
+
+# GetStructs wire format (device sends 4 separate array fragments):
 # [0] STRING_ARRAY = struct names (one per struct)
-# [1] U32_ARRAY   = struct IDs
-# [2] U8_ARRAY    = field type IDs (flat across all structs)
-# [3] STRING_ARRAY = field names (flat across all structs)
-# Fields are split across structs by dividing evenly (e.g. 7 fields, 2 structs -> 3 + 4).
+# [1] U32_ARRAY   = numberStructureElements — field count for each struct
+# [2] U8_ARRAY    = structureElementTypes — flat field type bytes (variable width)
+# [3] STRING_ARRAY = structureElementDescriptions — flat field names
+#
+# structureElementTypes byte encoding:
+#   - Simple types: 1 byte using HamiltonDataType values (40=F32, 23=BOOL, etc.)
+#   - Complex references: 3 bytes [sentinel, source_id, ref_id]
+#     sentinel=30 for STRUCTURE, sentinel=32 for ENUM (matches piglet)
+#   The HamiltonDataType namespace is used here, NOT the introspection type namespace.
+
+
+def _resolve_struct_field_type(
+  pt: ParameterType,
+  registry: Optional["TypeRegistry"] = None,
+) -> str:
+  """Resolve a struct field's ParameterType to a human-readable type name.
+
+  Struct field type_ids use the HamiltonDataType wire namespace (e.g. 40=F32,
+  23=BOOL) -- not the method-parameter introspection namespace. Complex
+  references (30=STRUCTURE, 32=ENUM) are resolved via the TypeRegistry when provided.
+  """
+  if pt.is_complex and pt.source_id is not None and pt.ref_id is not None:
+    if registry is not None:
+      s = registry.resolve_struct(pt.source_id, pt.ref_id)
+      if s:
+        return f"struct({s.name})"
+      e = registry.resolve_enum(pt.source_id, pt.ref_id)
+      if e:
+        return e.name
+    return f"ref(iface={pt.source_id}, id={pt.ref_id})"
+  return resolve_type_id(pt.type_id)  # HamiltonDataType resolver
 
 
 # ============================================================================
@@ -446,8 +618,8 @@ class GetObjectCommand(HamiltonCommand):
   class Response:
     name: Str
     version: Str
-    method_count: I32
-    subobject_count: I32
+    method_count: U32
+    subobject_count: U16
 
 
 class GetMethodCommand(HamiltonCommand):
@@ -479,16 +651,21 @@ class GetMethodCommand(HamiltonCommand):
     # The remaining fragments are STRING types containing type IDs as bytes.
     # Complex types (struct/enum refs) are 3-byte triples [type_id, source_id, ref_id].
     # Labels are comma-separated, one per *logical* parameter (matching ParameterType count).
-    parameter_types_str = None
     parameter_labels_str = None
 
     if parser.has_remaining():
-      _, parameter_types_str = parser.parse_next()
+      # Fragment 4: parameter_types. Wire type is STRING but payload is binary type IDs;
+      # use parse_next_raw() to avoid UTF-8 decode failure on bytes 0x80-0xFF.
+      _, flags, _, param_types_payload = parser.parse_next_raw()
+      if flags & PADDED_FLAG:
+        param_types_payload = param_types_payload[:-1] if param_types_payload else param_types_payload
+      param_types_payload = param_types_payload.rstrip(b"\x00")  # STRING null terminator
+      all_types = _parse_type_ids(param_types_payload)
+    else:
+      all_types = []
 
     if parser.has_remaining():
       _, parameter_labels_str = parser.parse_next()
-
-    all_types = _parse_type_ids(parameter_types_str) if parameter_types_str else []
 
     all_labels: list[str] = []
     if parameter_labels_str:
@@ -620,10 +797,18 @@ class GetStructsCommand(HamiltonCommand):
 
   @dataclass(frozen=True)
   class Response:
-    """GetStructs returns 4 fragments: struct names, struct IDs, field type IDs, field names."""
+    """GetStructs returns 4 fragments: struct names, per-struct field counts, flat field type IDs, flat field names.
+
+    Fragment layout (device signature: StructInfo):
+      [0] STRING_ARRAY  = struct names (one per struct)
+      [1] U32_ARRAY     = numberStructureElements: field count for each struct (NOT struct IDs)
+      [2] U8_ARRAY      = structureElementTypes: flat field type IDs across all structs
+      [3] STRING_ARRAY  = structureElementDescriptions: flat field names across all structs
+    Struct IDs are positional (0-indexed); the device does not send them explicitly.
+    """
 
     struct_names: StrArray
-    struct_ids: U32Array
+    field_counts: U32Array
     field_type_ids: U8Array
     field_names: StrArray
 
@@ -847,9 +1032,14 @@ class HamiltonIntrospection:
   async def get_structs(self, address: Address, interface_id: int) -> List[StructInfo]:
     """Get struct definitions.
 
-    The device returns 4 fragments: struct_names (StrArray), struct_ids (U32Array),
-    field_type_ids (U8Array), field_names (StrArray). Fields are split across
-    structs in order (even split when not divisible).
+    The device returns 4 fragments per the StructInfo signature:
+      [0] struct_names (StrArray): one name per struct
+      [1] field_counts (U32Array): numberStructureElements — how many fields each struct has
+      [2] field_type_ids (U8Array): flat field type IDs across all structs
+      [3] field_names (StrArray): flat field names across all structs
+
+    Struct IDs are positional (0-indexed); the device does not send them explicitly.
+    field_counts drives the field-to-struct assignment (no even-split heuristic).
 
     Args:
       address: Object address
@@ -864,31 +1054,32 @@ class HamiltonIntrospection:
       raise RuntimeError("GetStructsCommand returned None")
 
     struct_names = list(response.struct_names)
-    struct_ids = list(response.struct_ids)
-    field_type_ids = list(response.field_type_ids)
+    # field_counts = numberStructureElements from the device: logical fields per struct.
+    # Struct IDs are positional (0-indexed); the device does not send them.
+    field_counts = [int(c) for c in response.field_counts]
+    type_bytes = list(response.field_type_ids)  # flat byte array; some entries are 3-byte triples
     field_names = list(response.field_names)
-    n_structs = len(struct_ids)
-    n_fields = len(field_names)
+    n_structs = len(field_counts)
     if n_structs == 0:
       return []
-    # Split field names/type IDs across structs (even split)
-    counts = [
-      n_fields // n_structs + (1 if i < n_fields % n_structs else 0)
-      for i in range(n_structs)
-    ]
-    offset = 0
+
+    # Walk type_bytes with a byte-level cursor (variable width: 1 byte for simple
+    # types, 3 bytes for 0xE8 complex references). field_counts gives the number
+    # of *logical* fields per struct, not the number of bytes to consume.
+    byte_offset = 0   # cursor into type_bytes
+    name_offset = 0   # cursor into field_names
     result: List[StructInfo] = []
-    for i in range(n_structs):
-      cnt = counts[i]
-      name = struct_names[i] if i < len(struct_names) else f"Struct_{struct_ids[i]}"
-      # field_type_ids may have one extra (e.g. 8 for 7 names); use min to stay in range
-      types_slice = field_type_ids[offset : offset + cnt]
-      names_slice = field_names[offset : offset + cnt]
-      fields = dict(zip(names_slice, types_slice))
-      result.append(
-        StructInfo(struct_id=int(struct_ids[i]), name=name, fields=fields)
-      )
-      offset += cnt
+    for i, cnt in enumerate(field_counts):
+      name = struct_names[i] if i < len(struct_names) else f"Struct_{i}"
+      parsed = _parse_type_seq(type_bytes[byte_offset:], _COMPLEX_STRUCT_TYPE_IDS)
+      # Consume exactly `cnt` logical entries; advance byte_offset by the bytes used.
+      type_entries = parsed[:cnt]
+      bytes_used = sum(pt._byte_width for pt in type_entries)
+      names_slice = field_names[name_offset : name_offset + cnt]
+      fields = dict(zip(names_slice, type_entries))
+      result.append(StructInfo(struct_id=i, name=name, fields=fields, interface_id=interface_id))
+      byte_offset += bytes_used
+      name_offset += cnt
     return result
 
   async def get_all_methods(self, address: Address) -> List[MethodInfo]:
@@ -921,7 +1112,11 @@ class HamiltonIntrospection:
 
     return methods
 
-  async def build_type_registry(self, address: Union[Address, str]) -> TypeRegistry:
+  async def build_type_registry(
+    self,
+    address: Union[Address, str],
+    global_pool: Optional[GlobalTypePool] = None,
+  ) -> TypeRegistry:
     """Build a complete TypeRegistry for an object.
 
     Uses InterfaceDescriptors (get_interfaces) as the canonical source of
@@ -931,12 +1126,13 @@ class HamiltonIntrospection:
 
     Args:
       address: Object address or dot-path (e.g. "MLPrepRoot.MphRoot.MPH").
+      global_pool: Optional GlobalTypePool for resolving source_id=1 refs.
 
     Returns:
       TypeRegistry with all type information for this object
     """
     address = self._resolve_address(address)
-    registry = TypeRegistry(address=address)
+    registry = TypeRegistry(address=address, global_pool=global_pool)
     supported = await self.get_supported_interface0_method_ids(address)
 
     if GET_INTERFACES in supported:
@@ -967,6 +1163,7 @@ class HamiltonIntrospection:
     self,
     address: Union[Address, str],
     subobject_addresses: Optional[List[Address]] = None,
+    global_pool: Optional[GlobalTypePool] = None,
   ) -> TypeRegistry:
     """Build a TypeRegistry that includes structs/enums from child objects.
 
@@ -979,12 +1176,13 @@ class HamiltonIntrospection:
       address: Parent object address or dot-path (e.g. "MLPrepRoot.MphRoot.MPH").
       subobject_addresses: Optional list of child addresses to include.
         If None, all direct subobjects are discovered automatically.
+      global_pool: Optional GlobalTypePool for resolving source_id=1 refs.
 
     Returns:
       TypeRegistry that can resolve types from both parent and children.
     """
     address = self._resolve_address(address)
-    registry = await self.build_type_registry(address)
+    registry = await self.build_type_registry(address, global_pool=global_pool)
 
     if subobject_addresses is None:
       supported = await self.get_supported_interface0_method_ids(address)
@@ -1011,6 +1209,49 @@ class HamiltonIntrospection:
         logger.debug("build_type_registry failed for child %s: %s", sub_addr, e)
 
     return registry
+
+  async def build_global_type_pool(
+    self,
+    global_addresses: List[Address],
+  ) -> GlobalTypePool:
+    """Build the global type pool from global objects.
+
+    This mirrors piglet's approach: walk each global object, iterate its
+    interfaces, and collect all structs/enums in sequential encounter order.
+    The resulting flat pool is used for source_id=1 lookups (1-based indexing).
+
+    Args:
+      global_addresses: List of global object addresses
+        (from HamiltonTCPClient._global_object_addresses).
+
+    Returns:
+      GlobalTypePool with all global structs and enums.
+    """
+    pool = GlobalTypePool()
+
+    for addr in global_addresses:
+      try:
+        supported = await self.get_supported_interface0_method_ids(addr)
+        if GET_INTERFACES not in supported:
+          continue
+
+        interfaces = await self.get_interfaces(addr)
+        for iface in interfaces:
+          if GET_STRUCTS in supported:
+            structs = await self.get_structs(addr, iface.interface_id)
+            pool.structs.extend(structs)
+            pool.interface_structs[iface.interface_id] = {s.struct_id: s for s in structs}
+          if GET_ENUMS in supported:
+            enums = await self.get_enums(addr, iface.interface_id)
+            pool.enums.extend(enums)
+      except Exception as e:
+        logger.debug("build_global_type_pool failed for %s: %s", addr, e)
+
+    logger.info(
+      "Global type pool built: %d structs, %d enums from %d global objects",
+      len(pool.structs), len(pool.enums), len(global_addresses),
+    )
+    return pool
 
   async def get_method_by_id(
     self,
@@ -1203,3 +1444,267 @@ class HamiltonIntrospection:
       address, interface_id, method_id,
       registry=registry, hc_result=hc_result,
     )
+
+
+# ============================================================================
+# STRUCT / COMMAND VALIDATION
+# ============================================================================
+
+
+def _snake_to_pascal(name: str) -> str:
+  """Convert snake_case to PascalCase for name comparison."""
+  return "".join(word.capitalize() for word in name.split("_"))
+
+
+def _get_wire_type_id(annotation) -> Optional[int]:
+  """Extract HamiltonDataType type_id from an Annotated type alias.
+
+  Works for all our wire types: F32, PaddedBool, U32, WEnum, Str,
+  Annotated[X, Struct()], Annotated[list[X], StructArray()], etc.
+
+  Returns None if the annotation doesn't carry a WireType.
+  """
+  origin = getattr(annotation, "__class__", None)
+  # Handle typing.Annotated
+  metadata = getattr(annotation, "__metadata__", None)
+  if metadata:
+    for m in metadata:
+      if hasattr(m, "type_id"):
+        return m.type_id
+  return None
+
+
+def _get_nested_dataclass(annotation):
+  """For Annotated[SomeDataclass, Struct()], return SomeDataclass. Else None."""
+  import typing
+  args = getattr(annotation, "__args__", None)
+  if not args:
+    return None
+  base_type = args[0]
+  # For Annotated[list[X], StructArray()], dig into the list's inner type
+  inner_args = getattr(base_type, "__args__", None)
+  if inner_args:
+    base_type = inner_args[0]
+  import dataclasses
+  if dataclasses.is_dataclass(base_type):
+    return base_type
+  return None
+
+
+@dataclass
+class FieldMismatch:
+  """One field-level mismatch between hand-crafted and introspected definitions."""
+  field_name: str
+  issue: str  # e.g. "missing", "extra", "type mismatch", "order mismatch"
+  expected: str = ""
+  actual: str = ""
+
+  def __str__(self):
+    s = f"  {self.field_name}: {self.issue}"
+    if self.expected or self.actual:
+      s += f" (expected={self.expected}, actual={self.actual})"
+    return s
+
+
+@dataclass
+class ValidationResult:
+  """Result of comparing a hand-crafted dataclass against introspection."""
+  name: str
+  passed: bool = False
+  mismatches: List[FieldMismatch] = field(default_factory=list)
+  children: List["ValidationResult"] = field(default_factory=list)
+
+  def __str__(self):
+    icon = "✅" if self.passed else "❌"
+    lines = [f"{icon} {self.name}"]
+    for m in self.mismatches:
+      lines.append(str(m))
+    for child in self.children:
+      for line in str(child).split("\n"):
+        lines.append(f"    {line}")
+    return "\n".join(lines)
+
+
+def validate_struct(
+  dataclass_cls,
+  introspected: StructInfo,
+  pool: Optional[GlobalTypePool] = None,
+) -> ValidationResult:
+  """Compare a hand-crafted dataclass against an introspected StructInfo.
+
+  Checks field count, field names (snake_case → PascalCase), field types
+  (extracts type_id from Annotated metadata), and field order. For nested
+  structs (Annotated[X, Struct()]), recursively validates the child struct
+  if a GlobalTypePool is provided.
+
+  Args:
+    dataclass_cls: The hand-crafted dataclass class (not an instance).
+    introspected: The introspected StructInfo from the device.
+    pool: Optional GlobalTypePool for resolving nested struct refs.
+
+  Returns:
+    ValidationResult with pass/fail and detailed mismatches.
+  """
+  import dataclasses as dc
+  import typing
+
+  result = ValidationResult(name=dataclass_cls.__name__)
+  mismatches = result.mismatches
+
+  # Get hand-crafted fields
+  hints = typing.get_type_hints(dataclass_cls, include_extras=True)
+  hand_fields = list(dc.fields(dataclass_cls))
+  hand_names = [f.name for f in hand_fields]
+  hand_pascal = [_snake_to_pascal(n) for n in hand_names]
+
+  # Get introspected fields
+  intro_names = list(introspected.fields.keys())
+  intro_types = list(introspected.fields.values())
+
+  # 1. Field count
+  if len(hand_names) != len(intro_names):
+    mismatches.append(FieldMismatch(
+      field_name="(count)",
+      issue="field count mismatch",
+      expected=str(len(intro_names)),
+      actual=str(len(hand_names)),
+    ))
+
+  # 2. Field names (order-aware)
+  for i, (hp, ip) in enumerate(zip(hand_pascal, intro_names)):
+    if hp != ip:
+      mismatches.append(FieldMismatch(
+        field_name=hand_names[i],
+        issue=f"name mismatch at position {i}",
+        expected=ip,
+        actual=hp,
+      ))
+
+  # 3. Extra / missing fields
+  hand_set = set(hand_pascal)
+  intro_set = set(intro_names)
+  for missing in intro_set - hand_set:
+    mismatches.append(FieldMismatch(field_name=missing, issue="missing in hand-crafted"))
+  for extra in hand_set - intro_set:
+    mismatches.append(FieldMismatch(field_name=extra, issue="extra in hand-crafted (not in introspection)"))
+
+  # 4. Field types (where names match)
+  for i, (hand_name, intro_name) in enumerate(zip(hand_names, intro_names)):
+    hp = _snake_to_pascal(hand_name)
+    if hp != intro_name:
+      continue  # Already reported as name mismatch
+    annotation = hints.get(hand_name)
+    if annotation is None:
+      continue
+    hand_type_id = _get_wire_type_id(annotation)
+    intro_pt = intro_types[i]
+    if hand_type_id is not None and hand_type_id != intro_pt.type_id:
+      try:
+        from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import HamiltonDataType
+        expected_name = HamiltonDataType(intro_pt.type_id).name
+        actual_name = HamiltonDataType(hand_type_id).name
+      except ValueError:
+        expected_name = str(intro_pt.type_id)
+        actual_name = str(hand_type_id)
+      mismatches.append(FieldMismatch(
+        field_name=hand_name,
+        issue="type mismatch",
+        expected=expected_name,
+        actual=actual_name,
+      ))
+
+    # 5. Recursive validation for nested structs
+    if (pool is not None and intro_pt.is_complex
+        and intro_pt.source_id is not None and intro_pt.ref_id is not None
+        and intro_pt.type_id == 30):  # STRUCTURE
+      nested_cls = _get_nested_dataclass(annotation)
+      if nested_cls:
+        if intro_pt.source_id == 1:
+          # Global pool ref (1-based index)
+          nested_struct = pool.resolve_struct(intro_pt.ref_id)
+        elif intro_pt.source_id == 0 and introspected.interface_id is not None:
+          # Same-interface ref: look up within that interface's struct group
+          nested_struct = pool.resolve_struct_local(
+            introspected.interface_id, intro_pt.ref_id
+          )
+        else:
+          nested_struct = None
+        if nested_struct:
+          child_result = validate_struct(nested_cls, nested_struct, pool)
+          result.children.append(child_result)
+
+  result.passed = len(mismatches) == 0 and all(c.passed for c in result.children)
+  return result
+
+
+def validate_command(
+  command_cls,
+  registry: TypeRegistry,
+  pool: GlobalTypePool,
+  interface_id: int = 1,
+) -> ValidationResult:
+  """Compare a PrepCommand against its introspected method signature.
+
+  Matches the command's command_id to the introspected method_id on the given
+  interface. Validates that the command's struct parameters match the method's
+  expected struct types.
+
+  Args:
+    command_cls: The PrepCommand subclass.
+    registry: TypeRegistry with the object's methods.
+    pool: GlobalTypePool for resolving struct refs.
+    interface_id: Interface ID to look up the method on (default 1 = Pipettor).
+
+  Returns:
+    ValidationResult with pass/fail and details.
+  """
+  import dataclasses as dc
+  import typing
+
+  cmd_id = getattr(command_cls, "command_id", None)
+  result = ValidationResult(name=f"{command_cls.__name__} (cmd={cmd_id})")
+
+  if cmd_id is None:
+    result.mismatches.append(FieldMismatch(
+      field_name="(class)", issue="no command_id attribute"))
+    result.passed = False
+    return result
+
+  # Find matching introspected method
+  method = registry.get_method(interface_id, cmd_id)
+  if method is None:
+    result.mismatches.append(FieldMismatch(
+      field_name="(method)", issue=f"no introspected method for [{interface_id}:{cmd_id}]"))
+    result.passed = False
+    return result
+
+  result.name = f"{command_cls.__name__} ↔ {method.name} [{interface_id}:{cmd_id}]"
+
+  # Get command's payload fields (exclude 'dest' and class-level attrs)
+  hints = typing.get_type_hints(command_cls, include_extras=True)
+  payload_fields = [
+    f for f in dc.fields(command_cls) if f.name != "dest"
+  ]
+
+  # Match struct payload fields to introspected parameter types positionally
+  struct_fields = [
+    (pf, hints.get(pf.name))
+    for pf in payload_fields
+    if _get_nested_dataclass(hints.get(pf.name)) is not None
+  ]
+  struct_params = [
+    pt for pt in method.parameter_types
+    if pt.is_complex and pt.source_id is not None and pt.ref_id is not None
+  ]
+
+  for (pf, annotation), pt in zip(struct_fields, struct_params):
+    intro_struct = pool.resolve_struct(pt.ref_id)
+    nested_cls = _get_nested_dataclass(annotation)
+    if intro_struct and nested_cls:
+      child_result = validate_struct(nested_cls, intro_struct, pool)
+      child_result.name = f"{pf.name} → {intro_struct.name} (ref={pt.ref_id})"
+      result.children.append(child_result)
+
+  result.passed = all(c.passed for c in result.children) and len(result.mismatches) == 0
+  return result
+

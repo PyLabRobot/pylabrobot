@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 class HamiltonDataType(IntEnum):
   """Hamilton parameter data types for wire encoding in DataFragments."""
 
+  VOID = 0
   # Scalar integer types
   I8 = 1
   I16 = 2
@@ -106,8 +107,6 @@ class Scalar(WireType):
 
   def encode_into(self, value, params: HoiParams) -> HoiParams:
     data = _struct.pack(self.fmt, value)
-    if self.padded:
-      data += b"\x00"
     return params._add_fragment(self.type_id, data, 0x01 if self.padded else 0)
 
   def decode_from(self, data: bytes) -> Any:

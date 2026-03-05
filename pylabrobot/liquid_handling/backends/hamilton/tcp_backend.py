@@ -42,6 +42,7 @@ from pylabrobot.io.socket import Socket
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import (
   GET_SUBOBJECT_ADDRESS,
+  GlobalTypePool,
   HamiltonIntrospection,
   ObjectInfo,
   TypeRegistry,
@@ -305,6 +306,7 @@ class HamiltonTCPClient:
     self._sequence_numbers: Dict[Address, int] = {}
     self._registry = ObjectRegistry(self)
     self._type_registries: Dict[Address, TypeRegistry] = {}
+    self._global_object_addresses: list[Address] = []
 
   @property
   def interfaces(self) -> RegistryProxy:
@@ -513,6 +515,9 @@ class HamiltonTCPClient:
     # Step 4: Discover root objects
     await self._discover_root()
 
+    # Step 4b: Discover global objects (shared type definitions)
+    await self._discover_globals()
+
     # Step 5: Walk depth-1 (or more) and register interfaces
     await self._discover_interfaces(max_depth=1)
 
@@ -653,6 +658,52 @@ class HamiltonTCPClient:
     self._registry.set_root_addresses(root_objects)
 
     logger.info(f"✓ Discovery complete: {len(root_objects)} root objects")
+
+  async def _discover_globals(self):
+    """Discover global objects via Protocol 3 HARP_PROTOCOL_REQUEST.
+
+    Global objects hold shared type definitions (structs/enums) referenced by
+    source_id=1 in method parameter triples. Piglet calls these "globals" and
+    uses request_id=2 (GLOBAL_OBJECT_ADDRESS) to discover them.
+    """
+    logger.info("Discovering Hamilton global objects...")
+
+    registration_service = Address(0, 0, 65534)
+
+    global_msg = RegistrationMessage(
+      dest=registration_service, action_code=RegistrationActionCode.HARP_PROTOCOL_REQUEST
+    )
+    global_msg.add_registration_option(
+      RegistrationOptionType.HARP_PROTOCOL_REQUEST,
+      protocol=2,
+      request_id=HoiRequestId.GLOBAL_OBJECT_ADDRESS,
+    )
+
+    if self.client_address is None or self._client_id is None:
+      raise RuntimeError("Client not initialized - call _initialize_connection() first")
+
+    seq = self._allocate_sequence_number(registration_service)
+    packet = global_msg.build(
+      src=self.client_address,
+      req_addr=Address(0, 0, 0),
+      res_addr=Address(0, 0, 0),
+      seq=seq,
+      harp_action_code=3,  # COMMAND_REQUEST
+      harp_response_required=True,
+    )
+
+    logger.info("[DISCOVER_GLOBALS] Sending global object discovery:")
+    logger.info(f"[DISCOVER_GLOBALS]   Length: {len(packet)} bytes, Seq: {seq}")
+    logger.info(f"[DISCOVER_GLOBALS]   Hex: {packet.hex(' ')}")
+
+    await self.write(packet)
+
+    response = await self._read_one_message()
+    assert isinstance(response, RegistrationResponse)
+
+    global_objects = self._parse_registration_response(response)
+    self._global_object_addresses = global_objects
+    logger.info(f"[DISCOVER_GLOBALS] ✓ Found {len(global_objects)} global objects")
 
   async def _discover_interfaces(self, max_depth: int = 1) -> None:
     """Walk root and register objects up to max_depth. Default 1 = root + direct children."""
@@ -872,6 +923,37 @@ class HamiltonTCPClient:
 
     assert last_error is not None
     raise last_error
+
+  async def introspect(
+    self, object_path: Optional[str] = None
+  ) -> tuple[GlobalTypePool, TypeRegistry]:
+    """Build introspection data on demand (for diagnostics/validation).
+
+    Queries the device for global structs/enums and optionally builds a
+    TypeRegistry for a specific object. Does not cache — each call queries
+    the device fresh.
+
+    Example::
+
+      pool, reg = await client.introspect("MLPrepRoot.PipettorRoot.Pipettor")
+      result = validate_struct(MyStruct, pool_struct, pool)
+      sig = await intro.resolve_signature(addr, 1, 9, reg)
+
+    Args:
+      object_path: Optional dot-path to build a TypeRegistry for
+        (e.g. "MLPrepRoot.PipettorRoot.Pipettor"). If None, returns
+        an empty TypeRegistry with just the global pool attached.
+
+    Returns:
+      (GlobalTypePool, TypeRegistry) tuple.
+    """
+    intro = HamiltonIntrospection(self)
+    pool = await intro.build_global_type_pool(self._global_object_addresses)
+    if object_path:
+      reg = await intro.build_type_registry(object_path, global_pool=pool)
+    else:
+      reg = TypeRegistry(address=None, global_pool=pool)
+    return pool, reg
 
   async def stop(self):
     """Close connection."""

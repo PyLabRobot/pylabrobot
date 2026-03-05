@@ -466,7 +466,7 @@ class TestHoiParams(unittest.TestCase):
     params = HoiParams().add([True, False, True], BoolArray).build()
     self.assertEqual(params[0], HamiltonDataType.BOOL_ARRAY)
     self.assertEqual(params[1], 0x01)  # flags = 0x01 for bool arrays
-    self.assertEqual(params[2:4], b"\x03\x00")  # length = 3
+    self.assertEqual(params[2:4], b"\x04\x00")  # length = 4 (3 bools + pad)
     self.assertEqual(params[4:7], b"\x01\x00\x01")
 
   def test_string_array(self):

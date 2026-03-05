@@ -34,6 +34,9 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   decode_fragment,
 )
 
+
+PADDED_FLAG = 0x01
+
 # ============================================================================
 # HOI PARAMETER ENCODING - DataFragment wrapping for HOI protocol
 # ============================================================================
@@ -72,11 +75,16 @@ class HoiParams:
 
     Creates: [type_id:1][flags:1][length:2][data:n]
 
+    When flags & PADDED_FLAG, appends a trailing pad byte (Prep convention).
+    Callers pass unpadded data; _add_fragment centralizes pad handling.
+
     Args:
       type_id: Data type ID
-      data: Fragment data bytes
-      flags: Fragment flags (default: 0, but BOOL_ARRAY uses 0x01)
+      data: Fragment data bytes (unpadded; pad added here when flags set)
+      flags: Fragment flags (default: 0; PADDED_FLAG for BoolArray, PaddedBool, PaddedU8)
     """
+    if flags & PADDED_FLAG:
+      data = data + b"\x00"
     fragment = Writer().u8(type_id).u8(flags).u16(len(data)).raw_bytes(data).finish()
     self._fragments.append(fragment)
     return self
@@ -148,6 +156,7 @@ class HoiParamsParser:
     if self._offset + 4 > len(self._data):
       raise ValueError(f"Insufficient data at offset {self._offset}")
     type_id = self._data[self._offset]
+    flags = self._data[self._offset + 1]
     length = int.from_bytes(self._data[self._offset + 2 : self._offset + 4], "little")
     payload_end = self._offset + 4 + length
     if payload_end > len(self._data):
@@ -156,7 +165,30 @@ class HoiParamsParser:
       )
     data = self._data[self._offset + 4 : payload_end]
     self._offset = payload_end
+    if (flags & PADDED_FLAG) and len(data) > 0:
+      data = data[:-1]
     return type_id, decode_fragment(type_id, data)
+
+  def parse_next_raw(self) -> tuple[int, int, int, bytes]:
+    """Return (type_id, flags, length, payload_bytes) without decoding.
+
+    Use when the wire declares STRING (type_id=15) but the payload is binary
+    (e.g. GetMethod parameter_types). Normal parse_next() would UTF-8 decode
+    and fail on bytes like 0xaa.
+    """
+    if self._offset + 4 > len(self._data):
+      raise ValueError(f"Insufficient data at offset {self._offset}")
+    type_id = self._data[self._offset]
+    flags = self._data[self._offset + 1]
+    length = int.from_bytes(self._data[self._offset + 2 : self._offset + 4], "little")
+    payload_end = self._offset + 4 + length
+    if payload_end > len(self._data):
+      raise ValueError(
+        f"DataFragment data extends beyond buffer: need {payload_end}, have {len(self._data)}"
+      )
+    payload = self._data[self._offset + 4 : payload_end]
+    self._offset = payload_end
+    return type_id, flags, length, payload
 
   def has_remaining(self) -> bool:
     return self._offset < len(self._data)
