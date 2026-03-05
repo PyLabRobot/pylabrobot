@@ -39,6 +39,7 @@ from .STAR_backend import (
   UnknownHamiltonError,
   parse_star_fw_string,
 )
+from .STAR_chatterbox import _DEFAULT_EXTENDED_CONFIGURATION, _DEFAULT_MACHINE_CONFIGURATION
 
 
 class TestSTARResponseParsing(unittest.TestCase):
@@ -177,8 +178,8 @@ class STARCommandCatcher(STARBackend):
 
   async def setup(self) -> None:  # type: ignore
     self._num_channels = 8
-    self.iswap_installed = True
-    self.core96_head_installed = True
+    self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self._core_parked = True
 
   async def send_command(  # type: ignore
@@ -260,8 +261,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.maxDiff = None
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1091,8 +1092,8 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plt_car2, rails=3)
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1220,8 +1221,8 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(plt_carrier, rails=10)
 
     self.star._num_channels = 8
-    self.star.core96_head_installed = True
-    self.star.iswap_installed = True
+    self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.star._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.star.setup = unittest.mock.AsyncMock()
     self.star._core_parked = True
     self.star._iswap_parked = True
@@ -1416,8 +1417,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.backend._write_and_read_command = unittest.mock.AsyncMock()
     self.backend.io = unittest.mock.AsyncMock()
     self.backend._num_channels = 8
-    self.backend.core96_head_installed = True
-    self.backend.iswap_installed = True
+    self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True
@@ -1652,8 +1653,8 @@ class STARTestBase(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
