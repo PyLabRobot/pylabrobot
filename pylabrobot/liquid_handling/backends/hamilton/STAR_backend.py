@@ -1228,13 +1228,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   def _min_spacing_between(self, i: int, j: int) -> float:
     """Return the conservative minimum Y spacing required between channels *i* and *j*.
 
-    The constraint is the larger of the two channels' individual minimum spacings,
-    ceiling'd to 1 decimal place for safe movement.
+    For adjacent channels, the constraint is the larger of the two channels' individual minimum
+    spacings, ceiling'd to 1 decimal place for safe movement.
+
+    For non-adjacent channels, the spacing is the sum of all intermediate adjacent-pair spacings.
     """
-    if abs(i - j) != 1:
-      raise ValueError(f"Channels must be adjacent, got i={i}, j={j}")
-    spacing = max(self._channels_minimum_y_spacing[i], self._channels_minimum_y_spacing[j])
-    return math.ceil(spacing * 10) / 10
+    lo, hi = min(i, j), max(i, j)
+    if hi - lo == 1:
+      spacing = max(self._channels_minimum_y_spacing[lo], self._channels_minimum_y_spacing[hi])
+      return math.ceil(spacing * 10) / 10
+    return sum(self._min_spacing_between(k, k + 1) for k in range(lo, hi))
 
   @property
   def num_arms(self) -> int:
