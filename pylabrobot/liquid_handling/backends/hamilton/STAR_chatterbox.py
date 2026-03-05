@@ -4,10 +4,97 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
+  ConfigurationData1,
+  ConfigurationData2,
+  ExtendedConfiguration,
   Head96Information,
+  MachineConfiguration,
   STARBackend,
+  XDriveConfigByte1,
+  XDriveConfigByte2,
 )
 from pylabrobot.resources.well import Well
+
+_DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
+  configuration_data_1=ConfigurationData1(
+    pip_type_1000ul=True,
+    iswap_installed=True,
+    main_front_cover_monitoring_installed=False,
+    auto_load_installed=True,
+    wash_station_1_installed=False,
+    wash_station_2_installed=False,
+    temp_controlled_carrier_1_installed=False,
+    temp_controlled_carrier_2_installed=False,
+  ),
+  num_pip_channels=8,
+)
+
+_DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
+  configuration_data_2=ConfigurationData2(
+    left_x_drive_large=True,
+    core_96_head_installed=False,
+    right_x_drive_large=False,
+    pump_station_1_installed=False,
+    pump_station_2_installed=False,
+    wash_station_1_type_cr=False,
+    wash_station_2_type_cr=False,
+    left_cover_installed=False,
+    right_cover_installed=False,
+    additional_front_cover_monitoring_installed=False,
+    pump_station_3_installed=False,
+    multi_channel_nano_pipettor_installed=False,
+    dispensing_head_384_installed=False,
+    xl_channels_installed=False,
+    tube_gripper_installed=False,
+    waste_direction_left=False,
+    iswap_gripper_wide=True,
+    additional_channel_nano_pipettor_installed=False,
+    imaging_channel_installed=False,
+    robotic_channel_installed=False,
+    channel_order_ox_first=False,
+    x0_interface_ham_can=False,
+    park_heads_with_iswap_off=False,
+  ),
+  configuration_data_3=0,
+  instrument_size_slots=30,
+  auto_load_size_slots=30,
+  tip_waste_x_position=800.0,
+  left_x_drive_config_byte_1=XDriveConfigByte1(
+    pip_installed=False,
+    iswap_installed=True,
+    core_96_head_installed=True,
+    nano_pipettor_installed=False,
+    dispensing_head_384_installed=False,
+    xl_channels_installed=False,
+    tube_gripper_installed=False,
+    imaging_channel_installed=False,
+  ),
+  left_x_drive_config_byte_2=XDriveConfigByte2(robotic_channel_installed=False),
+  right_x_drive_config_byte_1=XDriveConfigByte1(
+    pip_installed=True,
+    iswap_installed=True,
+    core_96_head_installed=True,
+    nano_pipettor_installed=False,
+    dispensing_head_384_installed=False,
+    xl_channels_installed=False,
+    tube_gripper_installed=False,
+    imaging_channel_installed=False,
+  ),
+  right_x_drive_config_byte_2=XDriveConfigByte2(robotic_channel_installed=False),
+  min_iswap_collision_free_position=350.0,
+  max_iswap_collision_free_position=600.0,
+  left_x_arm_width=370.0,
+  right_x_arm_width=370.0,
+  num_pip_channels=8,
+  num_xl_channels=0,
+  num_robotic_channels=0,
+  min_raster_pitch_pip_channels=9.0,
+  min_raster_pitch_xl_channels=36.0,
+  min_raster_pitch_robotic_channels=36.0,
+  pip_maximal_y_position=606.5,
+  left_arm_min_y_position=6.0,
+  right_arm_min_y_position=6.0,
+)
 
 
 class STARChatterboxBackend(STARBackend):
@@ -16,21 +103,21 @@ class STARChatterboxBackend(STARBackend):
   def __init__(
     self,
     num_channels: int = 8,
-    core96_head_installed: bool = True,
-    iswap_installed: bool = True,
+    machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONFIGURATION,
+    extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONFIGURATION,
   ):
     """Initialize a chatter box backend.
 
     Args:
       num_channels: Number of pipetting channels (default: 8)
-      core96_head_installed: Whether the CoRe 96 head is installed (default: True)
-      iswap_installed: Whether the iSWAP robotic arm is installed (default: True)
+      machine_configuration: Machine configuration to return from `request_machine_configuration`.
+      extended_configuration: Extended configuration to return from `request_extended_configuration`.
     """
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
-    self._core96_head_installed = core96_head_installed
-    self._iswap_installed = iswap_installed
+    self._machine_configuration = machine_configuration
+    self._extended_conf = extended_configuration
 
   async def setup(
     self,
@@ -57,17 +144,11 @@ class STARChatterboxBackend(STARBackend):
     conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
 
-    # Parse left X-drive configuration byte (xl) to identify installed modules
-    xl_value = self.extended_conf["xl"]
-    # xl is a bit field: bit 0 (LSB) reserved, bit 1 = iSWAP, bit 2 = 96-head
-    # Use bitwise operations to check specific bits
-    self.iswap_installed = bool(xl_value & 0b10)  # Check bit 1
-    self.core96_head_installed = bool(xl_value & 0b100)  # Check bit 2
-
-    # Parse autoload from kb configuration byte
-    configuration_data1 = bin(conf["kb"]).split("b")[-1].zfill(8)
-    autoload_configuration_byte = configuration_data1[-4]
-    self.autoload_installed = autoload_configuration_byte == "1"
+    self.autoload_installed = conf.configuration_data_1.auto_load_installed
+    self.iswap_installed = self.extended_conf.left_x_drive_config_byte_1.iswap_installed
+    self.core96_head_installed = (
+      self.extended_conf.left_x_drive_config_byte_1.core_96_head_installed
+    )
 
     # Mock firmware information for 96-head if installed
     if self.core96_head_installed and not skip_core96_head:
@@ -110,70 +191,10 @@ class STARChatterboxBackend(STARBackend):
 
   # # # # # # # # STAR configuration # # # # # # # #
 
-  async def request_machine_configuration(self):
-    """Return mock machine configuration data.
-    (Mock MEM-READ command)
+  async def request_machine_configuration(self) -> MachineConfiguration:
+    return self._machine_configuration
 
-    Configuration byte `kb` is directly copied from a STARlet with 8-channel pipettor,
-    iSWAP, and autoload installed.
-
-    Bit mapping for kb:
-      Bit 0: PIP Type (0=300µL, 1=1000µL)
-      Bit 1: ISWAP (0=none, 1=installed)
-      Bit 2: Main front cover monitoring (0=none, 1=installed)
-      Bit 3: Auto load (0=none, 1=installed)
-      Bit 4: Wash station 1 (0=none, 1=installed)
-      Bit 5: Wash station 2 (0=none, 1=installed)
-      Bit 6: Temp. controlled carrier 1 (0=none, 1=installed)
-      Bit 7: Temp. controlled carrier 2 (0=none, 1=installed)
-
-    Returns:
-      Dict with configuration parameters: kb (config byte), kp (num channels), id (command ID)
-    """
-    return {"kb": 11, "kp": self.num_channels, "id": 2}
-
-  async def request_extended_configuration(self):
-    """Return mock extended configuration data.
-
-    Extended configuration is dynamically generated based on __init__ parameters.
-
-    Returns:
-      Dict with extended configuration parameters including xl byte for module detection.
-    """
-    # Calculate xl byte based on installed modules
-    # Bit 0: (reserved)
-    # Bit 1: iSWAP (based on __init__ parameter)
-    # Bit 2: 96-head (based on __init__ parameter)
-    xl_value = 0
-    if self._iswap_installed:
-      xl_value |= 0b10  # Add iSWAP (bit 1)
-    if self._core96_head_installed:
-      xl_value |= 0b100  # Add 96-head (bit 2)
-
-    self._extended_conf = {
-      "ka": 65537,
-      "ke": 0,
-      "xt": 30,
-      "xa": 30,
-      "xw": 8000,
-      "xl": xl_value,  # Dynamic based on core96_head_installed from __init__
-      "xn": 0,
-      "xr": 0,
-      "xo": 0,
-      "xm": 3500,
-      "xx": 6000,
-      "xu": 3700,
-      "xv": 3700,
-      "kc": 0,
-      "kr": 0,
-      "ys": 90,
-      "kl": 360,
-      "km": 360,
-      "ym": 6065,
-      "yu": 60,
-      "yx": 60,
-      "id": 3,
-    }
+  async def request_extended_configuration(self) -> ExtendedConfiguration:
     return self._extended_conf
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
