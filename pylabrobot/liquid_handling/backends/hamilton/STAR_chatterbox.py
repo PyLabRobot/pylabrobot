@@ -11,8 +11,6 @@ from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
   Head96Information,
   MachineConfiguration,
   STARBackend,
-  XDriveConfigByte1,
-  XDriveConfigByte2,
 )
 from pylabrobot.resources.well import Well
 
@@ -43,6 +41,7 @@ class STARChatterboxBackend(STARBackend):
     num_channels: int = 8,
     machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONFIGURATION,
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONFIGURATION,
+    channels_minimum_y_spacing: Optional[List[float]] = None,
     # deprecated parameters
     core96_head_installed: Optional[bool] = None,
     iswap_installed: Optional[bool] = None,
@@ -53,6 +52,8 @@ class STARChatterboxBackend(STARBackend):
       num_channels: Number of pipetting channels (default: 8)
       machine_configuration: Machine configuration to return from `request_machine_configuration`.
       extended_configuration: Extended configuration to return from `request_extended_configuration`.
+      channels_minimum_y_spacing: Per-channel minimum Y spacing in mm. If None, defaults to
+        `extended_configuration.min_raster_pitch_pip_channels` for all channels.
       core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive
         .core_96_head_installed` instead.
       iswap_installed: Deprecated. Set `extended_configuration.left_x_drive
@@ -85,6 +86,18 @@ class STARChatterboxBackend(STARBackend):
 
     self._machine_configuration = machine_configuration
     self._extended_conf = extended_configuration
+
+    if channels_minimum_y_spacing is not None:
+      if len(channels_minimum_y_spacing) != num_channels:
+        raise ValueError(
+          f"channels_minimum_y_spacing has {len(channels_minimum_y_spacing)} entries, "
+          f"expected {num_channels}."
+        )
+      self._channels_minimum_y_spacing = list(channels_minimum_y_spacing)
+    else:
+      self._channels_minimum_y_spacing = [
+        extended_configuration.min_raster_pitch_pip_channels
+      ] * num_channels
 
   async def setup(
     self,

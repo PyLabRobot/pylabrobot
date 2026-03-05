@@ -1580,6 +1580,7 @@ class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
     backend = STARBackend()
     backend._num_channels = num_channels
     backend._channels_minimum_y_spacing = list(spacings)
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     backend.id_ = 0
     backend._write_and_read_command = unittest.mock.AsyncMock()
     backend.get_channels_y_positions = unittest.mock.AsyncMock()

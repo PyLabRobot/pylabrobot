@@ -1363,7 +1363,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Otherwise, it's the machine drive limit (635 mm).
     Symmetric with _frontmost_channel_min_y: max_y = limit - spacing[0] + 3.
     """
-    if self.iswap_installed:
+    if self.extended_conf.left_x_drive.iswap_installed:
       limit = await self.iswap_rotation_drive_request_y()
     else:
       limit = 635.0
@@ -4502,11 +4502,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     else:
       if self.extended_conf.left_x_drive.iswap_installed:
         max_y_pos = await self.iswap_rotation_drive_request_y()
-        limit = "iswap module y-position"
       else:
         # STAR machines do not allow channels y > 635 mm
         max_y_pos = 635
-        limit = "machine limit"
       if y > max_y_pos:
         raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm")
 
