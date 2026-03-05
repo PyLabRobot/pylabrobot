@@ -1507,14 +1507,14 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(gripper_id, 1)
       self.mock_socket_instance.write.assert_called_with(b"GetActiveGripper\n")
 
-  async def test_free_mode_enable(self):
+  async def test_freedrive_mode(self):
     self.mock_socket_instance.readline.return_value = b"0 freemode 1\r\n"
-    await self.backend.set_free_mode(True, 1)
+    await self.backend.freedrive_mode([1])
     self.mock_socket_instance.write.assert_called_with(b"freemode 1\n")
 
-  async def test_free_mode_disable(self):
+  async def test_end_freedrive_mode(self):
     self.mock_socket_instance.readline.return_value = b"0 freemode -1\r\n"
-    await self.backend.set_free_mode(False)
+    await self.backend.end_freedrive_mode()
     self.mock_socket_instance.write.assert_called_with(b"freemode -1\n")
 
   async def test_teach_position(self):

@@ -2254,30 +2254,20 @@ class PreciseFlexBackend(SCARABackend, ABC):
     response = await self.send_command("GetActiveGripper")
     return int(response)
 
-  async def set_free_mode(self, on: bool, axis: int = 0):
-    """
-    Activates or deactivates free mode.  The robot must be attached to enter free mode.
+  async def freedrive_mode(self, free_axes: List[int]) -> None:
+    """Enter freedrive mode, allowing manual movement of the specified joints.
+
+    The robot must be attached to enter free mode.
 
     Args:
-      on: If True, enable free mode. If False, disable free mode for all axes.
-      axis: Axis to apply free mode to. 0 = all axes or > 0 = Free just this axis. Ignored if 'on' parameter is False.
+      free_axes: List of joint indices to free. Use [0] for all axes.
     """
-    if not on:
-      axis = -1  # means turn off free mode for all axes
-    await self.send_command(f"freemode {axis}")
+    for axis in free_axes:
+      await self.send_command(f"freemode {axis}")
 
-  async def activate_free_mode(self, axis: int = 0):
-    """
-    Activates free mode.  The robot must be attached to enter free mode.
-
-    Args:
-      axis: Axis to apply free mode to. 0 = all axes or > 0 = Free just this axis.
-    """
-    await self.set_free_mode(True, axis)
-
-  async def deactivate_free_mode(self):
-    """Deactivates free mode for all axes."""
-    await self.set_free_mode(False)
+  async def end_freedrive_mode(self) -> None:
+    """Exit freedrive mode for all axes."""
+    await self.send_command("freemode -1")
 
   async def pick_plate_from_stored_position(
     self,

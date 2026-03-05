@@ -1,9 +1,12 @@
 import datetime
 from contextlib import asynccontextmanager
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import Head96Information, STARBackend
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
+  Head96Information,
+  STARBackend,
+)
 from pylabrobot.resources.well import Well
 
 
@@ -240,6 +243,15 @@ class STARChatterboxBackend(STARBackend):
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
 
+  async def move_channel_x(self, channel: int, x: float):
+    print(f"moving channel {channel} to x: {x}")
+
+  async def move_all_channels_in_z_safety(self):
+    print("moving all channels to z safety")
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    print(f"positioning channels in z: {zs}")
+
   # # # # # # # # 1_000 uL Channel: Complex Commands # # # # # # # #
 
   async def step_off_foil(
@@ -308,3 +320,26 @@ class STARChatterboxBackend(STARBackend):
     finally:
       messages.append("end slow iswap")
       print(" | ".join(messages))
+
+  # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
+
+  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
+    """Return tip length from the tip tracker.
+
+    Args:
+      channel_idx: Index of the pipetting channel (0-indexed).
+
+    Returns:
+      The tip length in mm from the tip tracker.
+
+    Raises:
+      NoTipError: If no tip is present on the channel (via tip tracker).
+    """
+    tip = self.head[channel_idx].get_tip()
+    return tip.total_tip_length
+
+  async def position_channels_in_y_direction(self, ys, make_space=True):
+    print("positioning channels in y:", ys, "make_space:", make_space)
+
+  async def request_pip_height_last_lld(self):
+    return list(range(12))
