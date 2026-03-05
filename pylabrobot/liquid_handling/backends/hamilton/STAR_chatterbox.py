@@ -154,6 +154,7 @@ class STARChatterboxBackend(STARBackend):
     return self._machine_configuration
 
   async def request_extended_configuration(self) -> ExtendedConfiguration:
+    assert self._extended_conf is not None
     return self._extended_conf
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
