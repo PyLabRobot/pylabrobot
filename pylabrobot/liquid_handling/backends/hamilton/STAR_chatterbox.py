@@ -4,8 +4,14 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
+  ConfigurationData1,
+  ConfigurationData2,
+  ExtendedConfiguration,
   Head96Information,
+  MachineConfiguration,
   STARBackend,
+  XDriveConfigByte1,
+  XDriveConfigByte2,
 )
 from pylabrobot.resources.well import Well
 
@@ -57,17 +63,11 @@ class STARChatterboxBackend(STARBackend):
     conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
 
-    # Parse left X-drive configuration byte (xl) to identify installed modules
-    xl_value = self.extended_conf["xl"]
-    # xl is a bit field: bit 0 (LSB) reserved, bit 1 = iSWAP, bit 2 = 96-head
-    # Use bitwise operations to check specific bits
-    self.iswap_installed = bool(xl_value & 0b10)  # Check bit 1
-    self.core96_head_installed = bool(xl_value & 0b100)  # Check bit 2
-
-    # Parse autoload from kb configuration byte
-    configuration_data1 = bin(conf["kb"]).split("b")[-1].zfill(8)
-    autoload_configuration_byte = configuration_data1[-4]
-    self.autoload_installed = autoload_configuration_byte == "1"
+    self.autoload_installed = conf.configuration_data_1.auto_load_installed
+    self.iswap_installed = self.extended_conf.left_x_drive_config_byte_1.iswap_installed
+    self.core96_head_installed = (
+      self.extended_conf.left_x_drive_config_byte_1.core_96_head_installed
+    )
 
     # Mock firmware information for 96-head if installed
     if self.core96_head_installed and not skip_core96_head:
@@ -110,70 +110,52 @@ class STARChatterboxBackend(STARBackend):
 
   # # # # # # # # STAR configuration # # # # # # # #
 
-  async def request_machine_configuration(self):
+  async def request_machine_configuration(self) -> MachineConfiguration:
     """Return mock machine configuration data.
-    (Mock MEM-READ command)
 
-    Configuration byte `kb` is directly copied from a STARlet with 8-channel pipettor,
-    iSWAP, and autoload installed.
-
-    Bit mapping for kb:
-      Bit 0: PIP Type (0=300µL, 1=1000µL)
-      Bit 1: ISWAP (0=none, 1=installed)
-      Bit 2: Main front cover monitoring (0=none, 1=installed)
-      Bit 3: Auto load (0=none, 1=installed)
-      Bit 4: Wash station 1 (0=none, 1=installed)
-      Bit 5: Wash station 2 (0=none, 1=installed)
-      Bit 6: Temp. controlled carrier 1 (0=none, 1=installed)
-      Bit 7: Temp. controlled carrier 2 (0=none, 1=installed)
-
-    Returns:
-      Dict with configuration parameters: kb (config byte), kp (num channels), id (command ID)
+    Configuration byte `kb` value of 11 (0b00001011) corresponds to a STARlet with:
+    1000ul PIP type, iSWAP installed, auto load installed.
     """
-    return {"kb": 11, "kp": self.num_channels, "id": 2}
+    return MachineConfiguration(
+      configuration_data_1=ConfigurationData1.from_int(11),
+      num_pip_channels=self.num_channels,
+    )
 
-  async def request_extended_configuration(self):
+  async def request_extended_configuration(self) -> ExtendedConfiguration:
     """Return mock extended configuration data.
 
-    Extended configuration is dynamically generated based on __init__ parameters.
-
-    Returns:
-      Dict with extended configuration parameters including xl byte for module detection.
+    Dynamically generated based on __init__ parameters.
     """
-    # Calculate xl byte based on installed modules
-    # Bit 0: (reserved)
-    # Bit 1: iSWAP (based on __init__ parameter)
-    # Bit 2: 96-head (based on __init__ parameter)
     xl_value = 0
     if self._iswap_installed:
-      xl_value |= 0b10  # Add iSWAP (bit 1)
+      xl_value |= 0b10  # iSWAP (bit 1)
     if self._core96_head_installed:
-      xl_value |= 0b100  # Add 96-head (bit 2)
+      xl_value |= 0b100  # 96-head (bit 2)
 
-    self._extended_conf = {
-      "ka": 65537,
-      "ke": 0,
-      "xt": 30,
-      "xa": 30,
-      "xw": 8000,
-      "xl": xl_value,  # Dynamic based on core96_head_installed from __init__
-      "xn": 0,
-      "xr": 0,
-      "xo": 0,
-      "xm": 3500,
-      "xx": 6000,
-      "xu": 3700,
-      "xv": 3700,
-      "kc": 0,
-      "kr": 0,
-      "ys": 90,
-      "kl": 360,
-      "km": 360,
-      "ym": 6065,
-      "yu": 60,
-      "yx": 60,
-      "id": 3,
-    }
+    self._extended_conf = ExtendedConfiguration(
+      configuration_data_2=ConfigurationData2.from_int(65537),
+      configuration_data_3=0,
+      instrument_size_slots=30,
+      auto_load_size_slots=30,
+      tip_waste_x_position=800.0,
+      left_x_drive_config_byte_1=XDriveConfigByte1.from_int(xl_value),
+      left_x_drive_config_byte_2=XDriveConfigByte2.from_int(0),
+      right_x_drive_config_byte_1=XDriveConfigByte1.from_int(0),
+      right_x_drive_config_byte_2=XDriveConfigByte2.from_int(0),
+      min_iswap_collision_free_position=350.0,
+      max_iswap_collision_free_position=600.0,
+      left_x_arm_width=370.0,
+      right_x_arm_width=370.0,
+      num_pip_channels=self.num_channels,
+      num_xl_channels=0,
+      num_robotic_channels=0,
+      min_raster_pitch_pip_channels=9.0,
+      min_raster_pitch_xl_channels=36.0,
+      min_raster_pitch_robotic_channels=36.0,
+      pip_maximal_y_position=606.5,
+      left_arm_min_y_position=6.0,
+      right_arm_min_y_position=6.0,
+    )
     return self._extended_conf
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
