@@ -8,7 +8,7 @@ import sys
 import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
   Any,
   Awaitable,
@@ -117,7 +117,7 @@ def need_iswap_parked(
 
   @functools.wraps(method)
   async def wrapper(self: "STARBackend", *args, **kwargs):
-    if self.iswap_installed and not self.iswap_parked:
+    if self.extended_conf.left_x_drive.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
         minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
@@ -134,7 +134,7 @@ def _requires_head96(
 
   @functools.wraps(method)
   async def wrapper(self: "STARBackend", *args, **kwargs):
-    if not self.core96_head_installed:
+    if not self.extended_conf.left_x_drive.core_96_head_installed:
       raise RuntimeError(
         "This command requires a 96-head, but none is installed. "
         "Check your instrument configuration."
@@ -1144,193 +1144,47 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
 
 
 @dataclass
-class ConfigurationData1:
-  """Configuration data 1 (kb parameter). Parsed from a 1-byte hex value.
+class DriveConfiguration:
+  """Configuration for an X drive (left or right).
 
-  Returned by RM (Request Machine Configuration), also used in AK (Set Instrument Configuration).
+  Combines byte 1 (xl/xr) and byte 2 (xn/xo) into a single object.
+  Note: the installed modules on left and right drives must be different.
   """
 
-  pip_type_1000ul: bool
-  """Bit 0: PIP Type. False = 300ul, True = 1000ul."""
-  iswap_installed: bool
-  """Bit 1: ISWAP. False = none, True = installed."""
-  main_front_cover_monitoring_installed: bool
-  """Bit 2: Main front cover monitoring. False = none, True = installed."""
-  auto_load_installed: bool
-  """Bit 3: Auto load. False = none, True = installed."""
-  wash_station_1_installed: bool
-  """Bit 4: Wash station 1. False = none, True = installed."""
-  wash_station_2_installed: bool
-  """Bit 5: Wash station 2. False = none, True = installed."""
-  temp_controlled_carrier_1_installed: bool
-  """Bit 6: Temperature controlled carrier 1. False = none, True = installed."""
-  temp_controlled_carrier_2_installed: bool
-  """Bit 7: Temperature controlled carrier 2. False = none, True = installed."""
-
-  @classmethod
-  def from_int(cls, value: int) -> "ConfigurationData1":
-    return cls(
-      pip_type_1000ul=bool(value & (1 << 0)),
-      iswap_installed=bool(value & (1 << 1)),
-      main_front_cover_monitoring_installed=bool(value & (1 << 2)),
-      auto_load_installed=bool(value & (1 << 3)),
-      wash_station_1_installed=bool(value & (1 << 4)),
-      wash_station_2_installed=bool(value & (1 << 5)),
-      temp_controlled_carrier_1_installed=bool(value & (1 << 6)),
-      temp_controlled_carrier_2_installed=bool(value & (1 << 7)),
-    )
-
-
-@dataclass
-class ConfigurationData2:
-  """Configuration data 2 (ka parameter). Parsed from a 3-byte (24-bit) hex value.
-
-  Used in AK (Set Instrument Configuration) and returned by QM (Request Extended Configuration).
-  """
-
-  left_x_drive_large: bool
-  """Bit 0: Left X drive. False = small, True = large."""
-  core_96_head_installed: bool
-  """Bit 1: CoRe 96 Head. False = none, True = installed."""
-  right_x_drive_large: bool
-  """Bit 2: Right X drive. False = small, True = large."""
-  pump_station_1_installed: bool
-  """Bit 3: Pump station 1. False = none, True = installed."""
-  pump_station_2_installed: bool
-  """Bit 4: Pump station 2. False = none, True = installed."""
-  wash_station_1_type_cr: bool
-  """Bit 5: Type wash station 1. False = G3, True = CR."""
-  wash_station_2_type_cr: bool
-  """Bit 6: Type wash station 2. False = G3, True = CR."""
-  left_cover_installed: bool
-  """Bit 7: Left cover. False = none, True = installed."""
-  right_cover_installed: bool
-  """Bit 8: Right cover. False = none, True = installed."""
-  additional_front_cover_monitoring_installed: bool
-  """Bit 9: Additional front cover monitoring. False = none, True = installed."""
-  pump_station_3_installed: bool
-  """Bit 10: Pump station 3. False = none, True = installed."""
-  multi_channel_nano_pipettor_installed: bool
-  """Bit 11: Multi channel nano pipettor. False = none, True = installed."""
-  dispensing_head_384_installed: bool
-  """Bit 12: 384 dispensing head. False = none, True = installed."""
-  xl_channels_installed: bool
-  """Bit 13: XL channels. False = none, True = installed."""
-  tube_gripper_installed: bool
-  """Bit 14: Tube gripper. False = none, True = installed."""
-  waste_direction_left: bool
-  """Bit 15: Waste direction. False = right, True = left."""
-  iswap_gripper_wide: bool
-  """Bit 16: iSWAP gripper size. False = small, True = wide."""
-  additional_channel_nano_pipettor_installed: bool
-  """Bit 17: Additional channel nano pipettor. False = none, True = installed."""
-  imaging_channel_installed: bool
-  """Bit 18: Imaging channel. False = none, True = installed."""
-  robotic_channel_installed: bool
-  """Bit 19: Robotic channel. False = none, True = installed."""
-  channel_order_ox_first: bool
-  """Bit 20: Channel order. False = XL first, True = OX first."""
-  x0_interface_ham_can: bool
-  """Bit 21: X0 interface. False = other, True = Ham CAN."""
-  park_heads_with_iswap_off: bool
-  """Bit 22: Park heads with iSWAP. False = on, True = off."""
-
-  @classmethod
-  def from_int(cls, value: int) -> "ConfigurationData2":
-    return cls(
-      left_x_drive_large=bool(value & (1 << 0)),
-      core_96_head_installed=bool(value & (1 << 1)),
-      right_x_drive_large=bool(value & (1 << 2)),
-      pump_station_1_installed=bool(value & (1 << 3)),
-      pump_station_2_installed=bool(value & (1 << 4)),
-      wash_station_1_type_cr=bool(value & (1 << 5)),
-      wash_station_2_type_cr=bool(value & (1 << 6)),
-      left_cover_installed=bool(value & (1 << 7)),
-      right_cover_installed=bool(value & (1 << 8)),
-      additional_front_cover_monitoring_installed=bool(value & (1 << 9)),
-      pump_station_3_installed=bool(value & (1 << 10)),
-      multi_channel_nano_pipettor_installed=bool(value & (1 << 11)),
-      dispensing_head_384_installed=bool(value & (1 << 12)),
-      xl_channels_installed=bool(value & (1 << 13)),
-      tube_gripper_installed=bool(value & (1 << 14)),
-      waste_direction_left=bool(value & (1 << 15)),
-      iswap_gripper_wide=bool(value & (1 << 16)),
-      additional_channel_nano_pipettor_installed=bool(value & (1 << 17)),
-      imaging_channel_installed=bool(value & (1 << 18)),
-      robotic_channel_installed=bool(value & (1 << 19)),
-      channel_order_ox_first=bool(value & (1 << 20)),
-      x0_interface_ham_can=bool(value & (1 << 21)),
-      park_heads_with_iswap_off=bool(value & (1 << 22)),
-    )
-
-
-@dataclass
-class XDriveConfigByte1:
-  """X drive configuration byte 1 (xl/xr parameter). Parsed from a 1-byte hex value.
-
-  Used for both left (xl) and right (xr) X drives.
-  Note: the "1" values of xl/xn and xr/xo must be different.
-  """
-
-  pip_installed: bool
-  """Bit 0: PIP. False = none, True = installed."""
-  iswap_installed: bool
-  """Bit 1: iSWAP. False = none, True = installed."""
-  core_96_head_installed: bool
-  """Bit 2: CoRe 96 head. False = none, True = installed."""
-  nano_pipettor_installed: bool
-  """Bit 3: Nano pipettor. False = none, True = installed."""
-  dispensing_head_384_installed: bool
-  """Bit 4: 384 dispensing head. False = none, True = installed."""
-  xl_channels_installed: bool
-  """Bit 5: XL channels. False = none, True = installed."""
-  tube_gripper_installed: bool
-  """Bit 6: Tube gripper. False = none, True = installed."""
-  imaging_channel_installed: bool
-  """Bit 7: Imaging channel. False = none, True = installed."""
-
-  @classmethod
-  def from_int(cls, value: int) -> "XDriveConfigByte1":
-    return cls(
-      pip_installed=bool(value & (1 << 0)),
-      iswap_installed=bool(value & (1 << 1)),
-      core_96_head_installed=bool(value & (1 << 2)),
-      nano_pipettor_installed=bool(value & (1 << 3)),
-      dispensing_head_384_installed=bool(value & (1 << 4)),
-      xl_channels_installed=bool(value & (1 << 5)),
-      tube_gripper_installed=bool(value & (1 << 6)),
-      imaging_channel_installed=bool(value & (1 << 7)),
-    )
-
-
-@dataclass
-class XDriveConfigByte2:
-  """X drive configuration byte 2 (xn/xo parameter). Parsed from a 1-byte hex value.
-
-  Used for both left (xn) and right (xo) X drives.
-  Note: the "1" values of xl/xn and xr/xo must be different.
-  """
-
-  robotic_channel_installed: bool
-  """Bit 0: Robotic channel. False = none, True = installed."""
-
-  @classmethod
-  def from_int(cls, value: int) -> "XDriveConfigByte2":
-    return cls(
-      robotic_channel_installed=bool(value & (1 << 0)),
-    )
+  pip_installed: bool = False
+  iswap_installed: bool = False
+  core_96_head_installed: bool = False
+  nano_pipettor_installed: bool = False
+  dispensing_head_384_installed: bool = False
+  xl_channels_installed: bool = False
+  tube_gripper_installed: bool = False
+  imaging_channel_installed: bool = False
+  robotic_channel_installed: bool = False
 
 
 @dataclass
 class MachineConfiguration:
-  """Response from RM (Request Machine Configuration) command [SFCO.0035].
+  """Response from RM (Request Machine Configuration) command [SFCO.0035]."""
 
-  This command returns basic configuration data about the instrument.
-  """
+  # kb byte (configuration data 1)
+  pip_type_1000ul: bool = False
+  """Bit 0: PIP Type. False = 300ul, True = 1000ul."""
+  kb_iswap_installed: bool = False
+  """Bit 1: ISWAP. False = none, True = installed."""
+  main_front_cover_monitoring_installed: bool = False
+  """Bit 2: Main front cover monitoring. False = none, True = installed."""
+  auto_load_installed: bool = False
+  """Bit 3: Auto load. False = none, True = installed."""
+  wash_station_1_installed: bool = False
+  """Bit 4: Wash station 1. False = none, True = installed."""
+  wash_station_2_installed: bool = False
+  """Bit 5: Wash station 2. False = none, True = installed."""
+  temp_controlled_carrier_1_installed: bool = False
+  """Bit 6: Temperature controlled carrier 1. False = none, True = installed."""
+  temp_controlled_carrier_2_installed: bool = False
+  """Bit 7: Temperature controlled carrier 2. False = none, True = installed."""
 
-  configuration_data_1: ConfigurationData1
-  """Parsed configuration data 1 (kb byte)."""
-  num_pip_channels: int
+  num_pip_channels: int = 0
   """Number of PIP channels (kp). Range: 0..16."""
 
 
@@ -1342,49 +1196,93 @@ class ExtendedConfiguration:
   (Set Instrument Configuration) [SFCO.0026] parameter set.
   """
 
-  configuration_data_2: ConfigurationData2
-  """Parsed configuration data 2 (ka, 24-bit)."""
-  configuration_data_3: int
+  # ka (configuration data 2, 24-bit)
+  left_x_drive_large: bool = False
+  """Bit 0: Left X drive. False = small, True = large."""
+  ka_core_96_head_installed: bool = False
+  """Bit 1: CoRe 96 Head. False = none, True = installed."""
+  right_x_drive_large: bool = False
+  """Bit 2: Right X drive. False = small, True = large."""
+  pump_station_1_installed: bool = False
+  """Bit 3: Pump station 1. False = none, True = installed."""
+  pump_station_2_installed: bool = False
+  """Bit 4: Pump station 2. False = none, True = installed."""
+  wash_station_1_type_cr: bool = False
+  """Bit 5: Type wash station 1. False = G3, True = CR."""
+  wash_station_2_type_cr: bool = False
+  """Bit 6: Type wash station 2. False = G3, True = CR."""
+  left_cover_installed: bool = False
+  """Bit 7: Left cover. False = none, True = installed."""
+  right_cover_installed: bool = False
+  """Bit 8: Right cover. False = none, True = installed."""
+  additional_front_cover_monitoring_installed: bool = False
+  """Bit 9: Additional front cover monitoring. False = none, True = installed."""
+  pump_station_3_installed: bool = False
+  """Bit 10: Pump station 3. False = none, True = installed."""
+  multi_channel_nano_pipettor_installed: bool = False
+  """Bit 11: Multi channel nano pipettor. False = none, True = installed."""
+  dispensing_head_384_installed: bool = False
+  """Bit 12: 384 dispensing head. False = none, True = installed."""
+  xl_channels_installed: bool = False
+  """Bit 13: XL channels. False = none, True = installed."""
+  tube_gripper_installed: bool = False
+  """Bit 14: Tube gripper. False = none, True = installed."""
+  waste_direction_left: bool = False
+  """Bit 15: Waste direction. False = right, True = left."""
+  iswap_gripper_wide: bool = False
+  """Bit 16: iSWAP gripper size. False = small, True = wide."""
+  additional_channel_nano_pipettor_installed: bool = False
+  """Bit 17: Additional channel nano pipettor. False = none, True = installed."""
+  imaging_channel_installed: bool = False
+  """Bit 18: Imaging channel. False = none, True = installed."""
+  robotic_channel_installed: bool = False
+  """Bit 19: Robotic channel. False = none, True = installed."""
+  channel_order_ox_first: bool = False
+  """Bit 20: Channel order. False = XL first, True = OX first."""
+  x0_interface_ham_can: bool = False
+  """Bit 21: X0 interface. False = other, True = Ham CAN."""
+  park_heads_with_iswap_off: bool = False
+  """Bit 22: Park heads with iSWAP. False = on, True = off."""
+
+  # ke (configuration data 3, 32-bit)
+  configuration_data_3: int = 0
   """Raw configuration data 3 (ke, 32-bit). Bit definitions are undocumented."""
-  instrument_size_slots: int
-  """Instrument size in slots, X range (xt). Range: 10..99. Default: 54."""
-  auto_load_size_slots: int
-  """Auto load size in slots (xa). Range: 10..54. Default: 54."""
-  tip_waste_x_position: float
+
+  instrument_size_slots: int = 54
+  """Instrument size in slots, X range (xt). Default: 54."""
+  auto_load_size_slots: int = 54
+  """Auto load size in slots (xa). Default: 54."""
+  tip_waste_x_position: float = 1340.0
   """Tip waste X-position [mm] (xw). Default: 1340.0."""
-  left_x_drive_config_byte_1: XDriveConfigByte1
-  """Left X drive configuration byte 1 (xl)."""
-  left_x_drive_config_byte_2: XDriveConfigByte2
-  """Left X drive configuration byte 2 (xn)."""
-  right_x_drive_config_byte_1: XDriveConfigByte1
-  """Right X drive configuration byte 1 (xr)."""
-  right_x_drive_config_byte_2: XDriveConfigByte2
-  """Right X drive configuration byte 2 (xo)."""
-  min_iswap_collision_free_position: float
+  left_x_drive: DriveConfiguration = field(default_factory=DriveConfiguration)
+  """Left X drive configuration (xl + xn)."""
+  right_x_drive: DriveConfiguration = field(default_factory=DriveConfiguration)
+  """Right X drive configuration (xr + xo)."""
+  min_iswap_collision_free_position: float = 350.0
   """Minimal iSWAP collision free position for direct X access [mm] (xm). Default: 350.0."""
-  max_iswap_collision_free_position: float
+  max_iswap_collision_free_position: float = 1140.0
   """Maximal iSWAP collision free position for direct X access [mm] (xx). Default: 1140.0."""
-  left_x_arm_width: float
+  left_x_arm_width: float = 370.0
   """Width of left X arm [mm] (xu). Default: 370.0."""
-  right_x_arm_width: float
+  right_x_arm_width: float = 370.0
   """Width of right X arm [mm] (xv). Default: 370.0."""
-  num_pip_channels: int
+  num_pip_channels: int = 0
   """Number of PIP channels (kp). Range: 0..16."""
-  num_xl_channels: int
+  num_xl_channels: int = 0
   """Number of XL channels (kc). Range: 0..8."""
-  num_robotic_channels: int
+  num_robotic_channels: int = 0
   """Number of Robotic channels (kr). Range: 0..8."""
-  min_raster_pitch_pip_channels: float
+  min_raster_pitch_pip_channels: float = 9.0
   """Minimal raster pitch of PIP channels [mm] (ys). Default: 9.0."""
-  min_raster_pitch_xl_channels: float
+  min_raster_pitch_xl_channels: float = 36.0
   """Minimal raster pitch of XL channels [mm] (kl). Default: 36.0."""
-  min_raster_pitch_robotic_channels: float
+  min_raster_pitch_robotic_channels: float = 36.0
   """Minimal raster pitch of Robotic channels [mm] (km). Default: 36.0."""
-  pip_maximal_y_position: float
+  pip_maximal_y_position: float = 606.5
   """PIP maximal Y position [mm] (ym). Default: 606.5."""
-  left_arm_min_y_position: float
+  left_arm_min_y_position: float = 6.0
   """Left arm minimal Y position [mm] (yu). Default: 6.0."""
-  right_arm_min_y_position: float
+  right_arm_min_y_position: float = 6.0
   """Right arm minimal Y position [mm] (yx). Default: 6.0."""
 
 
@@ -1435,9 +1333,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       serial_number=serial_number,
     )
 
-    self.iswap_installed: Optional[bool] = None
-    self.autoload_installed: Optional[bool] = None
-    self.core96_head_installed: Optional[bool] = None
+    self._machine_conf: Optional[MachineConfiguration] = None
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
@@ -1455,13 +1351,69 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     self._setup_done = False
 
+  _DEPRECATED_INSTALLED_ATTRS = frozenset(
+    {
+      "autoload_installed",
+      "iswap_installed",
+      "core96_head_installed",
+    }
+  )
+
+  def __setattr__(self, name: str, value: Any) -> None:
+    if name in self._DEPRECATED_INSTALLED_ATTRS:
+      warnings.warn(
+        f"Setting {name} is deprecated. Pass the appropriate configuration objects instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      return
+    super().__setattr__(name, value)
+
+  @property
+  def machine_conf(self) -> MachineConfiguration:
+    """Machine configuration."""
+    if self._machine_conf is None:
+      raise RuntimeError("has not loaded machine_conf, forgot to call `setup`?")
+    return self._machine_conf
+
+  @property
+  def autoload_installed(self) -> bool:
+    """Deprecated. Use `machine_conf.auto_load_installed`."""
+    warnings.warn(
+      "autoload_installed is deprecated. Use `machine_conf.auto_load_installed` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.machine_conf.auto_load_installed
+
+  @property
+  def iswap_installed(self) -> bool:
+    """Deprecated. Use `extended_conf.left_x_drive.iswap_installed`."""
+    warnings.warn(
+      "iswap_installed is deprecated. Use `extended_conf.left_x_drive.iswap_installed` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.extended_conf.left_x_drive.iswap_installed
+
+  @property
+  def core96_head_installed(self) -> bool:
+    """Deprecated. Use `extended_conf.left_x_drive.core_96_head_installed`."""
+    warnings.warn(
+      "core96_head_installed is deprecated. Use "
+      "`extended_conf.left_x_drive.core_96_head_installed` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.extended_conf.left_x_drive.core_96_head_installed
+
   @property
   def num_arms(self) -> int:
-    return 1 if self.iswap_installed else 0
+    return 1 if self.extended_conf.left_x_drive.iswap_installed else 0
 
   @property
   def head96_installed(self) -> Optional[bool]:
-    return self.core96_head_installed
+    return self.extended_conf.left_x_drive.core_96_head_installed
 
   @property
   def unsafe(self) -> "UnSafe":
@@ -1690,14 +1642,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.id_ = 0
 
     # Request machine information
-    conf = await self.request_machine_configuration()
+    self._machine_conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
-
-    self.autoload_installed = conf.configuration_data_1.auto_load_installed
-    self.core96_head_installed = (
-      self.extended_conf.left_x_drive_config_byte_1.core_96_head_installed
-    )
-    self.iswap_installed = self.extended_conf.left_x_drive_config_byte_1.iswap_installed
     self._head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()
@@ -1712,7 +1658,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # pre_initialize will move all channels to Z safety
       # so if we skip pre_initialize, we need to raise the channels ourselves
       await self.move_all_channels_in_z_safety()
-      if self.core96_head_installed:
+      if self.extended_conf.left_x_drive.core_96_head_installed:
         await self.move_core_96_to_safe_position()
 
     tip_presences = await self.request_tip_presence()
@@ -1726,7 +1672,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     async def set_up_autoload():
-      if self.autoload_installed and not skip_autoload:
+      if self.machine_conf.auto_load_installed and not skip_autoload:
         autoload_initialized = await self.request_autoload_initialization_status()
         if not autoload_initialized:
           await self.initialize_autoload()
@@ -1734,7 +1680,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         await self.park_autoload()
 
     async def set_up_iswap():
-      if self.iswap_installed and not skip_iswap:
+      if self.extended_conf.left_x_drive.iswap_installed and not skip_iswap:
         iswap_initialized = await self.request_iswap_initialization_status()
         if not iswap_initialized:
           await self.initialize_iswap()
@@ -1744,7 +1690,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
     async def set_up_core96_head():
-      if self.core96_head_installed and not skip_core96_head:
+      if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
         # Initialize 96-head
         core96_head_initialized = await self.request_core_96_head_initialization_status()
         if not core96_head_initialized:
@@ -4046,7 +3992,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Low level component of :meth:`move_resource`
     """
 
-    assert self.iswap_installed, "iswap must be installed"
+    assert self.extended_conf.left_x_drive.iswap_installed, "iswap must be installed"
 
     x_direction = 0 if center.x >= 0 else 1
     y_direction = 0 if center.y >= 0 else 1
@@ -4511,7 +4457,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      if self.iswap_installed:
+      if self.extended_conf.left_x_drive.iswap_installed:
         max_y_pos = await self.iswap_rotation_drive_request_y()
         limit = "iswap module y-position"
       else:
@@ -5272,8 +5218,16 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     resp = await self.send_command(module="C0", command="RM", fmt="kb**kp##")
+    kb = resp["kb"]
     return MachineConfiguration(
-      configuration_data_1=ConfigurationData1.from_int(resp["kb"]),
+      pip_type_1000ul=bool(kb & (1 << 0)),
+      kb_iswap_installed=bool(kb & (1 << 1)),
+      main_front_cover_monitoring_installed=bool(kb & (1 << 2)),
+      auto_load_installed=bool(kb & (1 << 3)),
+      wash_station_1_installed=bool(kb & (1 << 4)),
+      wash_station_2_installed=bool(kb & (1 << 5)),
+      temp_controlled_carrier_1_installed=bool(kb & (1 << 6)),
+      temp_controlled_carrier_2_installed=bool(kb & (1 << 7)),
       num_pip_channels=resp["kp"],
     )
 
@@ -5290,16 +5244,51 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       fmt="ka******ke********xt##xa##xw#####xl**xn**xr**xo**xm#####xx#####xu####xv####kp##kc#kr#"
       + "ys###kl###km###ym####yu####yx####",
     )
+
+    def _parse_drive(byte1: int, byte2: int) -> DriveConfiguration:
+      return DriveConfiguration(
+        pip_installed=bool(byte1 & (1 << 0)),
+        iswap_installed=bool(byte1 & (1 << 1)),
+        core_96_head_installed=bool(byte1 & (1 << 2)),
+        nano_pipettor_installed=bool(byte1 & (1 << 3)),
+        dispensing_head_384_installed=bool(byte1 & (1 << 4)),
+        xl_channels_installed=bool(byte1 & (1 << 5)),
+        tube_gripper_installed=bool(byte1 & (1 << 6)),
+        imaging_channel_installed=bool(byte1 & (1 << 7)),
+        robotic_channel_installed=bool(byte2 & (1 << 0)),
+      )
+
+    ka = resp["ka"]
     return ExtendedConfiguration(
-      configuration_data_2=ConfigurationData2.from_int(resp["ka"]),
+      left_x_drive_large=bool(ka & (1 << 0)),
+      ka_core_96_head_installed=bool(ka & (1 << 1)),
+      right_x_drive_large=bool(ka & (1 << 2)),
+      pump_station_1_installed=bool(ka & (1 << 3)),
+      pump_station_2_installed=bool(ka & (1 << 4)),
+      wash_station_1_type_cr=bool(ka & (1 << 5)),
+      wash_station_2_type_cr=bool(ka & (1 << 6)),
+      left_cover_installed=bool(ka & (1 << 7)),
+      right_cover_installed=bool(ka & (1 << 8)),
+      additional_front_cover_monitoring_installed=bool(ka & (1 << 9)),
+      pump_station_3_installed=bool(ka & (1 << 10)),
+      multi_channel_nano_pipettor_installed=bool(ka & (1 << 11)),
+      dispensing_head_384_installed=bool(ka & (1 << 12)),
+      xl_channels_installed=bool(ka & (1 << 13)),
+      tube_gripper_installed=bool(ka & (1 << 14)),
+      waste_direction_left=bool(ka & (1 << 15)),
+      iswap_gripper_wide=bool(ka & (1 << 16)),
+      additional_channel_nano_pipettor_installed=bool(ka & (1 << 17)),
+      imaging_channel_installed=bool(ka & (1 << 18)),
+      robotic_channel_installed=bool(ka & (1 << 19)),
+      channel_order_ox_first=bool(ka & (1 << 20)),
+      x0_interface_ham_can=bool(ka & (1 << 21)),
+      park_heads_with_iswap_off=bool(ka & (1 << 22)),
       configuration_data_3=resp["ke"],
       instrument_size_slots=resp["xt"],
       auto_load_size_slots=resp["xa"],
       tip_waste_x_position=resp["xw"] / 10,
-      left_x_drive_config_byte_1=XDriveConfigByte1.from_int(resp["xl"]),
-      left_x_drive_config_byte_2=XDriveConfigByte2.from_int(resp["xn"]),
-      right_x_drive_config_byte_1=XDriveConfigByte1.from_int(resp["xr"]),
-      right_x_drive_config_byte_2=XDriveConfigByte2.from_int(resp["xo"]),
+      left_x_drive=_parse_drive(resp["xl"], resp["xn"]),
+      right_x_drive=_parse_drive(resp["xr"], resp["xo"]),
       min_iswap_collision_free_position=resp["xm"] / 10,
       max_iswap_collision_free_position=resp["xx"] / 10,
       left_x_arm_width=resp["xu"] / 10,
@@ -10125,7 +10114,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Request iSWAP rotation drive Y position (center) in mm. This is equivalent to the y location of the iSWAP module."""
-    if not self.iswap_installed:
+    if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter

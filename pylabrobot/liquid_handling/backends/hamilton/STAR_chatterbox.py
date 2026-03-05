@@ -6,96 +6,31 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
-  ConfigurationData1,
-  ConfigurationData2,
+  DriveConfiguration,
   ExtendedConfiguration,
   Head96Information,
   MachineConfiguration,
   STARBackend,
-  XDriveConfigByte1,
-  XDriveConfigByte2,
 )
 from pylabrobot.resources.well import Well
 
 _DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
-  configuration_data_1=ConfigurationData1(
-    pip_type_1000ul=True,
-    iswap_installed=True,
-    main_front_cover_monitoring_installed=False,
-    auto_load_installed=True,
-    wash_station_1_installed=False,
-    wash_station_2_installed=False,
-    temp_controlled_carrier_1_installed=False,
-    temp_controlled_carrier_2_installed=False,
-  ),
+  pip_type_1000ul=True,
+  kb_iswap_installed=True,
+  auto_load_installed=True,
   num_pip_channels=8,
 )
 
 _DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
-  configuration_data_2=ConfigurationData2(
-    left_x_drive_large=True,
-    core_96_head_installed=False,
-    right_x_drive_large=False,
-    pump_station_1_installed=False,
-    pump_station_2_installed=False,
-    wash_station_1_type_cr=False,
-    wash_station_2_type_cr=False,
-    left_cover_installed=False,
-    right_cover_installed=False,
-    additional_front_cover_monitoring_installed=False,
-    pump_station_3_installed=False,
-    multi_channel_nano_pipettor_installed=False,
-    dispensing_head_384_installed=False,
-    xl_channels_installed=False,
-    tube_gripper_installed=False,
-    waste_direction_left=False,
-    iswap_gripper_wide=True,
-    additional_channel_nano_pipettor_installed=False,
-    imaging_channel_installed=False,
-    robotic_channel_installed=False,
-    channel_order_ox_first=False,
-    x0_interface_ham_can=False,
-    park_heads_with_iswap_off=False,
-  ),
-  configuration_data_3=0,
+  left_x_drive_large=True,
+  iswap_gripper_wide=True,
   instrument_size_slots=30,
   auto_load_size_slots=30,
   tip_waste_x_position=800.0,
-  left_x_drive_config_byte_1=XDriveConfigByte1(
-    pip_installed=False,
-    iswap_installed=True,
-    core_96_head_installed=True,
-    nano_pipettor_installed=False,
-    dispensing_head_384_installed=False,
-    xl_channels_installed=False,
-    tube_gripper_installed=False,
-    imaging_channel_installed=False,
-  ),
-  left_x_drive_config_byte_2=XDriveConfigByte2(robotic_channel_installed=False),
-  right_x_drive_config_byte_1=XDriveConfigByte1(
-    pip_installed=True,
-    iswap_installed=True,
-    core_96_head_installed=True,
-    nano_pipettor_installed=False,
-    dispensing_head_384_installed=False,
-    xl_channels_installed=False,
-    tube_gripper_installed=False,
-    imaging_channel_installed=False,
-  ),
-  right_x_drive_config_byte_2=XDriveConfigByte2(robotic_channel_installed=False),
+  left_x_drive=DriveConfiguration(iswap_installed=True, core_96_head_installed=True),
   min_iswap_collision_free_position=350.0,
   max_iswap_collision_free_position=600.0,
-  left_x_arm_width=370.0,
-  right_x_arm_width=370.0,
   num_pip_channels=8,
-  num_xl_channels=0,
-  num_robotic_channels=0,
-  min_raster_pitch_pip_channels=9.0,
-  min_raster_pitch_xl_channels=36.0,
-  min_raster_pitch_robotic_channels=36.0,
-  pip_maximal_y_position=606.5,
-  left_arm_min_y_position=6.0,
-  right_arm_min_y_position=6.0,
 )
 
 
@@ -117,9 +52,9 @@ class STARChatterboxBackend(STARBackend):
       num_channels: Number of pipetting channels (default: 8)
       machine_configuration: Machine configuration to return from `request_machine_configuration`.
       extended_configuration: Extended configuration to return from `request_extended_configuration`.
-      core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive_config_byte_1
+      core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive
         .core_96_head_installed` instead.
-      iswap_installed: Deprecated. Set `extended_configuration.left_x_drive_config_byte_1
+      iswap_installed: Deprecated. Set `extended_configuration.left_x_drive
         .iswap_installed` instead.
     """
     super().__init__()
@@ -128,11 +63,11 @@ class STARChatterboxBackend(STARBackend):
 
     if core96_head_installed is not None or iswap_installed is not None:
       extended_configuration = copy.deepcopy(extended_configuration)
-      xl = copy.deepcopy(extended_configuration.left_x_drive_config_byte_1)
+      xl = copy.deepcopy(extended_configuration.left_x_drive)
       if core96_head_installed is not None:
         warnings.warn(
           "core96_head_installed is deprecated. Pass an ExtendedConfiguration with "
-          "left_x_drive_config_byte_1.core_96_head_installed set instead.",
+          "left_x_drive.core_96_head_installed set instead.",
           DeprecationWarning,
           stacklevel=2,
         )
@@ -140,12 +75,12 @@ class STARChatterboxBackend(STARBackend):
       if iswap_installed is not None:
         warnings.warn(
           "iswap_installed is deprecated. Pass an ExtendedConfiguration with "
-          "left_x_drive_config_byte_1.iswap_installed set instead.",
+          "left_x_drive.iswap_installed set instead.",
           DeprecationWarning,
           stacklevel=2,
         )
         xl.iswap_installed = iswap_installed
-      extended_configuration.left_x_drive_config_byte_1 = xl
+      extended_configuration.left_x_drive = xl
 
     self._machine_configuration = machine_configuration
     self._extended_conf = extended_configuration
@@ -172,17 +107,11 @@ class STARChatterboxBackend(STARBackend):
     self.id_ = 0
 
     # Request machine information
-    conf = await self.request_machine_configuration()
+    self._machine_conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
 
-    self.autoload_installed = conf.configuration_data_1.auto_load_installed
-    self.iswap_installed = self.extended_conf.left_x_drive_config_byte_1.iswap_installed
-    self.core96_head_installed = (
-      self.extended_conf.left_x_drive_config_byte_1.core_96_head_installed
-    )
-
     # Mock firmware information for 96-head if installed
-    if self.core96_head_installed and not skip_core96_head:
+    if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
       self._head96_information = Head96Information(
         fw_version=datetime.date(2023, 1, 1),
         supports_clot_monitoring_clld=False,
