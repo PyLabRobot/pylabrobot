@@ -34,7 +34,15 @@ class STARChatterboxBackend(STARBackend):
     self._iswap_parked = True
     self._core96_head_installed = core96_head_installed
     self._iswap_installed = iswap_installed
-    self._init_channels_minimum_y_spacing = channels_minimum_y_spacing
+    if channels_minimum_y_spacing is not None:
+      if len(channels_minimum_y_spacing) != num_channels:
+        raise ValueError(
+          f"channels_minimum_y_spacing has {len(channels_minimum_y_spacing)} entries, "
+          f"expected {num_channels}."
+        )
+      self._channels_minimum_y_spacing = list(channels_minimum_y_spacing)
+    else:
+      self._channels_minimum_y_spacing = [9.0] * num_channels
 
   async def setup(
     self,
@@ -84,17 +92,6 @@ class STARChatterboxBackend(STARBackend):
       )
     else:
       self._head96_information = None
-
-    # Populate per-channel minimum Y spacing (no hardware to query).
-    if self._init_channels_minimum_y_spacing is not None:
-      if len(self._init_channels_minimum_y_spacing) != self.num_channels:
-        raise ValueError(
-          f"channels_minimum_y_spacing has {len(self._init_channels_minimum_y_spacing)} entries, "
-          f"expected {self.num_channels}."
-        )
-      self._channels_minimum_y_spacing = list(self._init_channels_minimum_y_spacing)
-    else:
-      self._channels_minimum_y_spacing = [9.0] * self.num_channels
 
   async def stop(self):
     await LiquidHandlerBackend.stop(self)
@@ -224,21 +221,13 @@ class STARChatterboxBackend(STARBackend):
     """Return mock minimum Y spacing for the given channel.
 
     Returns the value stored in ``_channels_minimum_y_spacing`` (set during
-    ``setup()``) without issuing any hardware commands.
+    ``__init__()``) without issuing any hardware commands.
     """
     if not 0 <= channel_idx <= self.num_channels - 1:
       raise ValueError(
         f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
       )
     return self._channels_minimum_y_spacing[channel_idx]
-
-  async def channels_request_y_minimum_spacing(self) -> List[float]:
-    """Return mock minimum Y spacings for all channels.
-
-    Returns the exact values stored in ``_channels_minimum_y_spacing``
-    (set during ``setup()``) without issuing any hardware commands.
-    """
-    return list(self._channels_minimum_y_spacing)
 
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
