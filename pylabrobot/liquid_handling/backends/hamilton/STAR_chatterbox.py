@@ -1,4 +1,6 @@
+import copy
 import datetime
+import warnings
 from contextlib import asynccontextmanager
 from typing import Dict, List, Literal, Optional, Union
 
@@ -105,6 +107,9 @@ class STARChatterboxBackend(STARBackend):
     num_channels: int = 8,
     machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONFIGURATION,
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONFIGURATION,
+    # deprecated parameters
+    core96_head_installed: Optional[bool] = None,
+    iswap_installed: Optional[bool] = None,
   ):
     """Initialize a chatter box backend.
 
@@ -112,10 +117,36 @@ class STARChatterboxBackend(STARBackend):
       num_channels: Number of pipetting channels (default: 8)
       machine_configuration: Machine configuration to return from `request_machine_configuration`.
       extended_configuration: Extended configuration to return from `request_extended_configuration`.
+      core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive_config_byte_1
+        .core_96_head_installed` instead.
+      iswap_installed: Deprecated. Set `extended_configuration.left_x_drive_config_byte_1
+        .iswap_installed` instead.
     """
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
+
+    if core96_head_installed is not None or iswap_installed is not None:
+      extended_configuration = copy.deepcopy(extended_configuration)
+      xl = copy.deepcopy(extended_configuration.left_x_drive_config_byte_1)
+      if core96_head_installed is not None:
+        warnings.warn(
+          "core96_head_installed is deprecated. Pass an ExtendedConfiguration with "
+          "left_x_drive_config_byte_1.core_96_head_installed set instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        xl.core_96_head_installed = core96_head_installed
+      if iswap_installed is not None:
+        warnings.warn(
+          "iswap_installed is deprecated. Pass an ExtendedConfiguration with "
+          "left_x_drive_config_byte_1.iswap_installed set instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        xl.iswap_installed = iswap_installed
+      extended_configuration.left_x_drive_config_byte_1 = xl
+
     self._machine_configuration = machine_configuration
     self._extended_conf = extended_configuration
 
