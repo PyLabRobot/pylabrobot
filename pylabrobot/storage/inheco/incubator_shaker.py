@@ -100,7 +100,7 @@ class IncubatorShakerStack(Resource, Machine):
       loc = self._incubator_loading_tray_location[unit_type]
       if loc is None:
         raise ValueError(
-          f"Loading tray location for unit type {unit_type} is not defined. " "Cannot set up stack."
+          f"Loading tray location for unit type {unit_type} is not defined. Cannot set up stack."
         )
 
       self.assign_child_resource(
@@ -117,9 +117,9 @@ class IncubatorShakerStack(Resource, Machine):
 
     self._size_z = stack_size_z
 
-    assert (
-      self.power_credit < 5
-    ), f"Too many units: unit composition {self.backend.unit_composition} is exceeding 5 power credit limit. Reduce number of units."
+    assert self.power_credit < 5, (
+      f"Too many units: unit composition {self.backend.unit_composition} is exceeding 5 power credit limit. Reduce number of units."
+    )
 
   async def stop(self):
     """Gracefully stop backend communication."""
