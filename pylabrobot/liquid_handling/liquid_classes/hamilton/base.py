@@ -1,9 +1,10 @@
 from typing import Any, Dict
 
+from pylabrobot.serializer import SerializableMixin
 from pylabrobot.utils.interpolation import interpolate_1d
 
 
-class HamiltonLiquidClass:
+class HamiltonLiquidClass(SerializableMixin):
   """A liquid class like used in VENUS / Venus on Vantage."""
 
   def __init__(

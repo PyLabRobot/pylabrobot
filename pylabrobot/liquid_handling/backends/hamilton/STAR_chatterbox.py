@@ -1,10 +1,36 @@
+import copy
 import datetime
+import warnings
 from contextlib import asynccontextmanager
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import Head96Information, STARBackend
+from pylabrobot.liquid_handling.backends.hamilton.STAR_backend import (
+  DriveConfiguration,
+  ExtendedConfiguration,
+  Head96Information,
+  MachineConfiguration,
+  STARBackend,
+)
 from pylabrobot.resources.well import Well
+
+_DEFAULT_MACHINE_CONFIGURATION = MachineConfiguration(
+  pip_type_1000ul=True,
+  kb_iswap_installed=True,
+  auto_load_installed=True,
+  num_pip_channels=8,
+)
+
+_DEFAULT_EXTENDED_CONFIGURATION = ExtendedConfiguration(
+  left_x_drive_large=True,
+  iswap_gripper_wide=True,
+  instrument_size_slots=30,
+  auto_load_size_slots=30,
+  tip_waste_x_position=800.0,
+  left_x_drive=DriveConfiguration(iswap_installed=True, core_96_head_installed=True),
+  min_iswap_collision_free_position=350.0,
+  max_iswap_collision_free_position=600.0,
+)
 
 
 class STARChatterboxBackend(STARBackend):
@@ -13,21 +39,50 @@ class STARChatterboxBackend(STARBackend):
   def __init__(
     self,
     num_channels: int = 8,
-    core96_head_installed: bool = True,
-    iswap_installed: bool = True,
+    machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONFIGURATION,
+    extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONFIGURATION,
+    # deprecated parameters
+    core96_head_installed: Optional[bool] = None,
+    iswap_installed: Optional[bool] = None,
   ):
     """Initialize a chatter box backend.
 
     Args:
       num_channels: Number of pipetting channels (default: 8)
-      core96_head_installed: Whether the CoRe 96 head is installed (default: True)
-      iswap_installed: Whether the iSWAP robotic arm is installed (default: True)
+      machine_configuration: Machine configuration to return from `request_machine_configuration`.
+      extended_configuration: Extended configuration to return from `request_extended_configuration`.
+      core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive
+        .core_96_head_installed` instead.
+      iswap_installed: Deprecated. Set `extended_configuration.left_x_drive
+        .iswap_installed` instead.
     """
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
-    self._core96_head_installed = core96_head_installed
-    self._iswap_installed = iswap_installed
+
+    if core96_head_installed is not None or iswap_installed is not None:
+      extended_configuration = copy.deepcopy(extended_configuration)
+      xl = copy.deepcopy(extended_configuration.left_x_drive)
+      if core96_head_installed is not None:
+        warnings.warn(
+          "core96_head_installed is deprecated. Pass an ExtendedConfiguration with "
+          "left_x_drive.core_96_head_installed set instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        xl.core_96_head_installed = core96_head_installed
+      if iswap_installed is not None:
+        warnings.warn(
+          "iswap_installed is deprecated. Pass an ExtendedConfiguration with "
+          "left_x_drive.iswap_installed set instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        xl.iswap_installed = iswap_installed
+      extended_configuration.left_x_drive = xl
+
+    self._machine_configuration = machine_configuration
+    self._extended_conf = extended_configuration
 
   async def setup(
     self,
@@ -51,23 +106,11 @@ class STARChatterboxBackend(STARBackend):
     self.id_ = 0
 
     # Request machine information
-    conf = await self.request_machine_configuration()
+    self._machine_conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
 
-    # Parse left X-drive configuration byte (xl) to identify installed modules
-    xl_value = self.extended_conf["xl"]
-    # xl is a bit field: bit 0 (LSB) reserved, bit 1 = iSWAP, bit 2 = 96-head
-    # Use bitwise operations to check specific bits
-    self.iswap_installed = bool(xl_value & 0b10)  # Check bit 1
-    self.core96_head_installed = bool(xl_value & 0b100)  # Check bit 2
-
-    # Parse autoload from kb configuration byte
-    configuration_data1 = bin(conf["kb"]).split("b")[-1].zfill(8)
-    autoload_configuration_byte = configuration_data1[-4]
-    self.autoload_installed = autoload_configuration_byte == "1"
-
     # Mock firmware information for 96-head if installed
-    if self.core96_head_installed and not skip_core96_head:
+    if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
       self._head96_information = Head96Information(
         fw_version=datetime.date(2023, 1, 1),
         supports_clot_monitoring_clld=False,
@@ -107,70 +150,11 @@ class STARChatterboxBackend(STARBackend):
 
   # # # # # # # # STAR configuration # # # # # # # #
 
-  async def request_machine_configuration(self):
-    """Return mock machine configuration data.
-    (Mock MEM-READ command)
+  async def request_machine_configuration(self) -> MachineConfiguration:
+    return self._machine_configuration
 
-    Configuration byte `kb` is directly copied from a STARlet with 8-channel pipettor,
-    iSWAP, and autoload installed.
-
-    Bit mapping for kb:
-      Bit 0: PIP Type (0=300µL, 1=1000µL)
-      Bit 1: ISWAP (0=none, 1=installed)
-      Bit 2: Main front cover monitoring (0=none, 1=installed)
-      Bit 3: Auto load (0=none, 1=installed)
-      Bit 4: Wash station 1 (0=none, 1=installed)
-      Bit 5: Wash station 2 (0=none, 1=installed)
-      Bit 6: Temp. controlled carrier 1 (0=none, 1=installed)
-      Bit 7: Temp. controlled carrier 2 (0=none, 1=installed)
-
-    Returns:
-      Dict with configuration parameters: kb (config byte), kp (num channels), id (command ID)
-    """
-    return {"kb": 11, "kp": self.num_channels, "id": 2}
-
-  async def request_extended_configuration(self):
-    """Return mock extended configuration data.
-
-    Extended configuration is dynamically generated based on __init__ parameters.
-
-    Returns:
-      Dict with extended configuration parameters including xl byte for module detection.
-    """
-    # Calculate xl byte based on installed modules
-    # Bit 0: (reserved)
-    # Bit 1: iSWAP (based on __init__ parameter)
-    # Bit 2: 96-head (based on __init__ parameter)
-    xl_value = 0
-    if self._iswap_installed:
-      xl_value |= 0b10  # Add iSWAP (bit 1)
-    if self._core96_head_installed:
-      xl_value |= 0b100  # Add 96-head (bit 2)
-
-    self._extended_conf = {
-      "ka": 65537,
-      "ke": 0,
-      "xt": 30,
-      "xa": 30,
-      "xw": 8000,
-      "xl": xl_value,  # Dynamic based on core96_head_installed from __init__
-      "xn": 0,
-      "xr": 0,
-      "xo": 0,
-      "xm": 3500,
-      "xx": 6000,
-      "xu": 3700,
-      "xv": 3700,
-      "kc": 0,
-      "kr": 0,
-      "ys": 90,
-      "kl": 360,
-      "km": 360,
-      "ym": 6065,
-      "yu": 60,
-      "yx": 60,
-      "id": 3,
-    }
+  async def request_extended_configuration(self) -> ExtendedConfiguration:
+    assert self._extended_conf is not None
     return self._extended_conf
 
   # # # # # # # # 1_000 uL Channel: Basic Commands # # # # # # # #
@@ -204,6 +188,15 @@ class STARChatterboxBackend(STARBackend):
 
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")
+
+  async def move_channel_x(self, channel: int, x: float):
+    print(f"moving channel {channel} to x: {x}")
+
+  async def move_all_channels_in_z_safety(self):
+    print("moving all channels to z safety")
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    print(f"positioning channels in z: {zs}")
 
   # # # # # # # # 1_000 uL Channel: Complex Commands # # # # # # # #
 
@@ -273,3 +266,26 @@ class STARChatterboxBackend(STARBackend):
     finally:
       messages.append("end slow iswap")
       print(" | ".join(messages))
+
+  # # # # # # # # Liquid Level Detection (LLD) # # # # # # # #
+
+  async def request_tip_len_on_channel(self, channel_idx: int) -> float:
+    """Return tip length from the tip tracker.
+
+    Args:
+      channel_idx: Index of the pipetting channel (0-indexed).
+
+    Returns:
+      The tip length in mm from the tip tracker.
+
+    Raises:
+      NoTipError: If no tip is present on the channel (via tip tracker).
+    """
+    tip = self.head[channel_idx].get_tip()
+    return tip.total_tip_length
+
+  async def position_channels_in_y_direction(self, ys, make_space=True):
+    print("positioning channels in y:", ys, "make_space:", make_space)
+
+  async def request_pip_height_last_lld(self):
+    return list(range(12))

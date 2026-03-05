@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from pylabrobot.serializer import deserialize, serialize
+from pylabrobot.serializer import SerializableMixin, deserialize, serialize
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
@@ -63,7 +63,7 @@ DidUnassignResourceCallback = Callable[["Resource"], None]
 ResourceDidUpdateState = Callable[[Dict[str, Any]], None]
 
 
-class Resource:
+class Resource(SerializableMixin):
   """Base class for deck resources.
 
   Args:

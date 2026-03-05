@@ -39,6 +39,7 @@ from .STAR_backend import (
   UnknownHamiltonError,
   parse_star_fw_string,
 )
+from .STAR_chatterbox import _DEFAULT_EXTENDED_CONFIGURATION, _DEFAULT_MACHINE_CONFIGURATION
 
 
 class TestSTARResponseParsing(unittest.TestCase):
@@ -177,8 +178,8 @@ class STARCommandCatcher(STARBackend):
 
   async def setup(self) -> None:  # type: ignore
     self._num_channels = 8
-    self.iswap_installed = True
-    self.core96_head_installed = True
+    self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self._core_parked = True
 
   async def send_command(  # type: ignore
@@ -262,8 +263,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.maxDiff = None
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1113,8 +1114,8 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plt_car2, rails=3)
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1242,8 +1243,8 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(plt_carrier, rails=10)
 
     self.star._num_channels = 8
-    self.star.core96_head_installed = True
-    self.star.iswap_installed = True
+    self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.star._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.star.setup = unittest.mock.AsyncMock()
     self.star._core_parked = True
     self.star._iswap_parked = True
@@ -1285,7 +1286,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call("C0RZid0006"),
         _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
         _any_write_and_read_command_call("C0RYid0008"),
-        _any_write_and_read_command_call("C0JYid0009yp1530 1399 1297 1196 1095 0994 0892 0755"),
+        _any_write_and_read_command_call("C0JYid0009yp1530 1440 1350 1260 1170 1080 0990 0755"),
         _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
         _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
         _any_write_and_read_command_call("C0RZid0012"),
@@ -1329,7 +1330,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call("C0RZid0006"),
         _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
         _any_write_and_read_command_call("C0RYid0008"),
-        _any_write_and_read_command_call("C0JYid0009yp1530 1370 1280 1190 1100 1010 0920 0755"),
+        _any_write_and_read_command_call("C0JYid0009yp1530 1440 1350 1260 1170 1080 0990 0755"),
         _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
         _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
         _any_write_and_read_command_call("C0RZid0012"),
@@ -1374,7 +1375,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call("C0RZid0006"),
         _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
         _any_write_and_read_command_call("C0RYid0008"),
-        _any_write_and_read_command_call("C0JYid0009yp1953 1735 1582 1429 1275 1122 0969 0755"),
+        _any_write_and_read_command_call("C0JYid0009yp1953 1863 1773 1683 1593 1503 1413 0755"),
         _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
         _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
         _any_write_and_read_command_call("C0RZid0012"),
@@ -1419,7 +1420,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
         _any_write_and_read_command_call("C0RZid0006"),
         _any_write_and_read_command_call("C0JZid0007zp2476 2083 2083 2083 2083 2083 2083 2476"),
         _any_write_and_read_command_call("C0RYid0008"),
-        _any_write_and_read_command_call("C0JYid0009yp1953 1577 1487 1397 1307 1217 1127 0755"),
+        _any_write_and_read_command_call("C0JYid0009yp1953 1863 1773 1683 1593 1503 1413 0755"),
         _any_write_and_read_command_call("C0KZid0010pn08zj2256"),
         _any_write_and_read_command_call("C0KZid0011pn01zj2256"),
         _any_write_and_read_command_call("C0RZid0012"),
@@ -1438,8 +1439,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.backend._write_and_read_command = unittest.mock.AsyncMock()
     self.backend.io = unittest.mock.AsyncMock()
     self.backend._num_channels = 8
-    self.backend.core96_head_installed = True
-    self.backend.iswap_installed = True
+    self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True
@@ -1549,3 +1550,370 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(tz, 2186)
 
     tip_rack.unassign()
+
+
+class STARTestBase(unittest.IsolatedAsyncioTestCase):
+  """Shared setup for probe/batch/helper tests."""
+
+  async def asyncSetUp(self):
+    self.STAR = STARBackend(read_timeout=1)
+    self.STAR._write_and_read_command = unittest.mock.AsyncMock()
+    self.STAR.io = unittest.mock.AsyncMock()
+    self.STAR.io.setup = unittest.mock.AsyncMock()
+    self.STAR.io.write = unittest.mock.MagicMock()
+    self.STAR.io.read = unittest.mock.MagicMock()
+
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.STAR, deck=self.deck)
+
+    self.tip_car = TIP_CAR_480_A00(name="tip carrier")
+    self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
+    self.deck.assign_child_resource(self.tip_car, rails=1)
+
+    self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
+    self.deck.assign_child_resource(self.plt_car, rails=9)
+
+    self.STAR._num_channels = 8
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.STAR.setup = unittest.mock.AsyncMock()
+    self.STAR._core_parked = True
+    self.STAR._iswap_parked = True
+    await self.lh.setup()
+
+    set_tip_tracking(enabled=False)
+
+  async def asyncTearDown(self):
+    await self.lh.stop()
+
+  def _put_tips_on_channels(self, channels):
+    tip = self.tip_rack.get_tip("A1")
+    self.lh.update_head_state({ch: tip for ch in channels})
+
+
+class TestMoveToTraverseHeight(STARTestBase):
+  async def test_none_calls_z_safety(self):
+    with unittest.mock.patch.object(
+      self.STAR, "move_all_channels_in_z_safety", new_callable=unittest.mock.AsyncMock
+    ) as mock_z_safety:
+      await self.STAR._move_to_traverse_height(channels=[0, 1], traverse_height=None)
+      mock_z_safety.assert_awaited_once()
+
+  async def test_float_calls_position_z(self):
+    with unittest.mock.patch.object(
+      self.STAR, "position_channels_in_z_direction", new_callable=unittest.mock.AsyncMock
+    ) as mock_pos_z:
+      await self.STAR._move_to_traverse_height(channels=[0, 2], traverse_height=245.0)
+      mock_pos_z.assert_awaited_once_with({0: 245.0, 2: 245.0})
+
+
+class TestComputeChannelsInResourceLocations(STARTestBase):
+  async def test_explicit_offsets(self):
+    wells = [self.plate.get_item("A1"), self.plate.get_item("B1")]
+    offsets = [Coordinate(0, 0, 0), Coordinate(0, 0, 0)]
+    locs = self.STAR._compute_channels_in_resource_locations(
+      resources=wells, use_channels=[0, 1], offsets=offsets
+    )
+    self.assertEqual(len(locs), 2)
+    self.assertAlmostEqual(locs[0].x, 298.3, places=1)
+    self.assertAlmostEqual(locs[0].y, 145.7, places=1)
+    self.assertAlmostEqual(locs[1].x, 298.3, places=1)
+    self.assertAlmostEqual(locs[1].y, 136.7, places=1)
+
+  async def test_none_offsets_single_resource(self):
+    """Same resource twice: both channels get the well center (offset auto-calc falls back to zero for small wells)."""
+    well = self.plate.get_item("A1")
+    locs = self.STAR._compute_channels_in_resource_locations(
+      resources=[well, well], use_channels=[0, 1], offsets=None
+    )
+    self.assertEqual(len(locs), 2)
+    self.assertAlmostEqual(locs[0].x, 298.3, places=1)
+    self.assertAlmostEqual(locs[0].y, 145.7, places=1)
+    self.assertAlmostEqual(locs[1].x, 298.3, places=1)
+    self.assertAlmostEqual(locs[1].y, 145.7, places=1)
+
+  async def test_none_offsets_different_resources(self):
+    """Different resources with no offsets: each gets its own center."""
+    well_a1 = self.plate.get_item("A1")
+    well_b1 = self.plate.get_item("B1")
+    locs = self.STAR._compute_channels_in_resource_locations(
+      resources=[well_a1, well_b1], use_channels=[0, 1], offsets=None
+    )
+    self.assertEqual(len(locs), 2)
+    self.assertAlmostEqual(locs[0].x, 298.3, places=1)
+    self.assertAlmostEqual(locs[0].y, 145.7, places=1)
+    self.assertAlmostEqual(locs[1].x, 298.3, places=1)
+    self.assertAlmostEqual(locs[1].y, 136.7, places=1)
+
+
+class TestExecuteBatched(STARTestBase):
+  async def test_single_batch(self):
+    well = self.plate.get_item("A1")
+    calls = []
+
+    async def func(batch):
+      calls.append(batch)
+
+    self._put_tips_on_channels([0, 1])
+
+    with (
+      unittest.mock.patch.object(self.STAR, "move_channel_x", new_callable=unittest.mock.AsyncMock),
+      unittest.mock.patch.object(
+        self.STAR, "position_channels_in_y_direction", new_callable=unittest.mock.AsyncMock
+      ),
+      unittest.mock.patch.object(
+        self.STAR, "move_all_channels_in_z_safety", new_callable=unittest.mock.AsyncMock
+      ),
+    ):
+      await self.STAR.execute_batched(
+        func=func,
+        resources=[well, well],
+        use_channels=[0, 1],
+      )
+
+    all_indices = [i for call in calls for i in call]
+    self.assertEqual(sorted(all_indices), [0, 1])
+
+  async def test_different_x_groups(self):
+    well_a1 = self.plate.get_item("A1")
+    well_a2 = self.plate.get_item("A2")
+    calls = []
+
+    async def func(batch):
+      calls.append(list(batch))
+
+    self._put_tips_on_channels([0, 1])
+
+    with (
+      unittest.mock.patch.object(self.STAR, "move_channel_x", new_callable=unittest.mock.AsyncMock),
+      unittest.mock.patch.object(
+        self.STAR, "position_channels_in_y_direction", new_callable=unittest.mock.AsyncMock
+      ),
+      unittest.mock.patch.object(
+        self.STAR, "move_all_channels_in_z_safety", new_callable=unittest.mock.AsyncMock
+      ),
+    ):
+      await self.STAR.execute_batched(
+        func=func,
+        resources=[well_a1, well_a2],
+        use_channels=[0, 1],
+        resource_offsets=[Coordinate.zero(), Coordinate.zero()],
+      )
+
+    all_indices = [i for call in calls for i in call]
+    self.assertEqual(sorted(all_indices), [0, 1])
+
+  async def test_traverse_height(self):
+    well_a1 = self.plate.get_item("A1")
+    well_a2 = self.plate.get_item("A2")
+
+    async def func(batch):
+      pass
+
+    self._put_tips_on_channels([0, 1])
+
+    with (
+      unittest.mock.patch.object(self.STAR, "move_channel_x", new_callable=unittest.mock.AsyncMock),
+      unittest.mock.patch.object(
+        self.STAR, "position_channels_in_y_direction", new_callable=unittest.mock.AsyncMock
+      ),
+      unittest.mock.patch.object(
+        self.STAR, "_move_to_traverse_height", new_callable=unittest.mock.AsyncMock
+      ) as mock_traverse,
+    ):
+      await self.STAR.execute_batched(
+        func=func,
+        resources=[well_a1, well_a2],
+        use_channels=[0, 1],
+        resource_offsets=[Coordinate.zero(), Coordinate.zero()],
+        min_traverse_height_during_command=200.0,
+      )
+
+      if mock_traverse.await_count > 0:
+        for call in mock_traverse.call_args_list:
+          self.assertEqual(call.kwargs.get("traverse_height"), 200.0)
+
+
+class TestProbeLiquidHeightsBatch(STARTestBase):
+  async def test_single_well_returns_height(self):
+    well = self.plate.get_item("A1")
+    self._put_tips_on_channels([0])
+
+    with (
+      unittest.mock.patch.object(
+        self.STAR,
+        "_move_z_drive_to_liquid_surface_using_clld",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=None,
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_pip_height_last_lld",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=list(range(12)),
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_tip_len_on_channel",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=59.9,
+      ),
+    ):
+      result = await self.STAR._probe_liquid_heights_batch(containers=[well], use_channels=[0])
+
+    # request_pip_height_last_lld returns list(range(12)), so channel 0 gets height 0.
+    # relative = 0 - cavity_bottom_z = 0 - 186.65 = -186.65
+    self.assertEqual(len(result), 1)
+    self.assertAlmostEqual(result[0], 0 - well.get_absolute_location("c", "c", "cavity_bottom").z)
+
+  async def test_n_replicates(self):
+    well = self.plate.get_item("A1")
+    self._put_tips_on_channels([0])
+
+    mock_detect = unittest.mock.AsyncMock(return_value=None)
+    with (
+      unittest.mock.patch.object(
+        self.STAR, "_move_z_drive_to_liquid_surface_using_clld", mock_detect
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_pip_height_last_lld",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=list(range(12)),
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_tip_len_on_channel",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=59.9,
+      ),
+    ):
+      await self.STAR._probe_liquid_heights_batch(
+        containers=[well], use_channels=[0], n_replicates=3
+      )
+
+    self.assertEqual(mock_detect.await_count, 3)
+
+  async def test_no_liquid_detected_returns_zero(self):
+    well = self.plate.get_item("A1")
+    self._put_tips_on_channels([0])
+
+    error = STARFirmwareError(
+      errors={
+        "Pipetting channel 1": UnknownHamiltonError(
+          message="No liquid level found",
+          trace_information=0,
+          raw_response="no liquid level found",
+          raw_module="P1",
+        )
+      },
+      raw_response="no liquid level found",
+    )
+
+    async def raise_error(**kwargs):
+      raise error
+
+    with (
+      unittest.mock.patch.object(
+        self.STAR,
+        "_move_z_drive_to_liquid_surface_using_clld",
+        unittest.mock.AsyncMock(side_effect=raise_error),
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_pip_height_last_lld",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=list(range(12)),
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_tip_len_on_channel",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=59.9,
+      ),
+    ):
+      result = await self.STAR._probe_liquid_heights_batch(containers=[well], use_channels=[0])
+
+    self.assertEqual(result[0], 0.0)
+
+  async def test_inconsistent_replicates_raises(self):
+    well = self.plate.get_item("A1")
+    self._put_tips_on_channels([0])
+
+    error = STARFirmwareError(
+      errors={
+        "Pipetting channel 1": UnknownHamiltonError(
+          message="No liquid level found",
+          trace_information=0,
+          raw_response="no liquid level found",
+          raw_module="P1",
+        )
+      },
+      raw_response="no liquid level found",
+    )
+
+    call_count = 0
+
+    async def side_effect(**kwargs):
+      nonlocal call_count
+      call_count += 1
+      if call_count == 1:
+        return None
+      raise error
+
+    with (
+      unittest.mock.patch.object(
+        self.STAR,
+        "_move_z_drive_to_liquid_surface_using_clld",
+        unittest.mock.AsyncMock(side_effect=side_effect),
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_pip_height_last_lld",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=list(range(12)),
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_tip_len_on_channel",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=59.9,
+      ),
+    ):
+      with self.assertRaises(RuntimeError):
+        await self.STAR._probe_liquid_heights_batch(
+          containers=[well], use_channels=[0], n_replicates=2
+        )
+
+  async def test_pressure_lld_mode(self):
+    well = self.plate.get_item("A1")
+    self._put_tips_on_channels([0])
+
+    with (
+      unittest.mock.patch.object(
+        self.STAR,
+        "_search_for_surface_using_plld",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=None,
+      ) as mock_plld,
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_pip_height_last_lld",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=list(range(12)),
+      ),
+      unittest.mock.patch.object(
+        self.STAR,
+        "request_tip_len_on_channel",
+        new_callable=unittest.mock.AsyncMock,
+        return_value=59.9,
+      ),
+    ):
+      await self.STAR._probe_liquid_heights_batch(
+        containers=[well],
+        use_channels=[0],
+        lld_mode=self.STAR.LLDMode.PRESSURE,
+      )
+
+    mock_plld.assert_awaited_once()
