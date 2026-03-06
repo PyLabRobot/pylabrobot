@@ -8,9 +8,10 @@ import sys
 import warnings
 from abc import ABCMeta
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
   Any,
+  Awaitable,
   Callable,
   Coroutine,
   Dict,
@@ -37,6 +38,7 @@ from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
 )
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
+from pylabrobot.liquid_handling.backends.hamilton.planning import group_by_x_batch_by_xy
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
@@ -60,6 +62,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelDispense,
 )
 from pylabrobot.liquid_handling.utils import (
+  MIN_SPACING_EDGE,
   get_tight_single_resource_liquid_op_offsets,
   get_wide_single_resource_liquid_op_offsets,
 )
@@ -114,7 +117,7 @@ def need_iswap_parked(
 
   @functools.wraps(method)
   async def wrapper(self: "STARBackend", *args, **kwargs):
-    if self.iswap_installed and not self.iswap_parked:
+    if self.extended_conf.left_x_drive.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
         minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
@@ -131,7 +134,7 @@ def _requires_head96(
 
   @functools.wraps(method)
   async def wrapper(self: "STARBackend", *args, **kwargs):
-    if not self.core96_head_installed:
+    if not self.extended_conf.left_x_drive.core_96_head_installed:
       raise RuntimeError(
         "This command requires a 96-head, but none is installed. "
         "Check your instrument configuration."
@@ -1141,6 +1144,147 @@ def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
 
 
 @dataclass
+class DriveConfiguration:
+  """Configuration for an X drive (left or right).
+
+  Combines byte 1 (xl/xr) and byte 2 (xn/xo) into a single object.
+  Note: the installed modules on left and right drives must be different.
+  """
+
+  pip_installed: bool = False
+  iswap_installed: bool = False
+  core_96_head_installed: bool = False
+  nano_pipettor_installed: bool = False
+  dispensing_head_384_installed: bool = False
+  xl_channels_installed: bool = False
+  tube_gripper_installed: bool = False
+  imaging_channel_installed: bool = False
+  robotic_channel_installed: bool = False
+
+
+@dataclass
+class MachineConfiguration:
+  """Response from RM (Request Machine Configuration) command [SFCO.0035]."""
+
+  # kb byte (configuration data 1)
+  pip_type_1000ul: bool = False
+  """Bit 0: PIP Type. False = 300ul, True = 1000ul."""
+  kb_iswap_installed: bool = False
+  """Bit 1: ISWAP. False = none, True = installed."""
+  main_front_cover_monitoring_installed: bool = False
+  """Bit 2: Main front cover monitoring. False = none, True = installed."""
+  auto_load_installed: bool = False
+  """Bit 3: Auto load. False = none, True = installed."""
+  wash_station_1_installed: bool = False
+  """Bit 4: Wash station 1. False = none, True = installed."""
+  wash_station_2_installed: bool = False
+  """Bit 5: Wash station 2. False = none, True = installed."""
+  temp_controlled_carrier_1_installed: bool = False
+  """Bit 6: Temperature controlled carrier 1. False = none, True = installed."""
+  temp_controlled_carrier_2_installed: bool = False
+  """Bit 7: Temperature controlled carrier 2. False = none, True = installed."""
+
+  num_pip_channels: int = 0
+  """Number of PIP channels (kp). Range: 0..16."""
+
+
+@dataclass
+class ExtendedConfiguration:
+  """Response from QM (Request Extended Configuration) command.
+
+  This command returns the full instrument configuration matching the AK
+  (Set Instrument Configuration) [SFCO.0026] parameter set.
+  """
+
+  # ka (configuration data 2, 24-bit)
+  left_x_drive_large: bool = False
+  """Bit 0: Left X drive. False = small, True = large."""
+  ka_core_96_head_installed: bool = False
+  """Bit 1: CoRe 96 Head. False = none, True = installed."""
+  right_x_drive_large: bool = False
+  """Bit 2: Right X drive. False = small, True = large."""
+  pump_station_1_installed: bool = False
+  """Bit 3: Pump station 1. False = none, True = installed."""
+  pump_station_2_installed: bool = False
+  """Bit 4: Pump station 2. False = none, True = installed."""
+  wash_station_1_type_cr: bool = False
+  """Bit 5: Type wash station 1. False = G3, True = CR."""
+  wash_station_2_type_cr: bool = False
+  """Bit 6: Type wash station 2. False = G3, True = CR."""
+  left_cover_installed: bool = False
+  """Bit 7: Left cover. False = none, True = installed."""
+  right_cover_installed: bool = False
+  """Bit 8: Right cover. False = none, True = installed."""
+  additional_front_cover_monitoring_installed: bool = False
+  """Bit 9: Additional front cover monitoring. False = none, True = installed."""
+  pump_station_3_installed: bool = False
+  """Bit 10: Pump station 3. False = none, True = installed."""
+  multi_channel_nano_pipettor_installed: bool = False
+  """Bit 11: Multi channel nano pipettor. False = none, True = installed."""
+  dispensing_head_384_installed: bool = False
+  """Bit 12: 384 dispensing head. False = none, True = installed."""
+  xl_channels_installed: bool = False
+  """Bit 13: XL channels. False = none, True = installed."""
+  tube_gripper_installed: bool = False
+  """Bit 14: Tube gripper. False = none, True = installed."""
+  waste_direction_left: bool = False
+  """Bit 15: Waste direction. False = right, True = left."""
+  iswap_gripper_wide: bool = False
+  """Bit 16: iSWAP gripper size. False = small, True = wide."""
+  additional_channel_nano_pipettor_installed: bool = False
+  """Bit 17: Additional channel nano pipettor. False = none, True = installed."""
+  imaging_channel_installed: bool = False
+  """Bit 18: Imaging channel. False = none, True = installed."""
+  robotic_channel_installed: bool = False
+  """Bit 19: Robotic channel. False = none, True = installed."""
+  channel_order_ox_first: bool = False
+  """Bit 20: Channel order. False = XL first, True = OX first."""
+  x0_interface_ham_can: bool = False
+  """Bit 21: X0 interface. False = other, True = Ham CAN."""
+  park_heads_with_iswap_off: bool = False
+  """Bit 22: Park heads with iSWAP. False = on, True = off."""
+
+  # ke (configuration data 3, 32-bit)
+  configuration_data_3: int = 0
+  """Raw configuration data 3 (ke, 32-bit). Bit definitions are undocumented."""
+
+  instrument_size_slots: int = 54
+  """Instrument size in slots, X range (xt). Default: 54."""
+  auto_load_size_slots: int = 54
+  """Auto load size in slots (xa). Default: 54."""
+  tip_waste_x_position: float = 1340.0
+  """Tip waste X-position [mm] (xw). Default: 1340.0."""
+  left_x_drive: DriveConfiguration = field(default_factory=DriveConfiguration)
+  """Left X drive configuration (xl + xn)."""
+  right_x_drive: DriveConfiguration = field(default_factory=DriveConfiguration)
+  """Right X drive configuration (xr + xo)."""
+  min_iswap_collision_free_position: float = 350.0
+  """Minimal iSWAP collision free position for direct X access [mm] (xm). Default: 350.0."""
+  max_iswap_collision_free_position: float = 1140.0
+  """Maximal iSWAP collision free position for direct X access [mm] (xx). Default: 1140.0."""
+  left_x_arm_width: float = 370.0
+  """Width of left X arm [mm] (xu). Default: 370.0."""
+  right_x_arm_width: float = 370.0
+  """Width of right X arm [mm] (xv). Default: 370.0."""
+  num_xl_channels: int = 0
+  """Number of XL channels (kc). Range: 0..8."""
+  num_robotic_channels: int = 0
+  """Number of Robotic channels (kr). Range: 0..8."""
+  min_raster_pitch_pip_channels: float = 9.0
+  """Minimal raster pitch of PIP channels [mm] (ys). Default: 9.0."""
+  min_raster_pitch_xl_channels: float = 36.0
+  """Minimal raster pitch of XL channels [mm] (kl). Default: 36.0."""
+  min_raster_pitch_robotic_channels: float = 36.0
+  """Minimal raster pitch of Robotic channels [mm] (km). Default: 36.0."""
+  pip_maximal_y_position: float = 606.5
+  """PIP maximal Y position [mm] (ym). Default: 606.5."""
+  left_arm_min_y_position: float = 6.0
+  """Left arm minimal Y position [mm] (yu). Default: 6.0."""
+  right_arm_min_y_position: float = 6.0
+  """Right arm minimal Y position [mm] (yx). Default: 6.0."""
+
+
+@dataclass
 class Head96Information:
   """Information about the installed 96-head."""
 
@@ -1187,15 +1331,13 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       serial_number=serial_number,
     )
 
-    self.iswap_installed: Optional[bool] = None
-    self.autoload_installed: Optional[bool] = None
-    self.core96_head_installed: Optional[bool] = None
+    self._machine_conf: Optional[MachineConfiguration] = None
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
     self._channel_minimum_y_spacing: float = 9.0
     self._core_parked: Optional[bool] = None
-    self._extended_conf: Optional[dict] = None
+    self._extended_conf: Optional[ExtendedConfiguration] = None
     self._channel_traversal_height: float = 245.0
     self._iswap_traversal_height: float = 280.0
     self.core_adjustment = Coordinate.zero()
@@ -1208,12 +1350,50 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self._setup_done = False
 
   @property
+  def machine_conf(self) -> MachineConfiguration:
+    """Machine configuration."""
+    if self._machine_conf is None:
+      raise RuntimeError("has not loaded machine_conf, forgot to call `setup`?")
+    return self._machine_conf
+
+  @property
+  def autoload_installed(self) -> bool:
+    """Deprecated. Use `machine_conf.auto_load_installed`."""
+    warnings.warn(
+      "autoload_installed is deprecated. Use `machine_conf.auto_load_installed` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.machine_conf.auto_load_installed
+
+  @property
+  def iswap_installed(self) -> bool:
+    """Deprecated. Use `extended_conf.left_x_drive.iswap_installed`."""
+    warnings.warn(
+      "iswap_installed is deprecated. Use `extended_conf.left_x_drive.iswap_installed` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.extended_conf.left_x_drive.iswap_installed
+
+  @property
+  def core96_head_installed(self) -> bool:
+    """Deprecated. Use `extended_conf.left_x_drive.core_96_head_installed`."""
+    warnings.warn(
+      "core96_head_installed is deprecated. Use "
+      "`extended_conf.left_x_drive.core_96_head_installed` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.extended_conf.left_x_drive.core_96_head_installed
+
+  @property
   def num_arms(self) -> int:
-    return 1 if self.iswap_installed else 0
+    return 1 if self.extended_conf.left_x_drive.iswap_installed else 0
 
   @property
   def head96_installed(self) -> Optional[bool]:
-    return self.core96_head_installed
+    return self.extended_conf.left_x_drive.core_96_head_installed
 
   @property
   def unsafe(self) -> "UnSafe":
@@ -1272,7 +1452,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     return 2
 
   @property
-  def extended_conf(self) -> dict:
+  def extended_conf(self) -> ExtendedConfiguration:
     """Extended configuration."""
     if self._extended_conf is None:
       raise RuntimeError("has not loaded extended_conf, forgot to call `setup`?")
@@ -1442,20 +1622,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     self.id_ = 0
 
     # Request machine information
-    conf = await self.request_machine_configuration()
+    self._machine_conf = await self.request_machine_configuration()
     self._extended_conf = await self.request_extended_configuration()
-
-    left_x_drive_configuration_byte_1 = bin(self.extended_conf["xl"])
-    left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1 + "0" * (
-      16 - len(left_x_drive_configuration_byte_1)
-    )
-    left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
-    configuration_data1 = bin(conf["kb"]).split("b")[-1].zfill(8)
-    autoload_configuration_byte = configuration_data1[-4]
-    # Identify installations
-    self.autoload_installed = autoload_configuration_byte == "1"
-    self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
-    self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
     self._head96_information: Optional[Head96Information] = None
 
     initialized = await self.request_instrument_initialization_status()
@@ -1470,7 +1638,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # pre_initialize will move all channels to Z safety
       # so if we skip pre_initialize, we need to raise the channels ourselves
       await self.move_all_channels_in_z_safety()
-      if self.core96_head_installed:
+      if self.extended_conf.left_x_drive.core_96_head_installed:
         await self.move_core_96_to_safe_position()
 
     tip_presences = await self.request_tip_presence()
@@ -1484,7 +1652,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       )
 
     async def set_up_autoload():
-      if self.autoload_installed and not skip_autoload:
+      if self.machine_conf.auto_load_installed and not skip_autoload:
         autoload_initialized = await self.request_autoload_initialization_status()
         if not autoload_initialized:
           await self.initialize_autoload()
@@ -1492,7 +1660,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         await self.park_autoload()
 
     async def set_up_iswap():
-      if self.iswap_installed and not skip_iswap:
+      if self.extended_conf.left_x_drive.iswap_installed and not skip_iswap:
         iswap_initialized = await self.request_iswap_initialization_status()
         if not iswap_initialized:
           await self.initialize_iswap()
@@ -1502,7 +1670,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
     async def set_up_core96_head():
-      if self.core96_head_installed and not skip_core96_head:
+      if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
         # Initialize 96-head
         core96_head_initialized = await self.request_core_96_head_initialization_status()
         if not core96_head_initialized:
@@ -1832,6 +2000,223 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     LIQUID = 0
     FOAM = 1
 
+  async def _move_to_traverse_height(
+    self, channels: Optional[List[int]] = None, traverse_height: Optional[float] = None
+  ):
+    """Move channels to a specified traverse height, if given, otherwise move to full Z safety.
+
+    Args:
+      channels: Channels to move. If None, all channels are moved.
+      traverse_height: Absolute Z position in mm. If None, move to full Z safety.
+    """
+    if traverse_height is None:
+      await self.move_all_channels_in_z_safety()
+    else:
+      if channels is None:
+        channels = list(range(self.num_channels))
+      await self.position_channels_in_z_direction(
+        {channel: traverse_height for channel in channels}
+      )
+
+  async def _probe_liquid_heights_batch(
+    self,
+    containers: List[Container],
+    use_channels: List[int],
+    lld_mode: LLDMode = LLDMode.GAMMA,
+    search_speed: float = 10.0,
+    n_replicates: int = 1,
+  ) -> List[float]:
+    """Helper for probe_liquid_heights that performs a single batch of liquid level detection using a set of channels.
+
+    Assumes channels are moved to the appropriate traverse height before calling, and does not move channels after completion.
+    """
+
+    tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
+
+    detect_func: Callable[..., Any]
+    if lld_mode == self.LLDMode.GAMMA:
+      detect_func = self._move_z_drive_to_liquid_surface_using_clld
+    else:
+      detect_func = self._search_for_surface_using_plld
+
+    # Compute Z search bounds for this batch
+    batch_lowest_immers = [
+      container.get_absolute_location("c", "c", "cavity_bottom").z
+      + tip_len
+      - self.DEFAULT_TIP_FITTING_DEPTH
+      for container, tip_len in zip(containers, tip_lengths)
+    ]
+    batch_start_pos = [
+      container.get_absolute_location("c", "c", "t").z
+      + tip_len
+      - self.DEFAULT_TIP_FITTING_DEPTH
+      + 5
+      for container, tip_len in zip(containers, tip_lengths)
+    ]
+
+    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
+      idx: [] for idx in range(len(use_channels))
+    }
+
+    # Run n_replicates detection loop for this batch
+    for _ in range(n_replicates):
+      errors = await asyncio.gather(
+        *[
+          detect_func(
+            channel_idx=channel,
+            lowest_immers_pos=lip,
+            start_pos_search=sps,
+            channel_speed=search_speed,
+          )
+          for channel, lip, sps in zip(use_channels, batch_lowest_immers, batch_start_pos)
+        ],
+        return_exceptions=True,
+      )
+
+      # Get heights for ALL channels, handling failures for channels with no liquid
+      current_absolute_liquid_heights = await self.request_pip_height_last_lld()
+      for idx, (channel_idx, error) in enumerate(zip(use_channels, errors)):
+        if isinstance(error, STARFirmwareError):
+          error_msg = str(error).lower()
+          if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
+            height = None
+            msg = (
+              f"Operation {idx} (channel {channel_idx}): No liquid detected. Could be because there is "
+              f"no liquid in container {containers[idx].name} or liquid level "
+              f"is too low."
+            )
+            if lld_mode == self.LLDMode.GAMMA:
+              msg += " Consider using pressure-based LLD if liquid is believed to exist."
+            logger.warning(msg)
+          else:
+            raise error
+        elif isinstance(error, Exception):
+          raise error
+        else:
+          height = current_absolute_liquid_heights[channel_idx]
+        absolute_heights_measurements[idx].append(height)
+
+    # Compute liquid heights relative to well bottom
+    relative_to_well: List[float] = []
+    inconsistent_ops: List[str] = []
+
+    for idx, container in enumerate(containers):
+      measurements = absolute_heights_measurements[idx]
+      valid = [m for m in measurements if m is not None]
+      cavity_bottom = container.get_absolute_location("c", "c", "cavity_bottom").z
+
+      if len(valid) == 0:
+        relative_to_well.append(0.0)
+      elif len(valid) == len(measurements):
+        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
+      else:
+        inconsistent_ops.append(
+          f"Operation {idx}: {len(valid)}/{len(measurements)} replicates detected liquid"
+        )
+
+    if inconsistent_ops:
+      raise RuntimeError(
+        "Inconsistent liquid detection across replicates. "
+        "This may indicate liquid levels near the detection limit:\n" + "\n".join(inconsistent_ops)
+      )
+
+    return relative_to_well
+
+  def _compute_channels_in_resource_locations(
+    self,
+    resources: Sequence[Resource],
+    use_channels: List[int],
+    offsets: Optional[List[Coordinate]],
+  ) -> List[Coordinate]:
+    """Compute absolute locations of resources with given offsets."""
+
+    if offsets is None:
+      if len(set(resources)) == 1:
+        container_size_y = resources[0].get_absolute_size_y()
+        # For non-consecutive channels (e.g. [0,1,2,5,6,7]), we must account for
+        # phantom intermediate channels (3,4) that physically exist between them.
+        # Compute offsets for the full channel range (min to max), then pick only
+        # the offsets corresponding to the actual channels being used.
+        num_channels_in_span = max(use_channels) - min(use_channels) + 1
+        min_required = (
+          MIN_SPACING_EDGE * 2 + (num_channels_in_span - 1) * self._channel_minimum_y_spacing
+        )
+        if container_size_y >= min_required:
+          all_offsets = get_wide_single_resource_liquid_op_offsets(
+            resource=resources[0],
+            num_channels=num_channels_in_span,
+            min_spacing=self._channel_minimum_y_spacing,
+          )
+          min_ch = min(use_channels)
+          offsets = [all_offsets[ch - min_ch] for ch in use_channels]
+
+          if num_channels_in_span % 2 != 0:
+            y_offset = 5.5
+            offsets = [offset + Coordinate(0, y_offset, 0) for offset in offsets]
+        # else: container too small to fit all channels — fall back to center offsets.
+        # Y sub-batching will serialize channels that can't coexist.
+
+    offsets = offsets or [Coordinate.zero()] * len(resources)
+
+    # Compute positions for all resources
+    resource_locations = [
+      resource.get_location_wrt(self.deck, x="c", y="c", z="b") + offset
+      for resource, offset in zip(resources, offsets)
+    ]
+
+    return resource_locations
+
+  async def execute_batched(  # TODO: any hamilton liquid handler
+    self,
+    func: Callable[[List[int]], Awaitable[None]],
+    resources: List[Container],
+    use_channels: Optional[List[int]] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    min_traverse_height_during_command: Optional[float] = None,
+  ):
+    if use_channels is None:
+      use_channels = list(range(len(resources)))
+
+    # precompute locations and batches
+    locations = self._compute_channels_in_resource_locations(
+      resources, use_channels, resource_offsets
+    )
+    x_batches = group_by_x_batch_by_xy(
+      locations=locations,
+      use_channels=use_channels,
+      channels_minimum_y_spacing=self._channel_minimum_y_spacing,
+    )
+
+    # loop over batches. keep track of channels used in previous batch to ensure they are raised to traverse height before next batch
+    prev_channels: Optional[List[int]] = None
+
+    try:
+      for x_value, x_batch in x_batches.items():
+        if prev_channels is not None:
+          await self._move_to_traverse_height(
+            channels=prev_channels, traverse_height=min_traverse_height_during_command
+          )
+        await self.move_channel_x(0, x_value)
+
+        for y_batch in x_batch:
+          if prev_channels is not None:
+            await self._move_to_traverse_height(
+              channels=prev_channels, traverse_height=min_traverse_height_during_command
+            )
+          await self.position_channels_in_y_direction(
+            {use_channels[idx]: locations[idx].y for idx in y_batch},
+          )
+
+          await func(y_batch)
+
+          prev_channels = [use_channels[idx] for idx in y_batch]
+    except Exception:
+      await self.move_all_channels_in_z_safety()
+      raise
+    except BaseException:
+      await self.move_all_channels_in_z_safety()
+      raise
+
   async def probe_liquid_heights(
     self,
     containers: List[Container],
@@ -1840,7 +2225,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     lld_mode: LLDMode = LLDMode.GAMMA,
     search_speed: float = 10.0,
     n_replicates: int = 1,
-    move_to_z_safety_after: bool = True,
+    # Traverse height parameters (None = full Z safety, float = absolute Z position in mm)
+    min_traverse_height_at_beginning_of_command: Optional[float] = None,
+    min_traverse_height_during_command: Optional[float] = None,
+    z_position_at_end_of_command: Optional[float] = None,
+    # Deprecated
+    move_to_z_safety_after: Optional[bool] = None,
   ) -> List[float]:
     """Probe liquid surface heights in containers using liquid level detection.
 
@@ -1851,201 +2241,104 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Args:
       containers: List of Container objects to probe, one per channel.
       use_channels: Channel indices to use for probing (0-indexed).
-      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single containers with odd channel counts to avoid center dividers. Defaults to container centers.
-      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based. Defaults to capacitive.
+      resource_offsets: Optional XYZ offsets from container centers. Auto-calculated for single
+        containers with odd channel counts to avoid center dividers. Defaults to container centers.
+      lld_mode: Detection mode - LLDMode(1) for capacitive, LLDMode(2) for pressure-based.
+        Defaults to capacitive.
       search_speed: Z-axis search speed in mm/s. Default 10.0 mm/s.
       n_replicates: Number of measurements per channel. Default 1.
-      move_to_z_safety_after: Whether to move channels to safe Z height after probing. Default True.
+      min_traverse_height_at_beginning_of_command: Absolute Z height (mm) to move involved
+        channels to before the first batch. None (default) uses full Z safety.
+      min_traverse_height_during_command: Absolute Z height (mm) to move involved channels to
+        between batches (X groups and Y sub-batches). None (default) uses full Z safety.
+      z_position_at_end_of_command: Absolute Z height (mm) to move involved channels to after
+        probing. None (default) uses full Z safety.
 
     Returns:
       Mean of measured liquid heights for each container (mm from cavity bottom).
 
     Raises:
       RuntimeError: If channels lack tips.
-      NotImplementedError: If channels require different X positions.
 
     Notes:
       - All specified channels must have tips attached
-      - All channels must be at the same X position (single-row operation)
+      - Containers at different X positions are probed in sequential groups (single X carriage)
       - For single containers with odd channel counts, Y-offsets are applied to avoid
         center dividers (Hamilton 1000 uL spacing: 9mm, offset: 5.5mm)
     """
 
-    if use_channels is None:
-      use_channels = list(range(len(containers)))
-
-    # Handle tip positioning ... if SINGLE container instance
-    if resource_offsets is None:
-      if len(set(containers)) == 1:
-        resource_offsets = get_wide_single_resource_liquid_op_offsets(
-          resource=containers[0], num_channels=len(containers)
-        )
-
-        if len(use_channels) % 2 != 0:
-          # Hamilton 1000 uL channels are 9 mm apart, so offset by half the distance
-          # + extra for the potential central 'splash guard'
-          y_offset = 5.5
-          resource_offsets = [
-            resource_offsets[i] + Coordinate(0, y_offset, 0) for i in range(len(use_channels))
-          ]
-
-    resource_offsets = resource_offsets or [Coordinate.zero()] * len(containers)
+    if move_to_z_safety_after is not None:
+      warnings.warn(
+        "The 'move_to_z_safety_after' parameter is deprecated and will be removed in a future release. "
+        "Use 'z_position_at_end_of_command' with an appropriate Z height instead. If not set, "
+        "the default behavior will be to move to full Z safety after the command.",
+        DeprecationWarning,
+      )
 
     # Validate parameters.
+    if use_channels is None:
+      use_channels = list(range(len(containers)))
+    if len(use_channels) == 0:
+      raise ValueError("use_channels must not be empty.")
+    if not all(0 <= ch < self.num_channels for ch in use_channels):
+      raise ValueError(
+        f"All use_channels must be integers in range [0, {self.num_channels - 1}], "
+        f"got {use_channels}."
+      )
+
     if lld_mode not in {self.LLDMode.GAMMA, self.LLDMode.PRESSURE}:
       raise ValueError(f"LLDMode must be 1 (capacitive) or 2 (pressure-based), is {lld_mode}")
 
-    if not len(containers) == len(use_channels) == len(resource_offsets):
+    if not len(containers) == len(use_channels):
       raise ValueError(
-        "Length of containers, use_channels, resource_offsets and tip_lengths must match."
-        f"are {len(containers)}, {len(use_channels)}, {len(resource_offsets)}."
+        "Length of containers and use_channels must match, "
+        f"got lengths {len(containers)}, {len(use_channels)}."
       )
 
+    # Validate resource_offsets length (if provided) to avoid silent truncation in downstream zips.
+    if resource_offsets is not None and len(resource_offsets) != len(containers):
+      raise ValueError(
+        "Length of resource_offsets must match the length of containers and use_channels, "
+        f"got lengths {len(resource_offsets)} (resource_offsets) and "
+        f"{len(containers)} (containers/use_channels)."
+      )
     # Make sure we have tips on all channels and know their lengths
     tip_presence = await self.request_tip_presence()
     if not all(tip_presence[idx] for idx in use_channels):
       raise RuntimeError("All specified channels must have tips attached.")
 
-    tip_lengths = [await self.request_tip_len_on_channel(channel_idx=idx) for idx in use_channels]
-
-    # Move channels to safe Z height before starting
-    await self.move_all_channels_in_z_safety()
-
-    # Check if all channels are on the same x position, then move there
-    x_pos = [
-      resource.get_location_wrt(self.deck, x="c", y="c", z="b").x + offset.x
-      for resource, offset in zip(containers, resource_offsets)
-    ]
-    if len(set(x_pos)) > 1:  # TODO: implement
-      raise NotImplementedError(
-        "probe_liquid_heights is not yet supported for multiple x positions."
-      )
-    await self.move_channel_x(0, x_pos[0])
-
-    # Move channels to their y positions
-    y_pos = [
-      resource.get_location_wrt(self.deck, x="c", y="c", z="b").y + offset.y
-      for resource, offset in zip(containers, resource_offsets)
-    ]
-    await self.position_channels_in_y_direction(
-      {channel: y for channel, y in zip(use_channels, y_pos)}
+    # Move channels to traverse height
+    await self._move_to_traverse_height(
+      channels=use_channels, traverse_height=min_traverse_height_at_beginning_of_command
     )
 
-    # Detect liquid heights
-    absolute_heights_measurements: Dict[int, List[Optional[float]]] = {
-      ch: [] for ch in use_channels
-    }
+    result_by_operation: Dict[int, float] = {}
 
-    lowest_immers_positions = [
-      container.get_absolute_location("c", "c", "cavity_bottom").z
-      + tip_len
-      - self.DEFAULT_TIP_FITTING_DEPTH
-      for container, tip_len in zip(containers, tip_lengths)
-    ]
-    start_pos_searches = [
-      container.get_absolute_location("c", "c", "t").z
-      + tip_len
-      - self.DEFAULT_TIP_FITTING_DEPTH
-      + 5
-      for container, tip_len in zip(containers, tip_lengths)
-    ]
-
-    try:
-      for _ in range(n_replicates):
-        if lld_mode == self.LLDMode.GAMMA:
-          results = await asyncio.gather(
-            *[
-              self._move_z_drive_to_liquid_surface_using_clld(
-                channel_idx=channel,
-                lowest_immers_pos=lip,
-                start_pos_search=sps,
-                channel_speed=search_speed,
-              )
-              for channel, lip, sps in zip(
-                use_channels, lowest_immers_positions, start_pos_searches
-              )
-            ],
-            return_exceptions=True,
-          )
-
-        else:
-          results = await asyncio.gather(
-            *[
-              self._search_for_surface_using_plld(
-                channel_idx=channel,
-                lowest_immers_pos=lip,
-                start_pos_search=sps,
-                channel_speed=search_speed,
-                dispense_drive_speed=5.0,
-                plld_mode=self.PressureLLDMode.LIQUID,
-                clld_verification=False,
-                post_detection_dist=0.0,
-              )
-              for channel, lip, sps in zip(
-                use_channels, lowest_immers_positions, start_pos_searches
-              )
-            ],
-            return_exceptions=True,
-          )
-
-        # Get heights for ALL channels, handling failures for channels with no liquid
-        # (indexed 0 to self.num_channels-1) but only store for used channels
-        current_absolute_liquid_heights = await self.request_pip_height_last_lld()
-        for idx, (ch_idx, result) in enumerate(zip(use_channels, results)):
-          if isinstance(result, STARFirmwareError):
-            # Check if it's specifically the "no liquid found" error
-            error_msg = str(result).lower()
-            if "no liquid level found" in error_msg or "no liquid was present" in error_msg:
-              height = None  # No liquid detected - this is expected
-              msg = (
-                f"Channel {ch_idx}: No liquid detected. Could be because there is "
-                f"no liquid in container {containers[idx].name} or liquid level is too low."
-              )
-              if lld_mode == self.LLDMode.GAMMA:
-                msg += " Consider using pressure-based LLD if liquid is believed to exist."
-              logger.warning(msg)
-            else:
-              # Some other firmware error - re-raise it
-              raise result
-          elif isinstance(result, Exception):
-            # Some other unexpected error - re-raise it
-            raise result
-          else:
-            height = current_absolute_liquid_heights[ch_idx]
-          absolute_heights_measurements[ch_idx].append(height)
-    except:
-      await self.move_all_channels_in_z_safety()
-      raise
-
-    # Compute liquid heights relative to well bottom
-    relative_to_well: List[float] = []
-    inconsistent_channels: List[str] = []
-
-    for ch, container in zip(use_channels, containers):
-      measurements = absolute_heights_measurements[ch]
-      valid = [m for m in measurements if m is not None]
-      cavity_bottom = container.get_absolute_location("c", "c", "cavity_bottom").z
-
-      if len(valid) == 0:
-        relative_to_well.append(0.0)
-      elif len(valid) == len(measurements):
-        relative_to_well.append(sum(valid) / len(valid) - cavity_bottom)
-      else:
-        inconsistent_channels.append(
-          f"Channel {ch}: {len(valid)}/{len(measurements)} replicates detected liquid"
-        )
-
-    if inconsistent_channels:
-      raise RuntimeError(
-        "Inconsistent liquid detection across replicates. "
-        "This may indicate liquid levels near the detection limit:\n"
-        + "\n".join(inconsistent_channels)
+    async def func(batch: List[int]):
+      liquid_heights = await self._probe_liquid_heights_batch(
+        containers=[containers[idx] for idx in batch],
+        use_channels=[use_channels[idx] for idx in batch],
+        lld_mode=lld_mode,
+        search_speed=search_speed,
+        n_replicates=n_replicates,
       )
+      for idx, height in zip(batch, liquid_heights):
+        result_by_operation[idx] = height
 
-    if move_to_z_safety_after:
-      await self.move_all_channels_in_z_safety()
+    await self.execute_batched(
+      func=func,
+      resources=containers,
+      use_channels=use_channels,
+      resource_offsets=resource_offsets,
+      min_traverse_height_during_command=min_traverse_height_during_command,
+    )
 
-    return relative_to_well
+    await self._move_to_traverse_height(
+      channels=use_channels,
+      traverse_height=z_position_at_end_of_command,
+    )
+
+    return [result_by_operation[idx] for idx in range(len(containers))]
 
   async def probe_liquid_volumes(
     self,
@@ -2076,8 +2369,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       Volumes in each container (uL).
 
     Raises:
-      ValueError: If any container doesn't support height-to-volume conversion (raised by probe_liquid_heights).
-      NotImplementedError: If channels require different X positions.
+      ValueError: If any container doesn't support height-to-volume conversion.
 
     Notes:
     - Delegates all motion, LLD, validation, and safety logic to probe_liquid_heights
@@ -3680,7 +3972,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     Low level component of :meth:`move_resource`
     """
 
-    assert self.iswap_installed, "iswap must be installed"
+    assert self.extended_conf.left_x_drive.iswap_installed, "iswap must be installed"
 
     x_direction = 0 if center.x >= 0 else 1
     y_direction = 0 if center.y >= 0 else 1
@@ -4145,7 +4437,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
         )
     else:
-      if self.iswap_installed:
+      if self.extended_conf.left_x_drive.iswap_installed:
         max_y_pos = await self.iswap_rotation_drive_request_y()
         limit = "iswap module y-position"
       else:
@@ -4898,20 +5190,97 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # TODO: parse res
     return await self.send_command(module="C0", command="UJ")
 
-  async def request_machine_configuration(self):
-    """Request machine configuration"""
+  async def request_machine_configuration(self) -> MachineConfiguration:
+    """Request machine configuration (RM command) [SFCO.0035].
 
-    # TODO: parse res
-    return await self.send_command(module="C0", command="RM", fmt="kb**kp**")
+    Returns the basic machine configuration including configuration data 1 (kb)
+    and number of PIP channels (kp).
+    """
 
-  async def request_extended_configuration(self):
-    """Request extended configuration"""
+    resp = await self.send_command(module="C0", command="RM", fmt="kb**kp##")
+    kb = resp["kb"]
+    return MachineConfiguration(
+      pip_type_1000ul=bool(kb & (1 << 0)),
+      kb_iswap_installed=bool(kb & (1 << 1)),
+      main_front_cover_monitoring_installed=bool(kb & (1 << 2)),
+      auto_load_installed=bool(kb & (1 << 3)),
+      wash_station_1_installed=bool(kb & (1 << 4)),
+      wash_station_2_installed=bool(kb & (1 << 5)),
+      temp_controlled_carrier_1_installed=bool(kb & (1 << 6)),
+      temp_controlled_carrier_2_installed=bool(kb & (1 << 7)),
+      num_pip_channels=resp["kp"],
+    )
 
-    return await self.send_command(
+  async def request_extended_configuration(self) -> ExtendedConfiguration:
+    """Request extended configuration (QM command).
+
+    Returns the full instrument configuration matching the AK
+    (Set Instrument Configuration) [SFCO.0026] parameter set.
+    """
+
+    resp = await self.send_command(
       module="C0",
       command="QM",
-      fmt="ka******ke********xt##xa##xw#####xl**xn**xr**xo**xm#####xx#####xu####xv####kc#kr#ys###"
-      + "kl###km###ym####yu####yx####",
+      fmt="ka******ke********xt##xa##xw#####xl**xn**xr**xo**xm#####xx#####xu####xv####kc#kr#"
+      + "ys###kl###km###ym####yu####yx####",
+    )
+
+    def _parse_drive(byte1: int, byte2: int) -> DriveConfiguration:
+      return DriveConfiguration(
+        pip_installed=bool(byte1 & (1 << 0)),
+        iswap_installed=bool(byte1 & (1 << 1)),
+        core_96_head_installed=bool(byte1 & (1 << 2)),
+        nano_pipettor_installed=bool(byte1 & (1 << 3)),
+        dispensing_head_384_installed=bool(byte1 & (1 << 4)),
+        xl_channels_installed=bool(byte1 & (1 << 5)),
+        tube_gripper_installed=bool(byte1 & (1 << 6)),
+        imaging_channel_installed=bool(byte1 & (1 << 7)),
+        robotic_channel_installed=bool(byte2 & (1 << 0)),
+      )
+
+    ka = resp["ka"]
+    return ExtendedConfiguration(
+      left_x_drive_large=bool(ka & (1 << 0)),
+      ka_core_96_head_installed=bool(ka & (1 << 1)),
+      right_x_drive_large=bool(ka & (1 << 2)),
+      pump_station_1_installed=bool(ka & (1 << 3)),
+      pump_station_2_installed=bool(ka & (1 << 4)),
+      wash_station_1_type_cr=bool(ka & (1 << 5)),
+      wash_station_2_type_cr=bool(ka & (1 << 6)),
+      left_cover_installed=bool(ka & (1 << 7)),
+      right_cover_installed=bool(ka & (1 << 8)),
+      additional_front_cover_monitoring_installed=bool(ka & (1 << 9)),
+      pump_station_3_installed=bool(ka & (1 << 10)),
+      multi_channel_nano_pipettor_installed=bool(ka & (1 << 11)),
+      dispensing_head_384_installed=bool(ka & (1 << 12)),
+      xl_channels_installed=bool(ka & (1 << 13)),
+      tube_gripper_installed=bool(ka & (1 << 14)),
+      waste_direction_left=bool(ka & (1 << 15)),
+      iswap_gripper_wide=bool(ka & (1 << 16)),
+      additional_channel_nano_pipettor_installed=bool(ka & (1 << 17)),
+      imaging_channel_installed=bool(ka & (1 << 18)),
+      robotic_channel_installed=bool(ka & (1 << 19)),
+      channel_order_ox_first=bool(ka & (1 << 20)),
+      x0_interface_ham_can=bool(ka & (1 << 21)),
+      park_heads_with_iswap_off=bool(ka & (1 << 22)),
+      configuration_data_3=resp["ke"],
+      instrument_size_slots=resp["xt"],
+      auto_load_size_slots=resp["xa"],
+      tip_waste_x_position=resp["xw"] / 10,
+      left_x_drive=_parse_drive(resp["xl"], resp["xn"]),
+      right_x_drive=_parse_drive(resp["xr"], resp["xo"]),
+      min_iswap_collision_free_position=resp["xm"] / 10,
+      max_iswap_collision_free_position=resp["xx"] / 10,
+      left_x_arm_width=resp["xu"] / 10,
+      right_x_arm_width=resp["xv"] / 10,
+      num_xl_channels=resp["kc"],
+      num_robotic_channels=resp["kr"],
+      min_raster_pitch_pip_channels=resp["ys"] / 10,
+      min_raster_pitch_xl_channels=resp["kl"] / 10,
+      min_raster_pitch_robotic_channels=resp["km"] / 10,
+      pip_maximal_y_position=resp["ym"] / 10,
+      left_arm_min_y_position=resp["yu"] / 10,
+      right_arm_min_y_position=resp["yx"] / 10,
     )
 
   async def request_node_names(self):
@@ -5121,7 +5490,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     y_positions = [4050 - i * dy for i in range(self.num_channels)]
 
     await self.initialize_pipetting_channels(
-      x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
+      x_positions=[
+        int(self.extended_conf.tip_waste_x_position * 10)
+      ],  # Tip eject waste X position.
       y_positions=y_positions,
       begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
       end_of_tip_deposit_process=1220,
@@ -8275,7 +8646,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Park autoload"""
 
     # Identify max number of x positions for your liquid handler
-    max_x_pos = str(self.extended_conf["xt"]).zfill(2)
+    max_x_pos = str(self.extended_conf.instrument_size_slots).zfill(2)
 
     await self.move_autoload_to_safe_z_position()
 
@@ -9722,7 +10093,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   async def iswap_rotation_drive_request_y(self) -> float:
     """Request iSWAP rotation drive Y position (center) in mm. This is equivalent to the y location of the iSWAP module."""
-    if not self.iswap_installed:
+    if not self.extended_conf.left_x_drive.iswap_installed:
       raise RuntimeError("iSWAP is not installed")
     resp = await self.send_command(module="R0", command="RY", fmt="ry##### (n)")
     iswap_y_pos = resp["ry"][1]  # 0 = FW counter, 1 = HW counter
@@ -9903,7 +10274,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     # Use identified rail number to calculate possible upper limit:
     # STAR = 95 - 1415 mm, STARlet = 95 - 800mm
-    num_rails = self.extended_conf["xt"]
+    num_rails = self.extended_conf.instrument_size_slots
     track_width = 22.5  # mm
     reachable_dist_to_last_rail = 125.0
 
@@ -11050,6 +11421,17 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       channel_locations[channel_idx] = y
 
     if make_space:
+      use_channels = list(ys.keys())
+      back_channel = min(use_channels)
+      front_channel = max(use_channels)
+
+      # Position channels in between used channels
+      for intermediate_ch in range(back_channel + 1, front_channel):
+        if intermediate_ch not in ys:
+          channel_locations[intermediate_ch] = (
+            channel_locations[intermediate_ch - 1] - self._channel_minimum_y_spacing
+          )
+
       # For the channels to the back of `back_channel`, make sure the space between them is
       # >=9mm. We start with the channel closest to `back_channel`, and make sure the
       # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
@@ -11057,8 +11439,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # This order matters because the channel in front of any channel may have been moved in the
       # previous iteration.
       # Note that if a channel is already spaced at >=9mm, it is not moved.
-      use_channels = list(ys.keys())
-      back_channel = min(use_channels)
       for channel_idx in range(back_channel, 0, -1):
         if (
           channel_locations[channel_idx - 1] - channel_locations[channel_idx]
@@ -11071,7 +11451,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # spaced >= channel_minimum_y_spacing (usually 9mm) apart. This time, we iterate from
       # back (closest to `front_channel`) to the front (lh.backend.num_channels - 1), and
       # put each channel >= channel_minimum_y_spacing before the one behind it.
-      front_channel = max(use_channels)
       for channel_idx in range(front_channel, self.num_channels - 1):
         if (
           channel_locations[channel_idx] - channel_locations[channel_idx + 1]
@@ -11159,7 +11538,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
       if spread == "wide":
         offsets = get_wide_single_resource_liquid_op_offsets(
-          well, num_channels=len(piercing_channels)
+          resource=well,
+          num_channels=len(piercing_channels),
+          min_spacing=self._channel_minimum_y_spacing,
         )
       else:
         offsets = get_tight_single_resource_liquid_op_offsets(
