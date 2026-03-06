@@ -710,8 +710,9 @@ class TestODTCSiLADualTrack(unittest.IsolatedAsyncioTestCase):
       cm.__exit__.return_value = None
       return cm
 
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen), patch(
-      "pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.05
+    with (
+      patch("urllib.request.urlopen", side_effect=mock_urlopen),
+      patch("pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.05),
     ):
       # Short POLLING_START_BUFFER in test so we don't wait 10s; lifetime still allows polling to run.
       interface = ODTCSiLAInterface(
@@ -742,8 +743,9 @@ class TestODTCSiLADualTrack(unittest.IsolatedAsyncioTestCase):
       cm.__exit__.return_value = None
       return cm
 
-    with patch("urllib.request.urlopen", side_effect=mock_urlopen), patch(
-      "pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.02
+    with (
+      patch("urllib.request.urlopen", side_effect=mock_urlopen),
+      patch("pylabrobot.thermocycling.inheco.odtc_sila_interface.POLLING_START_BUFFER", 0.02),
     ):
       # Short POLLING_START_BUFFER so timeout (0.5s) is hit quickly instead of waiting 10s.
       interface = ODTCSiLAInterface(
@@ -1389,10 +1391,11 @@ class TestODTCBackend(unittest.IsolatedAsyncioTestCase):
   async def test_run_stored_protocol_calls_execute_method(self):
     """Test run_stored_protocol calls execute_method with name, wait, protocol (no estimated_duration_seconds)."""
     self.backend.execute_method = AsyncMock(return_value=None)  # type: ignore[method-assign]
-    with patch.object(
-      self.backend, "get_protocol", new_callable=AsyncMock, return_value=None
-    ), patch.object(
-      self.backend, "get_method_set", new_callable=AsyncMock, return_value=ODTCMethodSet()
+    with (
+      patch.object(self.backend, "get_protocol", new_callable=AsyncMock, return_value=None),
+      patch.object(
+        self.backend, "get_method_set", new_callable=AsyncMock, return_value=ODTCMethodSet()
+      ),
     ):
       await self.backend.run_stored_protocol("MyMethod", wait=True)
     self.backend.execute_method.assert_called_once_with("MyMethod", wait=True, protocol=None)

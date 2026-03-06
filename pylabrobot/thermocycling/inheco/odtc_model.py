@@ -212,8 +212,7 @@ def volume_to_fluid_quantity(volume_ul: float) -> int:
   """
   if volume_ul > 100:
     raise ValueError(
-      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. "
-      "Please use a volume between 0-100 µL."
+      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. Please use a volume between 0-100 µL."
     )
   if volume_ul <= 29:
     return 0  # 10-29ul
@@ -247,8 +246,7 @@ def validate_volume_fluid_quantity(
     return
   if volume_ul > 100:
     raise ValueError(
-      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. "
-      "Please use a volume between 0-100 µL."
+      f"Volume {volume_ul} µL exceeds ODTC maximum of 100 µL. Please use a volume between 0-100 µL."
     )
   expected = volume_to_fluid_quantity(volume_ul)
   if fluid_quantity != expected:
@@ -644,8 +642,7 @@ class ODTCConfig:
     # Validate plate_type
     if self.plate_type not in c.valid_plate_types:
       errors.append(
-        f"plate_type={self.plate_type} invalid for {c.variant_name}. "
-        f"Valid: {c.valid_plate_types}"
+        f"plate_type={self.plate_type} invalid for {c.variant_name}. Valid: {c.valid_plate_types}"
       )
 
     # Validate lid_temperature
@@ -1412,8 +1409,7 @@ def _calculate_slope(
   # Validate config defaults too (in case user configured invalid defaults)
   if default_slope > max_slope:
     logger.warning(
-      "Config default_%s_slope %.2f °C/s exceeds hardware maximum %.2f °C/s. "
-      "Clamping to maximum.",
+      "Config default_%s_slope %.2f °C/s exceeds hardware maximum %.2f °C/s. Clamping to maximum.",
       direction,
       default_slope,
       max_slope,

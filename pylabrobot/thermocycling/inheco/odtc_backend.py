@@ -1064,7 +1064,7 @@ class ODTCBackend(ThermocyclerBackend):
       allow_overwrite = True
       if not odtc.name:
         self.logger.warning(
-          "ODTCProtocol name resolved to scratch name '%s'. " "Auto-enabling allow_overwrite=True.",
+          "ODTCProtocol name resolved to scratch name '%s'. Auto-enabling allow_overwrite=True.",
           resolved_name,
         )
 
