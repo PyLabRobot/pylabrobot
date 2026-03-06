@@ -4,9 +4,9 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
 
-MIN_SPACING_BETWEEN_CHANNELS = 9
+MIN_SPACING_BETWEEN_CHANNELS = 9.0
 # minimum spacing between the edge of the container and the center of channel
-MIN_SPACING_EDGE = 1
+MIN_SPACING_EDGE = 1.0
 
 
 def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):
@@ -20,8 +20,7 @@ def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing
 
 
 def get_wide_single_resource_liquid_op_offsets(
-  resource: Resource,
-  num_channels: int,
+  resource: Resource, num_channels: int, min_spacing: float = MIN_SPACING_BETWEEN_CHANNELS
 ) -> List[Coordinate]:
   resource_size = resource.get_absolute_size_y()
   centers = list(
@@ -30,7 +29,7 @@ def get_wide_single_resource_liquid_op_offsets(
         dim_size=resource_size,
         n=num_channels,
         margin=MIN_SPACING_EDGE,
-        min_spacing=MIN_SPACING_BETWEEN_CHANNELS,
+        min_spacing=min_spacing,
       )
     )
   )  # reverse because channels are from back to front
