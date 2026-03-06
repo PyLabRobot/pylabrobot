@@ -1,0 +1,6 @@
+pylabrobot.pumps.cole\_parmer.masterflex\_backend.MasterflexBackend.get\_all\_instances
+=======================================================================================
+
+.. currentmodule:: pylabrobot.pumps.cole_parmer.masterflex_backend
+
+.. automethod:: MasterflexBackend.get_all_instances

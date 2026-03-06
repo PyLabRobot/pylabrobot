@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.standard.ImagingResult.focal\_height
+==============================================================
+
+.. currentmodule:: pylabrobot.plate_reading.standard
+
+.. autoattribute:: ImagingResult.focal_height

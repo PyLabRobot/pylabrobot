@@ -1,0 +1,6 @@
+pylabrobot.plate\_reading.agilent.biotek\_cytation\_backend.CytationBackend.set\_auto\_exposure
+===============================================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.agilent.biotek_cytation_backend
+
+.. automethod:: CytationBackend.set_auto_exposure

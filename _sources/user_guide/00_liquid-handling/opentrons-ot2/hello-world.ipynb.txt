@@ -1,0 +1,294 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "d05c1147",
+   "metadata": {},
+   "source": [
+    "# OT2\n",
+    "\n",
+    "This notebook shows how to use the Opentrons OT2 with Pylabrobot.\n",
+    "\n",
+    "```{note}\n",
+    "The 8 channel pipette is not yet supported.\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "69a595f9",
+   "metadata": {},
+   "source": [
+    "## Connecting"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "95c0f738",
+   "metadata": {},
+   "source": [
+    "There are different ways to find the robot IP address.\n",
+    "- the OT vendor app.\n",
+    "- using its hostname, e.g. `ot2.local`.\n",
+    "- `arp -a` command in terminal to list all devices in the network.\n",
+    "- checking the connected devices in your router admin panel.\n",
+    "- ..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "236c2618",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.liquid_handling import LiquidHandler, OpentronsOT2Backend\n",
+    "from pylabrobot.resources import OTDeck\n",
+    "deck = OTDeck()\n",
+    "robot_ip = \"192.168.0.61\"\n",
+    "ot2_backend = OpentronsOT2Backend(host=robot_ip)\n",
+    "lh = LiquidHandler(backend=ot2_backend, deck=deck)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "a84ddd36",
+   "metadata": {},
+   "source": [
+    "You can set the traversal height for the robot as follows. This is the height above the deck at which tips will move."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "aed97f4b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "ot2_backend.traversal_height = 120"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "3bdd7aee",
+   "metadata": {},
+   "source": [
+    "The robot will automatically home on `setup`, unless `skip_home=True` is passed."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "d76a35bc",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.setup(skip_home=False)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "3788cd77",
+   "metadata": {},
+   "source": [
+    "Homing manually:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "e15e0897",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await ot2_backend.home()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "04354871",
+   "metadata": {},
+   "source": [
+    "## Deck setup"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "92a83aa4",
+   "metadata": {},
+   "source": [
+    "Loading a tip rack from the OT reosurce library. This requires a network connection the first time to download the labware definition. After that it is cached locally."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "de328307",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources.opentrons.load import load_ot_tip_rack\n",
+    "tr20uL = load_ot_tip_rack(\n",
+    "  ot_name=\"opentrons_96_filtertiprack_20ul\",  # https://labware.opentrons.com\n",
+    "  plr_resource_name=\"20uL Tip Rack 1\"  # name used in Pylabrobot, arbitrary\n",
+    ")\n",
+    "deck.assign_child_at_slot(tr20uL, slot=9)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "352955c5",
+   "metadata": {},
+   "source": [
+    "Plates are loaded from [the PLR resource library](https://docs.pylabrobot.org/resources/index.html) as usual."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "13beeec5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import agilent_96_wellplate_150uL_Ub\n",
+    "plate = agilent_96_wellplate_150uL_Ub(name=\"premixplate\")\n",
+    "deck.assign_child_at_slot(plate, slot=6)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e44fbcb8",
+   "metadata": {},
+   "source": [
+    "You can also import tube racks from the OT resource library and use them with normal PLR tubes:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "bdacf9e1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources.opentrons.load import load_ot_tube_rack\n",
+    "from pylabrobot.resources import Eppendorf_DNA_LoBind_1_5ml_Vb\n",
+    "tube_rack = load_ot_tube_rack(\n",
+    "  ot_name=\"opentrons_24_aluminumblock_nest_1.5ml_snapcap\",\n",
+    "  plr_resource_name=\"tube_rack\"\n",
+    ")\n",
+    "tube_rack[0] = tube = Eppendorf_DNA_LoBind_1_5ml_Vb(name=\"tube_01\")\n",
+    "deck.assign_child_at_slot(tube_rack, slot=4)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2f2d968c",
+   "metadata": {},
+   "source": [
+    "## Liquid handling"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8044bf5c",
+   "metadata": {},
+   "source": [
+    "OT2 robots often get out of calibration or do not calibrate to the deck correctly.\n",
+    "\n",
+    "You can deal with this by passing offsets to specific operations. The offsets are in mm. Below shows 0,0,0 but you might need a mm to make operations work on your robot. Be careful that the offsets will drift over time."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "a09f7071",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources.coordinate import Coordinate\n",
+    "tip_offset = Coordinate(x=0, y=0, z=0)\n",
+    "await lh.pick_up_tips(tr20uL[95], offsets=[tip_offset])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "933d2326",
+   "metadata": {},
+   "source": [
+    "Moving liquid from a plate to a tube:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "4e5726a1-5dd3-4d51-ad24-6d6a255ec37c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plate_offset = Coordinate(x=0, y=0, z=0)\n",
+    "await lh.aspirate(plate[0], vols=[20], offsets=[plate_offset])\n",
+    "tube_offset = Coordinate(x=0, y=0, z=0)\n",
+    "await lh.dispense([tube], vols=[20], offsets=[tube_offset])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c0f1057b",
+   "metadata": {},
+   "source": [
+    "You can put the tips in the trash after use using `await lh.discard_tips()`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "e299ba23",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "trash_tip = False\n",
+    "if trash_tip:\n",
+    "  await lh.discard_tips()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8bb37049",
+   "metadata": {},
+   "source": [
+    "Or return them to the pickup location using `await lh.return_tips()`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "21ec44a0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips(offsets=[tip_offset])"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.24"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

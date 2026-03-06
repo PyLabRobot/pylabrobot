@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_creators.hamilton\_tip\_300uL\_filter\_slim
+==============================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_creators
+
+.. autofunction:: hamilton_tip_300uL_filter_slim

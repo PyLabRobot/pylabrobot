@@ -1,0 +1,6 @@
+pylabrobot.thermocycling.thermocycler.Thermocycler.get\_all\_children
+=====================================================================
+
+.. currentmodule:: pylabrobot.thermocycling.thermocycler
+
+.. automethod:: Thermocycler.get_all_children

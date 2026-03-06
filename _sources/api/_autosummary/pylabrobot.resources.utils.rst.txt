@@ -1,0 +1,37 @@
+﻿pylabrobot.resources.utils
+==========================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automodule:: pylabrobot.resources.utils
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      create_equally_spaced_2d
+      create_equally_spaced_x
+      create_equally_spaced_y
+      create_ordered_items_2d
+      label_to_row_index
+      query
+      row_index_to_label
+      sort_by_xy_and_chunk_by_x
+      split_identifier
+   
+   
+
+   
+   
+   
+
+   
+   
+   

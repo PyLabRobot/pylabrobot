@@ -1,0 +1,6 @@
+pylabrobot.io.sila.discovery.SiLADevice.host
+============================================
+
+.. currentmodule:: pylabrobot.io.sila.discovery
+
+.. autoattribute:: SiLADevice.host
