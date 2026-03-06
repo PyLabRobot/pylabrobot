@@ -14,7 +14,10 @@ from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
-from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
+from pylabrobot.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_waste_positions_for_n_channels,
+)
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -473,12 +476,43 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     )
 
 
+class TestGetWastePositionsForNChannels(unittest.TestCase):
+  """Tests for get_waste_positions_for_n_channels helper."""
+
+  def test_single_position_repeats_to_n(self):
+    deck = STARLetDeck(waste_positions=None)
+    positions = deck.get_waste_positions()
+    self.assertEqual(len(positions), 1)
+    result = get_waste_positions_for_n_channels(positions, 8)
+    self.assertEqual(len(result), 8)
+    self.assertTrue(all(r is positions[0] for r in result))
+
+  def test_sixteen_positions_subset_to_eight(self):
+    deck = STARLetDeck()
+    positions = deck.get_waste_positions()
+    self.assertEqual(len(positions), 16)
+    result = get_waste_positions_for_n_channels(positions, 8)
+    self.assertEqual(len(result), 8)
+    self.assertEqual(
+      [r.name for r in result],
+      [f"waste_position_{2 * i + 1}" for i in range(8)],
+    )
+
+  def test_n_greater_than_positions_raises(self):
+    deck = STARLetDeck()
+    positions = deck.get_waste_positions()
+    with self.assertRaises(ValueError) as ctx:
+      get_waste_positions_for_n_channels(positions, 20)
+    self.assertIn("Requested 20", str(ctx.exception))
+    self.assertIn("only has 16", str(ctx.exception))
+
+
 class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.maxDiff = None
 
     self.backend = _create_mock_backend(num_channels=8)
-    self.deck = STARLetDeck()
+    self.deck = STARLetDeck(waste_positions=None)
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
@@ -486,6 +520,51 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
+
+  async def test_channel_waste_positions_set_at_setup(self):
+    """After setup, _channel_waste_positions has length backend.num_channels."""
+    positions = self.lh._channel_waste_positions
+    self.assertIsNotNone(positions)
+    assert positions is not None  # for mypy
+    self.assertEqual(len(positions), 8)
+    # Single trash deck: all entries are the same trash
+    self.assertTrue(all(r is positions[0] for r in positions))
+
+  async def test_discard_tips_before_setup_raises(self):
+    """discard_tips before setup raises a clear error."""
+    backend = _create_mock_backend(num_channels=8)
+    deck = STARLetDeck(waste_positions=None)
+    lh = LiquidHandler(backend=backend, deck=deck)
+    with self.assertRaises(RuntimeError) as ctx:
+      await lh.discard_tips(use_channels=[0])
+    self.assertIn("Setup has not been run", str(ctx.exception))
+
+  async def test_discard_tips_uses_per_channel_waste_positions(self):
+    """With addressable waste, discard_tips sends each channel to its assigned waste position."""
+    deck = STARLetDeck()  # 16 addressable waste positions
+    backend = _create_mock_backend(num_channels=8)
+    lh = LiquidHandler(backend=backend, deck=deck)
+    tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
+    deck.assign_child_resource(tip_rack, location=Coordinate(0, 0, 0))
+    await lh.setup()
+
+    # Pick up on channels 0, 2, 5 only
+    await lh.pick_up_tips(
+      tip_rack["A1", "C1", "F1"],
+      use_channels=[0, 2, 5],
+    )
+    backend.drop_tips.reset_mock()
+    await lh.discard_tips(use_channels=[0, 2, 5])
+
+    # Each channel should go to its pre-assigned waste position (from setup), not first 3
+    call = backend.drop_tips.call_args
+    ops = call.kwargs["ops"]
+    use_channels = call.kwargs["use_channels"]
+    self.assertEqual(use_channels, [0, 2, 5])
+    self.assertEqual(len(ops), 3)
+    # With 8 channels over 16 positions: channel 0 -> waste_position_1, 2 -> waste_position_5, 5 -> waste_position_11
+    expected_names = ["waste_position_1", "waste_position_5", "waste_position_11"]
+    self.assertEqual([op.resource.name for op in ops], expected_names)
 
   async def test_offsets_tips(self):
     tip_spot = self.tip_rack.get_item("A1")

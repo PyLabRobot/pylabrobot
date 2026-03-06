@@ -64,12 +64,42 @@ class HamiltonDeckTests(unittest.TestCase):
           │
     (31)  ├── waste_block               Resource             (775.000, 115.000, 100.000)
           │   ├── teaching_tip_rack     TipRack              (780.900, 461.100, 100.000)
+          │   ├── waste_position_1      Trash                (800.000, 405.000, 187.000)
+          │   ├── waste_position_2      Trash                (800.000, 392.500, 187.000)
+          │   ├── waste_position_3      Trash                (800.000, 380.000, 187.000)
+          │   ├── waste_position_4      Trash                (800.000, 367.500, 187.000)
+          │   ├── waste_position_5      Trash                (800.000, 355.000, 187.000)
+          │   ├── waste_position_6      Trash                (800.000, 342.500, 187.000)
+          │   ├── waste_position_7      Trash                (800.000, 330.000, 187.000)
+          │   ├── waste_position_8      Trash                (800.000, 317.500, 187.000)
+          │   ├── waste_position_9      Trash                (800.000, 305.000, 187.000)
+          │   ├── waste_position_10     Trash                (800.000, 292.500, 187.000)
+          │   ├── waste_position_11     Trash                (800.000, 280.000, 187.000)
+          │   ├── waste_position_12     Trash                (800.000, 267.500, 187.000)
+          │   ├── waste_position_13     Trash                (800.000, 255.000, 187.000)
+          │   ├── waste_position_14     Trash                (800.000, 242.500, 187.000)
+          │   ├── waste_position_15     Trash                (800.000, 230.000, 187.000)
+          │   ├── waste_position_16     Trash                (800.000, 217.500, 187.000)
           │   ├── core_grippers         HamiltonCoreGrippers (797.500, 085.500, 205.000)
           │
     (32)  ├── trash                     Trash                (800.000, 190.600, 137.100)
     """[1:]
       ),
     )
+
+  def test_get_waste_positions_default_returns_16(self):
+    """Default STARLetDeck has 16 addressable waste positions."""
+    deck = STARLetDeck()
+    positions = deck.get_waste_positions()
+    self.assertEqual(len(positions), 16)
+    self.assertEqual([p.name for p in positions], [f"waste_position_{i}" for i in range(1, 17)])
+
+  def test_get_waste_positions_none_returns_single_trash(self):
+    """STARLetDeck(waste_positions=None) returns single trash (same as get_trash_area)."""
+    deck = STARLetDeck(waste_positions=None)
+    positions = deck.get_waste_positions()
+    self.assertEqual(len(positions), 1)
+    self.assertIs(positions[0], deck.get_trash_area())
 
   def test_assign_gigantic_resource(self):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
