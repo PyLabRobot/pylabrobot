@@ -1,6 +1,5 @@
-import sys
 from abc import ABCMeta, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -23,11 +22,6 @@ from pylabrobot.liquid_handling.standard import (
 from pylabrobot.resources import Tip
 from pylabrobot.serializer import serialize
 
-if sys.version_info >= (3, 8):
-  from typing import TypedDict
-else:
-  from typing_extensions import TypedDict
-
 
 class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   """A backend that serializes all commands received, and sends them to `self.send_command` for
@@ -36,6 +30,8 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def __init__(self, num_channels: int):
     LiquidHandlerBackend.__init__(self)
     self._num_channels = num_channels
+    self._num_arms = 1
+    self._head96_installed = True
 
   @property
   def num_channels(self) -> int:
@@ -230,29 +226,17 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   async def move_channel_z(self, channel: int, z: float):
     await self.send_command(command="move_channel_z", data={"channel": channel, "z": z})
 
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Request tip presence on each channel via the serialized command interface.
+
+    Returns:
+      A list of length `num_channels` where each element is `True` if a tip is mounted,
+      `False` if not, or `None` if unknown.
+    """
+    result = await self.send_command(command="request_tip_presence")
+    if result is not None and "tip_presence" in result:
+      return cast(List[Optional[bool]], result["tip_presence"])
+    return [None] * self.num_channels
+
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     return True
-
-
-class SerializingSavingBackend(SerializingBackend):
-  """A backend that saves all serialized commands in `self.sent_commands`, wrote for testing."""
-
-  class Command(TypedDict):
-    command: str
-    data: Optional[Dict[str, Any]]
-
-  async def setup(self):
-    self.sent_commands: List[SerializingSavingBackend.Command] = []
-    await super().setup()
-
-  async def send_command(self, command: str, data: Optional[Dict[str, Any]] = None):
-    self.sent_commands.append({"command": command, "data": data})
-
-  def clear(self):
-    self.sent_commands = []
-
-  def get_first_data_for_command(self, command: str) -> Optional[Dict[str, Any]]:
-    for sent_command in self.sent_commands:
-      if sent_command["command"] == command:
-        return sent_command["data"]
-    return None

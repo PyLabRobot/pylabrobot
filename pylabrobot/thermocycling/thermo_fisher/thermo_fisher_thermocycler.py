@@ -4,6 +4,7 @@ import hmac
 import logging
 import re
 import ssl
+import warnings
 import xml.etree.ElementTree as ET
 from abc import ABCMeta
 from base64 import b64decode
@@ -176,9 +177,9 @@ def _gen_protocol_data(
     }
 
   stages = protocol.stages
-  assert len(stages) == len(
-    stage_name_prefixes
-  ), "Number of stages must match number of stage names"
+  assert len(stages) == len(stage_name_prefixes), (
+    "Number of stages must match number of stage names"
+  )
 
   data = {
     # "status": "OK",
@@ -229,8 +230,11 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
       ssl_context.check_hostname = False
       ssl_context.verify_mode = ssl.CERT_NONE
-      ssl_context.minimum_version = ssl.TLSVersion.TLSv1
-      ssl_context.maximum_version = ssl.TLSVersion.TLSv1
+      # TLSv1 is required for legacy ThermoFisher hardware - silence deprecation warning
+      with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="ssl.TLSVersion.TLSv1 is deprecated")
+        ssl_context.minimum_version = ssl.TLSVersion.TLSv1
+        ssl_context.maximum_version = ssl.TLSVersion.TLSv1
       try:
         # This is required for some legacy devices that use older ciphers or protocols
         # that are disabled by default in newer OpenSSL versions.
@@ -465,11 +469,11 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
           self.available_blocks.append(block_id)
 
   async def get_block_current_temperature(self, block_id=1) -> List[float]:
-    res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:BlockTemperatures?"})
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:TBC:BlockTemperatures?"})
     return cast(List[float], self._parse_scpi_response(res)["args"])
 
   async def get_sample_temps(self, block_id=1) -> List[float]:
-    res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:SampleTemperatures?"})
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:TBC:SampleTemperatures?"})
     return cast(List[float], self._parse_scpi_response(res)["args"])
 
   async def get_nickname(self) -> str:
@@ -527,7 +531,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:BLOCK", "args": [1 if control_enabled else 0, temp]}
+      {"cmd": f"TBC{block_id + 1}:BLOCK", "args": [1 if control_enabled else 0, temp]}
     )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set block idle temperature")
@@ -541,7 +545,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:COVER", "args": [1 if control_enabled else 0, temp]}
+      {"cmd": f"TBC{block_id + 1}:COVER", "args": [1 if control_enabled else 0, temp]}
     )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set cover idle temperature")
@@ -555,7 +559,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:RAMP", "params": {"rate": rate}, "args": temperature},
+      {"cmd": f"TBC{block_id + 1}:RAMP", "params": {"rate": rate}, "args": temperature},
       response_timeout=60,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
@@ -569,7 +573,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:BlockRAMP", "params": {"rate": rate}, "args": [target_temp]},
+      {"cmd": f"TBC{block_id + 1}:BlockRAMP", "params": {"rate": rate}, "args": [target_temp]},
       response_timeout=60,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
@@ -582,7 +586,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
     res = await self.send_command(
-      {"cmd": f"TBC{block_id+1}:CoverRAMP", "params": {}, "args": [target_temp]},
+      {"cmd": f"TBC{block_id + 1}:CoverRAMP", "params": {}, "args": [target_temp]},
       response_timeout=60,
     )
     if self._parse_scpi_response(res)["status"] != "OK":
@@ -619,7 +623,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   async def continue_run(self, block_id: int):
     for _ in range(3):
       await asyncio.sleep(1)
-      res = await self.send_command({"cmd": f"TBC{block_id+1}:CONTinue"})
+      res = await self.send_command({"cmd": f"TBC{block_id + 1}:CONTinue"})
       if self._parse_scpi_response(res)["status"] != "OK":
         raise ValueError("Failed to continue from indefinite hold")
 
@@ -908,7 +912,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
 
   async def get_lid_current_temperature(self, block_id: Optional[int] = None) -> List[float]:
     assert block_id is not None, "block_id must be specified"
-    res = await self.send_command({"cmd": f"TBC{block_id+1}:TBC:CoverTemperatures?"})
+    res = await self.send_command({"cmd": f"TBC{block_id + 1}:TBC:CoverTemperatures?"})
     return cast(List[float], self._parse_scpi_response(res)["args"])
 
   async def run_protocol(

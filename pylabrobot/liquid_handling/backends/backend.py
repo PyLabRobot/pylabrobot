@@ -34,12 +34,23 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     setup_finished: Whether the backend has been set up.
   """
 
+  _num_arms: int = 0
+
+  @property
+  def num_arms(self) -> int:
+    return self._num_arms
+
   def __init__(self):
     super().__init__()
     self.setup_finished = False
+    self._head96_installed: Optional[bool] = False
     self._deck: Optional[Deck] = None
     self._head: Optional[Dict[int, TipTracker]] = None
     self._head96: Optional[Dict[int, TipTracker]] = None
+
+  @property
+  def head96_installed(self) -> Optional[bool]:
+    return self._head96_installed
 
   def set_deck(self, deck: Deck):
     """Set the deck for the robot. Called automatically by `LiquidHandler.setup` or can be called
@@ -138,6 +149,12 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
 
   async def move_channel_z(self, channel: int, z: float):
     """Move the specified channel to the specified z coordinate."""
+
+    raise NotImplementedError()
+
+  async def request_tip_presence(self) -> List[Optional[bool]]:
+    """Request the tip presence status for each channel. Returns a list of length `num_channels`
+    where each element is `True` if a tip is mounted, `False` if not, or `None` if unknown."""
 
     raise NotImplementedError()
 

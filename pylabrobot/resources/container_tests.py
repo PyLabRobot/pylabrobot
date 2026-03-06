@@ -35,6 +35,7 @@ class TestContainer(unittest.TestCase):
         "category": None,
         "model": None,
         "barcode": None,
+        "preferred_pickup_location": None,
         "max_volume": 1000,
         "compute_volume_from_height": serialize(compute_volume_from_height),
         "compute_height_from_volume": serialize(compute_height_from_volume),
