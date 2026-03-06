@@ -1925,11 +1925,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # get highest z position
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     if drop_method == TipDropMethod.PLACE_SHIFT:
-      use_addressable_waste_z = (
-        all(isinstance(op.resource, Trash) for op in ops)
-        and all(
-          getattr(op.resource, "category", None) == "waste_position" for op in ops
-        )
+      use_addressable_waste_z = all(isinstance(op.resource, Trash) for op in ops) and all(
+        getattr(op.resource, "category", None) == "waste_position" for op in ops
       )
       if use_addressable_waste_z:
         begin_tip_deposit_process = (

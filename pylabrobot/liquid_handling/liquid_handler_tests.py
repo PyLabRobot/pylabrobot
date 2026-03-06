@@ -523,12 +523,12 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_channel_waste_positions_set_at_setup(self):
     """After setup, _channel_waste_positions has length backend.num_channels."""
-    self.assertIsNotNone(self.lh._channel_waste_positions)
-    self.assertEqual(len(self.lh._channel_waste_positions), 8)
+    positions = self.lh._channel_waste_positions
+    self.assertIsNotNone(positions)
+    assert positions is not None  # for mypy
+    self.assertEqual(len(positions), 8)
     # Single trash deck: all entries are the same trash
-    self.assertTrue(
-      all(r is self.lh._channel_waste_positions[0] for r in self.lh._channel_waste_positions)
-    )
+    self.assertTrue(all(r is positions[0] for r in positions))
 
   async def test_discard_tips_before_setup_raises(self):
     """discard_tips before setup raises a clear error."""

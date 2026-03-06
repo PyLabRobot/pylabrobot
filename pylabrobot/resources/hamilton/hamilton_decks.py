@@ -590,9 +590,7 @@ class HamiltonSTARDeck(HamiltonDeck):
         break
     if M == 0:
       return [cast(Trash, self.get_trash_area())]
-    return [
-      cast(Trash, self.get_resource(f"waste_position_{i}")) for i in range(1, M + 1)
-    ]
+    return [cast(Trash, self.get_resource(f"waste_position_{i}")) for i in range(1, M + 1)]
 
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
@@ -643,7 +641,9 @@ def STARDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
-  waste_positions: Optional[List[Coordinate]] = None, # TODO: pretty sure this can be the same as Starlet, but have not confirmed with real hardware.
+  waste_positions: Optional[
+    List[Coordinate]
+  ] = None,  # TODO: pretty sure this can be the same as Starlet, but have not confirmed with real hardware.
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck.
 
