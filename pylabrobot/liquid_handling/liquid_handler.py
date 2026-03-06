@@ -31,6 +31,7 @@ from pylabrobot.liquid_handling.strictness import (
 )
 from pylabrobot.liquid_handling.utils import (
   get_tight_single_resource_liquid_op_offsets,
+  get_waste_positions_for_n_channels,
   get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.machines.machine import Machine, need_setup_finished
@@ -767,20 +768,28 @@ class LiquidHandler(Resource, Machine):
     if n == 0:
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
-    trash = self.deck.get_trash_area()
-    trash_offsets = get_tight_single_resource_liquid_op_offsets(
-      trash,
-      num_channels=n,
-    )
-    # add trash_offsets to offsets if defined, otherwise use trash_offsets
-    # too advanced for mypy
-    offsets = [
-      o + to if o is not None else to
-      for o, to in zip(offsets or [None] * n, trash_offsets)  # type: ignore
-    ]
+    positions = self.deck.get_waste_positions()
+    waste_spots = get_waste_positions_for_n_channels(positions, len(use_channels))
+    if all(s is waste_spots[0] for s in waste_spots):
+      trash = waste_spots[0]
+      trash_offsets = get_tight_single_resource_liquid_op_offsets(
+        trash,
+        num_channels=n,
+      )
+      offsets = [
+        o + to if o is not None else to
+        for o, to in zip(offsets or [None] * n, trash_offsets)  # type: ignore
+      ]
+      return await self.drop_tips(
+        tip_spots=[trash] * n,
+        use_channels=use_channels,
+        offsets=offsets,
+        allow_nonzero_volume=allow_nonzero_volume,
+        **backend_kwargs,
+      )
 
     return await self.drop_tips(
-      tip_spots=[trash] * n,
+      tip_spots=waste_spots,
       use_channels=use_channels,
       offsets=offsets,
       allow_nonzero_volume=allow_nonzero_volume,

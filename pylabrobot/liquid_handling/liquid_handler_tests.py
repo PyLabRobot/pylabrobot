@@ -14,7 +14,10 @@ from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
-from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
+from pylabrobot.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_waste_positions_for_n_channels,
+)
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -473,12 +476,43 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     )
 
 
+class TestGetWastePositionsForNChannels(unittest.TestCase):
+  """Tests for get_waste_positions_for_n_channels helper."""
+
+  def test_single_position_repeats_to_n(self):
+    deck = STARLetDeck(waste_positions=None)
+    positions = deck.get_waste_positions()
+    self.assertEqual(len(positions), 1)
+    result = get_waste_positions_for_n_channels(positions, 8)
+    self.assertEqual(len(result), 8)
+    self.assertTrue(all(r is positions[0] for r in result))
+
+  def test_sixteen_positions_subset_to_eight(self):
+    deck = STARLetDeck()
+    positions = deck.get_waste_positions()
+    self.assertEqual(len(positions), 16)
+    result = get_waste_positions_for_n_channels(positions, 8)
+    self.assertEqual(len(result), 8)
+    self.assertEqual(
+      [r.name for r in result],
+      [f"waste_position_{2 * i + 1}" for i in range(8)],
+    )
+
+  def test_n_greater_than_positions_raises(self):
+    deck = STARLetDeck()
+    positions = deck.get_waste_positions()
+    with self.assertRaises(ValueError) as ctx:
+      get_waste_positions_for_n_channels(positions, 20)
+    self.assertIn("Requested 20", str(ctx.exception))
+    self.assertIn("only has 16", str(ctx.exception))
+
+
 class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.maxDiff = None
 
     self.backend = _create_mock_backend(num_channels=8)
-    self.deck = STARLetDeck()
+    self.deck = STARLetDeck(waste_positions=None)
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")

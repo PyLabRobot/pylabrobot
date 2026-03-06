@@ -132,3 +132,7 @@ class Deck(Resource):
   def get_trash_area96(self) -> Trash:
     deck_class = self.__class__.__name__
     raise NotImplementedError(f"This method is not implemented by deck '{deck_class}'")
+
+  def get_waste_positions(self) -> List[Trash]:
+    """Return the list of waste positions on this deck. Default: single trash area."""
+    return [cast(Trash, self.get_trash_area())]
