@@ -1266,8 +1266,6 @@ class ExtendedConfiguration:
   """Width of left X arm [mm] (xu). Default: 370.0."""
   right_x_arm_width: float = 370.0
   """Width of right X arm [mm] (xv). Default: 370.0."""
-  num_pip_channels: int = 0
-  """Number of PIP channels (kp). Range: 0..16."""
   num_xl_channels: int = 0
   """Number of XL channels (kc). Range: 0..8."""
   num_robotic_channels: int = 0
@@ -5223,7 +5221,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(
       module="C0",
       command="QM",
-      fmt="ka******ke********xt##xa##xw#####xl**xn**xr**xo**xm#####xx#####xu####xv####kp##kc#kr#"
+      fmt="ka******ke********xt##xa##xw#####xl**xn**xr**xo**xm#####xx#####xu####xv####kc#kr#"
       + "ys###kl###km###ym####yu####yx####",
     )
 
@@ -5275,7 +5273,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       max_iswap_collision_free_position=resp["xx"] / 10,
       left_x_arm_width=resp["xu"] / 10,
       right_x_arm_width=resp["xv"] / 10,
-      num_pip_channels=resp["kp"],
       num_xl_channels=resp["kc"],
       num_robotic_channels=resp["kr"],
       min_raster_pitch_pip_channels=resp["ys"] / 10,
