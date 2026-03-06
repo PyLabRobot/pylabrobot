@@ -147,6 +147,7 @@ class LiquidHandler(Resource, Machine):
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
     self._resource_pickups: Dict[int, Optional[ResourcePickup]] = {}
+    self._channel_waste_positions: Optional[List[Trash]] = None  # set in setup()
 
   @property
   def _resource_pickup(self) -> Optional[ResourcePickup]:
@@ -183,6 +184,11 @@ class LiquidHandler(Resource, Machine):
       tracker.register_callback(self._state_updated)
 
     self._resource_pickups = {a: None for a in range(self.backend.num_arms)}
+
+    positions = self.deck.get_waste_positions()
+    self._channel_waste_positions = get_waste_positions_for_n_channels(
+      positions, self.backend.num_channels
+    )
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
@@ -768,8 +774,10 @@ class LiquidHandler(Resource, Machine):
     if n == 0:
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
-    positions = self.deck.get_waste_positions()
-    waste_spots = get_waste_positions_for_n_channels(positions, len(use_channels))
+    if self._channel_waste_positions is None:
+      raise RuntimeError("Setup has not been run. Call LiquidHandler.setup() first.")
+
+    waste_spots = [self._channel_waste_positions[c] for c in use_channels]
     if all(s is waste_spots[0] for s in waste_spots):
       trash = waste_spots[0]
       trash_offsets = get_tight_single_resource_liquid_op_offsets(

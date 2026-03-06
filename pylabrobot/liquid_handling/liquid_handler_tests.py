@@ -521,6 +521,51 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
     await self.lh.setup()
 
+  async def test_channel_waste_positions_set_at_setup(self):
+    """After setup, _channel_waste_positions has length backend.num_channels."""
+    self.assertIsNotNone(self.lh._channel_waste_positions)
+    self.assertEqual(len(self.lh._channel_waste_positions), 8)
+    # Single trash deck: all entries are the same trash
+    self.assertTrue(
+      all(r is self.lh._channel_waste_positions[0] for r in self.lh._channel_waste_positions)
+    )
+
+  async def test_discard_tips_before_setup_raises(self):
+    """discard_tips before setup raises a clear error."""
+    backend = _create_mock_backend(num_channels=8)
+    deck = STARLetDeck(waste_positions=None)
+    lh = LiquidHandler(backend=backend, deck=deck)
+    with self.assertRaises(RuntimeError) as ctx:
+      await lh.discard_tips(use_channels=[0])
+    self.assertIn("Setup has not been run", str(ctx.exception))
+
+  async def test_discard_tips_uses_per_channel_waste_positions(self):
+    """With addressable waste, discard_tips sends each channel to its assigned waste position."""
+    deck = STARLetDeck()  # 16 addressable waste positions
+    backend = _create_mock_backend(num_channels=8)
+    lh = LiquidHandler(backend=backend, deck=deck)
+    tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
+    deck.assign_child_resource(tip_rack, location=Coordinate(0, 0, 0))
+    await lh.setup()
+
+    # Pick up on channels 0, 2, 5 only
+    await lh.pick_up_tips(
+      tip_rack["A1", "C1", "F1"],
+      use_channels=[0, 2, 5],
+    )
+    backend.drop_tips.reset_mock()
+    await lh.discard_tips(use_channels=[0, 2, 5])
+
+    # Each channel should go to its pre-assigned waste position (from setup), not first 3
+    call = backend.drop_tips.call_args
+    ops = call.kwargs["ops"]
+    use_channels = call.kwargs["use_channels"]
+    self.assertEqual(use_channels, [0, 2, 5])
+    self.assertEqual(len(ops), 3)
+    # With 8 channels over 16 positions: channel 0 -> waste_position_1, 2 -> waste_position_5, 5 -> waste_position_11
+    expected_names = ["waste_position_1", "waste_position_5", "waste_position_11"]
+    self.assertEqual([op.resource.name for op in ops], expected_names)
+
   async def test_offsets_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
     tip = tip_spot.get_tip()
