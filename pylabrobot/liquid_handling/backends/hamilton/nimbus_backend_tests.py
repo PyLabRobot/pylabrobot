@@ -6,7 +6,6 @@ and liquid handling operations.
 
 import unittest
 import unittest.mock
-from typing import Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import (
   Aspirate,

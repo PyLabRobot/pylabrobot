@@ -25,7 +25,7 @@ class PrepTransportLayerTests(unittest.TestCase):
     assert ip_packet.protocol == 6
     assert ip_packet.version == (3, 0)
     assert ip_packet.options_length == 0
-    assert ip_packet.options == None
+    assert ip_packet.options is None
     assert ip_packet.payload == self.harp_packet_data
 
   def test_encode_ip_packet(self):

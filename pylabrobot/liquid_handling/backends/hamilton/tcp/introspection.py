@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Annotated, Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
@@ -38,7 +38,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonPr
 from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   HamiltonDataType,
   I8Array,
-  I32,
   I32Array,
   Str,
   StrArray,
@@ -1475,7 +1474,6 @@ def _get_wire_type_id(annotation) -> Optional[int]:
 
   Returns None if the annotation doesn't carry a WireType.
   """
-  origin = getattr(annotation, "__class__", None)
   # Handle typing.Annotated
   metadata = getattr(annotation, "__metadata__", None)
   if metadata:
@@ -1487,7 +1485,6 @@ def _get_wire_type_id(annotation) -> Optional[int]:
 
 def _get_nested_dataclass(annotation):
   """For Annotated[SomeDataclass, Struct()], return SomeDataclass. Else None."""
-  import typing
   args = getattr(annotation, "__args__", None)
   if not args:
     return None

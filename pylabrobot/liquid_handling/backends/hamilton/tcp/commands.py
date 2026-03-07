@@ -17,7 +17,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
-from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import I32
 
 
 class HamiltonCommand:
