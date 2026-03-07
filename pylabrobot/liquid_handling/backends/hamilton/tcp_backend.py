@@ -946,14 +946,17 @@ class HamiltonTCPClient:
             if not self.detailed_errors:
               raise RuntimeError(enriched_msg)
             # Layer B: async TypeRegistry diagnosis (method signature, expected params)
+            # Use the address from the error response so we resolve the method on the object that threw
             intro = HamiltonIntrospection(self)
-            addr = command.dest_address
-            if addr not in self._type_registries:
+            error_addr = parsed_addr[0] if parsed_addr else command.dest_address
+            if error_addr not in self._type_registries:
               try:
-                self._type_registries[addr] = await intro.build_type_registry(addr)
+                self._type_registries[error_addr] = await intro.build_type_registry(error_addr)
               except Exception:
                 raise RuntimeError(enriched_msg)
-            diagnostic = await intro.diagnose_error(enriched_msg, self._type_registries[addr])
+            diagnostic = await intro.diagnose_error(
+              enriched_msg, self._type_registries[error_addr]
+            )
             raise RuntimeError(diagnostic)
           logger.debug(enriched_msg)
           return None

@@ -623,6 +623,13 @@ def STARDeck(
 
 
 class PrepDeck(Deck):
+  """Hamilton PREP deck with spots, trash, teaching tip site, and waste positions.
+
+  Includes a teaching tip site (deck site id=2: 6x6x85 mm), using the same 300uL tip
+  definition as the STAR teaching rack, and three waste positions (two for dual-channel
+  pipettor, one for 8MPH) from DeckConfiguration waste site definitions.
+  """
+
   def __init__(
     self, name="deck", size_x=0, size_y=0.5, size_z=0, origin=Coordinate.zero(), category="deck"
   ):
@@ -637,13 +644,46 @@ class PrepDeck(Deck):
           name=f"spot_{column}_{row}",
           size_x=127.76,
           size_y=92,
-          size_z=0,
+          size_z=12.5,
+          child_location=Coordinate(0, 0, 3.75),
         )
         self.assign_child_resource(spot, location=Coordinate(x, y, 0))
 
     trash = Trash(name="trash", size_x=0, size_y=0, size_z=0)
     # TODO: y coordinate
     self.assign_child_resource(trash, location=Coordinate(287.0, 0, 0))
+
+    # Same tip definition as STAR teaching rack: 300uL tip. Backend sends z_position =
+    # Slot height=83 mm (measured from tip top); 300uL filter: total_tip_length=59.9 mm + fine adjustment
+    teaching_tip_spot = TipSpot(
+      name="teaching_tip",
+      size_x=6.0,
+      size_y=6.0,
+      make_tip=hamilton_tip_300uL_filter,
+      size_z=0.0,
+      category="teaching_tip",
+    )
+    self.assign_child_resource(
+      teaching_tip_spot,
+      location=Coordinate(x=284.76, y=214.29, z=23.85),
+    )
+
+    # Waste positions from DeckConfiguration.GetWasteSiteDefinitions (index 1, 2, 3).
+    # Names match ChannelIndex / use_channels: 0=RearChannel, 1=FrontChannel, MPH separate.
+    # Channel 1 (Front): (286.8, 10, 68.4), Channel 2 (Rear): (286.8, 30, 68.4), 8MPH: (286.8, 112, 68.4)
+    # Assign with size (0, 0, 68.4) so get_absolute_location(..., z="t") gives drop height 68.4
+    for waste_name, y_pos in [("waste_rear", 30.0), ("waste_front", 10.0), ("waste_mph", 112.0)]:
+      waste = Trash(
+        name=waste_name,
+        size_x=0.0,
+        size_y=0.0,
+        size_z=68.4,
+        category="waste_position",
+      )
+      self.assign_child_resource(
+        waste,
+        location=Coordinate(x=286.8, y=y_pos, z=0.0),
+      )
 
   def __getitem__(self, key: int) -> ResourceHolder:
     return self.children[key]
