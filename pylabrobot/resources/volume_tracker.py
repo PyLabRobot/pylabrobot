@@ -8,6 +8,7 @@ from pylabrobot.resources.errors import (
   TooLittleVolumeError,
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.serializer import SerializableMixin
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False  # type: ignore
@@ -32,7 +33,7 @@ def no_volume_tracking():
 VolumeTrackerCallback = Callable[[], None]
 
 
-class VolumeTracker:
+class VolumeTracker(SerializableMixin):
   """A volume tracker tracks operations that change the volume in a container and raises errors
   if the volume operations are invalid."""
 

@@ -2,9 +2,11 @@ import enum
 from dataclasses import dataclass
 from typing import List, Optional
 
+from pylabrobot.serializer import SerializableMixin
+
 
 @dataclass
-class Step:
+class Step(SerializableMixin):
   """Represents a single step in a thermocycler profile."""
 
   temperature: List[float]
@@ -20,7 +22,7 @@ class Step:
 
 
 @dataclass
-class Stage:
+class Stage(SerializableMixin):
   """Represents a single stage in a thermocycler protocol."""
 
   steps: List[Step]
@@ -34,7 +36,7 @@ class Stage:
 
 
 @dataclass
-class Protocol:
+class Protocol(SerializableMixin):
   """Represents a thermocycler protocol ("cycle") with multiple stages."""
 
   stages: List[Stage]

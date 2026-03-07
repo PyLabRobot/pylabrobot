@@ -59,6 +59,12 @@ tr > td:nth-child(5) { width: 15%; }
 | Cole Parmer | Masterflex L/S 07522-20 07522-30 07551-20 07551-30 07575-30 07575-40 | Full | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/pumps/cole-parmer-masterflex.html) / [OEM](https://www.masterflex.nl/assets/uploads/2017/09/07551-xx.pdf) |
 | Agrowtek | Pump Array | Full | [OEM](https://www.agrowtek.com/index.php/products/dosing_systems/dosing-pumps/agrowdose-adi-digital-persitaltic-dosing-pumps-detail) |
 
+### Plate Washers
+
+| Manufacturer | Machine | PLR-Support | Links |
+|--------------|---------|-------------|--------|
+| Agilent (BioTek) | EL406 | Mostly | [PLR](https://docs.pylabrobot.org/user_guide/00_liquid-handling/plate-washing/biotek-el406.html) / [OEM](https://www.agilent.com/en/product/microplate-instrumentation/microplate-washers-dispensers/biotek-el406-washer-dispenser-795212) |
+
 ---
 
 ## Material Handling
@@ -160,6 +166,7 @@ tr > td:nth-child(5) { width: 15%; }
 | Byonoy | Luminescence 96 Automate | <span class="badge badge-luminescence">luminescence</span> | Full | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/byonoy/luminescence.html) / [OEM](https://byonoy.com/luminescence-96-automate/) |
 | Molecular Devices | SpectraMax M5e | <span class="badge badge-absorbance">absorbance</span><span class="badge badge-fluorescence">fluorescence</span> <span class="badge badge-time-resolved-fluo">time-resolved fluorescence</span><span class="badge badge-fluo-polarization">fluorescence polarization</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers) |
 | Molecular Devices | SpectraMax 384plus | <span class="badge badge-absorbance">absorbance</span> | Full | [OEM](https://www.moleculardevices.com/products/microplate-readers/absorbance-readers/spectramax-abs-plate-readers) |
+| Molecular Devices | ImageXpress Pico | <span class="badge badge-microscopy">microscopy</span> | Basics | [PLR](https://docs.pylabrobot.org/user_guide/02_analytical/plate-reading/pico.html) / [OEM](https://www.moleculardevices.com/products/cellular-imaging-systems/high-content-imaging/imagexpress-pico) |
 
 
 ### Flow Cytometers
