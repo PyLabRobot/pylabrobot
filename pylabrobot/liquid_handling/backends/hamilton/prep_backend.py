@@ -49,6 +49,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   Enum as WEnum,
 )
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
   HamiltonTCPClient,
@@ -70,8 +71,13 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
+from pylabrobot.liquid_handling.liquid_classes.hamilton import (
+  HamiltonLiquidClass,
+  get_star_liquid_class,
+)
 from pylabrobot.resources import Tip
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.well import CrossSectionType, Well
@@ -265,13 +271,14 @@ class AspirateParameters:
     loc,
     op: "SingleChannelAspiration",
     prewet_volume: float = 0.0,
+    blowout_volume: Optional[float] = None,
   ) -> "AspirateParameters":
     return cls(
       default_values=False,
       x_position=loc.x,
       y_position=loc.y,
       prewet_volume=prewet_volume,
-      blowout_volume=op.blow_out_air_volume or 0.0,
+      blowout_volume=(op.blow_out_air_volume or 0.0) if blowout_volume is None else blowout_volume,
     )
 
 
@@ -2482,14 +2489,15 @@ class PrepBackend(LiquidHandlerBackend):
     self,
     ops: List[SingleChannelAspiration],
     use_channels: List[int],
-    z_final: Optional[float] = None,
-    z_fluid: Optional[float] = None,
-    z_air: Optional[float] = None,
-    settling_time: float = 1.0,
-    transport_air_volume: float = 0.0,
-    z_liquid_exit_speed: float = 10.0,
-    z_minimum: Optional[float] = None,
-    z_bottom_search_offset: float = 2.0,
+    z_final: Optional[List[Optional[float]]] = None,
+    z_fluid: Optional[List[Optional[float]]] = None,
+    z_air: Optional[List[Optional[float]]] = None,
+    settling_time: Optional[List[Optional[float]]] = None,
+    transport_air_volume: Optional[List[Optional[float]]] = None,
+    z_liquid_exit_speed: Optional[List[Optional[float]]] = None,
+    prewet_volume: Optional[List[Optional[float]]] = None,
+    z_minimum: Optional[List[Optional[float]]] = None,
+    z_bottom_search_offset: Optional[List[Optional[float]]] = None,
     monitoring_mode: MonitoringMode = MonitoringMode.MONITORING,
     use_lld: bool = False,
     lld: Optional[LldParameters] = None,
@@ -2498,21 +2506,33 @@ class PrepBackend(LiquidHandlerBackend):
     tadm: Optional[TadmParameters] = None,
     container_segments: Optional[List[List[SegmentDescriptor]]] = None, # TODO: Doesn't work with No LLD
     auto_container_geometry: bool = False,
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
   ):
     """Aspirate using v2 commands, dispatching to the appropriate variant.
 
     Selects the command variant based on ``use_lld`` / ``lld`` (LLD on/off) and
-    ``monitoring_mode`` (Monitoring vs TADM).  When z_minimum, z_final, z_fluid,
-    or z_air are None, they are derived from well geometry (absolute coordinates,
-    STAR-aligned): z_minimum = well bottom, z_fluid = well bottom + op.liquid_height,
-    z_air = above labware + 2 mm, z_final = Prep traverse height minus fitted tip length (when None).
+    ``monitoring_mode`` (Monitoring vs TADM).  Z/geometry parameters (z_final,
+    z_fluid, z_air, z_minimum, z_bottom_search_offset): when None, default lists
+    are derived from well geometry (absolute coordinates, STAR-aligned). When a
+    list is passed, length must match len(ops); each element overrides that channel
+    (list entry None = use default for that channel).
+
+    Liquid-class-derived parameters (settling_time, transport_air_volume,
+    z_liquid_exit_speed, prewet_volume): when None, HLC (or fallback) is used per channel.
+    When a list is passed, length must match len(ops); each element overrides the HLC for that
+    channel (list entry None = use HLC/fallback for that channel).
 
     Args:
-      z_final: Z after the move (retract height). If None, uses bare-channel traverse height
-        minus max fitted tip length across channels (so the instrument ends at traverse height).
-      z_fluid: Liquid surface Z when not using LLD. If None, derived as well_bottom + op.liquid_height.
-      z_air: Z in air (above liquid). If None, derived as top of well + 2 mm.
-      z_minimum: Minimum Z (well floor). If None, derived as well bottom.
+      z_final: Z after the move (retract height) per channel. None = traverse minus fitted tip length per op.
+      z_fluid: Liquid surface Z when not using LLD, per channel. None = well_bottom + op.liquid_height.
+      z_air: Z in air (above liquid), per channel. None = top of well + 2 mm.
+      settling_time: Settling time (s) per channel. None = liquid class or fallback 1.0 per channel.
+      transport_air_volume: Transport air volume (µL) per channel. None = liquid class or fallback 0.0.
+      z_liquid_exit_speed: Z speed on leaving liquid (mm/s) per channel. None = liquid class or fallback 10.0.
+      prewet_volume: Pre-wet volume (µL) per channel. None = liquid class or fallback 0.0.
+      z_minimum: Minimum Z (well floor) per channel. None = well bottom.
+      z_bottom_search_offset: Bottom search offset (mm) per channel. None = 2.0 per channel.
       monitoring_mode: Select TADM or Monitoring (default: Monitoring).
       use_lld: Enable LLD aspirate variant.  Also activated if ``lld`` is set.
       lld: LLD seek parameters. When None and use_lld=True, built from labware geometry
@@ -2525,10 +2545,14 @@ class PrepBackend(LiquidHandlerBackend):
       auto_container_geometry: Automatically build container segments from the
         well's cross-section geometry.  Pass False to use empty segments
         (firmware falls back to the CommonParameters cone model).
+      hamilton_liquid_classes: Optional list of Hamilton liquid classes, one per op.
+        When None, defaults are built per op via get_star_liquid_class (same as STAR).
+        When provided, length must match len(ops).
+      disable_volume_correction: Per-op flag to skip volume correction. When None, treated as [False]*n.
 
     Example::
 
-      await backend.aspirate(ops, [0], z_final=95.0, settling_time=2.0)
+      await backend.aspirate(ops, [0], z_final=[95.0], settling_time=[2.0])
       await backend.aspirate(ops, [0], use_lld=True)
       await backend.aspirate(ops, [0], monitoring_mode=MonitoringMode.TADM)
     """
@@ -2538,19 +2562,77 @@ class PrepBackend(LiquidHandlerBackend):
         f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
       )
 
+    n = len(ops)
+    if hamilton_liquid_classes is not None:
+      if len(hamilton_liquid_classes) != n:
+        raise ValueError(
+          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
+        )
+      hlcs = list(hamilton_liquid_classes)
+    else:
+      # Defaults from STAR calibration table; add get_prep_liquid_class if Prep needs different values.
+      hlcs = [
+        get_star_liquid_class(
+          tip_volume=op.tip.maximal_volume,
+          is_core=False,
+          is_tip=True,
+          has_filter=op.tip.has_filter,
+          liquid=Liquid.WATER,
+          jet=False,
+          blow_out=False,
+        )
+        for op in ops
+      ]
+    disable_volume_correction = disable_volume_correction if disable_volume_correction is not None else [False] * n
+    if len(disable_volume_correction) != n:
+      raise ValueError(
+        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
+      )
+    ch_to_hlc = {ch: hlcs[i] for i, ch in enumerate(use_channels)}
+    ch_to_disable = {ch: disable_volume_correction[i] for i, ch in enumerate(use_channels)}
+    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
+
+    # Default lists from HLC (fallbacks when HLC is None)
+    default_settling = [hlc.aspiration_settling_time if hlc is not None else 1.0 for hlc in hlcs]
+    default_transport_air_volume = [hlc.aspiration_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs]
+    default_z_liquid_exit_speed = [hlc.aspiration_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
+    default_prewet_volume = [hlc.aspiration_over_aspirate_volume if hlc is not None else 0.0 for hlc in hlcs]
+    settling_time = fill_in_defaults(settling_time, default_settling)
+    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air_volume)
+    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_liquid_exit_speed)
+    prewet_volume = fill_in_defaults(prewet_volume, default_prewet_volume)
+
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
+    ]
+    flow_rates = [
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100.0)
+      for op, hlc in zip(ops, hlcs)
+    ]
+    blowout_volumes = [
+      op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0.0)
+      for op, hlc in zip(ops, hlcs)
+    ]
+
     effective_lld = use_lld or (lld is not None)
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
 
-    # Resolve z_final: when None, use bare-channel traverse height minus fitted tip length
-    # so the instrument (which may add tip length) ends with channel at traverse height.
-    raw_traverse = self._resolve_traverse_height(z_final)
-    if z_final is None and indexed_ops:
-      max_fitted_length = max(
-        op.tip.total_tip_length - op.tip.fitting_depth for op in indexed_ops.values()
-      )
-      resolved_z_final = raw_traverse - max_fitted_length
-    else:
-      resolved_z_final = raw_traverse
+    # Precompute well geometry once (used for default Z lists and for LLD in the loop).
+    well_geometry = [_absolute_z_from_well(op) for op in ops]
+    default_z_minimum = [g[0] for g in well_geometry]
+    default_z_fluid = [g[1] for g in well_geometry]
+    default_z_air = [g[3] for g in well_geometry]
+    raw_traverse = self._resolve_traverse_height(None)
+    default_z_final = [
+      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
+    ]
+    default_z_bottom_search_offset = [2.0] * n
+    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
+    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
+    z_air = fill_in_defaults(z_air, default_z_air)
+    z_final = fill_in_defaults(z_final, default_z_final)
+    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bottom_search_offset)
 
     # Build per-channel segment lists.
     ch_segments: dict[int, list[SegmentDescriptor]] = {}
@@ -2574,20 +2656,27 @@ class PrepBackend(LiquidHandlerBackend):
     for ch in range(self.num_channels):
       if ch not in indexed_ops:
         continue
+      idx = ch_to_idx[ch]
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       self._validate_position(loc.x, loc.y, loc.z)
       radius = _effective_radius(op.resource)
-      asp = AspirateParameters.for_op(loc, op)
+      asp = AspirateParameters.for_op(
+        loc,
+        op,
+        prewet_volume=prewet_volume[idx],
+        blowout_volume=blowout_volumes[idx],
+      )
       segs = ch_segments[ch]
 
-      well_bottom_z, liquid_surface_z, top_of_well_z, z_air_z = _absolute_z_from_well(op)
-      z_minimum_ch = z_minimum if z_minimum is not None else well_bottom_z
-      z_final_ch = resolved_z_final
-      z_fluid_ch = z_fluid if z_fluid is not None else liquid_surface_z
-      z_air_ch = z_air if z_air is not None else z_air_z
+      z_minimum_ch = z_minimum[idx]
+      z_final_ch = z_final[idx]
+      z_fluid_ch = z_fluid[idx]
+      z_air_ch = z_air[idx]
+      z_bottom_search_offset_ch = z_bottom_search_offset[idx]
 
       if effective_lld and lld is None:
+        top_of_well_z = well_geometry[idx][2]
         _lld = LldParameters(
           default_values=False,
           z_seek=top_of_well_z,
@@ -2599,15 +2688,16 @@ class PrepBackend(LiquidHandlerBackend):
         _lld = lld or LldParameters.default()
 
       common = CommonParameters.for_op(
-        op.volume, radius,
-        flow_rate=op.flow_rate,
+        volumes[idx],
+        radius,
+        flow_rate=flow_rates[idx],
         z_minimum=z_minimum_ch,
         z_final=z_final_ch,
-        z_liquid_exit_speed=z_liquid_exit_speed,
-        transport_air_volume=transport_air_volume,
-        settling_time=settling_time,
+        z_liquid_exit_speed=z_liquid_exit_speed[idx],
+        transport_air_volume=transport_air_volume[idx],
+        settling_time=settling_time[idx],
       )
-      no_lld = NoLldParameters.for_fixed_z(z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset)
+      no_lld = NoLldParameters.for_fixed_z(z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch)
 
       if effective_lld and monitoring_mode == MonitoringMode.TADM:
         params_lld_tadm.append(AspirateParametersLldAndTadm2(
@@ -2672,41 +2762,60 @@ class PrepBackend(LiquidHandlerBackend):
     self,
     ops: List[SingleChannelDispense],
     use_channels: List[int],
-    final_z: Optional[float] = None,
-    z_fluid: Optional[float] = None,
-    z_air: Optional[float] = None,
-    settling_time: float = 0.0,
-    transport_air_volume: float = 0.0,
-    z_liquid_exit_speed: float = 10.0,
-    z_minimum: Optional[float] = None,
-    z_bottom_search_offset: float = 2.0,
+    final_z: Optional[List[Optional[float]]] = None,
+    z_fluid: Optional[List[Optional[float]]] = None,
+    z_air: Optional[List[Optional[float]]] = None,
+    settling_time: Optional[List[Optional[float]]] = None,
+    transport_air_volume: Optional[List[Optional[float]]] = None,
+    z_liquid_exit_speed: Optional[List[Optional[float]]] = None,
+    stop_back_volume: Optional[List[Optional[float]]] = None,
+    cutoff_speed: Optional[List[Optional[float]]] = None,
+    z_minimum: Optional[List[Optional[float]]] = None,
+    z_bottom_search_offset: Optional[List[Optional[float]]] = None,
     use_lld: bool = False,
     lld: Optional[LldParameters] = None,
     c_lld: Optional[CLldParameters] = None,
     container_segments: Optional[List[List[SegmentDescriptor]]] = None,
     auto_container_geometry: bool = False, # TODO: Doesn't work with no LLD
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    disable_volume_correction: Optional[List[bool]] = None,
   ):
     """Dispense using v2 commands, dispatching to NoLLD or LLD variant.
 
-    When final_z, z_minimum, z_fluid, or z_air are None, they are derived from well
-    geometry (absolute coordinates, STAR-aligned): z_minimum = well bottom,
-    z_fluid = well bottom + op.liquid_height,     z_air = above labware + 2 mm,
-    final_z = Prep traverse height minus fitted tip length (when None).
+    Z/geometry parameters (final_z, z_fluid, z_air, z_minimum, z_bottom_search_offset):
+    when None, default lists are derived from well geometry (absolute coordinates,
+    STAR-aligned). When a list is passed, length must match len(ops); each element
+    overrides that channel (list entry None = use default for that channel).
+
+    Liquid-class-derived parameters (settling_time, transport_air_volume,
+    z_liquid_exit_speed, stop_back_volume, cutoff_speed): when None, HLC (or fallback)
+    is used per channel. When a list is passed, length must match len(ops); each
+    element overrides the HLC for that channel (list entry None = use HLC/fallback).
 
     Args:
-      final_z: Z after the move. If None, uses bare-channel traverse height minus max fitted tip length.
-      z_fluid: Liquid surface Z when not using LLD. If None, derived as well_bottom + op.liquid_height.
-      z_air: Z in air (above liquid). If None, derived as top of well + 2 mm.
-      z_minimum: Minimum Z (well floor). If None, derived as well bottom.
+      final_z: Z after the move per channel. None = traverse minus fitted tip length per op.
+      z_fluid: Liquid surface Z when not using LLD, per channel. None = well_bottom + op.liquid_height.
+      z_air: Z in air (above liquid), per channel. None = top of well + 2 mm.
+      settling_time: Settling time (s) per channel. None = liquid class or fallback 0.0 per channel.
+      transport_air_volume: Transport air volume (µL) per channel. None = liquid class or fallback 0.0.
+      z_liquid_exit_speed: Z speed on leaving liquid (mm/s) per channel. None = liquid class or fallback 10.0.
+      stop_back_volume: Stop-back volume (µL) per channel. None = liquid class or fallback 0.0.
+      cutoff_speed: Cutoff/stop flow rate (µL/s) per channel. None = liquid class or fallback 100.0.
+      z_minimum: Minimum Z (well floor) per channel. None = well bottom.
+      z_bottom_search_offset: Bottom search offset (mm) per channel. None = 2.0 per channel.
       use_lld: Enable LLD dispense variant.  Also activated if ``lld`` is set.
       lld: LLD seek parameters. When None and use_lld=True, built from labware geometry.
       c_lld: Capacitive LLD parameters (LLD variant only).
       container_segments: Per-channel SegmentDescriptor lists for liquid following.
       auto_container_geometry: Automatically build container segments from well geometry.
+      hamilton_liquid_classes: Optional list of Hamilton liquid classes, one per op.
+        When None, defaults are built per op via get_star_liquid_class (same as STAR).
+        When provided, length must match len(ops).
+      disable_volume_correction: Per-op flag to skip volume correction. When None, treated as [False]*n.
 
     Example::
 
-      await backend.dispense(ops, [0], final_z=95.0, settling_time=0.5)
+      await backend.dispense(ops, [0], final_z=[95.0], settling_time=[0.5])
       await backend.dispense(ops, [0], use_lld=True)
     """
     assert len(ops) == len(use_channels)
@@ -2715,18 +2824,75 @@ class PrepBackend(LiquidHandlerBackend):
         f"use_channels index out of range (valid: 0..{self.num_channels - 1})"
       )
 
+    n = len(ops)
+    if hamilton_liquid_classes is not None:
+      if len(hamilton_liquid_classes) != n:
+        raise ValueError(
+          f"hamilton_liquid_classes length must match len(ops): {len(hamilton_liquid_classes)} != {n}"
+        )
+      hlcs = list(hamilton_liquid_classes)
+    else:
+      # Defaults from STAR calibration table; add get_prep_liquid_class if Prep needs different values.
+      hlcs = [
+        get_star_liquid_class(
+          tip_volume=op.tip.maximal_volume,
+          is_core=False,
+          is_tip=True,
+          has_filter=op.tip.has_filter,
+          liquid=Liquid.WATER,
+          jet=False,
+          blow_out=False,
+        )
+        for op in ops
+      ]
+    disable_volume_correction = disable_volume_correction if disable_volume_correction is not None else [False] * n
+    if len(disable_volume_correction) != n:
+      raise ValueError(
+        f"disable_volume_correction length must match len(ops): {len(disable_volume_correction)} != {n}"
+      )
+    ch_to_hlc = {ch: hlcs[i] for i, ch in enumerate(use_channels)}
+    ch_to_disable = {ch: disable_volume_correction[i] for i, ch in enumerate(use_channels)}
+    ch_to_idx = {ch: i for i, ch in enumerate(use_channels)}
+
+    # Default lists from HLC (fallbacks when HLC is None)
+    default_settling = [hlc.dispense_settling_time if hlc is not None else 0.0 for hlc in hlcs]
+    default_transport_air_volume = [hlc.dispense_air_transport_volume if hlc is not None else 0.0 for hlc in hlcs]
+    default_z_liquid_exit_speed = [hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hlcs]
+    default_stop_back_volume = [hlc.dispense_stop_back_volume if hlc is not None else 0.0 for hlc in hlcs]
+    default_cutoff_speed = [hlc.dispense_stop_flow_rate if hlc is not None else 100.0 for hlc in hlcs]
+    settling_time = fill_in_defaults(settling_time, default_settling)
+    transport_air_volume = fill_in_defaults(transport_air_volume, default_transport_air_volume)
+    z_liquid_exit_speed = fill_in_defaults(z_liquid_exit_speed, default_z_liquid_exit_speed)
+    stop_back_volume = fill_in_defaults(stop_back_volume, default_stop_back_volume)
+    cutoff_speed = fill_in_defaults(cutoff_speed, default_cutoff_speed)
+
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None and not disabled else op.volume
+      for op, hlc, disabled in zip(ops, hlcs, disable_volume_correction)
+    ]
+    flow_rates = [
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100.0)
+      for op, hlc in zip(ops, hlcs)
+    ]
+
     effective_lld = use_lld or (lld is not None)
     indexed_ops = {ch: op for ch, op in zip(use_channels, ops)}
 
-    # Resolve z_final: when None, use bare-channel traverse height minus fitted tip length.
-    raw_traverse = self._resolve_traverse_height(final_z)
-    if final_z is None and indexed_ops:
-      max_fitted_length = max(
-        op.tip.total_tip_length - op.tip.fitting_depth for op in indexed_ops.values()
-      )
-      resolved_z_final = raw_traverse - max_fitted_length
-    else:
-      resolved_z_final = raw_traverse
+    # Precompute well geometry once (used for default Z lists and for LLD in the loop).
+    well_geometry = [_absolute_z_from_well(op) for op in ops]
+    default_z_minimum = [g[0] for g in well_geometry]
+    default_z_fluid = [g[1] for g in well_geometry]
+    default_z_air = [g[3] for g in well_geometry]
+    raw_traverse = self._resolve_traverse_height(None)
+    default_final_z = [
+      raw_traverse - (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
+    ]
+    default_z_bottom_search_offset = [2.0] * n
+    z_minimum = fill_in_defaults(z_minimum, default_z_minimum)
+    z_fluid = fill_in_defaults(z_fluid, default_z_fluid)
+    z_air = fill_in_defaults(z_air, default_z_air)
+    final_z = fill_in_defaults(final_z, default_final_z)
+    z_bottom_search_offset = fill_in_defaults(z_bottom_search_offset, default_z_bottom_search_offset)
 
     ch_segments: dict[int, list[SegmentDescriptor]] = {}
     for i, ch in enumerate(use_channels):
@@ -2745,20 +2911,26 @@ class PrepBackend(LiquidHandlerBackend):
     for ch in range(self.num_channels):
       if ch not in indexed_ops:
         continue
+      idx = ch_to_idx[ch]
       op = indexed_ops[ch]
       loc = op.resource.get_absolute_location("c", "c", "cavity_bottom")
       self._validate_position(loc.x, loc.y, loc.z)
       radius = _effective_radius(op.resource)
-      disp = DispenseParameters.for_op(loc)
+      disp = DispenseParameters.for_op(
+        loc,
+        stop_back_volume=stop_back_volume[idx],
+        cutoff_speed=cutoff_speed[idx],
+      )
       segs = ch_segments[ch]
 
-      well_bottom_z, liquid_surface_z, top_of_well_z, z_air_z = _absolute_z_from_well(op)
-      z_minimum_ch = z_minimum if z_minimum is not None else well_bottom_z
-      z_final_ch = resolved_z_final
-      z_fluid_ch = z_fluid if z_fluid is not None else liquid_surface_z
-      z_air_ch = z_air if z_air is not None else z_air_z
+      z_minimum_ch = z_minimum[idx]
+      z_final_ch = final_z[idx]
+      z_fluid_ch = z_fluid[idx]
+      z_air_ch = z_air[idx]
+      z_bottom_search_offset_ch = z_bottom_search_offset[idx]
 
       if effective_lld and lld is None:
+        top_of_well_z = well_geometry[idx][2]
         _lld = LldParameters(
           default_values=False,
           z_seek=top_of_well_z,
@@ -2770,13 +2942,14 @@ class PrepBackend(LiquidHandlerBackend):
         _lld = lld or LldParameters.default()
 
       common = CommonParameters.for_op(
-        op.volume, radius,
-        flow_rate=op.flow_rate,
+        volumes[idx],
+        radius,
+        flow_rate=flow_rates[idx],
         z_minimum=z_minimum_ch,
         z_final=z_final_ch,
-        z_liquid_exit_speed=z_liquid_exit_speed,
-        transport_air_volume=transport_air_volume,
-        settling_time=settling_time,
+        z_liquid_exit_speed=z_liquid_exit_speed[idx],
+        transport_air_volume=transport_air_volume[idx],
+        settling_time=settling_time[idx],
       )
 
       if effective_lld:
@@ -2799,7 +2972,7 @@ class PrepBackend(LiquidHandlerBackend):
           dispense=disp,
           container_description=segs,
           common=common,
-          no_lld=NoLldParameters.for_fixed_z(z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset),
+          no_lld=NoLldParameters.for_fixed_z(z_fluid_ch, z_air_ch, z_bottom_search_offset=z_bottom_search_offset_ch),
           mix=MixParameters.default(),
           adc=AdcParameters.default(),
           tadm=TadmParameters.default(),
@@ -2926,7 +3099,7 @@ class PrepBackend(LiquidHandlerBackend):
     x: float,
     y: Union[float, List[float]],
     z: Union[float, List[float]],
-    use_channels: Union[int, List[int]] = 0,
+    use_channels: Optional[Union[int, List[int]]] = 0,
     *,
     via_lane: bool = False,
   ) -> None:
@@ -2936,7 +3109,13 @@ class PrepBackend(LiquidHandlerBackend):
     a list of indices; for all channels use list(range(self.num_channels)). For a
     single channel, y and z may be scalars instead of lists.
     """
-    channels = [use_channels] if isinstance(use_channels, int) else list(use_channels)
+    if use_channels is None:
+      channels = [0]
+    elif isinstance(use_channels, list):
+      channels = list(use_channels)
+    else:
+      # int or int-like (e.g. numpy.int64); single channel
+      channels = [int(use_channels)]
     channels = sorted(channels)
     if channels:
       assert max(channels) < self.num_channels, (
