@@ -59,6 +59,7 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
+  GripDirection,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
   MultiHeadDispenseContainer,
@@ -75,8 +76,8 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
 )
-from pylabrobot.resources import Tip
-from pylabrobot.resources.hamilton import HamiltonTip, TipSize
+from pylabrobot.resources import Coordinate, Tip
+from pylabrobot.resources.hamilton import HamiltonCoreGrippers, HamiltonTip, TipSize
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.trash import Trash
@@ -1357,6 +1358,18 @@ class PrepReleasePlate(PrepCommand):
   command_id = 21
 
 
+# CORE gripper tool definition for PrepPickUpTool (struct); matches instrument id=11.
+CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS = TipPickupParameters(
+  default_values=False,
+  volume=1.0,
+  length=22.9,
+  tip_type=TipTypes.None_,
+  has_filter=False,
+  is_needle=False,
+  is_tool=True,
+)
+
+
 @dataclass
 class PrepEmptyDispenser(PrepCommand):
   """Empty dispenser (cmd=23, dest=Pipettor)."""
@@ -1905,6 +1918,7 @@ class PrepBackend(LiquidHandlerBackend):
     self._resolver = HamiltonInterfaceResolver(self.client, self._INTERFACES)
     self._num_channels: Optional[int] = None
     self._has_mph: Optional[bool] = None
+    self._gripper_tool_on: bool = False
 
   def _has_interface(self, name: str) -> bool:
     """Return True if the interface was resolved and is present."""
@@ -2122,6 +2136,17 @@ class PrepBackend(LiquidHandlerBackend):
   def has_mph(self) -> bool:
     """True if the 8-channel Multi-Pipetting Head (8MPH) is present. Set at setup from GetPresentChannels."""
     return bool(self._has_mph) if self._has_mph is not None else False
+
+  @property
+  def num_arms(self) -> int:
+    """Number of resource-handling arms. 1 when deck has core_grippers and 2 channels, else 0."""
+    if self.deck is None or self._num_channels is None or self._num_channels != 2:
+      return 0
+    try:
+      mount = self.deck.get_resource("core_grippers")
+      return 1 if isinstance(mount, HamiltonCoreGrippers) else 0
+    except Exception:
+      return 0
 
   def _validate_position(self, x: float, y: float, z: float) -> None:
     """Raise ValueError if (x, y, z) is outside deck bounds. No-op if config/bounds not set."""
@@ -3000,14 +3025,178 @@ class PrepBackend(LiquidHandlerBackend):
   ):
     raise NotImplementedError("dispense96 is not supported on the Prep")
 
-  async def pick_up_resource(self, pickup: ResourcePickup):
-    raise NotImplementedError("pick_up_resource is not yet implemented on the Prep")
+  async def pick_up_tool(
+    self,
+    tool_position_x: float,
+    tool_position_z: float,
+    front_channel_position_y: float,
+    rear_channel_position_y: float,
+    *,
+    tool_seek: Optional[float] = None,
+    tool_x_radius: float = 2.0,
+    tool_y_radius: float = 2.0,
+    tip_definition: Optional[TipPickupParameters] = None,
+  ) -> None:
+    """Pick up tool from the given position (PrepPickUpTool, cmd=15). Sets _gripper_tool_on and moves channels to safe Z."""
+    if tool_seek is None:
+      tool_seek = tool_position_z + 10.0
+    if tip_definition is None:
+      tip_definition = CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
+    y_mid = (front_channel_position_y + rear_channel_position_y) / 2.0
+    self._validate_position(tool_position_x, y_mid, tool_position_z)
+    await self.client.send_command(
+      PrepPickUpTool(
+        dest=await self._require("pipettor"),
+        tip_definition=tip_definition,
+        tool_position_x=tool_position_x,
+        tool_position_z=tool_position_z,
+        front_channel_position_y=front_channel_position_y,
+        rear_channel_position_y=rear_channel_position_y,
+        tool_seek=tool_seek,
+        tool_x_radius=tool_x_radius,
+        tool_y_radius=tool_y_radius,
+      )
+    )
+    self._gripper_tool_on = True
+    await self.move_channels_to_safe_z()
+
+  async def drop_tool(
+    self, *, move_to_safe_z_first: bool = True
+  ) -> None:
+    """Drop tool (PrepDropTool, cmd=16). Optionally move channels to safe Z first. Clears _gripper_tool_on."""
+    if move_to_safe_z_first:
+      await self.move_channels_to_safe_z()
+    await self.client.send_command(
+      PrepDropTool(dest=await self._require("pipettor"))
+    )
+    self._gripper_tool_on = False
+
+  async def release_plate(self) -> None:
+    """Release plate / open gripper (PrepReleasePlate, cmd=21). No parameters."""
+    await self.client.send_command(
+      PrepReleasePlate(dest=await self._require("pipettor"))
+    )
+
+  async def pick_up_resource(
+    self,
+    pickup: ResourcePickup,
+    *,
+    clearance_y: float = 2.5,
+    grip_speed_y: float = 5.0,
+    squeeze_mm: float = 2.0,
+  ):
+    if self.deck is None:
+      raise RuntimeError("deck not set")
+    if pickup.direction != GripDirection.FRONT:
+      raise NotImplementedError(
+        "PREP CORE gripper only supports GripDirection.FRONT"
+      )
+    resource = pickup.resource
+    center = resource.get_location_wrt(self.deck, "c", "c", "t") + pickup.offset
+    grip_height = center.z - pickup.pickup_distance_from_top
+    # plate_top_center = literal top center of plate (x, y, z_top); grip_height is separate.
+    plate_top_center = XYZCoord(
+      default_values=False,
+      x_position=center.x,
+      y_position=center.y,
+      z_position=center.z,
+    )
+    # Grip distance = how far the grippers close from open (travel). Open = labware_y + clearance_y, final = labware_y - squeeze_mm → close by clearance_y + squeeze_mm.
+    grip_distance = clearance_y + squeeze_mm
+    plate_dims = PlateDimensions(
+      default_values=False,
+      length=resource.get_absolute_size_x(),
+      width=resource.get_absolute_size_y(),
+      height=resource.get_absolute_size_z(),
+    )
+    if not self._gripper_tool_on:
+      mount = self.deck.get_resource("core_grippers")
+      if not isinstance(mount, HamiltonCoreGrippers):
+        raise TypeError(
+          "deck must have a resource named 'core_grippers' of type HamiltonCoreGrippers"
+        )
+      loc = mount.get_location_wrt(self.deck)
+      await self.pick_up_tool(
+        tool_position_x=loc.x,
+        tool_position_z=loc.z,
+        front_channel_position_y=loc.y + mount.front_channel_y_center,
+        rear_channel_position_y=loc.y + mount.back_channel_y_center,
+        tool_seek=loc.z + 10.0,
+      )
+    self._validate_position(center.x, center.y, grip_height)
+    await self.client.send_command(
+      PrepPickUpPlate(
+        dest=await self._require("pipettor"),
+        plate_top_center=plate_top_center,
+        plate=plate_dims,
+        clearance_y=clearance_y,
+        grip_speed_y=grip_speed_y,
+        grip_distance=grip_distance,
+        grip_height=grip_height,
+      )
+    )
 
   async def move_picked_up_resource(self, move: ResourceMove):
-    raise NotImplementedError("move_picked_up_resource is not yet implemented on the Prep")
+    if self.deck is None:
+      raise RuntimeError("deck not set")
+    center = (
+      move.location
+      + move.resource.get_anchor("c", "c", "t")
+      - Coordinate(z=move.pickup_distance_from_top)
+      + move.offset
+    )
+    plate_top_center = XYZCoord(
+      default_values=False,
+      x_position=center.x,
+      y_position=center.y,
+      z_position=center.z,
+    )
+    self._validate_position(center.x, center.y, center.z)
+    await self.client.send_command(
+      PrepMovePlate(
+        dest=await self._require("pipettor"),
+        plate_top_center=plate_top_center,
+        acceleration_scale_x=1,
+      )
+    )
 
-  async def drop_resource(self, drop: ResourceDrop):
-    raise NotImplementedError("drop_resource is not yet implemented on the Prep")
+  async def drop_resource(
+    self,
+    drop: ResourceDrop,
+    *,
+    return_gripper: bool = True,
+    clearance_y: float = 3.0,
+  ):
+    if self.deck is None:
+      raise RuntimeError("deck not set")
+    resource = drop.resource
+    dest_center = (
+      drop.destination
+      + resource.get_anchor("c", "c", "t")
+      + drop.offset
+    )
+    place_z = (
+      drop.destination.z
+      + resource.get_absolute_size_z()
+      - drop.pickup_distance_from_top
+    )
+    plate_top_center = XYZCoord(
+      default_values=False,
+      x_position=dest_center.x,
+      y_position=dest_center.y,
+      z_position=place_z,
+    )
+    self._validate_position(dest_center.x, dest_center.y, place_z)
+    await self.client.send_command(
+      PrepDropPlate(
+        dest=await self._require("pipettor"),
+        plate_top_center=plate_top_center,
+        clearance_y=clearance_y,
+        acceleration_scale_x=1,
+      )
+    )
+    if return_gripper:
+      await self.drop_tool()
 
   def can_pick_up_tip(self, channel_idx: int, tip: Tip) -> bool:
     """Check if the tip can be picked up by the specified channel.
@@ -3093,6 +3282,35 @@ class PrepBackend(LiquidHandlerBackend):
   # ---------------------------------------------------------------------------
   # Pipettor convenience methods
   # ---------------------------------------------------------------------------
+
+  async def move_channels_to_safe_z(
+    self, channels: Optional[List[int]] = None
+  ) -> None:
+    """Move the given channels' Z axes up to safe (traverse) height (cmd=28).
+
+    Use after picking up a tool or before returning a tool to avoid collisions
+    during XY moves. The instrument uses its configured safe/traverse height;
+    no height parameter is sent.
+
+    Args:
+      channels: Channel indices to move (0=rear, 1=front). None = all channels.
+    """
+    if channels is None:
+      channels = list(range(self.num_channels))
+    else:
+      channels = sorted(set(channels))
+    if not channels:
+      return
+    assert max(channels) < self.num_channels, (
+      f"channel index out of range (valid: 0..{self.num_channels - 1})"
+    )
+    channel_enums = [_CHANNEL_INDEX[ch] for ch in channels]
+    await self.client.send_command(
+      PrepMoveZUpToSafe(
+        dest=await self._require("pipettor"),
+        channels=channel_enums,
+      )
+    )
 
   async def move_to_position(
     self,

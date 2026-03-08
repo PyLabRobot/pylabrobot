@@ -389,6 +389,24 @@ class HamiltonCoreGrippers(Resource):
     }
 
 
+def prep_core_gripper_mount() -> HamiltonCoreGrippers:
+  """CORE gripper mount for PREP decks. Assign at Coordinate(290, 266.5, 62).
+
+  Physical rear paddle at (290, 257.5, 62), front at (290, 275.5, 62).
+  front_channel_y_center / back_channel_y_center are named for the PREP command
+  (front_channel_position_y, rear_channel_position_y) so the correct paddle is used.
+  """
+  return HamiltonCoreGrippers(
+    name="core_grippers",
+    back_channel_y_center=9.0,
+    front_channel_y_center=-9.0,
+    size_x=20.0,
+    size_y=20.0,
+    size_z=24.0,
+    model="prep_core_gripper_mount",
+  )
+
+
 def hamilton_core_gripper_1000ul_at_waste() -> HamiltonCoreGrippers:
   # inner hole diameter is 8.6mm
   # distance from base of rack to outer base of containers: -7mm
@@ -629,11 +647,22 @@ class PrepDeck(Deck):
   """
 
   def __init__(
-    self, name="deck", size_x=0, size_y=0.5, size_z=0, origin=Coordinate.zero(), category="deck"
+    self,
+    name="deck",
+    size_x=0,
+    size_y=0.5,
+    size_z=0,
+    origin=Coordinate.zero(),
+    category="deck",
+    with_core_grippers: bool = False,
   ):
     super().__init__(
       name=name, size_x=size_x, size_y=size_y, size_z=size_z, origin=origin, category=category
     )
+    if with_core_grippers:
+      self.assign_child_resource(
+        prep_core_gripper_mount(), location=Coordinate(290, 266.5, 62.5)
+      )
     for column in range(2):
       for row in range(4):
         x = column * 140
