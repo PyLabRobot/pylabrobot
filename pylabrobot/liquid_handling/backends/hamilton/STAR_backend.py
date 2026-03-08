@@ -6336,6 +6336,19 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
   # TODO:(command:OT)
 
   # -------------- 3.10 96-Head commands --------------
+  #
+  #  3.10.1  Constants & unit conversion helpers
+  #  3.10.2  Firmware info queries
+  #  3.10.3  Initialization
+  #  3.10.4  Query & status
+  #  3.10.5  Single-axis movements
+  #  3.10.6  Compound movements
+  #  3.10.7  Dispensing drive operations
+  #  3.10.8  Calibration
+  #  3.10.9  Tip handling
+  #  3.10.10 Liquid handling
+  #  3.10.11 Wash procedure commands
+  #  3.10.12 Deprecated 96-Head methods
 
   # -------------- 3.10.1 Constants & unit conversion helpers --------------
 
@@ -6534,7 +6547,59 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
-  # -------------- 3.10.4 Single-axis movements --------------
+  # -------------- 3.10.4 Query & status --------------
+
+  async def head96_request_tip_presence(self) -> int:
+    """Request Tip presence on the 96-Head
+
+    Note: this command requests this information from the STAR(let)'s
+      internal memory.
+      It does not directly sense whether tips are present.
+
+    Returns:
+      0 = no tips
+      1 = firmware believes tips are on the 96-head
+    """
+    resp = await self.send_command(module="C0", command="QH", fmt="qh#")
+
+    return int(resp["qh"])
+
+  async def head96_request_position(self) -> Coordinate:
+    """Request position of CoRe 96 Head (A1 considered to tip length)
+
+    Returns:
+      Coordinate: x, y, z in mm
+    """
+
+    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
+
+    x_coordinate = resp["xs"] / 10
+    y_coordinate = resp["yh"] / 10
+    z_coordinate = resp["za"] / 10
+
+    x_coordinate = x_coordinate if resp["xd"] == 0 else -x_coordinate
+
+    return Coordinate(x=x_coordinate, y=y_coordinate, z=z_coordinate)
+
+  async def head96_request_channel_tadm_status(self):
+    """Request CoRe 96 Head channel TADM Status
+
+    Returns:
+      qx: TADM channel status 0 = off 1 = on
+    """
+
+    return await self.send_command(module="C0", command="VC", fmt="qx#")
+
+  async def head96_request_channel_tadm_error_status(self):
+    """Request CoRe 96 Head channel TADM error status
+
+    Returns:
+      vb: error pattern 0 = no error
+    """
+
+    return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
+
+  # -------------- 3.10.5 Single-axis movements --------------
 
   @_requires_head96
   async def head96_move_to_z_safety(self):
@@ -6714,7 +6779,42 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
-  # -------------- 3.10.5 Dispensing drive operations --------------
+  # -------------- 3.10.6 Compound movements --------------
+
+  @_requires_head96
+  async def head96_move_to_coordinate(
+    self,
+    coordinate: Coordinate,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
+  ):
+    """Move STAR(let) 96-Head to defined Coordinate
+
+    Args:
+      coordinate: Coordinate of A1 in mm
+        - if tip present refers to tip bottom,
+        - if not present refers to channel bottom
+      minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
+        (refers to all channels independent of tip pattern parameter 'tm'). Must be between ? and
+        342.5. Default 342.5.
+    """
+
+    self._check_96_position_legal(coordinate)
+
+    assert 0 <= minimum_height_at_beginning_of_a_command <= 342.5, (
+      "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
+    )
+
+    return await self.send_command(
+      module="C0",
+      command="EM",
+      xs=f"{abs(round(coordinate.x * 10)):05}",
+      xd="0" if coordinate.x >= 0 else "1",
+      yh=f"{round(coordinate.y * 10):04}",
+      za=f"{round(coordinate.z * 10):04}",
+      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+    )
+
+  # -------------- 3.10.7 Dispensing drive operations --------------
 
   async def head96_dispensing_drive_move_to_home_volume(
     self,
@@ -6799,7 +6899,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     position_mm = await self.head96_dispensing_drive_request_position_mm()
     return self._head96_dispensing_drive_mm_to_uL(position_mm)
 
-  # -------------- 3.10.6 Calibration --------------
+  # -------------- 3.10.8 Calibration --------------
 
   async def head96_set_x_offset(self, x_offset: int):
     """Set X-offset X-axis <-> CoRe 96 head
@@ -6810,7 +6910,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="AF", x_offset=x_offset)
 
-  # -------------- 3.10.7 Tip handling --------------
+  # -------------- 3.10.9 Tip handling --------------
 
   @_requires_head96
   async def pick_up_tips96(
@@ -7054,7 +7154,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ze=f"{minimum_height_command_end:04}",
     )
 
-  # -------------- 3.10.8 Liquid handling --------------
+  # -------------- 3.10.10 Liquid handling --------------
 
   @_requires_head96
   async def aspirate96(
@@ -8126,93 +8226,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       cj=tadm_algorithm,
       cx=recording_mode,
     )
-
-  # -------------- 3.10.9 Compound movements --------------
-
-  @_requires_head96
-  async def head96_move_to_coordinate(
-    self,
-    coordinate: Coordinate,
-    minimum_height_at_beginning_of_a_command: float = 342.5,
-  ):
-    """Move STAR(let) 96-Head to defined Coordinate
-
-    Args:
-      coordinate: Coordinate of A1 in mm
-        - if tip present refers to tip bottom,
-        - if not present refers to channel bottom
-      minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
-        (refers to all channels independent of tip pattern parameter 'tm'). Must be between ? and
-        342.5. Default 342.5.
-    """
-
-    self._check_96_position_legal(coordinate)
-
-    assert 0 <= minimum_height_at_beginning_of_a_command <= 342.5, (
-      "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
-    )
-
-    return await self.send_command(
-      module="C0",
-      command="EM",
-      xs=f"{abs(round(coordinate.x * 10)):05}",
-      xd="0" if coordinate.x >= 0 else "1",
-      yh=f"{round(coordinate.y * 10):04}",
-      za=f"{round(coordinate.z * 10):04}",
-      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
-    )
-
-  # -------------- 3.10.10 Query & status --------------
-
-  async def head96_request_tip_presence(self) -> int:
-    """Request Tip presence on the 96-Head
-
-    Note: this command requests this information from the STAR(let)'s
-      internal memory.
-      It does not directly sense whether tips are present.
-
-    Returns:
-      0 = no tips
-      1 = firmware believes tips are on the 96-head
-    """
-    resp = await self.send_command(module="C0", command="QH", fmt="qh#")
-
-    return int(resp["qh"])
-
-  async def head96_request_position(self) -> Coordinate:
-    """Request position of CoRe 96 Head (A1 considered to tip length)
-
-    Returns:
-      Coordinate: x, y, z in mm
-    """
-
-    resp = await self.send_command(module="C0", command="QI", fmt="xs#####xd#yh####za####")
-
-    x_coordinate = resp["xs"] / 10
-    y_coordinate = resp["yh"] / 10
-    z_coordinate = resp["za"] / 10
-
-    x_coordinate = x_coordinate if resp["xd"] == 0 else -x_coordinate
-
-    return Coordinate(x=x_coordinate, y=y_coordinate, z=z_coordinate)
-
-  async def head96_request_channel_tadm_status(self):
-    """Request CoRe 96 Head channel TADM Status
-
-    Returns:
-      qx: TADM channel status 0 = off 1 = on
-    """
-
-    return await self.send_command(module="C0", command="VC", fmt="qx#")
-
-  async def head96_request_channel_tadm_error_status(self):
-    """Request CoRe 96 Head channel TADM error status
-
-    Returns:
-      vb: error pattern 0 = no error
-    """
-
-    return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
 
   # -------------- 3.10.11 Wash procedure commands --------------
 
