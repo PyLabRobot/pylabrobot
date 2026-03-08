@@ -251,16 +251,16 @@ class InhecoSiLAInterface:
       if tag_local == "DataEvent":
         try:
           raw = next(e.text for e in payload.iter() if _localname(e.tag) == "dataValue")
-          series = ET.fromstring(ET.fromstring(raw).find(".//AnyData").text).findall(
-            ".//dataSeries"
-          )
+          any_data_elem = ET.fromstring(raw).find(".//AnyData")  # type: ignore[arg-type]
+          assert any_data_elem is not None and any_data_elem.text is not None
+          series = ET.fromstring(any_data_elem.text).findall(".//dataSeries")
           data = {}
           for s in series:
             val = s.findall(".//integerValue")[-1].text
             unit = s.get("unit")
             data[s.get("nameId")] = f"{val} {unit}" if unit else val
           print(f"[{datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]}] [SiLA DataEvent] {data}")
-        except:
+        except Exception:
           pass
         return SOAP_RESPONSE_DataEventResponse.encode("utf-8")
 

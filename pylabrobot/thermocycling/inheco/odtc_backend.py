@@ -15,7 +15,7 @@ def _format_number(n: Any) -> str:
   try:
     f = float(n)
     return str(int(f)) if f.is_integer() else str(f)
-  except:
+  except (ValueError, TypeError):
     return str(n)
 
 
@@ -47,7 +47,7 @@ class ODTCBackend(ThermocyclerBackend):
     self._block_target_temp: Optional[float] = None
     self._lid_target_temp: Optional[float] = None
     self._current_sensors: Dict[str, float] = {}
-    self._temp_update_time = 0
+    self._temp_update_time: float = 0
 
   async def setup(self) -> None:
     await self._sila_interface.setup()
