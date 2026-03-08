@@ -678,7 +678,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_core_96_tip_pickup(self):
+  async def test_head96_tip_pickup(self):
     await self.lh.pick_up_tips96(self.tip_rack)
     self.STAR._write_and_read_command.assert_has_calls(
       [
@@ -693,7 +693,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     set_tip_tracking(enabled=False)
 
-  async def test_core_96_tip_drop(self):
+  async def test_head96_tip_drop(self):
     await self.lh.pick_up_tips96(self.tip_rack)  # pick up tips first
     self.STAR._write_and_read_command.reset_mock()
     await self.lh.drop_tips96(self.tip_rack)
@@ -703,7 +703,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_core_96_tip_discard(self):
+  async def test_head96_tip_discard(self):
     await self.lh.pick_up_tips96(self.tip_rack)  # pick up tips first
     self.STAR._write_and_read_command.reset_mock()
     await self.lh.discard_tips96()
@@ -713,7 +713,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_core_96_aspirate(self):
+  async def test_head96_aspirate(self):
     await self.lh.pick_up_tips96(self.tip_rack2)  # pick up high volume tips
     self.STAR._write_and_read_command.reset_mock()
 
@@ -731,7 +731,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_core_96_dispense(self):
+  async def test_head96_dispense(self):
     await self.lh.pick_up_tips96(self.tip_rack2)  # pick up high volume tips
     if self.plate.lid is not None:
       self.plate.lid.unassign()
@@ -750,7 +750,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-  async def test_core_96_dispense_quadrant(self):
+  async def test_head96_dispense_quadrant(self):
     """Test that each quadrant of a 384-well plate produces the correct firmware command.
 
     Before the fix, all quadrants produced identical xs/yh values because the reference well

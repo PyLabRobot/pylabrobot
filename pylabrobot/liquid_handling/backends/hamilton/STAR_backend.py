@@ -1607,15 +1607,26 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     skip_pip=False,
     skip_autoload=False,
     skip_iswap=False,
-    skip_core96_head=False,
+    skip_head96=False,
+    **kwargs,
   ):
     """Creates a USB connection and finds read/write interfaces.
 
     Args:
       skip_autoload: if True, skip initializing the autoload module, if applicable.
       skip_iswap: if True, skip initializing the iSWAP module, if applicable.
-      skip_core96_head: if True, skip initializing the CoRe 96 head module, if applicable.
+      skip_head96: if True, skip initializing the CoRe 96 head module, if applicable.
     """
+
+    if "skip_core96_head" in kwargs:
+      warnings.warn(  # TODO: remove 2026-08
+        "`skip_core96_head` is deprecated. Use `skip_head96` instead. Will be removed in 2026-08.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      skip_head96 = kwargs.pop("skip_core96_head")
+    if kwargs:
+      raise TypeError(f"Unexpected keyword arguments: {kwargs}")
 
     await super().setup()
 
@@ -1639,7 +1650,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       # so if we skip pre_initialize, we need to raise the channels ourselves
       await self.move_all_channels_in_z_safety()
       if self.extended_conf.left_x_drive.core_96_head_installed:
-        await self.move_core_96_to_safe_position()
+        await self.head96_move_to_z_safety()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -1669,12 +1680,12 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
         )
 
-    async def set_up_core96_head():
-      if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
+    async def set_up_head96():
+      if self.extended_conf.left_x_drive.core_96_head_installed and not skip_head96:
         # Initialize 96-head
-        core96_head_initialized = await self.request_core_96_head_initialization_status()
+        core96_head_initialized = await self.head96_request_initialization_status()
         if not core96_head_initialized:
-          await self.initialize_core_96_head(
+          await self.head96_initialize(
             trash96=self.deck.get_trash_area96(),
             z_position_at_the_command_end=self._channel_traversal_height,
           )
@@ -1695,7 +1706,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     async def set_up_arm_modules():
       await set_up_pip()
       await set_up_iswap()
-      await set_up_core96_head()
+      await set_up_head96()
 
     await asyncio.gather(set_up_autoload(), set_up_arm_modules())
 
@@ -3283,682 +3294,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return ret
 
-  @_requires_head96
-  async def pick_up_tips96(
-    self,
-    pickup: PickupTipRack,
-    tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
-    minimum_height_command_end: Optional[float] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    experimental_alignment_tipspot_identifier: str = "A1",
-  ):
-    """Pick up tips using the 96 head.
-
-    `tip_pickup_method` can be one of the following:
-        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mounting tips.
-        - "from_waste":
-            1. it actually moves the plunger all the way up
-            2. mounts tips
-            3. moves up like 10mm
-            4. moves plunger all the way down
-            5. moves to traversal height (tips out of rack)
-        - "full_blowout":
-            1. it actually moves the plunger all the way up
-            2. mounts tips
-            3. moves to traversal height (tips out of rack)
-
-    Args:
-      pickup: The standard `PickupTipRack` operation.
-      tip_pickup_method: The method to use for picking up tips. One of "from_rack", "from_waste", "full_blowout".
-      minimum_height_command_end: The minimum height to move to at the end of the command.
-      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to at the beginning of the command.
-      experimental_alignment_tipspot_identifier: The tipspot to use for alignment with head's A1 channel. Defaults to "tipspot A1".  allowed range is A1 to H12.
-    """
-
-    if isinstance(tip_pickup_method, int):
-      warnings.warn(
-        "tip_pickup_method as int is deprecated and will be removed in the future. Use string literals instead.",
-        DeprecationWarning,
-      )
-      tip_pickup_method = {0: "from_rack", 1: "from_waste", 2: "full_blowout"}[tip_pickup_method]
-
-    if tip_pickup_method not in {"from_rack", "from_waste", "full_blowout"}:
-      raise ValueError(f"Invalid tip_pickup_method: '{tip_pickup_method}'.")
-
-    prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
-    if prototypical_tip is None:
-      raise ValueError("No tips found in the tip rack.")
-    if not isinstance(prototypical_tip, HamiltonTip):
-      raise TypeError("Tip type must be HamiltonTip.")
-
-    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
-
-    tip_length = prototypical_tip.total_tip_length
-    fitting_depth = prototypical_tip.fitting_depth
-    tip_engage_height_from_tipspot = tip_length - fitting_depth
-
-    # Adjust tip engage height based on tip size
-    if prototypical_tip.tip_size == TipSize.LOW_VOLUME:
-      tip_engage_height_from_tipspot += 2
-    elif prototypical_tip.tip_size != TipSize.STANDARD_VOLUME:
-      tip_engage_height_from_tipspot -= 2
-
-    # Compute pickup Z
-    alignment_tipspot = pickup.resource.get_item(experimental_alignment_tipspot_identifier)
-    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
-    z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
-
-    # Compute full position (used for x/y)
-    pickup_position = (
-      alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
-    )
-    pickup_position.z = round(z_pickup_position, 2)
-
-    self._check_96_position_legal(pickup_position, skip_z=True)
-
-    if tip_pickup_method == "from_rack":
-      # the STAR will not automatically move the dispensing drive down if it is still up
-      # so we need to move it down here
-      # see https://github.com/PyLabRobot/pylabrobot/pull/835
-      lowest_dispensing_drive_height_no_tips = 218.19
-      await self.head96_dispensing_drive_move_to_position(lowest_dispensing_drive_height_no_tips)
-
-    try:
-      await self.pick_up_tips_core96(
-        x_position=abs(round(pickup_position.x * 10)),
-        x_direction=0 if pickup_position.x >= 0 else 1,
-        y_position=round(pickup_position.y * 10),
-        tip_type_idx=ttti,
-        tip_pickup_method={
-          "from_rack": 0,
-          "from_waste": 1,
-          "full_blowout": 2,
-        }[tip_pickup_method],
-        z_deposit_position=round(pickup_position.z * 10),
-        minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-        ),
-        minimum_height_command_end=round(
-          (minimum_height_command_end or self._channel_traversal_height) * 10
-        ),
-      )
-    except STARFirmwareError as e:
-      if plr_e := convert_star_firmware_error_to_plr_error(e):
-        raise plr_e from e
-      raise e
-
-  @_requires_head96
-  async def drop_tips96(
-    self,
-    drop: DropTipRack,
-    minimum_height_command_end: Optional[float] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    experimental_alignment_tipspot_identifier: str = "A1",
-  ):
-    """Drop tips from the 96 head."""
-
-    if isinstance(drop.resource, TipRack):
-      tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
-      position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
-      tip_rack = tip_spot_a1.parent
-      assert tip_rack is not None
-      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
-      # This should be the case for all normal hamilton tip carriers + racks
-      # In the future, we might want to make this more flexible
-      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
-    else:
-      position = self._position_96_head_in_resource(drop.resource) + drop.offset
-
-    self._check_96_position_legal(position, skip_z=True)
-
-    x_direction = 0 if position.x >= 0 else 1
-
-    return await self.discard_tips_core96(
-      x_position=abs(round(position.x * 10)),
-      x_direction=x_direction,
-      y_position=round(position.y * 10),
-      z_deposit_position=round(position.z * 10),
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      minimum_height_command_end=round(
-        (minimum_height_command_end or self._channel_traversal_height) * 10
-      ),
-    )
-
-  @_requires_head96
-  async def aspirate96(
-    self,
-    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer],
-    jet: bool = False,
-    blow_out: bool = False,
-    use_lld: bool = False,
-    pull_out_distance_transport_air: float = 10,
-    hlc: Optional[HamiltonLiquidClass] = None,
-    aspiration_type: int = 0,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    min_z_endpos: Optional[float] = None,
-    lld_search_height: float = 199.9,
-    minimum_height: Optional[float] = None,
-    second_section_height: float = 3.2,
-    second_section_ratio: float = 618.0,
-    immersion_depth: float = 0,
-    surface_following_distance: float = 0,
-    transport_air_volume: float = 5.0,
-    pre_wetting_volume: float = 5.0,
-    gamma_lld_sensitivity: int = 1,
-    swap_speed: float = 2.0,
-    settling_time: float = 1.0,
-    mix_position_from_liquid_surface: float = 0,
-    mix_surface_following_distance: float = 0,
-    limit_curve_index: int = 0,
-    disable_volume_correction: bool = False,
-    # Deprecated parameters, to be removed in future versions
-    # rm: >2026-01
-    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
-    minimal_end_height: Optional[float] = None,
-    air_transport_retract_dist: Optional[float] = None,
-    maximum_immersion_depth: Optional[float] = None,
-    surface_following_distance_during_mix: float = 0,
-    tube_2nd_section_height_measured_from_zm: float = 3.2,
-    tube_2nd_section_ratio: float = 618.0,
-    immersion_depth_direction: Optional[int] = None,
-    mix_volume: float = 0,
-    mix_cycles: int = 0,
-    speed_of_mix: float = 0.0,
-  ):
-    """Aspirate using the Core96 head.
-
-    Args:
-      aspiration: The aspiration to perform.
-
-      jet: Whether to search for a jet liquid class. Only used on dispense.
-      blow_out: Whether to use "blow out" dispense mode. Only used on dispense. Note that this is
-        labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
-        documentation.
-      hlc: The Hamiltonian liquid class to use. If `None`, the liquid class will be determined
-        automatically.
-
-      use_lld: If True, use gamma liquid level detection. If False, use liquid height.
-      pull_out_distance_transport_air: The distance to retract after aspirating, in millimeters.
-
-      aspiration_type: The type of aspiration to perform. (0 = simple; 1 = sequence; 2 = cup emptied)
-      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
-        starting the command.
-      min_z_endpos: The minimum height to move to after the command.
-      lld_search_height: The height to search for the liquid level.
-      minimum_height: Minimum height (maximum immersion depth)
-      second_section_height: Height of the second section.
-      second_section_ratio: Ratio of [the diameter of the bottom * 10000] / [the diameter of the top]
-      immersion_depth: The immersion depth above or below the liquid level.
-      surface_following_distance: The distance to follow the liquid surface when aspirating.
-      transport_air_volume: The volume of air to aspirate after the liquid.
-      pre_wetting_volume: The volume of liquid to use for pre-wetting.
-      gamma_lld_sensitivity: The sensitivity of the gamma liquid level detection.
-      swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 0.3 and 160. Default 2.
-      settling_time: The time to wait after aspirating.
-      mix_position_from_liquid_surface: The position of the mix from the liquid surface.
-      mix_surface_following_distance: The distance to follow the liquid surface during mix.
-      limit_curve_index: The index of the limit curve to use.
-      disable_volume_correction: Whether to disable liquid class volume correction.
-    """
-
-    # # # TODO: delete > 2026-01 # # #
-    if mix_volume != 0 or mix_cycles != 0 or speed_of_mix != 0:
-      raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate96 instead. "
-        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
-      )
-
-    if immersion_depth_direction is not None:
-      warnings.warn(
-        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
-        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
-        "out of the liquid.",
-        DeprecationWarning,
-      )
-
-    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
-      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
-      warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
-        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding surface_following_distance.",
-        DeprecationWarning,
-      )
-
-    if minimal_end_height is not None:
-      min_z_endpos = minimal_end_height
-      warnings.warn(
-        "The minimal_end_height parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard min_z_endpos parameter instead.\n"
-        "min_z_endpos currently superseding minimal_end_height.",
-        DeprecationWarning,
-      )
-
-    if air_transport_retract_dist is not None:
-      pull_out_distance_transport_air = air_transport_retract_dist
-      warnings.warn(
-        "The air_transport_retract_dist parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
-        "pull_out_distance_transport_air currently superseding air_transport_retract_dist.",
-        DeprecationWarning,
-      )
-
-    if maximum_immersion_depth is not None:
-      minimum_height = maximum_immersion_depth
-      warnings.warn(
-        "The maximum_immersion_depth parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard minimum_height parameter instead.\n"
-        "minimum_height currently superseding maximum_immersion_depth.",
-        DeprecationWarning,
-      )
-
-    if surface_following_distance_during_mix != 0:
-      mix_surface_following_distance = surface_following_distance_during_mix
-      warnings.warn(
-        "The surface_following_distance_during_mix parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
-        "mix_surface_following_distance currently superseding surface_following_distance_during_mix.",
-        DeprecationWarning,
-      )
-
-    if tube_2nd_section_height_measured_from_zm != 3.2:
-      second_section_height = tube_2nd_section_height_measured_from_zm
-      warnings.warn(
-        "The tube_2nd_section_height_measured_from_zm parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard second_section_height parameter instead.\n"
-        "second_section_height_measured_from_zm currently superseding second_section_height.",
-        DeprecationWarning,
-      )
-
-    if tube_2nd_section_ratio != 618.0:
-      second_section_ratio = tube_2nd_section_ratio
-      warnings.warn(
-        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard second_section_ratio parameter instead.\n"
-        "second_section_ratio currently superseding tube_2nd_section_ratio.",
-        DeprecationWarning,
-      )
-    # # # delete # # #
-
-    # get the first well and tip as representatives
-    if isinstance(aspiration, MultiHeadAspirationPlate):
-      plate = aspiration.wells[0].parent
-      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
-      rot = plate.get_absolute_rotation()
-      if rot.x % 360 != 0 or rot.y % 360 != 0:
-        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
-      if rot.z % 360 == 180:
-        ref_well = aspiration.wells[-1]
-      elif rot.z % 360 == 0:
-        ref_well = aspiration.wells[0]
-      else:
-        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
-
-      position = (
-        ref_well.get_location_wrt(self.deck)
-        + ref_well.center()
-        + Coordinate(z=ref_well.material_z_thickness)
-        + aspiration.offset
-      )
-    else:
-      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
-      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
-      x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
-      y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
-      position = (
-        aspiration.container.get_location_wrt(self.deck, z="cavity_bottom")
-        + Coordinate(x=x_position, y=y_position)
-        + aspiration.offset
-      )
-    self._check_96_position_legal(position, skip_z=True)
-
-    tip = next(tip for tip in aspiration.tips if tip is not None)
-
-    liquid_height = position.z + (aspiration.liquid_height or 0)
-
-    hlc = hlc or get_star_liquid_class(
-      tip_volume=tip.maximal_volume,
-      is_core=True,
-      is_tip=True,
-      has_filter=tip.has_filter,
-      # get last liquid in pipette, first to be dispensed
-      liquid=Liquid.WATER,  # default to WATER
-      jet=jet,
-      blow_out=blow_out,  # see comment in method docstring
-    )
-
-    if disable_volume_correction or hlc is None:
-      volume = aspiration.volume
-    else:  # hlc is not None and not disable_volume_correction
-      volume = hlc.compute_corrected_volume(aspiration.volume)
-
-    # Get better default values from the HLC if available
-    transport_air_volume = transport_air_volume or (
-      hlc.aspiration_air_transport_volume if hlc is not None else 0
-    )
-    blow_out_air_volume = aspiration.blow_out_air_volume or (
-      hlc.aspiration_blow_out_volume if hlc is not None else 0
-    )
-    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
-    swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
-
-    x_direction = 0 if position.x >= 0 else 1
-    return await self.aspirate_core_96(
-      x_position=abs(round(position.x * 10)),
-      x_direction=x_direction,
-      y_positions=round(position.y * 10),
-      aspiration_type=aspiration_type,
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-      lld_search_height=round(lld_search_height * 10),
-      liquid_surface_no_lld=round(liquid_height * 10),
-      pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      minimum_height=round((minimum_height or position.z) * 10),
-      second_section_height=round(second_section_height * 10),
-      second_section_ratio=round(second_section_ratio * 10),
-      immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
-      surface_following_distance=round(surface_following_distance * 10),
-      aspiration_volumes=round(volume * 10),
-      aspiration_speed=round(flow_rate * 10),
-      transport_air_volume=round(transport_air_volume * 10),
-      blow_out_air_volume=round(blow_out_air_volume * 10),
-      pre_wetting_volume=round(pre_wetting_volume * 10),
-      lld_mode=int(use_lld),
-      gamma_lld_sensitivity=gamma_lld_sensitivity,
-      swap_speed=round(swap_speed * 10),
-      settling_time=round(settling_time * 10),
-      mix_volume=round(aspiration.mix.volume * 10) if aspiration.mix is not None else 0,
-      mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
-      mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
-      mix_surface_following_distance=round(mix_surface_following_distance * 10),
-      speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
-      channel_pattern=[True] * 12 * 8,
-      limit_curve_index=limit_curve_index,
-      tadm_algorithm=False,
-      recording_mode=0,
-    )
-
-  @_requires_head96
-  async def dispense96(
-    self,
-    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
-    jet: bool = False,
-    empty: bool = False,
-    blow_out: bool = False,
-    hlc: Optional[HamiltonLiquidClass] = None,
-    pull_out_distance_transport_air=10,
-    use_lld: bool = False,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    min_z_endpos: Optional[float] = None,
-    lld_search_height: float = 199.9,
-    minimum_height: Optional[float] = None,
-    second_section_height: float = 3.2,
-    second_section_ratio: float = 618.0,
-    immersion_depth: float = 0,
-    surface_following_distance: float = 0,
-    transport_air_volume: float = 5.0,
-    gamma_lld_sensitivity: int = 1,
-    swap_speed: float = 2.0,
-    settling_time: float = 0,
-    mix_position_from_liquid_surface: float = 0,
-    mix_surface_following_distance: float = 0,
-    limit_curve_index: int = 0,
-    cut_off_speed: float = 5.0,
-    stop_back_volume: float = 0,
-    disable_volume_correction: bool = False,
-    # Deprecated parameters, to be removed in future versions
-    # rm: >2026-01
-    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,  # surface_following_distance!
-    maximum_immersion_depth: Optional[float] = None,
-    minimal_end_height: Optional[float] = None,
-    mixing_position_from_liquid_surface: float = 0,
-    surface_following_distance_during_mixing: float = 0,
-    air_transport_retract_dist=10,
-    tube_2nd_section_ratio: float = 618.0,
-    tube_2nd_section_height_measured_from_zm: float = 3.2,
-    immersion_depth_direction: Optional[int] = None,
-    mixing_volume: float = 0,
-    mixing_cycles: int = 0,
-    speed_of_mixing: float = 0.0,
-    dispense_mode: Optional[int] = None,
-  ):
-    """Dispense using the Core96 head.
-
-    Args:
-      dispense: The Dispense command to execute.
-      jet: Whether to use jet dispense mode.
-      empty: Whether to use empty dispense mode.
-      blow_out: Whether to blow out after dispensing.
-      pull_out_distance_transport_air: The distance to retract after dispensing, in mm.
-      use_lld: Whether to use gamma LLD.
-
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-        command, in mm.
-      min_z_endpos: Minimal end height, in mm.
-      lld_search_height: LLD search height, in mm.
-      minimum_height: Maximum immersion depth, in mm. Equals Minimum height during command.
-      second_section_height: Height of the second section, in mm.
-      second_section_ratio: Ratio of [the diameter of the bottom * 10000] / [the diameter of the top].
-      immersion_depth: Immersion depth, in mm.
-      surface_following_distance: Surface following distance, in mm. Default 0.
-      transport_air_volume: Transport air volume, to dispense before aspiration.
-      gamma_lld_sensitivity: Gamma LLD sensitivity.
-      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 0.3 and 160. Default 10.
-      settling_time: Settling time, in seconds.
-      mix_position_from_liquid_surface: Mixing position from liquid surface, in mm.
-      mix_surface_following_distance: Surface following distance during mixing, in mm.
-      limit_curve_index: Limit curve index.
-      cut_off_speed: Unknown.
-      stop_back_volume: Unknown.
-      disable_volume_correction: Whether to disable liquid class volume correction.
-    """
-
-    # # # TODO: delete > 2026-01 # # #
-    if mixing_volume != 0 or mixing_cycles != 0 or speed_of_mixing != 0:
-      raise NotImplementedError(
-        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
-        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
-      )
-
-    if immersion_depth_direction is not None:
-      warnings.warn(
-        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
-        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
-        "out of the liquid.",
-        DeprecationWarning,
-      )
-
-    if liquid_surface_sink_distance_at_the_end_of_dispense != 0:
-      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_dispense
-      warnings.warn(
-        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
-        "liquid_surface_sink_distance_at_the_end_of_dispense currently superseding surface_following_distance.",
-        DeprecationWarning,
-      )
-
-    if maximum_immersion_depth is not None:
-      minimum_height = maximum_immersion_depth
-      warnings.warn(
-        "The maximum_immersion_depth parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard minimum_height parameter instead.\n"
-        "minimum_height currently superseding maximum_immersion_depth.",
-        DeprecationWarning,
-      )
-
-    if minimal_end_height is not None:
-      min_z_endpos = minimal_end_height
-      warnings.warn(
-        "The minimal_end_height parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard min_z_endpos parameter instead.\n"
-        "min_z_endpos currently superseding minimal_end_height.",
-        DeprecationWarning,
-      )
-
-    if mixing_position_from_liquid_surface != 0:
-      mix_position_from_liquid_surface = mixing_position_from_liquid_surface
-      warnings.warn(
-        "The mixing_position_from_liquid_surface parameter is deprecated and will be removed in the future "
-        "Use the Hamilton-standard mix_position_from_liquid_surface parameter instead.\n"
-        "mix_position_from_liquid_surface currently superseding mixing_position_from_liquid_surface.",
-        DeprecationWarning,
-      )
-
-    if surface_following_distance_during_mixing != 0:
-      mix_surface_following_distance = surface_following_distance_during_mixing
-      warnings.warn(
-        "The surface_following_distance_during_mixing parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
-        "mix_surface_following_distance currently superseding surface_following_distance_during_mixing.",
-        DeprecationWarning,
-      )
-
-    if air_transport_retract_dist != 10:
-      pull_out_distance_transport_air = air_transport_retract_dist
-      warnings.warn(
-        "The air_transport_retract_dist parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
-        "pull_out_distance_transport_air currently superseding air_transport_retract_dist.",
-        DeprecationWarning,
-      )
-
-    if tube_2nd_section_ratio != 618.0:
-      second_section_ratio = tube_2nd_section_ratio
-      warnings.warn(
-        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard second_section_ratio parameter instead.\n"
-        "second_section_ratio currently superseding tube_2nd_section_ratio.",
-        DeprecationWarning,
-      )
-
-    if tube_2nd_section_height_measured_from_zm != 3.2:
-      second_section_height = tube_2nd_section_height_measured_from_zm
-      warnings.warn(
-        "The tube_2nd_section_height_measured_from_zm parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard second_section_height parameter instead.\n"
-        "second_section_height currently superseding tube_2nd_section_height_measured_from_zm.",
-        DeprecationWarning,
-      )
-
-    if dispense_mode is not None:
-      warnings.warn(
-        "The dispense_mode parameter is deprecated and will be removed in the future. "
-        "Use the combination of the `jet`, `empty` and `blow_out` parameters instead. "
-        "dispense_mode currently superseding those parameters.",
-        DeprecationWarning,
-      )
-    else:
-      dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
-    # # # delete # # #
-
-    # get the first well and tip as representatives
-    if isinstance(dispense, MultiHeadDispensePlate):
-      plate = dispense.wells[0].parent
-      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
-      rot = plate.get_absolute_rotation()
-      if rot.x % 360 != 0 or rot.y % 360 != 0:
-        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
-      if rot.z % 360 == 180:
-        ref_well = dispense.wells[-1]
-      elif rot.z % 360 == 0:
-        ref_well = dispense.wells[0]
-      else:
-        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
-
-      position = (
-        ref_well.get_location_wrt(self.deck)
-        + ref_well.center()
-        + Coordinate(z=ref_well.material_z_thickness)
-        + dispense.offset
-      )
-    else:
-      # dispense in the center of the container
-      # but we have to get the position of the center of tip A1
-      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
-      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
-      x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
-      y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
-      position = (
-        dispense.container.get_location_wrt(self.deck, z="cavity_bottom")
-        + Coordinate(x=x_position, y=y_position)
-        + dispense.offset
-      )
-    self._check_96_position_legal(position, skip_z=True)
-    tip = next(tip for tip in dispense.tips if tip is not None)
-
-    liquid_height = position.z + (dispense.liquid_height or 0)
-
-    hlc = hlc or get_star_liquid_class(
-      tip_volume=tip.maximal_volume,
-      is_core=True,
-      is_tip=True,
-      has_filter=tip.has_filter,
-      # get last liquid in pipette, first to be dispensed
-      liquid=Liquid.WATER,  # default to WATER
-      jet=jet,
-      blow_out=blow_out,  # see comment in method docstring
-    )
-
-    if disable_volume_correction or hlc is None:
-      volume = dispense.volume
-    else:  # hlc is not None and not disable_volume_correction
-      volume = hlc.compute_corrected_volume(dispense.volume)
-
-    transport_air_volume = transport_air_volume or (
-      hlc.dispense_air_transport_volume if hlc is not None else 0
-    )
-    blow_out_air_volume = dispense.blow_out_air_volume or (
-      hlc.dispense_blow_out_volume if hlc is not None else 0
-    )
-    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
-    swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
-
-    return await self.dispense_core_96(
-      dispensing_mode=dispense_mode,
-      x_position=abs(round(position.x * 10)),
-      x_direction=0 if position.x >= 0 else 1,
-      y_position=round(position.y * 10),
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
-      ),
-      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
-      lld_search_height=round(lld_search_height * 10),
-      liquid_surface_no_lld=round(liquid_height * 10),
-      pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
-      minimum_height=round((minimum_height or position.z) * 10),
-      second_section_height=round(second_section_height * 10),
-      second_section_ratio=round(second_section_ratio * 10),
-      immersion_depth=round(immersion_depth * 10),
-      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
-      surface_following_distance=round(surface_following_distance * 10),
-      dispense_volume=round(volume * 10),
-      dispense_speed=round(flow_rate * 10),
-      transport_air_volume=round(transport_air_volume * 10),
-      blow_out_air_volume=round(blow_out_air_volume * 10),
-      lld_mode=int(use_lld),
-      gamma_lld_sensitivity=gamma_lld_sensitivity,
-      swap_speed=round(swap_speed * 10),
-      settling_time=round(settling_time * 10),
-      mixing_volume=round(dispense.mix.volume * 10) if dispense.mix is not None else 0,
-      mixing_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
-      mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
-      mix_surface_following_distance=round(mix_surface_following_distance * 10),
-      speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 1200,
-      channel_pattern=[True] * 12 * 8,
-      limit_curve_index=limit_curve_index,
-      tadm_algorithm=False,
-      recording_mode=0,
-      cut_off_speed=round(cut_off_speed * 10),
-      stop_back_volume=round(stop_back_volume * 10),
-    )
-
   async def iswap_move_picked_up_resource(
     self,
     center: Coordinate,
@@ -4910,15 +4245,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """
 
     return await self.send_command(module="C0", command="AG", x_offset=x_offset)
-
-  async def set_x_offset_x_axis_core_96_head(self, x_offset: int):
-    """Set X-offset X-axis <-> CoRe 96 head
-
-    Args:
-      x_offset: X-offset [0.1mm]
-    """
-
-    return await self.send_command(module="C0", command="AF", x_offset=x_offset)
 
   async def set_x_offset_x_axis_core_nano_pipettor_head(self, x_offset: int):
     """Set X-offset X-axis <-> CoRe 96 head
@@ -7011,131 +6337,10 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   # -------------- 3.10 96-Head commands --------------
 
-  async def head96_request_firmware_version(self) -> datetime.date:
-    """Request 96 Head firmware version (MEM-READ command)."""
-    resp: str = await self.send_command(module="H0", command="RF")
-    return self._parse_firmware_version_datetime(resp)
+  # -------------- 3.10.1 Constants & unit conversion helpers --------------
 
-  async def _head96_request_configuration(self) -> List[str]:
-    """Request the 96-head configuration (raw) using the QU command.
-
-    The instrument returns a sequence of positional tokens. This method returns
-    those tokens without decoding them, but the following indices are currently
-    understood:
-
-        - index 0: clot_monitoring_with_clld
-        - index 1: stop_disc_type (codes: 0=core_i, 1=core_ii)
-        - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
-        - indices 3..9: reservable positions (positions 4..10)
-
-    Returns:
-      Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
-    """
-    resp: str = await self.send_command(module="H0", command="QU")
-    return resp.split("au")[-1].split()
-
-  async def head96_request_type(self) -> Head96Information.HeadType:
-    """Send QG and return the 96-head type as a human-readable string."""
-    type_map: Dict[int, Head96Information.HeadType] = {
-      0: "Low volume head",
-      1: "High volume head",
-      2: "96 head II",
-      3: "96 head TADM",
-    }
-    resp = await self.send_command(module="H0", command="QG", fmt="qg#")
-    return type_map.get(resp["qg"], "unknown")
-
-  # -------------- 3.10.1 Initialization --------------
-
-  async def initialize_core_96_head(
-    self, trash96: Trash, z_position_at_the_command_end: float = 245.0
-  ):
-    """Initialize CoRe 96 Head
-
-    Args:
-      trash96: Trash object where tips should be disposed. The 96 head will be positioned in the
-        center of the trash.
-      z_position_at_the_command_end: Z position at the end of the command [mm].
-    """
-
-    # The firmware command expects location of tip A1 of the head.
-    loc = self._position_96_head_in_resource(trash96)
-    self._check_96_position_legal(loc, skip_z=True)
-
-    return await self.send_command(
-      module="C0",
-      command="EI",
-      read_timeout=60,
-      xs=f"{abs(round(loc.x * 10)):05}",
-      xd=0 if loc.x >= 0 else 1,
-      yh=f"{abs(round(loc.y * 10)):04}",
-      za=f"{round(loc.z * 10):04}",
-      ze=f"{round(z_position_at_the_command_end * 10):04}",
-    )
-
-  async def request_core_96_head_initialization_status(self) -> bool:
-    # not available in the C0 docs, so get from module H0 itself instead
-    response = await self.send_command(module="H0", command="QW", fmt="qw#")
-    return bool(response.get("qw", 0) == 1)  # type?
-
-  async def head96_dispensing_drive_and_squeezer_driver_initialize(
-    self,
-    squeezer_speed: float = 15.0,  # mm/sec
-    squeezer_acceleration: float = 62.0,  # mm/sec**2,
-    squeezer_current_limit: int = 15,
-    dispensing_drive_current_limit: int = 7,
-  ):
-    """Initialize 96-head's dispensing drive AND squeezer drive
-
-    This command...
-      - drops any tips that might be on the channel (in place, without moving to trash!)
-      - moves the dispense drive to volume position 215.92 uL
-        (after tip pickup it will be at 218.19 uL)
-
-    Args:
-      squeezer_speed: Speed of the movement (mm/sec). Default is 15.0 mm/sec.
-      squeezer_acceleration: Acceleration of the movement (mm/sec**2). Default is 62.0 mm/sec**2.
-      squeezer_current_limit: Current limit for the squeezer drive (1-15). Default is 15.
-      dispensing_drive_current_limit: Current limit for the dispensing drive (1-15). Default is 7.
-    """
-
-    if not (0.01 <= squeezer_speed <= 16.69):
-      raise ValueError(
-        f"96-head squeezer drive speed must be between 0.01 and 16.69 mm/sec, is {squeezer_speed}"
-      )
-    if not (1.04 <= squeezer_acceleration <= 62.6):
-      raise ValueError(
-        "96-head squeezer drive acceleration must be between 1.04 and "
-        f"62.6 mm/sec**2, is {squeezer_acceleration}"
-      )
-    if not (1 <= squeezer_current_limit <= 15):
-      raise ValueError(
-        "96-head squeezer drive current limit must be between 1 and 15, "
-        f"is {squeezer_current_limit}"
-      )
-    if not (1 <= dispensing_drive_current_limit <= 15):
-      raise ValueError(
-        "96-head dispensing drive current limit must be between 1 and 15, "
-        f"is {dispensing_drive_current_limit}"
-      )
-
-    squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
-    squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
-      squeezer_acceleration
-    )
-
-    resp = await self.send_command(
-      module="H0",
-      command="PI",
-      sv=f"{squeezer_speed_increment:05}",
-      sr=f"{squeezer_acceleration_increment:06}",
-      sw=f"{squeezer_current_limit:02}",
-      dw=f"{dispensing_drive_current_limit:02}",
-    )
-
-    return resp
-
-  # -------------- 3.10.2 96-Head Movements --------------
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = 0
+  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP = 1244.59
 
   # Conversion factors for 96-Head (mm per increment)
   _head96_z_drive_mm_per_increment = 0.005
@@ -7204,17 +6409,132 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     """Convert squeezer drive hardware increments to mm for 96-head."""
     return round(value_increments * self._head96_squeezer_drive_mm_per_increment, 2)
 
-  # Movement commands
+  # -------------- 3.10.2 Firmware info queries --------------
 
-  async def move_core_96_to_safe_position(self):
-    """Move CoRe 96 Head to Z safe position."""
-    warnings.warn(
-      "move_core_96_to_safe_position is deprecated. Use head96_move_to_z_safety instead. "
-      "This method will be removed in 2026-04",  # TODO: remove 2026-04
-      DeprecationWarning,
-      stacklevel=2,
+  async def head96_request_firmware_version(self) -> datetime.date:
+    """Request 96 Head firmware version (MEM-READ command)."""
+    resp: str = await self.send_command(module="H0", command="RF")
+    return self._parse_firmware_version_datetime(resp)
+
+  async def _head96_request_configuration(self) -> List[str]:
+    """Request the 96-head configuration (raw) using the QU command.
+
+    The instrument returns a sequence of positional tokens. This method returns
+    those tokens without decoding them, but the following indices are currently
+    understood:
+
+        - index 0: clot_monitoring_with_clld
+        - index 1: stop_disc_type (codes: 0=core_i, 1=core_ii)
+        - index 2: instrument_type (codes: 0=legacy, 1=FM-STAR)
+        - indices 3..9: reservable positions (positions 4..10)
+
+    Returns:
+      Raw positional tokens extracted from the QU response (the portion after the last ``"au"`` marker).
+    """
+    resp: str = await self.send_command(module="H0", command="QU")
+    return resp.split("au")[-1].split()
+
+  async def head96_request_type(self) -> Head96Information.HeadType:
+    """Send QG and return the 96-head type as a human-readable string."""
+    type_map: Dict[int, Head96Information.HeadType] = {
+      0: "Low volume head",
+      1: "High volume head",
+      2: "96 head II",
+      3: "96 head TADM",
+    }
+    resp = await self.send_command(module="H0", command="QG", fmt="qg#")
+    return type_map.get(resp["qg"], "unknown")
+
+  # -------------- 3.10.3 Initialization --------------
+
+  async def head96_initialize(self, trash96: Trash, z_position_at_the_command_end: float = 245.0):
+    """Initialize CoRe 96 Head
+
+    Args:
+      trash96: Trash object where tips should be disposed. The 96 head will be positioned in the
+        center of the trash.
+      z_position_at_the_command_end: Z position at the end of the command [mm].
+    """
+
+    # The firmware command expects location of tip A1 of the head.
+    loc = self._position_96_head_in_resource(trash96)
+    self._check_96_position_legal(loc, skip_z=True)
+
+    return await self.send_command(
+      module="C0",
+      command="EI",
+      read_timeout=60,
+      xs=f"{abs(round(loc.x * 10)):05}",
+      xd=0 if loc.x >= 0 else 1,
+      yh=f"{abs(round(loc.y * 10)):04}",
+      za=f"{round(loc.z * 10):04}",
+      ze=f"{round(z_position_at_the_command_end * 10):04}",
     )
-    return await self.head96_move_to_z_safety()
+
+  async def head96_request_initialization_status(self) -> bool:
+    """Request initialization status of CoRe 96 Head."""
+    # not available in the C0 docs, so get from module H0 itself instead
+    response = await self.send_command(module="H0", command="QW", fmt="qw#")
+    return bool(response.get("qw", 0) == 1)  # type?
+
+  async def head96_dispensing_drive_and_squeezer_driver_initialize(
+    self,
+    squeezer_speed: float = 15.0,  # mm/sec
+    squeezer_acceleration: float = 62.0,  # mm/sec**2,
+    squeezer_current_limit: int = 15,
+    dispensing_drive_current_limit: int = 7,
+  ):
+    """Initialize 96-head's dispensing drive AND squeezer drive
+
+    This command...
+      - drops any tips that might be on the channel (in place, without moving to trash!)
+      - moves the dispense drive to volume position 215.92 uL
+        (after tip pickup it will be at 218.19 uL)
+
+    Args:
+      squeezer_speed: Speed of the movement (mm/sec). Default is 15.0 mm/sec.
+      squeezer_acceleration: Acceleration of the movement (mm/sec**2). Default is 62.0 mm/sec**2.
+      squeezer_current_limit: Current limit for the squeezer drive (1-15). Default is 15.
+      dispensing_drive_current_limit: Current limit for the dispensing drive (1-15). Default is 7.
+    """
+
+    if not (0.01 <= squeezer_speed <= 16.69):
+      raise ValueError(
+        f"96-head squeezer drive speed must be between 0.01 and 16.69 mm/sec, is {squeezer_speed}"
+      )
+    if not (1.04 <= squeezer_acceleration <= 62.6):
+      raise ValueError(
+        "96-head squeezer drive acceleration must be between 1.04 and "
+        f"62.6 mm/sec**2, is {squeezer_acceleration}"
+      )
+    if not (1 <= squeezer_current_limit <= 15):
+      raise ValueError(
+        "96-head squeezer drive current limit must be between 1 and 15, "
+        f"is {squeezer_current_limit}"
+      )
+    if not (1 <= dispensing_drive_current_limit <= 15):
+      raise ValueError(
+        "96-head dispensing drive current limit must be between 1 and 15, "
+        f"is {dispensing_drive_current_limit}"
+      )
+
+    squeezer_speed_increment = self._head96_squeezer_drive_mm_to_increment(squeezer_speed)
+    squeezer_acceleration_increment = self._head96_squeezer_drive_mm_to_increment(
+      squeezer_acceleration
+    )
+
+    resp = await self.send_command(
+      module="H0",
+      command="PI",
+      sv=f"{squeezer_speed_increment:05}",
+      sr=f"{squeezer_acceleration_increment:06}",
+      sw=f"{squeezer_current_limit:02}",
+      dw=f"{dispensing_drive_current_limit:02}",
+    )
+
+    return resp
+
+  # -------------- 3.10.4 Single-axis movements --------------
 
   @_requires_head96
   async def head96_move_to_z_safety(self):
@@ -7394,11 +6714,250 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return resp
 
-  # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
+  # -------------- 3.10.5 Dispensing drive operations --------------
+
+  async def head96_dispensing_drive_move_to_home_volume(
+    self,
+  ):
+    """Move the 96-head dispensing drive into its home position (vol=0.0 uL).
+
+    .. warning::
+      This firmware command is known to be broken: the 96-head dispensing drive cannot reach
+      vol=0.0 uL, which typically raises
+      ``STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted
+      area')}``.
+    """
+
+    logger.warning(
+      "head96_dispensing_drive_move_to_home_volume is a known broken firmware command: "
+      "the 96-head dispensing drive cannot reach vol=0.0 uL and will likely raise "
+      "STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted "
+      "area')}. Attempting to send the command anyway."
+    )
+
+    return await self.send_command(
+      module="H0",
+      command="DL",
+    )
+
+  @_requires_head96
+  async def head96_dispensing_drive_move_to_position(
+    self,
+    position,
+    speed: float = 261.1,
+    stop_speed: float = 0,
+    acceleration: float = 17406.84,
+    current_protection_limiter: int = 15,
+  ):
+    """Move dispensing drive to absolute position in uL
+
+    Args:
+      position: Position in uL. Between 0, 1244.59.
+      speed: Speed in uL/s. Between 0.1, 1063.75.
+      stop_speed: Stop speed in uL/s. Between 0, 1063.75.
+      acceleration: Acceleration in uL/s^2. Between 96.7, 17406.84.
+      current_protection_limiter: Current protection limiter (0-15), default 15
+    """
+
+    if not (
+      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
+      <= position
+      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
+    ):
+      raise ValueError("position must be between 0 and 1244.59")
+    if not (0.1 <= speed <= 1063.75):
+      raise ValueError("speed must be between 0.1 and 1063.75")
+    if not (0 <= stop_speed <= 1063.75):
+      raise ValueError("stop_speed must be between 0 and 1063.75")
+    if not (96.7 <= acceleration <= 17406.84):
+      raise ValueError("acceleration must be between 96.7 and 17406.84")
+    if not (0 <= current_protection_limiter <= 15):
+      raise ValueError("current_protection_limiter must be between 0 and 15")
+
+    position_increments = self._head96_dispensing_drive_uL_to_increment(position)
+    speed_increments = self._head96_dispensing_drive_uL_to_increment(speed)
+    stop_speed_increments = self._head96_dispensing_drive_uL_to_increment(stop_speed)
+    acceleration_increments = self._head96_dispensing_drive_uL_to_increment(acceleration)
+
+    await self.send_command(
+      module="H0",
+      command="DQ",
+      dq=f"{position_increments:05}",
+      dv=f"{speed_increments:05}",
+      du=f"{stop_speed_increments:05}",
+      dr=f"{acceleration_increments:06}",
+      dw=f"{current_protection_limiter:02}",
+    )
+
+  async def head96_dispensing_drive_request_position_mm(self) -> float:
+    """Request 96 Head dispensing drive position in mm"""
+    resp = await self.send_command(module="H0", command="RD", fmt="rd######")
+    return self._head96_dispensing_drive_increment_to_mm(resp["rd"])
+
+  async def head96_dispensing_drive_request_position_uL(self) -> float:
+    """Request 96 Head dispensing drive position in uL"""
+    position_mm = await self.head96_dispensing_drive_request_position_mm()
+    return self._head96_dispensing_drive_mm_to_uL(position_mm)
+
+  # -------------- 3.10.6 Calibration --------------
+
+  async def head96_set_x_offset(self, x_offset: int):
+    """Set X-offset X-axis <-> CoRe 96 head
+
+    Args:
+      x_offset: X-offset [0.1mm]
+    """
+
+    return await self.send_command(module="C0", command="AF", x_offset=x_offset)
+
+  # -------------- 3.10.7 Tip handling --------------
+
+  @_requires_head96
+  async def pick_up_tips96(
+    self,
+    pickup: PickupTipRack,
+    tip_pickup_method: Literal["from_rack", "from_waste", "full_blowout"] = "from_rack",
+    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    experimental_alignment_tipspot_identifier: str = "A1",
+  ):
+    """Pick up tips using the 96 head.
+
+    `tip_pickup_method` can be one of the following:
+        - "from_rack": standard tip pickup from a tip rack. this moves the plunger all the way down before mounting tips.
+        - "from_waste":
+            1. it actually moves the plunger all the way up
+            2. mounts tips
+            3. moves up like 10mm
+            4. moves plunger all the way down
+            5. moves to traversal height (tips out of rack)
+        - "full_blowout":
+            1. it actually moves the plunger all the way up
+            2. mounts tips
+            3. moves to traversal height (tips out of rack)
+
+    Args:
+      pickup: The standard `PickupTipRack` operation.
+      tip_pickup_method: The method to use for picking up tips. One of "from_rack", "from_waste", "full_blowout".
+      minimum_height_command_end: The minimum height to move to at the end of the command.
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to at the beginning of the command.
+      experimental_alignment_tipspot_identifier: The tipspot to use for alignment with head's A1 channel. Defaults to "tipspot A1".  allowed range is A1 to H12.
+    """
+
+    if isinstance(tip_pickup_method, int):
+      warnings.warn(
+        "tip_pickup_method as int is deprecated and will be removed in the future. Use string literals instead.",
+        DeprecationWarning,
+      )
+      tip_pickup_method = {0: "from_rack", 1: "from_waste", 2: "full_blowout"}[tip_pickup_method]
+
+    if tip_pickup_method not in {"from_rack", "from_waste", "full_blowout"}:
+      raise ValueError(f"Invalid tip_pickup_method: '{tip_pickup_method}'.")
+
+    prototypical_tip = next((tip for tip in pickup.tips if tip is not None), None)
+    if prototypical_tip is None:
+      raise ValueError("No tips found in the tip rack.")
+    if not isinstance(prototypical_tip, HamiltonTip):
+      raise TypeError("Tip type must be HamiltonTip.")
+
+    ttti = await self.get_or_assign_tip_type_index(prototypical_tip)
+
+    tip_length = prototypical_tip.total_tip_length
+    fitting_depth = prototypical_tip.fitting_depth
+    tip_engage_height_from_tipspot = tip_length - fitting_depth
+
+    # Adjust tip engage height based on tip size
+    if prototypical_tip.tip_size == TipSize.LOW_VOLUME:
+      tip_engage_height_from_tipspot += 2
+    elif prototypical_tip.tip_size != TipSize.STANDARD_VOLUME:
+      tip_engage_height_from_tipspot -= 2
+
+    # Compute pickup Z
+    alignment_tipspot = pickup.resource.get_item(experimental_alignment_tipspot_identifier)
+    tip_spot_z = alignment_tipspot.get_location_wrt(self.deck).z + pickup.offset.z
+    z_pickup_position = tip_spot_z + tip_engage_height_from_tipspot
+
+    # Compute full position (used for x/y)
+    pickup_position = (
+      alignment_tipspot.get_location_wrt(self.deck) + alignment_tipspot.center() + pickup.offset
+    )
+    pickup_position.z = round(z_pickup_position, 2)
+
+    self._check_96_position_legal(pickup_position, skip_z=True)
+
+    if tip_pickup_method == "from_rack":
+      # the STAR will not automatically move the dispensing drive down if it is still up
+      # so we need to move it down here
+      # see https://github.com/PyLabRobot/pylabrobot/pull/835
+      lowest_dispensing_drive_height_no_tips = 218.19
+      await self.head96_dispensing_drive_move_to_position(lowest_dispensing_drive_height_no_tips)
+
+    try:
+      await self._head96_low_level_pick_up_tips(
+        x_position=abs(round(pickup_position.x * 10)),
+        x_direction=0 if pickup_position.x >= 0 else 1,
+        y_position=round(pickup_position.y * 10),
+        tip_type_idx=ttti,
+        tip_pickup_method={
+          "from_rack": 0,
+          "from_waste": 1,
+          "full_blowout": 2,
+        }[tip_pickup_method],
+        z_deposit_position=round(pickup_position.z * 10),
+        minimum_traverse_height_at_beginning_of_a_command=round(
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        ),
+        minimum_height_command_end=round(
+          (minimum_height_command_end or self._channel_traversal_height) * 10
+        ),
+      )
+    except STARFirmwareError as e:
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
+      raise e
+
+  @_requires_head96
+  async def drop_tips96(
+    self,
+    drop: DropTipRack,
+    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    experimental_alignment_tipspot_identifier: str = "A1",
+  ):
+    """Drop tips from the 96 head."""
+
+    if isinstance(drop.resource, TipRack):
+      tip_spot_a1 = drop.resource.get_item(experimental_alignment_tipspot_identifier)
+      position = tip_spot_a1.get_location_wrt(self.deck) + tip_spot_a1.center() + drop.offset
+      tip_rack = tip_spot_a1.parent
+      assert tip_rack is not None
+      position.z = tip_rack.get_location_wrt(self.deck).z + 1.45
+      # This should be the case for all normal hamilton tip carriers + racks
+      # In the future, we might want to make this more flexible
+      assert abs(position.z - 216.4) < 1e-6, f"z position must be 216.4, got {position.z}"
+    else:
+      position = self._position_96_head_in_resource(drop.resource) + drop.offset
+
+    self._check_96_position_legal(position, skip_z=True)
+
+    x_direction = 0 if position.x >= 0 else 1
+
+    return await self._head96_low_level_discard_tips(
+      x_position=abs(round(position.x * 10)),
+      x_direction=x_direction,
+      y_position=round(position.y * 10),
+      z_deposit_position=round(position.z * 10),
+      minimum_traverse_height_at_beginning_of_a_command=round(
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+      ),
+      minimum_height_command_end=round(
+        (minimum_height_command_end or self._channel_traversal_height) * 10
+      ),
+    )
 
   @need_iswap_parked
   @_requires_head96
-  async def pick_up_tips_core96(
+  async def _head96_low_level_pick_up_tips(
     self,
     x_position: int,
     x_direction: int,
@@ -7451,7 +7010,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   @need_iswap_parked
   @_requires_head96
-  async def discard_tips_core96(
+  async def _head96_low_level_discard_tips(
     self,
     x_position: int,
     x_direction: int,
@@ -7466,9 +7025,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       x_position: x position [0.1mm]. Must be between 0 and 30000. Default 0.
       x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       y_position: y position [0.1mm]. Must be between 1080 and 5600. Default 5600.
-      tip_type: Tip type.
-      tip_pickup_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96
-        tip wash station. 2 = pick up with " full volume blow out"
       z_deposit_position: Z- deposit position [0.1mm] (collar bearing position) Must bet between
         0 and 3425. Default 3425.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning
@@ -7498,39 +7054,544 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       ze=f"{minimum_height_command_end:04}",
     )
 
-  # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
+  # -------------- 3.10.8 Liquid handling --------------
 
-  # # # Granular commands # # #
-
-  async def head96_dispensing_drive_move_to_home_volume(
+  @_requires_head96
+  async def aspirate96(
     self,
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer],
+    jet: bool = False,
+    blow_out: bool = False,
+    use_lld: bool = False,
+    pull_out_distance_transport_air: float = 10,
+    hlc: Optional[HamiltonLiquidClass] = None,
+    aspiration_type: int = 0,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    min_z_endpos: Optional[float] = None,
+    lld_search_height: float = 199.9,
+    minimum_height: Optional[float] = None,
+    second_section_height: float = 3.2,
+    second_section_ratio: float = 618.0,
+    immersion_depth: float = 0,
+    surface_following_distance: float = 0,
+    transport_air_volume: float = 5.0,
+    pre_wetting_volume: float = 5.0,
+    gamma_lld_sensitivity: int = 1,
+    swap_speed: float = 2.0,
+    settling_time: float = 1.0,
+    mix_position_from_liquid_surface: float = 0,
+    mix_surface_following_distance: float = 0,
+    limit_curve_index: int = 0,
+    disable_volume_correction: bool = False,
+    # Deprecated parameters, to be removed in future versions
+    # rm: >2026-01
+    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
+    minimal_end_height: Optional[float] = None,
+    air_transport_retract_dist: Optional[float] = None,
+    maximum_immersion_depth: Optional[float] = None,
+    surface_following_distance_during_mix: float = 0,
+    tube_2nd_section_height_measured_from_zm: float = 3.2,
+    tube_2nd_section_ratio: float = 618.0,
+    immersion_depth_direction: Optional[int] = None,
+    mix_volume: float = 0,
+    mix_cycles: int = 0,
+    speed_of_mix: float = 0.0,
   ):
-    """Move the 96-head dispensing drive into its home position (vol=0.0 uL).
+    """Aspirate using the Core96 head.
 
-    .. warning::
-      This firmware command is known to be broken: the 96-head dispensing drive cannot reach
-      vol=0.0 uL, which typically raises
-      ``STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted
-      area')}``.
+    Args:
+      aspiration: The aspiration to perform.
+
+      jet: Whether to search for a jet liquid class. Only used on dispense.
+      blow_out: Whether to use "blow out" dispense mode. Only used on dispense. Note that this is
+        labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
+        documentation.
+      hlc: The Hamiltonian liquid class to use. If `None`, the liquid class will be determined
+        automatically.
+
+      use_lld: If True, use gamma liquid level detection. If False, use liquid height.
+      pull_out_distance_transport_air: The distance to retract after aspirating, in millimeters.
+
+      aspiration_type: The type of aspiration to perform. (0 = simple; 1 = sequence; 2 = cup emptied)
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
+        starting the command.
+      min_z_endpos: The minimum height to move to after the command.
+      lld_search_height: The height to search for the liquid level.
+      minimum_height: Minimum height (maximum immersion depth)
+      second_section_height: Height of the second section.
+      second_section_ratio: Ratio of [the diameter of the bottom * 10000] / [the diameter of the top]
+      immersion_depth: The immersion depth above or below the liquid level.
+      surface_following_distance: The distance to follow the liquid surface when aspirating.
+      transport_air_volume: The volume of air to aspirate after the liquid.
+      pre_wetting_volume: The volume of liquid to use for pre-wetting.
+      gamma_lld_sensitivity: The sensitivity of the gamma liquid level detection.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 0.3 and 160. Default 2.
+      settling_time: The time to wait after aspirating.
+      mix_position_from_liquid_surface: The position of the mix from the liquid surface.
+      mix_surface_following_distance: The distance to follow the liquid surface during mix.
+      limit_curve_index: The index of the limit curve to use.
+      disable_volume_correction: Whether to disable liquid class volume correction.
     """
 
-    logger.warning(
-      "head96_dispensing_drive_move_to_home_volume is a known broken firmware command: "
-      "the 96-head dispensing drive cannot reach vol=0.0 uL and will likely raise "
-      "STARFirmwareError: {'CoRe 96 Head': UnknownHamiltonError('Position out of permitted "
-      "area')}. Attempting to send the command anyway."
+    # # # TODO: delete > 2026-01 # # #
+    if mix_volume != 0 or mix_cycles != 0 or speed_of_mix != 0:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.aspirate96 instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
+    if liquid_surface_sink_distance_at_the_end_of_aspiration != 0:
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_aspiration
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_aspiration parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_aspiration currently superseding surface_following_distance.",
+        DeprecationWarning,
+      )
+
+    if minimal_end_height is not None:
+      min_z_endpos = minimal_end_height
+      warnings.warn(
+        "The minimal_end_height parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard min_z_endpos parameter instead.\n"
+        "min_z_endpos currently superseding minimal_end_height.",
+        DeprecationWarning,
+      )
+
+    if air_transport_retract_dist is not None:
+      pull_out_distance_transport_air = air_transport_retract_dist
+      warnings.warn(
+        "The air_transport_retract_dist parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
+        "pull_out_distance_transport_air currently superseding air_transport_retract_dist.",
+        DeprecationWarning,
+      )
+
+    if maximum_immersion_depth is not None:
+      minimum_height = maximum_immersion_depth
+      warnings.warn(
+        "The maximum_immersion_depth parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard minimum_height parameter instead.\n"
+        "minimum_height currently superseding maximum_immersion_depth.",
+        DeprecationWarning,
+      )
+
+    if surface_following_distance_during_mix != 0:
+      mix_surface_following_distance = surface_following_distance_during_mix
+      warnings.warn(
+        "The surface_following_distance_during_mix parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
+        "mix_surface_following_distance currently superseding surface_following_distance_during_mix.",
+        DeprecationWarning,
+      )
+
+    if tube_2nd_section_height_measured_from_zm != 3.2:
+      second_section_height = tube_2nd_section_height_measured_from_zm
+      warnings.warn(
+        "The tube_2nd_section_height_measured_from_zm parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard second_section_height parameter instead.\n"
+        "second_section_height_measured_from_zm currently superseding second_section_height.",
+        DeprecationWarning,
+      )
+
+    if tube_2nd_section_ratio != 618.0:
+      second_section_ratio = tube_2nd_section_ratio
+      warnings.warn(
+        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard second_section_ratio parameter instead.\n"
+        "second_section_ratio currently superseding tube_2nd_section_ratio.",
+        DeprecationWarning,
+      )
+    # # # delete # # #
+
+    # get the first well and tip as representatives
+    if isinstance(aspiration, MultiHeadAspirationPlate):
+      plate = aspiration.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadAspirationPlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = aspiration.wells[-1]
+      elif rot.z % 360 == 0:
+        ref_well = aspiration.wells[0]
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
+
+      position = (
+        ref_well.get_location_wrt(self.deck)
+        + ref_well.center()
+        + Coordinate(z=ref_well.material_z_thickness)
+        + aspiration.offset
+      )
+    else:
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (aspiration.container.get_absolute_size_x() - x_width) / 2
+      y_position = (aspiration.container.get_absolute_size_y() - y_width) / 2 + y_width
+      position = (
+        aspiration.container.get_location_wrt(self.deck, z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + aspiration.offset
+      )
+    self._check_96_position_legal(position, skip_z=True)
+
+    tip = next(tip for tip in aspiration.tips if tip is not None)
+
+    liquid_height = position.z + (aspiration.liquid_height or 0)
+
+    hlc = hlc or get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      # get last liquid in pipette, first to be dispensed
+      liquid=Liquid.WATER,  # default to WATER
+      jet=jet,
+      blow_out=blow_out,  # see comment in method docstring
     )
 
-    return await self.send_command(
-      module="H0",
-      command="DL",
+    if disable_volume_correction or hlc is None:
+      volume = aspiration.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(aspiration.volume)
+
+    # Get better default values from the HLC if available
+    transport_air_volume = transport_air_volume or (
+      hlc.aspiration_air_transport_volume if hlc is not None else 0
+    )
+    blow_out_air_volume = aspiration.blow_out_air_volume or (
+      hlc.aspiration_blow_out_volume if hlc is not None else 0
+    )
+    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
+    swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
+    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
+
+    x_direction = 0 if position.x >= 0 else 1
+    return await self._head96_low_level_aspirate(
+      x_position=abs(round(position.x * 10)),
+      x_direction=x_direction,
+      y_positions=round(position.y * 10),
+      aspiration_type=aspiration_type,
+      minimum_traverse_height_at_beginning_of_a_command=round(
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+      ),
+      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
+      lld_search_height=round(lld_search_height * 10),
+      liquid_surface_no_lld=round(liquid_height * 10),
+      pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
+      minimum_height=round((minimum_height or position.z) * 10),
+      second_section_height=round(second_section_height * 10),
+      second_section_ratio=round(second_section_ratio * 10),
+      immersion_depth=round(immersion_depth * 10),
+      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
+      surface_following_distance=round(surface_following_distance * 10),
+      aspiration_volumes=round(volume * 10),
+      aspiration_speed=round(flow_rate * 10),
+      transport_air_volume=round(transport_air_volume * 10),
+      blow_out_air_volume=round(blow_out_air_volume * 10),
+      pre_wetting_volume=round(pre_wetting_volume * 10),
+      lld_mode=int(use_lld),
+      gamma_lld_sensitivity=gamma_lld_sensitivity,
+      swap_speed=round(swap_speed * 10),
+      settling_time=round(settling_time * 10),
+      mix_volume=round(aspiration.mix.volume * 10) if aspiration.mix is not None else 0,
+      mix_cycles=aspiration.mix.repetitions if aspiration.mix is not None else 0,
+      mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
+      mix_surface_following_distance=round(mix_surface_following_distance * 10),
+      speed_of_mix=round(aspiration.mix.flow_rate * 10) if aspiration.mix is not None else 1200,
+      channel_pattern=[True] * 12 * 8,
+      limit_curve_index=limit_curve_index,
+      tadm_algorithm=False,
+      recording_mode=0,
     )
 
-  # # # "Atomic" liquid handling commands # # #
+  @_requires_head96
+  async def dispense96(
+    self,
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
+    jet: bool = False,
+    empty: bool = False,
+    blow_out: bool = False,
+    hlc: Optional[HamiltonLiquidClass] = None,
+    pull_out_distance_transport_air=10,
+    use_lld: bool = False,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    min_z_endpos: Optional[float] = None,
+    lld_search_height: float = 199.9,
+    minimum_height: Optional[float] = None,
+    second_section_height: float = 3.2,
+    second_section_ratio: float = 618.0,
+    immersion_depth: float = 0,
+    surface_following_distance: float = 0,
+    transport_air_volume: float = 5.0,
+    gamma_lld_sensitivity: int = 1,
+    swap_speed: float = 2.0,
+    settling_time: float = 0,
+    mix_position_from_liquid_surface: float = 0,
+    mix_surface_following_distance: float = 0,
+    limit_curve_index: int = 0,
+    cut_off_speed: float = 5.0,
+    stop_back_volume: float = 0,
+    disable_volume_correction: bool = False,
+    # Deprecated parameters, to be removed in future versions
+    # rm: >2026-01
+    liquid_surface_sink_distance_at_the_end_of_dispense: float = 0,  # surface_following_distance!
+    maximum_immersion_depth: Optional[float] = None,
+    minimal_end_height: Optional[float] = None,
+    mixing_position_from_liquid_surface: float = 0,
+    surface_following_distance_during_mixing: float = 0,
+    air_transport_retract_dist=10,
+    tube_2nd_section_ratio: float = 618.0,
+    tube_2nd_section_height_measured_from_zm: float = 3.2,
+    immersion_depth_direction: Optional[int] = None,
+    mixing_volume: float = 0,
+    mixing_cycles: int = 0,
+    speed_of_mixing: float = 0.0,
+    dispense_mode: Optional[int] = None,
+  ):
+    """Dispense using the Core96 head.
+
+    Args:
+      dispense: The Dispense command to execute.
+      jet: Whether to use jet dispense mode.
+      empty: Whether to use empty dispense mode.
+      blow_out: Whether to blow out after dispensing.
+      pull_out_distance_transport_air: The distance to retract after dispensing, in mm.
+      use_lld: Whether to use gamma LLD.
+
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command, in mm.
+      min_z_endpos: Minimal end height, in mm.
+      lld_search_height: LLD search height, in mm.
+      minimum_height: Maximum immersion depth, in mm. Equals Minimum height during command.
+      second_section_height: Height of the second section, in mm.
+      second_section_ratio: Ratio of [the diameter of the bottom * 10000] / [the diameter of the top].
+      immersion_depth: Immersion depth, in mm.
+      surface_following_distance: Surface following distance, in mm. Default 0.
+      transport_air_volume: Transport air volume, to dispense before aspiration.
+      gamma_lld_sensitivity: Gamma LLD sensitivity.
+      swap_speed: Swap speed (on leaving liquid) [mm/s]. Must be between 0.3 and 160. Default 2.
+      settling_time: Settling time, in seconds.
+      mix_position_from_liquid_surface: Mixing position from liquid surface, in mm.
+      mix_surface_following_distance: Surface following distance during mixing, in mm.
+      limit_curve_index: Limit curve index.
+      cut_off_speed: Unknown.
+      stop_back_volume: Unknown.
+      disable_volume_correction: Whether to disable liquid class volume correction.
+    """
+
+    # # # TODO: delete > 2026-01 # # #
+    if mixing_volume != 0 or mixing_cycles != 0 or speed_of_mixing != 0:
+      raise NotImplementedError(
+        "Mixing through backend kwargs is deprecated. Use the `mix` parameter of LiquidHandler.dispense instead. "
+        "https://docs.pylabrobot.org/user_guide/00_liquid-handling/mixing.html"
+      )
+
+    if immersion_depth_direction is not None:
+      warnings.warn(
+        "The immersion_depth_direction parameter is deprecated and will be removed in the future. "
+        "Use positive values for immersion_depth to move into the liquid, and negative values to move "
+        "out of the liquid.",
+        DeprecationWarning,
+      )
+
+    if liquid_surface_sink_distance_at_the_end_of_dispense != 0:
+      surface_following_distance = liquid_surface_sink_distance_at_the_end_of_dispense
+      warnings.warn(
+        "The liquid_surface_sink_distance_at_the_end_of_dispense parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard surface_following_distance parameter instead.\n"
+        "liquid_surface_sink_distance_at_the_end_of_dispense currently superseding surface_following_distance.",
+        DeprecationWarning,
+      )
+
+    if maximum_immersion_depth is not None:
+      minimum_height = maximum_immersion_depth
+      warnings.warn(
+        "The maximum_immersion_depth parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard minimum_height parameter instead.\n"
+        "minimum_height currently superseding maximum_immersion_depth.",
+        DeprecationWarning,
+      )
+
+    if minimal_end_height is not None:
+      min_z_endpos = minimal_end_height
+      warnings.warn(
+        "The minimal_end_height parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard min_z_endpos parameter instead.\n"
+        "min_z_endpos currently superseding minimal_end_height.",
+        DeprecationWarning,
+      )
+
+    if mixing_position_from_liquid_surface != 0:
+      mix_position_from_liquid_surface = mixing_position_from_liquid_surface
+      warnings.warn(
+        "The mixing_position_from_liquid_surface parameter is deprecated and will be removed in the future "
+        "Use the Hamilton-standard mix_position_from_liquid_surface parameter instead.\n"
+        "mix_position_from_liquid_surface currently superseding mixing_position_from_liquid_surface.",
+        DeprecationWarning,
+      )
+
+    if surface_following_distance_during_mixing != 0:
+      mix_surface_following_distance = surface_following_distance_during_mixing
+      warnings.warn(
+        "The surface_following_distance_during_mixing parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard mix_surface_following_distance parameter instead.\n"
+        "mix_surface_following_distance currently superseding surface_following_distance_during_mixing.",
+        DeprecationWarning,
+      )
+
+    if air_transport_retract_dist != 10:
+      pull_out_distance_transport_air = air_transport_retract_dist
+      warnings.warn(
+        "The air_transport_retract_dist parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard pull_out_distance_transport_air parameter instead.\n"
+        "pull_out_distance_transport_air currently superseding air_transport_retract_dist.",
+        DeprecationWarning,
+      )
+
+    if tube_2nd_section_ratio != 618.0:
+      second_section_ratio = tube_2nd_section_ratio
+      warnings.warn(
+        "The tube_2nd_section_ratio parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard second_section_ratio parameter instead.\n"
+        "second_section_ratio currently superseding tube_2nd_section_ratio.",
+        DeprecationWarning,
+      )
+
+    if tube_2nd_section_height_measured_from_zm != 3.2:
+      second_section_height = tube_2nd_section_height_measured_from_zm
+      warnings.warn(
+        "The tube_2nd_section_height_measured_from_zm parameter is deprecated and will be removed in the future. "
+        "Use the Hamilton-standard second_section_height parameter instead.\n"
+        "second_section_height currently superseding tube_2nd_section_height_measured_from_zm.",
+        DeprecationWarning,
+      )
+
+    if dispense_mode is not None:
+      warnings.warn(
+        "The dispense_mode parameter is deprecated and will be removed in the future. "
+        "Use the combination of the `jet`, `empty` and `blow_out` parameters instead. "
+        "dispense_mode currently superseding those parameters.",
+        DeprecationWarning,
+      )
+    else:
+      dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
+    # # # delete # # #
+
+    # get the first well and tip as representatives
+    if isinstance(dispense, MultiHeadDispensePlate):
+      plate = dispense.wells[0].parent
+      assert isinstance(plate, Plate), "MultiHeadDispensePlate well parent must be a Plate"
+      rot = plate.get_absolute_rotation()
+      if rot.x % 360 != 0 or rot.y % 360 != 0:
+        raise ValueError("Plate rotation around x or y is not supported for 96 head operations")
+      if rot.z % 360 == 180:
+        ref_well = dispense.wells[-1]
+      elif rot.z % 360 == 0:
+        ref_well = dispense.wells[0]
+      else:
+        raise ValueError("96 head only supports plate rotations of 0 or 180 degrees around z")
+
+      position = (
+        ref_well.get_location_wrt(self.deck)
+        + ref_well.center()
+        + Coordinate(z=ref_well.material_z_thickness)
+        + dispense.offset
+      )
+    else:
+      # dispense in the center of the container
+      # but we have to get the position of the center of tip A1
+      x_width = (12 - 1) * 9  # 12 tips in a row, 9 mm between them
+      y_width = (8 - 1) * 9  # 8 tips in a column, 9 mm between them
+      x_position = (dispense.container.get_absolute_size_x() - x_width) / 2
+      y_position = (dispense.container.get_absolute_size_y() - y_width) / 2 + y_width
+      position = (
+        dispense.container.get_location_wrt(self.deck, z="cavity_bottom")
+        + Coordinate(x=x_position, y=y_position)
+        + dispense.offset
+      )
+    self._check_96_position_legal(position, skip_z=True)
+    tip = next(tip for tip in dispense.tips if tip is not None)
+
+    liquid_height = position.z + (dispense.liquid_height or 0)
+
+    hlc = hlc or get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      # get last liquid in pipette, first to be dispensed
+      liquid=Liquid.WATER,  # default to WATER
+      jet=jet,
+      blow_out=blow_out,  # see comment in method docstring
+    )
+
+    if disable_volume_correction or hlc is None:
+      volume = dispense.volume
+    else:  # hlc is not None and not disable_volume_correction
+      volume = hlc.compute_corrected_volume(dispense.volume)
+
+    transport_air_volume = transport_air_volume or (
+      hlc.dispense_air_transport_volume if hlc is not None else 0
+    )
+    blow_out_air_volume = dispense.blow_out_air_volume or (
+      hlc.dispense_blow_out_volume if hlc is not None else 0
+    )
+    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
+    swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
+    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
+
+    return await self._head96_low_level_dispense(
+      dispensing_mode=dispense_mode,
+      x_position=abs(round(position.x * 10)),
+      x_direction=0 if position.x >= 0 else 1,
+      y_position=round(position.y * 10),
+      minimum_traverse_height_at_beginning_of_a_command=round(
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+      ),
+      min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
+      lld_search_height=round(lld_search_height * 10),
+      liquid_surface_no_lld=round(liquid_height * 10),
+      pull_out_distance_transport_air=round(pull_out_distance_transport_air * 10),
+      minimum_height=round((minimum_height or position.z) * 10),
+      second_section_height=round(second_section_height * 10),
+      second_section_ratio=round(second_section_ratio * 10),
+      immersion_depth=round(immersion_depth * 10),
+      immersion_depth_direction=immersion_depth_direction or (0 if (immersion_depth >= 0) else 1),
+      surface_following_distance=round(surface_following_distance * 10),
+      dispense_volume=round(volume * 10),
+      dispense_speed=round(flow_rate * 10),
+      transport_air_volume=round(transport_air_volume * 10),
+      blow_out_air_volume=round(blow_out_air_volume * 10),
+      lld_mode=int(use_lld),
+      gamma_lld_sensitivity=gamma_lld_sensitivity,
+      swap_speed=round(swap_speed * 10),
+      settling_time=round(settling_time * 10),
+      mixing_volume=round(dispense.mix.volume * 10) if dispense.mix is not None else 0,
+      mixing_cycles=dispense.mix.repetitions if dispense.mix is not None else 0,
+      mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
+      mix_surface_following_distance=round(mix_surface_following_distance * 10),
+      speed_of_mixing=round(dispense.mix.flow_rate * 10) if dispense.mix is not None else 1200,
+      channel_pattern=[True] * 12 * 8,
+      limit_curve_index=limit_curve_index,
+      tadm_algorithm=False,
+      recording_mode=0,
+      cut_off_speed=round(cut_off_speed * 10),
+      stop_back_volume=round(stop_back_volume * 10),
+    )
 
   @need_iswap_parked
   @_requires_head96
-  async def aspirate_core_96(
+  async def _head96_low_level_aspirate(
     self,
     aspiration_type: int = 0,
     x_position: int = 0,
@@ -7546,7 +7607,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     second_section_ratio: int = 3425,
     immersion_depth: int = 0,
     immersion_depth_direction: int = 0,
-    surface_following_distance: float = 0,
+    surface_following_distance: int = 0,
     aspiration_volumes: int = 0,
     aspiration_speed: int = 1000,
     transport_air_volume: int = 0,
@@ -7599,9 +7660,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       immersion_depth: Immersion depth [0.1mm]. Must be between 0 and 3600. Default 0.
       immersion_depth_direction: Direction of immersion depth (0 = go deeper, 1 = go up out of
           liquid). Must be between 0 and 1. Default 0.
-      surface_following_distance_at_the_end_of_aspiration: Surface following distance during
-          aspiration [0.1mm]. Must be between 0 and 990. Default 0. (renamed for clarity from
-          'liquid_surface_sink_distance_at_the_end_of_aspiration' in firmware docs)
+      surface_following_distance: Surface following distance during
+          aspiration [0.1mm]. Must be between 0 and 990. Default 0.
       aspiration_volumes: Aspiration volume [0.1ul]. Must be between 0 and 11500. Default 0.
       aspiration_speed: Aspiration speed [0.1ul/s]. Must be between 3 and 5000. Default 1000.
       transport_air_volume: Transport air volume [0.1ul]. Must be between 0 and 500. Default 0.
@@ -7621,7 +7681,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
           mix [0.1mm]. Must be between 0 and 990. Default 0.
       speed_of_mix: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
           Default 1000.
-      todo: TODO: 24 hex chars. Must be between 4 and 5000.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
       recording_mode: Recording mode 0 : no 1 : TADM errors only 2 : all TADM measurement.
@@ -7700,8 +7759,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       second_section_height = tube_2nd_section_height_measured_from_zm
       warnings.warn(
         "The tube_2nd_section_height_measured_from_zm parameter is deprecated and will be removed in the future. "
-        "Use the Hamilton-standard tube_2nd_section_height_measured_from_zm parameter instead.\n"
-        "tube_2nd_section_height_measured_from_zm currently superseding tube_2nd_section_height_measured_from_zm.",
+        "Use the Hamilton-standard second_section_height parameter instead.\n"
+        "second_section_height currently superseding tube_2nd_section_height_measured_from_zm.",
         DeprecationWarning,
       )
     # # # delete # # #
@@ -7794,7 +7853,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
   @need_iswap_parked
   @_requires_head96
-  async def dispense_core_96(
+  async def _head96_low_level_dispense(
     self,
     dispensing_mode: int = 0,
     x_position: int = 0,
@@ -7808,7 +7867,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     minimum_height: int = 3425,
     immersion_depth: int = 0,
     immersion_depth_direction: int = 0,
-    surface_following_distance: float = 0,
+    surface_following_distance: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
     min_z_endpos: int = 3425,
     dispense_volume: int = 0,
@@ -8068,49 +8127,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       cx=recording_mode,
     )
 
-  # -------------- 3.10.4 Adjustment & movement commands --------------
-
-  @_requires_head96
-  async def move_core_96_head_to_defined_position(
-    self,
-    x: float,
-    y: float,
-    z: float = 342.5,
-    minimum_height_at_beginning_of_a_command: float = 342.5,
-  ):
-    """Move CoRe 96 Head to defined position
-
-    Args:
-      x: X-Position [1mm] of well A1. Must be between -300.0 and 300.0. Default 0.
-      y: Y-Position [1mm]. Must be between 108.0 and 560.0. Default 0.
-      z: Z-Position [1mm]. Must be between 0 and 560.0. Default 0.
-      minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command [1mm]
-        (refers to all channels independent of tip pattern parameter 'tm'). Must be between 0 and
-        342.5. Default 342.5.
-    """
-
-    warnings.warn(  # TODO: remove 2025-02
-      "`move_core_96_head_to_defined_position` is deprecated and will be "
-      "removed in 2025-02. Use `head96_move_to_coordinate` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-
-    # TODO: these are values for a STARBackend. Find them for a STARlet.
-    self._check_96_position_legal(Coordinate(x, y, z))
-    assert 0 <= minimum_height_at_beginning_of_a_command <= 342.5, (
-      "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
-    )
-
-    return await self.send_command(
-      module="C0",
-      command="EM",
-      xs=f"{abs(round(x * 10)):05}",
-      xd=0 if x >= 0 else 1,
-      yh=f"{round(y * 10):04}",
-      za=f"{round(z * 10):04}",
-      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
-    )
+  # -------------- 3.10.9 Compound movements --------------
 
   @_requires_head96
   async def head96_move_to_coordinate(
@@ -8145,139 +8162,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
       zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
     )
 
-  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM = 0
-  HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP = 1244.59
-
-  @_requires_head96
-  async def head96_dispensing_drive_move_to_position(
-    self,
-    position,
-    speed: float = 261.1,
-    stop_speed: float = 0,
-    acceleration: float = 17406.84,
-    current_protection_limiter: int = 15,
-  ):
-    """Move dispensing drive to absolute position in uL
-
-    Args:
-      position: Position in uL. Between 0, 1244.59.
-      speed: Speed in uL/s. Between 0.1, 1063.75.
-      stop_speed: Stop speed in uL/s. Between 0, 1063.75.
-      acceleration: Acceleration in uL/s^2. Between 96.7, 17406.84.
-      current_protection_limiter: Current protection limiter (0-15), default 15
-    """
-
-    if not (
-      self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_BOTTOM
-      <= position
-      <= self.HEAD96_DISPENSING_DRIVE_VOL_LIMIT_TOP
-    ):
-      raise ValueError("position must be between 0 and 1244.59")
-    if not (0.1 <= speed <= 1063.75):
-      raise ValueError("speed must be between 0.1 and 1063.75")
-    if not (0 <= stop_speed <= 1063.75):
-      raise ValueError("stop_speed must be between 0 and 1063.75")
-    if not (96.7 <= acceleration <= 17406.84):
-      raise ValueError("acceleration must be between 96.7 and 17406.84")
-    if not (0 <= current_protection_limiter <= 15):
-      raise ValueError("current_protection_limiter must be between 0 and 15")
-
-    position_increments = self._head96_dispensing_drive_uL_to_increment(position)
-    speed_increments = self._head96_dispensing_drive_uL_to_increment(speed)
-    stop_speed_increments = self._head96_dispensing_drive_uL_to_increment(stop_speed)
-    acceleration_increments = self._head96_dispensing_drive_uL_to_increment(acceleration)
-
-    await self.send_command(
-      module="H0",
-      command="DQ",
-      dq=f"{position_increments:05}",
-      dv=f"{speed_increments:05}",
-      du=f"{stop_speed_increments:05}",
-      dr=f"{acceleration_increments:06}",
-      dw=f"{current_protection_limiter:02}",
-    )
-
-  async def move_core_96_head_x(self, x_position: float):
-    """Move CoRe 96 Head X to absolute position
-
-    .. deprecated::
-      Use :meth:`head96_move_x` instead. Will be removed in 2026-06.
-    """
-    warnings.warn(
-      "`move_core_96_head_x` is deprecated. Use `head96_move_x` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.head96_move_x(x_position)
-
-  async def move_core_96_head_y(self, y_position: float):
-    """Move CoRe 96 Head Y to absolute position
-
-    .. deprecated::
-      Use :meth:`head96_move_y` instead. Will be removed in 2026-06.
-    """
-    warnings.warn(
-      "`move_core_96_head_y` is deprecated. Use `head96_move_y` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.head96_move_y(y_position)
-
-  async def move_core_96_head_z(self, z_position: float):
-    """Move CoRe 96 Head Z to absolute position
-
-    .. deprecated::
-      Use :meth:`head96_move_z` instead. Will be removed in 2026-06.
-    """
-    warnings.warn(
-      "`move_core_96_head_z` is deprecated. Use `head96_move_z` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.head96_move_z(z_position)
-
-  async def move_96head_to_coordinate(
-    self,
-    coordinate: Coordinate,
-    minimum_height_at_beginning_of_a_command: float = 342.5,
-  ):
-    """Move STAR(let) 96-Head to defined Coordinate
-
-    .. deprecated::
-      Use :meth:`head96_move_to_coordinate` instead. Will be removed in 2026-06.
-    """
-    warnings.warn(
-      "`move_96head_to_coordinate` is deprecated. Use `head96_move_to_coordinate` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return await self.head96_move_to_coordinate(
-      coordinate=coordinate,
-      minimum_height_at_beginning_of_a_command=minimum_height_at_beginning_of_a_command,
-    )
-
-  # -------------- 3.10.5 Wash procedure commands using CoRe 96 Head --------------
-
-  # TODO:(command:EG) Washing tips using CoRe 96 Head
-  # TODO:(command:EU) Empty washed tips (end of wash procedure only)
-
-  # -------------- 3.10.6 Query CoRe 96 Head --------------
-
-  async def request_tip_presence_in_core_96_head(self):
-    """Deprecated - use `head96_request_tip_presence` instead.
-
-    Returns:
-      dictionary with key qh:
-        qh: 0 = no tips, 1 = tips are picked up
-    """
-    warnings.warn(  # TODO: remove 2026-06
-      "`request_tip_presence_in_core_96_head` is deprecated and will be "
-      "removed in 2026-06 use `head96_request_tip_presence` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-
-    return await self.send_command(module="C0", command="QH", fmt="qh#")
+  # -------------- 3.10.10 Query & status --------------
 
   async def head96_request_tip_presence(self) -> int:
     """Request Tip presence on the 96-Head
@@ -8293,18 +8178,6 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     resp = await self.send_command(module="C0", command="QH", fmt="qh#")
 
     return int(resp["qh"])
-
-  async def request_position_of_core_96_head(self):
-    """Deprecated - use `head96_request_position` instead."""
-
-    warnings.warn(  # TODO: remove 2026-02
-      "`request_position_of_core_96_head` is deprecated and will be "
-      "removed in 2026-02 use `head96_request_position` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-
-    return await self.head96_request_position()
 
   async def head96_request_position(self) -> Coordinate:
     """Request position of CoRe 96 Head (A1 considered to tip length)
@@ -8323,7 +8196,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return Coordinate(x=x_coordinate, y=y_coordinate, z=z_coordinate)
 
-  async def request_core_96_head_channel_tadm_status(self):
+  async def head96_request_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
 
     Returns:
@@ -8332,7 +8205,7 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="VC", fmt="qx#")
 
-  async def request_core_96_head_channel_tadm_error_status(self):
+  async def head96_request_channel_tadm_error_status(self):
     """Request CoRe 96 Head channel TADM error status
 
     Returns:
@@ -8341,15 +8214,269 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
 
     return await self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
 
-  async def head96_dispensing_drive_request_position_mm(self) -> float:
-    """Request 96 Head dispensing drive position in mm"""
-    resp = await self.send_command(module="H0", command="RD", fmt="rd######")
-    return self._head96_dispensing_drive_increment_to_mm(resp["rd"])
+  # -------------- 3.10.11 Wash procedure commands --------------
 
-  async def head96_dispensing_drive_request_position_uL(self) -> float:
-    """Request 96 Head dispensing drive position in uL"""
-    position_mm = await self.head96_dispensing_drive_request_position_mm()
-    return self._head96_dispensing_drive_mm_to_uL(position_mm)
+  # TODO:(command:EG) Washing tips using CoRe 96 Head
+  # TODO:(command:EU) Empty washed tips (end of wash procedure only)
+
+  # -------------- 3.10.12 Deprecated 96-Head methods --------------
+  #
+  # All methods below are deprecated. Use the head96_* equivalents listed in
+  # each method's docstring.
+  #
+  # Removal schedule:
+  #   2026-04: move_core_96_to_safe_position, move_core_96_head_to_defined_position,
+  #            request_position_of_core_96_head
+  #   2026-08: everything else (including pick_up_tips_core96, discard_tips_core96,
+  #            aspirate_core_96, dispense_core_96)
+  #
+
+  async def initialize_core_96_head(self, *args, **kwargs):
+    """Deprecated - use :meth:`head96_initialize` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_initialize` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`initialize_core_96_head` is deprecated and will be removed in 2026-08. Use `head96_initialize` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_initialize(*args, **kwargs)
+
+  async def request_core_96_head_initialization_status(self) -> bool:
+    """Deprecated - use :meth:`head96_request_initialization_status` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_request_initialization_status` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`request_core_96_head_initialization_status` is deprecated and will be removed in 2026-08. Use `head96_request_initialization_status` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_request_initialization_status()
+
+  async def move_core_96_to_safe_position(self):
+    """Deprecated - use :meth:`head96_move_to_z_safety` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-04. Use :meth:`head96_move_to_z_safety` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-04
+      "`move_core_96_to_safe_position` is deprecated and will be removed in 2026-04. Use `head96_move_to_z_safety` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_to_z_safety()
+
+  @_requires_head96
+  async def move_core_96_head_to_defined_position(
+    self,
+    x: float,
+    y: float,
+    z: float = 342.5,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
+  ):
+    """Deprecated - use :meth:`head96_move_to_coordinate` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-04. Use :meth:`head96_move_to_coordinate` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-04
+      "`move_core_96_head_to_defined_position` is deprecated and will be removed in 2026-04. Use `head96_move_to_coordinate` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    self._check_96_position_legal(Coordinate(x, y, z))
+    assert 0 <= minimum_height_at_beginning_of_a_command <= 342.5, (
+      "minimum_height_at_beginning_of_a_command must be between 0 and 342.5"
+    )
+    return await self.send_command(
+      module="C0",
+      command="EM",
+      xs=f"{abs(round(x * 10)):05}",
+      xd=0 if x >= 0 else 1,
+      yh=f"{round(y * 10):04}",
+      za=f"{round(z * 10):04}",
+      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+    )
+
+  async def move_core_96_head_x(self, x_position: float):
+    """Deprecated - use :meth:`head96_move_x` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_move_x` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`move_core_96_head_x` is deprecated and will be removed in 2026-08. Use `head96_move_x` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_x(x_position)
+
+  async def move_core_96_head_y(self, y_position: float):
+    """Deprecated - use :meth:`head96_move_y` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_move_y` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`move_core_96_head_y` is deprecated and will be removed in 2026-08. Use `head96_move_y` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_y(y_position)
+
+  async def move_core_96_head_z(self, z_position: float):
+    """Deprecated - use :meth:`head96_move_z` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_move_z` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`move_core_96_head_z` is deprecated and will be removed in 2026-08. Use `head96_move_z` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_z(z_position)
+
+  async def move_96head_to_coordinate(
+    self,
+    coordinate: Coordinate,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
+  ):
+    """Deprecated - use :meth:`head96_move_to_coordinate` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_move_to_coordinate` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`move_96head_to_coordinate` is deprecated and will be removed in 2026-08. Use `head96_move_to_coordinate` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_move_to_coordinate(
+      coordinate=coordinate,
+      minimum_height_at_beginning_of_a_command=minimum_height_at_beginning_of_a_command,
+    )
+
+  async def request_tip_presence_in_core_96_head(self):
+    """Deprecated - use :meth:`head96_request_tip_presence` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_request_tip_presence` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`request_tip_presence_in_core_96_head` is deprecated and will be removed in 2026-08. Use `head96_request_tip_presence` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_request_tip_presence()
+
+  async def request_position_of_core_96_head(self):
+    """Deprecated - use :meth:`head96_request_position` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-04. Use :meth:`head96_request_position` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-04
+      "`request_position_of_core_96_head` is deprecated and will be removed in 2026-04. Use `head96_request_position` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_request_position()
+
+  async def request_core_96_head_channel_tadm_status(self):
+    """Deprecated - use :meth:`head96_request_channel_tadm_status` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_request_channel_tadm_status` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`request_core_96_head_channel_tadm_status` is deprecated and will be removed in 2026-08. Use `head96_request_channel_tadm_status` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_request_channel_tadm_status()
+
+  async def request_core_96_head_channel_tadm_error_status(self):
+    """Deprecated - use :meth:`head96_request_channel_tadm_error_status` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_request_channel_tadm_error_status` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`request_core_96_head_channel_tadm_error_status` is deprecated and will be removed in 2026-08. Use `head96_request_channel_tadm_error_status` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_request_channel_tadm_error_status()
+
+  async def set_x_offset_x_axis_core_96_head(self, *args, **kwargs):
+    """Deprecated - use :meth:`head96_set_x_offset` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`head96_set_x_offset` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`set_x_offset_x_axis_core_96_head` is deprecated and will be removed in 2026-08. Use `head96_set_x_offset` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self.head96_set_x_offset(*args, **kwargs)
+
+  async def pick_up_tips_core96(self, *args, **kwargs):
+    """Deprecated - use :meth:`_head96_low_level_pick_up_tips` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`_head96_low_level_pick_up_tips` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`pick_up_tips_core96` is deprecated and will be removed in 2026-08. Use `_head96_low_level_pick_up_tips` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self._head96_low_level_pick_up_tips(*args, **kwargs)
+
+  async def discard_tips_core96(self, *args, **kwargs):
+    """Deprecated - use :meth:`_head96_low_level_discard_tips` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`_head96_low_level_discard_tips` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`discard_tips_core96` is deprecated and will be removed in 2026-08. Use `_head96_low_level_discard_tips` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self._head96_low_level_discard_tips(*args, **kwargs)
+
+  async def aspirate_core_96(self, *args, **kwargs):
+    """Deprecated - use :meth:`_head96_low_level_aspirate` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`_head96_low_level_aspirate` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`aspirate_core_96` is deprecated and will be removed in 2026-08. Use `_head96_low_level_aspirate` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self._head96_low_level_aspirate(*args, **kwargs)
+
+  async def dispense_core_96(self, *args, **kwargs):
+    """Deprecated - use :meth:`_head96_low_level_dispense` instead.
+
+    .. deprecated::
+      This method will be removed in 2026-08. Use :meth:`_head96_low_level_dispense` instead.
+    """
+    warnings.warn(  # TODO: remove 2026-08
+      "`dispense_core_96` is deprecated and will be removed in 2026-08. Use `_head96_low_level_dispense` instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return await self._head96_low_level_dispense(*args, **kwargs)
 
   # -------------- 3.11 384 Head commands --------------
 

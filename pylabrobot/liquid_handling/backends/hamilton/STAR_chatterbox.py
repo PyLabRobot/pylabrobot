@@ -90,7 +90,8 @@ class STARChatterboxBackend(STARBackend):
     skip_pip=False,
     skip_autoload=False,
     skip_iswap=False,
-    skip_core96_head=False,
+    skip_head96=False,
+    **kwargs,
   ):
     """Initialize the chatterbox backend and detect installed modules.
 
@@ -99,8 +100,18 @@ class STARChatterboxBackend(STARBackend):
       skip_pip: If True, skip pipetting channel initialization.
       skip_autoload: If True, skip initializing the autoload module, if applicable.
       skip_iswap: If True, skip initializing the iSWAP module, if applicable.
-      skip_core96_head: If True, skip initializing the CoRe 96 head module, if applicable.
+      skip_head96: If True, skip initializing the CoRe 96 head module, if applicable.
     """
+    if "skip_core96_head" in kwargs:
+      warnings.warn(  # TODO: remove 2026-08
+        "`skip_core96_head` is deprecated. Use `skip_head96` instead. Will be removed in 2026-08.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      skip_head96 = kwargs.pop("skip_core96_head")
+    if kwargs:
+      raise TypeError(f"Unexpected keyword arguments: {kwargs}")
+
     await LiquidHandlerBackend.setup(self)
 
     self.id_ = 0
@@ -110,7 +121,7 @@ class STARChatterboxBackend(STARBackend):
     self._extended_conf = await self.request_extended_configuration()
 
     # Mock firmware information for 96-head if installed
-    if self.extended_conf.left_x_drive.core_96_head_installed and not skip_core96_head:
+    if self.extended_conf.left_x_drive.core_96_head_installed and not skip_head96:
       self._head96_information = Head96Information(
         fw_version=datetime.date(2023, 1, 1),
         supports_clot_monitoring_clld=False,
