@@ -292,6 +292,17 @@ def _parse_hamilton_error_fragments(params: bytes) -> List[str]:
         type_name = f"type_{type_id}"
       if isinstance(decoded, bytes):
         decoded = decoded.decode("utf-8", errors="replace").rstrip("\x00").strip()
+      elif (
+        type_id == HamiltonDataType.U8_ARRAY
+        and isinstance(decoded, list)
+        and all(isinstance(x, int) and 0 <= x <= 255 for x in decoded)
+      ):
+        b = bytes(decoded)
+        s = b.decode("utf-8", errors="replace").rstrip("\x00").strip()
+        # Strip leading control characters (e.g. length or flags before message text)
+        s = s.lstrip("\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f").strip()
+        if s and any(c.isprintable() or c.isspace() for c in s):
+          decoded = s
       out.append(f"{type_name}={decoded}")
     except Exception:
       out.append(f"type_{type_id}=<{length} bytes>")

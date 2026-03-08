@@ -100,6 +100,7 @@ _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
   53: "List[u32]",
   57: "struct",  # Complex type: (57, source_id, ref_id) → single struct
   61: "List[struct]",  # Complex type: (61, source_id, ref_id) → list of structs
+  63: "struct",  # Return element: struct ref in a return list (e.g. MoveYAbsolute return)
   66: "List[bool]",
   77: "List[str]",
   82: "List[enum]",  # Complex type, needs source_id + enum_id
@@ -147,12 +148,12 @@ _INTROSPECTION_TYPE_NAMES: dict[int, str] = {
 # Type ID sets for categorization
 # 78 = enum (Argument); 60, 64 = struct (ReturnValue) — see _INTROSPECTION_TYPE_NAMES comments
 _ARGUMENT_TYPE_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 33, 41, 45, 49, 53, 57, 61, 66, 77, 78, 82, 102}
-_RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 68, 76}
+_RETURN_ELEMENT_TYPE_IDS = {18, 19, 20, 21, 22, 23, 24, 35, 43, 47, 51, 55, 63, 68, 76}
 _RETURN_VALUE_TYPE_IDS = {25, 26, 27, 28, 29, 30, 31, 32, 36, 44, 48, 52, 56, 60, 64, 69, 81, 85, 104, 105}
 
 # Complex type sentinels: byte values that begin a 3-byte triple [type_id, source_id, ref_id].
 # The two contexts (method parameterTypes vs struct structureElementTypes) use different sentinels.
-_COMPLEX_METHOD_TYPE_IDS = {57, 60, 61, 64, 78, 81, 82, 85}  # GetMethod parameterTypes triples
+_COMPLEX_METHOD_TYPE_IDS = {57, 60, 61, 63, 64, 78, 81, 82, 85}  # GetMethod parameterTypes triples
 _COMPLEX_STRUCT_TYPE_IDS = {30, 31, 32, 35}  # STRUCTURE=30, STRUCT_ARRAY=31, ENUM=32, ENUM_ARRAY=35
 # Backward-compat alias (used by ParameterType.is_complex for method parameters)
 _COMPLEX_TYPE_IDS = _COMPLEX_METHOD_TYPE_IDS
@@ -247,7 +248,7 @@ class ParameterType:
   @property
   def is_struct_ref(self) -> bool:
     """True if this is a struct reference (type 30 in struct context, 57/61 in method context)."""
-    return self.type_id in {30, 31, 57, 60, 61, 64}
+    return self.type_id in {30, 31, 57, 60, 61, 63, 64}
 
   @property
   def is_enum_ref(self) -> bool:
@@ -1378,10 +1379,24 @@ class HamiltonIntrospection:
 
     if hc_result is not None:
       lines.append(f"  Device error: {describe_hc_result(hc_result)}")
-    elif error_text:
+    if error_text:
       lines.append(f"  Device said: {error_text}")
 
     return "\n".join(lines)
+
+  @staticmethod
+  def parse_error_u8_array_message(error_string: str) -> Optional[str]:
+    """Extract the decoded U8_ARRAY device message from a Hamilton error string.
+
+    The parsed error string may contain ``U8_ARRAY=...`` (or ``U8_ARRAY="..."``)
+    with the instrument's human-readable message. Returns that value or None.
+    """
+    import re
+    # Match U8_ARRAY= then either quoted content or rest until "; " or " [" or end
+    m = re.search(r"U8_ARRAY=(?:\"([^\"]*)\"|([^;[\]]*?)(?:\s*;\s*|\s*\[|$))", error_string)
+    if not m:
+      return None
+    return (m.group(1) or m.group(2) or "").strip() or None
 
   @staticmethod
   def parse_error_address(
@@ -1446,9 +1461,10 @@ class HamiltonIntrospection:
     if parsed is None:
       return f"Could not parse error address from: {error_string}"
     address, interface_id, method_id, hc_result = parsed
+    error_text = self.parse_error_u8_array_message(error_string) or ""
     return await self.resolve_error(
       address, interface_id, method_id,
-      registry=registry, hc_result=hc_result,
+      registry=registry, hc_result=hc_result, error_text=error_text,
     )
 
 
