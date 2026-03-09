@@ -25,15 +25,6 @@ logger = logging.getLogger(__name__)
 BIN_RE = re.compile(r"^(\d+),BIN:$")
 
 
-@dataclass
-class InfiniteScanConfig:
-  """Scan configuration for Infinite plate readers."""
-
-  flashes: int = 25
-  default_focal_height_mm: float = 20.0
-  counts_per_mm_x: float = 1_000
-  counts_per_mm_y: float = 1_000
-  counts_per_mm_z: float = 1_000
 
 
 def _integration_microseconds_to_seconds(value: int) -> float:
@@ -513,7 +504,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
   def __init__(
     self,
-    scan_config: Optional[InfiniteScanConfig] = None,
+    counts_per_mm_x: float = 1_000,
+    counts_per_mm_y: float = 1_000,
+    counts_per_mm_z: float = 1_000,
   ) -> None:
     super().__init__()
     self.io = USB(
@@ -522,7 +515,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       packet_read_timeout=3,
       read_timeout=30,
     )
-    self.config = scan_config or InfiniteScanConfig()
+    self.counts_per_mm_x = counts_per_mm_x
+    self.counts_per_mm_y = counts_per_mm_y
+    self.counts_per_mm_z = counts_per_mm_z
     self._setup_lock: Optional[asyncio.Lock] = None
     self._ready = False
     self._read_chunk_size = 512
@@ -612,7 +607,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._await_measurements(decoder, count, mode)
       await self._await_scan_terminal(decoder.pop_terminal())
 
-  async def read_absorbance(self, plate: Plate, wells: List[Well], wavelength: int) -> List[Dict]:
+  async def read_absorbance(
+    self, plate: Plate, wells: List[Well], wavelength: int, flashes: int = 25
+  ) -> List[Dict]:
     """Queue and execute an absorbance scan."""
 
     if not 230 <= wavelength <= 1_000:
@@ -624,7 +621,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     await self._begin_run()
     try:
-      await self._configure_absorbance(wavelength)
+      await self._configure_absorbance(wavelength, flashes=flashes)
       await self._run_scan(
         ordered_wells=ordered_wells,
         decoder=decoder,
@@ -668,10 +665,10 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("POSITION CLEAR", allow_timeout=True)
     await self._send_command("MIRROR CLEAR", allow_timeout=True)
 
-  async def _configure_absorbance(self, wavelength_nm: int) -> None:
+  async def _configure_absorbance(self, wavelength_nm: int, *, flashes: int) -> None:
     wl_decitenth = int(round(wavelength_nm * 10))
     bw_decitenth = int(round(self._auto_bandwidth(wavelength_nm) * 10))
-    reads_number = max(1, int(self.config.flashes))
+    reads_number = max(1, flashes)
 
     await self._send_command("MODE ABS")
     await self._clear_mode_settings(excitation=True)
@@ -704,7 +701,9 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     wells: List[Well],
     excitation_wavelength: int,
     emission_wavelength: int,
-    focal_height: Optional[float] = None,
+    focal_height: float = 20.0,
+    flashes: int = 25,
+    integration_us: int = 20,
   ) -> List[Dict]:
     """Queue and execute a fluorescence scan."""
 
@@ -712,15 +711,6 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       raise ValueError("Excitation wavelength must be between 230 nm and 850 nm.")
     if not 230 <= emission_wavelength <= 850:
       raise ValueError("Emission wavelength must be between 230 nm and 850 nm.")
-    if focal_height is None:
-      focal_height = self.config.default_focal_height_mm
-    elif not math.isclose(focal_height, self.config.default_focal_height_mm):
-      logger.warning(
-        "Fluorescence focal height manually set to %.3f mm (default is %.3f mm); "
-        "changing it manually may cause physical collision.",
-        focal_height,
-        self.config.default_focal_height_mm,
-      )
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for fluorescence scans.")
 
@@ -729,7 +719,10 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
 
     await self._begin_run()
     try:
-      await self._configure_fluorescence(excitation_wavelength, emission_wavelength, focal_height)
+      await self._configure_fluorescence(
+        excitation_wavelength, emission_wavelength, focal_height,
+        flashes=flashes, integration_us=integration_us,
+      )
       decoder = _FluorescenceRunDecoder(len(scan_wells))
 
       await self._run_scan(
@@ -762,13 +755,14 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._end_run()
 
   async def _configure_fluorescence(
-    self, excitation_nm: int, emission_nm: int, focal_height: float
+    self, excitation_nm: int, emission_nm: int, focal_height: float,
+    *, flashes: int, integration_us: int,
   ) -> None:
     ex_decitenth = int(round(excitation_nm * 10))
     em_decitenth = int(round(emission_nm * 10))
-    reads_number = max(1, int(self.config.flashes))
+    reads_number = max(1, flashes)
     beam_diameter = self._capability_numeric("FI.TOP", "#BEAM DIAMETER", 3000)
-    z_position = int(round(focal_height * self.config.counts_per_mm_z))
+    z_position = int(round(focal_height * self.counts_per_mm_z))
 
     # UI issues the entire FI configuration twice before PREPARE REF.
     for _ in range(2):
@@ -776,7 +770,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._clear_mode_settings(excitation=True, emission=True)
       await self._send_command(f"EXCITATION 0,FI,{ex_decitenth},50,0", allow_timeout=True)
       await self._send_command(f"EMISSION 0,FI,{em_decitenth},200,0", allow_timeout=True)
-      await self._send_command("TIME 0,INTEGRATION=20", allow_timeout=True)
+      await self._send_command(f"TIME 0,INTEGRATION={integration_us}", allow_timeout=True)
       await self._send_command("TIME 0,LAG=0", allow_timeout=True)
       await self._send_command("TIME 0,READDELAY=0", allow_timeout=True)
       await self._send_command("GAIN 0,VALUE=100", allow_timeout=True)
@@ -787,7 +781,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await self._send_command(f"READS 0,NUMBER={reads_number}", allow_timeout=True)
       await self._send_command(f"EXCITATION 1,FI,{ex_decitenth},50,0", allow_timeout=True)
       await self._send_command(f"EMISSION 1,FI,{em_decitenth},200,0", allow_timeout=True)
-      await self._send_command("TIME 1,INTEGRATION=20", allow_timeout=True)
+      await self._send_command(f"TIME 1,INTEGRATION={integration_us}", allow_timeout=True)
       await self._send_command("TIME 1,LAG=0", allow_timeout=True)
       await self._send_command("TIME 1,READDELAY=0", allow_timeout=True)
       await self._send_command("GAIN 1,VALUE=100", allow_timeout=True)
@@ -799,31 +793,25 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     self,
     plate: Plate,
     wells: List[Well],
-    focal_height: Optional[float] = None,
+    focal_height: float = 20.0,
+    flashes: int = 25,
+    dark_integration_us: int = 3_000_000,
+    meas_integration_us: int = 1_000_000,
   ) -> List[Dict]:
     """Queue and execute a luminescence scan."""
 
-    if focal_height is None:
-      focal_height = self.config.default_focal_height_mm
-    elif not math.isclose(focal_height, self.config.default_focal_height_mm):
-      logger.warning(
-        "Luminescence focal height manually set to %.3f mm (default is %.3f mm); "
-        "changing it manually may cause physical collision.",
-        focal_height,
-        self.config.default_focal_height_mm,
-      )
     if focal_height < 0:
       raise ValueError("Focal height must be non-negative for luminescence scans.")
 
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=False)
 
-    dark_integration = 3_000_000
-    meas_integration = 1_000_000
+    dark_integration = dark_integration_us
+    meas_integration = meas_integration_us
 
     await self._begin_run()
     try:
-      await self._configure_luminescence(dark_integration, meas_integration, focal_height)
+      await self._configure_luminescence(dark_integration, meas_integration, focal_height, flashes=flashes)
 
       decoder = _LuminescenceRunDecoder(
         len(scan_wells),
@@ -884,7 +872,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._read_command_response()
 
   async def _configure_luminescence(
-    self, dark_integration: int, meas_integration: int, focal_height: float
+    self, dark_integration: int, meas_integration: int, focal_height: float, *, flashes: int,
   ) -> None:
     await self._send_command("MODE LUM")
     # Pre-flight safety checks observed in captures (queries omitted).
@@ -892,8 +880,8 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     await self._send_command("CHECK LUM.LID")
     await self._send_command("CHECK LUM.STEPLOSS")
     await self._send_command("MODE LUM")
-    reads_number = max(1, int(self.config.flashes))
-    z_position = int(round(focal_height * self.config.counts_per_mm_z))
+    reads_number = max(1, flashes)
+    z_position = int(round(focal_height * self.counts_per_mm_z))
     await self._clear_mode_settings(emission=True)
     await self._send_command(f"POSITION LUM,Z={z_position}", allow_timeout=True)
     await self._send_command(f"TIME 0,INTEGRATION={dark_integration}", allow_timeout=True)
@@ -928,13 +916,12 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
     if well.location is None:
       raise ValueError("Well does not have a location assigned within its plate definition.")
     center = well.location + well.get_anchor(x="c", y="c")
-    cfg = self.config
-    stage_x = int(round(center.x * cfg.counts_per_mm_x))
+    stage_x = int(round(center.x * self.counts_per_mm_x))
     parent_plate = well.parent
     if parent_plate is None or not isinstance(parent_plate, Plate):
       raise ValueError("Well is not assigned to a plate; cannot derive stage coordinates.")
     plate_height_mm = parent_plate.get_size_y()
-    stage_y = int(round((plate_height_mm - center.y) * cfg.counts_per_mm_y))
+    stage_y = int(round((plate_height_mm - center.y) * self.counts_per_mm_y))
     return stage_x, stage_y
 
   def _scan_range(
@@ -993,6 +980,7 @@ class TecanInfinite200ProBackend(PlateReaderBackend):
       await asyncio.sleep(0.2)
       await self.io.setup()
     except Exception:
+      logger.warning("Transport recovery failed.", exc_info=True)
       return
     self._mode_capabilities.clear()
     self._reset_stream_state()
@@ -1290,5 +1278,4 @@ class _LuminescenceRunDecoder(_MeasurementDecoder):
 
 __all__ = [
   "TecanInfinite200ProBackend",
-  "InfiniteScanConfig",
 ]

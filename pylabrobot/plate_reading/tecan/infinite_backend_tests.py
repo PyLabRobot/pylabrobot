@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, call, patch
 
 from pylabrobot.io.usb import USB
 from pylabrobot.plate_reading.tecan.infinite_backend import (
-  InfiniteScanConfig,
   TecanInfinite200ProBackend,
   _absorbance_od_calibrated,
   _AbsorbanceRunDecoder,
@@ -594,7 +593,7 @@ class TestTecanInfiniteDecoders(unittest.TestCase):
 class TestTecanInfiniteScanGeometry(unittest.TestCase):
   def setUp(self):
     self.backend = TecanInfinite200ProBackend(
-      scan_config=InfiniteScanConfig(counts_per_mm_x=1, counts_per_mm_y=1)
+      counts_per_mm_x=1, counts_per_mm_y=1
     )
     self.plate = _make_test_plate()
 
@@ -663,7 +662,7 @@ class TestTecanInfiniteCommands(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(patcher.stop)
 
     self.backend = TecanInfinite200ProBackend(
-      scan_config=InfiniteScanConfig(counts_per_mm_x=1000, counts_per_mm_y=1000)
+      counts_per_mm_x=1000, counts_per_mm_y=1000
     )
     self.plate = _make_test_plate()
     self.plate.location = Coordinate.zero()
