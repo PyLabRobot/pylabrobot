@@ -27,11 +27,11 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **backend_kwargs):
     pass
 
   @abstractmethod
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **backend_kwargs):
     pass
 
   @abstractmethod

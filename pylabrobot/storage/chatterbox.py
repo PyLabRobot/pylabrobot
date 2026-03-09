@@ -19,10 +19,10 @@ class IncubatorChatterboxBackend(IncubatorBackend):
   async def close_door(self):
     print("Closing door")
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **backend_kwargs):
     print(f"Fetching plate {plate} to loading tray")
 
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **backend_kwargs):
     print(f"Taking in plate {plate} at site {site}")
 
   async def set_temperature(self, temperature: float):
