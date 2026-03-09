@@ -14,3 +14,9 @@ Thermocyclers are essential for temperature-controlled processes like PCR (Polym
 ## Supported Thermocyclers
 
 - Opentrons Thermocycler
+
+```{toctree}
+:maxdepth: 1
+
+Inheco ODTC <inheco-odtc>
+```
