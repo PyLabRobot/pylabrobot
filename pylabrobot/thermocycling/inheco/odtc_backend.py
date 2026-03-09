@@ -41,7 +41,7 @@ def _recursive_find_key(data: Any, key: str) -> Any:
   return None
 
 
-class ODTCBackend(ThermocyclerBackend):
+class ExperimentalODTCBackend(ThermocyclerBackend):
   def __init__(self, ip: str, client_ip: Optional[str] = None) -> None:
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=ip)
     self._block_target_temp: Optional[float] = None
