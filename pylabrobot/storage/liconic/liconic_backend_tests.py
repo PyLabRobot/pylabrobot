@@ -1,3 +1,5 @@
+# mypy: disable-error-code="attr-defined,method-assign"
+
 import unittest
 from unittest.mock import AsyncMock
 

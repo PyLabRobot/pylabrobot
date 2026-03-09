@@ -67,6 +67,7 @@ class LiconicBackend(IncubatorBackend):
     self._racks: List[PlateCarrier] = []
 
     self.io = Serial(
+      human_readable_device_name=f"Liconic {model.value}",
       port=port,
       baudrate=self.default_baud,
       bytesize=serial.EIGHTBITS,
@@ -139,7 +140,7 @@ class LiconicBackend(IncubatorBackend):
     rack = site.parent
     assert isinstance(rack, PlateCarrier), "Site not in rack"
     assert self._racks is not None, "Racks not set"
-    if not rack.model.startswith("liconic"):
+    if rack.model is None or not rack.model.startswith("liconic"):
       raise ValueError(f"The plate carrier used: {rack.model} is not compatible with the Liconic")
     match = re.search(r"_(\d+)mm", rack.model)
     if match:
@@ -174,7 +175,9 @@ class LiconicBackend(IncubatorBackend):
     await self._send_command("ST 1902")
     await self._wait_ready()
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate, read_barcode: bool = False):
+  async def fetch_plate_to_loading_tray(
+    self, plate: Plate, read_barcode: bool = False, **backend_kwargs
+  ):
     """Fetch a plate from the incubator to the loading tray."""
     site = plate.parent
     assert isinstance(site, PlateHolder), "Plate not in storage"
@@ -194,7 +197,9 @@ class LiconicBackend(IncubatorBackend):
     await self._wait_ready()
     await self._send_command("ST 1903")  # terminate access
 
-  async def take_in_plate(self, plate: Plate, site: PlateHolder, read_barcode: bool = False):
+  async def take_in_plate(
+    self, plate: Plate, site: PlateHolder, read_barcode: bool = False, **backend_kwargs
+  ):
     """Take in a plate from the loading tray to the incubator."""
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)

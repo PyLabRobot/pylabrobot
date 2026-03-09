@@ -29,6 +29,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
     # BL-1300 Barcode reader factory default serial communication settings
     # should be the same factory default for the BL-600HA and BL-1300 models
     self.io = Serial(
+      human_readable_device_name="Keyence Barcode Scanner",
       port=port,
       baudrate=self.default_baudrate,
       bytesize=serial.SEVENBITS,
