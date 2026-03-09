@@ -35,7 +35,7 @@ LICONIC_SITE_HEIGHT_TO_STEPS = {
 }
 
 
-class LiconicBackend(IncubatorBackend):
+class ExperimentalLiconicBackend(IncubatorBackend):
   """Backend for Liconic incubators.
 
   Optionally accepts a BarcodeScanner instance for internal barcode reading.

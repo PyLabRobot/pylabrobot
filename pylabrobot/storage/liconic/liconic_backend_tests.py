@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock
 from pylabrobot.resources import PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
 from pylabrobot.storage.liconic.constants import LiconicType
-from pylabrobot.storage.liconic.liconic_backend import LICONIC_SITE_HEIGHT_TO_STEPS, LiconicBackend
+from pylabrobot.storage.liconic.liconic_backend import (
+  LICONIC_SITE_HEIGHT_TO_STEPS,
+  ExperimentalLiconicBackend,
+)
 from pylabrobot.storage.liconic.racks import (
   liconic_rack_5mm_42,
   liconic_rack_17mm_22,
@@ -74,7 +77,7 @@ class TestRackConstruction(unittest.TestCase):
 
 class TestCarrierToStepsPos(unittest.TestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
 
   def test_parses_model_name(self):
     rack = liconic_rack_17mm_22("test_rack")
@@ -118,7 +121,7 @@ class TestCarrierToStepsPos(unittest.TestCase):
 
 class TestSiteToMN(unittest.TestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
 
   def test_first_rack_first_site(self):
     rack = liconic_rack_17mm_22("rack1")
@@ -147,7 +150,7 @@ class TestValueConversions(unittest.IsolatedAsyncioTestCase):
   """Test the PLC register value conversions without actual serial IO."""
 
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._send_command = AsyncMock(return_value="OK")
     self.backend._wait_ready = AsyncMock()
 
@@ -208,7 +211,7 @@ class TestValueConversions(unittest.IsolatedAsyncioTestCase):
       await self.backend.start_shaking(51.0)
 
   async def test_nc_model_rejects_climate(self):
-    backend = LiconicBackend(model=LiconicType.STX44_NC, port="/dev/null")
+    backend = ExperimentalLiconicBackend(model=LiconicType.STX44_NC, port="/dev/null")
     with self.assertRaises(NotImplementedError):
       await backend.set_temperature(37.0)
     with self.assertRaises(NotImplementedError):
@@ -219,7 +222,7 @@ class TestValueConversions(unittest.IsolatedAsyncioTestCase):
 
 class TestShaking(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._send_command = AsyncMock(return_value="OK")
     self.backend._wait_ready = AsyncMock()
 
@@ -240,7 +243,7 @@ class TestShaking(unittest.IsolatedAsyncioTestCase):
 
 class TestDoorControl(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._send_command = AsyncMock(return_value="OK")
     self.backend._wait_ready = AsyncMock()
 
@@ -257,7 +260,7 @@ class TestDoorControl(unittest.IsolatedAsyncioTestCase):
 
 class TestSensors(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._wait_ready = AsyncMock()
 
   async def test_check_shovel_sensor_true(self):
@@ -298,7 +301,7 @@ class TestSensors(unittest.IsolatedAsyncioTestCase):
 
 class TestClimateGetters(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._wait_ready = AsyncMock()
 
   async def test_get_target_temperature(self):
@@ -327,7 +330,7 @@ class TestClimateGetters(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(result, 0.9)
 
   async def test_nc_model_rejects_humidity(self):
-    backend = LiconicBackend(model=LiconicType.STX44_NC, port="/dev/null")
+    backend = ExperimentalLiconicBackend(model=LiconicType.STX44_NC, port="/dev/null")
     with self.assertRaises(NotImplementedError):
       await backend.get_humidity()
     with self.assertRaises(NotImplementedError):
@@ -338,7 +341,7 @@ class TestClimateGetters(unittest.IsolatedAsyncioTestCase):
 
 class TestSwapStation(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
 
   async def test_turn_swap_station_home_when_swapped(self):
     self.backend._send_command = AsyncMock(return_value="1")
@@ -353,7 +356,7 @@ class TestSwapStation(unittest.IsolatedAsyncioTestCase):
 
 class TestInitialize(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend._send_command = AsyncMock(return_value="OK")
     self.backend._wait_ready = AsyncMock()
 
@@ -366,23 +369,23 @@ class TestInitialize(unittest.IsolatedAsyncioTestCase):
 
 class TestSerialization(unittest.TestCase):
   def test_serialize_roundtrip(self):
-    backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/ttyUSB0")
+    backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/ttyUSB0")
     data = backend.serialize()
     self.assertEqual(data["port"], "/dev/ttyUSB0")
     self.assertEqual(data["model"], "STX44_IC")
 
-    restored = LiconicBackend.deserialize(data)
+    restored = ExperimentalLiconicBackend.deserialize(data)
     self.assertEqual(restored.io.port, "/dev/ttyUSB0")
     self.assertEqual(restored.model, LiconicType.STX44_IC)
 
   def test_deserialize_string_model(self):
-    restored = LiconicBackend.deserialize({"port": "/dev/ttyUSB0", "model": "STX44_IC"})
+    restored = ExperimentalLiconicBackend.deserialize({"port": "/dev/ttyUSB0", "model": "STX44_IC"})
     self.assertEqual(restored.model, LiconicType.STX44_IC)
 
 
 class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.backend = LiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
+    self.backend = ExperimentalLiconicBackend(model=LiconicType.STX44_IC, port="/dev/null")
     self.backend.io = AsyncMock()
 
   async def test_send_command_raises_on_empty_response(self):
