@@ -36,6 +36,7 @@ class Serial(IOBase):
 
   def __init__(
     self,
+    human_readable_device_name: str,
     port: Optional[str] = None,
     vid: Optional[int] = None,
     pid: Optional[int] = None,
@@ -48,6 +49,7 @@ class Serial(IOBase):
     rtscts: bool = False,
     dsrdtr: bool = False,
   ):
+    self._human_readable_device_name = human_readable_device_name
     self._port = port
     self._vid = vid
     self._pid = pid
@@ -175,7 +177,7 @@ class Serial(IOBase):
       self._ser = await loop.run_in_executor(self._executor, _open_serial)
 
     except serial.SerialException as e:
-      logger.error("Could not connect to device, is it in use by a different notebook/process?")
+      logger.error(f"Could not connect to device '{self._human_readable_device_name}', is it in use by a different notebook/process?")
       if self._executor is not None:
         self._executor.shutdown(wait=True)
         self._executor = None
@@ -192,7 +194,7 @@ class Serial(IOBase):
       loop = asyncio.get_running_loop()
 
       if self._executor is None:
-        raise RuntimeError("Call setup() first.")
+        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
       await loop.run_in_executor(self._executor, self._ser.close)
 
     if self._executor is not None:
@@ -202,13 +204,9 @@ class Serial(IOBase):
   async def write(self, data: bytes):
     """Write data to the serial device."""
 
-    assert self._ser is not None, "forgot to call setup?"
-    assert self._port is not None, "Port not set. Did you call setup()?"
-
     loop = asyncio.get_running_loop()
-
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
+    if self._executor is None or self._ser is None:
+      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
     await loop.run_in_executor(self._executor, self._ser.write, data)
 
@@ -220,13 +218,9 @@ class Serial(IOBase):
   async def read(self, num_bytes: int = 1) -> bytes:
     """Read data from the serial device."""
 
-    assert self._ser is not None, "forgot to call setup?"
-    assert self._port is not None, "Port not set. Did you call setup()?"
-
     loop = asyncio.get_running_loop()
-
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
+    if self._executor is None or self._ser is None:
+      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
     data = await loop.run_in_executor(self._executor, self._ser.read, num_bytes)
 
@@ -241,13 +235,9 @@ class Serial(IOBase):
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     """Read a line from the serial device."""
 
-    assert self._ser is not None, "forgot to call setup?"
-    assert self._port is not None, "Port not set. Did you call setup()?"
-
     loop = asyncio.get_running_loop()
-
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
+    if self._executor is None or self._ser is None:
+      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
     data = await loop.run_in_executor(self._executor, self._ser.readline)
 
@@ -262,12 +252,9 @@ class Serial(IOBase):
   async def send_break(self, duration: float):
     """Send a break condition for the specified duration."""
 
-    assert self._ser is not None, "forgot to call setup?"
-    assert self._port is not None, "Port not set. Did you call setup()?"
-
     loop = asyncio.get_running_loop()
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
+    if self._executor is None or self._ser is None:
+      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
 
     def _send_break(ser, duration: float) -> None:
       """Send a break condition for the specified duration."""
@@ -279,23 +266,17 @@ class Serial(IOBase):
     capturer.record(SerialCommand(device_id=self._port, action="send_break", data=str(duration)))
 
   async def reset_input_buffer(self):
-    assert self._ser is not None, "forgot to call setup?"
-    assert self._port is not None, "Port not set. Did you call setup()?"
-
     loop = asyncio.get_running_loop()
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
+    if self._executor is None or self._ser is None:
+      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_input_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_input_buffer", self._port)
     capturer.record(SerialCommand(device_id=self._port, action="reset_input_buffer", data=""))
 
   async def reset_output_buffer(self):
-    assert self._ser is not None, "forgot to call setup?"
-    assert self._port is not None, "Port not set. Did you call setup()?"
-
     loop = asyncio.get_running_loop()
-    if self._executor is None:
-      raise RuntimeError("Call setup() first.")
+    if self._executor is None or self._ser is None:
+      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_output_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
     capturer.record(SerialCommand(device_id=self._port, action="reset_output_buffer", data=""))
@@ -334,6 +315,7 @@ class Serial(IOBase):
 
   def serialize(self):
     return {
+      "human_readable_device_name": self._human_readable_device_name,
       "port": self._port,
       "baudrate": self.baudrate,
       "bytesize": self.bytesize,
@@ -348,6 +330,7 @@ class Serial(IOBase):
   @classmethod
   def deserialize(cls, data: dict) -> "Serial":
     return cls(
+      human_readable_device_name=data["human_readable_device_name"],
       port=data["port"],
       baudrate=data["baudrate"],
       bytesize=data["bytesize"],
@@ -364,6 +347,7 @@ class SerialValidator(Serial):
   def __init__(
     self,
     cr: "CaptureReader",
+    human_readable_device_name: str,
     port: str,
     baudrate: int = 9600,
     bytesize: int = 8,  # serial.EIGHTBITS
@@ -376,6 +360,7 @@ class SerialValidator(Serial):
   ):
     super().__init__(
       port=port,
+      human_readable_device_name=human_readable_device_name,
       baudrate=baudrate,
       bytesize=bytesize,
       parity=parity,

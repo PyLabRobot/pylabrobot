@@ -46,7 +46,7 @@ class PreciseFlexBackend(SCARABackend, ABC):
     timeout=20,
   ) -> None:
     super().__init__()
-    self.io = Socket(host=host, port=port)
+    self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
     self.profile_index: int = 1
     self.location_index: int = 1
     self.horizontal_compliance: bool = False

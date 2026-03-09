@@ -32,6 +32,7 @@ class BioShake(HeaterShakerBackend):
       stopbits=serial.STOPBITS_ONE,
       write_timeout=10,
       timeout=self.timeout,
+      human_readable_device_name="BioShake",
     )
 
   async def _send_command(self, cmd: str, delay: float = 0.5, timeout: float = 2):

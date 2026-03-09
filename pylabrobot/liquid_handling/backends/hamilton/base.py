@@ -71,6 +71,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     super().__init__()
     self.io = USB(
+      human_readable_device_name="Hamilton Liquid Handler",
       id_vendor=0x08AF,
       id_product=id_product,
       device_address=device_address,

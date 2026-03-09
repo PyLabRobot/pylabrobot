@@ -46,6 +46,7 @@ class USB(IOBase):
     self,
     id_vendor: int,
     id_product: int,
+    human_readable_device_name: str,
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
@@ -57,6 +58,7 @@ class USB(IOBase):
     Args:
       id_vendor: The USB vendor ID of the machine.
       id_product: The USB product ID of the machine.
+      human_readable_device_name: A human-readable name for the device, used in error messages.
       device_address: The USB device_address of the machine. If `None`, use the first device found.
         This is useful for machines that have no unique serial number, such as the Hamilton STAR.
       serial_number: The serial number of the machine. If `None`, use the first device found.
@@ -91,6 +93,7 @@ class USB(IOBase):
 
     # unique id in the logs
     self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
+    self._human_readable_device_name = human_readable_device_name
 
   async def write(self, data: bytes, timeout: Optional[float] = None):
     """Write data to the device.
@@ -101,7 +104,8 @@ class USB(IOBase):
         (specified by the `write_timeout` attribute).
     """
 
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
+    if self.dev is None or self.read_endpoint is None:
+      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
 
     if timeout is None:
       timeout = self.write_timeout
@@ -111,7 +115,7 @@ class USB(IOBase):
     write_endpoint = self.write_endpoint
     dev = self.dev
     if self._executor is None or dev is None or write_endpoint is None:
-      raise RuntimeError("Call setup() first.")
+      raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
     await loop.run_in_executor(
       self._executor,
       lambda: dev.write(write_endpoint, data, timeout=timeout),
@@ -141,7 +145,8 @@ class USB(IOBase):
       A bytearray containing the data read, or None if no data was received.
     """
 
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
+    if self.dev is None or self.read_endpoint is None:
+      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
 
     read_size = size if size is not None else self.read_endpoint.wMaxPacketSize
 
@@ -169,7 +174,8 @@ class USB(IOBase):
         more packets arrive.
     """
 
-    assert self.read_endpoint is not None, "Device not connected."
+    if self.dev is None or self.read_endpoint is None:
+      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
 
     if timeout is None:
       timeout = self.read_timeout
@@ -208,11 +214,11 @@ class USB(IOBase):
         )
         return resp
 
-      raise TimeoutError("Timeout while reading.")
+      raise TimeoutError(f"Timeout while reading from USB device '{self._human_readable_device_name}'.")
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self.dev is None:
-      raise RuntimeError("Call setup() first.")
+      raise RuntimeError(f"Call setup() first for USB device '{self._human_readable_device_name}'.")
     return await loop.run_in_executor(self._executor, read_or_timeout)
 
   def get_available_devices(self) -> List["usb.core.Device"]:
@@ -229,7 +235,7 @@ class USB(IOBase):
       if self._device_address is not None:
         if dev.address is None:
           raise RuntimeError(
-            "A device address was specified, but the backend used for PyUSB does "
+            f"A device address was specified for '{self._human_readable_device_name}', but the backend used for PyUSB does "
             "not support device addresses."
           )
 
@@ -239,7 +245,7 @@ class USB(IOBase):
       if self._serial_number is not None:
         if dev._serial_number is None:
           raise RuntimeError(
-            "A serial number was specified, but the device does not have a serial number."
+            f"A serial number was specified for '{self._human_readable_device_name}', but the device does not have a serial number."
           )
 
         if dev.serial_number != self._serial_number:
@@ -276,7 +282,8 @@ class USB(IOBase):
     data_or_wLength: int,
     timeout: Optional[int] = None,
   ) -> bytearray:
-    assert self.dev is not None, "Device not connected."
+    if self.dev is None:
+      raise RuntimeError(f"USB device for '{self._human_readable_device_name}' is not connected.")
 
     if timeout is None:
       timeout = self.read_timeout
@@ -396,6 +403,7 @@ class USB(IOBase):
 
     return {
       **super().serialize(),
+      "human_readable_device_name": self._human_readable_device_name,
       "id_vendor": self._id_vendor,
       "id_product": self._id_product,
       "device_address": self._device_address,
@@ -410,6 +418,7 @@ class USBValidator(USB):
   def __init__(
     self,
     cr: "CaptureReader",
+    human_readable_device_name: str,
     id_vendor: int,
     id_product: int,
     device_address: Optional[int] = None,
@@ -419,6 +428,7 @@ class USBValidator(USB):
     write_timeout: int = 30,
   ):
     super().__init__(
+      human_readable_device_name=human_readable_device_name,
       id_vendor=id_vendor,
       id_product=id_product,
       device_address=device_address,

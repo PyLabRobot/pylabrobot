@@ -29,7 +29,8 @@ class HIDCommand(Command):
 
 
 class HID(IOBase):
-  def __init__(self, vid: int, pid: int, serial_number: Optional[str] = None):
+  def __init__(self, human_readable_device_name: str, vid: int, pid: int, serial_number: Optional[str] = None):
+    self._human_readable_device_name = human_readable_device_name
     self.vid = vid
     self.pid = pid
     self.serial_number = serial_number
@@ -174,6 +175,7 @@ class HID(IOBase):
 
   def serialize(self):
     return {
+      "human_readable_device_name": self._human_readable_device_name,
       "vid": self.vid,
       "pid": self.pid,
       "serial_number": self.serial_number,
@@ -184,11 +186,12 @@ class HIDValidator(HID):
   def __init__(
     self,
     cr: "CaptureReader",
+    human_readable_device_name: str,
     vid: int = 0x03EB,
     pid: int = 0x2023,
     serial_number: Optional[str] = None,
   ):
-    super().__init__(vid=vid, pid=pid, serial_number=serial_number)
+    super().__init__(human_readable_device_name=human_readable_device_name, vid=vid, pid=pid, serial_number=serial_number)
     self.cr = cr
 
   async def setup(self):
