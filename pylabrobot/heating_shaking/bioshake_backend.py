@@ -185,7 +185,7 @@ class BioShake(HeaterShakerBackend):
     )
     await self.start_shaking(speed=speed, acceleration=acceleration)
 
-  async def stop_shaking(self, deceleration: int = 0, sleep_time_after_stop: int = 3):
+  async def stop_shaking(self, deceleration: int = 0):
     # Check if decel is an integer
     if isinstance(deceleration, float):
       if not deceleration.is_integer():  # type: ignore[attr-defined] # mypy is retarded
@@ -214,6 +214,7 @@ class BioShake(HeaterShakerBackend):
     # The BioShake 3000 ELM firmware needs the motor to fully decelerate
     # before the edge-locking mechanism (ELM) can operate. Without this
     # delay, subsequent setElmUnlockPos commands return 'e' (error).
+    sleep_time_after_stop = 3
     await asyncio.sleep(sleep_time_after_stop)
 
   @property
