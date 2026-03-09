@@ -15,7 +15,7 @@ response parsers (CommandResponse, InitResponse, RegistrationResponse).
 from __future__ import annotations
 
 from dataclasses import dataclass, fields as dc_fields
-from typing import Any, List, get_args, get_origin, get_type_hints
+from typing import Any, List, cast, get_args, get_origin, get_type_hints
 
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
@@ -96,7 +96,7 @@ class HoiParams:
     """
     if hasattr(wire_type, "__metadata__"):
       wire_type = wire_type.__metadata__[0]
-    return wire_type.encode_into(value, self)
+    return cast("HoiParams", wire_type.encode_into(value, self))
 
   # ------------------------------------------------------------------
   # Generic dataclass serialiser (wire_types.py Annotated metadata)
@@ -125,7 +125,7 @@ class HoiParams:
       if not isinstance(meta, WireType):
         continue
       params = meta.encode_into(getattr(obj, f.name), params)
-    return params
+    return cast("HoiParams", params)
 
   def build(self) -> bytes:
     """Return concatenated DataFragments."""

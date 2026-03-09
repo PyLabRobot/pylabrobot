@@ -35,7 +35,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.socket import Socket
@@ -214,7 +214,7 @@ class RegistryProxy:
     """Wire-level destination for this path. Use for required interfaces; KeyError if not discovered."""
     path = object.__getattribute__(self, "_path")
     registry = object.__getattribute__(self, "_registry")
-    return registry.address(path)
+    return cast(Address, registry.address(path))
 
   @property
   def info(self) -> ObjectInfo:
@@ -223,7 +223,7 @@ class RegistryProxy:
     obj = registry._objects.get(path)
     if obj is None:
       raise KeyError(f"'{path}' not in registry. Call await .resolve() first.")
-    return obj
+    return cast(ObjectInfo, obj)
 
   @property
   def is_available(self) -> bool:
@@ -301,10 +301,12 @@ class HamiltonInterfaceResolver:
         if spec.raise_when_missing:
           logger.warning("%s", msg)
         raise RuntimeError(msg) from None
-      return self._resolved[name]
+      addr = self._resolved[name]
+      assert addr is not None
+      return addr
     try:
       await self.client.interfaces[spec.path].resolve()
-      addr = self.client.interfaces[spec.path].address
+      addr = cast(Address, self.client.interfaces[spec.path].address)
       self._resolved[name] = addr
       logger.debug("Resolved %s → %s (%s)", name, addr, spec.path)
       return addr
@@ -324,9 +326,9 @@ class HamiltonInterfaceResolver:
         addr = await self.require(name)
         logger.info("Found interface '%s' (%s) at %s", name, spec.path, addr)
       else:
-        addr = await self.get(name)
-        if addr is not None:
-          logger.info("Found interface '%s' (%s) at %s", name, spec.path, addr)
+        optional_addr = await self.get(name)
+        if optional_addr is not None:
+          logger.info("Found interface '%s' (%s) at %s", name, spec.path, optional_addr)
         else:
           logger.info("Could not find interface '%s' (%s) on instrument.", name, spec.path)
 

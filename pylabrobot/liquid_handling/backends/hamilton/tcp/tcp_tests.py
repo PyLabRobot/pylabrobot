@@ -1194,10 +1194,12 @@ class TestWireTypeRoundTrip(unittest.TestCase):
     self._roundtrip_scalar(I32, 42, HamiltonDataType.I32)
 
   def test_roundtrip_f32(self):
+    from typing import get_args
+
     from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import F32
 
     value = 2.5  # exactly representable in float32
-    meta = F32.__metadata__[0]
+    meta = get_args(F32)[1]
     params = HoiParams()
     meta.encode_into(value, params)
     frag = params._fragments[0]
@@ -1216,9 +1218,11 @@ class TestWireTypeRoundTrip(unittest.TestCase):
     self._roundtrip_array(I16Array, [1, 2, 3], HamiltonDataType.I16_ARRAY)
 
   def test_roundtrip_string(self):
+    from typing import get_args
+
     from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import Str
 
-    meta = Str.__metadata__[0]
+    meta = get_args(Str)[1]
     params = HoiParams()
     meta.encode_into("hello", params)
     frag = params._fragments[0]

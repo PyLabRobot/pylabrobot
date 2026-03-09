@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
@@ -419,7 +419,7 @@ class TypeRegistry:
     print(method.get_signature_string(registry))  # PickupTips(tipParameters: PickupTipParameters, ...)
   """
 
-  address: Address
+  address: Optional[Address] = None
   interfaces: Dict[int, "InterfaceInfo"] = field(default_factory=dict)
   structs: Dict[int, Dict[int, "StructInfo"]] = field(default_factory=dict)
   enums: Dict[int, Dict[int, "EnumInfo"]] = field(default_factory=dict)
@@ -857,7 +857,7 @@ class HamiltonIntrospection:
   def _resolve_address(self, addr_or_path: Union[Address, str]) -> Address:
     """Resolve dot-path string to Address using the backend's registry, or return Address as-is."""
     if isinstance(addr_or_path, str):
-      return self.backend._registry.address(addr_or_path)
+      return cast(Address, self.backend._registry.address(addr_or_path))
     return addr_or_path
 
   async def get_supported_interface0_method_ids(self, address: Address) -> Set[int]:
@@ -1495,7 +1495,7 @@ def _get_wire_type_id(annotation) -> Optional[int]:
   if metadata:
     for m in metadata:
       if hasattr(m, "type_id"):
-        return m.type_id
+        return cast(int, m.type_id)
   return None
 
 
@@ -1729,13 +1729,15 @@ def validate_command(
   ]
 
   for (pf, annotation), pt in zip(struct_fields, struct_params):
+    ref_id = pt.ref_id
+    assert ref_id is not None, "struct_params filtered for ref_id is not None"
     if pt.source_id == 1:
-      intro_struct = pool.resolve_struct(pt.ref_id)
+      intro_struct = pool.resolve_struct(ref_id)
     elif pt.source_id == 0:
       # Same-interface ref: would need interface_id context; skip for now
       intro_struct = None
     else:
-      intro_struct = pool.resolve_struct(pt.ref_id)
+      intro_struct = pool.resolve_struct(ref_id)
     nested_cls = _get_nested_dataclass(annotation)
     if intro_struct and nested_cls:
       child_result = validate_struct(nested_cls, intro_struct, pool)

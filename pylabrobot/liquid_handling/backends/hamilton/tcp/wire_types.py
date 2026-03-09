@@ -312,7 +312,8 @@ _WIRE_TYPE_REGISTRY: dict[int, WireType] = {}
 
 
 def _register(alias: type) -> None:
-  meta = alias.__metadata__[0]
+  meta = getattr(alias, "__metadata__", (None,))[0]
+  assert meta is not None, f"Expected Annotated alias with metadata: {alias}"
   _WIRE_TYPE_REGISTRY[meta.type_id] = meta
 
 
