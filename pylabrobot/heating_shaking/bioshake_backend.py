@@ -211,6 +211,12 @@ class BioShake(HeaterShakerBackend):
     # stop shaking
     await self._send_command(cmd="shakeOff", delay=0.2)
 
+    # The BioShake 3000 ELM firmware needs the motor to fully decelerate
+    # before the edge-locking mechanism (ELM) can operate. Without this
+    # delay, subsequent setElmUnlockPos commands return 'e' (error).
+    sleep_time_after_stop = 3
+    await asyncio.sleep(sleep_time_after_stop)
+
   @property
   def supports_locking(self) -> bool:
     return True
