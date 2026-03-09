@@ -163,7 +163,14 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
   def __init__(self, port: Optional[str] = None, vid: int = 0x0403, pid: int = 0x6001):
     super().__init__()
 
-    self.io = Serial(human_readable_device_name="Mettler Toledo Scale", port=port, vid=vid, pid=pid, baudrate=9600, timeout=1)
+    self.io = Serial(
+      human_readable_device_name="Mettler Toledo Scale",
+      port=port,
+      vid=vid,
+      pid=pid,
+      baudrate=9600,
+      timeout=1,
+    )
 
   async def setup(self) -> None:
     # Core state

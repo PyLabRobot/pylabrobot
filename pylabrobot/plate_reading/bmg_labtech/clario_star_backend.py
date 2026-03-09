@@ -26,7 +26,9 @@ class CLARIOstarBackend(PlateReaderBackend):
   and many commands and parameters are not implemented yet."""
 
   def __init__(self, device_id: Optional[str] = None):
-    self.io = FTDI(human_readable_device_name="BMG CLARIOstar", device_id=device_id, vid=0x0403, pid=0xBB68)
+    self.io = FTDI(
+      human_readable_device_name="BMG CLARIOstar", device_id=device_id, vid=0x0403, pid=0xBB68
+    )
 
   async def setup(self):
     await self.io.setup()

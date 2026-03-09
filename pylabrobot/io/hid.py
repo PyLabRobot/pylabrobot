@@ -29,7 +29,9 @@ class HIDCommand(Command):
 
 
 class HID(IOBase):
-  def __init__(self, human_readable_device_name: str, vid: int, pid: int, serial_number: Optional[str] = None):
+  def __init__(
+    self, human_readable_device_name: str, vid: int, pid: int, serial_number: Optional[str] = None
+  ):
     self._human_readable_device_name = human_readable_device_name
     self.vid = vid
     self.pid = pid
@@ -141,7 +143,8 @@ class HID(IOBase):
     write_data = report_id + data
 
     def _write():
-      assert self.device is not None, "forgot to call setup?"
+      if self.device is None:
+        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
       return self.device.write(write_data)
 
     if self._executor is None:
@@ -157,7 +160,8 @@ class HID(IOBase):
     loop = asyncio.get_running_loop()
 
     def _read():
-      assert self.device is not None, "forgot to call setup?"
+      if self.device is None:
+        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
       try:
         return self.device.read(size, timeout=int(timeout))
       except HIDException as e:
@@ -191,7 +195,12 @@ class HIDValidator(HID):
     pid: int = 0x2023,
     serial_number: Optional[str] = None,
   ):
-    super().__init__(human_readable_device_name=human_readable_device_name, vid=vid, pid=pid, serial_number=serial_number)
+    super().__init__(
+      human_readable_device_name=human_readable_device_name,
+      vid=vid,
+      pid=pid,
+      serial_number=serial_number,
+    )
     self.cr = cr
 
   async def setup(self):

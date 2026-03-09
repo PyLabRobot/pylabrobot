@@ -177,7 +177,9 @@ class Serial(IOBase):
       self._ser = await loop.run_in_executor(self._executor, _open_serial)
 
     except serial.SerialException as e:
-      logger.error(f"Could not connect to device '{self._human_readable_device_name}', is it in use by a different notebook/process?")
+      logger.error(
+        f"Could not connect to device '{self._human_readable_device_name}', is it in use by a different notebook/process?"
+      )
       if self._executor is not None:
         self._executor.shutdown(wait=True)
         self._executor = None
@@ -212,7 +214,7 @@ class Serial(IOBase):
 
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
-      SerialCommand(device_id=self._port, action="write", data=data.decode("unicode_escape"))
+      SerialCommand(device_id=self.port, action="write", data=data.decode("unicode_escape"))
     )
 
   async def read(self, num_bytes: int = 1) -> bytes:
@@ -227,7 +229,7 @@ class Serial(IOBase):
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
       capturer.record(
-        SerialCommand(device_id=self._port, action="read", data=data.decode("unicode_escape"))
+        SerialCommand(device_id=self.port, action="read", data=data.decode("unicode_escape"))
       )
 
     return cast(bytes, data)
@@ -244,7 +246,7 @@ class Serial(IOBase):
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
       capturer.record(
-        SerialCommand(device_id=self._port, action="readline", data=data.decode("unicode_escape"))
+        SerialCommand(device_id=self.port, action="readline", data=data.decode("unicode_escape"))
       )
 
     return cast(bytes, data)
@@ -263,7 +265,7 @@ class Serial(IOBase):
 
     await loop.run_in_executor(self._executor, lambda: _send_break(self._ser, duration=duration))
     logger.log(LOG_LEVEL_IO, "[%s] send_break %s", self._port, duration)
-    capturer.record(SerialCommand(device_id=self._port, action="send_break", data=str(duration)))
+    capturer.record(SerialCommand(device_id=self.port, action="send_break", data=str(duration)))
 
   async def reset_input_buffer(self):
     loop = asyncio.get_running_loop()
@@ -271,7 +273,7 @@ class Serial(IOBase):
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_input_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_input_buffer", self._port)
-    capturer.record(SerialCommand(device_id=self._port, action="reset_input_buffer", data=""))
+    capturer.record(SerialCommand(device_id=self.port, action="reset_input_buffer", data=""))
 
   async def reset_output_buffer(self):
     loop = asyncio.get_running_loop()
@@ -279,7 +281,7 @@ class Serial(IOBase):
       raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_output_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
-    capturer.record(SerialCommand(device_id=self._port, action="reset_output_buffer", data=""))
+    capturer.record(SerialCommand(device_id=self.port, action="reset_output_buffer", data=""))
 
   @property
   def dtr(self) -> bool:

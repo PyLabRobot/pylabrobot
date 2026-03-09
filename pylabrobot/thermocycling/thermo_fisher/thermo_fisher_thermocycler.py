@@ -249,7 +249,10 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
 
     self.io = Socket(
       human_readable_device_name="Thermo Fisher Thermocycler",
-      host=ip, port=self.port, ssl_context=ssl_context, server_hostname=serial_number
+      host=ip,
+      port=self.port,
+      ssl_context=ssl_context,
+      server_hostname=serial_number,
     )
     self._num_blocks: Optional[int] = None
     self.num_temp_zones = 0

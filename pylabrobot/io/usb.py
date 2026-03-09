@@ -214,7 +214,9 @@ class USB(IOBase):
         )
         return resp
 
-      raise TimeoutError(f"Timeout while reading from USB device '{self._human_readable_device_name}'.")
+      raise TimeoutError(
+        f"Timeout while reading from USB device '{self._human_readable_device_name}'."
+      )
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self.dev is None:

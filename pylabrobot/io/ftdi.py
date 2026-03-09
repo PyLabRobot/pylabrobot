@@ -85,7 +85,9 @@ class FTDI(IOBase):
     self._executor: Optional[ThreadPoolExecutor] = None
 
     if get_capture_or_validation_active():
-      raise RuntimeError(f"Cannot create a new FTDI object for '{self._human_readable_device_name}' while capture or validation is active")
+      raise RuntimeError(
+        f"Cannot create a new FTDI object for '{self._human_readable_device_name}' while capture or validation is active"
+      )
 
   @property
   def dev(self) -> "Device":

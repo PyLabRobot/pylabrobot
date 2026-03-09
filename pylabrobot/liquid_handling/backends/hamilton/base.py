@@ -113,6 +113,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     usb_serialized = self.io.serialize()
     del usb_serialized["id_vendor"]
     del usb_serialized["id_product"]
+    del usb_serialized["human_readable_device_name"]
     liquid_handler_serialized = LiquidHandlerBackend.serialize(self)
     return {**usb_serialized, **liquid_handler_serialized}
 
