@@ -21,7 +21,7 @@ def _liconic_rack(
         size_y=127.27,
         # estimates
         size_z=max(site_height, total_height - site_height) if i == num_sites - 1 else site_height,
-        name=f"{name} - {i + 1}",
+        name=f"{name}-{i}",
         pedestal_size_z=0,
       ).at(
         Coordinate(
