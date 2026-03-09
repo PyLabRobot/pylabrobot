@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import Literal, Optional, cast
+from typing import List, Literal, Optional, cast
 
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -649,8 +649,8 @@ class PrepDeck(Deck):
   def __init__(
     self,
     name="deck",
-    size_x=0,
-    size_y=0.5,
+    size_x=300.0,
+    size_y=320.0,
     size_z=0,
     origin=Coordinate.zero(),
     category="deck",
@@ -663,10 +663,11 @@ class PrepDeck(Deck):
       self.assign_child_resource(
         prep_core_gripper_mount(), location=Coordinate(290, 266.5, 62.5)
       )
+    spots_list: List[ResourceHolder] = []
     for column in range(2):
       for row in range(4):
         x = column * 140
-        y = row * 95.5  # ?
+        y = (row * 95) + 2  # TODO: Check if this offset is valid on other systems (plastic corner stay?)
         spot = ResourceHolder(
           name=f"spot_{column}_{row}",
           size_x=127.76,
@@ -675,6 +676,8 @@ class PrepDeck(Deck):
           child_location=Coordinate(0, 0, 3.75),
         )
         self.assign_child_resource(spot, location=Coordinate(x, y, 0))
+        spots_list.append(spot)
+    self.spots: List[ResourceHolder] = spots_list
 
     trash = Trash(name="trash", size_x=0, size_y=0, size_z=0)
     # TODO: y coordinate
@@ -713,7 +716,9 @@ class PrepDeck(Deck):
       )
 
   def __getitem__(self, key: int) -> ResourceHolder:
-    return self.children[key]
+    """Get labware spot by index 0-7 (column-major: 0=spot_0_0, ..., 7=spot_1_3)."""
+    return self.spots[key]
 
   def __setitem__(self, key: int, value: Resource):
-    self.children[key].assign_child_resource(value)
+    """Assign resource to labware spot by index 0-7."""
+    self.spots[key].assign_child_resource(value)
