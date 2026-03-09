@@ -22,7 +22,7 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     super().__init__()
     self.timeout = timeout
 
-    self.io = FTDI(device_id=device_id)
+    self.io = FTDI(device_id=device_id, human_readable_device_name="Biotek Cytation 5")
 
     self._version: Optional[str] = None
 

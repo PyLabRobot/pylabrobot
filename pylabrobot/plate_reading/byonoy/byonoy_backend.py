@@ -23,7 +23,7 @@ class _ByonoyBase(PlateReaderBackend, metaclass=abc.ABCMeta):
   """
 
   def __init__(self, pid: int, device_type: _ByonoyDevice) -> None:
-    self.io = HID(vid=0x16D0, pid=pid)
+    self.io = HID(human_readable_device_name="Byonoy Plate Reader", vid=0x16D0, pid=pid)
     self._background_thread: Optional[threading.Thread] = None
     self._stop_background = threading.Event()
     self._ping_interval = 1.0  # Send ping every second

@@ -100,7 +100,7 @@ class ExperimentalBioTekEL406Backend(
     logger.info("  Timeout: %.1f seconds", self.timeout)
 
     if self.io is None:
-      self.io = FTDI(device_id=self._device_id)
+      self.io = FTDI(human_readable_device_name="BioTek EL406", device_id=self._device_id)
       await self.io.setup()
 
     # Configure serial parameters

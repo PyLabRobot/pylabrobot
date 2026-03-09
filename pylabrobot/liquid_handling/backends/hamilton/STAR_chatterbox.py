@@ -41,6 +41,7 @@ class STARChatterboxBackend(STARBackend):
     num_channels: int = 8,
     machine_configuration: MachineConfiguration = _DEFAULT_MACHINE_CONFIGURATION,
     extended_configuration: ExtendedConfiguration = _DEFAULT_EXTENDED_CONFIGURATION,
+    channels_minimum_y_spacing: Optional[List[float]] = None,
     # deprecated parameters
     core96_head_installed: Optional[bool] = None,
     iswap_installed: Optional[bool] = None,
@@ -51,6 +52,8 @@ class STARChatterboxBackend(STARBackend):
       num_channels: Number of pipetting channels (default: 8)
       machine_configuration: Machine configuration to return from `request_machine_configuration`.
       extended_configuration: Extended configuration to return from `request_extended_configuration`.
+      channels_minimum_y_spacing: Per-channel minimum Y spacing in mm. If None, defaults to
+        `extended_configuration.min_raster_pitch_pip_channels` for all channels.
       core96_head_installed: Deprecated. Set `extended_configuration.left_x_drive
         .core_96_head_installed` instead.
       iswap_installed: Deprecated. Set `extended_configuration.left_x_drive
@@ -83,6 +86,18 @@ class STARChatterboxBackend(STARBackend):
 
     self._machine_configuration = machine_configuration
     self._extended_conf = extended_configuration
+
+    if channels_minimum_y_spacing is not None:
+      if len(channels_minimum_y_spacing) != num_channels:
+        raise ValueError(
+          f"channels_minimum_y_spacing has {len(channels_minimum_y_spacing)} entries, "
+          f"expected {num_channels}."
+        )
+      self._channels_minimum_y_spacing = list(channels_minimum_y_spacing)
+    else:
+      self._channels_minimum_y_spacing = [
+        extended_configuration.min_raster_pitch_pip_channels
+      ] * num_channels
 
   async def setup(
     self,
@@ -185,6 +200,18 @@ class STARChatterboxBackend(STARBackend):
       raise ValueError(f"channel_idx must be between 0 and {self.num_channels - 1}")
 
     return simulated_value
+
+  async def channel_request_y_minimum_spacing(self, channel_idx: int) -> float:
+    """Return mock minimum Y spacing for the given channel.
+
+    Returns the value stored in ``_channels_minimum_y_spacing`` (set during
+    ``__init__()``) without issuing any hardware commands.
+    """
+    if not 0 <= channel_idx <= self.num_channels - 1:
+      raise ValueError(
+        f"channel_idx must be between 0 and {self.num_channels - 1}, got {channel_idx}."
+      )
+    return self._channels_minimum_y_spacing[channel_idx]
 
   async def move_channel_y(self, channel: int, y: float):
     print(f"moving channel {channel} to y: {y}")

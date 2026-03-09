@@ -9,7 +9,9 @@ class HamiltonHepaFanBackend(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""
 
   def __init__(self, device_id=None):
-    self.io = FTDI(device_id=device_id, vid=0x0856, pid=0xAC11)
+    self.io = FTDI(
+      human_readable_device_name="Hamilton HEPA Fan", device_id=device_id, vid=0x0856, pid=0xAC11
+    )
 
   async def setup(self):
     await self.io.setup()

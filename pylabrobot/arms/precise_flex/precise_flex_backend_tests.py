@@ -38,7 +38,9 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_init(self):
     self.assertFalse(self.backend._has_rail)
-    self.MockSocketClass.assert_called_once_with(host="localhost", port=10100)
+    self.MockSocketClass.assert_called_once_with(
+      human_readable_device_name="Precise Flex Arm", host="localhost", port=10100
+    )
     self.assertEqual(self.backend.profile_index, 1)
     self.assertEqual(self.backend.location_index, 1)
     self.assertFalse(self.backend.horizontal_compliance)
@@ -50,7 +52,9 @@ class PreciseFlexBackendTests(unittest.IsolatedAsyncioTestCase):
 
     backend_with_rail = PreciseFlexBackend(has_rail=True, host="127.0.0.1", port=12345)
     self.assertTrue(backend_with_rail._has_rail)
-    self.MockSocketClass.assert_called_once_with(host="127.0.0.1", port=12345)
+    self.MockSocketClass.assert_called_once_with(
+      human_readable_device_name="Precise Flex Arm", host="127.0.0.1", port=12345
+    )
     self.assertEqual(backend_with_rail.profile_index, 1)
     self.assertEqual(backend_with_rail.location_index, 1)
     self.assertFalse(backend_with_rail.horizontal_compliance)
