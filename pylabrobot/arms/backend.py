@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from pylabrobot.arms.precise_flex.coords import PreciseFlexCartesianCoords
 from pylabrobot.machines.backend import MachineBackend
@@ -125,3 +125,15 @@ class SCARABackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def get_cartesian_position(self) -> PreciseFlexCartesianCoords:
     """Get the current position of the arm in 3D space."""
+
+  @abstractmethod
+  async def freedrive_mode(self, free_axes: List[int]) -> None:
+    """Enter freedrive mode, allowing manual movement of the specified joints.
+
+    Args:
+      free_axes: List of joint indices to free.
+    """
+
+  @abstractmethod
+  async def end_freedrive_mode(self) -> None:
+    """Exit freedrive mode."""

@@ -78,6 +78,7 @@ class CytomatBackend(IncubatorBackend):
       stopbits=serial.STOPBITS_ONE,
       write_timeout=1,
       timeout=1,
+      human_readable_device_name="Cytomat",
     )
 
   async def setup(self):

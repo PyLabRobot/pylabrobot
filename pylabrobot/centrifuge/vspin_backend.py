@@ -27,7 +27,7 @@ class Access2Backend(LoaderBackend):
       device_id: The libftdi id for the loader. Find using
         `python3 -m pylibftdi.examples.list_devices`
     """
-    self.io = FTDI(device_id=device_id)
+    self.io = FTDI(human_readable_device_name="Agilent Access2 Loader", device_id=device_id)
     self.timeout = timeout
 
   async def _read(self) -> bytes:
@@ -180,7 +180,7 @@ class VSpinBackend(CentrifugeBackend):
     Args:
       device_id: The libftdi id for the centrifuge. Find using `python -m pylibftdi.examples.list_devices`
     """
-    self.io = FTDI(device_id=device_id)
+    self.io = FTDI(human_readable_device_name="Agilent VSpin Centrifuge", device_id=device_id)
     self._bucket_1_remainder: Optional[int] = None
     # only attempt loading calibration if device_id is not None
     # if it is None, we will load it after setup when we can query the device id from the io

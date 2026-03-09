@@ -39,6 +39,7 @@ from .STAR_backend import (
   UnknownHamiltonError,
   parse_star_fw_string,
 )
+from .STAR_chatterbox import _DEFAULT_EXTENDED_CONFIGURATION, _DEFAULT_MACHINE_CONFIGURATION
 
 
 class TestSTARResponseParsing(unittest.TestCase):
@@ -177,8 +178,8 @@ class STARCommandCatcher(STARBackend):
 
   async def setup(self) -> None:  # type: ignore
     self._num_channels = 8
-    self.iswap_installed = True
-    self.core96_head_installed = True
+    self._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self._core_parked = True
 
   async def send_command(  # type: ignore
@@ -260,8 +261,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.maxDiff = None
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1091,8 +1092,8 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plt_car2, rails=3)
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True
@@ -1220,8 +1221,8 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(plt_carrier, rails=10)
 
     self.star._num_channels = 8
-    self.star.core96_head_installed = True
-    self.star.iswap_installed = True
+    self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.star._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.star.setup = unittest.mock.AsyncMock()
     self.star._core_parked = True
     self.star._iswap_parked = True
@@ -1416,8 +1417,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.backend._write_and_read_command = unittest.mock.AsyncMock()
     self.backend.io = unittest.mock.AsyncMock()
     self.backend._num_channels = 8
-    self.backend.core96_head_installed = True
-    self.backend.iswap_installed = True
+    self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.backend.setup = unittest.mock.AsyncMock()
     self.backend._core_parked = True
     self.backend._iswap_parked = True
@@ -1529,6 +1530,108 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     tip_rack.unassign()
 
 
+class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
+  """Test that different channel spacing configurations produce different behavior.
+
+  Real firmware VY responses captured from hardware (GitHub issue #822):
+    - 4-channel 18mm single-rail:  P<n>VYid<id>yc194 388 1  (yc[1]=388 → 18.0mm)
+    - 8-channel 9mm standard:      P<n>VYid<id>yc000 194 0  (yc[1]=194 → 9.0mm)
+  """
+
+  # -- can_reach_position: reachability shrinks with wider spacing ----------------
+
+  async def test_can_reach_4ch_18mm_rejects_position_reachable_at_9mm(self):
+    """A position reachable by channel 0 at 9mm spacing is unreachable at 18mm spacing.
+
+    Channel 0 (backmost) min_y = left_arm_min_y_position + sum(spacings[1..3])
+      At 9mm:  6 + 9*3 = 33   → y=33 reachable
+      At 18mm: 6 + 18*3 = 60  → y=33 unreachable
+    """
+    backend = STARBackend()
+    backend._num_channels = 4
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+
+    backend._channels_minimum_y_spacing = [9.0] * 4
+    self.assertTrue(backend.can_reach_position(0, Coordinate(100, 33, 100)))
+
+    backend._channels_minimum_y_spacing = [18.0] * 4
+    self.assertFalse(backend.can_reach_position(0, Coordinate(100, 33, 100)))
+
+  async def test_can_reach_4ch_18mm_rejects_back_channel_too_far_back(self):
+    """At 18mm spacing, the backmost channel has a lower max_y than at 9mm.
+
+    Channel 3 (frontmost) max_y = pip_maximal_y_position - sum(spacings[0..2])
+      At 9mm:  606.5 - 9*3 = 579.5  → y=574 reachable
+      At 18mm: 606.5 - 18*3 = 552.5 → y=574 unreachable
+    """
+    backend = STARBackend()
+    backend._num_channels = 4
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+
+    backend._channels_minimum_y_spacing = [9.0] * 4
+    self.assertTrue(backend.can_reach_position(3, Coordinate(100, 574, 100)))
+
+    backend._channels_minimum_y_spacing = [18.0] * 4
+    self.assertFalse(backend.can_reach_position(3, Coordinate(100, 574, 100)))
+
+  # -- position_channels_in_y_direction: validation rejects tight positions -------
+
+  def _make_star_backend(self, num_channels, spacings):
+    """Helper: create a STARBackend with given channel count and spacings, mocking I/O."""
+    backend = STARBackend()
+    backend._num_channels = num_channels
+    backend._channels_minimum_y_spacing = list(spacings)
+    backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    backend.id_ = 0
+    backend._write_and_read_command = unittest.mock.AsyncMock()
+    backend.get_channels_y_positions = unittest.mock.AsyncMock()
+    return backend
+
+  async def test_position_channels_rejects_9mm_gap_when_spacing_is_18mm(self):
+    """With make_space=False, channels 9mm apart pass validation at 9mm but are rejected at 18mm."""
+    spread_positions = {0: 100.0, 1: 91.0, 2: 82.0, 3: 73.0}
+
+    # At 9mm: channels spaced 9mm apart → valid, JY command is sent.
+    backend_9 = self._make_star_backend(4, [9.0] * 4)
+    backend_9.get_channels_y_positions.return_value = dict(spread_positions)
+    await backend_9.position_channels_in_y_direction(spread_positions, make_space=False)
+    self.assertTrue(backend_9._write_and_read_command.called)
+
+    # At 18mm: same positions → rejected.
+    backend_18 = self._make_star_backend(4, [18.0] * 4)
+    backend_18.get_channels_y_positions.return_value = dict(spread_positions)
+    with self.assertRaises(ValueError):
+      await backend_18.position_channels_in_y_direction(spread_positions, make_space=False)
+
+  async def test_position_channels_make_space_spreads_wider_at_18mm(self):
+    """make_space=True pushes non-target channels further apart at 18mm than at 9mm.
+
+    Move only channel 2 to y=40. make_space adjusts channels 3 (in front of channel 2)
+    to respect minimum spacing. At 9mm it pushes channel 3 to 31, at 18mm to 22.
+    """
+    current = {0: 300.0, 1: 200.0, 2: 100.0, 3: 50.0}
+    requested = {2: 40.0}
+
+    # At 9mm: channel 3 must be ≤ 40 - 9 = 31.
+    backend_9 = self._make_star_backend(4, [9.0] * 4)
+    backend_9.get_channels_y_positions.return_value = dict(current)
+    await backend_9.position_channels_in_y_direction(dict(requested), make_space=True)
+    cmd_9mm = backend_9._write_and_read_command.call_args.kwargs["cmd"]
+    # Channel 3 pushed to 31.0 → 310 increments.
+    self.assertIn("0310", cmd_9mm)
+
+    # At 18mm: channel 3 must be ≤ 40 - 18 = 22.
+    backend_18 = self._make_star_backend(4, [18.0] * 4)
+    backend_18.get_channels_y_positions.return_value = dict(current)
+    await backend_18.position_channels_in_y_direction(dict(requested), make_space=True)
+    cmd_18mm = backend_18._write_and_read_command.call_args.kwargs["cmd"]
+    # Channel 3 pushed to 22.0 → 220 increments.
+    self.assertIn("0220", cmd_18mm)
+
+    # The JY commands must differ.
+    self.assertNotEqual(cmd_9mm, cmd_18mm)
+
+
 class STARTestBase(unittest.IsolatedAsyncioTestCase):
   """Shared setup for probe/batch/helper tests."""
 
@@ -1552,8 +1655,8 @@ class STARTestBase(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.STAR._num_channels = 8
-    self.STAR.core96_head_installed = True
-    self.STAR.iswap_installed = True
+    self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.STAR._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
     self.STAR.setup = unittest.mock.AsyncMock()
     self.STAR._core_parked = True
     self.STAR._iswap_parked = True

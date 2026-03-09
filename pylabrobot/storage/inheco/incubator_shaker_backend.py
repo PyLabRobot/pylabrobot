@@ -159,6 +159,7 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     self.dip_switch_id = dip_switch_id
 
     self.io = Serial(
+      human_readable_device_name="Inheco Incubator Shaker",
       port=port,
       vid=vid,
       pid=pid,

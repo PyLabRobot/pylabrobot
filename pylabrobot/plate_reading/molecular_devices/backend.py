@@ -251,7 +251,12 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   def __init__(self, port: str) -> None:
     self.port = port
-    self.io = Serial(self.port, baudrate=9600, timeout=0.2)
+    self.io = Serial(
+      human_readable_device_name="Molecular Devices Plate Reader",
+      port=self.port,
+      baudrate=9600,
+      timeout=0.2,
+    )
 
   async def setup(self) -> None:
     await self.io.setup()
