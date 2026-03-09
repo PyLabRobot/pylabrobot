@@ -74,6 +74,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     super().__init__()
     self.io = USB(
+      human_readable_device_name="Tecan EVO",
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,

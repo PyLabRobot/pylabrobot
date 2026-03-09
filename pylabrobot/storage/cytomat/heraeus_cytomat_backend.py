@@ -41,6 +41,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
       write_timeout=1,
       timeout=1,
       rtscts=True,
+      human_readable_device_name="Heraeus Cytomat",
     )
 
   async def setup(self) -> Serial:
