@@ -41,6 +41,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
       write_timeout=1,
       timeout=1,
       rtscts=True,
+      human_readable_device_name="Heraeus Cytomat",
     )
 
   async def setup(self) -> Serial:
@@ -108,7 +109,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
     await self._send_command("ST 1902")
     await self._wait_ready()
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate, site=PlateHolder):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **backend_kwargs):
     """Fetch a plate from storage onto the transfer station, with gate open/close."""
     site = plate.parent
     assert isinstance(site, PlateHolder), "Plate not in storage"
@@ -119,7 +120,7 @@ class HeraeusCytomatBackend(IncubatorBackend):
     await self._wait_ready()
     await self._send_command("ST 1903")  # terminate access
 
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **backend_kwargs):
     """Place a plate from the transfer station into storage at the given site."""
     m, n = self._site_to_m_n(site)
     await self._send_command(f"WR DM0 {m}")  # carousel pos

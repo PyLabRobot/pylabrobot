@@ -419,6 +419,7 @@ class HamiltonTCPClient:
         retries that command once.
     """
     self.io = Socket(
+      human_readable_device_name="Hamilton Liquid Handler",
       host=host,
       port=port,
       read_timeout=read_timeout,

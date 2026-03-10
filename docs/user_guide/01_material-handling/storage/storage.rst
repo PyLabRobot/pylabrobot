@@ -7,8 +7,8 @@ A storage machine is defined as a **machine whose primary feature is**
 
 Examples of this simplest form of a storage machine include:
 
-- `Agilent Labware MiniHub <https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/labware-minihub>`_ – open storage of labware with rotation feature
-- `Lab Services PlateCarousel <https://www.lab-services.nl/en/products/platebutler/platecarousel>`_ – open storage of labware with rotation feature
+- `Agilent Labware MiniHub <https://www.agilent.com/en/product/automated-liquid-handling/automated-microplate-management/labware-minihub>`_ - open storage of labware with rotation feature
+- `Lab Services PlateCarousel <https://www.lab-services.nl/en/products/platebutler/platecarousel>`_ - open storage of labware with rotation feature
 
 
 However, this purposefully broad definition means most storage machines also include other features such as:
@@ -48,7 +48,7 @@ However, this purposefully broad definition means most storage machines also inc
      </p>
      <p>
         The only time the term <code>plate hotel</code> or <code>hotel</code> is used in PyLabRobot is when
-        referring to the name of a specific machine, such as the 
+        referring to the name of a specific machine, such as the
         <a href="https://www.thermofisher.com/order/catalog/product/50078485" target="_blank" rel="noopener">
           TFS Cytomat™ 2 Hotel Automated Storage</a>.
         In this case, it is used as a noun to refer to a specific product.
@@ -73,21 +73,21 @@ Retrieval Pattern: Stacking (Sequential) vs. Random Access
 
    * - **Stacking Access (Sequential)**
      - **Random Access**
-   * - Materials stored in a fixed order (e.g. vertical stack, rotating carousel).  
+   * - Materials stored in a fixed order (e.g. vertical stack, rotating carousel).
        Only the top/front-most item is accessible without mechanical movement.
-     - Materials stored in individually addressable slots or shelves.  
+     - Materials stored in individually addressable slots or shelves.
        Any item can be accessed directly.
    * - Slower access time for deeper items.
      - Faster access to any item.
    * - Simpler mechanics, smaller footprint.
      - More flexible but mechanically complex.
-   * - **Examples:** 
+   * - **Examples:**
 
-       - Agilent Labware MiniHub  
+       - Agilent Labware MiniHub
        - Lab Services PlateCarousel
-     - **Examples:**  
-     
-       - Thermo Cytomat 2 C450  
+     - **Examples:**
+
+       - Thermo Cytomat 2 C450
        - LiCONiC STX Series
 
 Accessibility: Open vs. Closed Storage
@@ -99,19 +99,19 @@ Accessibility: Open vs. Closed Storage
 
    * - **Open Storage**
      - **Closed Storage**
-   * - Materials are exposed without obstruction.  
+   * - Materials are exposed without obstruction.
        No barrier between the robot and the stored material.
-     - Materials enclosed in a chamber.  
+     - Materials enclosed in a chamber.
        Access requires opening a door, drawer, or robotic port.
    * - Simplifies integration and visual inspection.
      - Enables environmental control (temperature, humidity, sterility).
    * - No protection from contamination or temperature drift.
      - Ideal for incubators, cold storage, and sterile handling.
-   * - **Examples:**  
-       - Agilent Labware MiniHub  
+   * - **Examples:**
+       - Agilent Labware MiniHub
        - Manual stackers
-     - **Examples:**  
-       - Thermo Cytomat 2  
+     - **Examples:**
+       - Thermo Cytomat 2
        - LiCONiC STX incubators
 
 Combined Retrieval & Access Summary
@@ -120,16 +120,16 @@ Combined Retrieval & Access Summary
 .. list-table::
    :header-rows: 1
 
-   * - 
+   * -
      - **Open Storage**
      - **Closed Storage**
    * - **Stacking Access (Sequential)**
-     - Agilent Labware MiniHub  
+     - Agilent Labware MiniHub
        Lab Services PlateCarousel
      - STX incubators with drawer-based shelves
    * - **Random Access**
      - Rare in open format (e.g. manual racks)
-     - Thermo Cytomat 2 C450  
+     - Thermo Cytomat 2 C450
        LiCONiC STX Series
 
 
@@ -142,3 +142,4 @@ Combined Retrieval & Access Summary
    cytomat
    inheco/incubator_shaker
    inheco/scila
+   liconic

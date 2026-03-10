@@ -78,6 +78,7 @@ class CytomatBackend(IncubatorBackend):
       stopbits=serial.STOPBITS_ONE,
       write_timeout=1,
       timeout=1,
+      human_readable_device_name="Cytomat",
     )
 
   async def setup(self):
@@ -391,12 +392,12 @@ class CytomatBackend(IncubatorBackend):
   async def get_temperature(self) -> float:
     return (await self.get_incubation_query("it")).actual_value
 
-  async def fetch_plate_to_loading_tray(self, plate: Plate):
+  async def fetch_plate_to_loading_tray(self, plate: Plate, **backend_kwargs):
     site = plate.parent
     assert isinstance(site, PlateHolder)
     await self.action_storage_to_transfer(site)
 
-  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder, **backend_kwargs):
     await self.action_transfer_to_storage(site)
 
   async def set_temperature(self, *args, **kwargs):
