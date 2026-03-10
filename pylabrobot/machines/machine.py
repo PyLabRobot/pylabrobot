@@ -42,7 +42,7 @@ class Machine(SerializableMixin, ABC):
   """Abstract base class for machine frontends."""
 
   def __init__(self, backend: MachineBackend):
-    self.backend = backend
+    self._backend = backend
     self._setup_finished = False
 
   @property
@@ -50,7 +50,7 @@ class Machine(SerializableMixin, ABC):
     return self._setup_finished
 
   def serialize(self) -> dict:
-    return {"backend": self.backend.serialize()}
+    return {"backend": self._backend.serialize()}
 
   @classmethod
   def deserialize(cls, data: dict):
@@ -61,12 +61,12 @@ class Machine(SerializableMixin, ABC):
     return cls(**data_copy)
 
   async def setup(self, **backend_kwargs):
-    await self.backend.setup(**backend_kwargs)
+    await self._backend.setup(**backend_kwargs)
     self._setup_finished = True
 
   @need_setup_finished
   async def stop(self):
-    await self.backend.stop()
+    await self._backend.stop()
     self._setup_finished = False
 
   async def __aenter__(self):

@@ -136,7 +136,7 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     self.mock_loader_backend.unload.assert_not_awaited()
 
   def test_serialize(self):
-    self.loader.backend = LoaderChatterboxBackend()
-    self.centrifuge.backend = CentrifugeChatterboxBackend()
+    self.loader._backend = LoaderChatterboxBackend()
+    self.centrifuge._backend = CentrifugeChatterboxBackend()
     serialized = self.loader.serialize()
     self.assertEqual(Loader.deserialize(serialized), self.loader)

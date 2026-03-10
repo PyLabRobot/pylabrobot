@@ -52,7 +52,7 @@ class ThermocyclerTests(unittest.IsolatedAsyncioTestCase):
 
   def test_thermocycler_serialization(self):
     """Test that the high-level resource serializes and deserializes correctly."""
-    self.tc.backend = ThermocyclerChatterboxBackend()
+    self.tc._backend = ThermocyclerChatterboxBackend()
     serialized = self.tc.serialize()
     deserialized = Thermocycler.deserialize(serialized)
     assert self.tc == deserialized
