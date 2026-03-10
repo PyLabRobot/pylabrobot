@@ -2,6 +2,7 @@ import random
 from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.capabilities.automated_retrieval import AutomatedRetrievalCapability
+from pylabrobot.capabilities.barcode_scanning import BarcodeScanningCapability
 from pylabrobot.capabilities.humidity_controlling import HumidityControlCapability
 from pylabrobot.capabilities.shaking import ShakingCapability
 from pylabrobot.capabilities.temperature_controlling import TemperatureControlCapability
@@ -16,7 +17,7 @@ from pylabrobot.resources import (
   Rotation,
 )
 
-from .backend import LiconicBackend
+from .backend import LiconicBackend, LiconicType
 
 
 class NoFreeSiteError(Exception):
@@ -27,9 +28,12 @@ class Liconic(Resource, Machine):
   def __init__(
     self,
     name: str,
-    backend: LiconicBackend,
+    liconic_model: Union[LiconicType, str],
+    port: str,
     racks: List[PlateCarrier],
     loading_tray_location: Coordinate,
+    has_shaker: bool = False,
+    barcode_scanner: Optional[BarcodeScanningCapability] = None,
     size_x: float = 0,
     size_y: float = 0,
     size_z: float = 0,
@@ -37,6 +41,10 @@ class Liconic(Resource, Machine):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
+    if isinstance(liconic_model, str):
+      liconic_model = LiconicType(liconic_model)
+
+    backend = LiconicBackend(model=liconic_model, port=port)
     Resource.__init__(
       self,
       name=name,
@@ -60,19 +68,30 @@ class Liconic(Resource, Machine):
       self.assign_child_resource(rack, location=None)
 
     self.retrieval = AutomatedRetrievalCapability(backend=backend)
-    self.tc = TemperatureControlCapability(backend=backend)
-    self.humidity = HumidityControlCapability(backend=backend)
-    self.shaker = ShakingCapability(backend=backend)
+    self.tc = TemperatureControlCapability(backend=backend) if liconic_model.has_temperature_control else None
+    self.humidity = HumidityControlCapability(backend=backend) if liconic_model.has_humidity_control else None
+    self.shaker = ShakingCapability(backend=backend) if has_shaker else None
+    self.barcode_scanner = barcode_scanner
 
-    self._capabilities = [self.tc, self.humidity, self.retrieval, self.shaker]
+    self._capabilities = [
+      c for c in [self.retrieval, self.tc, self.humidity, self.shaker, self.barcode_scanner]
+      if c is not None
+    ]
 
   @property
   def racks(self) -> List[PlateCarrier]:
     return self._racks
 
   async def setup(self, **backend_kwargs):
+    if self.barcode_scanner is not None:
+      await self.barcode_scanner.backend.setup()
     await super().setup()
     await self._backend.set_racks(self._racks)
+
+  async def stop(self):
+    await super().stop()
+    if self.barcode_scanner is not None:
+      await self.barcode_scanner.backend.stop()
 
   def get_num_free_sites(self) -> int:
     return sum(len(rack.get_free_sites()) for rack in self._racks)

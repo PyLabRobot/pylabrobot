@@ -13,6 +13,7 @@ from pylabrobot.capabilities.shaking.backend import ShakerBackend
 from pylabrobot.capabilities.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.io.serial import Serial
 from pylabrobot.machines.backend import MachineBackend
+from pylabrobot.capabilities.barcode_scanning import BarcodeScannerBackend
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.carrier import PlateCarrier
@@ -38,10 +39,6 @@ LICONIC_SITE_HEIGHT_TO_STEPS = {
   104: 3563,  # pitch=110, site_height=104
 }
 
-# Climate suffix categories
-_COOLING_SUFFIXES = {"HC", "HR", "DF"}
-_HUMIDITY_SUFFIXES = {"IC", "HC", "HR", "AR", "DH"}
-_NC_SUFFIX = "NC"
 
 
 class LiconicBackend(
@@ -50,10 +47,7 @@ class LiconicBackend(
   HumidityControllerBackend,
   ShakerBackend,
 ):
-  """Backend for Liconic incubators.
-
-  Optionally accepts a barcode_scanner for internal barcode reading.
-  """
+  """Backend for Liconic incubators."""
 
   default_baud = 9600
   serial_message_encoding = "ascii"
@@ -65,13 +59,8 @@ class LiconicBackend(
     self,
     model: Union[LiconicType, str],
     port: str,
-    barcode_scanner=None,
   ):
     super().__init__()
-
-    # TODO: barcode scanner should be managed by the front end (Liconic machine class)
-    # and passed to the backend, rather than owned by the backend directly.
-    self.barcode_scanner = barcode_scanner
 
     if isinstance(model, str):
       try:
@@ -96,10 +85,6 @@ class LiconicBackend(
 
     self.co2_installed: Optional[bool] = None
     self.n2_installed: Optional[bool] = None
-
-  @property
-  def _climate_suffix(self) -> str:
-    return self.model.value.split("_")[-1]
 
   async def setup(self):
     await MachineBackend.setup(self)
@@ -182,10 +167,10 @@ class LiconicBackend(
 
   @property
   def supports_active_cooling(self) -> bool:
-    return self._climate_suffix in _COOLING_SUFFIXES
+    return self.model.has_active_cooling
 
   async def set_temperature(self, temperature: float):
-    if self._climate_suffix == _NC_SUFFIX:
+    if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     temp_value = int(temperature * 10)
     temp_str = str(temp_value).zfill(5)
@@ -193,7 +178,7 @@ class LiconicBackend(
     await self._wait_ready()
 
   async def get_current_temperature(self) -> float:
-    if self._climate_suffix == _NC_SUFFIX:
+    if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM982")
     try:
@@ -208,17 +193,17 @@ class LiconicBackend(
 
   @property
   def supports_humidity_control(self) -> bool:
-    return self._climate_suffix in _HUMIDITY_SUFFIXES
+    return self.model.has_humidity_control
 
   async def set_humidity(self, humidity: float):
-    if self._climate_suffix == _NC_SUFFIX:
+    if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     humidity_val = int(humidity * 1000)
     await self._send_command(f"WR DM893 {str(humidity_val).zfill(5)}")
     await self._wait_ready()
 
   async def get_current_humidity(self) -> float:
-    if self._climate_suffix == _NC_SUFFIX:
+    if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM983")
     try:
@@ -366,12 +351,12 @@ class LiconicBackend(
     await self._wait_ready()
     await self._send_command("ST 1903")
 
-  async def read_barcode_inline(self, cassette: int, plt_position: int) -> Barcode:
-    if self.barcode_scanner is None:
-      raise RuntimeError("Barcode scanner not configured for this incubator instance")
+  async def read_barcode_inline(
+    self, cassette: int, plt_position: int, barcode_scanner: BarcodeScannerBackend
+  ) -> Barcode:
     await self._send_command("ST 1910")
     await self._wait_ready()
-    barcode = await self.barcode_scanner.scan()
+    barcode = await barcode_scanner.scan_barcode()
     logger.info(
       "Read barcode from plate at cassette %d, position %d: %s",
       cassette, plt_position, barcode.data,
@@ -382,9 +367,7 @@ class LiconicBackend(
     await self._wait_ready()
     return barcode
 
-  async def scan_barcode(self, site: PlateHolder) -> Barcode:
-    if self.barcode_scanner is None:
-      raise RuntimeError("Barcode scanner not configured for this incubator instance")
+  async def scan_barcode(self, site: PlateHolder, barcode_scanner: BarcodeScannerBackend) -> Barcode:
     m, n = self._site_to_m_n(site)
     step_size, pos_num = self._carrier_to_steps_pos(site)
     await self._send_command(f"WR DM0 {m}")
@@ -392,12 +375,12 @@ class LiconicBackend(
     await self._send_command(f"WR DM25 {pos_num}")
     await self._send_command(f"WR DM5 {n}")
     await self._send_command("ST 1910")
-    barcode = await self.barcode_scanner.scan()
+    barcode = await barcode_scanner.scan_barcode()
     logger.info("Scanned barcode: %s", barcode.data)
     return barcode
 
   async def get_target_temperature(self) -> float:
-    if self._climate_suffix == _NC_SUFFIX:
+    if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM890")
     try:
@@ -406,7 +389,7 @@ class LiconicBackend(
       raise RuntimeError(f"Invalid set temperature value received from incubator: {resp!r}")
 
   async def get_target_humidity(self) -> float:
-    if self._climate_suffix == _NC_SUFFIX:
+    if not self.model.has_temperature_control:
       raise NotImplementedError("Climate control is not supported on this model")
     resp = await self._send_command("RD DM893")
     try:

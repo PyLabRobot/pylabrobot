@@ -1,6 +1,6 @@
 """Legacy. Use pylabrobot.liconic.LiconicBackend instead."""
 
-from typing import List, Union
+from typing import List, Optional, Union
 
 from pylabrobot.resources import Plate, PlateHolder
 from pylabrobot.resources.carrier import PlateCarrier
@@ -27,9 +27,15 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     barcode_scanner=None,
   ):
     super().__init__()
-    self._new = new_liconic.LiconicBackend(
-      model=model, port=port, barcode_scanner=barcode_scanner
-    )
+    self._new = new_liconic.LiconicBackend(model=model, port=port)
+    self.barcode_scanner = barcode_scanner
+
+  @property
+  def _barcode_backend(self) -> Optional[new_liconic.BarcodeScannerBackend]:
+    """Extract the BarcodeScannerBackend from a legacy BarcodeScanner Machine."""
+    if self.barcode_scanner is None:
+      return None
+    return self.barcode_scanner.backend
 
   def __getattr__(self, name):
     if name in self._FORWARDED_ATTRS:
@@ -69,10 +75,12 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     self, plate: Plate, read_barcode: bool = False, **backend_kwargs
   ):
     if read_barcode:
+      if self.barcode_scanner is None:
+        raise RuntimeError("Barcode scanner not configured for this incubator instance")
       site = plate.parent
       assert isinstance(site, PlateHolder)
       m, n = self._new._site_to_m_n(site)
-      plate.barcode = await self._new.read_barcode_inline(m, n)
+      plate.barcode = await self._new.read_barcode_inline(m, n, self._barcode_backend)
     await self._new.fetch_plate_to_loading_tray(plate)
 
   async def take_in_plate(
@@ -80,17 +88,21 @@ class ExperimentalLiconicBackend(IncubatorBackend):
   ):
     await self._new.store_plate(plate, site)
     if read_barcode:
+      if self.barcode_scanner is None:
+        raise RuntimeError("Barcode scanner not configured for this incubator instance")
       m, n = self._new._site_to_m_n(site)
-      plate.barcode = await self._new.read_barcode_inline(m, n)
+      plate.barcode = await self._new.read_barcode_inline(m, n, self._barcode_backend)
 
   async def move_position_to_position(
     self, plate: Plate, dest_site: PlateHolder, read_barcode: bool = False
   ):
     if read_barcode:
+      if self.barcode_scanner is None:
+        raise RuntimeError("Barcode scanner not configured for this incubator instance")
       orig_site = plate.parent
       assert isinstance(orig_site, PlateHolder)
       m, n = self._new._site_to_m_n(orig_site)
-      plate.barcode = await self._new.read_barcode_inline(m, n)
+      plate.barcode = await self._new.read_barcode_inline(m, n, self._barcode_backend)
     await self._new.move_position_to_position(plate, dest_site)
 
   async def set_temperature(self, temperature: float):
@@ -154,10 +166,14 @@ class ExperimentalLiconicBackend(IncubatorBackend):
     return await self._new.check_second_transfer_sensor()
 
   async def scan_barcode(self, site: PlateHolder):
-    return await self._new.scan_barcode(site)
+    if self.barcode_scanner is None:
+      raise RuntimeError("Barcode scanner not configured for this incubator instance")
+    return await self._new.scan_barcode(site, self._barcode_backend)
 
   async def read_barcode_inline(self, cassette: int, plt_position: int):
-    return await self._new.read_barcode_inline(cassette, plt_position)
+    if self.barcode_scanner is None:
+      raise RuntimeError("Barcode scanner not configured for this incubator instance")
+    return await self._new.read_barcode_inline(cassette, plt_position, self._barcode_backend)
 
   def serialize(self) -> dict:
     return self._new.serialize()
