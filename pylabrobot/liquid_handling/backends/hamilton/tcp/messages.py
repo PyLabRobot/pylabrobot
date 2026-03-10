@@ -14,7 +14,8 @@ response parsers (CommandResponse, InitResponse, RegistrationResponse).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields as dc_fields
+from dataclasses import dataclass
+from dataclasses import fields as dc_fields
 from typing import Any, List, cast, get_args, get_origin, get_type_hints
 
 from pylabrobot.io.binary import Reader, Writer
@@ -33,7 +34,6 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   HamiltonDataType,
   decode_fragment,
 )
-
 
 PADDED_FLAG = 0x01
 

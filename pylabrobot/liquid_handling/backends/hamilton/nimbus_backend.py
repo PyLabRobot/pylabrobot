@@ -12,27 +12,27 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, overload, Sequence, Tuple, TypeVar, Union
+from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, Union, overload
 
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+  I32,
+  U16,
   Bool,
   BoolArray,
   I16Array,
-  I32,
   I32Array,
-  U16,
   U16Array,
   U32Array,
 )
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
-  HamiltonTCPClient,
   HamiltonInterfaceResolver,
+  HamiltonTCPClient,
   InterfaceSpec,
 )
 from pylabrobot.liquid_handling.standard import (

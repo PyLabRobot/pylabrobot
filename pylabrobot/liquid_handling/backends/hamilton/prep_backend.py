@@ -26,18 +26,21 @@ import asyncio
 import logging
 import math
 import random
-from typing import List, Optional, overload, Tuple, Union
-
-from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
+from typing import List, Optional, Tuple, Union, overload
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 from pylabrobot.liquid_handling.backends.hamilton.common import fill_in_defaults
+from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import (
-  HamiltonTCPClient,
   HamiltonInterfaceResolver,
+  HamiltonTCPClient,
   InterfaceSpec,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
+from pylabrobot.liquid_handling.liquid_classes.hamilton import (
+  HamiltonLiquidClass,
+  get_star_liquid_class,
+)
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -53,10 +56,6 @@ from pylabrobot.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
-)
-from pylabrobot.liquid_handling.liquid_classes.hamilton import (
-  HamiltonLiquidClass,
-  get_star_liquid_class,
 )
 from pylabrobot.resources import Coordinate, Tip
 from pylabrobot.resources.hamilton import HamiltonTip, TipSize

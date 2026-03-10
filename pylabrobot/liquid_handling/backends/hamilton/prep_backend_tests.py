@@ -5,17 +5,18 @@ commands, geometry computed, command variants dispatched, and state managed.
 All tests mock client.send_command — no real TCP connection required.
 """
 
+import asyncio
 import math
 import unittest
 import unittest.mock
 
+from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 from pylabrobot.liquid_handling.backends.hamilton.prep_backend import (
   PrepBackend,
   _absolute_z_from_well,
   _build_container_segments,
   _effective_radius,
 )
-from pylabrobot.liquid_handling.backends.hamilton import prep_commands as PrepCmd
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_star_liquid_class
 from pylabrobot.liquid_handling.standard import (
@@ -38,13 +39,12 @@ from pylabrobot.resources import (
   Plate,
   PrepDeck,
   Rotation,
+  TipPickupMethod,
+  TipSize,
   Trash,
   Well,
   hamilton_96_tiprack_300uL_filter,
-  TipPickupMethod,
-  TipSize,
 )
-
 
 # =============================================================================
 # Setup helpers
@@ -261,6 +261,13 @@ class TestPrepHelperFunctions(unittest.TestCase):
 
 class TestPrepBackendUnit(unittest.TestCase):
   """Backend construction, properties, and traverse height resolution."""
+
+  def setUp(self):
+    super().setUp()
+    try:
+      asyncio.get_running_loop()
+    except RuntimeError:
+      asyncio.set_event_loop(asyncio.new_event_loop())
 
   def test_num_channels_raises_before_setup(self):
     backend = PrepBackend(host="localhost", port=2000)

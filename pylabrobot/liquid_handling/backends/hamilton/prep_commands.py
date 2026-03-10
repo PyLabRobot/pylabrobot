@@ -14,28 +14,29 @@ from enum import IntEnum
 from typing import Annotated, Optional, Tuple
 
 from pylabrobot.liquid_handling.backends.hamilton.tcp.commands import HamiltonCommand
-from pylabrobot.liquid_handling.standard import SingleChannelAspiration
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import HoiParams
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol
 from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
-  EnumArray,
   F32,
   I8,
   I16,
-  I16Array,
   I64,
+  U16,
+  U32,
+  EnumArray,
+  I16Array,
   PaddedBool,
   PaddedU8,
   Str,
   Struct,
   StructArray,
-  U16,
-  U32,
   U8Array,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
   Enum as WEnum,
 )
-
+from pylabrobot.liquid_handling.standard import SingleChannelAspiration
 
 # =============================================================================
 # Enums (mirrored from Prep protocol spec)

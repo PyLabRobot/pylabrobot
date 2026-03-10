@@ -30,18 +30,12 @@ from pylabrobot.liquid_handling.backends.hamilton.nimbus_backend import (
   UnlockDoor,
   _get_tip_type_from_tip,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
+from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import ObjectInfo
 from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
   HoiParams,
   HoiParamsParser,
 )
-from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
-  Bool,
-  I16Array,
-  U16,
-)
-from pylabrobot.liquid_handling.backends.hamilton.tcp.introspection import ObjectInfo
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
   Address,
   HarpPacket,
@@ -49,6 +43,12 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import (
   IpPacket,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import HamiltonProtocol, Hoi2Action
+from pylabrobot.liquid_handling.backends.hamilton.tcp.wire_types import (
+  U16,
+  Bool,
+  I16Array,
+)
+from pylabrobot.liquid_handling.backends.hamilton.tcp_backend import HamiltonTCPClient
 from pylabrobot.liquid_handling.standard import (
   Drop,
   Pickup,

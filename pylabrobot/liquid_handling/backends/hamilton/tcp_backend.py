@@ -56,9 +56,9 @@ from pylabrobot.liquid_handling.backends.hamilton.tcp.messages import (
   CommandResponse,
   InitMessage,
   InitResponse,
-  parse_hamilton_error_params,
   RegistrationMessage,
   RegistrationResponse,
+  parse_hamilton_error_params,
 )
 from pylabrobot.liquid_handling.backends.hamilton.tcp.packets import Address
 from pylabrobot.liquid_handling.backends.hamilton.tcp.protocol import (
