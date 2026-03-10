@@ -36,9 +36,11 @@ DEVICE_ENDPOINTS = {
   SparkDevice.PLATE_TRANSPORT: {
     "write": SparkEndpoint.BULK_OUT,
     "read_status": SparkEndpoint.INTERRUPT_IN,
+    "read_data": SparkEndpoint.INTERRUPT_IN,
   },
   SparkDevice.LUMINESCENCE: {
     "write": SparkEndpoint.BULK_OUT,
     "read_status": SparkEndpoint.INTERRUPT_IN,
+    "read_data": SparkEndpoint.BULK_IN1,
   },
 }

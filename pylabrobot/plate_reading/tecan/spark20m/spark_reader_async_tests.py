@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the module under test
 from pylabrobot.plate_reading.tecan.spark20m.enums import SparkDevice, SparkEndpoint
-from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import SparkReaderAsync
+from pylabrobot.plate_reading.tecan.spark20m.spark_reader_async import SparkError, SparkReaderAsync
 
 
 class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
@@ -274,10 +274,9 @@ class TestSparkReaderAsync(unittest.IsolatedAsyncioTestCase):
 
       read_task = asyncio.create_task(return_error_bytes())
 
-      # get_response catches exceptions and logs them, returning None
       mock_reader = AsyncMock()
-      result = await self.reader._get_response(read_task, reader=mock_reader)
-      self.assertIsNone(result)
+      with self.assertRaises(SparkError):
+        await self.reader._get_response(read_task, reader=mock_reader)
 
   async def test_get_response_empty_packet_retry(self) -> None:
     # Test that empty packet (ZLP) triggers retry

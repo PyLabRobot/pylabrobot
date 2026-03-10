@@ -11,6 +11,10 @@ from .enums import DEVICE_ENDPOINTS, VENDOR_ID, SparkDevice, SparkEndpoint
 from .spark_packet_parser import PACKET_TYPE, parse_single_spark_packet
 
 
+class SparkError(Exception):
+  """Error returned by the Spark device in a RespError packet."""
+
+
 class SparkReaderAsync:
   def __init__(self, vid: int = VENDOR_ID) -> None:
     self.vid: int = vid
@@ -225,7 +229,7 @@ class SparkReaderAsync:
       if parsed.get("type") == "RespMessage":
         self.msgs.append(parsed["payload"])
       elif parsed.get("type") == "RespError":
-        raise Exception(parsed)
+        raise SparkError(parsed)
 
       deadline = time.monotonic() + timeout
       while parsed.get("type") != "RespReady" and time.monotonic() < deadline:
@@ -244,7 +248,9 @@ class SparkReaderAsync:
             if parsed.get("type") == "RespMessage":
               self.msgs.append(parsed["payload"])
             elif parsed.get("type") == "RespError":
-              raise Exception(parsed)
+              raise SparkError(parsed)
+        except SparkError:
+          raise
         except Exception as e:
           logging.error(f"Error in get_response retry: {e}")
       if parsed.get("type") != "RespReady":
@@ -254,6 +260,8 @@ class SparkReaderAsync:
     except asyncio.CancelledError:
       logging.warning("Read task was cancelled")
       return None
+    except SparkError:
+      raise
     except Exception as e:
       logging.error(f"Error in get_response: {e}", exc_info=True)
       return None
