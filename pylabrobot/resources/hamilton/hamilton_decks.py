@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import Literal, Optional, cast
+from typing import List, Literal, Optional, cast
 
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -27,6 +27,11 @@ STAR_NUM_RAILS = 56
 STAR_SIZE_X = 1545
 STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
+
+# Default waste tip positions for STAR/STARlet (x=800, y 405→217.5 mm, z=187).
+STAR_DEFAULT_WASTE_POSITIONS: List[Coordinate] = [
+  Coordinate(x=800.0, y=405.0 - i * 12.5, z=187.0) for i in range(16)
+]
 
 
 def rails_for_x_coordinate(x: float) -> int:
@@ -442,6 +447,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     core_grippers: Optional[
       Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
     ] = "1000uL-5mL-on-waste",
+    waste_positions: Optional[List[Coordinate]] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size.
 
@@ -516,11 +522,31 @@ class HamiltonSTARDeck(HamiltonDeck):
         waste_block.assign_child_resource(
           teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
         )
+      if waste_positions is not None:
+        wb_loc = waste_block.get_location_wrt(self)
+        for i, pos in enumerate(waste_positions, start=1):
+          pos_rel = Coordinate(
+            x=pos.x - wb_loc.x,
+            y=pos.y - wb_loc.y,
+            z=pos.z - wb_loc.z,
+          )
+          waste_block.assign_child_resource(
+            Trash(
+              name=f"waste_position_{i}",
+              size_x=0.0,
+              size_y=0.0,
+              size_z=0.0,
+              category="waste_position",
+            ),
+            location=pos_rel,
+          )
     else:
       if with_trash:
         raise RuntimeError("Trash area cannot be created when no waste block is present.")
       if with_teaching_rack:
         raise RuntimeError("Teaching rack cannot be created when no waste block is present.")
+      if waste_positions is not None:
+        raise RuntimeError("Waste positions cannot be created when no waste block is present.")
 
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if num_rails == STAR_NUM_RAILS else 798
@@ -554,6 +580,18 @@ class HamiltonSTARDeck(HamiltonDeck):
       )
     return self._trash96
 
+  def get_waste_positions(self) -> List[Trash]:
+    """Return the list of waste positions: 16 addressable spots or single trash."""
+    M = 0
+    for i in range(1, 17):
+      if self.has_resource(f"waste_position_{i}"):
+        M += 1
+      else:
+        break
+    if M == 0:
+      return [cast(Trash, self.get_trash_area())]
+    return [cast(Trash, self.get_resource(f"waste_position_{i}")) for i in range(1, M + 1)]
+
   def clear(self, include_trash: bool = False):
     """Clear the deck, removing all resources except the trash areas and the waste block."""
     children_names = [child.name for child in self.children]
@@ -574,6 +612,7 @@ def STARLetDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
+  waste_positions: Optional[List[Coordinate]] = STAR_DEFAULT_WASTE_POSITIONS,
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck.
 
@@ -590,6 +629,7 @@ def STARLetDeck(
     with_trash96=with_trash96,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
+    waste_positions=waste_positions,
   )
 
 
@@ -601,6 +641,9 @@ def STARDeck(
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
+  waste_positions: Optional[
+    List[Coordinate]
+  ] = None,  # TODO: pretty sure this can be the same as Starlet, but have not confirmed with real hardware.
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck.
 
@@ -617,4 +660,5 @@ def STARDeck(
     with_trash96=with_trash96,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
+    waste_positions=waste_positions,
   )

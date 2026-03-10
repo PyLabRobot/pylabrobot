@@ -1960,17 +1960,32 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     # get highest z position
     max_z = max(op.resource.get_location_wrt(self.deck).z + op.offset.z for op in ops)
     if drop_method == TipDropMethod.PLACE_SHIFT:
-      # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
-      begin_tip_deposit_process = (
-        round((max_z + 59.9) * 10)
-        if begin_tip_deposit_process is None
-        else round(begin_tip_deposit_process * 10)
+      use_addressable_waste_z = all(isinstance(op.resource, Trash) for op in ops) and all(
+        getattr(op.resource, "category", None) == "waste_position" for op in ops
       )
-      end_tip_deposit_process = (
-        round((max_z + 49.9) * 10)
-        if end_tip_deposit_process is None
-        else round(end_tip_deposit_process * 10)
-      )
+      if use_addressable_waste_z:
+        begin_tip_deposit_process = (
+          round((max_z + 10) * 10)
+          if begin_tip_deposit_process is None
+          else round(begin_tip_deposit_process * 10)
+        )
+        end_tip_deposit_process = (
+          round(max_z * 10)
+          if end_tip_deposit_process is None
+          else round(end_tip_deposit_process * 10)
+        )
+      else:
+        # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
+        begin_tip_deposit_process = (
+          round((max_z + 59.9) * 10)
+          if begin_tip_deposit_process is None
+          else round(begin_tip_deposit_process * 10)
+        )
+        end_tip_deposit_process = (
+          round((max_z + 49.9) * 10)
+          if end_tip_deposit_process is None
+          else round(end_tip_deposit_process * 10)
+        )
     else:
       max_total_tip_length = max(op.tip.total_tip_length for op in ops)
       max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
