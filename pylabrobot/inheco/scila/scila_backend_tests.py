@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
 
 from pylabrobot.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
-from pylabrobot.legacy.storage.inheco.scila.scila_backend import SCILABackend
+from pylabrobot.inheco.scila.scila_backend import SCILABackend
 
 
 class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
@@ -31,6 +31,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.mock_sila_interface.send_command.assert_any_call("Initialize")
 
   async def test_stop(self):
+    await self.backend.setup()
     await self.backend.stop()
     self.mock_sila_interface.close.assert_called_once()
 
@@ -62,7 +63,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     )
     self.mock_sila_interface.send_command.assert_called_with("GetTemperature")
 
-  async def test_measure_temperature(self):
+  async def test_get_current_temperature(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
       "<Response>"
       "  <Parameter name='CurrentTemperature'><Float64>25.0</Float64></Parameter>"
@@ -70,7 +71,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
       "  <Parameter name='TemperatureControl'><Boolean>true</Boolean></Parameter>"
       "</Response>"
     )
-    temp = await self.backend.measure_temperature()
+    temp = await self.backend.get_current_temperature()
     self.assertEqual(temp, 25.0)
 
   async def test_request_target_temperature(self):
@@ -193,14 +194,14 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     )
     self.mock_sila_interface.send_command.assert_called_with("GetValveStatus")
 
-  async def test_start_temperature_control(self):
-    await self.backend.start_temperature_control(30.0)
+  async def test_set_temperature(self):
+    await self.backend.set_temperature(30.0)
     self.mock_sila_interface.send_command.assert_called_with(
       "SetTemperature", targetTemperature=30.0, temperatureControl=True
     )
 
-  async def test_stop_temperature_control(self):
-    await self.backend.stop_temperature_control()
+  async def test_deactivate(self):
+    await self.backend.deactivate()
     self.mock_sila_interface.send_command.assert_called_with(
       "SetTemperature", temperatureControl=False
     )
